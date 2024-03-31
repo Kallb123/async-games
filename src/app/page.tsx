@@ -1,6 +1,7 @@
 import PasswordForm from "@/components/PasswordForm";
 import styles from "./page.module.css";
 import { auth, currentUser } from "@clerk/nextjs";
+import FcmTokenComp from "@/components/FirebaseForeground";
 
 export default async function Home() {
   // Get the userId from auth() -- if null, the user is not signed in
@@ -23,6 +24,7 @@ export default async function Home() {
         </p>
       </div>
       <PasswordForm></PasswordForm>
+      <FcmTokenComp /> 
     </main>
   );
 }
