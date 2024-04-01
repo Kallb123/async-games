@@ -23,7 +23,7 @@ export default function PasswordForm() {
             throw new Error('Password incorrect');
         }
 
-        router.push('/')
+        router.push('/');
       } catch (error) {
         console.error(error);
       }

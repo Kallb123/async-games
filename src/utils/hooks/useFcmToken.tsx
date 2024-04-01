@@ -25,6 +25,22 @@ const useFcmToken = () => {
             if (currentToken) {
               setToken(currentToken);
               console.log(currentToken);
+        
+              try {
+                  const response = await fetch('/api/notificationtoken', {
+                  method: "POST",
+                  headers: {
+                      'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({token: currentToken})
+                  });
+      
+                  if (!response.ok) {
+                      throw new Error('Password incorrect');
+                  }
+              } catch (error) {
+                  console.error(error);
+              }
             } else {
               console.log('No registration token available. Request permission to generate one.');
             }
