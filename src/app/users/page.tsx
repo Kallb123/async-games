@@ -1,4 +1,5 @@
 'use client'
+import CurrentUserInfo from "@/components/CurrentUserInfo";
 import FcmTokenComp from "@/components/FirebaseForeground";
 import { useUser } from "@clerk/nextjs";
 import { User } from "@clerk/nextjs/server";
@@ -54,11 +55,7 @@ export default function Home() {
 
   return (
     <main>
-      <div>
-        <p>
-          Hello {user?.firstName} {user?.lastName}. Unlocked: {user?.publicMetadata.unlocked === true ? "Yes" : "No"}
-        </p>
-      </div>
+      <CurrentUserInfo />
       <div>
         <ul>
             {users.map((userMap) => (

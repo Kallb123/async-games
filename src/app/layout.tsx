@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import 'bootstrap/dist/css/bootstrap.css';
 import "./globals.css";
 import { ClerkProvider } from '@clerk/nextjs'
+import { Container } from "react-bootstrap";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -57,7 +58,11 @@ export default function RootLayout({
           <meta property="og:url" content="https://async-games.vercel.app" />
           {/* <meta property="og:image" content="https://async-games.vercel.app/icons/apple-touch-icon.png" /> */}
         </head>
-        <body className={inter.className}>{children}</body>
+        <body className={inter.className}>
+          <Container>
+            {children}
+          </Container>
+        </body>
       </html>
     </ClerkProvider>
   );

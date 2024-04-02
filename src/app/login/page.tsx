@@ -1,4 +1,4 @@
-import styles from "./page.module.css";
+import CurrentUserInfo from "@/components/CurrentUserInfo";
 import { auth, currentUser } from "@clerk/nextjs";
 
 export default async function Home() {
@@ -15,12 +15,8 @@ export default async function Home() {
   const unlocked = user?.publicMetadata.unlocked;
 
   return (
-    <main className={styles.main}>
-      <div className={styles.description}>
-        <p>
-          Hello {user?.firstName} {user?.lastName}. Unlocked: {unlocked === true ? "Yes" : "No"}
-        </p>
-      </div>
+    <main>
+      <CurrentUserInfo />
     </main>
   );
 }
