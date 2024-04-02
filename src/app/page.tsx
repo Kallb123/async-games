@@ -1,30 +1,48 @@
-import PasswordForm from "@/components/PasswordForm";
+'use client'
 import styles from "./page.module.css";
-import { auth, currentUser } from "@clerk/nextjs";
+import { useUser } from "@clerk/nextjs";
 import FcmTokenComp from "@/components/FirebaseForeground";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { Button } from "react-bootstrap";
 
-export default async function Home() {
-  // Get the userId from auth() -- if null, the user is not signed in
-  const { userId } = auth();
- 
-  if (userId) {
-    // Query DB for user specific information or display assets only to signed in users 
-  }
- 
-  // Get the Backend API User object when you need access to the user's information
-  const user = await currentUser();
-  // Use `user` to render user details or create UI elements
-  const unlocked = user?.publicMetadata.unlocked;
+export default function Home() {
+  const { user, isLoaded } = useUser();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isLoaded) {
+        if (!user) {
+            router.push('/login');
+        }
+
+        // Use `user` to render user details or create UI elements
+        const unlocked = user?.publicMetadata.unlocked;
+      
+        if (unlocked !== true) {
+          console.log(user, unlocked);
+          router.push('/unlockaccess');
+        }
+    }
+  }, [isLoaded]);
 
   return (
     <main className={styles.main}>
+      <Button>New Game</Button>
+      <h2>Your Turn</h2>
+      <hr />
+      <h2>Incoming Invites</h2>
+      <hr />
+      <h2>Their Turn</h2>
+      <hr />
+      <h2>Awaiting Response</h2>
+      <hr />
       <div className={styles.description}>
         <p>
-          Hello {user?.firstName} {user?.lastName}. Unlocked: {unlocked === true ? "Yes" : "No"}
+          Hello {user?.firstName} {user?.lastName}. Unlocked: {user?.publicMetadata.unlocked === true ? "Yes" : "No"}
         </p>
       </div>
-      <PasswordForm></PasswordForm>
-      <FcmTokenComp /> 
+      <FcmTokenComp />
     </main>
   );
 }

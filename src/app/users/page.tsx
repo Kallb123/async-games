@@ -6,24 +6,29 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from "react";
 
 export default function Home() {
-  const { user } = useUser();
-  
-  // Use `user` to render user details or create UI elements
-  const unlocked = user?.publicMetadata.unlocked;
+  const { user, isLoaded } = useUser();
   const router = useRouter();
-
-  if (unlocked !== true) {
-    console.log(user, unlocked);
-    // router.push('/');
-  }
 
   const [users, setUsers] = useState([] as User[]);
 
   useEffect(() => {
+    if (isLoaded) {
+        if (!user) {
+            router.push('/login');
+        }
+
+        // Use `user` to render user details or create UI elements
+        const unlocked = user?.publicMetadata.unlocked;
+      
+        if (unlocked !== true) {
+          console.log(user, unlocked);
+          router.push('/unlockaccess');
+        }
+    }
     fetch('/api/users')
     .then(response => response.json())
     .then(data => setUsers(data.users));
-  }, []);
+  }, [isLoaded]);
     
   const handleNotify = async (userId: string, e: React.MouseEvent<HTMLLIElement>) => {
     e.preventDefault();
@@ -51,7 +56,7 @@ export default function Home() {
     <main>
       <div>
         <p>
-          Hello {user?.firstName} {user?.lastName}. Unlocked: {unlocked === true ? "Yes" : "No"}
+          Hello {user?.firstName} {user?.lastName}. Unlocked: {user?.publicMetadata.unlocked === true ? "Yes" : "No"}
         </p>
       </div>
       <div>
