@@ -2,12 +2,17 @@
 import { useUser } from "@clerk/nextjs";
 import FcmTokenComp from "@/components/FirebaseForeground";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { Button } from "react-bootstrap";
+import { useEffect, useState } from "react";
+import { Button, Col, Form, Row } from "react-bootstrap";
 import CurrentUserInfo from "@/components/CurrentUserInfo";
+import UserInviteList from "@/components/UserInviteList";
 
 export default function Home() {
   const { user, isLoaded } = useUser();
+  const [userList, setUserList] = useState([""] as string[]);
+  const [enabledDocks, setEnabledDocks] = useState(false);
+  const [enabledBillionaireRow, setEnabledBillionaireRow] = useState(false);
+  const [turnTimer, setTurnTimer] = useState("1d");
   const router = useRouter();
 
   useEffect(() => {
@@ -20,18 +25,75 @@ export default function Home() {
         const unlocked = user?.publicMetadata.unlocked;
       
         if (unlocked !== true) {
-          console.log(user, unlocked);
           router.push('/unlockaccess');
         }
     }
   }, [isLoaded]);
 
+  const setUserListItem = (index: number, value: string) => {
+    const changedList = userList.map((user, i) => {
+      if (i === index) {
+        return value;
+      } else {
+        return user;
+      }
+    });
+    const filteredList = changedList.filter((user, i) => {
+      if (user !== "") return user;
+      return null;
+    });
+    if (filteredList.length === 0) {
+      setUserList([""]);
+    } else {
+      if (filteredList[filteredList.length-1] === "") {
+        setUserList(filteredList);
+      } else {
+        setUserList([...filteredList, ""]);
+      }
+    }
+  }
+
   return (
     <main>
       <h1>New Game: Dice Cities</h1>
-        <Button disabled>Settlements and Cities</Button>
-        <Button href="/newgame/dicecities">Dice Cities</Button>
-        <Button disabled>Chess</Button>
+        <Row>
+          <Col>
+            <UserInviteList userList={userList} setItem={setUserListItem} />
+          </Col>
+          <Col>
+            <Form>
+              <h3>Expansions</h3>
+              <Form.Check
+                type="switch"
+                label="Docks"
+                checked={enabledDocks}
+                onChange={(e) => setEnabledDocks(e.target.checked)}
+              /><br />
+              <Form.Check
+                type="switch"
+                label="Billionaire's Row"
+                checked={enabledBillionaireRow}
+                onChange={(e) => setEnabledBillionaireRow(e.target.checked)}
+              />
+              <h3>Options</h3>
+              <Form.Group as={Row} className="mb-3">
+                <Form.Label column>Turn Time Limit</Form.Label>
+                <Col sm={8}>
+                  <Form.Select as={Col} value={turnTimer} onChange={(e) => setTurnTimer(e.target.value)} aria-label="Turn timer select">
+                    <option value="10m">10 minutes</option>
+                    <option value="30m">30 minutes</option>
+                    <option value="1h">1 hour</option>
+                    <option value="3h">3 hours</option>
+                    <option value="1d">1 day</option>
+                    <option value="3d">3 days</option>
+                    <option value="7d">7 days</option>
+                  </Form.Select>
+                </Col>
+              </Form.Group>
+            </Form>
+          </Col>
+        </Row>
+        <Button>Send Invitation</Button>
         <CurrentUserInfo />
         <FcmTokenComp />
     </main>

@@ -28,8 +28,10 @@ export default function Home() {
 
   return (
     <main>
-        <Button disabled>Settlements and Cities</Button>
-        <Button href="/newgame/dicecities">Dice Cities</Button>
+        <h1>New Game</h1>
+        <h2>Select a Game</h2>
+        <Button disabled>Settlements and Cities</Button><br />
+        <Button href="/newgame/dicecities">Dice Cities</Button><br />
         <Button disabled>Chess</Button>
         <CurrentUserInfo />
         <FcmTokenComp />

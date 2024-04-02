@@ -28,6 +28,7 @@ export default function Home() {
 
   return (
     <main>
+      <h1>Async Gaming</h1>
       <Button href="/newgame">New Game</Button>
       <h2>Your Turn</h2>
       <hr />
