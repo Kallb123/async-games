@@ -38,7 +38,7 @@ export default function Home() {
         return user;
       }
     });
-    const filteredList = changedList.filter((user, i) => {
+    const filteredList = changedList.filter((user) => {
       if (user !== "") return user;
       return null;
     });
@@ -53,15 +53,41 @@ export default function Home() {
     }
   }
 
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    const filteredUserList = userList.filter((user) => {
+      if (user !== "") return user;
+      return null;
+    });
+
+    try {
+      const response = await fetch('/api/newgame/dicecities', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          userList: filteredUserList,
+          enabledDocks,
+          enabledBillionaireRow,
+          turnTimer
+        })
+      })
+    } catch (error) {
+
+    }
+  }
+
   return (
     <main>
       <h1>New Game: Dice Cities</h1>
-        <Row>
-          <Col>
-            <UserInviteList userList={userList} setItem={setUserListItem} />
-          </Col>
-          <Col>
-            <Form>
+        <Form onSubmit={handleSubmit}>
+          <Row>
+            <Col>
+              <UserInviteList userList={userList} setItem={setUserListItem} />
+            </Col>
+            <Col>
               <h3>Expansions</h3>
               <Form.Check
                 type="switch"
@@ -90,10 +116,10 @@ export default function Home() {
                   </Form.Select>
                 </Col>
               </Form.Group>
-            </Form>
-          </Col>
-        </Row>
-        <Button>Send Invitation</Button>
+            </Col>
+            <Button type="submit">Send Invitation</Button>
+          </Row>
+        </Form>
         <CurrentUserInfo />
         <FcmTokenComp />
     </main>
