@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Button, Col, Form, Row } from "react-bootstrap";
 import CurrentUserInfo from "@/components/CurrentUserInfo";
 import UserInviteList from "@/components/UserInviteList";
+import { DiceCitiesInvitation } from "@/app/api/newgame/dicecities/route";
 
 export default function Home() {
   const { user, isLoaded } = useUser();
@@ -62,17 +63,18 @@ export default function Home() {
     });
 
     try {
+      const data: DiceCitiesInvitation = {
+        userList: filteredUserList,
+        enabledDocks,
+        enabledBillionaireRow,
+        turnTimer
+      };
       const response = await fetch('/api/newgame/dicecities', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          userList: filteredUserList,
-          enabledDocks,
-          enabledBillionaireRow,
-          turnTimer
-        })
+        body: JSON.stringify(data)
       })
     } catch (error) {
 
