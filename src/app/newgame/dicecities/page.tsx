@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { Button, Col, Form, Row } from "react-bootstrap";
 import CurrentUserInfo from "@/components/CurrentUserInfo";
 import UserInviteList from "@/components/UserInviteList";
-import { DiceCitiesInvitation } from "@/app/api/newgame/dicecities/route";
+import { DiceCitiesInvitationRequest } from "@/app/api/newgame/dicecities/route";
 
 export default function Home() {
   const { user, isLoaded } = useUser();
@@ -63,7 +63,7 @@ export default function Home() {
     });
 
     try {
-      const data: DiceCitiesInvitation = {
+      const data: DiceCitiesInvitationRequest = {
         userList: filteredUserList,
         enabledDocks,
         enabledBillionaireRow,

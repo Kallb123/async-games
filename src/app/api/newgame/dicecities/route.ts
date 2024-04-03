@@ -4,17 +4,26 @@ import { credential } from 'firebase-admin';
 import { getApp, getApps, initializeApp } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
+import clientPromise from "../../../../utils/mongodb/mongodb";
+import { randomUUID } from 'crypto';
 
-export interface DiceCitiesInvitation {
+export interface DiceCitiesInvitationRequest {
   userList: string[],
   enabledDocks: boolean,
   enabledBillionaireRow: boolean,
   turnTimer: string
 }
 
+export interface DiceCitiesInvitationData {
+  inviteId: `${string}-${string}-${string}-${string}-${string}`,
+  userIdList: string[],
+  enabledDocks: boolean,
+  enabledBillionaireRow: boolean,
+  turnTimer: string
+}
+
 export async function POST(request: NextRequest) {
-  const diceCitiesInvitation: DiceCitiesInvitation = await request.json();
-  console.log(diceCitiesInvitation);
+  const diceCitiesInvitation: DiceCitiesInvitationRequest = await request.json();
 
   const { userId } = auth();
   if (!userId) {
@@ -26,11 +35,23 @@ export async function POST(request: NextRequest) {
     username: diceCitiesInvitation.userList
   });
 
-  console.log(userList);
   // Lookup failed for a user
   if (userList.length !== diceCitiesInvitation.userList.length) {
     return NextResponse.error();
   }
+
+  // Create invite
+  const invite: DiceCitiesInvitationData = {
+    inviteId: randomUUID(),
+    userIdList: userList.map(user => user.id),
+    enabledDocks: diceCitiesInvitation.enabledDocks,
+    enabledBillionaireRow: diceCitiesInvitation.enabledBillionaireRow,
+    turnTimer: diceCitiesInvitation.turnTimer
+  }
+  const dbClient = await clientPromise;
+  const db = dbClient.db("async-games");
+  const inviteResponse = await db.collection("gameInvites").insertOne(invite);
+  console.log(inviteResponse.insertedId);
 
   // Send notifications
   if (!getApps().length) {
