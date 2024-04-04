@@ -22,13 +22,13 @@ export default function Home() {
         const unlocked = user?.publicMetadata.unlocked;
       
         if (unlocked !== true) {
-          console.log(user, unlocked);
           router.push('/unlockaccess');
         }
+
+        fetch('/api/users')
+        .then(response => response.json())
+        .then(data => setUsers(data.users));
     }
-    fetch('/api/users')
-    .then(response => response.json())
-    .then(data => setUsers(data.users));
   }, [isLoaded]);
     
   const handleNotify = async (userId: string, e: React.MouseEvent<HTMLLIElement>) => {

@@ -66,7 +66,6 @@ export async function POST(request: NextRequest) {
   const dbClient = await clientPromise;
   const db = dbClient.db("async-games");
   const inviteResponse = await db.collection("gameInvites").insertOne(invite);
-  console.log(inviteResponse.insertedId);
 
   // Send notifications
   if (!getApps().length) {
