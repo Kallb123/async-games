@@ -6,27 +6,16 @@ import { getMessaging } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
 import clientPromise from "../../../../utils/mongodb/mongodb";
 import { randomUUID } from 'crypto';
+import { InvitationData, InvitationRequest } from '@/utils/mongodb/InvitationData';
 
-export interface DiceCitiesInvitationRequest {
-  userList: string[],
+export interface DiceCitiesInvitationRequest extends InvitationRequest {
   enabledDocks: boolean,
   enabledBillionaireRow: boolean,
-  turnTimer: string
 }
 
-export interface UserIdAcceptance {
-  userId: string,
-  inviteAccepted: boolean
-}
-
-export interface DiceCitiesInvitationData {
-  inviteId: `${string}-${string}-${string}-${string}-${string}`,
-  senderId: string,
-  userIdList: UserIdAcceptance[],
+export interface DiceCitiesInvitationData extends InvitationData {
   enabledDocks: boolean,
   enabledBillionaireRow: boolean,
-  turnTimer: string,
-  timestamp: string
 }
 
 export async function POST(request: NextRequest) {

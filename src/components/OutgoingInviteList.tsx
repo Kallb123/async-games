@@ -5,7 +5,7 @@ import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-export default function IncomingInviteList() {
+export default function OutgoingInviteList() {
     const { user, isLoaded } = useUser();
     const router = useRouter();
     const [inviteList, setInviteList] = useState([] as InvitationData[]);
@@ -23,7 +23,7 @@ export default function IncomingInviteList() {
             router.push('/unlockaccess');
           }
 
-          fetch('/api/user/incominginvites')
+          fetch('/api/user/outgoinginvites')
           .then(response => response.json())
           .then(data => setInviteList(data.inviteList));
       }
@@ -31,10 +31,10 @@ export default function IncomingInviteList() {
 
     return (
         <>
-            <h2>Incoming Invites</h2>
+            <h2>Awaiting Response</h2>
             <ul>
                 {inviteList.map((invite: InvitationData) => (
-                    <li key={invite.inviteId}>{invite.timestamp} {invite.senderId}</li>
+                    <li key={invite.inviteId}>{invite.timestamp} {invite.userIdList.map(user => (<span key={user.userId}>{user.userId}</span>))}</li>
                 ))}
             </ul>
         </>

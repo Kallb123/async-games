@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { Button } from "react-bootstrap";
 import CurrentUserInfo from "@/components/CurrentUserInfo";
 import IncomingInviteList from "@/components/IncomingInvitesList";
+import OutgoingInviteList from "@/components/OutgoingInviteList";
 
 export default function Home() {
   const { user, isLoaded } = useUser();
@@ -36,7 +37,7 @@ export default function Home() {
       <hr />
       <h2>Their Turn</h2>
       <hr />
-      <h2>Awaiting Response</h2>
+      <OutgoingInviteList />
       <hr />
       <CurrentUserInfo />
       <FcmTokenComp />
