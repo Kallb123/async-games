@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
   const { userId } = auth();
 
   if (!userId) {
-    return NextResponse.error();
+    return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
   }
 
   if (password !== process.env.ACCESS_PASSWORD) {
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
         unlocked: false
       }
     });
-    return NextResponse.error();
+    return NextResponse.json({}, {status: 400, statusText: "Incorrect password"});
   }
 
   await clerkClient.users.updateUserMetadata(userId, {

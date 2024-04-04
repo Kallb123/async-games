@@ -5,12 +5,12 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
   const { token } = await request.json();
   if (!token) {
-    return NextResponse.error();
+    return NextResponse.json({}, {status: 401, statusText: "Missing token from request body"});
   }
 
   const { userId } = auth();
   if (!userId) {
-    return NextResponse.error();
+    return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
   }
 
   const user = await currentUser();

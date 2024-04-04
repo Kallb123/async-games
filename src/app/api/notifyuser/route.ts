@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
   const authResponse = auth();
 
   if (!authResponse.userId) {
-    return NextResponse.error();
+    return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
   }
   
   const { userId } = await request.json();

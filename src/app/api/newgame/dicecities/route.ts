@@ -14,12 +14,19 @@ export interface DiceCitiesInvitationRequest {
   turnTimer: string
 }
 
+export interface UserIdAcceptance {
+  userId: string,
+  inviteAccepted: boolean
+}
+
 export interface DiceCitiesInvitationData {
   inviteId: `${string}-${string}-${string}-${string}-${string}`,
-  userIdList: string[],
+  senderId: string,
+  userIdList: UserIdAcceptance[],
   enabledDocks: boolean,
   enabledBillionaireRow: boolean,
-  turnTimer: string
+  turnTimer: string,
+  timestamp: string
 }
 
 export async function POST(request: NextRequest) {
@@ -27,7 +34,7 @@ export async function POST(request: NextRequest) {
 
   const { userId } = auth();
   if (!userId) {
-    return NextResponse.error();
+    return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
   }
   const thisUser = await currentUser();
 
@@ -37,16 +44,24 @@ export async function POST(request: NextRequest) {
 
   // Lookup failed for a user
   if (userList.length !== diceCitiesInvitation.userList.length) {
-    return NextResponse.error();
+    return NextResponse.json({}, {status: 404, statusText: "User not found"});
+  }
+
+  if (userList.length === 0) {
+    return NextResponse.json({}, {status: 404, statusText: "User not found"});
   }
 
   // Create invite
   const invite: DiceCitiesInvitationData = {
     inviteId: randomUUID(),
-    userIdList: userList.map(user => user.id),
+    senderId: userId,
+    userIdList: userList.map(user => {
+      return {userId: user.id, inviteAccepted: false}
+    }),
     enabledDocks: diceCitiesInvitation.enabledDocks,
     enabledBillionaireRow: diceCitiesInvitation.enabledBillionaireRow,
-    turnTimer: diceCitiesInvitation.turnTimer
+    turnTimer: diceCitiesInvitation.turnTimer,
+    timestamp: (new Date()).toISOString()
   }
   const dbClient = await clientPromise;
   const db = dbClient.db("async-games");
@@ -65,16 +80,18 @@ export async function POST(request: NextRequest) {
   }
   const firebaseApp = getApp('adminApp');
   const messaging = getMessaging(firebaseApp);
-  const tokens = userList.flatMap((user) => user.privateMetadata.notificationTokens as TimedToken[]);
-  messaging.sendEach(tokens.map((token) => {
-      return {
-          token: token.token,
-          notification: {
-              title: "Game Invite",
-              body: `${thisUser?.username} has invited you to play Dice Cities!`
-          }
-      }
-  }));
+  const tokens = userList.flatMap((user) => user.privateMetadata.notificationTokens as TimedToken[]).filter(token => token);
+  if (tokens.length) {
+    messaging.sendEach(tokens.map((token) => {
+        return {
+            token: token.token,
+            notification: {
+                title: "Game Invite",
+                body: `${thisUser?.username} has invited you to play Dice Cities!`
+            }
+        }
+    }));
+  }
 
   return NextResponse.json({success: true});
 }
