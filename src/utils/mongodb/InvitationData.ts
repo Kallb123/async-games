@@ -11,6 +11,13 @@ export interface InvitationData {
     timestamp: string
 }
 
+export interface InvitationResponse {
+    inviteId: `${string}-${string}-${string}-${string}-${string}`,
+    sender: string,
+    userList: string[],
+    timestamp: string
+}
+
 export interface InvitationRequest {
     userList: string[],
     turnTimer: string

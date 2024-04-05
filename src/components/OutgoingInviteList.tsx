@@ -1,14 +1,15 @@
 'use client'
 
-import { InvitationData } from "@/utils/mongodb/InvitationData";
+import { InvitationResponse } from "@/utils/mongodb/InvitationData";
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import Moment from 'react-moment';
 
 export default function OutgoingInviteList() {
     const { user, isLoaded } = useUser();
     const router = useRouter();
-    const [inviteList, setInviteList] = useState([] as InvitationData[]);
+    const [inviteList, setInviteList] = useState([] as InvitationResponse[]);
 
     useEffect(() => {
       if (isLoaded) {
@@ -33,8 +34,8 @@ export default function OutgoingInviteList() {
         <>
             <h2>Awaiting Response</h2>
             <ul>
-                {inviteList.map((invite: InvitationData) => (
-                    <li key={invite.inviteId}>{invite.timestamp} {invite.userIdList.map(user => (<span key={user.userId}>{user.userId}</span>))}</li>
+                {inviteList.map((invite: InvitationResponse) => (
+                    <li key={invite.inviteId}><Moment fromNow>{invite.timestamp}</Moment>: {invite.userList.map(user => (<span key={user}>{user}</span>))}</li>
                 ))}
             </ul>
         </>
