@@ -7,6 +7,7 @@ import { getMessaging } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
 import { InvitationData } from '@/utils/mongodb/InvitationData';
 import { randomUUID } from 'crypto';
+import { GameData } from '@/utils/mongodb/GameData';
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
   });
 
   // Create game
-  const gameData = {
+  const gameData: GameData = {
     gameId: randomUUID(),
     userIdList: userList.map(user => user.id).concat(inviteData.senderId),
     turnTimer: inviteData.turnTimer,

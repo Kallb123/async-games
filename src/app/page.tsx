@@ -7,6 +7,8 @@ import { Button } from "react-bootstrap";
 import CurrentUserInfo from "@/components/CurrentUserInfo";
 import IncomingInviteList from "@/components/IncomingInvitesList";
 import OutgoingInviteList from "@/components/OutgoingInviteList";
+import MyTurnList from "@/components/MyTurnList";
+import TheirTurnList from "@/components/TheirTurnList";
 
 export default function Home() {
   const pathName = usePathname();
@@ -33,11 +35,11 @@ export default function Home() {
     <main>
       <h1>Async Gaming</h1>
       <Button href="/newgame">New Game</Button>
-      <h2>Your Turn</h2>
+      <MyTurnList />
       <hr />
       <IncomingInviteList />
       <hr />
-      <h2>Their Turn</h2>
+      <TheirTurnList />
       <hr />
       <OutgoingInviteList />
       <hr />
