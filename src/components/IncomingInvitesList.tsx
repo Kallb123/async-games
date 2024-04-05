@@ -30,12 +30,24 @@ export default function IncomingInviteList() {
       }
     }, [isLoaded]);
 
+    const handleAccept = (inviteId: `${string}-${string}-${string}-${string}-${string}`) => {
+        fetch('/api/invite/accept', {
+            method: "POST",
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({inviteId})
+        })
+        .then(response => response.json())
+        .then(data => setInviteList(data.inviteList));
+    }
+
     return (
         <>
             <h2>Incoming Invites</h2>
             <ul>
                 {inviteList.map((invite: InvitationResponse) => (
-                    <li key={invite.inviteId}><Moment fromNow>{invite.timestamp}</Moment>: {invite.sender}</li>
+                    <li key={invite.inviteId} onClick={() => handleAccept(invite.inviteId)}><Moment fromNow>{invite.timestamp}</Moment>: {invite.sender}</li>
                 ))}
             </ul>
         </>
