@@ -2,6 +2,7 @@ import { auth, clerkClient } from '@clerk/nextjs';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
+  console.log(`POST ${request.nextUrl.pathname}`);
   const { password } = await request.json();
   const { userId } = auth();
 

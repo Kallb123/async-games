@@ -6,6 +6,7 @@ import { getMessaging } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
+  console.log(`POST ${request.nextUrl.pathname}`);
   const authResponse = auth();
 
   if (!authResponse.userId) {

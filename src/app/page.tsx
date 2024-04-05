@@ -1,7 +1,7 @@
 'use client'
 import { useUser } from "@clerk/nextjs";
 import FcmTokenComp from "@/components/FirebaseForeground";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Button } from "react-bootstrap";
 import CurrentUserInfo from "@/components/CurrentUserInfo";
@@ -9,6 +9,8 @@ import IncomingInviteList from "@/components/IncomingInvitesList";
 import OutgoingInviteList from "@/components/OutgoingInviteList";
 
 export default function Home() {
+  const pathName = usePathname();
+  console.log(`GET ${pathName}`);
   const { user, isLoaded } = useUser();
   const router = useRouter();
 

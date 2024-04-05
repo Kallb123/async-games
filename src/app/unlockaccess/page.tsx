@@ -1,9 +1,11 @@
 import PasswordForm from "@/components/PasswordForm";
 import { auth, currentUser } from "@clerk/nextjs";
-import { redirect } from "next/navigation";
+import { redirect, usePathname } from "next/navigation";
 import CurrentUserInfo from "@/components/CurrentUserInfo";
 
-export default async function Home() {
+export default async function UnlockAccess() {
+  const pathName = usePathname();
+  console.log(`GET ${pathName}`);
   // Get the userId from auth() -- if null, the user is not signed in
   const { userId } = auth();
  

@@ -1,7 +1,10 @@
 import CurrentUserInfo from "@/components/CurrentUserInfo";
 import { auth, currentUser } from "@clerk/nextjs";
+import { usePathname } from "next/navigation";
 
-export default async function Home() {
+export default async function Login() {
+  const pathName = usePathname();
+  console.log(`GET ${pathName}`);
   // Get the userId from auth() -- if null, the user is not signed in
   const { userId } = auth();
  

@@ -1,12 +1,14 @@
 'use client'
 import { useUser } from "@clerk/nextjs";
 import FcmTokenComp from "@/components/FirebaseForeground";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Button } from "react-bootstrap";
 import CurrentUserInfo from "@/components/CurrentUserInfo";
 
-export default function Home() {
+export default function NewGame() {
+  const pathName = usePathname();
+  console.log(`GET ${pathName}`);
   const { user, isLoaded } = useUser();
   const router = useRouter();
 

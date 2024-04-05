@@ -3,6 +3,7 @@ import { auth, clerkClient, currentUser } from '@clerk/nextjs';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
+  console.log(`POST ${request.nextUrl.pathname}`);
   const { token } = await request.json();
   if (!token) {
     return NextResponse.json({}, {status: 401, statusText: "Missing token from request body"});

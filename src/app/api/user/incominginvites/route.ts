@@ -4,6 +4,8 @@ import clientPromise from "../../../../utils/mongodb/mongodb";
 import { InvitationData, InvitationResponse } from '@/utils/mongodb/InvitationData';
 
 export async function GET(request: NextRequest) {
+  console.log(`GET ${request.nextUrl.pathname}`);
+
   const { userId } = auth();
   if (!userId) {
     return NextResponse.json({}, {status: 400, statusText: "Not signed in"});

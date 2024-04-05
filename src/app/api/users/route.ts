@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { redirect } from 'next/navigation';
 
 export async function GET(request: NextRequest) {
+  console.log(`GET ${request.nextUrl.pathname}`);
   // Get the userId from auth() -- if null, the user is not signed in
   const { userId } = auth();
  

@@ -3,10 +3,12 @@ import CurrentUserInfo from "@/components/CurrentUserInfo";
 import FcmTokenComp from "@/components/FirebaseForeground";
 import { useUser } from "@clerk/nextjs";
 import { User } from "@clerk/nextjs/server";
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from "react";
 
-export default function Home() {
+export default function Users() {
+  const pathName = usePathname();
+  console.log(`GET ${pathName}`);
   const { user, isLoaded } = useUser();
   const router = useRouter();
 

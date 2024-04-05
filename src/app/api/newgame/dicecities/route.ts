@@ -19,6 +19,7 @@ export interface DiceCitiesInvitationData extends InvitationData {
 }
 
 export async function POST(request: NextRequest) {
+  console.log(`POST ${request.nextUrl.pathname}`);
   const diceCitiesInvitation: DiceCitiesInvitationRequest = await request.json();
 
   const { userId } = auth();

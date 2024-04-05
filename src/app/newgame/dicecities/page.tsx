@@ -1,14 +1,16 @@
 'use client'
 import { useUser } from "@clerk/nextjs";
 import FcmTokenComp from "@/components/FirebaseForeground";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button, Col, Form, Row } from "react-bootstrap";
 import CurrentUserInfo from "@/components/CurrentUserInfo";
 import UserInviteList from "@/components/UserInviteList";
 import { DiceCitiesInvitationRequest } from "@/app/api/newgame/dicecities/route";
 
-export default function Home() {
+export default function NewGameDiceCities() {
+  const pathName = usePathname();
+  console.log(`GET ${pathName}`);
   const { user, isLoaded } = useUser();
   const [userList, setUserList] = useState([""] as string[]);
   const [enabledDocks, setEnabledDocks] = useState(false);
