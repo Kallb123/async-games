@@ -46,6 +46,7 @@ export default function Home() {
       <OutgoingInviteList />
       <hr />
       <CurrentUserInfo />
+      <DevTools />
     </main>
   );
 }
