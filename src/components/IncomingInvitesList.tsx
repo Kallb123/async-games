@@ -16,6 +16,10 @@ export default function IncomingInviteList() {
             console.log(`IncomingInviteList message received: NewInvite`);
             refreshContent();
         });
+        window.addEventListener('InviteAccepted', () => {
+            console.log(`IncomingInviteList message received: InviteAccepted`);
+            refreshContent();
+        });
         window.addEventListener('GameStart', () => {
             console.log(`IncomingInviteList message received: GameStart`);
             refreshContent();

@@ -7,7 +7,7 @@ import { getMessaging } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
 import { InvitationData } from '@/utils/mongodb/InvitationData';
 import { randomUUID } from 'crypto';
-import { GameData } from '@/utils/mongodb/GameData';
+import { GameCreator, GameData } from '@/utils/mongodb/GameData';
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
@@ -30,27 +30,7 @@ export async function POST(request: NextRequest) {
     acceptance.inviteAccepted = true;
   }
 
-  if (!inviteData.userIdList.every((uil) => uil.inviteAccepted === true)) {
-    await db.collection("gameInvites").replaceOne({"inviteId": inviteId}, inviteData);
-    return NextResponse.json({success: true});
-  }
-
-  const userList = await clerkClient.users.getUserList({
-    userId: inviteData.userIdList.map(uid => uid.userId)
-  });
-
-  // Create game
-  const gameData: GameData = {
-    gameId: randomUUID(),
-    userIdList: userList.map(user => user.id).concat(inviteData.senderId),
-    turnTimer: inviteData.turnTimer,
-    currentTurn: authResponse.userId
-  }
-  await db.collection("gameData").insertOne(gameData);
-  
-  await db.collection("gameInvites").deleteOne({"inviteId": inviteId});
-
-  // Send notifications
+  // initialise Firebase
   if (!getApps().length) {
     initializeApp({
       credential: credential.cert({
@@ -62,7 +42,40 @@ export async function POST(request: NextRequest) {
   }
   const firebaseApp = getApp('adminApp');
   const messaging = getMessaging(firebaseApp);
+
+  const userList = await clerkClient.users.getUserList({
+    userId: inviteData.userIdList.map(uid => uid.userId)
+  });
+
+  // If not everyone has accepted
+  const allAccepted = inviteData.userIdList.every((uil) => uil.inviteAccepted === true);
+  if (!allAccepted) {
+    await db.collection("gameInvites").replaceOne({"inviteId": inviteId}, inviteData);
+  }
+
   const tokens = userList.flatMap((user) => user.privateMetadata.notificationTokens as TimedToken[]).filter(token => token);
+  if (tokens.length) {
+    messaging.sendEach(tokens.map((token) => {
+        return {
+            token: token.token,
+            data: {
+                event: 'InviteAccepted',
+                inviteId: inviteId
+            }
+        }
+    }));
+  }
+
+  if (!allAccepted) {
+    return NextResponse.json({success: true});
+  }
+
+  // Create game
+  const gameData: GameData = await GameCreator(inviteData);
+  await db.collection("gameData").insertOne(gameData);
+  
+  await db.collection("gameInvites").deleteOne({"inviteId": inviteId});
+
   if (tokens.length) {
     messaging.sendEach(tokens.map((token) => {
         return {

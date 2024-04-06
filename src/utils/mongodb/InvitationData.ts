@@ -8,7 +8,8 @@ export interface InvitationData {
     senderId: string,
     userIdList: UserIdAcceptance[],
     turnTimer: string,
-    timestamp: string
+    timestamp: string,
+    gameType: string
 }
 
 export interface InvitationResponse {

@@ -54,7 +54,8 @@ export async function POST(request: NextRequest) {
     enabledDocks: diceCitiesInvitation.enabledDocks,
     enabledBillionaireRow: diceCitiesInvitation.enabledBillionaireRow,
     turnTimer: diceCitiesInvitation.turnTimer,
-    timestamp: (new Date()).toISOString()
+    timestamp: (new Date()).toISOString(),
+    gameType: 'DiceCities'
   }
   const dbClient = await clientPromise;
   const db = dbClient.db("async-games");
