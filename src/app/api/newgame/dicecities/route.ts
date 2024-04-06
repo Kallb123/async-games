@@ -27,6 +27,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
   }
   const thisUser = await currentUser();
+  if (!thisUser) {
+    return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
+  }
 
   const userList = await clerkClient.users.getUserList({
     username: diceCitiesInvitation.userList
@@ -77,6 +80,22 @@ export async function POST(request: NextRequest) {
             notification: {
                 title: "Game Invite",
                 body: `${thisUser?.username} has invited you to play Dice Cities!`
+            },
+            data: {
+              event: "NewInvite",
+              inviteId: invite.inviteId,
+            }
+        }
+    }));
+  }
+  const tokensSender = (thisUser.privateMetadata.notificationTokens as TimedToken[]).filter(token => token);
+  if (tokensSender.length) {
+    messaging.sendEach(tokensSender.map((token) => {
+        return {
+            token: token.token,
+            data: {
+              event: "NewInvite",
+              inviteId: invite.inviteId,
             }
         }
     }));

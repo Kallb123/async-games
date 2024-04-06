@@ -1,6 +1,6 @@
 'use client'
 import CurrentUserInfo from "@/components/CurrentUserInfo";
-import FcmTokenComp from "@/components/FirebaseForeground";
+import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useUser } from "@clerk/nextjs";
 import { User } from "@clerk/nextjs/server";
 import { usePathname, useRouter } from 'next/navigation';

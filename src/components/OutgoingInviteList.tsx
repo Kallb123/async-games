@@ -12,23 +12,37 @@ export default function OutgoingInviteList() {
     const [inviteList, setInviteList] = useState([] as InvitationResponse[]);
 
     useEffect(() => {
-      if (isLoaded) {
-          if (!user) {
-              router.push('/login');
-          }
-  
-          // Use `user` to render user details or create UI elements
-          const unlocked = user?.publicMetadata.unlocked;
-        
-          if (unlocked !== true) {
-            router.push('/unlockaccess');
-          }
+        window.addEventListener('NewInvite', () => {
+            console.log(`OutgoingInviteList message received: NewInvite`);
+            refreshContent();
+        });
+        window.addEventListener('GameStart', () => {
+            console.log(`OutgoingInviteList message received: GameStart`);
+            refreshContent();
+        });
 
-          fetch('/api/user/outgoinginvites')
-          .then(response => response.json())
-          .then(data => setInviteList(data.inviteList));
-      }
+        refreshContent();
     }, [isLoaded]);
+
+    const refreshContent = async () => {
+        console.log('Refresh outgoing invite');
+        if (isLoaded) {
+            if (!user) {
+                router.push('/login');
+            }
+    
+            // Use `user` to render user details or create UI elements
+            const unlocked = user?.publicMetadata.unlocked;
+          
+            if (unlocked !== true) {
+              router.push('/unlockaccess');
+            }
+
+            fetch('/api/user/outgoinginvites')
+            .then(response => response.json())
+            .then(data => {if (data && data.inviteList) setInviteList(data.inviteList)});
+        }
+    }
 
     return (
         <>

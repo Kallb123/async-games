@@ -1,6 +1,6 @@
 'use client'
 import { useUser } from "@clerk/nextjs";
-import FcmTokenComp from "@/components/FirebaseForeground";
+import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Button } from "react-bootstrap";

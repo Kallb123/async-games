@@ -12,23 +12,40 @@ export default function IncomingInviteList() {
     const [inviteList, setInviteList] = useState([] as InvitationResponse[]);
 
     useEffect(() => {
-      if (isLoaded) {
-          if (!user) {
-              router.push('/login');
-          }
-  
-          // Use `user` to render user details or create UI elements
-          const unlocked = user?.publicMetadata.unlocked;
-        
-          if (unlocked !== true) {
-            router.push('/unlockaccess');
-          }
+        window.addEventListener('NewInvite', () => {
+            console.log(`IncomingInviteList message received: NewInvite`);
+            refreshContent();
+        });
+        window.addEventListener('GameStart', () => {
+            console.log(`IncomingInviteList message received: GameStart`);
+            refreshContent();
+        });
 
-          fetch('/api/user/incominginvites')
-          .then(response => response.json())
-          .then(data => setInviteList(data.inviteList));
-      }
+        refreshContent();
     }, [isLoaded]);
+
+    const refreshContent = async () => {
+        console.log('Refresh incoming invite');
+        if (isLoaded) {
+            if (!user) {
+                router.push('/login');
+            }
+    
+            // Use `user` to render user details or create UI elements
+            const unlocked = user?.publicMetadata.unlocked;
+          
+            if (unlocked !== true) {
+              router.push('/unlockaccess');
+            }
+
+            console.log("Attempting to update incoming invite list");
+            fetch('/api/user/incominginvites')
+            .then(response => response.json())
+            .then(data => {if (data && data.inviteList) setInviteList(data.inviteList);});
+        } else {
+            console.log("Refresh failed, isLoaded", isLoaded);
+        }
+    }
 
     const handleAccept = (inviteId: `${string}-${string}-${string}-${string}-${string}`) => {
         fetch('/api/invite/accept', {
@@ -39,7 +56,7 @@ export default function IncomingInviteList() {
             body: JSON.stringify({inviteId})
         })
         .then(response => response.json())
-        .then(data => setInviteList(data.inviteList));
+        .then(data => {});
     }
 
     return (

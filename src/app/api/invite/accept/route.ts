@@ -47,6 +47,8 @@ export async function POST(request: NextRequest) {
     currentTurn: authResponse.userId
   }
   await db.collection("gameData").insertOne(gameData);
+  
+  await db.collection("gameInvites").deleteOne({"inviteId": inviteId});
 
   // Send notifications
   if (!getApps().length) {
@@ -74,6 +76,5 @@ export async function POST(request: NextRequest) {
     }));
   }
 
-  await db.collection("gameInvites").deleteOne({"inviteId": inviteId});
   return NextResponse.json({success: true});
 }

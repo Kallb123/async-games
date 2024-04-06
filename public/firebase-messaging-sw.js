@@ -65,6 +65,9 @@ messaging.onBackgroundMessage((payload) => {
     console.log('[firebase-messaging-sw.js] Received background message ', payload);
 
     const { title, body, image, icon, ...restPayload } = payload.data;
+    if (!title || !body) {
+        return;
+    }
     const notificationOptions = {
         body,
         icon: image || '/icons/firebase-logo.png', // path to your "fallback" firebase notification logo

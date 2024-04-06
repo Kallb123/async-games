@@ -11,23 +11,37 @@ export default function TheirTurnList() {
     const [gameList, setGameList] = useState([] as GameResponse[]);
 
     useEffect(() => {
-      if (isLoaded) {
-          if (!user) {
-              router.push('/login');
-          }
-  
-          // Use `user` to render user details or create UI elements
-          const unlocked = user?.publicMetadata.unlocked;
-        
-          if (unlocked !== true) {
-            router.push('/unlockaccess');
-          }
+        window.addEventListener('NewInvite', () => {
+            console.log(`TheirTurnList message received: NewInvite`);
+            refreshContent();
+        });
+        window.addEventListener('GameStart', () => {
+            console.log(`TheirTurnList message received: GameStart`);
+            refreshContent();
+        });
 
-          fetch('/api/game/theirturnlist')
-          .then(response => response.json())
-          .then(data => setGameList(data.gameList));
-      }
+        refreshContent();
     }, [isLoaded]);
+
+    const refreshContent = async () => {
+        console.log('Refresh their turn list');
+        if (isLoaded) {
+            if (!user) {
+                router.push('/login');
+            }
+    
+            // Use `user` to render user details or create UI elements
+            const unlocked = user?.publicMetadata.unlocked;
+          
+            if (unlocked !== true) {
+              router.push('/unlockaccess');
+            }
+  
+            fetch('/api/game/theirturnlist')
+            .then(response => response.json())
+            .then(data => {if (data && data.gameList) setGameList(data.gameList)});
+        }
+    }
 
     return (
         <>
