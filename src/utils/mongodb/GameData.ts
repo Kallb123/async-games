@@ -1,7 +1,7 @@
-import { randomUUID } from "crypto";
 import { InvitationData } from "./InvitationData"
 import { auth, clerkClient } from "@clerk/nextjs";
 import { DiceCitiesInvitationData } from "@/app/api/newgame/dicecities/route";
+import { CreateDiceCitiesGame } from "@/games/DiceCities/DiceCitiesInit";
 
 export interface GameData {
     gameId: `${string}-${string}-${string}-${string}-${string}`,
@@ -10,7 +10,12 @@ export interface GameData {
     turnTimer: string,
     currentTurn: string,
     lastTurnTimestamp: string,
-    gameState: string
+    gameState: GameState
+}
+
+export interface GameState {
+    turnOrder: string[],
+    history: string[]
 }
 
 export interface GameResponse {
@@ -23,6 +28,11 @@ export interface GameResponse {
 export interface DiceCitiesGameData extends GameData {
     enabledDocks: boolean,
     enabledBillionaireRow: boolean,
+    gameState: DiceCitiesGameState
+}
+
+export interface DiceCitiesGameState extends GameState {
+    bankCards: any[]
 }
 
 export async function GameCreator(invite: InvitationData): Promise<GameData> {
@@ -37,18 +47,8 @@ export async function GameCreator(invite: InvitationData): Promise<GameData> {
     switch (invite.gameType) {
         case "DiceCities":
             const diceCitiesInvite = invite as DiceCitiesInvitationData;
-            const gameData: DiceCitiesGameData = {
-                gameId: randomUUID(),
-                gameType: invite.gameType,
-                userIdList: userList.map(user => user.id).concat(invite.senderId),
-                turnTimer: invite.turnTimer,
-                currentTurn: authResponse.userId,
-                lastTurnTimestamp: (new Date()).toISOString(),
-                gameState: "",
-                enabledDocks: diceCitiesInvite.enabledDocks,
-                enabledBillionaireRow: diceCitiesInvite.enabledBillionaireRow
-            }
-            return gameData;
+            const userIdList = userList.map(user => user.id).concat(invite.senderId);
+            return await CreateDiceCitiesGame(diceCitiesInvite, userIdList);
             break;
         default:
             throw new Error(`GameType not recognised: ${invite.gameType}`);
