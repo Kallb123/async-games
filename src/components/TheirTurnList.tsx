@@ -19,6 +19,10 @@ export default function TheirTurnList() {
             console.log(`TheirTurnList message received: GameStart`);
             refreshContent();
         });
+        window.addEventListener('TurnTaken', () => {
+            console.log(`TheirTurnList message received: TurnTaken`);
+            refreshContent();
+        });
 
         refreshContent();
     }, [isLoaded]);

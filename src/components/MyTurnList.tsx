@@ -19,6 +19,10 @@ export default function MyTurnList() {
             console.log(`MyTurnList message received: GameStart`);
             refreshContent();
         });
+        window.addEventListener('TurnTaken', () => {
+            console.log(`MyTurnList message received: TurnTaken`);
+            refreshContent();
+        });
 
         refreshContent();
     }, [isLoaded]);
@@ -43,12 +47,24 @@ export default function MyTurnList() {
         }
     }
 
+    const handleClick = async (gameId: `${string}-${string}-${string}-${string}-${string}`) => {
+        fetch('/api/game/taketurn', {
+            method: "POST",
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({gameId})
+        })
+        .then(response => response.json())
+        .then(data => console.log(data));
+    }
+
     return (
         <>
             <h2>Your Turn</h2>
             <ul>
                 {gameList.map((game: GameResponse) => (
-                    <li key={game.gameId}>{game.usernameList.map(user => (<span key={user}>{user} </span>))}</li>
+                    <li key={game.gameId} onClick={() => {handleClick(game.gameId);}}>{game.usernameList.map(user => (<span key={user}>{user} </span>))}</li>
                 ))}
             </ul>
         </>
