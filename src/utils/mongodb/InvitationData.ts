@@ -1,16 +1,16 @@
-export interface UserIdAcceptance {
-    userId: string,
-    inviteAccepted: boolean
-}
+import { Schema } from "mongoose";
 
-export interface InvitationData {
-    inviteId: `${string}-${string}-${string}-${string}-${string}`,
-    senderId: string,
-    userIdList: UserIdAcceptance[],
-    turnTimer: string,
-    timestamp: string,
-    gameType: string
-}
+var InvitationSchema = new Schema ({
+    inviteId: Schema.Types.UUID,
+    senderId: String,
+    userIdList: [{
+        userId: String,
+        inviteAccepted: Boolean
+    }],
+    turnTimer: String,
+    timestamp: String,
+    gameType: String
+ });
 
 export interface InvitationResponse {
     inviteId: `${string}-${string}-${string}-${string}-${string}`,
