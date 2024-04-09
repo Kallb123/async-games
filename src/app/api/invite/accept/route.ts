@@ -1,13 +1,12 @@
 import TimedToken from '@/utils/firebase/TimedToken';
-import clientPromise from '@/utils/mongodb/mongodb';
+import clientPromise, { dbConnect } from '@/utils/mongodb/mongodb';
 import { auth, clerkClient } from '@clerk/nextjs';
 import { credential } from 'firebase-admin';
 import { initializeApp, getApp, getApps } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
-import { InvitationData } from '@/utils/mongodb/InvitationData';
-import { randomUUID } from 'crypto';
 import { GameCreator, GameData } from '@/utils/mongodb/GameData';
+import { IInvitationDataDocument, InvitationModel } from '@/utils/mongodb/InvitationData';
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
@@ -22,8 +21,11 @@ export async function POST(request: NextRequest) {
   const dbClient = await clientPromise;
   const db = dbClient.db("async-games");
 
-  // @ts-ignore
-  const inviteData: InvitationData = await db.collection("gameInvites").findOne({inviteId});
+  await dbConnect();
+  const inviteData: IInvitationDataDocument = await InvitationModel.findOne({inviteId}).exec();
+  if (!inviteData) {
+    return NextResponse.json({}, {status: 404, statusText: "Invite not found"});
+  }
 
   const acceptance = inviteData.userIdList.find((uil) => uil.userId === authResponse.userId);
   if (acceptance) {
@@ -50,7 +52,7 @@ export async function POST(request: NextRequest) {
   // If not everyone has accepted
   const allAccepted = inviteData.userIdList.every((uil) => uil.inviteAccepted === true);
   if (!allAccepted) {
-    await db.collection("gameInvites").replaceOne({"inviteId": inviteId}, inviteData);
+    await inviteData.save();
   }
 
   const tokens = userList.flatMap((user) => user.privateMetadata.notificationTokens as TimedToken[]).filter(token => token);
@@ -74,7 +76,7 @@ export async function POST(request: NextRequest) {
   const gameData: GameData = await GameCreator(inviteData);
   await db.collection("gameData").insertOne(gameData);
   
-  await db.collection("gameInvites").deleteOne({"inviteId": inviteId});
+  await inviteData.deleteOne();
 
   if (tokens.length) {
     messaging.sendEach(tokens.map((token) => {

@@ -1,6 +1,28 @@
-import { Schema } from "mongoose";
+import { Document, Model, Schema, model, models } from "mongoose";
 
-var InvitationSchema = new Schema ({
+interface IUserIdAcceptance {
+    userId: string,
+    inviteAccepted: boolean
+}
+
+export interface IInvitationData {
+    inviteId: `${string}-${string}-${string}-${string}-${string}`,
+    senderId: string,
+    userIdList: IUserIdAcceptance[],
+    turnTimer: string,
+    timestamp: string,
+    gameType: string
+}
+
+export interface IInvitationDataDocument extends IInvitationData, Document {
+    CreateGame: () => void;
+}
+
+export interface IInvitationDataModel extends Model<IInvitationDataDocument> {
+    // Model methods
+}
+
+export var InvitationSchema = new Schema<IInvitationDataDocument> ({
     inviteId: Schema.Types.UUID,
     senderId: String,
     userIdList: [{
@@ -10,7 +32,11 @@ var InvitationSchema = new Schema ({
     turnTimer: String,
     timestamp: String,
     gameType: String
- });
+}, {discriminatorKey: 'kind'});
+InvitationSchema.methods.CreateGame = function() {
+    console.log("Generic game");
+};
+export var InvitationModel = models.Invitation || model<IInvitationDataDocument, IInvitationDataModel>('Invitation', InvitationSchema);
 
 export interface InvitationResponse {
     inviteId: `${string}-${string}-${string}-${string}-${string}`,

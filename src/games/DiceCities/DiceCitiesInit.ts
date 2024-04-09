@@ -1,8 +1,8 @@
-import { DiceCitiesInvitationData } from "@/app/api/newgame/dicecities/route";
+import { IDiceCitiesInvitationData } from "@/app/api/newgame/dicecities/route";
 import { DiceCitiesGameData } from "@/utils/mongodb/GameData";
 import { randomUUID } from "crypto";
 
-export async function CreateDiceCitiesGame(invite: DiceCitiesInvitationData, userIdList: string[]): Promise<DiceCitiesGameData> {
+export async function CreateDiceCitiesGame(invite: IDiceCitiesInvitationData, userIdList: string[]): Promise<DiceCitiesGameData> {
     const turnOrder = userIdList;
     const gameData: DiceCitiesGameData = {
         gameId: randomUUID(),

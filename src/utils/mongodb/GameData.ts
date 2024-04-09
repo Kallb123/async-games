@@ -1,7 +1,7 @@
-import { InvitationData } from "./InvitationData"
+import { IInvitationDataDocument } from "./InvitationData"
 import { auth, clerkClient } from "@clerk/nextjs";
-import { DiceCitiesInvitationData } from "@/app/api/newgame/dicecities/route";
 import { CreateDiceCitiesGame } from "@/games/DiceCities/DiceCitiesInit";
+import { IDiceCitiesInvitationDataDocument } from "@/app/api/newgame/dicecities/route";
 
 export interface GameData {
     gameId: `${string}-${string}-${string}-${string}-${string}`,
@@ -35,10 +35,11 @@ export interface DiceCitiesGameState extends GameState {
     bankCards: any[]
 }
 
-export async function GameCreator(invite: InvitationData): Promise<GameData> {
+export async function GameCreator(invite: IInvitationDataDocument): Promise<GameData> {
     const userList = await clerkClient.users.getUserList({
       userId: invite.userIdList.map(uid => uid.userId)
     });
+    invite.CreateGame();
     const authResponse = auth();
     if (!authResponse.userId) {
         throw new Error("User not signed in?");
@@ -46,7 +47,7 @@ export async function GameCreator(invite: InvitationData): Promise<GameData> {
     
     switch (invite.gameType) {
         case "DiceCities":
-            const diceCitiesInvite = invite as DiceCitiesInvitationData;
+            const diceCitiesInvite = invite as IDiceCitiesInvitationDataDocument;
             const userIdList = userList.map(user => user.id).concat(invite.senderId);
             return await CreateDiceCitiesGame(diceCitiesInvite, userIdList);
             break;

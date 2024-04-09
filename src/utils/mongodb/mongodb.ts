@@ -39,6 +39,7 @@ export async function dbConnect() {
 
   return cached.conn;
 }
+dbConnect();
 
 const uri = process.env.MONGODB_URI
 const options: MongoClientOptions = {

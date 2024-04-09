@@ -5,9 +5,7 @@ import { credential } from 'firebase-admin';
 import { initializeApp, getApp, getApps } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
-import { InvitationData } from '@/utils/mongodb/InvitationData';
-import { randomUUID } from 'crypto';
-import { GameCreator, GameData } from '@/utils/mongodb/GameData';
+import { GameData } from '@/utils/mongodb/GameData';
 
 export async function POST(request: NextRequest) {
   console.log(`${request.method} ${request.nextUrl.pathname}`);
