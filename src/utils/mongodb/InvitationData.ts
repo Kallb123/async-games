@@ -1,4 +1,5 @@
 import { Document, Model, Schema, model, models } from "mongoose";
+import { IGameData } from "./GameData";
 
 interface IUserIdAcceptance {
     userId: string,
@@ -15,11 +16,12 @@ export interface IInvitationData {
 }
 
 export interface IInvitationDataDocument extends IInvitationData, Document {
-    CreateGame: () => void;
+    // Instance methods
+    CreateGame: (invite: IInvitationData, userIdList: string[]) => IGameData;
 }
 
 export interface IInvitationDataModel extends Model<IInvitationDataDocument> {
-    // Model methods
+    // Static methods
 }
 
 export var InvitationSchema = new Schema<IInvitationDataDocument> ({
@@ -33,7 +35,7 @@ export var InvitationSchema = new Schema<IInvitationDataDocument> ({
     timestamp: String,
     gameType: String
 }, {discriminatorKey: 'kind'});
-InvitationSchema.methods.CreateGame = function() {
+InvitationSchema.methods.CreateGame = function(invite: IInvitationData, userIdList: string[]) {
     console.log("Generic game");
 };
 export var InvitationModel = models.Invitation || model<IInvitationDataDocument, IInvitationDataModel>('Invitation', InvitationSchema);

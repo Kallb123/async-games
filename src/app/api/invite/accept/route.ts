@@ -1,11 +1,11 @@
 import TimedToken from '@/utils/firebase/TimedToken';
-import clientPromise, { dbConnect } from '@/utils/mongodb/mongodb';
+import { dbConnect } from '@/utils/mongodb/mongodb';
 import { auth, clerkClient } from '@clerk/nextjs';
 import { credential } from 'firebase-admin';
 import { initializeApp, getApp, getApps } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
-import { GameCreator, GameData } from '@/utils/mongodb/GameData';
+import { DiceCitiesGameDataModel, GameDataModel, IGameData } from '@/utils/mongodb/GameData';
 import { IInvitationDataDocument, InvitationModel } from '@/utils/mongodb/InvitationData';
 
 export async function POST(request: NextRequest) {
@@ -17,9 +17,6 @@ export async function POST(request: NextRequest) {
   }
   
   const { inviteId } = await request.json();
-
-  const dbClient = await clientPromise;
-  const db = dbClient.db("async-games");
 
   await dbConnect();
   const inviteData: IInvitationDataDocument = await InvitationModel.findOne({inviteId}).exec();
@@ -45,8 +42,9 @@ export async function POST(request: NextRequest) {
   const firebaseApp = getApp('adminApp');
   const messaging = getMessaging(firebaseApp);
 
+  const userIdList = inviteData.userIdList.map(uid => uid.userId);
   const userList = await clerkClient.users.getUserList({
-    userId: inviteData.userIdList.map(uid => uid.userId)
+    userId: userIdList
   });
 
   // If not everyone has accepted
@@ -73,8 +71,10 @@ export async function POST(request: NextRequest) {
   }
 
   // Create game
-  const gameData: GameData = await GameCreator(inviteData);
-  await db.collection("gameData").insertOne(gameData);
+  const gameData = inviteData.CreateGame(inviteData, userIdList);
+  const gameDataM = new DiceCitiesGameDataModel(gameData);
+
+  await gameDataM.save();
   
   await inviteData.deleteOne();
 

@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import { IInvitationData, IInvitationDataDocument, InvitationModel, InvitationRequest } from '@/utils/mongodb/InvitationData';
 import { Model, Schema, models } from 'mongoose';
 import { dbConnect } from '@/utils/mongodb/mongodb';
+import { IDiceCitiesGameData } from '@/utils/mongodb/GameData';
 
 export interface DiceCitiesInvitationRequest extends InvitationRequest {
   enabledDocks: boolean,
@@ -27,14 +28,34 @@ export interface IDiceCitiesInvitationDataModel extends Model<IDiceCitiesInvitat
   // Model methods
 }
 
-export var DiceCitiesInvitationSchema = new Schema<IDiceCitiesInvitationDataDocument>({
+var DiceCitiesInvitationSchema = new Schema<IDiceCitiesInvitationDataDocument>({
   enabledDocks: Boolean,
   enabledBillionaireRow: Boolean
 }, {discriminatorKey: 'kind'});
-DiceCitiesInvitationSchema.methods.CreateGame = () => {
-  console.log("Creating dice cities game!!")
+DiceCitiesInvitationSchema.methods.CreateGame = (invite: IDiceCitiesInvitationData, userIdList: string[]) => {
+  console.log("Creating dice cities game!!");
+
+  const turnOrder = userIdList;
+  const gameData: IDiceCitiesGameData = {
+      gameId: randomUUID(),
+      gameType: invite.gameType,
+      userIdList,
+      turnTimer: invite.turnTimer,
+      currentTurn: turnOrder[0],
+      lastTurnTimestamp: (new Date()).toISOString(),
+      gameState: {
+          turnOrder,
+          history: []
+      },
+      specificGameState: {
+        bankCards: []
+      },
+      enabledDocks: invite.enabledDocks,
+      enabledBillionaireRow: invite.enabledBillionaireRow
+  }
+  return gameData;
 };
-export var DiceCitiesInvitationModel = models.DiceCitiesInvitation || InvitationModel.discriminator<IDiceCitiesInvitationDataDocument, IDiceCitiesInvitationDataModel>('DiceCitiesInvitation', DiceCitiesInvitationSchema);
+var DiceCitiesInvitationModel = models.DiceCitiesInvitation || InvitationModel.discriminator<IDiceCitiesInvitationDataDocument, IDiceCitiesInvitationDataModel>('DiceCitiesInvitation', DiceCitiesInvitationSchema);
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
