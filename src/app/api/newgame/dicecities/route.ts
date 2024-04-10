@@ -32,7 +32,7 @@ var DiceCitiesInvitationSchema = new Schema<IDiceCitiesInvitationDataDocument>({
   enabledDocks: Boolean,
   enabledBillionaireRow: Boolean
 }, {discriminatorKey: 'kind'});
-DiceCitiesInvitationSchema.methods.CreateGame = (invite: IDiceCitiesInvitationData, userIdList: string[]) => {
+DiceCitiesInvitationSchema.methods.CreateGame = function(invite: IDiceCitiesInvitationData, userIdList: string[]) {
   console.log("Creating dice cities game!!");
 
   const turnOrder = userIdList;

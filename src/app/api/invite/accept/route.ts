@@ -5,7 +5,7 @@ import { credential } from 'firebase-admin';
 import { initializeApp, getApp, getApps } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
-import { DiceCitiesGameDataModel, GameDataModel, IGameData } from '@/utils/mongodb/GameData';
+import { DiceCitiesGameDataModel } from '@/utils/mongodb/GameData';
 import { IInvitationDataDocument, InvitationModel } from '@/utils/mongodb/InvitationData';
 
 export async function POST(request: NextRequest) {
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Create game
-  const gameData = inviteData.CreateGame(inviteData, userIdList);
+  const gameData = inviteData.CreateGame(inviteData, userIdList.concat(inviteData.senderId));
   const gameDataM = new DiceCitiesGameDataModel(gameData);
 
   await gameDataM.save();
