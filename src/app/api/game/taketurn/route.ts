@@ -1,13 +1,11 @@
 import TimedToken from '@/utils/firebase/TimedToken';
-import clientPromise from '@/utils/mongodb/mongodb';
+import { dbConnect } from '@/utils/mongodb/mongodb';
 import { auth, clerkClient } from '@clerk/nextjs';
 import { credential } from 'firebase-admin';
 import { initializeApp, getApp, getApps } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
-import { InvitationData } from '@/utils/mongodb/InvitationData';
-import { randomUUID } from 'crypto';
-import { GameCreator, GameData } from '@/utils/mongodb/GameData';
+import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 
 export async function POST(request: NextRequest) {
   console.log(`${request.method} ${request.nextUrl.pathname}`);
@@ -19,11 +17,8 @@ export async function POST(request: NextRequest) {
   
   const { gameId } = await request.json();
 
-  const dbClient = await clientPromise;
-  const db = dbClient.db("async-games");
-
-  // @ts-ignore
-  const gameData: GameData = await db.collection("gameData").findOne({gameId});
+  await dbConnect();
+  const gameData: IGameDataDocument = await GameDataModel.findOne({gameId}).exec();
 
   if (gameData.currentTurn !== authResponse.userId) {
     return NextResponse.json({}, {status: 401, statusText: "Not your turn"});
@@ -42,7 +37,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, {status: 400, statusText: "Next user not found"});
   }
 
-  await db.collection("gameData").replaceOne({gameId}, gameData);
+  await gameData.save();
 
   // initialise Firebase
   if (!getApps().length) {

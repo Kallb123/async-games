@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import clientPromise from "../../../../utils/mongodb/mongodb";
+import { dbConnect } from "../../../../utils/mongodb/mongodb";
+import { GameDataModel } from '@/utils/mongodb/GameData';
+import { InvitationModel } from '@/utils/mongodb/InvitationData';
 
 export async function GET(request: NextRequest) {
   console.log(`GET ${request.nextUrl.pathname}`);
-
-  const dbClient = await clientPromise;
-  const db = dbClient.db("async-games");
-  await db.collection("gameInvites").deleteMany({});
-  await db.collection("gameData").deleteMany({});
+  
+  await dbConnect();
+  await InvitationModel.deleteMany({}).exec();
+  await GameDataModel.deleteMany({}).exec();
 
   return NextResponse.json({success: true});
 }

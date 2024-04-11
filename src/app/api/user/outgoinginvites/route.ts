@@ -1,7 +1,7 @@
 import { auth, clerkClient } from '@clerk/nextjs'
 import { NextRequest, NextResponse } from 'next/server';
-import clientPromise from "../../../../utils/mongodb/mongodb";
-import { InvitationData, InvitationResponse } from '@/utils/mongodb/InvitationData';
+import { dbConnect } from "../../../../utils/mongodb/mongodb";
+import { IInvitationDataDocument, InvitationModel, InvitationResponse } from '@/utils/mongodb/InvitationData';
 
 export async function GET(request: NextRequest) {
   console.log(`GET ${request.nextUrl.pathname}`);
@@ -10,12 +10,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
   }
 
-  const dbClient = await clientPromise;
-  const db = dbClient.db("async-games");
+  await dbConnect();
 
-  // @ts-ignore
-  const inviteData: InvitationData[] = await db.collection("gameInvites").find({senderId: userId}).toArray();
-
+  const inviteData: IInvitationDataDocument[] = await InvitationModel.find({senderId: userId});
+  
   const inviteResponses: InvitationResponse[] = [];
   for(const invite of inviteData) {
     const sender = (await clerkClient.users.getUser(invite.senderId)).username ?? "Unknown User";

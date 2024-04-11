@@ -1,7 +1,7 @@
 import { auth, clerkClient } from '@clerk/nextjs'
 import { NextRequest, NextResponse } from 'next/server';
-import clientPromise from "../../../../utils/mongodb/mongodb";
-import { GameData, GameResponse } from '@/utils/mongodb/GameData';
+import { dbConnect } from "../../../../utils/mongodb/mongodb";
+import { GameDataModel, GameResponse, IGameDataDocument } from '@/utils/mongodb/GameData';
 
 export async function GET(request: NextRequest) {
   console.log(`GET ${request.nextUrl.pathname}`);
@@ -10,12 +10,10 @@ export async function GET(request: NextRequest) {
   if (!userId) {
     return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
   }
+  
+  await dbConnect();
 
-  const dbClient = await clientPromise;
-  const db = dbClient.db("async-games");
-
-  // @ts-ignore
-  const gameDatas: GameData[] = await db.collection("gameData").find({currentTurn: userId}).toArray();
+  const gameDatas: IGameDataDocument[] = await GameDataModel.find({currentTurn: userId}).exec();
 
   const gameResponses: GameResponse[] = [];
   for(const gameData of gameDatas) {
