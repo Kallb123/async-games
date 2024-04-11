@@ -1,4 +1,4 @@
-import { Document, Model, Schema, model, models } from "mongoose";
+import { Document, Model, Schema, model, models, Types } from "mongoose";
 
 export interface IGameState {
     turnOrder: string[],
@@ -8,6 +8,7 @@ export interface IGameState {
 export interface IGameData {
     gameId: `${string}-${string}-${string}-${string}-${string}`,
     gameType: string,
+    friendlyName: string,
     userIdList: string[],
     turnTimer: string,
     currentTurn: string,
@@ -26,6 +27,7 @@ export interface IGameDataModel extends Model<IGameDataDocument> {
 export var GameDataSchema = new Schema<IGameDataDocument> ({
     gameId: Schema.Types.UUID,
     gameType: String,
+    friendlyName: String,
     userIdList: [String],
     turnTimer: String,
     currentTurn: String,
@@ -44,8 +46,45 @@ export interface GameResponse {
     currentTurn: string
 }
 
+export type cardType = "farm" | "pasture" | "store" | "dining" | "production" | "landmark" | "factory" | "market";
+
+export interface IDiceCitiesCard {
+    cardId: Types.UUID,
+    title: string,
+    cost: number,
+    rollNumber: number[],
+    text: string,
+    art: string,
+    type: cardType,
+    icon: string,
+    ownLimit: number,
+    bankGain: number,
+    onOwnTurn: boolean,
+    onOponentsTurn: boolean,
+    stealRollerGain: number,
+    stealAllGain: number,
+    stealChosenGain: number,
+    tradeCards: boolean,
+    gainMultiplier: {type: cardType, amountPerType: number} | null
+}
+
+export interface IDiceCitiesCardCount {
+    card: Types.UUID,
+    amount: number
+}
+
+export interface IDiceCitiesPlayerState {
+    cards: IDiceCitiesCardCount[],
+    money: number,
+    doubleUnlocked: boolean,
+    bonusDiningAndStore: boolean,
+    rerollDoubles: boolean,
+    oneReroll: boolean
+}
+
 export interface IDiceCitiesGameState {
-    bankCards: any[]
+    bankCards: IDiceCitiesCardCount[],
+    playerStates: { [key: string]: IDiceCitiesPlayerState }
 }
 
 export interface IDiceCitiesGameData extends IGameData {
@@ -64,7 +103,27 @@ export interface IDiceCitiesGameDataModel extends Model<IDiceCitiesGameDataDocum
 
 var DiceCitiesGameDataSchema = new Schema<IDiceCitiesGameDataDocument>({
     enabledDocks: Boolean,
-    enabledBillionaireRow: Boolean
+    enabledBillionaireRow: Boolean,
+    specificGameState: {
+        bankCards: [{
+            card: Schema.Types.UUID,
+            amount: Number
+        }],
+        playerStates: {
+            type: Map,
+            of: {
+                cards: [{
+                    card: Schema.Types.UUID,
+                    amount: Number
+                }],
+                money: Number,
+                doubleUnlocked: Boolean,
+                bonusDiningAndStore: Boolean,
+                rerollDoubles: Boolean,
+                oneReroll: Boolean
+            }
+        }
+    }
 }, {discriminatorKey: 'kind'});
 
 export var DiceCitiesGameDataModel = models.DiceCitiesGameData || GameDataModel.discriminator<IDiceCitiesGameDataDocument, IDiceCitiesGameDataModel>('DiceCitiesGameData', DiceCitiesGameDataSchema);

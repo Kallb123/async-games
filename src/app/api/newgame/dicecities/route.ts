@@ -9,6 +9,8 @@ import { IInvitationData, IInvitationDataDocument, InvitationModel, InvitationRe
 import { Model, Schema, models } from 'mongoose';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { IDiceCitiesGameData } from '@/utils/mongodb/GameData';
+import { DiceCitiesCardIds, DiceCitiesCards } from '@/games/DiceCities/cards';
+import { UUID } from 'mongodb';
 
 export interface DiceCitiesInvitationRequest extends InvitationRequest {
   enabledDocks: boolean,
@@ -39,6 +41,7 @@ DiceCitiesInvitationSchema.methods.CreateGame = function(invite: IDiceCitiesInvi
   const gameData: IDiceCitiesGameData = {
       gameId: randomUUID(),
       gameType: invite.gameType,
+      friendlyName: "Dice Cities",
       userIdList,
       turnTimer: invite.turnTimer,
       currentTurn: turnOrder[0],
@@ -48,10 +51,30 @@ DiceCitiesInvitationSchema.methods.CreateGame = function(invite: IDiceCitiesInvi
           history: []
       },
       specificGameState: {
-        bankCards: []
+        bankCards: [{
+          card: new UUID(DiceCitiesCardIds.WHEAT_FIELD),
+          amount: 5
+      }],
+        playerStates: {}
       },
       enabledDocks: invite.enabledDocks,
       enabledBillionaireRow: invite.enabledBillionaireRow
+  }
+  for (const userId of userIdList) {
+    gameData.specificGameState.playerStates[userId] = {
+      cards: [{
+        card: new UUID(DiceCitiesCardIds.WHEAT_FIELD),
+        amount: 1
+      }, {
+          card: new UUID(DiceCitiesCardIds.BAKERY),
+          amount: 1
+      }],
+      money: 3,
+      doubleUnlocked: false,
+      bonusDiningAndStore: false,
+      rerollDoubles: false,
+      oneReroll: false
+    };
   }
   return gameData;
 };
