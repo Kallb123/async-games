@@ -64,7 +64,7 @@ export default function MyTurnList() {
             <h2>Your Turn</h2>
             <ul>
                 {gameList.map((game: GameResponse) => (
-                    <li key={game.gameId} onClick={() => {handleClick(game.gameId);}}>{game.usernameList.map(user => (<span key={user}>{user} </span>))}</li>
+                    <li key={game.gameId}><a href={`/games/${game.url}/${game.gameId}`}>{game.usernameList.map(user => (<span key={user}>{user} </span>))}</a></li>
                 ))}
             </ul>
         </>
