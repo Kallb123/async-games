@@ -5,80 +5,8 @@ import { getApp, getApps, initializeApp } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
-import { IInvitationData, IInvitationDataDocument, InvitationModel, InvitationRequest } from '@/utils/mongodb/InvitationData';
-import { Model, Schema, models } from 'mongoose';
+import { DiceCitiesInvitationModel, DiceCitiesInvitationRequest } from '@/utils/mongodb/InvitationData';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { IDiceCitiesGameData } from '@/utils/mongodb/GameData';
-import { DiceCitiesCardIds, DiceCitiesCards } from '@/games/DiceCities/cards';
-import { UUID } from 'mongodb';
-
-export interface DiceCitiesInvitationRequest extends InvitationRequest {
-  enabledDocks: boolean,
-  enabledBillionaireRow: boolean,
-}
-
-export interface IDiceCitiesInvitationData extends IInvitationData {
-  enabledDocks: boolean,
-  enabledBillionaireRow: boolean,
-}
-
-export interface IDiceCitiesInvitationDataDocument extends IDiceCitiesInvitationData, IInvitationDataDocument {
-
-}
-
-export interface IDiceCitiesInvitationDataModel extends Model<IDiceCitiesInvitationDataDocument> {
-  // Model methods
-}
-
-var DiceCitiesInvitationSchema = new Schema<IDiceCitiesInvitationDataDocument>({
-  enabledDocks: Boolean,
-  enabledBillionaireRow: Boolean
-}, {discriminatorKey: 'kind'});
-DiceCitiesInvitationSchema.methods.CreateGame = function(invite: IDiceCitiesInvitationData, userIdList: string[]) {
-  console.log("Creating dice cities game!!");
-
-  const turnOrder = userIdList;
-  const gameData: IDiceCitiesGameData = {
-      gameId: randomUUID(),
-      gameType: invite.gameType,
-      friendlyName: "Dice Cities",
-      userIdList,
-      turnTimer: invite.turnTimer,
-      currentTurn: turnOrder[0],
-      lastTurnTimestamp: (new Date()).toISOString(),
-      gameState: {
-          turnOrder,
-          history: []
-      },
-      specificGameState: {
-        bankCards: [{
-          card: new UUID(DiceCitiesCardIds.WHEAT_FIELD),
-          amount: 5
-      }],
-        playerStates: {}
-      },
-      enabledDocks: invite.enabledDocks,
-      enabledBillionaireRow: invite.enabledBillionaireRow
-  }
-  for (const userId of userIdList) {
-    gameData.specificGameState.playerStates[userId] = {
-      cards: [{
-        card: new UUID(DiceCitiesCardIds.WHEAT_FIELD),
-        amount: 1
-      }, {
-          card: new UUID(DiceCitiesCardIds.BAKERY),
-          amount: 1
-      }],
-      money: 3,
-      doubleUnlocked: false,
-      bonusDiningAndStore: false,
-      rerollDoubles: false,
-      oneReroll: false
-    };
-  }
-  return gameData;
-};
-var DiceCitiesInvitationModel = models.DiceCitiesInvitation || InvitationModel.discriminator<IDiceCitiesInvitationDataDocument, IDiceCitiesInvitationDataModel>('DiceCitiesInvitation', DiceCitiesInvitationSchema);
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);

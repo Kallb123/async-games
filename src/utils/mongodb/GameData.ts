@@ -13,6 +13,7 @@ export interface IGameData {
     turnTimer: string,
     currentTurn: string,
     lastTurnTimestamp: string,
+    url: string,
     gameState: IGameState
 }
 
@@ -32,6 +33,7 @@ export var GameDataSchema = new Schema<IGameDataDocument> ({
     turnTimer: String,
     currentTurn: String,
     lastTurnTimestamp: String,
+    url: String,
     gameState: {
         turnOrder: [String],
         history: [String]
@@ -43,7 +45,8 @@ export interface GameResponse {
     gameId: `${string}-${string}-${string}-${string}-${string}`,
     usernameList: string[],
     turnTimer: string,
-    currentTurn: string
+    currentTurn: string,
+    url: string
 }
 
 export type cardType = "farm" | "pasture" | "store" | "dining" | "production" | "landmark" | "factory" | "market";

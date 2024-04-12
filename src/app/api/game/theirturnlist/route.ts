@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
     gameResponses.push({
       gameId: gameData.gameId,
       turnTimer: gameData.turnTimer,
+      url: gameData.url,
       currentTurn,
       usernameList
     });

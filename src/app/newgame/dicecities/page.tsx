@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { Button, Col, Form, Row } from "react-bootstrap";
 import CurrentUserInfo from "@/components/CurrentUserInfo";
 import UserInviteList from "@/components/UserInviteList";
-import { DiceCitiesInvitationRequest } from "@/app/api/newgame/dicecities/route";
+import { DiceCitiesInvitationRequest } from "@/utils/mongodb/InvitationData";
 
 export default function NewGameDiceCities() {
   const pathName = usePathname();

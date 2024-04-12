@@ -24,7 +24,8 @@ export async function GET(request: NextRequest) {
       gameId: gameData.gameId,
       turnTimer: gameData.turnTimer,
       currentTurn,
-      usernameList
+      usernameList,
+      url: gameData.url
     });
   }
 
