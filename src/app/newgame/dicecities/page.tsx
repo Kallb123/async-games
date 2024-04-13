@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { Button, Col, Form, Row } from "react-bootstrap";
 import CurrentUserInfo from "@/components/CurrentUserInfo";
 import UserInviteList from "@/components/UserInviteList";
-import { DiceCitiesInvitationRequest } from "@/utils/mongodb/InvitationData";
+import { DiceCitiesInvitationRequest } from "@/games/DiceCities/DiceCitiesModels";
 
 export default function NewGameDiceCities() {
   const pathName = usePathname();
@@ -86,6 +86,7 @@ export default function NewGameDiceCities() {
   return (
     <main>
       <h1>New Game: Dice Cities</h1>
+        <h2><a href="/">Home</a></h2>
         <Form onSubmit={handleSubmit}>
           <Row>
             <Col>

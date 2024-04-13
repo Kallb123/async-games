@@ -1,5 +1,5 @@
-import { IDiceCitiesCard } from "@/utils/mongodb/GameData";
 import { UUID } from "mongodb";
+import { IDiceCitiesCard } from "./apiModels";
 
 export enum DiceCitiesCardIds {
     WHEAT_FIELD = "2d5aaaa4-e939-43a4-84ab-7ebb89e16ee5",
@@ -10,7 +10,7 @@ export enum DiceCitiesCardIds {
 }
 
 const wheatField: IDiceCitiesCard = {
-    cardId: new UUID("2d5aaaa4-e939-43a4-84ab-7ebb89e16ee5"),
+    cardId: "2d5aaaa4-e939-43a4-84ab-7ebb89e16ee5",
     title: "Wheat Field",
     cost: 1,
     rollNumber: [1],
@@ -30,7 +30,7 @@ const wheatField: IDiceCitiesCard = {
 }
 
 const ranch: IDiceCitiesCard = {
-    cardId: new UUID("ff935104-9d5e-403f-82c7-a01bdaed330d"),
+    cardId: "ff935104-9d5e-403f-82c7-a01bdaed330d",
     title: "Ranch",
     cost: 1,
     rollNumber: [2],
@@ -50,7 +50,7 @@ const ranch: IDiceCitiesCard = {
 }
 
 const bakery: IDiceCitiesCard = {
-    cardId: new UUID("2e39db49-1ce2-4622-a4c0-38997a6c96c4"),
+    cardId: "2e39db49-1ce2-4622-a4c0-38997a6c96c4",
     title: "Bakery",
     cost: 1,
     rollNumber: [2, 3],
@@ -70,7 +70,7 @@ const bakery: IDiceCitiesCard = {
 }
 
 const cafe: IDiceCitiesCard = {
-    cardId: new UUID("e88383e3-59fe-4805-9517-acf56b8516dd"),
+    cardId: "e88383e3-59fe-4805-9517-acf56b8516dd",
     title: "Cafe",
     cost: 2,
     rollNumber: [3],
@@ -90,7 +90,7 @@ const cafe: IDiceCitiesCard = {
 }
 
 const convenienceStore: IDiceCitiesCard = {
-    cardId: new UUID("a64cea71-c38d-46cb-8574-8e9e70403ae6"),
+    cardId: "a64cea71-c38d-46cb-8574-8e9e70403ae6",
     title: "Convenience Store",
     cost: 2,
     rollNumber: [4],

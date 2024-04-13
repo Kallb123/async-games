@@ -1,7 +1,8 @@
-import { auth, clerkClient } from '@clerk/nextjs'
+import { auth } from '@clerk/nextjs'
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from "../../../../utils/mongodb/mongodb";
-import { GameDataModel, GameResponse, IGameDataDocument } from '@/utils/mongodb/GameData';
+import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
+import { IGameResponse } from '@/utils/apiModels/GameDataApi';
 
 export async function GET(request: NextRequest) {
   console.log(`GET ${request.nextUrl.pathname}`);
@@ -15,19 +16,7 @@ export async function GET(request: NextRequest) {
 
   const gameDatas: IGameDataDocument[] = await GameDataModel.find({currentTurn: userId}).exec();
 
-  const gameResponses: GameResponse[] = [];
-  for(const gameData of gameDatas) {
-    const currentTurn = (await clerkClient.users.getUser(gameData.currentTurn)).username ?? "Unknown User";
-    const users = await clerkClient.users.getUserList({userId: gameData.userIdList});
-    const usernameList = users.map(user => user.username ?? "Unknown User");
-    gameResponses.push({
-      gameId: gameData.gameId,
-      turnTimer: gameData.turnTimer,
-      currentTurn,
-      usernameList,
-      url: gameData.url
-    });
-  }
+  const gameResponses: IGameResponse[] = await Promise.all(gameDatas.map(async gameData => await gameData.CreateResponse()));
 
   return NextResponse.json({success: true, gameList: gameResponses});
 }

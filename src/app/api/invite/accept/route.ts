@@ -5,8 +5,9 @@ import { credential } from 'firebase-admin';
 import { initializeApp, getApp, getApps } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
-import { DiceCitiesGameDataModel } from '@/utils/mongodb/GameData';
 import { IInvitationDataDocument, InvitationModel } from '@/utils/mongodb/InvitationData';
+import { DiceCitiesGameDataModel } from '@/games/DiceCities/DiceCitiesModels';
+import { uuidString } from '@/utils/apiModels/GameDataApi';
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest) {
             data: {
                 event: 'GameStart',
                 inviteId: inviteId,
-                gameId: gameData.gameId
+                gameId: gameData.gameId.toString() as uuidString
             }
         }
     }));

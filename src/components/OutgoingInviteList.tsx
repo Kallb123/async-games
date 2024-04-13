@@ -1,6 +1,6 @@
 'use client'
 
-import { InvitationResponse } from "@/utils/mongodb/InvitationData";
+import { IInvitationResponse } from "@/utils/mongodb/InvitationData";
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -9,7 +9,7 @@ import Moment from 'react-moment';
 export default function OutgoingInviteList() {
     const { user, isLoaded } = useUser();
     const router = useRouter();
-    const [inviteList, setInviteList] = useState([] as InvitationResponse[]);
+    const [inviteList, setInviteList] = useState([] as IInvitationResponse[]);
 
     useEffect(() => {
         window.addEventListener('NewInvite', () => {
@@ -52,7 +52,7 @@ export default function OutgoingInviteList() {
         <>
             <h2>Awaiting Response</h2>
             <ul>
-                {inviteList.map((invite: InvitationResponse) => (
+                {inviteList.map((invite: IInvitationResponse) => (
                     <li key={invite.inviteId}><Moment fromNow>{invite.timestamp}</Moment>: {invite.userList.map(user => (<span key={user}>{user}</span>))}</li>
                 ))}
             </ul>

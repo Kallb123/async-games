@@ -1,7 +1,8 @@
 import { auth, clerkClient } from '@clerk/nextjs'
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from "../../../../utils/mongodb/mongodb";
-import { IInvitationDataDocument, InvitationModel, InvitationResponse } from '@/utils/mongodb/InvitationData';
+import { IInvitationDataDocument, InvitationModel, IInvitationResponse } from '@/utils/mongodb/InvitationData';
+import { userIdListToUsernameList } from '@/utils/mongodb/GameData';
 
 export async function GET(request: NextRequest) {
   console.log(`GET ${request.nextUrl.pathname}`);
@@ -14,11 +15,10 @@ export async function GET(request: NextRequest) {
 
   const inviteData: IInvitationDataDocument[] = await InvitationModel.find({senderId: userId});
   
-  const inviteResponses: InvitationResponse[] = [];
+  const inviteResponses: IInvitationResponse[] = [];
   for(const invite of inviteData) {
     const sender = (await clerkClient.users.getUser(invite.senderId)).username ?? "Unknown User";
-    const users = await clerkClient.users.getUserList({userId: invite.userIdList.map(userIdAcceptance => userIdAcceptance.userId)});
-    const userList = users.map(user => user.username ?? "Unknown User");
+    const userList = await userIdListToUsernameList(invite.userIdList.map(userIdAcceptance => userIdAcceptance.userId));
     inviteResponses.push({
       timestamp: invite.timestamp,
       inviteId: invite.inviteId,

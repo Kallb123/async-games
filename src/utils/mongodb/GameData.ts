@@ -1,4 +1,6 @@
-import { Document, Model, Schema, model, models, Types } from "mongoose";
+import { Document, Model, Schema, Types, model, models } from "mongoose";
+import { IGameDataResponse, IGameResponse } from "../apiModels/GameDataApi";
+import { clerkClient } from "@clerk/nextjs";
 
 export interface IGameState {
     turnOrder: string[],
@@ -6,7 +8,7 @@ export interface IGameState {
 }
 
 export interface IGameData {
-    gameId: `${string}-${string}-${string}-${string}-${string}`,
+    gameId: Types.UUID,
     gameType: string,
     friendlyName: string,
     userIdList: string[],
@@ -19,6 +21,8 @@ export interface IGameData {
 
 export interface IGameDataDocument extends IGameData, Document {
     // Instance methods
+    CreateResponse: () => Promise<IGameResponse>;
+    CreateDataResponse: () => Promise<IGameDataResponse>;
 }
 
 export interface IGameDataModel extends Model<IGameDataDocument> {
@@ -39,95 +43,36 @@ export var GameDataSchema = new Schema<IGameDataDocument> ({
         history: [String]
     }
 }, {discriminatorKey: 'kind'});
+GameDataSchema.methods.CreateResponse = async function(): Promise<IGameResponse> {
+    console.log("CreateResponse: Generic game");
+
+    return {  
+        gameId: this.gameId,
+        gameType: this.gameType,
+        friendlyName: this.friendlyName,
+        usernameList: await userIdListToUsernameList(this.userIdList),
+        turnTimer: this.turnTimer,
+        currentTurn: this.currentTurn,
+        url: this.url,
+    }
+};
+GameDataSchema.methods.CreateDataResponse = async function(): Promise<IGameDataResponse> {
+    console.log("CreateDataResponse: Generic game");
+
+    return {  
+        gameId: this.gameId,
+        gameType: this.gameType,
+        friendlyName: this.friendlyName,
+        usernameList: await userIdListToUsernameList(this.userIdList),
+        turnTimer: this.turnTimer,
+        currentTurn: this.currentTurn,
+        url: this.url,
+        gameState: this.gameState,
+    }
+};
 export var GameDataModel = models.GameData || model<IGameDataDocument, IGameDataModel>('GameData', GameDataSchema);
 
-export interface GameResponse {
-    gameId: `${string}-${string}-${string}-${string}-${string}`,
-    usernameList: string[],
-    turnTimer: string,
-    currentTurn: string,
-    url: string
+export async function userIdListToUsernameList(userIdList: string[]): Promise<string[]> {
+    const users = await clerkClient.users.getUserList({userId: userIdList});
+    return users.map(user => user.username ?? "Unknown User");
 }
-
-export type cardType = "farm" | "pasture" | "store" | "dining" | "production" | "landmark" | "factory" | "market";
-
-export interface IDiceCitiesCard {
-    cardId: Types.UUID,
-    title: string,
-    cost: number,
-    rollNumber: number[],
-    text: string,
-    art: string,
-    type: cardType,
-    icon: string,
-    ownLimit: number,
-    bankGain: number,
-    onOwnTurn: boolean,
-    onOponentsTurn: boolean,
-    stealRollerGain: number,
-    stealAllGain: number,
-    stealChosenGain: number,
-    tradeCards: boolean,
-    gainMultiplier: {type: cardType, amountPerType: number} | null
-}
-
-export interface IDiceCitiesCardCount {
-    card: Types.UUID,
-    amount: number
-}
-
-export interface IDiceCitiesPlayerState {
-    cards: IDiceCitiesCardCount[],
-    money: number,
-    doubleUnlocked: boolean,
-    bonusDiningAndStore: boolean,
-    rerollDoubles: boolean,
-    oneReroll: boolean
-}
-
-export interface IDiceCitiesGameState {
-    bankCards: IDiceCitiesCardCount[],
-    playerStates: { [key: string]: IDiceCitiesPlayerState }
-}
-
-export interface IDiceCitiesGameData extends IGameData {
-    enabledDocks: boolean,
-    enabledBillionaireRow: boolean,
-    specificGameState: IDiceCitiesGameState
-}
-
-export interface IDiceCitiesGameDataDocument extends IDiceCitiesGameData, IGameDataDocument {
-    // Instance methods
-}
-
-export interface IDiceCitiesGameDataModel extends Model<IDiceCitiesGameDataDocument> {
-    // Static methods
-}
-
-var DiceCitiesGameDataSchema = new Schema<IDiceCitiesGameDataDocument>({
-    enabledDocks: Boolean,
-    enabledBillionaireRow: Boolean,
-    specificGameState: {
-        bankCards: [{
-            card: Schema.Types.UUID,
-            amount: Number
-        }],
-        playerStates: {
-            type: Map,
-            of: {
-                cards: [{
-                    card: Schema.Types.UUID,
-                    amount: Number
-                }],
-                money: Number,
-                doubleUnlocked: Boolean,
-                bonusDiningAndStore: Boolean,
-                rerollDoubles: Boolean,
-                oneReroll: Boolean
-            }
-        }
-    }
-}, {discriminatorKey: 'kind'});
-
-export var DiceCitiesGameDataModel = models.DiceCitiesGameData || GameDataModel.discriminator<IDiceCitiesGameDataDocument, IDiceCitiesGameDataModel>('DiceCitiesGameData', DiceCitiesGameDataSchema);
-

@@ -1,6 +1,6 @@
 'use client'
 
-import { GameResponse } from "@/utils/mongodb/GameData";
+import { IGameResponse } from "@/utils/apiModels/GameDataApi";
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 export default function TheirTurnList() {
     const { user, isLoaded } = useUser();
     const router = useRouter();
-    const [gameList, setGameList] = useState([] as GameResponse[]);
+    const [gameList, setGameList] = useState([] as IGameResponse[]);
 
     useEffect(() => {
         window.addEventListener('NewInvite', () => {
@@ -51,7 +51,7 @@ export default function TheirTurnList() {
         <>
             <h2>Their Turn</h2>
             <ul>
-                {gameList.map((game: GameResponse) => (
+                {gameList.map((game: IGameResponse) => (
                     <li key={game.gameId}>{game.usernameList.map(user => (<span key={user}>{user} </span>))}</li>
                 ))}
             </ul>

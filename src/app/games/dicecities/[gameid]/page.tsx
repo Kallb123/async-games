@@ -5,91 +5,73 @@ import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button, Col, Form, Row } from "react-bootstrap";
 import CurrentUserInfo from "@/components/CurrentUserInfo";
+import DiceCitiesPlayer from "@/components/games/DiceCities/DiceCitiesPlayer";
+import { IDiceCitiesGameDataResponse } from "@/games/DiceCities/apiModels";
 
 export default function GameDiceCities({ params }: { params: { gameid: string } }) {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
   const { user, isLoaded } = useUser();
-  const [userList, setUserList] = useState([""] as string[]);
-  const [enabledDocks, setEnabledDocks] = useState(false);
-  const [enabledBillionaireRow, setEnabledBillionaireRow] = useState(false);
-  const [turnTimer, setTurnTimer] = useState("1d");
+  const [gameData, setGameData] = useState({} as IDiceCitiesGameDataResponse);
   const router = useRouter();
 
   const gameId = params.gameid;
 
-  useEffect(() => {
-    if (isLoaded) {
-        if (!user) {
-            router.push('/login');
-        }
+    useEffect(() => {
+        if (isLoaded) {
+            if (!user) {
+                router.push('/login');
+            }
 
-        // Use `user` to render user details or create UI elements
-        const unlocked = user?.publicMetadata.unlocked;
-      
-        if (unlocked !== true) {
-          router.push('/unlockaccess');
+            // Use `user` to render user details or create UI elements
+            const unlocked = user?.publicMetadata.unlocked;
+        
+            if (unlocked !== true) {
+            router.push('/unlockaccess');
+            }
+
+            getGameData();
         }
+    }, [isLoaded]);
+
+    const getGameData = async () => {
+        fetch(`/api/game/${gameId}`)
+        .then(response => response.json())
+        .then(data => {if (data) setGameData(data.gameData)});
+    };
+
+    const handleTakeTurn = async () => {
+        fetch('/api/game/taketurn', {
+            method: "POST",
+            headers: {
+            'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({gameId})
+        })
+        .then(response => response.json())
+        .then(data => console.log(data));
     }
-  }, [isLoaded]);
 
-  const handleTakeTurn = async () => {
-    fetch('/api/game/taketurn', {
-        method: "POST",
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({gameId})
-    })
-    .then(response => response.json())
-    .then(data => console.log(data));
-}
-
-  return (
-    <main>
-      <h1>Dice Cities</h1>
-        <Form>
+    return (
+        <main>
+            <h1>Dice Cities</h1>
+            <h2><a href="/">Home</a></h2>
+            <Form>
+                <Row>
+                    <Col>
+                        <Button onClick={handleTakeTurn}>Take Turn</Button>
+                    </Col>
+                </Row>
             <Row>
                 <Col>
-                    <Button onClick={handleTakeTurn}>Take Turn</Button>
+                    {gameData?.specificGameState?.playerStates ? Object.keys(gameData.specificGameState.playerStates).map(userId => (
+                        <DiceCitiesPlayer key={userId} userId={userId} playerState={gameData.specificGameState.playerStates[userId]} />
+                    )) : ("")}
                 </Col>
             </Row>
-          <Row>
-            <Col>
-              <h3>Expansions</h3>
-              <Form.Check
-                type="switch"
-                label="Docks"
-                checked={enabledDocks}
-                onChange={(e) => setEnabledDocks(e.target.checked)}
-              /><br />
-              <Form.Check
-                type="switch"
-                label="Billionaire's Row"
-                checked={enabledBillionaireRow}
-                onChange={(e) => setEnabledBillionaireRow(e.target.checked)}
-              />
-              <h3>Options</h3>
-              <Form.Group as={Row} className="mb-3">
-                <Form.Label column>Turn Time Limit</Form.Label>
-                <Col sm={8}>
-                  <Form.Select as={Col} value={turnTimer} onChange={(e) => setTurnTimer(e.target.value)} aria-label="Turn timer select">
-                    <option value="10m">10 minutes</option>
-                    <option value="30m">30 minutes</option>
-                    <option value="1h">1 hour</option>
-                    <option value="3h">3 hours</option>
-                    <option value="1d">1 day</option>
-                    <option value="3d">3 days</option>
-                    <option value="7d">7 days</option>
-                  </Form.Select>
-                </Col>
-              </Form.Group>
-            </Col>
-            <Button type="submit">Send Invitation</Button>
-          </Row>
-        </Form>
-        <CurrentUserInfo />
-        <FcmTokenComp />
-    </main>
-  );
+            </Form>
+            <CurrentUserInfo />
+            <FcmTokenComp />
+        </main>
+    );
 }

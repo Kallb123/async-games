@@ -5,8 +5,8 @@ import { getApp, getApps, initializeApp } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
-import { DiceCitiesInvitationModel, DiceCitiesInvitationRequest } from '@/utils/mongodb/InvitationData';
 import { dbConnect } from '@/utils/mongodb/mongodb';
+import { DiceCitiesInvitationModel, DiceCitiesInvitationRequest } from '@/games/DiceCities/DiceCitiesModels';
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);

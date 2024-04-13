@@ -31,6 +31,7 @@ export default function NewGame() {
   return (
     <main>
         <h1>New Game</h1>
+        <h2><a href="/">Home</a></h2>
         <h2>Select a Game</h2>
         <Button disabled>Settlements and Cities</Button><br />
         <Button href="/newgame/dicecities">Dice Cities</Button><br />
