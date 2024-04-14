@@ -18,6 +18,9 @@ export async function GET(request: NextRequest, {params}: { params: IGetGamePara
     await dbConnect();
 
     const gameData: IGameDataDocument = await GameDataModel.findOne({gameId: params.gameid}).exec();
+    if (!gameData) {
+        return NextResponse.json({}, {status: 404, statusText: "Game not found"});
+    }
     const gameDataResponse = await gameData.CreateDataResponse();
 
     return NextResponse.json({success: true, gameData: gameDataResponse});

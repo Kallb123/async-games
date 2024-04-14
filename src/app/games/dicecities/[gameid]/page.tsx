@@ -36,8 +36,17 @@ export default function GameDiceCities({ params }: { params: { gameid: string } 
 
     const getGameData = async () => {
         fetch(`/api/game/${gameId}`)
-        .then(response => response.json())
-        .then(data => {if (data) setGameData(data.gameData)});
+        .then(response => {
+            if (!response.ok) {
+                throw new Error("Game not found");
+            }
+            return response.json();
+        })
+        .then(data => {if (data) setGameData(data.gameData)})
+        .catch(error => {
+            console.error(error);
+            router.push('/');
+        });
     };
 
     const handleTakeTurn = async () => {
