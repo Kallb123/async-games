@@ -1,14 +1,13 @@
 'use client'
 
-import { IDiceCitiesCard, IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
+import { IDiceCitiesCard, IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
 import { DiceCitiesCards } from "@/games/DiceCities/cards";
 
-interface DiceCitiesPlayerProps {
-    playerState: IDiceCitiesPlayerStateResponse,
-    userId: string
+interface DiceCitiesBankProps {
+    gameState: IDiceCitiesGameStateResponse
 }
 
-export default function DiceCitiesPlayer({playerState, userId}: DiceCitiesPlayerProps) {
+export default function DiceCitiesBank({gameState}: DiceCitiesBankProps) {
     const handleClick = async (gameId: `${string}-${string}-${string}-${string}-${string}`) => {
         fetch('/api/game/taketurn', {
             method: "POST",
@@ -23,23 +22,20 @@ export default function DiceCitiesPlayer({playerState, userId}: DiceCitiesPlayer
 
     return (
         <>
-            <h2>{userId}</h2>
+            <h2>Bank</h2>
             <ul>
-                <li>Money: {playerState.money}</li>
+                {/* <li>Money: ???</li> */}
                 <li>
                     <ul>
-                        {playerState.cards.map(cardCount => {
+                        {gameState.bankCards.map(cardCount => {
                             const card: IDiceCitiesCard = DiceCitiesCards[cardCount.card.toString()];
+                            console.log(DiceCitiesCards, cardCount.card.toString(), card);
                             return (
                                 <li key={cardCount.card.toString()}>{card.title} x{cardCount.amount}</li>
                             )
                         })}
                     </ul>
                 </li>
-                <li>Shopping Mall: {playerState.bonusDiningAndStore ? "True" : "False"}</li>
-                <li>Train Station: {playerState.doubleUnlocked ? "True" : "False"}</li>
-                <li>Amusement Park: {playerState.oneReroll ? "True" : "False"}</li>
-                <li>Radio Tower: {playerState.rerollDoubles ? "True" : "False"}</li>
             </ul>
         </>
     );

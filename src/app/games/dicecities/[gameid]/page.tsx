@@ -7,6 +7,7 @@ import { Button, Col, Form, Row } from "react-bootstrap";
 import CurrentUserInfo from "@/components/CurrentUserInfo";
 import DiceCitiesPlayer from "@/components/games/DiceCities/DiceCitiesPlayer";
 import { IDiceCitiesGameDataResponse } from "@/games/DiceCities/apiModels";
+import DiceCitiesBank from "@/components/games/DiceCities/DiceCitiesBank";
 
 export default function GameDiceCities({ params }: { params: { gameid: string } }) {
   const pathName = usePathname();
@@ -76,6 +77,9 @@ export default function GameDiceCities({ params }: { params: { gameid: string } 
                     {gameData?.specificGameState?.playerStates ? Object.keys(gameData.specificGameState.playerStates).map(userId => (
                         <DiceCitiesPlayer key={userId} userId={userId} playerState={gameData.specificGameState.playerStates[userId]} />
                     )) : ("")}
+                </Col>
+                <Col>
+                    <DiceCitiesBank gameState={gameData?.specificGameState} />
                 </Col>
             </Row>
             </Form>
