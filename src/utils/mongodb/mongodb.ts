@@ -1,5 +1,7 @@
-import { MongoClient, MongoClientOptions } from 'mongodb'
 import mongoose from 'mongoose';
+import { GameDataModel } from './GameData';
+import { DiceCitiesGameDataModel, DiceCitiesInvitationModel } from '@/games/DiceCities/DiceCitiesModels';
+import { InvitationModel } from './InvitationData';
 declare global {
   var mongoose: any; // This must be a `var` and not a `let / const`
 }
@@ -20,6 +22,7 @@ if (!cached) {
 
 export async function dbConnect() {
   if (cached.conn) {
+    initialiseDiscriminators();
     return cached.conn;
   }
   if (!cached.promise) {
@@ -37,6 +40,14 @@ export async function dbConnect() {
     throw e;
   }
 
+  initialiseDiscriminators();
   return cached.conn;
 }
 dbConnect();
+
+function initialiseDiscriminators() {
+  const Invitation = InvitationModel;
+  const DiceCitiesInvitation = DiceCitiesInvitationModel;
+  const GameData = GameDataModel;
+  const DiceCitiesGameData = DiceCitiesGameDataModel;
+}
