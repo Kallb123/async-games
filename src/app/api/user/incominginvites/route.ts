@@ -24,7 +24,8 @@ export async function GET(request: NextRequest) {
       timestamp: invite.timestamp,
       inviteId: invite.inviteId,
       sender,
-      userList
+      userList,
+      gameFriendlyName: invite.gameFriendlyName
     });
   }
 

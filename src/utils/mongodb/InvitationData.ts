@@ -12,7 +12,8 @@ export interface IInvitationData {
     userIdList: IUserIdAcceptance[],
     turnTimer: string,
     timestamp: string,
-    gameType: string
+    gameType: string,
+    gameFriendlyName: string
 }
 
 export interface IInvitationDataDocument extends IInvitationData, Document {
@@ -33,7 +34,8 @@ export var InvitationSchema = new Schema<IInvitationDataDocument> ({
     }],
     turnTimer: String,
     timestamp: String,
-    gameType: String
+    gameType: String,
+    gameFriendlyName: String
 }, {discriminatorKey: 'kind'});
 InvitationSchema.methods.CreateGame = function(invite: IInvitationData, userIdList: string[]) {
     console.log("CreateGame: Generic game");
@@ -44,7 +46,8 @@ export interface IInvitationResponse {
     inviteId: `${string}-${string}-${string}-${string}-${string}`,
     sender: string,
     userList: string[],
-    timestamp: string
+    timestamp: string,
+    gameFriendlyName: string
 }
 
 export interface IInvitationRequest {

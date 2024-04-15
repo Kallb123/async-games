@@ -66,11 +66,12 @@ export default function IncomingInviteList() {
     return (
         <>
             <h2>Incoming Invites</h2>
-            <ul>
-                {inviteList.map((invite: IInvitationResponse) => (
-                    <li key={invite.inviteId} onClick={() => handleAccept(invite.inviteId)}><Moment fromNow>{invite.timestamp}</Moment>: {invite.sender}</li>
-                ))}
-            </ul>
+            {inviteList.map((invite: IInvitationResponse) => (
+                <div key={invite.inviteId}>
+                    <span style={{fontWeight: "bold"}}>{invite.sender}</span> has invited you to play <span style={{fontWeight: "bold"}}>{invite.gameFriendlyName}</span><br />
+                    <span><Moment fromNow>{invite.timestamp}</Moment></span> - <a href="#" onClick={() => handleAccept(invite.inviteId)}>Accept</a> or <a href="#">Decline</a>
+                </div>
+            ))}
         </>
     );
 }

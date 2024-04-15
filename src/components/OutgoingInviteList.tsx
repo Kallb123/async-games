@@ -51,11 +51,12 @@ export default function OutgoingInviteList() {
     return (
         <>
             <h2>Awaiting Response</h2>
-            <ul>
-                {inviteList.map((invite: IInvitationResponse) => (
-                    <li key={invite.inviteId}><Moment fromNow>{invite.timestamp}</Moment>: {invite.userList.map(user => (<span key={user}>{user}</span>))}</li>
-                ))}
-            </ul>
+            {inviteList.map((invite: IInvitationResponse) => (
+                <div key={invite.inviteId}>
+                    You invited <span style={{fontWeight: "bold"}}>{invite.userList.map(user => (<span key={user}>{user}</span>))}</span> to play <span style={{fontWeight: "bold"}}>{invite.gameFriendlyName}</span><br />
+                    <span><Moment fromNow>{invite.timestamp}</Moment></span>
+                </div>
+            ))}
         </>
     );
 }

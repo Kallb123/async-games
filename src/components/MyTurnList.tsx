@@ -62,11 +62,11 @@ export default function MyTurnList() {
     return (
         <>
             <h2>Your Turn</h2>
-            <ul>
-                {gameList.map((game: IGameResponse) => (
-                    <li key={game.gameId}><a href={`/games/${game.url}/${game.gameId}`}>{game.usernameList.map(user => (<span key={user}>{user} </span>))}</a></li>
-                ))}
-            </ul>
+            {gameList.map((game: IGameResponse) => (
+                <div key={game.gameId}>
+                    <a href={`/games/${game.url}/${game.gameId}`}>It&apos;s your turn in <span style={{fontWeight: "bold"}}>{game.friendlyName}</span> with <span style={{fontWeight: "bold"}}>{game.usernameList.filter(u => u !== user?.username).map(user => (<span key={user}>{user} </span>))}</span></a>
+                </div>
+            ))}
         </>
     );
 }

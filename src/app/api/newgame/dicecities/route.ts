@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { DiceCitiesInvitationModel, DiceCitiesInvitationRequest } from '@/games/DiceCities/DiceCitiesModels';
+import { IInvitationDataDocument } from '@/utils/mongodb/InvitationData';
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
   await dbConnect();
 
   // Create invite
-  const invite = new DiceCitiesInvitationModel({
+  const invite: IInvitationDataDocument = new DiceCitiesInvitationModel({
     inviteId: randomUUID(),
     senderId: userId,
     userIdList: userList.map(user => {
@@ -47,7 +48,8 @@ export async function POST(request: NextRequest) {
     enabledBillionaireRow: diceCitiesInvitation.enabledBillionaireRow,
     turnTimer: diceCitiesInvitation.turnTimer,
     timestamp: (new Date()).toISOString(),
-    gameType: 'DiceCities'
+    gameType: 'DiceCities',
+    gameFriendlyName: 'Dice Cities'
   });
 
   await invite.save();
