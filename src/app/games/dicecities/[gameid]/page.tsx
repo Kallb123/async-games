@@ -74,8 +74,8 @@ export default function GameDiceCities({ params }: { params: { gameid: string } 
                 </Row>
             <Row>
                 <Col>
-                    {gameData?.specificGameState?.playerStates ? Object.keys(gameData.specificGameState.playerStates).map(userId => (
-                        <DiceCitiesPlayer key={userId} userId={userId} playerState={gameData.specificGameState.playerStates[userId]} />
+                    {gameData?.specificGameState?.playerStates ? Object.keys(gameData.specificGameState.playerStates).map(userName => (
+                        <DiceCitiesPlayer key={userName} userName={userName} playerState={gameData.specificGameState.playerStates[userName]} />
                     )) : ("")}
                 </Col>
                 <Col>

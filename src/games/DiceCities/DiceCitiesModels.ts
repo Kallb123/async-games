@@ -140,6 +140,10 @@ DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(): Promise<
     console.log("CreateDataResponse: Dice Cities game");
 
     const usernameList = await userIdListToUsernameList(this.userIdList);
+    const userIdNameMap: { [key: string]: string} = {};
+    (this.userIdList as string[]).forEach((userId: string, i: number) => {
+        userIdNameMap[userId] = usernameList[i];
+    });
 
     return {
         gameId: this.gameId,
@@ -152,14 +156,14 @@ DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(): Promise<
         gameState: this.gameState,
         enabledDocks: this.enabledDocks,
         enabledBillionaireRow: this.enabledBillionaireRow,
-        specificGameState: gameStateToModel(this.specificGameState)
+        specificGameState: gameStateToModel(this.specificGameState, userIdNameMap)
     };
 };
 
-function gameStateToModel(gameState: IDiceCitiesGameState) : IDiceCitiesGameStateResponse {
+function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap: { [key: string]: string}) : IDiceCitiesGameStateResponse {
     const playerStates: { [key: string]: IDiceCitiesPlayerStateResponse; } = {};
     for (const [userId, playerStateModel] of gameState.playerStates) {
-        playerStates[userId] = {
+        playerStates[userIdNameMap[userId]] = {
             cards: playerStateModel.cards.map(cardCount => {
                 return {
                     card: cardCount.card.toString() as uuidString,
