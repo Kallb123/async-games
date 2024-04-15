@@ -27,7 +27,7 @@ export default function DiceCitiesBank({gameState}: DiceCitiesBankProps) {
                 {/* <li>Money: ???</li> */}
                 <li>
                     <ul>
-                        {gameState.bankCards.map(cardCount => {
+                        {gameState && gameState.bankCards.map(cardCount => {
                             const card: IDiceCitiesCard = DiceCitiesCards[cardCount.card.toString()];
                             console.log(DiceCitiesCards, cardCount.card.toString(), card);
                             return (
