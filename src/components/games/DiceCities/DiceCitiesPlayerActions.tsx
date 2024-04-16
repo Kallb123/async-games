@@ -1,7 +1,9 @@
 'use client'
 
 import { IDiceCitiesCard, IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
-import { DiceCitiesCards } from "@/games/DiceCities/cards";
+import { DiceCitiesCardIds, DiceCitiesCards } from "@/games/DiceCities/cards";
+import { IGameCommand, RequestCardPurchase, RequestDiceRoll } from "@/utils/apiModels/GameLogic";
+import { deserializeJSON } from "@/utils/apiModels/Serialisable";
 import DiceRoll from "@/utils/games/DiceRoll";
 import { useUser } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
@@ -28,6 +30,20 @@ export default function DiceCitiesPlayerActions({playerState, userName}: DiceCit
 
     const rollDice6 = async () => {
         const roll = await DiceRoll(6);
+        const myCommands: IGameCommand[] = [];
+        myCommands.push(new RequestDiceRoll());
+        const cardPurchase = new RequestCardPurchase();
+        cardPurchase.cardId = DiceCitiesCardIds.WHEAT_FIELD;
+        myCommands.push(cardPurchase);
+        console.log("Original array")
+        myCommands.forEach(c => console.log(c.toString()));
+        const stringify = JSON.stringify(myCommands);
+        const newArray: IGameCommand[] = deserializeJSON(stringify);
+        console.log("New array")
+        newArray.forEach(c => console.log(c.toString()));
+        const crapArray: IGameCommand[] = JSON.parse(stringify);
+        console.log("Crap array")
+        crapArray.forEach(c => console.log(c.toString()));
     }
 
     const rollDice12 = async () => {

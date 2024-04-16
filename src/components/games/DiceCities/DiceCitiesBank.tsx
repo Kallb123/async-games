@@ -29,7 +29,6 @@ export default function DiceCitiesBank({gameState}: DiceCitiesBankProps) {
                     <ul>
                         {gameState && gameState.bankCards.map(cardCount => {
                             const card: IDiceCitiesCard = DiceCitiesCards[cardCount.card.toString()];
-                            console.log(DiceCitiesCards, cardCount.card.toString(), card);
                             return (
                                 <li key={cardCount.card.toString()}>{card.title} x{cardCount.amount}</li>
                             )
