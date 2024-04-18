@@ -5,12 +5,19 @@ import { getApp, getApps, initializeApp } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { IGameCommand } from '@/utils/apiModels/GameLogic';
-import { GameDataModel, IGameData, IGameDataDocument } from '@/utils/mongodb/GameData';
+import { DiceCitiesRequestCardPurchase, DiceCitiesRequestDiceRoll, IGameCommand } from '@/utils/apiModels/GameLogic';
+import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
+import { deserializeJSON } from '@/utils/apiModels/Serialisable';
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
-  const commandRequest: IGameCommand = await request.json();
+  const registration = [
+    new DiceCitiesRequestDiceRoll(),
+    new DiceCitiesRequestCardPurchase()
+  ];
+  const commandRequest: IGameCommand = deserializeJSON(await request.text());
+  console.log(commandRequest);
+  console.log(commandRequest.myString());
 
   const { userId } = auth();
   if (!userId) {
@@ -23,6 +30,7 @@ export async function POST(request: NextRequest) {
 
   await dbConnect();
   const gameData: IGameDataDocument = await GameDataModel.findOne({gameId: commandRequest.gameId}).exec();
+//   console.log(gameData);
 
   if (userId !== gameData.currentTurn) {
     return NextResponse.json({}, {status: 400, statusText: "Not your turn in this game"});

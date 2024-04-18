@@ -5,13 +5,15 @@ import { DiceCitiesCards } from "@/games/DiceCities/cards";
 import { useUser } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import DiceCitiesPlayerActions from "./DiceCitiesPlayerActions";
+import { uuidString } from "@/utils/apiModels/GameDataApi";
 
 interface DiceCitiesPlayerProps {
     playerState: IDiceCitiesPlayerStateResponse,
-    userName: string
+    userName: string,
+    gameId: uuidString
 }
 
-export default function DiceCitiesPlayer({playerState, userName}: DiceCitiesPlayerProps) {
+export default function DiceCitiesPlayer({playerState, userName, gameId}: DiceCitiesPlayerProps) {
     const { user, isLoaded } = useUser();
     const [isMe, setIsMe] = useState(false);
 
@@ -59,7 +61,7 @@ export default function DiceCitiesPlayer({playerState, userName}: DiceCitiesPlay
                 <li>Radio Tower: {playerState.rerollDoubles ? "True" : "False"}</li>
             </ul>
             {isMe ? (
-                <DiceCitiesPlayerActions playerState={playerState} userName={userName} />
+                <DiceCitiesPlayerActions playerState={playerState} userName={userName} gameId={gameId} />
             ) : null}
         </>
     );

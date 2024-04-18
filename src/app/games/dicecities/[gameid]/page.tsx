@@ -8,8 +8,9 @@ import CurrentUserInfo from "@/components/CurrentUserInfo";
 import DiceCitiesPlayer from "@/components/games/DiceCities/DiceCitiesPlayer";
 import { IDiceCitiesGameDataResponse } from "@/games/DiceCities/apiModels";
 import DiceCitiesBank from "@/components/games/DiceCities/DiceCitiesBank";
+import { uuidString } from "@/utils/apiModels/GameDataApi";
 
-export default function GameDiceCities({ params }: { params: { gameid: string } }) {
+export default function GameDiceCities({ params }: { params: { gameid: uuidString } }) {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
   const { user, isLoaded } = useUser();
@@ -75,7 +76,7 @@ export default function GameDiceCities({ params }: { params: { gameid: string } 
             <Row>
                 <Col>
                     {gameData?.specificGameState?.playerStates ? Object.keys(gameData.specificGameState.playerStates).map(userName => (
-                        <DiceCitiesPlayer key={userName} userName={userName} playerState={gameData.specificGameState.playerStates[userName]} />
+                        <DiceCitiesPlayer key={userName} userName={userName} gameId={gameId} playerState={gameData.specificGameState.playerStates[userName]} />
                     )) : ("")}
                 </Col>
                 <Col>

@@ -14,7 +14,7 @@ export interface IGameCommand {
     gameId: uuidString;
     readonly className: string;
 
-    toString: () => string;
+    myString: () => string;
     Execute: (gameData: IGameData) => ICommandOutcome;
 }
 
@@ -24,9 +24,9 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
     timestamp: string = (new Date()).toISOString();
     gameId: uuidString = "uuuid-uuid-uuid-uuid-uuid";
     doubleDice: boolean = false;
-    readonly className = "RequestDiceRoll";
+    readonly className = "DiceCitiesRequestDiceRoll";
 
-    toString() {
+    myString() {
         return `DiceRoll! Double? ${this.doubleDice ? "True" : "False"}`;
     }
 
@@ -45,9 +45,9 @@ export class DiceCitiesRequestCardPurchase implements IGameCommand {
     timestamp: string = (new Date()).toISOString();
     gameId: uuidString = "uuuid-uuid-uuid-uuid-uuid";
     cardId: uuidString = "uuuid-uuid-uuid-uuid-uuid";
-    readonly className = "RequestCardPurchase";
+    readonly className = "DiceCitiesRequestCardPurchase";
 
-    toString() {
+    myString() {
         return `CardPurchase! Card? ${this.cardId}`;
     }
 

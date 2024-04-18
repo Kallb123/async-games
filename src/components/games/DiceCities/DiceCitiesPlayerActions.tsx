@@ -1,20 +1,17 @@
 'use client'
 
-import { IDiceCitiesCard, IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
-import { DiceCitiesCardIds, DiceCitiesCards } from "@/games/DiceCities/cards";
-import { IGameCommand, DiceCitiesRequestCardPurchase, DiceCitiesRequestDiceRoll } from "@/utils/apiModels/GameLogic";
-import { deserializeJSON } from "@/utils/apiModels/Serialisable";
-import DiceRoll from "@/utils/games/DiceRoll";
-import { useUser } from "@clerk/nextjs";
-import { useEffect, useState } from "react";
+import { IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
+import { uuidString } from "@/utils/apiModels/GameDataApi";
+import { DiceCitiesRequestDiceRoll } from "@/utils/apiModels/GameLogic";
 import { Button } from "react-bootstrap";
 
 interface DiceCitiesPlayerProps {
     playerState: IDiceCitiesPlayerStateResponse,
-    userName: string
+    userName: string,
+    gameId: uuidString
 }
 
-export default function DiceCitiesPlayerActions({playerState, userName}: DiceCitiesPlayerProps) {
+export default function DiceCitiesPlayerActions({playerState, userName, gameId}: DiceCitiesPlayerProps) {
     
     const handleClick = async (gameId: `${string}-${string}-${string}-${string}-${string}`) => {
         fetch('/api/game/taketurn', {
@@ -29,25 +26,49 @@ export default function DiceCitiesPlayerActions({playerState, userName}: DiceCit
     }
 
     const rollDice6 = async () => {
-        const roll = await DiceRoll(6);
-        const myCommands: IGameCommand[] = [];
-        myCommands.push(new DiceCitiesRequestDiceRoll());
-        const cardPurchase = new DiceCitiesRequestCardPurchase();
-        cardPurchase.cardId = DiceCitiesCardIds.WHEAT_FIELD;
-        myCommands.push(cardPurchase);
-        console.log("Original array")
-        myCommands.forEach(c => console.log(c.toString()));
-        const stringify = JSON.stringify(myCommands);
-        const newArray: IGameCommand[] = deserializeJSON(stringify);
-        console.log("New array")
-        newArray.forEach(c => console.log(c.toString()));
-        const crapArray: IGameCommand[] = JSON.parse(stringify);
-        console.log("Crap array")
-        crapArray.forEach(c => console.log(c.toString()));
+        // const myCommands: IGameCommand[] = [];
+        // myCommands.push(new DiceCitiesRequestDiceRoll());
+        // const cardPurchase = new DiceCitiesRequestCardPurchase();
+        // cardPurchase.cardId = DiceCitiesCardIds.WHEAT_FIELD;
+        // myCommands.push(cardPurchase);
+        // console.log("Original array")
+        // myCommands.forEach(c => console.log(c.toString()));
+        // const stringify = JSON.stringify(myCommands);
+        // const newArray: IGameCommand[] = deserializeJSON(stringify);
+        // console.log("New array")
+        // newArray.forEach(c => console.log(c.toString()));
+        // const crapArray: IGameCommand[] = JSON.parse(stringify);
+        // console.log("Crap array")
+        // crapArray.forEach(c => console.log(c.toString()));
+
+        const diceRoll = new DiceCitiesRequestDiceRoll();
+        diceRoll.gameId = gameId;
+        
+        fetch('/api/game/command', {
+            method: "POST",
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(diceRoll)
+        })
+        .then(response => response.json())
+        .then(data => console.log(data));
     }
 
     const rollDice12 = async () => {
-        const roll = await DiceRoll(12);
+        const diceRoll = new DiceCitiesRequestDiceRoll();
+        diceRoll.gameId = gameId;
+        diceRoll.doubleDice = true;
+        
+        fetch('/api/game/command', {
+            method: "POST",
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(diceRoll)
+        })
+        .then(response => response.json())
+        .then(data => console.log(data));
     }
 
     return (

@@ -48,28 +48,38 @@ DiceCitiesInvitationSchema.methods.CreateGame = function(invite: IDiceCitiesInvi
         },
         specificGameState: {
             bankCards: [{
-            card: new UUID(DiceCitiesCardIds.WHEAT_FIELD),
-            amount: 5
-        }],
-            playerStates: new Map<string, IDiceCitiesPlayerState>()
+                card: new UUID(DiceCitiesCardIds.WHEAT_FIELD),
+                amount: 5
+            },{
+                card: new UUID(DiceCitiesCardIds.BAKERY),
+                amount: 5
+            },{
+                card: new UUID(DiceCitiesCardIds.CAFE),
+                amount: 5
+            },{
+                card: new UUID(DiceCitiesCardIds.RANCH),
+                amount: 5
+            }],
+            playerStates: new Map<string, IDiceCitiesPlayerState>(),
+            hasRolled: false
         },
         enabledDocks: this.enabledDocks,
         enabledBillionaireRow: this.enabledBillionaireRow
     }
     for (const userId of userIdList) {
         gameData.specificGameState.playerStates.set(userId, {
-        cards: [{
-            card: new UUID(DiceCitiesCardIds.WHEAT_FIELD),
-            amount: 1
-        }, {
-            card: new UUID(DiceCitiesCardIds.BAKERY),
-            amount: 1
-        }],
-        money: 3,
-        doubleUnlocked: false,
-        bonusDiningAndStore: false,
-        rerollDoubles: false,
-        oneReroll: false
+            cards: [{
+                card: new UUID(DiceCitiesCardIds.WHEAT_FIELD),
+                amount: 1
+            }, {
+                card: new UUID(DiceCitiesCardIds.BAKERY),
+                amount: 1
+            }],
+            money: 3,
+            doubleUnlocked: false,
+            bonusDiningAndStore: false,
+            rerollDoubles: false,
+            oneReroll: false
         });
     }
     return gameData;
@@ -95,7 +105,8 @@ export interface IDiceCitiesPlayerState {
 
 export interface IDiceCitiesGameState {
     bankCards: IDiceCitiesCardCount[],
-    playerStates: Map<string, IDiceCitiesPlayerState>
+    playerStates: Map<string, IDiceCitiesPlayerState>,
+    hasRolled: boolean
 }
 
 export interface IDiceCitiesGameData extends IGameData {
@@ -133,7 +144,8 @@ var DiceCitiesGameDataSchema = new Schema<IDiceCitiesGameDataDocument>({
                 rerollDoubles: Boolean,
                 oneReroll: Boolean
             }
-        }
+        },
+        hasRolled: Boolean
     }
 }, {discriminatorKey: 'kind'});
 DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(): Promise<IDiceCitiesGameDataResponse> {
@@ -156,7 +168,8 @@ DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(): Promise<
         gameState: this.gameState,
         enabledDocks: this.enabledDocks,
         enabledBillionaireRow: this.enabledBillionaireRow,
-        specificGameState: gameStateToModel(this.specificGameState, userIdNameMap)
+        specificGameState: gameStateToModel(this.specificGameState, userIdNameMap),
+        hasRolled: this.hasRolled
     };
 };
 

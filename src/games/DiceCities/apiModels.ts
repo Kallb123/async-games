@@ -42,5 +42,6 @@ export interface IDiceCitiesGameStateResponse {
 export interface IDiceCitiesGameDataResponse extends IGameDataResponse {
     enabledDocks: boolean,
     enabledBillionaireRow: boolean,
-    specificGameState: IDiceCitiesGameStateResponse
+    specificGameState: IDiceCitiesGameStateResponse,
+    hasRolled: boolean
 }
