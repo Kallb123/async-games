@@ -52,7 +52,11 @@ export default function DiceCitiesPlayerActions({playerState, userName, gameId}:
             body: JSON.stringify(diceRoll)
         })
         .then(response => response.json())
-        .then(data => console.log(data));
+        .then(data => {
+            console.log(data);
+            // TODO: Handle prage update with new data
+            // Maybe there should be a higher level "submitCommand" method
+        });
     }
 
     const rollDice12 = async () => {

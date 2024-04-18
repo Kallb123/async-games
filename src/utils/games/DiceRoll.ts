@@ -1,4 +1,4 @@
-export default async function(diceNumber: number): Promise<number> {
+export async function DiceRollRequest(diceNumber: number): Promise<number> {
     return new Promise((resolve) => {
         fetch(`/api/utils/rolldice/${diceNumber}`)
         .then(response => {
@@ -12,4 +12,8 @@ export default async function(diceNumber: number): Promise<number> {
             }
         });
     });
+}
+
+export function DiceRoll(diceNumber: number): number {
+    return 1 + Math.floor(Math.random() * diceNumber);
 }
