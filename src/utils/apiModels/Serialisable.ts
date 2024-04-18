@@ -1,3 +1,4 @@
+// https://stackoverflow.com/questions/54427218/parsing-complex-json-objects-with-inheritance
 // a Serializable class has a no-arg constructor and an instance property
 // named className
 type Serialisable = new () => { readonly className: string }
