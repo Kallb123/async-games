@@ -2,7 +2,7 @@
 
 import { IDiceCitiesCard, IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
 import { DiceCitiesCardIds, DiceCitiesCards } from "@/games/DiceCities/cards";
-import { IGameCommand, RequestCardPurchase, RequestDiceRoll } from "@/utils/apiModels/GameLogic";
+import { IGameCommand, DiceCitiesRequestCardPurchase, DiceCitiesRequestDiceRoll } from "@/utils/apiModels/GameLogic";
 import { deserializeJSON } from "@/utils/apiModels/Serialisable";
 import DiceRoll from "@/utils/games/DiceRoll";
 import { useUser } from "@clerk/nextjs";
@@ -31,8 +31,8 @@ export default function DiceCitiesPlayerActions({playerState, userName}: DiceCit
     const rollDice6 = async () => {
         const roll = await DiceRoll(6);
         const myCommands: IGameCommand[] = [];
-        myCommands.push(new RequestDiceRoll());
-        const cardPurchase = new RequestCardPurchase();
+        myCommands.push(new DiceCitiesRequestDiceRoll());
+        const cardPurchase = new DiceCitiesRequestCardPurchase();
         cardPurchase.cardId = DiceCitiesCardIds.WHEAT_FIELD;
         myCommands.push(cardPurchase);
         console.log("Original array")
