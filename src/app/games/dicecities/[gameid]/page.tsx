@@ -102,19 +102,23 @@ export default function GameDiceCities({ params }: { params: { gameid: uuidStrin
             <Form>
                 <Row>
                     <Col>
-                        <Button onClick={handleTakeTurn}>Take Turn</Button>
+                        {gameData?.specificGameState?.playerStates ? Object.keys(gameData.specificGameState.playerStates).map(userName => (
+                            <DiceCitiesPlayer key={userName} userName={userName} currentTurn={gameData.currentTurn} hasRolled={gameData.specificGameState.hasRolled} submitCommand={submitCommand} playerState={gameData.specificGameState.playerStates[userName]} />
+                        )) : ("")}
+                    </Col>
+                    <Col>
+                        <DiceCitiesBank gameState={gameData?.specificGameState} submitCommand={submitCommand} />
                     </Col>
                 </Row>
-            <Row>
-                <Col>
-                    {gameData?.specificGameState?.playerStates ? Object.keys(gameData.specificGameState.playerStates).map(userName => (
-                        <DiceCitiesPlayer key={userName} userName={userName} currentTurn={gameData.currentTurn} hasRolled={gameData.specificGameState.hasRolled} submitCommand={submitCommand} playerState={gameData.specificGameState.playerStates[userName]} />
-                    )) : ("")}
-                </Col>
-                <Col>
-                    <DiceCitiesBank gameState={gameData?.specificGameState} submitCommand={submitCommand} />
-                </Col>
-            </Row>
+                <Row>
+                    <Col>
+                        <ul>
+                            {gameData?.gameState?.history ? gameData.gameState.history.map((historyString, index) => (
+                                <li key={index}>{historyString}</li>
+                            )) : ("")}
+                        </ul>
+                    </Col>
+                </Row>
             </Form>
             <CurrentUserInfo />
             <FcmTokenComp />
