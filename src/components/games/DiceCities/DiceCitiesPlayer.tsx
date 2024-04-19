@@ -52,7 +52,7 @@ export default function DiceCitiesPlayer({playerState, userName, currentTurn, ha
                         {playerState.cards.map(cardCount => {
                             const card: IDiceCitiesCard = DiceCitiesCards[cardCount.card.toString()];
                             return (
-                                <li key={cardCount.card.toString()}>{card.title} x{cardCount.amount}</li>
+                                <li key={cardCount.card.toString()} title={card.text}>{card.title} x{cardCount.amount}</li>
                             )
                         })}
                     </ul>
