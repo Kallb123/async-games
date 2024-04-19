@@ -13,13 +13,15 @@ import { IGameCommand } from "@/utils/apiModels/GameLogic";
 import { ICommandResponse } from "@/app/api/game/command/route";
 
 export default function GameDiceCities({ params }: { params: { gameid: uuidString } }) {
-  const pathName = usePathname();
-  console.log(`GET ${pathName}`);
-  const { user, isLoaded } = useUser();
-  const [gameData, setGameData] = useState({} as IDiceCitiesGameDataResponse);
-  const router = useRouter();
+    const pathName = usePathname();
+    console.log(`GET ${pathName}`);
+    const { user, isLoaded } = useUser();
+    const [gameData, setGameData] = useState({} as IDiceCitiesGameDataResponse);
+    const router = useRouter();
 
-  const gameId = params.gameid;
+    const gameId = params.gameid;
+
+    // TODO: listen for TurnTaken events
 
     useEffect(() => {
         if (isLoaded) {
@@ -36,6 +38,10 @@ export default function GameDiceCities({ params }: { params: { gameid: uuidStrin
 
             getGameData();
         }
+        window.addEventListener('TurnTaken', () => {
+            console.log(`DiceCitiesPage message received: TurnTaken`);
+            getGameData();
+        });
     }, [isLoaded]);
 
     const getGameData = async () => {
