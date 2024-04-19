@@ -49,16 +49,49 @@ DiceCitiesInvitationSchema.methods.CreateGame = function(invite: IDiceCitiesInvi
         specificGameState: {
             bankCards: [{
                 card: new UUID(DiceCitiesCardIds.WHEAT_FIELD),
-                amount: 5
+                amount: 6
             },{
                 card: new UUID(DiceCitiesCardIds.BAKERY),
-                amount: 5
+                amount: 6
             },{
                 card: new UUID(DiceCitiesCardIds.CAFE),
-                amount: 5
+                amount: 6
             },{
                 card: new UUID(DiceCitiesCardIds.RANCH),
-                amount: 5
+                amount: 6
+            },{
+                card: new UUID(DiceCitiesCardIds.FOREST),
+                amount: 6
+            },{
+                card: new UUID(DiceCitiesCardIds.MINE),
+                amount: 6
+            },{
+                card: new UUID(DiceCitiesCardIds.APPLE_ORCHARD),
+                amount: 6
+            },{
+                card: new UUID(DiceCitiesCardIds.CONVENIENCE_STORE),
+                amount: 6
+            },{
+                card: new UUID(DiceCitiesCardIds.CHEESE_FACTORY),
+                amount: 6
+            },{
+                card: new UUID(DiceCitiesCardIds.FURNITURE_FACTORY),
+                amount: 6
+            },{
+                card: new UUID(DiceCitiesCardIds.FRUIT_MARKET),
+                amount: 6
+            },{
+                card: new UUID(DiceCitiesCardIds.FAMILY_RESTAURANT),
+                amount: 6
+            },{
+                card: new UUID(DiceCitiesCardIds.STADIUM),
+                amount: userIdList.length
+            },{
+                card: new UUID(DiceCitiesCardIds.TV_STATION),
+                amount: userIdList.length
+            },{
+                card: new UUID(DiceCitiesCardIds.BUSINESS_CENTER),
+                amount: userIdList.length
             }],
             playerStates: new Map<string, IDiceCitiesPlayerState>(),
             hasRolled: false

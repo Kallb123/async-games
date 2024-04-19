@@ -6,7 +6,17 @@ export enum DiceCitiesCardIds {
     RANCH = "ff935104-9d5e-403f-82c7-a01bdaed330d",
     BAKERY = "2e39db49-1ce2-4622-a4c0-38997a6c96c4",
     CAFE = "e88383e3-59fe-4805-9517-acf56b8516dd",
+    FAMILY_RESTAURANT = "f8962796-e8f1-4d2e-a6ae-cf16b4b111aa",
     CONVENIENCE_STORE = "a64cea71-c38d-46cb-8574-8e9e70403ae6",
+    FOREST = "0973e5a9-33dc-4cbc-9894-49ab6d0d81a5",
+    MINE = "0d467870-047b-4ab7-9ff4-73329432374b",
+    APPLE_ORCHARD = "f4e6dfc0-7d0a-430b-b207-6ec7dafb7e6b",
+    CHEESE_FACTORY = "5c5ffacd-be5c-4581-aca9-54344aab183c",
+    FURNITURE_FACTORY = "3bc8d1dd-a387-4e48-89bf-923e0bcfdb04",
+    FRUIT_MARKET = "f8dd441e-5bed-444f-9659-b025d769af92",
+    STADIUM = "bfc9001e-bddf-40c0-a61b-1ecd2d70cbfe",
+    TV_STATION = "9a7c01d1-8513-4b69-af68-f0e04d57cbfe",
+    BUSINESS_CENTER = "a08ebbbe-21af-43bf-b92e-892559213e6d",
 }
 
 const wheatField: IDiceCitiesCard = {
