@@ -89,6 +89,26 @@ const cafe: IDiceCitiesCard = {
     gainMultiplier: null
 }
 
+const familyRestaurant: IDiceCitiesCard = {
+    cardId: "f8962796-e8f1-4d2e-a6ae-cf16b4b111aa",
+    title: "Family Restaurant",
+    cost: 3,
+    rollNumber: [9,10],
+    text: "Get 2 coins from the player who rolled the dice.",
+    art: "",
+    type: "dining",
+    icon: "",
+    ownLimit: 20,
+    bankGain: 0,
+    onOwnTurn: false,
+    onOponentsTurn: true,
+    stealRollerGain: 2,
+    stealAllGain: 0,
+    stealChosenGain: 0,
+    tradeCards: false,
+    gainMultiplier: null
+}
+
 const convenienceStore: IDiceCitiesCard = {
     cardId: "a64cea71-c38d-46cb-8574-8e9e70403ae6",
     title: "Convenience Store",
@@ -109,10 +129,209 @@ const convenienceStore: IDiceCitiesCard = {
     gainMultiplier: null
 }
 
+const forest: IDiceCitiesCard = {
+    cardId: "0973e5a9-33dc-4cbc-9894-49ab6d0d81a5",
+    title: "Forest",
+    cost: 3,
+    rollNumber: [5],
+    text: "Get 1 coin from the bank, on anyone's turn.",
+    art: "",
+    type: "production",
+    icon: "",
+    ownLimit: 20,
+    bankGain: 1,
+    onOwnTurn: true,
+    onOponentsTurn: true,
+    stealRollerGain: 0,
+    stealAllGain: 0,
+    stealChosenGain: 0,
+    tradeCards: false,
+    gainMultiplier: null
+}
+
+const mine: IDiceCitiesCard = {
+    cardId: "0d467870-047b-4ab7-9ff4-73329432374b",
+    title: "Mine",
+    cost: 6,
+    rollNumber: [9],
+    text: "Get 5 coins from the bank, on anyone's turn.",
+    art: "",
+    type: "production",
+    icon: "",
+    ownLimit: 20,
+    bankGain: 5,
+    onOwnTurn: true,
+    onOponentsTurn: true,
+    stealRollerGain: 0,
+    stealAllGain: 0,
+    stealChosenGain: 0,
+    tradeCards: false,
+    gainMultiplier: null
+}
+
+const appleOrchard: IDiceCitiesCard = {
+    cardId: "f4e6dfc0-7d0a-430b-b207-6ec7dafb7e6b",
+    title: "Apple Orchard",
+    cost: 3,
+    rollNumber: [10],
+    text: "Get 3 coins from the bank, on anyone's turn.",
+    art: "",
+    type: "farm",
+    icon: "",
+    ownLimit: 20,
+    bankGain: 3,
+    onOwnTurn: true,
+    onOponentsTurn: true,
+    stealRollerGain: 0,
+    stealAllGain: 0,
+    stealChosenGain: 0,
+    tradeCards: false,
+    gainMultiplier: null
+}
+
+const cheeseFactory: IDiceCitiesCard = {
+    cardId: "5c5ffacd-be5c-4581-aca9-54344aab183c",
+    title: "Cheese Factory",
+    cost: 5,
+    rollNumber: [7],
+    text: "If this is your turn, get 3 coins from the bank for each Pasture establishment that you own",
+    art: "",
+    type: "factory",
+    icon: "",
+    ownLimit: 20,
+    bankGain: 0,
+    onOwnTurn: true,
+    onOponentsTurn: false,
+    stealRollerGain: 0,
+    stealAllGain: 0,
+    stealChosenGain: 0,
+    tradeCards: false,
+    gainMultiplier: {
+        type: ["pasture"],
+        amountPerType: 3
+    }
+}
+
+const furnitureFactory: IDiceCitiesCard = {
+    cardId: "3bc8d1dd-a387-4e48-89bf-923e0bcfdb04",
+    title: "Furniture Factory",
+    cost: 3,
+    rollNumber: [8],
+    text: "If this is your turn, get 3 coins from the bank for each Production establishment that you own",
+    art: "",
+    type: "factory",
+    icon: "",
+    ownLimit: 20,
+    bankGain: 0,
+    onOwnTurn: true,
+    onOponentsTurn: false,
+    stealRollerGain: 0,
+    stealAllGain: 0,
+    stealChosenGain: 0,
+    tradeCards: false,
+    gainMultiplier: {
+        type: ["production"],
+        amountPerType: 3
+    }
+}
+
+const fruitAndVegetableMarket: IDiceCitiesCard = {
+    cardId: "f8dd441e-5bed-444f-9659-b025d769af92",
+    title: "Fruit and Vegetable Market",
+    cost: 2,
+    rollNumber: [11.12],
+    text: "If this is your turn, get 2 coins from the bank for each Farm establishment that you own",
+    art: "",
+    type: "market",
+    icon: "",
+    ownLimit: 20,
+    bankGain: 0,
+    onOwnTurn: true,
+    onOponentsTurn: false,
+    stealRollerGain: 0,
+    stealAllGain: 0,
+    stealChosenGain: 0,
+    tradeCards: false,
+    gainMultiplier: {
+        type: ["farm"],
+        amountPerType: 2
+    }
+}
+
+const stadium: IDiceCitiesCard = {
+    cardId: "bfc9001e-bddf-40c0-a61b-1ecd2d70cbfe",
+    title: "Stadium",
+    cost: 6,
+    rollNumber: [6],
+    text: "Get 2 coins from all players, on your turn only.",
+    art: "",
+    type: "landmark",
+    icon: "",
+    ownLimit: 1,
+    bankGain: 0,
+    onOwnTurn: true,
+    onOponentsTurn: false,
+    stealRollerGain: 0,
+    stealAllGain: 2,
+    stealChosenGain: 0,
+    tradeCards: false,
+    gainMultiplier: null
+}
+
+const tvStation: IDiceCitiesCard = {
+    cardId: "9a7c01d1-8513-4b69-af68-f0e04d57cbfe",
+    title: "TV Station",
+    cost: 7,
+    rollNumber: [6],
+    text: "If this is your turn, take 5 coins from any one player.",
+    art: "",
+    type: "landmark",
+    icon: "",
+    ownLimit: 1,
+    bankGain: 0,
+    onOwnTurn: true,
+    onOponentsTurn: false,
+    stealRollerGain: 0,
+    stealAllGain: 0,
+    stealChosenGain: 5,
+    tradeCards: false,
+    gainMultiplier: null
+}
+
+const businessCenter: IDiceCitiesCard = {
+    cardId: "a08ebbbe-21af-43bf-b92e-892559213e6d",
+    title: "Business Center",
+    cost: 8,
+    rollNumber: [6],
+    text: "If this is your turn, trade one non-Landmark establishment with another player.",
+    art: "",
+    type: "landmark",
+    icon: "",
+    ownLimit: 1,
+    bankGain: 0,
+    onOwnTurn: true,
+    onOponentsTurn: false,
+    stealRollerGain: 0,
+    stealAllGain: 0,
+    stealChosenGain: 0,
+    tradeCards: true,
+    gainMultiplier: null
+}
+
 export const DiceCitiesCards: { [key: string]: IDiceCitiesCard } = {
     "2d5aaaa4-e939-43a4-84ab-7ebb89e16ee5": wheatField,
     "ff935104-9d5e-403f-82c7-a01bdaed330d": ranch,
     "2e39db49-1ce2-4622-a4c0-38997a6c96c4": bakery,
     "e88383e3-59fe-4805-9517-acf56b8516dd": cafe,
+    "f8962796-e8f1-4d2e-a6ae-cf16b4b111aa": familyRestaurant,
     "a64cea71-c38d-46cb-8574-8e9e70403ae6": convenienceStore,
+    "0973e5a9-33dc-4cbc-9894-49ab6d0d81a5": forest,
+    "0d467870-047b-4ab7-9ff4-73329432374b": mine,
+    "f4e6dfc0-7d0a-430b-b207-6ec7dafb7e6b": appleOrchard,
+    "5c5ffacd-be5c-4581-aca9-54344aab183c": cheeseFactory,
+    "3bc8d1dd-a387-4e48-89bf-923e0bcfdb04": furnitureFactory,
+    "f8dd441e-5bed-444f-9659-b025d769af92": fruitAndVegetableMarket,
+    "bfc9001e-bddf-40c0-a61b-1ecd2d70cbfe": stadium,
+    "9a7c01d1-8513-4b69-af68-f0e04d57cbfe": tvStation,
+    "a08ebbbe-21af-43bf-b92e-892559213e6d": businessCenter
 }

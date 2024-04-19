@@ -18,7 +18,7 @@ export interface IDiceCitiesCard {
     stealAllGain: number,
     stealChosenGain: number,
     tradeCards: boolean,
-    gainMultiplier: {type: cardType, amountPerType: number} | null
+    gainMultiplier: {type: cardType[], amountPerType: number} | null
 }
 export interface IDiceCitiesCardCountResponse {
     card: uuidString,
