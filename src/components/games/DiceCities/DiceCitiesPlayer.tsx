@@ -1,19 +1,21 @@
-'use client'
-
 import { IDiceCitiesCard, IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
 import { DiceCitiesCards } from "@/games/DiceCities/cards";
 import { useUser } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import DiceCitiesPlayerActions from "./DiceCitiesPlayerActions";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
+import { IGameCommand } from "@/utils/apiModels/GameLogic";
+import { ICommandResponse } from "@/app/api/game/command/route";
 
 interface DiceCitiesPlayerProps {
     playerState: IDiceCitiesPlayerStateResponse,
     userName: string,
-    gameId: uuidString
+    hasRolled: boolean,
+    currentTurn: string,
+    submitCommand: (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => Promise<void>
 }
 
-export default function DiceCitiesPlayer({playerState, userName, gameId}: DiceCitiesPlayerProps) {
+export default function DiceCitiesPlayer({playerState, userName, currentTurn, hasRolled, submitCommand}: DiceCitiesPlayerProps) {
     const { user, isLoaded } = useUser();
     const [isMe, setIsMe] = useState(false);
 
@@ -60,8 +62,8 @@ export default function DiceCitiesPlayer({playerState, userName, gameId}: DiceCi
                 <li>Amusement Park: {playerState.oneReroll ? "True" : "False"}</li>
                 <li>Radio Tower: {playerState.rerollDoubles ? "True" : "False"}</li>
             </ul>
-            {isMe ? (
-                <DiceCitiesPlayerActions playerState={playerState} userName={userName} gameId={gameId} />
+            {isMe && currentTurn === user?.id ? (
+                <DiceCitiesPlayerActions playerState={playerState} hasRolled={hasRolled} submitCommand={submitCommand} />
             ) : null}
         </>
     );

@@ -168,8 +168,7 @@ DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(): Promise<
         gameState: this.gameState,
         enabledDocks: this.enabledDocks,
         enabledBillionaireRow: this.enabledBillionaireRow,
-        specificGameState: gameStateToModel(this.specificGameState, userIdNameMap),
-        hasRolled: this.hasRolled
+        specificGameState: gameStateToModel(this.specificGameState, userIdNameMap)
     };
 };
 
@@ -197,7 +196,8 @@ function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap: { [key
                 amount: cardCount.amount
             };
         }),
-        playerStates
+        playerStates,
+        hasRolled: gameState.hasRolled
     }
 }
 

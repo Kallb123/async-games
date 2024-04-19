@@ -36,12 +36,12 @@ export interface IDiceCitiesPlayerStateResponse {
 
 export interface IDiceCitiesGameStateResponse {
     bankCards: IDiceCitiesCardCountResponse[],
-    playerStates: { [key: string]: IDiceCitiesPlayerStateResponse }
+    playerStates: { [key: string]: IDiceCitiesPlayerStateResponse },
+    hasRolled: boolean
 }
 
 export interface IDiceCitiesGameDataResponse extends IGameDataResponse {
     enabledDocks: boolean,
     enabledBillionaireRow: boolean,
-    specificGameState: IDiceCitiesGameStateResponse,
-    hasRolled: boolean
+    specificGameState: IDiceCitiesGameStateResponse
 }

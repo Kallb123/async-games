@@ -1,17 +1,16 @@
-'use client'
-
+import { ICommandResponse } from "@/app/api/game/command/route";
 import { IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
-import { DiceCitiesRequestDiceRoll } from "@/utils/apiModels/GameLogic";
+import { DiceCitiesRequestDiceRoll, DiceCitiesRequestPassTurn, IGameCommand } from "@/utils/apiModels/GameLogic";
 import { Button } from "react-bootstrap";
 
 interface DiceCitiesPlayerProps {
+    hasRolled: boolean,
     playerState: IDiceCitiesPlayerStateResponse,
-    userName: string,
-    gameId: uuidString
+    submitCommand: (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => Promise<void>
 }
 
-export default function DiceCitiesPlayerActions({playerState, userName, gameId}: DiceCitiesPlayerProps) {
+export default function DiceCitiesPlayerActions({playerState, hasRolled, submitCommand}: DiceCitiesPlayerProps) {
     
     const handleClick = async (gameId: `${string}-${string}-${string}-${string}-${string}`) => {
         fetch('/api/game/taketurn', {
@@ -42,43 +41,31 @@ export default function DiceCitiesPlayerActions({playerState, userName, gameId}:
         // crapArray.forEach(c => console.log(c.toString()));
 
         const diceRoll = new DiceCitiesRequestDiceRoll();
-        diceRoll.gameId = gameId;
-        
-        fetch('/api/game/command', {
-            method: "POST",
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(diceRoll)
-        })
-        .then(response => response.json())
-        .then(data => {
-            console.log(data);
-            // TODO: Handle prage update with new data
-            // Maybe there should be a higher level "submitCommand" method
+        submitCommand(diceRoll, (commandResponse) => {
+            console.log(commandResponse);
         });
     }
 
     const rollDice12 = async () => {
         const diceRoll = new DiceCitiesRequestDiceRoll();
-        diceRoll.gameId = gameId;
         diceRoll.doubleDice = true;
-        
-        fetch('/api/game/command', {
-            method: "POST",
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(diceRoll)
-        })
-        .then(response => response.json())
-        .then(data => console.log(data));
+        submitCommand(diceRoll, (commandResponse) => {
+            console.log(commandResponse);
+        });
+    }
+
+    const passTurn = async () => {
+        const pass = new DiceCitiesRequestPassTurn();
+        submitCommand(pass, (commandResponse) => {
+
+        });
     }
 
     return (
         <>
-            <Button onClick={rollDice6}>Roll d6</Button>
-            <Button onClick={rollDice12} disabled={!playerState.doubleUnlocked}>Roll 2d6</Button>
+            <Button onClick={rollDice6} disabled={hasRolled}>Roll d6</Button>
+            <Button onClick={rollDice12} disabled={hasRolled || !playerState.doubleUnlocked}>Roll 2d6</Button>
+            <Button onClick={passTurn} disabled={!hasRolled}>Pass Without Buying</Button>
         </>
     );
 }

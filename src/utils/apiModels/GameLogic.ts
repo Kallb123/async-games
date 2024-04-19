@@ -42,6 +42,13 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
         const dcGameData = gameData as IDiceCitiesGameData;
         const currentPlayerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
 
+        if (dcGameData.specificGameState.hasRolled) {
+            return {
+                turnOver: false,
+                validMove: false
+            };
+        }
+
         const roll1 = DiceRoll(6);
         let roll2: number | null = null;
         let totalRoll = roll1;
@@ -80,8 +87,10 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
         // Award stolen money
         // Award stolen property
 
+        dcGameData.specificGameState.hasRolled = true;
+
         const outcome: IDiceCitiesDiceRollOutcome = {
-            turnOver: true, // TODO
+            turnOver: false, // TODO
             validMove: true,
             roll1,
             roll2
@@ -104,6 +113,33 @@ export class DiceCitiesRequestCardPurchase implements IGameCommand {
 
     Execute(gameData: IGameData) {
         const dcGameData = gameData as IDiceCitiesGameData;
+        return {
+            turnOver: true,
+            validMove: true
+        };
+    }
+}
+
+@serializable
+export class DiceCitiesRequestPassTurn implements IGameCommand {
+    id: uuidString = "uuuid-uuid-uuid-uuid-uuid";
+    timestamp: string = (new Date()).toISOString();
+    gameId: uuidString = "uuuid-uuid-uuid-uuid-uuid";
+    readonly className = "DiceCitiesRequestCardPurchase";
+
+    myString() {
+        return `PassTurn! Card?`;
+    }
+
+    Execute(gameData: IGameData) {
+        const dcGameData = gameData as IDiceCitiesGameData;
+        if (!dcGameData.specificGameState.hasRolled) {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+        dcGameData.specificGameState.hasRolled = false;
         return {
             turnOver: true,
             validMove: true

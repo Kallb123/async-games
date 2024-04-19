@@ -5,15 +5,22 @@ import { getApp, getApps, initializeApp } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { DiceCitiesRequestCardPurchase, DiceCitiesRequestDiceRoll, IGameCommand } from '@/utils/apiModels/GameLogic';
+import { DiceCitiesRequestCardPurchase, DiceCitiesRequestDiceRoll, DiceCitiesRequestPassTurn, ICommandOutcome, IGameCommand } from '@/utils/apiModels/GameLogic';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
+import { IGameDataResponse } from '@/utils/apiModels/GameDataApi';
+
+export interface ICommandResponse {
+  outcome: ICommandOutcome,
+  gameData: IGameDataResponse
+}
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
   const registration = [
     new DiceCitiesRequestDiceRoll(),
-    new DiceCitiesRequestCardPurchase()
+    new DiceCitiesRequestCardPurchase(),
+    new DiceCitiesRequestPassTurn()
   ];
   const commandRequest: IGameCommand = deserializeJSON(await request.text());
   console.log(commandRequest);
@@ -49,8 +56,13 @@ export async function POST(request: NextRequest) {
 
   await gameData.save();
 
+  const response: ICommandResponse = {
+    outcome: commandOutcome,
+    gameData: await gameData.CreateDataResponse()
+  }
+
   if (!commandOutcome.turnOver) {
-    return NextResponse.json(await gameData.CreateDataResponse(), {status: 200});
+    return NextResponse.json(response, {status: 200});
   }
 
   const userList = await clerkClient.users.getUserList({
@@ -105,5 +117,5 @@ export async function POST(request: NextRequest) {
     }));
   }
 
-  return NextResponse.json(await gameData.CreateDataResponse(), {status: 200});
+  return NextResponse.json(response, {status: 200});
 }

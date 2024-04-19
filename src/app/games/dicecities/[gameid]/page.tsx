@@ -9,6 +9,8 @@ import DiceCitiesPlayer from "@/components/games/DiceCities/DiceCitiesPlayer";
 import { IDiceCitiesGameDataResponse } from "@/games/DiceCities/apiModels";
 import DiceCitiesBank from "@/components/games/DiceCities/DiceCitiesBank";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
+import { IGameCommand } from "@/utils/apiModels/GameLogic";
+import { ICommandResponse } from "@/app/api/game/command/route";
 
 export default function GameDiceCities({ params }: { params: { gameid: uuidString } }) {
   const pathName = usePathname();
@@ -63,6 +65,30 @@ export default function GameDiceCities({ params }: { params: { gameid: uuidStrin
         .then(data => console.log(data));
     }
 
+    const submitCommand = async (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => {
+        command.gameId = gameId;
+        fetch('/api/game/command', {
+            method: "POST",
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(command)
+        })
+        .then(response => {
+            if (response.ok) {
+                return response.json();
+            }
+        })
+        .then(data => {
+            console.log(data);
+            // TODO: Handle prage update with new data
+            // Maybe there should be a higher level "submitCommand" method
+            const response: ICommandResponse = data;
+            setGameData(response.gameData as IDiceCitiesGameDataResponse);
+            callback(data);
+        });
+    }
+
     return (
         <main>
             <h1>Dice Cities</h1>
@@ -76,11 +102,11 @@ export default function GameDiceCities({ params }: { params: { gameid: uuidStrin
             <Row>
                 <Col>
                     {gameData?.specificGameState?.playerStates ? Object.keys(gameData.specificGameState.playerStates).map(userName => (
-                        <DiceCitiesPlayer key={userName} userName={userName} gameId={gameId} playerState={gameData.specificGameState.playerStates[userName]} />
+                        <DiceCitiesPlayer key={userName} userName={userName} currentTurn={gameData.currentTurn} hasRolled={gameData.specificGameState.hasRolled} submitCommand={submitCommand} playerState={gameData.specificGameState.playerStates[userName]} />
                     )) : ("")}
                 </Col>
                 <Col>
-                    <DiceCitiesBank gameState={gameData?.specificGameState} />
+                    <DiceCitiesBank gameState={gameData?.specificGameState} submitCommand={submitCommand} />
                 </Col>
             </Row>
             </Form>
