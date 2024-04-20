@@ -17,6 +17,10 @@ export enum DiceCitiesCardIds {
     STADIUM = "bfc9001e-bddf-40c0-a61b-1ecd2d70cbfe",
     TV_STATION = "9a7c01d1-8513-4b69-af68-f0e04d57cbfe",
     BUSINESS_CENTER = "a08ebbbe-21af-43bf-b92e-892559213e6d",
+    TRAIN_STATION = "5ca38fd7-eef0-4155-b5bb-8ff07ff5305a",
+    SHOPPING_MALL = "8a5ca6e4-f987-4273-b1eb-e1cc9e855c10",
+    AMUSEMENT_PARK = "a16f6202-ad15-41b9-a3f6-d5302acc033f",
+    RADIO_TOWER = "a8df8c37-e3b0-45d4-acc2-09815a151c04"
 }
 
 const wheatField: IDiceCitiesCard = {
@@ -328,6 +332,86 @@ const businessCenter: IDiceCitiesCard = {
     gainMultiplier: null
 }
 
+const trainStation: IDiceCitiesCard = {
+    cardId: "5ca38fd7-eef0-4155-b5bb-8ff07ff5305a",
+    title: "Train Station",
+    cost: 4,
+    rollNumber: [],
+    text: "You may roll 1 or 2 dice.",
+    art: "",
+    type: "landmark",
+    icon: "",
+    ownLimit: 1,
+    bankGain: 0,
+    onOwnTurn: false,
+    onOponentsTurn: false,
+    stealRollerGain: 0,
+    stealAllGain: 0,
+    stealChosenGain: 0,
+    tradeCards: false,
+    gainMultiplier: null
+}
+
+const shoppingMall: IDiceCitiesCard = {
+    cardId: "8a5ca6e4-f987-4273-b1eb-e1cc9e855c10",
+    title: "Shopping Mall",
+    cost: 10,
+    rollNumber: [],
+    text: "Earn +1 coin from your own dining and store establishments.",
+    art: "",
+    type: "landmark",
+    icon: "",
+    ownLimit: 1,
+    bankGain: 0,
+    onOwnTurn: false,
+    onOponentsTurn: false,
+    stealRollerGain: 0,
+    stealAllGain: 0,
+    stealChosenGain: 0,
+    tradeCards: false,
+    gainMultiplier: null
+}
+
+const amusementPark: IDiceCitiesCard = {
+    cardId: "a16f6202-ad15-41b9-a3f6-d5302acc033f",
+    title: "Amusement Park",
+    cost: 16,
+    rollNumber: [],
+    text: "If you roll matching dice, take another turn after this one.",
+    art: "",
+    type: "landmark",
+    icon: "",
+    ownLimit: 1,
+    bankGain: 0,
+    onOwnTurn: false,
+    onOponentsTurn: false,
+    stealRollerGain: 0,
+    stealAllGain: 0,
+    stealChosenGain: 0,
+    tradeCards: false,
+    gainMultiplier: null
+}
+
+const radioTower: IDiceCitiesCard = {
+    cardId: "a8df8c37-e3b0-45d4-acc2-09815a151c04",
+    title: "Radio Tower",
+    cost: 22,
+    rollNumber: [],
+    text: "Once every turn, you can choose to re-roll your dice.",
+    art: "",
+    type: "landmark",
+    icon: "",
+    ownLimit: 1,
+    bankGain: 0,
+    onOwnTurn: false,
+    onOponentsTurn: false,
+    stealRollerGain: 0,
+    stealAllGain: 0,
+    stealChosenGain: 0,
+    tradeCards: false,
+    gainMultiplier: null
+}
+
 export const DiceCitiesCards: { [key: string]: IDiceCitiesCard } = {
     "2d5aaaa4-e939-43a4-84ab-7ebb89e16ee5": wheatField,
     "ff935104-9d5e-403f-82c7-a01bdaed330d": ranch,
@@ -343,5 +427,9 @@ export const DiceCitiesCards: { [key: string]: IDiceCitiesCard } = {
     "f8dd441e-5bed-444f-9659-b025d769af92": fruitAndVegetableMarket,
     "bfc9001e-bddf-40c0-a61b-1ecd2d70cbfe": stadium,
     "9a7c01d1-8513-4b69-af68-f0e04d57cbfe": tvStation,
-    "a08ebbbe-21af-43bf-b92e-892559213e6d": businessCenter
+    "a08ebbbe-21af-43bf-b92e-892559213e6d": businessCenter,
+    "5ca38fd7-eef0-4155-b5bb-8ff07ff5305a": trainStation,
+    "8a5ca6e4-f987-4273-b1eb-e1cc9e855c10": shoppingMall,
+    "a16f6202-ad15-41b9-a3f6-d5302acc033f": amusementPark,
+    "a8df8c37-e3b0-45d4-acc2-09815a151c04": radioTower
 }

@@ -199,8 +199,6 @@ export class DiceCitiesRequestCardPurchase implements IGameCommand {
                 validMove: false
             }
         }
-        console.log("Executing for currentTurn:", dcGameData.currentTurn);
-        console.log("currentState", currentPlayerState);
 
         if (!dcGameData.specificGameState.hasRolled) {
             return {
@@ -278,6 +276,246 @@ export class DiceCitiesRequestPassTurn implements IGameCommand {
         }
         dcGameData.specificGameState.hasRolled = false;
         dcGameData.gameState.history.unshift(`${this.senderId} passed their turn`);
+        return {
+            turnOver: true,
+            validMove: true
+        };
+    }
+}
+
+@serializable
+export class DiceCitiesRequestUnlockTrainStation implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = (new Date()).toISOString();
+    gameId: uuidString = uuidv4() as uuidString;
+    senderId: string = "Unknown";
+    readonly className = "DiceCitiesRequestUnlockTrainStation";
+
+    myString() {
+        return `Train Station!`;
+    }
+
+    Execute(gameData: IGameData) {
+        const dcGameData = gameData as IDiceCitiesGameData;
+        const currentPlayerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
+        if (!currentPlayerState) {
+            console.error("Unable to find current player's state");
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+
+        if (!dcGameData.specificGameState.hasRolled) {
+            return {
+                turnOver: false,
+                validMove: false
+            };
+        }
+
+        const cardObject = DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION];
+
+        if (cardObject.cost > currentPlayerState.money) {
+            return {
+                turnOver: false,
+                validMove: false
+            };
+        }
+
+        if (currentPlayerState.doubleUnlocked) {
+            return {
+                turnOver: false,
+                validMove: false
+            };
+        }
+
+        // TODO: Add bank money
+        currentPlayerState.money -= cardObject.cost;
+
+        currentPlayerState.doubleUnlocked = true;
+
+        dcGameData.specificGameState.hasRolled = false;
+        dcGameData.gameState.history.unshift(`${this.senderId} bought a ${cardObject.title}`);
+        return {
+            turnOver: true,
+            validMove: true
+        };
+    }
+}
+
+@serializable
+export class DiceCitiesRequestUnlockShoppingMall implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = (new Date()).toISOString();
+    gameId: uuidString = uuidv4() as uuidString;
+    senderId: string = "Unknown";
+    readonly className = "DiceCitiesRequestUnlockShoppingMall";
+
+    myString() {
+        return `Shopping Mall!`;
+    }
+
+    Execute(gameData: IGameData) {
+        const dcGameData = gameData as IDiceCitiesGameData;
+        const currentPlayerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
+        if (!currentPlayerState) {
+            console.error("Unable to find current player's state");
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+
+        if (!dcGameData.specificGameState.hasRolled) {
+            return {
+                turnOver: false,
+                validMove: false
+            };
+        }
+
+        const cardObject = DiceCitiesCards[DiceCitiesCardIds.SHOPPING_MALL];
+
+        if (cardObject.cost > currentPlayerState.money) {
+            return {
+                turnOver: false,
+                validMove: false
+            };
+        }
+
+        if (currentPlayerState.bonusDiningAndStore) {
+            return {
+                turnOver: false,
+                validMove: false
+            };
+        }
+
+        // TODO: Add bank money
+        currentPlayerState.money -= cardObject.cost;
+
+        currentPlayerState.bonusDiningAndStore = true;
+
+        dcGameData.specificGameState.hasRolled = false;
+        dcGameData.gameState.history.unshift(`${this.senderId} bought a ${cardObject.title}`);
+        return {
+            turnOver: true,
+            validMove: true
+        };
+    }
+}
+
+@serializable
+export class DiceCitiesRequestUnlockAmusementPark implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = (new Date()).toISOString();
+    gameId: uuidString = uuidv4() as uuidString;
+    senderId: string = "Unknown";
+    readonly className = "DiceCitiesRequestUnlockAmusementPark";
+
+    myString() {
+        return `Amusement Park!`;
+    }
+
+    Execute(gameData: IGameData) {
+        const dcGameData = gameData as IDiceCitiesGameData;
+        const currentPlayerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
+        if (!currentPlayerState) {
+            console.error("Unable to find current player's state");
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+
+        if (!dcGameData.specificGameState.hasRolled) {
+            return {
+                turnOver: false,
+                validMove: false
+            };
+        }
+
+        const cardObject = DiceCitiesCards[DiceCitiesCardIds.AMUSEMENT_PARK];
+
+        if (cardObject.cost > currentPlayerState.money) {
+            return {
+                turnOver: false,
+                validMove: false
+            };
+        }
+
+        if (currentPlayerState.oneReroll) {
+            return {
+                turnOver: false,
+                validMove: false
+            };
+        }
+
+        // TODO: Add bank money
+        currentPlayerState.money -= cardObject.cost;
+
+        currentPlayerState.oneReroll = true;
+
+        dcGameData.specificGameState.hasRolled = false;
+        dcGameData.gameState.history.unshift(`${this.senderId} bought a ${cardObject.title}`);
+        return {
+            turnOver: true,
+            validMove: true
+        };
+    }
+}
+
+@serializable
+export class DiceCitiesRequestUnlockRadioTower implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = (new Date()).toISOString();
+    gameId: uuidString = uuidv4() as uuidString;
+    senderId: string = "Unknown";
+    readonly className = "DiceCitiesRequestUnlockRadioTower";
+
+    myString() {
+        return `Radio Tower!`;
+    }
+
+    Execute(gameData: IGameData) {
+        const dcGameData = gameData as IDiceCitiesGameData;
+        const currentPlayerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
+        if (!currentPlayerState) {
+            console.error("Unable to find current player's state");
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+
+        if (!dcGameData.specificGameState.hasRolled) {
+            return {
+                turnOver: false,
+                validMove: false
+            };
+        }
+
+        const cardObject = DiceCitiesCards[DiceCitiesCardIds.RADIO_TOWER];
+
+        if (cardObject.cost > currentPlayerState.money) {
+            return {
+                turnOver: false,
+                validMove: false
+            };
+        }
+
+        if (currentPlayerState.rerollDoubles) {
+            return {
+                turnOver: false,
+                validMove: false
+            };
+        }
+
+        // TODO: Add bank money
+        currentPlayerState.money -= cardObject.cost;
+
+        currentPlayerState.rerollDoubles = true;
+
+        dcGameData.specificGameState.hasRolled = false;
+        dcGameData.gameState.history.unshift(`${this.senderId} bought a ${cardObject.title}`);
         return {
             turnOver: true,
             validMove: true
