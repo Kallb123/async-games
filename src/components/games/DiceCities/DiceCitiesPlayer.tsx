@@ -3,7 +3,6 @@ import { DiceCitiesCards } from "@/games/DiceCities/cards";
 import { useUser } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import DiceCitiesPlayerActions from "./DiceCitiesPlayerActions";
-import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { IGameCommand } from "@/utils/apiModels/GameLogic";
 import { ICommandResponse } from "@/app/api/game/command/route";
 

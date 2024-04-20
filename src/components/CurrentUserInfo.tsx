@@ -26,7 +26,7 @@ export default function CurrentUserInfo() {
     return (
         <div>
             <p>
-                Hello {visibleName}. Unlocked: {user?.publicMetadata.unlocked === true ? "Yes" : "No"}
+                Hello <span title={user?.id}>{visibleName}</span>. Unlocked: {user?.publicMetadata.unlocked === true ? "Yes" : "No"}
             </p>
         </div>
     );

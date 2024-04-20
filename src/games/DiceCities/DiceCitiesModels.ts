@@ -1,11 +1,10 @@
 import { GameDataModel, IGameData, IGameDataDocument, userIdListToUsernameList } from "@/utils/mongodb/GameData";
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
-import { randomUUID } from "crypto";
 import { Model, Schema, Types, models } from "mongoose";
 import { DiceCitiesCardIds } from "./cards";
-import { UUID } from "mongodb";
 import { IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "./apiModels";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
+import { v4 as uuidv4 } from 'uuid';
 
 export interface DiceCitiesInvitationRequest extends IInvitationRequest {
     enabledDocks: boolean,
@@ -34,7 +33,7 @@ DiceCitiesInvitationSchema.methods.CreateGame = function(invite: IDiceCitiesInvi
 
     const turnOrder = userIdList;
     const gameData: IDiceCitiesGameData = {
-        gameId: new UUID(randomUUID()),
+        gameId: uuidv4(),
         gameType: this.gameType,
         friendlyName: "Dice Cities",
         userIdList,
@@ -48,49 +47,49 @@ DiceCitiesInvitationSchema.methods.CreateGame = function(invite: IDiceCitiesInvi
         },
         specificGameState: {
             bankCards: [{
-                card: new UUID(DiceCitiesCardIds.WHEAT_FIELD),
+                card: DiceCitiesCardIds.WHEAT_FIELD,
                 amount: 6
             },{
-                card: new UUID(DiceCitiesCardIds.BAKERY),
+                card: DiceCitiesCardIds.BAKERY,
                 amount: 6
             },{
-                card: new UUID(DiceCitiesCardIds.CAFE),
+                card: DiceCitiesCardIds.CAFE,
                 amount: 6
             },{
-                card: new UUID(DiceCitiesCardIds.RANCH),
+                card: DiceCitiesCardIds.RANCH,
                 amount: 6
             },{
-                card: new UUID(DiceCitiesCardIds.FOREST),
+                card: DiceCitiesCardIds.FOREST,
                 amount: 6
             },{
-                card: new UUID(DiceCitiesCardIds.MINE),
+                card: DiceCitiesCardIds.MINE,
                 amount: 6
             },{
-                card: new UUID(DiceCitiesCardIds.APPLE_ORCHARD),
+                card: DiceCitiesCardIds.APPLE_ORCHARD,
                 amount: 6
             },{
-                card: new UUID(DiceCitiesCardIds.CONVENIENCE_STORE),
+                card: DiceCitiesCardIds.CONVENIENCE_STORE,
                 amount: 6
             },{
-                card: new UUID(DiceCitiesCardIds.CHEESE_FACTORY),
+                card: DiceCitiesCardIds.CHEESE_FACTORY,
                 amount: 6
             },{
-                card: new UUID(DiceCitiesCardIds.FURNITURE_FACTORY),
+                card: DiceCitiesCardIds.FURNITURE_FACTORY,
                 amount: 6
             },{
-                card: new UUID(DiceCitiesCardIds.FRUIT_MARKET),
+                card: DiceCitiesCardIds.FRUIT_MARKET,
                 amount: 6
             },{
-                card: new UUID(DiceCitiesCardIds.FAMILY_RESTAURANT),
+                card: DiceCitiesCardIds.FAMILY_RESTAURANT,
                 amount: 6
             },{
-                card: new UUID(DiceCitiesCardIds.STADIUM),
+                card: DiceCitiesCardIds.STADIUM,
                 amount: userIdList.length
             },{
-                card: new UUID(DiceCitiesCardIds.TV_STATION),
+                card: DiceCitiesCardIds.TV_STATION,
                 amount: userIdList.length
             },{
-                card: new UUID(DiceCitiesCardIds.BUSINESS_CENTER),
+                card: DiceCitiesCardIds.BUSINESS_CENTER,
                 amount: userIdList.length
             }],
             playerStates: new Map<string, IDiceCitiesPlayerState>(),
@@ -102,10 +101,10 @@ DiceCitiesInvitationSchema.methods.CreateGame = function(invite: IDiceCitiesInvi
     for (const userId of userIdList) {
         gameData.specificGameState.playerStates.set(userId, {
             cards: [{
-                card: new UUID(DiceCitiesCardIds.WHEAT_FIELD),
+                card: DiceCitiesCardIds.WHEAT_FIELD,
                 amount: 1
             }, {
-                card: new UUID(DiceCitiesCardIds.BAKERY),
+                card: DiceCitiesCardIds.BAKERY,
                 amount: 1
             }],
             money: 3,
@@ -123,7 +122,7 @@ export var DiceCitiesInvitationModel = models.DiceCitiesInvitation || Invitation
 export type cardType = "farm" | "pasture" | "store" | "dining" | "production" | "landmark" | "factory" | "market";
 
 export interface IDiceCitiesCardCount {
-    card: Types.UUID,
+    card: string,
     amount: number
 }
 
@@ -161,14 +160,14 @@ var DiceCitiesGameDataSchema = new Schema<IDiceCitiesGameDataDocument>({
     enabledBillionaireRow: Boolean,
     specificGameState: {
         bankCards: [{
-            card: Schema.Types.UUID,
+            card: String,
             amount: Number
         }],
         playerStates: {
             type: Schema.Types.Map,
             of: {
                 cards: [{
-                    card: Schema.Types.UUID,
+                    card: String,
                     amount: Number
                 }],
                 money: Number,

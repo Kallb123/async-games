@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     new DiceCitiesRequestPassTurn()
   ];
   const commandRequest: IGameCommand = deserializeJSON(await request.text());
-  console.log(commandRequest);
+  // console.log(commandRequest);
   console.log(commandRequest.myString());
 
   const { userId } = auth();
@@ -41,6 +41,10 @@ export async function POST(request: NextRequest) {
 
   if (userId !== gameData.currentTurn) {
     return NextResponse.json({}, {status: 400, statusText: "Not your turn in this game"});
+  }
+
+  if (userId !== commandRequest.senderId) {
+    return NextResponse.json({}, {status: 400, statusText: "Can't request for someone else"});
   }
 
   const commandOutcome = commandRequest.Execute(gameData);

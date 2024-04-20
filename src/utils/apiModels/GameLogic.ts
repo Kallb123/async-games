@@ -5,6 +5,7 @@ import { serializable } from "./Serialisable";
 import { DiceRoll } from "../games/DiceRoll";
 import { DiceCitiesCards } from "@/games/DiceCities/cards";
 import { IDiceCitiesCard } from "@/games/DiceCities/apiModels";
+import { v4 as uuidv4, parse as parseUuid } from 'uuid';
 
 export interface ICommandOutcome {
     validMove: boolean,
@@ -15,6 +16,7 @@ export interface IGameCommand {
     id: uuidString;
     timestamp: string;
     gameId: uuidString;
+    senderId: string;
     readonly className: string;
 
     myString: () => string;
@@ -28,9 +30,10 @@ export interface IDiceCitiesDiceRollOutcome extends ICommandOutcome {
 
 @serializable
 export class DiceCitiesRequestDiceRoll implements IGameCommand {
-    id: uuidString = "uuuid-uuid-uuid-uuid-uuid";
+    id: uuidString = uuidv4() as uuidString;
     timestamp: string = (new Date()).toISOString();
-    gameId: uuidString = "uuuid-uuid-uuid-uuid-uuid";
+    gameId: uuidString = uuidv4() as uuidString;
+    senderId: string = "Unknown";
     doubleDice: boolean = false;
     readonly className = "DiceCitiesRequestDiceRoll";
 
@@ -64,7 +67,7 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
         }
         const rollerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
         if (!rollerState) {
-            console.error("Unable to find rolling player's state")
+            console.error("Unable to find rolling player's state");
             return {
                 turnOver: false,
                 validMove: false
@@ -143,7 +146,7 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
         // Award purple cards
 
         dcGameData.specificGameState.hasRolled = true;
-        dcGameData.gameState.history.unshift(`${dcGameData.currentTurn} rolled a ${totalRoll}`);
+        dcGameData.gameState.history.unshift(`${this.senderId} rolled a ${totalRoll}`);
 
         const outcome: IDiceCitiesDiceRollOutcome = {
             turnOver: false, // TODO
@@ -157,10 +160,11 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
 
 @serializable
 export class DiceCitiesRequestCardPurchase implements IGameCommand {
-    id: uuidString = "uuuid-uuid-uuid-uuid-uuid";
+    id: uuidString = uuidv4() as uuidString;
     timestamp: string = (new Date()).toISOString();
-    gameId: uuidString = "uuuid-uuid-uuid-uuid-uuid";
-    cardId: uuidString = "uuuid-uuid-uuid-uuid-uuid";
+    gameId: uuidString = uuidv4() as uuidString;
+    senderId: string = "Unknown";
+    cardId: uuidString = uuidv4() as uuidString;
     readonly className = "DiceCitiesRequestCardPurchase";
 
     myString() {
@@ -169,6 +173,64 @@ export class DiceCitiesRequestCardPurchase implements IGameCommand {
 
     Execute(gameData: IGameData) {
         const dcGameData = gameData as IDiceCitiesGameData;
+        const currentPlayerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
+        if (!currentPlayerState) {
+            console.error("Unable to find current player's state");
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+        console.log("Executing for currentTurn:", dcGameData.currentTurn);
+        console.log("currentState", currentPlayerState);
+
+        if (!dcGameData.specificGameState.hasRolled) {
+            return {
+                turnOver: false,
+                validMove: false
+            };
+        }
+
+        const cardObject = DiceCitiesCards[this.cardId];
+
+        if (cardObject.cost > currentPlayerState.money) {
+            return {
+                turnOver: false,
+                validMove: false
+            };
+        }
+
+        const currentOwned = currentPlayerState.cards.find(cc => cc.card === this.cardId);
+        if (currentOwned && currentOwned.amount >= cardObject.ownLimit) {
+            return {
+                turnOver: false,
+                validMove: false
+            };
+        }
+        
+        const bankCard = dcGameData.specificGameState.bankCards.find(cc => cc.card === this.cardId);
+        if (!bankCard || bankCard.amount === 0) {
+            return {
+                turnOver: false,
+                validMove: false
+            };
+        }
+
+        // TODO: Add bank money
+        currentPlayerState.money -= cardObject.cost;
+
+        bankCard.amount--;
+        if (currentOwned) {
+            currentOwned.amount++;
+        } else {
+            currentPlayerState.cards.push({
+                amount: 1,
+                card: this.cardId
+            });
+        }
+
+        dcGameData.specificGameState.hasRolled = false;
+        dcGameData.gameState.history.unshift(`${this.senderId} bought a ${cardObject.title}`);
         return {
             turnOver: true,
             validMove: true
@@ -178,13 +240,14 @@ export class DiceCitiesRequestCardPurchase implements IGameCommand {
 
 @serializable
 export class DiceCitiesRequestPassTurn implements IGameCommand {
-    id: uuidString = "uuuid-uuid-uuid-uuid-uuid";
+    id: uuidString = uuidv4() as uuidString;
     timestamp: string = (new Date()).toISOString();
-    gameId: uuidString = "uuuid-uuid-uuid-uuid-uuid";
-    readonly className = "DiceCitiesRequestCardPurchase";
+    gameId: uuidString = uuidv4() as uuidString;
+    senderId: string = "Unknown";
+    readonly className = "DiceCitiesRequestPassTurn";
 
     myString() {
-        return `PassTurn! Card?`;
+        return `PassTurn!`;
     }
 
     Execute(gameData: IGameData) {
@@ -196,7 +259,7 @@ export class DiceCitiesRequestPassTurn implements IGameCommand {
             }
         }
         dcGameData.specificGameState.hasRolled = false;
-        dcGameData.gameState.history.unshift(`${dcGameData.currentTurn} passed their turn`);
+        dcGameData.gameState.history.unshift(`${this.senderId} passed their turn`);
         return {
             turnOver: true,
             validMove: true

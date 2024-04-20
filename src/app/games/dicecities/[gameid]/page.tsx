@@ -3,7 +3,7 @@ import { useUser } from "@clerk/nextjs";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Button, Col, Form, Row } from "react-bootstrap";
+import { Col, Form, Row } from "react-bootstrap";
 import CurrentUserInfo from "@/components/CurrentUserInfo";
 import DiceCitiesPlayer from "@/components/games/DiceCities/DiceCitiesPlayer";
 import { IDiceCitiesGameDataResponse } from "@/games/DiceCities/apiModels";
@@ -52,7 +52,11 @@ export default function GameDiceCities({ params }: { params: { gameid: uuidStrin
             }
             return response.json();
         })
-        .then(data => {if (data) setGameData(data.gameData)})
+        .then(data => {
+            if (data) {
+                setGameData(data.gameData);
+            }
+        })
         .catch(error => {
             console.error(error);
             router.push('/');
@@ -73,6 +77,11 @@ export default function GameDiceCities({ params }: { params: { gameid: uuidStrin
 
     const submitCommand = async (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => {
         command.gameId = gameId;
+        if (!user) {
+            console.error("Unable to send command whilst not logged in");
+            return;
+        }
+        command.senderId = user.id;
         fetch('/api/game/command', {
             method: "POST",
             headers: {

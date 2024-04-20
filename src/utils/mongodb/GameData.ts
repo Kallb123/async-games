@@ -8,7 +8,7 @@ export interface IGameState {
 }
 
 export interface IGameData {
-    gameId: Types.UUID,
+    gameId: string,
     gameType: string,
     friendlyName: string,
     userIdList: string[],
@@ -74,5 +74,13 @@ export var GameDataModel = models.GameData || model<IGameDataDocument, IGameData
 
 export async function userIdListToUsernameList(userIdList: string[]): Promise<string[]> {
     const users = await clerkClient.users.getUserList({userId: userIdList});
-    return users.map(user => user.username ?? "Unknown User");
+    const usernameList: string[] = [];
+    userIdList.forEach(userId => {
+        const user = users.find(u => u.id === userId);
+        if (!user) {
+            return;
+        }
+        usernameList.push(user.username ?? "No username");
+    });
+    return usernameList;
 }
