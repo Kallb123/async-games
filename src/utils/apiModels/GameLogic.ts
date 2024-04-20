@@ -3,7 +3,7 @@ import { IGameData } from "../mongodb/GameData";
 import { uuidString } from "./GameDataApi";
 import { serializable } from "./Serialisable";
 import { DiceRoll } from "../games/DiceRoll";
-import { DiceCitiesCards } from "@/games/DiceCities/cards";
+import { DiceCitiesCardIds, DiceCitiesCards } from "@/games/DiceCities/cards";
 import { IDiceCitiesCard } from "@/games/DiceCities/apiModels";
 import { v4 as uuidv4, parse as parseUuid } from 'uuid';
 
@@ -144,6 +144,24 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
             });
         });
         // Award purple cards
+        const stadiumCard = DiceCitiesCards[DiceCitiesCardIds.STADIUM];
+        if (stadiumCard.rollNumber.includes(totalRoll)) {
+            const stadiumCount = rollerState.cards.find(cc => cc.card === DiceCitiesCardIds.STADIUM);
+            if (stadiumCount && stadiumCount.amount > 0) {
+                dcGameData.specificGameState.playerStates.forEach((playerState, userId) => {
+                    if (userId === dcGameData.currentTurn) {
+                        return;
+                    }
+    
+                    const cardAmount = stadiumCard.stealAllGain;
+                    const amountToSteal = Math.min(playerState.money, cardAmount);
+                    playerState.money -= amountToSteal;
+                    rollerState.money += amountToSteal;
+                });
+            }
+        }
+        // TODO: Business Center
+        // TODO: TV Station
 
         dcGameData.specificGameState.hasRolled = true;
         dcGameData.gameState.history.unshift(`${this.senderId} rolled a ${totalRoll}`);
