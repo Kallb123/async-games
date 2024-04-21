@@ -112,7 +112,7 @@ export default function GameDiceCities({ params }: { params: { gameid: uuidStrin
                 <Row>
                     <Col>
                         {gameData?.specificGameState?.playerStates ? Object.keys(gameData.specificGameState.playerStates).map(userName => (
-                            <DiceCitiesPlayer key={userName} userName={userName} currentTurn={gameData.currentTurn} hasRolled={gameData.specificGameState.hasRolled} submitCommand={submitCommand} playerState={gameData.specificGameState.playerStates[userName]} />
+                            <DiceCitiesPlayer key={userName} userName={userName} currentTurn={gameData.currentTurn} hasRolled={gameData.specificGameState.hasRolled} awaitingTSSelection={gameData.specificGameState.awaitingTSSelection} submitCommand={submitCommand} playerState={gameData.specificGameState.playerStates[userName]} />
                         )) : ("")}
                     </Col>
                     <Col>

@@ -2,7 +2,7 @@ import { auth, clerkClient } from '@clerk/nextjs'
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from "../../../../utils/mongodb/mongodb";
 import { IInvitationDataDocument, InvitationModel, IInvitationResponse } from '@/utils/mongodb/InvitationData';
-import { userIdListToUsernameList } from '@/utils/mongodb/GameData';
+import { userIdListToUsernameList } from '@/utils/users/clerk';
 
 export async function GET(request: NextRequest) {
   console.log(`GET ${request.nextUrl.pathname}`);

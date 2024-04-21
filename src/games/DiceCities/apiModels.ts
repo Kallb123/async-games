@@ -37,7 +37,10 @@ export interface IDiceCitiesPlayerStateResponse {
 export interface IDiceCitiesGameStateResponse {
     bankCards: IDiceCitiesCardCountResponse[],
     playerStates: { [key: string]: IDiceCitiesPlayerStateResponse },
-    hasRolled: boolean
+    hasRolled: boolean,
+    awaitingTSSelection: boolean,
+    awaitingBCSelectionOwn: boolean,
+    awaitingBCSelectionOpponent: boolean
 }
 
 export interface IDiceCitiesGameDataResponse extends IGameDataResponse {

@@ -3,7 +3,7 @@ import { DiceCitiesCardIds, DiceCitiesCards } from "@/games/DiceCities/cards";
 import { useUser } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import DiceCitiesPlayerActions from "./DiceCitiesPlayerActions";
-import { DiceCitiesRequestUnlockAmusementPark, DiceCitiesRequestUnlockRadioTower, DiceCitiesRequestUnlockShoppingMall, DiceCitiesRequestUnlockTrainStation, IGameCommand } from "@/utils/apiModels/GameLogic";
+import { DiceCitiesRequestTvStationSelection, DiceCitiesRequestUnlockAmusementPark, DiceCitiesRequestUnlockRadioTower, DiceCitiesRequestUnlockShoppingMall, DiceCitiesRequestUnlockTrainStation, IGameCommand } from "@/utils/apiModels/GameLogic";
 import { ICommandResponse } from "@/app/api/game/command/route";
 import { Button } from "react-bootstrap";
 
@@ -12,10 +12,11 @@ interface DiceCitiesPlayerProps {
     userName: string,
     hasRolled: boolean,
     currentTurn: string,
+    awaitingTSSelection: boolean,
     submitCommand: (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => Promise<void>
 }
 
-export default function DiceCitiesPlayer({playerState, userName, currentTurn, hasRolled, submitCommand}: DiceCitiesPlayerProps) {
+export default function DiceCitiesPlayer({playerState, userName, currentTurn, hasRolled, awaitingTSSelection, submitCommand}: DiceCitiesPlayerProps) {
     const { user, isLoaded } = useUser();
     const [isMe, setIsMe] = useState(false);
     const [myTurn, setMyTurn] = useState(false);
@@ -34,18 +35,6 @@ export default function DiceCitiesPlayer({playerState, userName, currentTurn, ha
         }
       }
     }, [isLoaded, currentTurn]);
-    
-    const handleClick = async (gameId: `${string}-${string}-${string}-${string}-${string}`) => {
-        fetch('/api/game/taketurn', {
-            method: "POST",
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({gameId})
-        })
-        .then(response => response.json())
-        .then(data => console.log(data));
-    }
 
     const purchaseShoppingMall = () => {
         const command = new DiceCitiesRequestUnlockShoppingMall();
@@ -75,9 +64,20 @@ export default function DiceCitiesPlayer({playerState, userName, currentTurn, ha
         });
     }
 
+    const selectForTS = () => {
+        const command = new DiceCitiesRequestTvStationSelection();
+        command.selectedUser = userName;
+        submitCommand(command, (commandResponse) => {
+            console.log(commandResponse);
+        });
+    }
+
     return (
         <>
             <h2>{userName}</h2>
+            {awaitingTSSelection && !isMe && myTurn ? 
+            <Button onClick={selectForTS}>Steal up to 5 coins</Button>
+            : ""}
             <ul>
                 <li>Money: {playerState.money}</li>
                 <li>
@@ -97,7 +97,7 @@ export default function DiceCitiesPlayer({playerState, userName, currentTurn, ha
                 <li title={DiceCitiesCards[DiceCitiesCardIds.RADIO_TOWER].text}>Radio Tower: {playerState.rerollDoubles ? "True" : "False"} {myTurn && isMe && playerState && !playerState.rerollDoubles ? <Button onClick={purchaseRadioTower} disabled={DiceCitiesCards[DiceCitiesCardIds.RADIO_TOWER].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</li>
             </ul>
             {isMe && currentTurn === user?.id ? (
-                <DiceCitiesPlayerActions playerState={playerState} hasRolled={hasRolled} submitCommand={submitCommand} />
+                <DiceCitiesPlayerActions playerState={playerState} hasRolled={hasRolled} awaitingSteal={awaitingTSSelection} submitCommand={submitCommand} />
             ) : null}
         </>
     );

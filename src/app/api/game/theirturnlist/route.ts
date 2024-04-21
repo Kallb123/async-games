@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs'
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from "../../../../utils/mongodb/mongodb";
-import { IGameDataDocument, GameDataModel, userIdListToUsernameList } from '@/utils/mongodb/GameData';
+import { IGameDataDocument, GameDataModel } from '@/utils/mongodb/GameData';
 import { IGameResponse } from '@/utils/apiModels/GameDataApi';
 
 export async function GET(request: NextRequest) {

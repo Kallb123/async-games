@@ -6,6 +6,7 @@ import { DiceRoll } from "../games/DiceRoll";
 import { DiceCitiesCardIds, DiceCitiesCards } from "@/games/DiceCities/cards";
 import { IDiceCitiesCard } from "@/games/DiceCities/apiModels";
 import { v4 as uuidv4, parse as parseUuid } from 'uuid';
+import { usernameListToUserIdList } from "../users/clerk";
 
 export interface ICommandOutcome {
     validMove: boolean,
@@ -20,7 +21,7 @@ export interface IGameCommand {
     readonly className: string;
 
     myString: () => string;
-    Execute: (gameData: IGameData) => ICommandOutcome;
+    Execute: (gameData: IGameData) => Promise<ICommandOutcome>;
 }
 
 export interface IDiceCitiesDiceRollOutcome extends ICommandOutcome {
@@ -41,11 +42,20 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
         return `DiceRoll! Double? ${this.doubleDice ? "True" : "False"}`;
     }
 
-    Execute(gameData: IGameData) {
+    async Execute (gameData: IGameData) {
         const dcGameData = gameData as IDiceCitiesGameData;
         const currentPlayerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
 
         if (dcGameData.specificGameState.hasRolled) {
+            return {
+                turnOver: false,
+                validMove: false
+            };
+        }
+
+        if (dcGameData.specificGameState.awaitingTSSelection || dcGameData.specificGameState.awaitingBCSelectionOwn
+             || dcGameData.specificGameState.awaitingBCSelectionOpponent
+        ) {
             return {
                 turnOver: false,
                 validMove: false
@@ -160,14 +170,34 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
                 });
             }
         }
-        // TODO: Business Center
-        // TODO: TV Station
+        let shouldRolled: boolean = true;
+        const tvStationCard = DiceCitiesCards[DiceCitiesCardIds.TV_STATION];
+        if (tvStationCard.rollNumber.includes(totalRoll)) {
+            const tvStationCount = rollerState.cards.find(cc => cc.card === DiceCitiesCardIds.TV_STATION);
+            if (tvStationCount && tvStationCount.amount > 0) {
+                // TODO: Check if someone to steal off
+                shouldRolled = false;
+                dcGameData.specificGameState.awaitingTSSelection = true;
+            }
+        }
+        const businessCenterCard = DiceCitiesCards[DiceCitiesCardIds.BUSINESS_CENTER];
+        if (businessCenterCard.rollNumber.includes(totalRoll)) {
+            const businessCenterCount = rollerState.cards.find(cc => cc.card === DiceCitiesCardIds.BUSINESS_CENTER);
+            if (businessCenterCount && businessCenterCount.amount > 0) {
+                // TODO: Check if someone to steal off
+                shouldRolled = false;
+                dcGameData.specificGameState.awaitingBCSelectionOwn = true;
+                dcGameData.specificGameState.awaitingBCSelectionOpponent = true;
+            }
+        }
 
-        dcGameData.specificGameState.hasRolled = true;
+        dcGameData.specificGameState.hasRolled = shouldRolled;
         dcGameData.gameState.history.unshift(`${this.senderId} rolled a ${totalRoll}`);
 
+        // TODO: Maybe end turn if nothin available to buy?
+
         const outcome: IDiceCitiesDiceRollOutcome = {
-            turnOver: false, // TODO
+            turnOver: false,
             validMove: true,
             roll1,
             roll2
@@ -189,7 +219,7 @@ export class DiceCitiesRequestCardPurchase implements IGameCommand {
         return `CardPurchase! Card? ${this.cardId}`;
     }
 
-    Execute(gameData: IGameData) {
+    async Execute(gameData: IGameData) {
         const dcGameData = gameData as IDiceCitiesGameData;
         const currentPlayerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
         if (!currentPlayerState) {
@@ -266,7 +296,7 @@ export class DiceCitiesRequestPassTurn implements IGameCommand {
         return `PassTurn!`;
     }
 
-    Execute(gameData: IGameData) {
+    async Execute(gameData: IGameData) {
         const dcGameData = gameData as IDiceCitiesGameData;
         if (!dcGameData.specificGameState.hasRolled) {
             return {
@@ -295,7 +325,7 @@ export class DiceCitiesRequestUnlockTrainStation implements IGameCommand {
         return `Train Station!`;
     }
 
-    Execute(gameData: IGameData) {
+    async Execute(gameData: IGameData) {
         const dcGameData = gameData as IDiceCitiesGameData;
         const currentPlayerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
         if (!currentPlayerState) {
@@ -355,7 +385,7 @@ export class DiceCitiesRequestUnlockShoppingMall implements IGameCommand {
         return `Shopping Mall!`;
     }
 
-    Execute(gameData: IGameData) {
+    async Execute(gameData: IGameData) {
         const dcGameData = gameData as IDiceCitiesGameData;
         const currentPlayerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
         if (!currentPlayerState) {
@@ -415,7 +445,7 @@ export class DiceCitiesRequestUnlockAmusementPark implements IGameCommand {
         return `Amusement Park!`;
     }
 
-    Execute(gameData: IGameData) {
+    async Execute(gameData: IGameData) {
         const dcGameData = gameData as IDiceCitiesGameData;
         const currentPlayerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
         if (!currentPlayerState) {
@@ -475,7 +505,7 @@ export class DiceCitiesRequestUnlockRadioTower implements IGameCommand {
         return `Radio Tower!`;
     }
 
-    Execute(gameData: IGameData) {
+    async Execute(gameData: IGameData) {
         const dcGameData = gameData as IDiceCitiesGameData;
         const currentPlayerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
         if (!currentPlayerState) {
@@ -522,3 +552,68 @@ export class DiceCitiesRequestUnlockRadioTower implements IGameCommand {
         };
     }
 }
+
+@serializable
+export class DiceCitiesRequestTvStationSelection implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = (new Date()).toISOString();
+    gameId: uuidString = uuidv4() as uuidString;
+    senderId: string = "Unknown";
+    selectedUser: string = "";
+    readonly className = "DiceCitiesRequestTvStationSelection";
+
+    myString() {
+        return `TV Station Selection: ${this.selectedUser}!`;
+    }
+
+    async Execute(gameData: IGameData) {
+        const dcGameData = gameData as IDiceCitiesGameData;
+        // This should be happening as part of the roll
+        if (dcGameData.specificGameState.hasRolled) {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+        if (!dcGameData.specificGameState.awaitingTSSelection) {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+
+        const selectedId = (await usernameListToUserIdList([this.selectedUser]))[0];
+        const selectedState = dcGameData.specificGameState.playerStates.get(selectedId);
+        if (!selectedState) {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+        const rollerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
+        if (!rollerState) {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+
+        const tvStationCard = DiceCitiesCards[DiceCitiesCardIds.TV_STATION];
+        const cardSteal = tvStationCard.stealChosenGain;
+        const amountToSteal = Math.min(cardSteal, selectedState.money);
+
+        selectedState.money -= amountToSteal;
+        rollerState.money += amountToSteal;
+
+        dcGameData.gameState.history.unshift(`${this.senderId} stole ${amountToSteal} coins from ${this.selectedUser}`);
+        dcGameData.specificGameState.awaitingTSSelection = false;
+        if (!dcGameData.specificGameState.awaitingBCSelectionOwn && !dcGameData.specificGameState.awaitingBCSelectionOpponent) {
+            dcGameData.specificGameState.hasRolled = true;
+        }
+        return {
+            turnOver: false,
+            validMove: true
+        };
+    }
+}
+

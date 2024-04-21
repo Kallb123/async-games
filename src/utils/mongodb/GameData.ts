@@ -1,6 +1,7 @@
-import { Document, Model, Schema, Types, model, models } from "mongoose";
+import { Document, Model, Schema, model, models } from "mongoose";
 import { IGameDataResponse, IGameResponse } from "../apiModels/GameDataApi";
 import { clerkClient } from "@clerk/nextjs";
+import { userIdListToUsernameList } from "../users/clerk";
 
 export interface IGameState {
     turnOrder: string[],
@@ -71,16 +72,3 @@ GameDataSchema.methods.CreateDataResponse = async function(): Promise<IGameDataR
     }
 };
 export var GameDataModel = models.GameData || model<IGameDataDocument, IGameDataModel>('GameData', GameDataSchema);
-
-export async function userIdListToUsernameList(userIdList: string[]): Promise<string[]> {
-    const users = await clerkClient.users.getUserList({userId: userIdList});
-    const usernameList: string[] = [];
-    userIdList.forEach(userId => {
-        const user = users.find(u => u.id === userId);
-        if (!user) {
-            return;
-        }
-        usernameList.push(user.username ?? "No username");
-    });
-    return usernameList;
-}

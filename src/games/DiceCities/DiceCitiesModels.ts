@@ -1,10 +1,11 @@
-import { GameDataModel, IGameData, IGameDataDocument, userIdListToUsernameList } from "@/utils/mongodb/GameData";
+import { GameDataModel, IGameData, IGameDataDocument } from "@/utils/mongodb/GameData";
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
-import { Model, Schema, Types, models } from "mongoose";
+import { Model, Schema, models } from "mongoose";
 import { DiceCitiesCardIds } from "./cards";
 import { IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "./apiModels";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { v4 as uuidv4 } from 'uuid';
+import { userIdListToUsernameList } from "@/utils/users/clerk";
 
 export interface DiceCitiesInvitationRequest extends IInvitationRequest {
     enabledDocks: boolean,
@@ -49,51 +50,54 @@ DiceCitiesInvitationSchema.methods.CreateGame = function(invite: IDiceCitiesInvi
             bankCards: [{
                 card: DiceCitiesCardIds.WHEAT_FIELD,
                 amount: 6
-            },{
+            }, {
                 card: DiceCitiesCardIds.BAKERY,
                 amount: 6
-            },{
+            }, {
                 card: DiceCitiesCardIds.CAFE,
                 amount: 6
-            },{
+            }, {
                 card: DiceCitiesCardIds.RANCH,
                 amount: 6
-            },{
+            }, {
                 card: DiceCitiesCardIds.FOREST,
                 amount: 6
-            },{
+            }, {
                 card: DiceCitiesCardIds.MINE,
                 amount: 6
-            },{
+            }, {
                 card: DiceCitiesCardIds.APPLE_ORCHARD,
                 amount: 6
-            },{
+            }, {
                 card: DiceCitiesCardIds.CONVENIENCE_STORE,
                 amount: 6
-            },{
+            }, {
                 card: DiceCitiesCardIds.CHEESE_FACTORY,
                 amount: 6
-            },{
+            }, {
                 card: DiceCitiesCardIds.FURNITURE_FACTORY,
                 amount: 6
-            },{
+            }, {
                 card: DiceCitiesCardIds.FRUIT_MARKET,
                 amount: 6
-            },{
+            }, {
                 card: DiceCitiesCardIds.FAMILY_RESTAURANT,
                 amount: 6
-            },{
+            }, {
                 card: DiceCitiesCardIds.STADIUM,
                 amount: userIdList.length
-            },{
+            }, {
                 card: DiceCitiesCardIds.TV_STATION,
                 amount: userIdList.length
-            },{
+            }, {
                 card: DiceCitiesCardIds.BUSINESS_CENTER,
                 amount: userIdList.length
             }],
             playerStates: new Map<string, IDiceCitiesPlayerState>(),
-            hasRolled: false
+            hasRolled: false,
+            awaitingTSSelection: false,
+            awaitingBCSelectionOwn: false,
+            awaitingBCSelectionOpponent: false
         },
         enabledDocks: this.enabledDocks,
         enabledBillionaireRow: this.enabledBillionaireRow
@@ -138,7 +142,10 @@ export interface IDiceCitiesPlayerState {
 export interface IDiceCitiesGameState {
     bankCards: IDiceCitiesCardCount[],
     playerStates: Map<string, IDiceCitiesPlayerState>,
-    hasRolled: boolean
+    hasRolled: boolean,
+    awaitingTSSelection: boolean,
+    awaitingBCSelectionOwn: boolean,
+    awaitingBCSelectionOpponent: boolean
 }
 
 export interface IDiceCitiesGameData extends IGameData {
@@ -177,7 +184,10 @@ var DiceCitiesGameDataSchema = new Schema<IDiceCitiesGameDataDocument>({
                 oneReroll: Boolean
             }
         },
-        hasRolled: Boolean
+        hasRolled: Boolean,
+        awaitingTSSelection: Boolean,
+        awaitingBCSelectionOwn: Boolean,
+        awaitingBCSelectionOpponent: Boolean
     }
 }, {discriminatorKey: 'kind'});
 DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(): Promise<IDiceCitiesGameDataResponse> {
@@ -229,7 +239,10 @@ function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap: { [key
             };
         }),
         playerStates,
-        hasRolled: gameState.hasRolled
+        hasRolled: gameState.hasRolled,
+        awaitingTSSelection: gameState.awaitingTSSelection,
+        awaitingBCSelectionOwn: gameState.awaitingBCSelectionOwn,
+        awaitingBCSelectionOpponent: gameState.awaitingBCSelectionOpponent
     }
 }
 
