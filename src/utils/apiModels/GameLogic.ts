@@ -6,7 +6,7 @@ import { DiceRoll } from "../games/DiceRoll";
 import { DiceCitiesCardIds, DiceCitiesCards } from "@/games/DiceCities/cards";
 import { IDiceCitiesCard } from "@/games/DiceCities/apiModels";
 import { v4 as uuidv4, parse as parseUuid } from 'uuid';
-import { usernameListToUserIdList } from "../users/clerk";
+import { userIdListToUsernameList, usernameListToUserIdList } from "../users/clerk";
 
 export interface ICommandOutcome {
     validMove: boolean,
@@ -192,7 +192,8 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
         }
 
         dcGameData.specificGameState.hasRolled = shouldRolled;
-        dcGameData.gameState.history.unshift(`${this.senderId} rolled a ${totalRoll}`);
+        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
+        dcGameData.gameState.history.unshift(`${senderUsername} rolled a ${totalRoll}`);
 
         // TODO: Maybe end turn if nothin available to buy?
 
@@ -276,7 +277,8 @@ export class DiceCitiesRequestCardPurchase implements IGameCommand {
         }
 
         dcGameData.specificGameState.hasRolled = false;
-        dcGameData.gameState.history.unshift(`${this.senderId} bought a ${cardObject.title}`);
+        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
+        dcGameData.gameState.history.unshift(`${senderUsername} bought a ${cardObject.title}`);
         return {
             turnOver: true,
             validMove: true
@@ -305,7 +307,8 @@ export class DiceCitiesRequestPassTurn implements IGameCommand {
             }
         }
         dcGameData.specificGameState.hasRolled = false;
-        dcGameData.gameState.history.unshift(`${this.senderId} passed their turn`);
+        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
+        dcGameData.gameState.history.unshift(`${senderUsername} passed their turn`);
         return {
             turnOver: true,
             validMove: true
@@ -365,7 +368,8 @@ export class DiceCitiesRequestUnlockTrainStation implements IGameCommand {
         currentPlayerState.doubleUnlocked = true;
 
         dcGameData.specificGameState.hasRolled = false;
-        dcGameData.gameState.history.unshift(`${this.senderId} bought a ${cardObject.title}`);
+        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
+        dcGameData.gameState.history.unshift(`${senderUsername} bought a ${cardObject.title}`);
         return {
             turnOver: true,
             validMove: true
@@ -425,7 +429,8 @@ export class DiceCitiesRequestUnlockShoppingMall implements IGameCommand {
         currentPlayerState.bonusDiningAndStore = true;
 
         dcGameData.specificGameState.hasRolled = false;
-        dcGameData.gameState.history.unshift(`${this.senderId} bought a ${cardObject.title}`);
+        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
+        dcGameData.gameState.history.unshift(`${senderUsername} bought a ${cardObject.title}`);
         return {
             turnOver: true,
             validMove: true
@@ -485,7 +490,8 @@ export class DiceCitiesRequestUnlockAmusementPark implements IGameCommand {
         currentPlayerState.oneReroll = true;
 
         dcGameData.specificGameState.hasRolled = false;
-        dcGameData.gameState.history.unshift(`${this.senderId} bought a ${cardObject.title}`);
+        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
+        dcGameData.gameState.history.unshift(`${senderUsername} bought a ${cardObject.title}`);
         return {
             turnOver: true,
             validMove: true
@@ -545,7 +551,8 @@ export class DiceCitiesRequestUnlockRadioTower implements IGameCommand {
         currentPlayerState.rerollDoubles = true;
 
         dcGameData.specificGameState.hasRolled = false;
-        dcGameData.gameState.history.unshift(`${this.senderId} bought a ${cardObject.title}`);
+        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
+        dcGameData.gameState.history.unshift(`${senderUsername} bought a ${cardObject.title}`);
         return {
             turnOver: true,
             validMove: true
@@ -605,7 +612,8 @@ export class DiceCitiesRequestTvStationSelection implements IGameCommand {
         selectedState.money -= amountToSteal;
         rollerState.money += amountToSteal;
 
-        dcGameData.gameState.history.unshift(`${this.senderId} stole ${amountToSteal} coins from ${this.selectedUser}`);
+        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
+        dcGameData.gameState.history.unshift(`${senderUsername} stole ${amountToSteal} coins from ${this.selectedUser}`);
         dcGameData.specificGameState.awaitingTSSelection = false;
         if (!dcGameData.specificGameState.awaitingBCSelectionOwn && !dcGameData.specificGameState.awaitingBCSelectionOpponent) {
             dcGameData.specificGameState.hasRolled = true;
