@@ -26,6 +26,8 @@ export interface IDiceCitiesCardCountResponse {
 }
 
 export interface IDiceCitiesPlayerStateResponse {
+    username: string,
+    userId: string,
     cards: IDiceCitiesCardCountResponse[],
     money: number,
     doubleUnlocked: boolean,

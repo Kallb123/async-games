@@ -176,6 +176,7 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
             const tvStationCount = rollerState.cards.find(cc => cc.card === DiceCitiesCardIds.TV_STATION);
             if (tvStationCount && tvStationCount.amount > 0) {
                 // TODO: Check if someone to steal off
+                // TODO: If there's only 2 players, can we skip the choice?
                 shouldRolled = false;
                 dcGameData.specificGameState.awaitingTSSelection = true;
             }

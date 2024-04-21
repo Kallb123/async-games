@@ -21,8 +21,6 @@ export default function GameDiceCities({ params }: { params: { gameid: uuidStrin
 
     const gameId = params.gameid;
 
-    // TODO: listen for TurnTaken events
-
     useEffect(() => {
         if (isLoaded) {
             if (!user) {
@@ -62,18 +60,6 @@ export default function GameDiceCities({ params }: { params: { gameid: uuidStrin
             router.push('/');
         });
     };
-
-    const handleTakeTurn = async () => {
-        fetch('/api/game/taketurn', {
-            method: "POST",
-            headers: {
-            'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({gameId})
-        })
-        .then(response => response.json())
-        .then(data => console.log(data));
-    }
 
     const submitCommand = async (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => {
         command.gameId = gameId;

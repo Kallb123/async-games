@@ -74,7 +74,7 @@ export default function DiceCitiesPlayer({playerState, userName, currentTurn, ha
 
     return (
         <>
-            <h2>{userName}</h2>
+            <h2>{userName}{playerState.userId === currentTurn ? " *" : ""}</h2>
             {awaitingTSSelection && !isMe && myTurn ? 
             <Button onClick={selectForTS}>Steal up to 5 coins</Button>
             : ""}

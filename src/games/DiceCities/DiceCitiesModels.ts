@@ -218,6 +218,8 @@ function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap: { [key
     const playerStates: { [key: string]: IDiceCitiesPlayerStateResponse; } = {};
     for (const [userId, playerStateModel] of gameState.playerStates) {
         playerStates[userIdNameMap[userId]] = {
+            userId,
+            username: userIdNameMap[userId],
             cards: playerStateModel.cards.map(cardCount => {
                 return {
                     card: cardCount.card.toString() as uuidString,
