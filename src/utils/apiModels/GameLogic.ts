@@ -5,7 +5,7 @@ import { serializable } from "./Serialisable";
 import { DiceRoll } from "../games/DiceRoll";
 import { DiceCitiesCardIds, DiceCitiesCards } from "@/games/DiceCities/cards";
 import { IDiceCitiesCard } from "@/games/DiceCities/apiModels";
-import { v4 as uuidv4, parse as parseUuid } from 'uuid';
+import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import { userIdListToUsernameList, usernameListToUserIdList } from "../users/clerk";
 
 export interface ICommandOutcome {
@@ -33,7 +33,7 @@ export interface IDiceCitiesDiceRollOutcome extends ICommandOutcome {
 export class DiceCitiesRequestDiceRoll implements IGameCommand {
     id: uuidString = uuidv4() as uuidString;
     timestamp: string = (new Date()).toISOString();
-    gameId: uuidString = uuidv4() as uuidString;
+    gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
     doubleDice: boolean = false;
     readonly className = "DiceCitiesRequestDiceRoll";
@@ -212,9 +212,9 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
 export class DiceCitiesRequestCardPurchase implements IGameCommand {
     id: uuidString = uuidv4() as uuidString;
     timestamp: string = (new Date()).toISOString();
-    gameId: uuidString = uuidv4() as uuidString;
+    gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
-    cardId: uuidString = uuidv4() as uuidString;
+    cardId: uuidString = NIL_UUID as uuidString;
     readonly className = "DiceCitiesRequestCardPurchase";
 
     myString() {
@@ -291,7 +291,7 @@ export class DiceCitiesRequestCardPurchase implements IGameCommand {
 export class DiceCitiesRequestPassTurn implements IGameCommand {
     id: uuidString = uuidv4() as uuidString;
     timestamp: string = (new Date()).toISOString();
-    gameId: uuidString = uuidv4() as uuidString;
+    gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
     readonly className = "DiceCitiesRequestPassTurn";
 
@@ -321,7 +321,7 @@ export class DiceCitiesRequestPassTurn implements IGameCommand {
 export class DiceCitiesRequestUnlockTrainStation implements IGameCommand {
     id: uuidString = uuidv4() as uuidString;
     timestamp: string = (new Date()).toISOString();
-    gameId: uuidString = uuidv4() as uuidString;
+    gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
     readonly className = "DiceCitiesRequestUnlockTrainStation";
 
@@ -382,7 +382,7 @@ export class DiceCitiesRequestUnlockTrainStation implements IGameCommand {
 export class DiceCitiesRequestUnlockShoppingMall implements IGameCommand {
     id: uuidString = uuidv4() as uuidString;
     timestamp: string = (new Date()).toISOString();
-    gameId: uuidString = uuidv4() as uuidString;
+    gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
     readonly className = "DiceCitiesRequestUnlockShoppingMall";
 
@@ -443,7 +443,7 @@ export class DiceCitiesRequestUnlockShoppingMall implements IGameCommand {
 export class DiceCitiesRequestUnlockAmusementPark implements IGameCommand {
     id: uuidString = uuidv4() as uuidString;
     timestamp: string = (new Date()).toISOString();
-    gameId: uuidString = uuidv4() as uuidString;
+    gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
     readonly className = "DiceCitiesRequestUnlockAmusementPark";
 
@@ -504,7 +504,7 @@ export class DiceCitiesRequestUnlockAmusementPark implements IGameCommand {
 export class DiceCitiesRequestUnlockRadioTower implements IGameCommand {
     id: uuidString = uuidv4() as uuidString;
     timestamp: string = (new Date()).toISOString();
-    gameId: uuidString = uuidv4() as uuidString;
+    gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
     readonly className = "DiceCitiesRequestUnlockRadioTower";
 
@@ -565,7 +565,7 @@ export class DiceCitiesRequestUnlockRadioTower implements IGameCommand {
 export class DiceCitiesRequestTvStationSelection implements IGameCommand {
     id: uuidString = uuidv4() as uuidString;
     timestamp: string = (new Date()).toISOString();
-    gameId: uuidString = uuidv4() as uuidString;
+    gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
     selectedUser: string = "";
     readonly className = "DiceCitiesRequestTvStationSelection";
@@ -630,9 +630,9 @@ export class DiceCitiesRequestTvStationSelection implements IGameCommand {
 export class DiceCitiesRequestBusinessCenterOwnSelection implements IGameCommand {
     id: uuidString = uuidv4() as uuidString;
     timestamp: string = (new Date()).toISOString();
-    gameId: uuidString = uuidv4() as uuidString;
+    gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
-    selectedCard: uuidString = uuidv4() as uuidString;
+    selectedCard: uuidString = NIL_UUID as uuidString;
     readonly className = "DiceCitiesRequestBusinessCenterOwnSelection";
 
     myString() {
@@ -721,8 +721,10 @@ export class DiceCitiesRequestBusinessCenterOwnSelection implements IGameCommand
 
         const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
         const selectedOpponentUsername = (await userIdListToUsernameList([dcGameData.specificGameState.bcSelectedOpponent]))[0];
-        dcGameData.gameState.history.unshift(`${senderUsername} stole a ${selectedOwnCard.title} for a ${selectedOpponentCard.title} coins from ${selectedOpponentUsername}`);
-        dcGameData.specificGameState.awaitingTSSelection = false;
+        dcGameData.gameState.history.unshift(`${senderUsername} stole a ${selectedOpponentCard.title} for a ${selectedOwnCard.title} coins from ${selectedOpponentUsername}`);
+        dcGameData.specificGameState.bcSelectedOpponent = "";
+        dcGameData.specificGameState.bcSelectedOpponent = "";
+        dcGameData.specificGameState.bcSelectedOpponentCard = NIL_UUID as uuidString;
         if (!dcGameData.specificGameState.awaitingTSSelection) {
             dcGameData.specificGameState.hasRolled = true;
         }
@@ -737,10 +739,10 @@ export class DiceCitiesRequestBusinessCenterOwnSelection implements IGameCommand
 export class DiceCitiesRequestBusinessCenterOpponentSelection implements IGameCommand {
     id: uuidString = uuidv4() as uuidString;
     timestamp: string = (new Date()).toISOString();
-    gameId: uuidString = uuidv4() as uuidString;
+    gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
-    selectedUser: uuidString = uuidv4() as uuidString;
-    selectedCard: uuidString = uuidv4() as uuidString;
+    selectedUser: string = "Unknown";
+    selectedCard: uuidString = NIL_UUID as uuidString;
     readonly className = "DiceCitiesRequestBusinessCenterOpponentSelection";
 
     myString() {
@@ -824,15 +826,17 @@ export class DiceCitiesRequestBusinessCenterOpponentSelection implements IGameCo
         }
 
         // Both selections made
-        removeCardFromPlayerState(this.selectedCard, rollerState);
-        addCardToPlayerState(this.selectedCard, opponentState);
-        removeCardFromPlayerState(dcGameData.specificGameState.bcSelectedOpponentCard, opponentState);
-        addCardToPlayerState(dcGameData.specificGameState.bcSelectedOpponentCard, rollerState);
+        removeCardFromPlayerState(dcGameData.specificGameState.bcSelectedOwnCard, rollerState);
+        addCardToPlayerState(dcGameData.specificGameState.bcSelectedOwnCard, opponentState);
+        removeCardFromPlayerState(this.selectedCard, opponentState);
+        addCardToPlayerState(this.selectedCard, rollerState);
 
         const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
         const selectedOpponentUsername = (await userIdListToUsernameList([dcGameData.specificGameState.bcSelectedOpponent]))[0];
-        dcGameData.gameState.history.unshift(`${senderUsername} stole a ${selectedOwnCard.title} for a ${selectedOpponentCard.title} coins from ${selectedOpponentUsername}`);
-        dcGameData.specificGameState.awaitingTSSelection = false;
+        dcGameData.gameState.history.unshift(`${senderUsername} stole a ${selectedOpponentCard.title} for a ${selectedOwnCard.title} coins from ${selectedOpponentUsername}`);
+        dcGameData.specificGameState.bcSelectedOpponent = "";
+        dcGameData.specificGameState.bcSelectedOpponent = "";
+        dcGameData.specificGameState.bcSelectedOpponentCard = NIL_UUID as uuidString;
         if (!dcGameData.specificGameState.awaitingTSSelection) {
             dcGameData.specificGameState.hasRolled = true;
         }

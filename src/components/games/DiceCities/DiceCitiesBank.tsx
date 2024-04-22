@@ -69,9 +69,9 @@ export default function DiceCitiesBank({gameState, submitCommand}: DiceCitiesBan
                 <li>
                     <ul>
                         {currentUserState && gameState && gameState.bankCards.map(cardCount => {
-                            const card: IDiceCitiesCard = DiceCitiesCards[cardCount.card.toString()];
+                            const card: IDiceCitiesCard = DiceCitiesCards[cardCount.card];
                             return (
-                                <li key={cardCount.card.toString()} title={card.text}>{card.title} x{cardCount.amount} (Cost: {card.cost}) <Button onClick={() => {handlePurchase(card.cardId)}} disabled={isDisabled(card, cardCount, currentUserState)}>Purchase</Button></li>
+                                <li key={cardCount.card} title={card.text}>{card.title} x{cardCount.amount} (Cost: {card.cost}) <Button onClick={() => {handlePurchase(card.cardId)}} disabled={isDisabled(card, cardCount, currentUserState)}>Purchase</Button></li>
                             )
                         })}
                     </ul>

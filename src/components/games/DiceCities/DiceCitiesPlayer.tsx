@@ -3,9 +3,10 @@ import { DiceCitiesCardIds, DiceCitiesCards } from "@/games/DiceCities/cards";
 import { useUser } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import DiceCitiesPlayerActions from "./DiceCitiesPlayerActions";
-import { DiceCitiesRequestTvStationSelection, DiceCitiesRequestUnlockAmusementPark, DiceCitiesRequestUnlockRadioTower, DiceCitiesRequestUnlockShoppingMall, DiceCitiesRequestUnlockTrainStation, IGameCommand } from "@/utils/apiModels/GameLogic";
+import { DiceCitiesRequestBusinessCenterOpponentSelection, DiceCitiesRequestBusinessCenterOwnSelection, DiceCitiesRequestTvStationSelection, DiceCitiesRequestUnlockAmusementPark, DiceCitiesRequestUnlockRadioTower, DiceCitiesRequestUnlockShoppingMall, DiceCitiesRequestUnlockTrainStation, IGameCommand } from "@/utils/apiModels/GameLogic";
 import { ICommandResponse } from "@/app/api/game/command/route";
 import { Button } from "react-bootstrap";
+import { uuidString } from "@/utils/apiModels/GameDataApi";
 
 interface DiceCitiesPlayerProps {
     playerState: IDiceCitiesPlayerStateResponse,
@@ -13,10 +14,11 @@ interface DiceCitiesPlayerProps {
     hasRolled: boolean,
     currentTurn: string,
     awaitingTSSelection: boolean,
+    awaitingBCSelection: boolean,
     submitCommand: (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => Promise<void>
 }
 
-export default function DiceCitiesPlayer({playerState, userName, currentTurn, hasRolled, awaitingTSSelection, submitCommand}: DiceCitiesPlayerProps) {
+export default function DiceCitiesPlayer({playerState, userName, currentTurn, hasRolled, awaitingTSSelection, awaitingBCSelection, submitCommand}: DiceCitiesPlayerProps) {
     const { user, isLoaded } = useUser();
     const [isMe, setIsMe] = useState(false);
     const [myTurn, setMyTurn] = useState(false);
@@ -72,6 +74,31 @@ export default function DiceCitiesPlayer({playerState, userName, currentTurn, ha
         });
     }
 
+    const selectForBC = (cardId: uuidString) => {
+        if (isMe) {
+            selectOwnBC(cardId);
+        } else {
+            selectOpponentBC(cardId);
+        }
+    }
+
+    const selectOwnBC = (cardId: uuidString) => {
+        const command = new DiceCitiesRequestBusinessCenterOwnSelection();
+        command.selectedCard = cardId;
+        submitCommand(command, (commandResponse) => {
+            console.log(commandResponse);
+        });
+    }
+
+    const selectOpponentBC = (cardId: uuidString) => {
+        const command = new DiceCitiesRequestBusinessCenterOpponentSelection();
+        command.selectedUser = playerState.userId;
+        command.selectedCard = cardId;
+        submitCommand(command, (commandResponse) => {
+            console.log(commandResponse);
+        });
+    }
+
     return (
         <>
             <h2>{userName}{playerState.userId === currentTurn ? " *" : ""}</h2>
@@ -84,9 +111,12 @@ export default function DiceCitiesPlayer({playerState, userName, currentTurn, ha
                     <ul>
                         <li>Cards</li>
                         {playerState.cards.map(cardCount => {
-                            const card: IDiceCitiesCard = DiceCitiesCards[cardCount.card.toString()];
+                            if (cardCount.amount === 0) return;
+                            const card: IDiceCitiesCard = DiceCitiesCards[cardCount.card];
                             return (
-                                <li key={cardCount.card.toString()} title={card.text}>{card.title} x{cardCount.amount}</li>
+                                <li key={cardCount.card} title={card.text}>{card.title} x{cardCount.amount} {
+                                    awaitingBCSelection && myTurn && card.type !== "landmark" ? <Button onClick={() => {selectForBC(cardCount.card)}}>Select to {isMe ? "Give" : "Receive"}</Button> : ""
+                                }</li>
                             )
                         })}
                     </ul>
@@ -97,7 +127,7 @@ export default function DiceCitiesPlayer({playerState, userName, currentTurn, ha
                 <li title={DiceCitiesCards[DiceCitiesCardIds.RADIO_TOWER].text}>Radio Tower: {playerState.rerollDoubles ? "True" : "False"} {myTurn && isMe && playerState && !playerState.rerollDoubles ? <Button onClick={purchaseRadioTower} disabled={DiceCitiesCards[DiceCitiesCardIds.RADIO_TOWER].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</li>
             </ul>
             {isMe && currentTurn === user?.id ? (
-                <DiceCitiesPlayerActions playerState={playerState} hasRolled={hasRolled} awaitingSteal={awaitingTSSelection} submitCommand={submitCommand} />
+                <DiceCitiesPlayerActions playerState={playerState} hasRolled={hasRolled} awaitingSteal={awaitingTSSelection || awaitingBCSelection} submitCommand={submitCommand} />
             ) : null}
         </>
     );
