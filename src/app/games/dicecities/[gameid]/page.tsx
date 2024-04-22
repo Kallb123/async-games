@@ -109,7 +109,7 @@ export default function GameDiceCities({ params }: { params: { gameid: uuidStrin
                         )) : ("")}
                     </Col>
                     <Col>
-                        <DiceCitiesBank gameState={gameData?.specificGameState} submitCommand={submitCommand} />
+                        <DiceCitiesBank gameState={gameData?.specificGameState} currentTurn={gameData.currentTurn} submitCommand={submitCommand} />
                     </Col>
                 </Row>
                 <Row>

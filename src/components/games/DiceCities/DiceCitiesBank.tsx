@@ -4,16 +4,16 @@ import { DiceCitiesCards } from "@/games/DiceCities/cards";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { DiceCitiesRequestCardPurchase, IGameCommand } from "@/utils/apiModels/GameLogic";
 import { useUser } from "@clerk/nextjs";
-import { UserResource } from "@clerk/types";
 import { useEffect, useState } from "react";
 import { Button } from "react-bootstrap";
 
 interface DiceCitiesBankProps {
     gameState: IDiceCitiesGameStateResponse,
+    currentTurn: string,
     submitCommand: (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => Promise<void>
 }
 
-export default function DiceCitiesBank({gameState, submitCommand}: DiceCitiesBankProps) {
+export default function DiceCitiesBank({gameState, currentTurn, submitCommand}: DiceCitiesBankProps) {
     const { user, isLoaded } = useUser();
     const [currentUserState, setCurrentUserState] = useState(null as IDiceCitiesPlayerStateResponse | null);
 
@@ -71,7 +71,11 @@ export default function DiceCitiesBank({gameState, submitCommand}: DiceCitiesBan
                         {currentUserState && gameState && gameState.bankCards.map(cardCount => {
                             const card: IDiceCitiesCard = DiceCitiesCards[cardCount.card];
                             return (
-                                <li key={cardCount.card} title={card.text}>{card.title} x{cardCount.amount} (Cost: {card.cost}) <Button onClick={() => {handlePurchase(card.cardId)}} disabled={isDisabled(card, cardCount, currentUserState)}>Purchase</Button></li>
+                                <li key={cardCount.card} title={card.text}>{card.title} x{cardCount.amount} (Cost: {card.cost}) {
+                                    isLoaded && user?.id === currentTurn && gameState.hasRolled ?
+                                        <Button onClick={() => {handlePurchase(card.cardId)}} disabled={isDisabled(card, cardCount, currentUserState)}>Purchase</Button>
+                                    : ""
+                                }</li>
                             )
                         })}
                     </ul>
