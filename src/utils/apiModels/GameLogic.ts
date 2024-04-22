@@ -121,13 +121,21 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
                 }
                 if (userId === dcGameData.currentTurn) {
                     if (cardObject.onOwnTurn) {
-                        console.log(`Rolled ${totalRoll}, adding money from ${cardObject.title} to ${userId}. CurrentTurn: ${dcGameData.currentTurn}`);
-                        return [cardObject];
+                        let output = [];
+                        for(let i = 0; i < cardCount.amount; i++) {
+                            console.log(`Rolled ${totalRoll}, adding money from ${cardObject.title} to ${userId}. CurrentTurn: ${dcGameData.currentTurn}`);
+                            output.push(cardObject);
+                        }
+                        return output;
                     }
                 } else {
                     if (cardObject.onOponentsTurn) {
-                        console.log(`Rolled ${totalRoll}, adding money from ${cardObject.title} to ${userId}. CurrentTurn: ${dcGameData.currentTurn}`);
-                        return [cardObject];
+                        let output = [];
+                        for(let i = 0; i < cardCount.amount; i++) {
+                            console.log(`Rolled ${totalRoll}, adding money from ${cardObject.title} to ${userId}. CurrentTurn: ${dcGameData.currentTurn}`);
+                            output.push(cardObject);
+                        }
+                        return output;
                     }
                 }
                 return [];
