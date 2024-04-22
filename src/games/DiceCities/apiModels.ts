@@ -42,7 +42,10 @@ export interface IDiceCitiesGameStateResponse {
     hasRolled: boolean,
     awaitingTSSelection: boolean,
     awaitingBCSelectionOwn: boolean,
-    awaitingBCSelectionOpponent: boolean
+    awaitingBCSelectionOpponent: boolean,
+    bcSelectedOwnCard: uuidString | null,
+    bcSelectedOpponent: string | null,
+    bcSelectedOpponentCard: uuidString | null
 }
 
 export interface IDiceCitiesGameDataResponse extends IGameDataResponse {

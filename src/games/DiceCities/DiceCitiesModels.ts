@@ -97,7 +97,10 @@ DiceCitiesInvitationSchema.methods.CreateGame = function(invite: IDiceCitiesInvi
             hasRolled: false,
             awaitingTSSelection: false,
             awaitingBCSelectionOwn: false,
-            awaitingBCSelectionOpponent: false
+            awaitingBCSelectionOpponent: false,
+            bcSelectedOwnCard: null,
+            bcSelectedOpponent: null,
+            bcSelectedOpponentCard: null
         },
         enabledDocks: this.enabledDocks,
         enabledBillionaireRow: this.enabledBillionaireRow
@@ -145,7 +148,10 @@ export interface IDiceCitiesGameState {
     hasRolled: boolean,
     awaitingTSSelection: boolean,
     awaitingBCSelectionOwn: boolean,
-    awaitingBCSelectionOpponent: boolean
+    awaitingBCSelectionOpponent: boolean,
+    bcSelectedOwnCard: uuidString | null,
+    bcSelectedOpponent: string | null,
+    bcSelectedOpponentCard: uuidString | null
 }
 
 export interface IDiceCitiesGameData extends IGameData {
@@ -187,7 +193,10 @@ var DiceCitiesGameDataSchema = new Schema<IDiceCitiesGameDataDocument>({
         hasRolled: Boolean,
         awaitingTSSelection: Boolean,
         awaitingBCSelectionOwn: Boolean,
-        awaitingBCSelectionOpponent: Boolean
+        awaitingBCSelectionOpponent: Boolean,
+        bcSelectedOwnCard: String,
+        bcSelectedOpponent: String,
+        bcSelectedOpponentCard: String
     }
 }, {discriminatorKey: 'kind'});
 DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(): Promise<IDiceCitiesGameDataResponse> {
@@ -244,7 +253,10 @@ function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap: { [key
         hasRolled: gameState.hasRolled,
         awaitingTSSelection: gameState.awaitingTSSelection,
         awaitingBCSelectionOwn: gameState.awaitingBCSelectionOwn,
-        awaitingBCSelectionOpponent: gameState.awaitingBCSelectionOpponent
+        awaitingBCSelectionOpponent: gameState.awaitingBCSelectionOpponent,
+        bcSelectedOwnCard: gameState.bcSelectedOwnCard,
+        bcSelectedOpponent: gameState.bcSelectedOpponent,
+        bcSelectedOpponentCard: gameState.bcSelectedOpponentCard
     }
 }
 

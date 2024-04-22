@@ -1,4 +1,4 @@
-import { IDiceCitiesGameData } from "@/games/DiceCities/DiceCitiesModels";
+import { IDiceCitiesGameData, IDiceCitiesPlayerState } from "@/games/DiceCities/DiceCitiesModels";
 import { IGameData } from "../mongodb/GameData";
 import { uuidString } from "./GameDataApi";
 import { serializable } from "./Serialisable";
@@ -623,6 +623,244 @@ export class DiceCitiesRequestTvStationSelection implements IGameCommand {
             turnOver: false,
             validMove: true
         };
+    }
+}
+
+@serializable
+export class DiceCitiesRequestBusinessCenterOwnSelection implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = (new Date()).toISOString();
+    gameId: uuidString = uuidv4() as uuidString;
+    senderId: string = "Unknown";
+    selectedCard: uuidString = uuidv4() as uuidString;
+    readonly className = "DiceCitiesRequestBusinessCenterOwnSelection";
+
+    myString() {
+        return `Business Center Own Selection: ${this.selectedCard}!`;
+    }
+
+    async Execute(gameData: IGameData) {
+        const dcGameData = gameData as IDiceCitiesGameData;
+        // This should be happening as part of the roll
+        if (dcGameData.specificGameState.hasRolled) {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+        if (!dcGameData.specificGameState.awaitingBCSelectionOwn && !dcGameData.specificGameState.awaitingBCSelectionOpponent) {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+
+        const rollerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
+        if (!rollerState) {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+
+        // Check valid type
+        const selectedOwnCard = DiceCitiesCards[this.selectedCard];
+        if (selectedOwnCard.type === "landmark") {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+
+        const cardOwned = rollerState.cards.find(cc => cc.card === this.selectedCard);
+        if (!cardOwned || cardOwned.amount === 0) {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+
+        dcGameData.specificGameState.awaitingBCSelectionOwn = false;
+        dcGameData.specificGameState.bcSelectedOwnCard = this.selectedCard;
+
+        // Still waiting?
+        if (dcGameData.specificGameState.awaitingBCSelectionOpponent) {
+            return {
+                turnOver: false,
+                validMove: true
+            }
+        }
+
+        if (!dcGameData.specificGameState.bcSelectedOpponent || !dcGameData.specificGameState.bcSelectedOpponentCard) {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+
+        const selectedOpponentState = dcGameData.specificGameState.playerStates.get(dcGameData.specificGameState.bcSelectedOpponent);
+        if (!selectedOpponentState) {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+        const selectedOpponentCard = DiceCitiesCards[dcGameData.specificGameState.bcSelectedOpponentCard];
+        if (selectedOpponentCard.type === "landmark") {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+
+        // Both selections made
+        removeCardFromPlayerState(this.selectedCard, rollerState);
+        addCardToPlayerState(this.selectedCard, selectedOpponentState);
+        removeCardFromPlayerState(dcGameData.specificGameState.bcSelectedOpponentCard, selectedOpponentState);
+        addCardToPlayerState(dcGameData.specificGameState.bcSelectedOpponentCard, rollerState);
+
+        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
+        const selectedOpponentUsername = (await userIdListToUsernameList([dcGameData.specificGameState.bcSelectedOpponent]))[0];
+        dcGameData.gameState.history.unshift(`${senderUsername} stole a ${selectedOwnCard.title} for a ${selectedOpponentCard.title} coins from ${selectedOpponentUsername}`);
+        dcGameData.specificGameState.awaitingTSSelection = false;
+        if (!dcGameData.specificGameState.awaitingTSSelection) {
+            dcGameData.specificGameState.hasRolled = true;
+        }
+        return {
+            turnOver: false,
+            validMove: true
+        };
+    }
+}
+
+@serializable
+export class DiceCitiesRequestBusinessCenterOpponentSelection implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = (new Date()).toISOString();
+    gameId: uuidString = uuidv4() as uuidString;
+    senderId: string = "Unknown";
+    selectedUser: uuidString = uuidv4() as uuidString;
+    selectedCard: uuidString = uuidv4() as uuidString;
+    readonly className = "DiceCitiesRequestBusinessCenterOpponentSelection";
+
+    myString() {
+        return `Business Center Opponent Selection: ${this.selectedUser} ${this.selectedCard}!`;
+    }
+
+    async Execute(gameData: IGameData) {
+        const dcGameData = gameData as IDiceCitiesGameData;
+        // This should be happening as part of the roll
+        if (dcGameData.specificGameState.hasRolled) {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+        if (!dcGameData.specificGameState.awaitingBCSelectionOwn && !dcGameData.specificGameState.awaitingBCSelectionOpponent) {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+
+        const rollerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
+        if (!rollerState) {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+
+        // Check valid type
+        const selectedOpponentCard = DiceCitiesCards[this.selectedCard];
+        if (selectedOpponentCard.type === "landmark") {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+
+        const opponentState = dcGameData.specificGameState.playerStates.get(this.selectedUser);
+        if (!opponentState) {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+
+        const opponentCardOwned = opponentState.cards.find(cc => cc.card === this.selectedCard);
+        if (!opponentCardOwned || opponentCardOwned.amount === 0) {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+
+        dcGameData.specificGameState.awaitingBCSelectionOpponent = false;
+        dcGameData.specificGameState.bcSelectedOpponent = this.selectedUser;
+        dcGameData.specificGameState.bcSelectedOpponentCard = this.selectedCard;
+
+        // Still waiting?
+        if (dcGameData.specificGameState.awaitingBCSelectionOwn) {
+            return {
+                turnOver: false,
+                validMove: true
+            }
+        }
+
+        if (!dcGameData.specificGameState.bcSelectedOwnCard) {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+
+        const selectedOwnCard = DiceCitiesCards[dcGameData.specificGameState.bcSelectedOwnCard];
+        if (selectedOwnCard.type === "landmark") {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+
+        // Both selections made
+        removeCardFromPlayerState(this.selectedCard, rollerState);
+        addCardToPlayerState(this.selectedCard, opponentState);
+        removeCardFromPlayerState(dcGameData.specificGameState.bcSelectedOpponentCard, opponentState);
+        addCardToPlayerState(dcGameData.specificGameState.bcSelectedOpponentCard, rollerState);
+
+        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
+        const selectedOpponentUsername = (await userIdListToUsernameList([dcGameData.specificGameState.bcSelectedOpponent]))[0];
+        dcGameData.gameState.history.unshift(`${senderUsername} stole a ${selectedOwnCard.title} for a ${selectedOpponentCard.title} coins from ${selectedOpponentUsername}`);
+        dcGameData.specificGameState.awaitingTSSelection = false;
+        if (!dcGameData.specificGameState.awaitingTSSelection) {
+            dcGameData.specificGameState.hasRolled = true;
+        }
+        return {
+            turnOver: false,
+            validMove: true
+        };
+    }
+}
+
+function addCardToPlayerState(cardId: uuidString, playerState: IDiceCitiesPlayerState) {
+    const cardOwned = playerState.cards.find(cc => cc.card === cardId);
+    if (cardOwned) {
+        cardOwned.amount++;
+        return;
+    }
+    playerState.cards.push({
+        card: cardId,
+        amount: 1
+    });
+    return;
+}
+
+function removeCardFromPlayerState(cardId: uuidString, playerState: IDiceCitiesPlayerState) {
+    const cardOwned = playerState.cards.find(cc => cc.card === cardId);
+    if (cardOwned) {
+        cardOwned.amount--;
+        return;
     }
 }
 
