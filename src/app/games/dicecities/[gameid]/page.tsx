@@ -102,6 +102,7 @@ export default function GameDiceCities({ params }: { params: { gameid: uuidStrin
                             userName={userName}
                             currentTurn={gameData.currentTurn}
                             hasRolled={gameData.specificGameState.hasRolled}
+                            hasReRolled={gameData.specificGameState.hasReRolled}
                             awaitingTSSelection={gameData.specificGameState.awaitingTSSelection}
                             awaitingBCSelection={gameData.specificGameState.awaitingBCSelectionOwn || gameData.specificGameState.awaitingBCSelectionOpponent}
                             submitCommand={submitCommand}

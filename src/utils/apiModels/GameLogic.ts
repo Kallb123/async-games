@@ -99,9 +99,6 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
             };
         }
 
-        const roll1 = DiceRoll(6);
-        let roll2: number | null = null;
-        let totalRoll = roll1;
         if (this.doubleDice) {
             if (!currentPlayerState?.doubleUnlocked) {
                 return {
@@ -109,150 +106,14 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
                     validMove: false
                 };
             }
-            roll2 = DiceRoll(6);
-            totalRoll += roll2;
         }
-        const rollerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
-        if (!rollerState) {
-            console.error("Unable to find rolling player's state");
-            return {
-                turnOver: false,
-                validMove: false
-            };
-        }
-        
-        if (roll1 === roll2 && rollerState.rerollDoubles) {
-            dcGameData.specificGameState.awaitingDoubleReroll = true;
-        }
-        // Award red cards
-        dcGameData.specificGameState.playerStates.forEach((playerState, userId) => {
-            if (userId === dcGameData.currentTurn) {
-                return;
-            }
-            const hitCards : IDiceCitiesCard[] = playerState.cards.flatMap(cardCount => {
-                const cardObject = DiceCitiesCards[cardCount.card.toString()];
-                if (!cardObject.rollNumber.includes(totalRoll)) {
-                    return [];
-                }
-                if (cardObject.stealRollerGain === 0) {
-                    return [];
-                }
-                if (!cardObject.onOponentsTurn) {
-                    return [];
-                }
-                console.log(`Rolled ${totalRoll}, ${cardObject.title} stealing money from roller to ${userId}. CurrentTurn: ${dcGameData.currentTurn}`);
-                return [cardObject];
-            });
-            hitCards.forEach(card => {
-                const cardAmount = card.type === "dining" && playerState.bonusDiningAndStore ? card.stealRollerGain+1 : card.stealRollerGain;
-                const amountToSteal = Math.min(rollerState.money, cardAmount);
-                playerState.money += amountToSteal;
-                rollerState.money -= amountToSteal;
-            });
-        });
-        // Award bank money (green and blue)
-        dcGameData.specificGameState.playerStates.forEach((playerState, userId) => {
-            const hitCards : IDiceCitiesCard[] = playerState.cards.flatMap(cardCount => {
-                const cardObject = DiceCitiesCards[cardCount.card.toString()];
-                if (!cardObject.rollNumber.includes(totalRoll)) {
-                    return [];
-                }
-                if (cardObject.bankGain === 0 && cardObject.gainMultiplier === null) {
-                    return [];
-                }
-                if (userId === dcGameData.currentTurn) {
-                    if (cardObject.onOwnTurn) {
-                        let output = [];
-                        for(let i = 0; i < cardCount.amount; i++) {
-                            console.log(`Rolled ${totalRoll}, adding money from ${cardObject.title} to ${userId}. CurrentTurn: ${dcGameData.currentTurn}`);
-                            output.push(cardObject);
-                        }
-                        return output;
-                    }
-                } else {
-                    if (cardObject.onOponentsTurn) {
-                        let output = [];
-                        for(let i = 0; i < cardCount.amount; i++) {
-                            console.log(`Rolled ${totalRoll}, adding money from ${cardObject.title} to ${userId}. CurrentTurn: ${dcGameData.currentTurn}`);
-                            output.push(cardObject);
-                        }
-                        return output;
-                    }
-                }
-                return [];
-            });
-            hitCards.forEach(card => {
-                let cardAmount = 0;
-                if (card.bankGain > 0) {
-                    cardAmount = card.type === "store" && playerState.bonusDiningAndStore ? card.bankGain+1 : card.bankGain;
-                } else if (card.gainMultiplier) {
-                    const numCards = playerState.cards.filter(cc => {
-                        const cardObject = DiceCitiesCards[cc.card.toString()];
-                        if (card.gainMultiplier?.type.includes(cardObject.type)) {
-                            return true;
-                        }
-                        return null;
-                    }).length;
-                    cardAmount = card.gainMultiplier.amountPerType * numCards;
-                } else {
-                    // What card is this??
-                    console.error("Ended up with no money for card:", card);
-                }
-                // TODO: Consider bank money? (42*1 + 24*5 + 12*10 = 42+120+120 = 282)
-                playerState.money += cardAmount;
-            });
-        });
-        // Award purple cards
-        const stadiumCard = DiceCitiesCards[DiceCitiesCardIds.STADIUM];
-        if (stadiumCard.rollNumber.includes(totalRoll)) {
-            const stadiumCount = rollerState.cards.find(cc => cc.card === DiceCitiesCardIds.STADIUM);
-            if (stadiumCount && stadiumCount.amount > 0) {
-                dcGameData.specificGameState.playerStates.forEach((playerState, userId) => {
-                    if (userId === dcGameData.currentTurn) {
-                        return;
-                    }
-    
-                    const cardAmount = stadiumCard.stealAllGain;
-                    const amountToSteal = Math.min(playerState.money, cardAmount);
-                    playerState.money -= amountToSteal;
-                    rollerState.money += amountToSteal;
-                });
-            }
-        }
-        let shouldRolled: boolean = true;
-        const tvStationCard = DiceCitiesCards[DiceCitiesCardIds.TV_STATION];
-        if (tvStationCard.rollNumber.includes(totalRoll)) {
-            const tvStationCount = rollerState.cards.find(cc => cc.card === DiceCitiesCardIds.TV_STATION);
-            if (tvStationCount && tvStationCount.amount > 0) {
-                // TODO: Check if someone to steal off
-                // TODO: If there's only 2 players, can we skip the choice?
-                shouldRolled = false;
-                dcGameData.specificGameState.awaitingTSSelection = true;
-            }
-        }
-        const businessCenterCard = DiceCitiesCards[DiceCitiesCardIds.BUSINESS_CENTER];
-        if (businessCenterCard.rollNumber.includes(totalRoll)) {
-            const businessCenterCount = rollerState.cards.find(cc => cc.card === DiceCitiesCardIds.BUSINESS_CENTER);
-            if (businessCenterCount && businessCenterCount.amount > 0) {
-                // TODO: Check if someone to steal off
-                shouldRolled = false;
-                dcGameData.specificGameState.awaitingBCSelectionOwn = true;
-                dcGameData.specificGameState.awaitingBCSelectionOpponent = true;
-            }
-        }
+        const outcome: IDiceCitiesDiceRollOutcome = doDiceRoll(dcGameData, this.doubleDice);
+        let totalRoll = this.doubleDice && outcome.roll2 ? outcome.roll1 + outcome.roll2 : outcome.roll1;
 
-        dcGameData.specificGameState.hasRolled = shouldRolled;
         const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
-        dcGameData.gameState.history.unshift(`${senderUsername} rolled a ${totalRoll}${roll2 ? ` (${roll1} and ${roll2})` : ""}`);
+        dcGameData.gameState.history.unshift(`${senderUsername} rolled a ${totalRoll}${outcome.roll2 ? ` (${outcome.roll1} and ${outcome.roll2})` : ""}`);
 
         // TODO: Maybe end turn if nothin available to buy?
-
-        const outcome: IDiceCitiesDiceRollOutcome = {
-            turnOver: false,
-            validMove: true,
-            roll1,
-            roll2
-        }
         return outcome;
     }
 }
@@ -896,6 +757,65 @@ export class DiceCitiesRequestBusinessCenterOpponentSelection implements IGameCo
     }
 }
 
+@serializable
+export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = (new Date()).toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = "Unknown";
+    readonly className = "DiceCitiesRequestRadioTowerReroll";
+
+    myString() {
+        return `Reroll with Radio Tower!`;
+    }
+
+    async Execute(gameData: IGameData) {
+        const dcGameData = gameData as IDiceCitiesGameData;
+        if (!dcGameData.specificGameState.hasRolled) {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+        if (dcGameData.specificGameState.hasReRolled) {
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+        const lastCommand = dcGameData.gameState.commandHistory.findLast(() => true);
+        if (!(lastCommand instanceof DiceCitiesRequestDiceRoll)) {
+            console.log("last command:", lastCommand);
+            return {
+                turnOver: false,
+                validMove: false
+            }
+        }
+        const doubleDice = lastCommand.doubleDice;
+
+        // TODO: Implement undo!
+        // lastCommand.Undo();
+
+        dcGameData.specificGameState.awaitingBCSelectionOpponent = false;
+        dcGameData.specificGameState.awaitingBCSelectionOwn = false;
+        dcGameData.specificGameState.awaitingTSSelection = false;
+        dcGameData.specificGameState.awaitingDoubleReroll = false;
+        dcGameData.specificGameState.bcSelectedOpponent = "";
+        dcGameData.specificGameState.bcSelectedOpponent = "";
+        dcGameData.specificGameState.bcSelectedOpponentCard = NIL_UUID as uuidString;
+
+        const outcome: IDiceCitiesDiceRollOutcome = doDiceRoll(dcGameData, doubleDice);
+        let totalRoll = doubleDice && outcome.roll2 ? outcome.roll1 + outcome.roll2 : outcome.roll1;
+
+        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
+        dcGameData.gameState.history.unshift(`${senderUsername} re-rolled for a ${totalRoll}${outcome.roll2 ? ` (${outcome.roll1} and ${outcome.roll2})` : ""}`);
+        return {
+            turnOver: false,
+            validMove: true
+        };
+    }
+}
+
 function addCardToPlayerState(cardId: uuidString, playerState: IDiceCitiesPlayerState) {
     const cardOwned = playerState.cards.find(cc => cc.card === cardId);
     if (cardOwned) {
@@ -917,3 +837,153 @@ function removeCardFromPlayerState(cardId: uuidString, playerState: IDiceCitiesP
     }
 }
 
+function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean) {
+    const roll1 = DiceRoll(6);
+    let roll2: number | null = null;
+    let totalRoll = roll1;
+    if (isDouble) {
+        roll2 = DiceRoll(6);
+        totalRoll += roll2;
+    }
+    const rollerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
+    if (!rollerState) {
+        console.error("Unable to find rolling player's state");
+        return {
+            turnOver: false,
+            validMove: false,
+            roll1: 0,
+            roll2: 0
+        };
+    }
+    
+    if (roll1 === roll2 && rollerState.rerollDoubles) {
+        dcGameData.specificGameState.awaitingDoubleReroll = true;
+    }
+    // Award red cards
+    dcGameData.specificGameState.playerStates.forEach((playerState, userId) => {
+        if (userId === dcGameData.currentTurn) {
+            return;
+        }
+        const hitCards : IDiceCitiesCard[] = playerState.cards.flatMap(cardCount => {
+            const cardObject = DiceCitiesCards[cardCount.card.toString()];
+            if (!cardObject.rollNumber.includes(totalRoll)) {
+                return [];
+            }
+            if (cardObject.stealRollerGain === 0) {
+                return [];
+            }
+            if (!cardObject.onOponentsTurn) {
+                return [];
+            }
+            console.log(`Rolled ${totalRoll}, ${cardObject.title} stealing money from roller to ${userId}. CurrentTurn: ${dcGameData.currentTurn}`);
+            return [cardObject];
+        });
+        hitCards.forEach(card => {
+            const cardAmount = card.type === "dining" && playerState.bonusDiningAndStore ? card.stealRollerGain+1 : card.stealRollerGain;
+            const amountToSteal = Math.min(rollerState.money, cardAmount);
+            playerState.money += amountToSteal;
+            rollerState.money -= amountToSteal;
+        });
+    });
+    // Award bank money (green and blue)
+    dcGameData.specificGameState.playerStates.forEach((playerState, userId) => {
+        const hitCards : IDiceCitiesCard[] = playerState.cards.flatMap(cardCount => {
+            const cardObject = DiceCitiesCards[cardCount.card.toString()];
+            if (!cardObject.rollNumber.includes(totalRoll)) {
+                return [];
+            }
+            if (cardObject.bankGain === 0 && cardObject.gainMultiplier === null) {
+                return [];
+            }
+            if (userId === dcGameData.currentTurn) {
+                if (cardObject.onOwnTurn) {
+                    let output = [];
+                    for(let i = 0; i < cardCount.amount; i++) {
+                        console.log(`Rolled ${totalRoll}, adding money from ${cardObject.title} to ${userId}. CurrentTurn: ${dcGameData.currentTurn}`);
+                        output.push(cardObject);
+                    }
+                    return output;
+                }
+            } else {
+                if (cardObject.onOponentsTurn) {
+                    let output = [];
+                    for(let i = 0; i < cardCount.amount; i++) {
+                        console.log(`Rolled ${totalRoll}, adding money from ${cardObject.title} to ${userId}. CurrentTurn: ${dcGameData.currentTurn}`);
+                        output.push(cardObject);
+                    }
+                    return output;
+                }
+            }
+            return [];
+        });
+        hitCards.forEach(card => {
+            let cardAmount = 0;
+            if (card.bankGain > 0) {
+                cardAmount = card.type === "store" && playerState.bonusDiningAndStore ? card.bankGain+1 : card.bankGain;
+            } else if (card.gainMultiplier) {
+                const numCards = playerState.cards.filter(cc => {
+                    const cardObject = DiceCitiesCards[cc.card.toString()];
+                    if (card.gainMultiplier?.type.includes(cardObject.type)) {
+                        return true;
+                    }
+                    return null;
+                }).length;
+                cardAmount = card.gainMultiplier.amountPerType * numCards;
+            } else {
+                // What card is this??
+                console.error("Ended up with no money for card:", card);
+            }
+            // TODO: Consider bank money? (42*1 + 24*5 + 12*10 = 42+120+120 = 282)
+            playerState.money += cardAmount;
+        });
+    });
+    // Award purple cards
+    const stadiumCard = DiceCitiesCards[DiceCitiesCardIds.STADIUM];
+    if (stadiumCard.rollNumber.includes(totalRoll)) {
+        const stadiumCount = rollerState.cards.find(cc => cc.card === DiceCitiesCardIds.STADIUM);
+        if (stadiumCount && stadiumCount.amount > 0) {
+            dcGameData.specificGameState.playerStates.forEach((playerState, userId) => {
+                if (userId === dcGameData.currentTurn) {
+                    return;
+                }
+
+                const cardAmount = stadiumCard.stealAllGain;
+                const amountToSteal = Math.min(playerState.money, cardAmount);
+                playerState.money -= amountToSteal;
+                rollerState.money += amountToSteal;
+            });
+        }
+    }
+    let shouldRolled: boolean = true;
+    const tvStationCard = DiceCitiesCards[DiceCitiesCardIds.TV_STATION];
+    if (tvStationCard.rollNumber.includes(totalRoll)) {
+        const tvStationCount = rollerState.cards.find(cc => cc.card === DiceCitiesCardIds.TV_STATION);
+        if (tvStationCount && tvStationCount.amount > 0) {
+            // TODO: Check if someone to steal off
+            // TODO: If there's only 2 players, can we skip the choice?
+            shouldRolled = false;
+            dcGameData.specificGameState.awaitingTSSelection = true;
+        }
+    }
+    const businessCenterCard = DiceCitiesCards[DiceCitiesCardIds.BUSINESS_CENTER];
+    if (businessCenterCard.rollNumber.includes(totalRoll)) {
+        const businessCenterCount = rollerState.cards.find(cc => cc.card === DiceCitiesCardIds.BUSINESS_CENTER);
+        if (businessCenterCount && businessCenterCount.amount > 0) {
+            // TODO: Check if someone to steal off
+            shouldRolled = false;
+            dcGameData.specificGameState.awaitingBCSelectionOwn = true;
+            dcGameData.specificGameState.awaitingBCSelectionOpponent = true;
+        }
+    }
+
+    dcGameData.specificGameState.hasRolled = shouldRolled;
+    // TODO: Maybe end turn if nothin available to buy?
+
+    const outcome: IDiceCitiesDiceRollOutcome = {
+        turnOver: false,
+        validMove: true,
+        roll1,
+        roll2
+    }
+    return outcome;
+}

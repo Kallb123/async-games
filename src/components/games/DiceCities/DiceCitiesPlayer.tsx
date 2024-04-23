@@ -12,13 +12,14 @@ interface DiceCitiesPlayerProps {
     playerState: IDiceCitiesPlayerStateResponse,
     userName: string,
     hasRolled: boolean,
+    hasReRolled: boolean,
     currentTurn: string,
     awaitingTSSelection: boolean,
     awaitingBCSelection: boolean,
     submitCommand: (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => Promise<void>
 }
 
-export default function DiceCitiesPlayer({playerState, userName, currentTurn, hasRolled, awaitingTSSelection, awaitingBCSelection, submitCommand}: DiceCitiesPlayerProps) {
+export default function DiceCitiesPlayer({playerState, userName, currentTurn, hasRolled, hasReRolled, awaitingTSSelection, awaitingBCSelection, submitCommand}: DiceCitiesPlayerProps) {
     const { user, isLoaded } = useUser();
     const [isMe, setIsMe] = useState(false);
     const [myTurn, setMyTurn] = useState(false);
@@ -127,7 +128,7 @@ export default function DiceCitiesPlayer({playerState, userName, currentTurn, ha
                 <li title={DiceCitiesCards[DiceCitiesCardIds.RADIO_TOWER].text}>Radio Tower: {playerState.rerollDoubles ? "True" : "False"} {myTurn && isMe && hasRolled && playerState && !playerState.rerollDoubles ? <Button onClick={purchaseRadioTower} disabled={DiceCitiesCards[DiceCitiesCardIds.RADIO_TOWER].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</li>
             </ul>
             {isMe && currentTurn === user?.id ? (
-                <DiceCitiesPlayerActions playerState={playerState} hasRolled={hasRolled} awaitingSteal={awaitingTSSelection || awaitingBCSelection} submitCommand={submitCommand} />
+                <DiceCitiesPlayerActions playerState={playerState} hasRolled={hasRolled} hasReRolled={hasReRolled} awaitingSteal={awaitingTSSelection || awaitingBCSelection} submitCommand={submitCommand} />
             ) : null}
         </>
     );

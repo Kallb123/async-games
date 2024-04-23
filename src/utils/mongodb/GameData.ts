@@ -1,11 +1,12 @@
 import { Document, Model, Schema, model, models } from "mongoose";
 import { IGameDataResponse, IGameResponse, uuidString } from "../apiModels/GameDataApi";
 import { userIdListToUsernameList } from "../users/clerk";
-import { IGameType } from "../apiModels/GameLogic";
+import { IGameCommand, IGameType } from "../apiModels/GameLogic";
 
 export interface IGameState {
     turnOrder: string[],
-    history: string[]
+    history: string[],
+    commandHistory: IGameCommand[]
 }
 
 export interface IGameData {
@@ -44,7 +45,14 @@ export var GameDataSchema = new Schema<IGameDataDocument> ({
     lastTurnTimestamp: String,
     gameState: {
         turnOrder: [String],
-        history: [String]
+        history: [String],
+        commandHistory: [{
+            id: String,
+            timestamp: String,
+            gameId: String,
+            senderId: String,
+            className: String
+        }]
     }
 }, {discriminatorKey: 'kind'});
 GameDataSchema.methods.CreateResponse = async function(): Promise<IGameResponse> {

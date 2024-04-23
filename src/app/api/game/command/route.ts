@@ -5,7 +5,7 @@ import { getApp, getApps, initializeApp } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { ICommandOutcome, IGameCommand, IGameType } from '@/utils/apiModels/GameLogic';
+import { DiceCitiesRequestRadioTowerReroll, ICommandOutcome, IGameCommand, IGameType } from '@/utils/apiModels/GameLogic';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { DiceCitiesGameType, DiceCitiesRequestBusinessCenterOpponentSelection, DiceCitiesRequestBusinessCenterOwnSelection, DiceCitiesRequestCardPurchase, DiceCitiesRequestDiceRoll, DiceCitiesRequestPassTurn, DiceCitiesRequestTvStationSelection, DiceCitiesRequestUnlockAmusementPark, DiceCitiesRequestUnlockRadioTower, DiceCitiesRequestUnlockShoppingMall, DiceCitiesRequestUnlockTrainStation } from '@/utils/apiModels/GameLogic';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
     new DiceCitiesRequestTvStationSelection(),
     new DiceCitiesRequestBusinessCenterOwnSelection(),
     new DiceCitiesRequestBusinessCenterOpponentSelection(),
+    new DiceCitiesRequestRadioTowerReroll(),
     new DiceCitiesGameType()
   ];
   // console.log(commandRequest);
@@ -60,6 +61,8 @@ export async function POST(request: NextRequest) {
   if (!commandOutcome.validMove) {
     return NextResponse.json({}, {status: 401, statusText: "Not a valid move"});
   }
+
+  gameData.gameState.commandHistory.push(commandRequest);
 
   // Checks whether the turn should be progressed and actions it if so
   console.log("first gameType:", gameData.gameType);

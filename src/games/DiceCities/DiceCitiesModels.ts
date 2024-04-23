@@ -47,7 +47,8 @@ DiceCitiesInvitationSchema.methods.CreateGame = function(invite: IDiceCitiesInvi
         // url: "dicecities",
         gameState: {
             turnOrder,
-            history: []
+            history: [],
+            commandHistory: []
         },
         specificGameState: {
             bankCards: [{
@@ -104,7 +105,8 @@ DiceCitiesInvitationSchema.methods.CreateGame = function(invite: IDiceCitiesInvi
             bcSelectedOwnCard: null,
             bcSelectedOpponent: null,
             bcSelectedOpponentCard: null,
-            awaitingDoubleReroll: false
+            awaitingDoubleReroll: false,
+            hasReRolled: false
         },
         enabledDocks: this.enabledDocks,
         enabledBillionaireRow: this.enabledBillionaireRow
@@ -156,7 +158,8 @@ export interface IDiceCitiesGameState {
     bcSelectedOwnCard: uuidString | null,
     bcSelectedOpponent: string | null,
     bcSelectedOpponentCard: uuidString | null,
-    awaitingDoubleReroll: boolean
+    awaitingDoubleReroll: boolean,
+    hasReRolled: boolean
 }
 
 export interface IDiceCitiesGameData extends IGameData {
@@ -202,7 +205,8 @@ var DiceCitiesGameDataSchema = new Schema<IDiceCitiesGameDataDocument>({
         bcSelectedOwnCard: String,
         bcSelectedOpponent: String,
         bcSelectedOpponentCard: String,
-        awaitingDoubleReroll: Boolean
+        awaitingDoubleReroll: Boolean,
+        hasReRolled: Boolean
     }
 }, {discriminatorKey: 'kind'});
 DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(): Promise<IDiceCitiesGameDataResponse> {
@@ -262,7 +266,8 @@ function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap: { [key
         bcSelectedOwnCard: gameState.bcSelectedOwnCard,
         bcSelectedOpponent: gameState.bcSelectedOpponent,
         bcSelectedOpponentCard: gameState.bcSelectedOpponentCard,
-        awaitingDoubleReroll: gameState.awaitingDoubleReroll
+        awaitingDoubleReroll: gameState.awaitingDoubleReroll,
+        hasReRolled: gameState.hasReRolled
     }
 }
 
