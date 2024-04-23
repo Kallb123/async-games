@@ -243,7 +243,7 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
 
         dcGameData.specificGameState.hasRolled = shouldRolled;
         const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
-        dcGameData.gameState.history.unshift(`${senderUsername} rolled a ${totalRoll}`);
+        dcGameData.gameState.history.unshift(`${senderUsername} rolled a ${totalRoll}${roll2 ? ` (${roll1} and ${roll2})` : ""}`);
 
         // TODO: Maybe end turn if nothin available to buy?
 
