@@ -1,3 +1,5 @@
+import { IGameType } from "./GameLogic";
+
 export type uuidString = `${string}-${string}-${string}-${string}-${string}`;
 
 export interface IGameResponse {
@@ -11,13 +13,10 @@ export interface IGameResponse {
 }
 
 export interface IGameDataResponse {
-    gameId: uuidString,
-    gameType: string,
-    friendlyName: string,
+    gameType: IGameType,
     usernameList: string[],
     turnTimer: string,
     currentTurn: string,
-    url: string,
     gameState: {
         turnOrder: string[],
         history: string[]

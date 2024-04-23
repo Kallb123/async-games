@@ -23,4 +23,3 @@ const reviver = (k: string, v: any) =>
 export function deserializeJSON(json: string) {
     return JSON.parse(json, reviver);
 }
-

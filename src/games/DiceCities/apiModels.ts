@@ -45,7 +45,8 @@ export interface IDiceCitiesGameStateResponse {
     awaitingBCSelectionOpponent: boolean,
     bcSelectedOwnCard: uuidString | null,
     bcSelectedOpponent: string | null,
-    bcSelectedOpponentCard: uuidString | null
+    bcSelectedOpponentCard: uuidString | null,
+    awaitingDoubleReroll: boolean
 }
 
 export interface IDiceCitiesGameDataResponse extends IGameDataResponse {

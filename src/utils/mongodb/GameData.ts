@@ -1,7 +1,7 @@
 import { Document, Model, Schema, model, models } from "mongoose";
-import { IGameDataResponse, IGameResponse } from "../apiModels/GameDataApi";
-import { clerkClient } from "@clerk/nextjs";
+import { IGameDataResponse, IGameResponse, uuidString } from "../apiModels/GameDataApi";
 import { userIdListToUsernameList } from "../users/clerk";
+import { IGameType } from "../apiModels/GameLogic";
 
 export interface IGameState {
     turnOrder: string[],
@@ -9,14 +9,12 @@ export interface IGameState {
 }
 
 export interface IGameData {
-    gameId: string,
-    gameType: string,
-    friendlyName: string,
+    gameId: uuidString,
+    gameType: IGameType,
     userIdList: string[],
     turnTimer: string,
     currentTurn: string,
     lastTurnTimestamp: string,
-    url: string,
     gameState: IGameState
 }
 
@@ -31,14 +29,19 @@ export interface IGameDataModel extends Model<IGameDataDocument> {
 }
 
 export var GameDataSchema = new Schema<IGameDataDocument> ({
-    gameId: Schema.Types.UUID,
-    gameType: String,
-    friendlyName: String,
+    gameId: String,
+    gameType: {
+        gameId: String,
+        gameType: String,
+        friendlyName: String,
+        icon: String,
+        url: String,
+        className: String
+    },
     userIdList: [String],
     turnTimer: String,
     currentTurn: String,
     lastTurnTimestamp: String,
-    url: String,
     gameState: {
         turnOrder: [String],
         history: [String]
@@ -47,28 +50,29 @@ export var GameDataSchema = new Schema<IGameDataDocument> ({
 GameDataSchema.methods.CreateResponse = async function(): Promise<IGameResponse> {
     console.log("CreateResponse: Generic game");
 
+    const gameDataDocument: IGameData = this as IGameData;
+
     return {  
-        gameId: this.gameId,
-        gameType: this.gameType,
-        friendlyName: this.friendlyName,
-        usernameList: await userIdListToUsernameList(this.userIdList),
-        turnTimer: this.turnTimer,
-        currentTurn: this.currentTurn,
-        url: this.url,
+        gameId: gameDataDocument.gameId,
+        gameType: gameDataDocument.gameType.gameType,
+        friendlyName: gameDataDocument.gameType.friendlyName,
+        usernameList: await userIdListToUsernameList(gameDataDocument.userIdList),
+        turnTimer: gameDataDocument.turnTimer,
+        currentTurn: gameDataDocument.currentTurn,
+        url: gameDataDocument.gameType.url,
     }
 };
 GameDataSchema.methods.CreateDataResponse = async function(): Promise<IGameDataResponse> {
     console.log("CreateDataResponse: Generic game");
 
-    return {  
-        gameId: this.gameId,
-        gameType: this.gameType,
-        friendlyName: this.friendlyName,
-        usernameList: await userIdListToUsernameList(this.userIdList),
-        turnTimer: this.turnTimer,
-        currentTurn: this.currentTurn,
-        url: this.url,
-        gameState: this.gameState,
+    const gameDataDocument: IGameData = this as IGameData;
+
+    return {
+        gameType: gameDataDocument.gameType,
+        usernameList: await userIdListToUsernameList(gameDataDocument.userIdList),
+        turnTimer: gameDataDocument.turnTimer,
+        currentTurn: gameDataDocument.currentTurn,
+        gameState: gameDataDocument.gameState,
     }
 };
 export var GameDataModel = models.GameData || model<IGameDataDocument, IGameDataModel>('GameData', GameDataSchema);

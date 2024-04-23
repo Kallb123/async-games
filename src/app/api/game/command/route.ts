@@ -5,8 +5,9 @@ import { getApp, getApps, initializeApp } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { DiceCitiesRequestBusinessCenterOpponentSelection, DiceCitiesRequestBusinessCenterOwnSelection, DiceCitiesRequestCardPurchase, DiceCitiesRequestDiceRoll, DiceCitiesRequestPassTurn, DiceCitiesRequestTvStationSelection, DiceCitiesRequestUnlockAmusementPark, DiceCitiesRequestUnlockRadioTower, DiceCitiesRequestUnlockShoppingMall, DiceCitiesRequestUnlockTrainStation, ICommandOutcome, IGameCommand } from '@/utils/apiModels/GameLogic';
+import { ICommandOutcome, IGameCommand, IGameType } from '@/utils/apiModels/GameLogic';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
+import { DiceCitiesGameType, DiceCitiesRequestBusinessCenterOpponentSelection, DiceCitiesRequestBusinessCenterOwnSelection, DiceCitiesRequestCardPurchase, DiceCitiesRequestDiceRoll, DiceCitiesRequestPassTurn, DiceCitiesRequestTvStationSelection, DiceCitiesRequestUnlockAmusementPark, DiceCitiesRequestUnlockRadioTower, DiceCitiesRequestUnlockShoppingMall, DiceCitiesRequestUnlockTrainStation } from '@/utils/apiModels/GameLogic';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
 import { IGameDataResponse } from '@/utils/apiModels/GameDataApi';
 
@@ -17,7 +18,8 @@ export interface ICommandResponse {
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
-  const registration = [
+  const commandRequest: IGameCommand = deserializeJSON(await request.text());
+  var registration = [
     new DiceCitiesRequestDiceRoll(),
     new DiceCitiesRequestCardPurchase(),
     new DiceCitiesRequestPassTurn(),
@@ -27,9 +29,9 @@ export async function POST(request: NextRequest) {
     new DiceCitiesRequestUnlockRadioTower(),
     new DiceCitiesRequestTvStationSelection(),
     new DiceCitiesRequestBusinessCenterOwnSelection(),
-    new DiceCitiesRequestBusinessCenterOpponentSelection()
+    new DiceCitiesRequestBusinessCenterOpponentSelection(),
+    new DiceCitiesGameType()
   ];
-  const commandRequest: IGameCommand = deserializeJSON(await request.text());
   // console.log(commandRequest);
   console.log(commandRequest.myString());
 
@@ -59,11 +61,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, {status: 401, statusText: "Not a valid move"});
   }
 
-  if (commandOutcome.turnOver) {
-    const currentIndex = gameData.gameState.turnOrder.findIndex(to => to === gameData.currentTurn);
-    const nextTurn = gameData.gameState.turnOrder[(currentIndex+1)%gameData.gameState.turnOrder.length];
-    gameData.currentTurn = nextTurn;
-  }
+  // Checks whether the turn should be progressed and actions it if so
+  console.log("first gameType:", gameData.gameType);
+  const gameType: IGameType = deserializeJSON(JSON.stringify(gameData.gameType));
+  console.log("deserialised gameType:", gameData.gameType);
+  gameType.CheckEndTurn(gameData, commandOutcome);
 
   await gameData.save();
 

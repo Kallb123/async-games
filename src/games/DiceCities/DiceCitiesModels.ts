@@ -6,6 +6,7 @@ import { IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse, IDiceCitiesP
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { v4 as uuidv4 } from 'uuid';
 import { userIdListToUsernameList } from "@/utils/users/clerk";
+import { DiceCitiesGameType } from "@/utils/apiModels/GameLogic";
 
 export interface DiceCitiesInvitationRequest extends IInvitationRequest {
     enabledDocks: boolean,
@@ -32,16 +33,18 @@ var DiceCitiesInvitationSchema = new Schema<IDiceCitiesInvitationDataDocument>({
 DiceCitiesInvitationSchema.methods.CreateGame = function(invite: IDiceCitiesInvitationData, userIdList: string[]) {
     console.log("CreateGame: Dice Cities game");
 
+    const gameType = new DiceCitiesGameType();
+
     const turnOrder = userIdList;
     const gameData: IDiceCitiesGameData = {
-        gameId: uuidv4(),
-        gameType: this.gameType,
-        friendlyName: "Dice Cities",
+        gameId: uuidv4() as uuidString,
+        gameType: gameType,
+        // friendlyName: "Dice Cities",
         userIdList,
         turnTimer: this.turnTimer,
         currentTurn: turnOrder[0],
         lastTurnTimestamp: (new Date()).toISOString(),
-        url: "dicecities",
+        // url: "dicecities",
         gameState: {
             turnOrder,
             history: []
@@ -100,7 +103,8 @@ DiceCitiesInvitationSchema.methods.CreateGame = function(invite: IDiceCitiesInvi
             awaitingBCSelectionOpponent: false,
             bcSelectedOwnCard: null,
             bcSelectedOpponent: null,
-            bcSelectedOpponentCard: null
+            bcSelectedOpponentCard: null,
+            awaitingDoubleReroll: false
         },
         enabledDocks: this.enabledDocks,
         enabledBillionaireRow: this.enabledBillionaireRow
@@ -151,7 +155,8 @@ export interface IDiceCitiesGameState {
     awaitingBCSelectionOpponent: boolean,
     bcSelectedOwnCard: uuidString | null,
     bcSelectedOpponent: string | null,
-    bcSelectedOpponentCard: uuidString | null
+    bcSelectedOpponentCard: uuidString | null,
+    awaitingDoubleReroll: boolean
 }
 
 export interface IDiceCitiesGameData extends IGameData {
@@ -196,30 +201,30 @@ var DiceCitiesGameDataSchema = new Schema<IDiceCitiesGameDataDocument>({
         awaitingBCSelectionOpponent: Boolean,
         bcSelectedOwnCard: String,
         bcSelectedOpponent: String,
-        bcSelectedOpponentCard: String
+        bcSelectedOpponentCard: String,
+        awaitingDoubleReroll: Boolean
     }
 }, {discriminatorKey: 'kind'});
 DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(): Promise<IDiceCitiesGameDataResponse> {
     console.log("CreateDataResponse: Dice Cities game");
 
-    const usernameList = await userIdListToUsernameList(this.userIdList);
+    const gameDataDocument: IDiceCitiesGameData = this as IDiceCitiesGameData;
+
+    const usernameList = await userIdListToUsernameList(gameDataDocument.userIdList);
     const userIdNameMap: { [key: string]: string} = {};
-    (this.userIdList as string[]).forEach((userId: string, i: number) => {
+    (gameDataDocument.userIdList as string[]).forEach((userId: string, i: number) => {
         userIdNameMap[userId] = usernameList[i];
     });
 
     return {
-        gameId: this.gameId,
-        gameType: this.gameType,
-        friendlyName: this.friendlyName,
+        gameType: gameDataDocument.gameType,
         usernameList,
-        turnTimer: this.turnTimer,
-        currentTurn: this.currentTurn,
-        url: this.url,
-        gameState: this.gameState,
-        enabledDocks: this.enabledDocks,
-        enabledBillionaireRow: this.enabledBillionaireRow,
-        specificGameState: gameStateToModel(this.specificGameState, userIdNameMap)
+        turnTimer: gameDataDocument.turnTimer,
+        currentTurn: gameDataDocument.currentTurn,
+        gameState: gameDataDocument.gameState,
+        enabledDocks: gameDataDocument.enabledDocks,
+        enabledBillionaireRow: gameDataDocument.enabledBillionaireRow,
+        specificGameState: gameStateToModel(gameDataDocument.specificGameState, userIdNameMap)
     };
 };
 
@@ -256,7 +261,8 @@ function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap: { [key
         awaitingBCSelectionOpponent: gameState.awaitingBCSelectionOpponent,
         bcSelectedOwnCard: gameState.bcSelectedOwnCard,
         bcSelectedOpponent: gameState.bcSelectedOpponent,
-        bcSelectedOpponentCard: gameState.bcSelectedOpponentCard
+        bcSelectedOpponentCard: gameState.bcSelectedOpponentCard,
+        awaitingDoubleReroll: gameState.awaitingDoubleReroll
     }
 }
 

@@ -24,9 +24,46 @@ export interface IGameCommand {
     Execute: (gameData: IGameData) => Promise<ICommandOutcome>;
 }
 
+export interface IGameType {
+    gameType: string,
+    friendlyName: string,
+    icon: string,
+    url: string,
+    readonly className: string;
+
+    CheckEndTurn: (gameData: IGameData, commandOutcome: ICommandOutcome) => void;
+}
+
 export interface IDiceCitiesDiceRollOutcome extends ICommandOutcome {
     roll1: number,
     roll2: number | null
+}
+
+@serializable
+export class DiceCitiesGameType implements IGameType {
+    gameId: uuidString = uuidv4() as uuidString;
+    gameType: string = "DiceCities";
+    friendlyName: string = "Dice Cities";
+    icon: string = "";
+    url: string = "dicecities";
+    readonly className: string = "DiceCitiesGameType";
+
+    CheckEndTurn (gameData: IGameData, commandOutcome: ICommandOutcome) {
+        const dcGameData: IDiceCitiesGameData = gameData as IDiceCitiesGameData;
+        if (dcGameData.specificGameState.awaitingDoubleReroll && commandOutcome.turnOver) {
+            dcGameData.specificGameState.hasRolled = false;
+            dcGameData.specificGameState.awaitingDoubleReroll = false;
+            return;
+        }
+
+        if (commandOutcome.turnOver) {
+            const currentIndex = gameData.gameState.turnOrder.findIndex(to => to === gameData.currentTurn);
+            const nextTurn = gameData.gameState.turnOrder[(currentIndex+1)%gameData.gameState.turnOrder.length];
+            gameData.currentTurn = nextTurn;
+        }
+
+        return;
+    };
 }
 
 @serializable
@@ -82,6 +119,10 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
                 turnOver: false,
                 validMove: false
             };
+        }
+        
+        if (roll1 === roll2 && rollerState.rerollDoubles) {
+            dcGameData.specificGameState.awaitingDoubleReroll = true;
         }
         // Award red cards
         dcGameData.specificGameState.playerStates.forEach((playerState, userId) => {
