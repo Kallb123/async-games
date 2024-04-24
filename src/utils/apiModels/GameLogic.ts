@@ -22,6 +22,7 @@ export interface IGameCommand {
 
     myString: () => string;
     Execute: (gameData: IGameData) => Promise<ICommandOutcome>;
+    Undo: (gameData: IGameData) => void;
 }
 
 export interface IGameType {
@@ -36,7 +37,8 @@ export interface IGameType {
 
 export interface IDiceCitiesDiceRollOutcome extends ICommandOutcome {
     roll1: number,
-    roll2: number | null
+    roll2: number | null,
+    moneyChanges: Map<string, number>
 }
 
 @serializable
@@ -73,6 +75,7 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
     gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
     doubleDice: boolean = false;
+    moneyChanges: Map<string, number> = new Map;
     readonly className = "DiceCitiesRequestDiceRoll";
 
     myString() {
@@ -108,6 +111,7 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
             }
         }
         const outcome: IDiceCitiesDiceRollOutcome = doDiceRoll(dcGameData, this.doubleDice);
+        this.moneyChanges = outcome.moneyChanges;
         let totalRoll = this.doubleDice && outcome.roll2 ? outcome.roll1 + outcome.roll2 : outcome.roll1;
 
         const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
@@ -115,6 +119,26 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
 
         // TODO: Maybe end turn if nothin available to buy?
         return outcome;
+    }
+
+    Undo (gameData: IGameData) {
+        const dcGameData: IDiceCitiesGameData = gameData as IDiceCitiesGameData;
+
+        this.moneyChanges.forEach((moneyChange, userId) => {
+            const playerState = dcGameData.specificGameState.playerStates.get(userId);
+            if (!playerState) {
+                return;
+            }
+
+            playerState.money += moneyChange;
+        });
+
+        dcGameData.gameState.commandHistory.pop();
+        dcGameData.specificGameState.hasRolled = false;
+        dcGameData.specificGameState.awaitingBCSelectionOwn = false;
+        dcGameData.specificGameState.awaitingBCSelectionOpponent = false;
+        dcGameData.specificGameState.awaitingTSSelection = false;
+        dcGameData.specificGameState.awaitingDoubleReroll = false;
     }
 }
 
@@ -195,6 +219,11 @@ export class DiceCitiesRequestCardPurchase implements IGameCommand {
             validMove: true
         };
     }
+
+    Undo (gameData: IGameData) {
+        // TODO: Implement Undo
+        console.error("Command Undo not implemented yet")
+    }
 }
 
 @serializable
@@ -224,6 +253,11 @@ export class DiceCitiesRequestPassTurn implements IGameCommand {
             turnOver: true,
             validMove: true
         };
+    }
+
+    Undo (gameData: IGameData) {
+        // TODO: Implement Undo
+        console.error("Command Undo not implemented yet")
     }
 }
 
@@ -286,6 +320,11 @@ export class DiceCitiesRequestUnlockTrainStation implements IGameCommand {
             validMove: true
         };
     }
+
+    Undo (gameData: IGameData) {
+        // TODO: Implement Undo
+        console.error("Command Undo not implemented yet")
+    }
 }
 
 @serializable
@@ -346,6 +385,11 @@ export class DiceCitiesRequestUnlockShoppingMall implements IGameCommand {
             turnOver: true,
             validMove: true
         };
+    }
+
+    Undo (gameData: IGameData) {
+        // TODO: Implement Undo
+        console.error("Command Undo not implemented yet")
     }
 }
 
@@ -408,6 +452,11 @@ export class DiceCitiesRequestUnlockAmusementPark implements IGameCommand {
             validMove: true
         };
     }
+
+    Undo (gameData: IGameData) {
+        // TODO: Implement Undo
+        console.error("Command Undo not implemented yet")
+    }
 }
 
 @serializable
@@ -468,6 +517,11 @@ export class DiceCitiesRequestUnlockRadioTower implements IGameCommand {
             turnOver: true,
             validMove: true
         };
+    }
+
+    Undo (gameData: IGameData) {
+        // TODO: Implement Undo
+        console.error("Command Undo not implemented yet")
     }
 }
 
@@ -533,6 +587,11 @@ export class DiceCitiesRequestTvStationSelection implements IGameCommand {
             turnOver: false,
             validMove: true
         };
+    }
+
+    Undo (gameData: IGameData) {
+        // TODO: Implement Undo
+        console.error("Command Undo not implemented yet")
     }
 }
 
@@ -642,6 +701,11 @@ export class DiceCitiesRequestBusinessCenterOwnSelection implements IGameCommand
             turnOver: false,
             validMove: true
         };
+    }
+
+    Undo (gameData: IGameData) {
+        // TODO: Implement Undo
+        console.error("Command Undo not implemented yet")
     }
 }
 
@@ -755,6 +819,11 @@ export class DiceCitiesRequestBusinessCenterOpponentSelection implements IGameCo
             validMove: true
         };
     }
+
+    Undo (gameData: IGameData) {
+        // TODO: Implement Undo
+        console.error("Command Undo not implemented yet")
+    }
 }
 
 @serializable
@@ -794,7 +863,7 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
         const doubleDice = lastCommand.doubleDice;
 
         // TODO: Implement undo!
-        // lastCommand.Undo();
+        lastCommand.Undo(dcGameData);
 
         dcGameData.specificGameState.awaitingBCSelectionOpponent = false;
         dcGameData.specificGameState.awaitingBCSelectionOwn = false;
@@ -813,6 +882,11 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
             turnOver: false,
             validMove: true
         };
+    }
+
+    Undo (gameData: IGameData) {
+        // TODO: Implement Undo
+        console.error("Command Undo not implemented yet")
     }
 }
 
@@ -837,7 +911,7 @@ function removeCardFromPlayerState(cardId: uuidString, playerState: IDiceCitiesP
     }
 }
 
-function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean) {
+function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean): IDiceCitiesDiceRollOutcome {
     const roll1 = DiceRoll(6);
     let roll2: number | null = null;
     let totalRoll = roll1;
@@ -852,13 +926,19 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean) {
             turnOver: false,
             validMove: false,
             roll1: 0,
-            roll2: 0
+            roll2: 0,
+            moneyChanges: new Map
         };
     }
     
     if (roll1 === roll2 && rollerState.rerollDoubles) {
         dcGameData.specificGameState.awaitingDoubleReroll = true;
     }
+
+    const moneyChanges: Map<string, number> = new Map;
+    dcGameData.specificGameState.playerStates.forEach((ps, userId) => {
+        moneyChanges.set(userId, 0);
+    });
     // Award red cards
     dcGameData.specificGameState.playerStates.forEach((playerState, userId) => {
         if (userId === dcGameData.currentTurn) {
@@ -882,7 +962,9 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean) {
             const cardAmount = card.type === "dining" && playerState.bonusDiningAndStore ? card.stealRollerGain+1 : card.stealRollerGain;
             const amountToSteal = Math.min(rollerState.money, cardAmount);
             playerState.money += amountToSteal;
+            moneyChanges.set(userId, (moneyChanges.get(userId) ?? 0) + amountToSteal);
             rollerState.money -= amountToSteal;
+            moneyChanges.set(dcGameData.currentTurn, (moneyChanges.get(dcGameData.currentTurn) ?? 0) - amountToSteal);
         });
     });
     // Award bank money (green and blue)
@@ -935,6 +1017,7 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean) {
             }
             // TODO: Consider bank money? (42*1 + 24*5 + 12*10 = 42+120+120 = 282)
             playerState.money += cardAmount;
+            moneyChanges.set(userId, (moneyChanges.get(userId) ?? 0) + cardAmount);
         });
     });
     // Award purple cards
@@ -950,7 +1033,9 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean) {
                 const cardAmount = stadiumCard.stealAllGain;
                 const amountToSteal = Math.min(playerState.money, cardAmount);
                 playerState.money -= amountToSteal;
+                moneyChanges.set(userId, (moneyChanges.get(userId) ?? 0) - amountToSteal);
                 rollerState.money += amountToSteal;
+                moneyChanges.set(dcGameData.currentTurn, (moneyChanges.get(dcGameData.currentTurn) ?? 0) + amountToSteal);
             });
         }
     }
@@ -983,7 +1068,8 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean) {
         turnOver: false,
         validMove: true,
         roll1,
-        roll2
+        roll2,
+        moneyChanges
     }
     return outcome;
 }
