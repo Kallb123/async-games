@@ -63,11 +63,10 @@ export async function POST(request: NextRequest) {
   }
 
   gameData.gameState.commandHistory.push(commandRequest);
+  gameData.markModified('gameState.commandHistory');
 
   // Checks whether the turn should be progressed and actions it if so
-  console.log("first gameType:", gameData.gameType);
   const gameType: IGameType = deserializeJSON(JSON.stringify(gameData.gameType));
-  console.log("deserialised gameType:", gameData.gameType);
   gameType.CheckEndTurn(gameData, commandOutcome);
 
   await gameData.save();

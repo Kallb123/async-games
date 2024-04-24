@@ -46,13 +46,16 @@ export var GameDataSchema = new Schema<IGameDataDocument> ({
     gameState: {
         turnOrder: [String],
         history: [String],
-        commandHistory: [{
-            id: String,
-            timestamp: String,
-            gameId: String,
-            senderId: String,
-            className: String
-        }]
+        commandHistory: [
+            Schema.Types.Mixed
+            // {
+            //     id: String,
+            //     timestamp: String,
+            //     gameId: String,
+            //     senderId: String,
+            //     className: String
+            // }
+        ]
     }
 }, {discriminatorKey: 'kind'});
 GameDataSchema.methods.CreateResponse = async function(): Promise<IGameResponse> {
