@@ -17,3 +17,5 @@ async function deleteAllData() {
   await InvitationModel.deleteMany({}).exec();
   await GameDataModel.deleteMany({}).exec();
 }
+
+export const dynamic = 'force-dynamic';
