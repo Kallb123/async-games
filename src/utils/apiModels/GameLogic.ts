@@ -1,7 +1,7 @@
 import { IDiceCitiesGameData, IDiceCitiesPlayerState } from "@/games/DiceCities/DiceCitiesModels";
 import { IGameData } from "../mongodb/GameData";
 import { uuidString } from "./GameDataApi";
-import { serializable } from "./Serialisable";
+import { deserializeJSON, serializable } from "./Serialisable";
 import { DiceRoll } from "../games/DiceRoll";
 import { DiceCitiesCardIds, DiceCitiesCards } from "@/games/DiceCities/cards";
 import { IDiceCitiesCard } from "@/games/DiceCities/apiModels";
@@ -111,6 +111,7 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
             }
         }
         const outcome: IDiceCitiesDiceRollOutcome = doDiceRoll(dcGameData, this.doubleDice);
+        dcGameData.specificGameState.hasReRolled = false;
         this.moneyChanges = outcome.moneyChanges;
         let totalRoll = this.doubleDice && outcome.roll2 ? outcome.roll1 + outcome.roll2 : outcome.roll1;
 
@@ -124,7 +125,9 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
     Undo (gameData: IGameData) {
         const dcGameData: IDiceCitiesGameData = gameData as IDiceCitiesGameData;
 
-        this.moneyChanges.forEach((moneyChange, userId) => {
+        const moneyMap: Map<string, number> = new Map(Object.entries(this.moneyChanges));
+
+        moneyMap.forEach((moneyChange, userId) => {
             const playerState = dcGameData.specificGameState.playerStates.get(userId);
             if (!playerState) {
                 return;
@@ -853,17 +856,18 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
             }
         }
         const lastCommand = dcGameData.gameState.commandHistory.findLast(() => true);
-        if (!(lastCommand instanceof DiceCitiesRequestDiceRoll)) {
+        const lastCommandDeserialised = deserializeJSON(JSON.stringify(lastCommand));
+        if (!(lastCommandDeserialised instanceof DiceCitiesRequestDiceRoll)) {
             console.log("last command:", lastCommand);
             return {
                 turnOver: false,
                 validMove: false
             }
         }
-        const doubleDice = lastCommand.doubleDice;
+        const doubleDice = lastCommandDeserialised.doubleDice;
 
         // TODO: Implement undo!
-        lastCommand.Undo(dcGameData);
+        lastCommandDeserialised.Undo(dcGameData);
 
         dcGameData.specificGameState.awaitingBCSelectionOpponent = false;
         dcGameData.specificGameState.awaitingBCSelectionOwn = false;
@@ -872,6 +876,7 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
         dcGameData.specificGameState.bcSelectedOpponent = "";
         dcGameData.specificGameState.bcSelectedOpponent = "";
         dcGameData.specificGameState.bcSelectedOpponentCard = NIL_UUID as uuidString;
+        dcGameData.specificGameState.hasReRolled = true;
 
         const outcome: IDiceCitiesDiceRollOutcome = doDiceRoll(dcGameData, doubleDice);
         let totalRoll = doubleDice && outcome.roll2 ? outcome.roll1 + outcome.roll2 : outcome.roll1;
