@@ -85,6 +85,9 @@ export default function GameDiceCities({ params }: { params: { gameid: uuidStrin
             // TODO: Handle prage update with new data
             // Maybe there should be a higher level "submitCommand" method
             const response: ICommandResponse = data;
+            if (!response || !response.gameData) {
+                return;
+            }
             setGameData(response.gameData as IDiceCitiesGameDataResponse);
             callback(data);
         });
