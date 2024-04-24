@@ -44,10 +44,10 @@ export default function DiceCitiesPlayerActions({playerState, hasRolled, hasReRo
 
     return (
         <>
-            <Button onClick={rollDice6} disabled={hasRolled || awaitingSteal}>Roll d6</Button>
-            <Button onClick={rollDice12} disabled={hasRolled || awaitingSteal || !playerState.doubleUnlocked}>Roll 2d6</Button>
+            <Button onClick={rollDice6} disabled={hasRolled || awaitingSteal}>Roll 1 die</Button>
+            <Button onClick={rollDice12} disabled={hasRolled || awaitingSteal || !playerState.doubleUnlocked}>Roll 2 dice</Button>
+            {playerState.oneReroll ? <Button onClick={reRoll} disabled={!hasRolled || hasReRolled}>Re-roll</Button> : ""}
             <Button onClick={passTurn} disabled={!hasRolled}>Pass Without Buying</Button>
-            {playerState.oneReroll ? <Button onClick={reRoll} disabled={!hasRolled || hasReRolled}></Button> : ""}
         </>
     );
 }
