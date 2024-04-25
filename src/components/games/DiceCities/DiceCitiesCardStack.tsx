@@ -3,6 +3,8 @@ import { useUser } from "@clerk/nextjs";
 import { useEffect } from "react";
 import DiceCitiesCard from "./DiceCitiesCard";
 
+const CARD_STACK_OFFSET = 25;
+
 interface DiceCitiesCardStackProps {
     card: IDiceCitiesCard,
     amount: number,
@@ -19,10 +21,10 @@ export default function DiceCitiesCardStack({card, amount, disabled}: DiceCities
     }, [isLoaded]);
 
     return (
-        <div style={{position: "relative", width: `${162+(amount-1)*30}px`, height: "250px"}}>
+        <div style={{position: "relative", width: `${162+(amount-1)*CARD_STACK_OFFSET}px`, height: "250px"}}>
         {
             [...Array(amount)].map((e, index) => (
-                <div key={index} style={{position: "absolute", left: `${index*30}px`}}>
+                <div key={index} style={{position: "absolute", left: `${index*CARD_STACK_OFFSET}px`}}>
                     <DiceCitiesCard card={card} disabled={disabled}></DiceCitiesCard>
                 </div>
             ))
