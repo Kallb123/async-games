@@ -8,6 +8,7 @@ import { ICommandResponse } from "@/app/api/game/command/route";
 import { Button } from "react-bootstrap";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import DiceCitiesCard from "./DiceCitiesCard";
+import DiceCitiesCardStack from "./DiceCitiesCardStack";
 
 interface DiceCitiesPlayerProps {
     playerState: IDiceCitiesPlayerStateResponse,
@@ -113,7 +114,7 @@ export default function DiceCitiesPlayer({playerState, userName, currentTurn, ha
                 if (cardCount.amount === 0) return;
                 const card: IDiceCitiesCard = DiceCitiesCards[cardCount.card];
                 return (
-                    <div key={cardCount.card} title={card.text}><DiceCitiesCard card={card} disabled={false}></DiceCitiesCard> x{cardCount.amount} {
+                    <div key={cardCount.card} title={card.text}><DiceCitiesCardStack card={card} amount={cardCount.amount} disabled={false}></DiceCitiesCardStack> {
                         awaitingBCSelection && myTurn && card.type !== "landmark" ? <Button onClick={() => {selectForBC(cardCount.card)}}>Select to {isMe ? "Give" : "Receive"}</Button> : ""
                     }</div>
                 )

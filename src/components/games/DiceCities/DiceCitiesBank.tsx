@@ -7,6 +7,7 @@ import { useUser } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import { Button } from "react-bootstrap";
 import DiceCitiesCard from "./DiceCitiesCard";
+import DiceCitiesCardStack from "./DiceCitiesCardStack";
 
 interface DiceCitiesBankProps {
     gameState: IDiceCitiesGameStateResponse,
@@ -70,7 +71,7 @@ export default function DiceCitiesBank({gameState, currentTurn, submitCommand}: 
             {currentUserState && gameState && gameState.bankCards.map(cardCount => {
                 const card: IDiceCitiesCard = DiceCitiesCards[cardCount.card];
                 return (
-                    <div key={cardCount.card} title={card.text}><DiceCitiesCard card={card} disabled={false}></DiceCitiesCard> x{cardCount.amount} {
+                    <div key={cardCount.card} title={card.text}><DiceCitiesCardStack card={card} amount={cardCount.amount} disabled={false}></DiceCitiesCardStack> {
                         isLoaded && user?.id === currentTurn && gameState.hasRolled ?
                             <Button onClick={() => {handlePurchase(card.cardId)}} disabled={isDisabled(card, cardCount, currentUserState)}>Purchase</Button>
                         : ""
