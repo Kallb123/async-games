@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import DiceCitiesPlayerActions from "./DiceCitiesPlayerActions";
 import { DiceCitiesRequestBusinessCenterOpponentSelection, DiceCitiesRequestBusinessCenterOwnSelection, DiceCitiesRequestTvStationSelection, DiceCitiesRequestUnlockAmusementPark, DiceCitiesRequestUnlockRadioTower, DiceCitiesRequestUnlockShoppingMall, DiceCitiesRequestUnlockTrainStation, IGameCommand } from "@/utils/apiModels/GameLogic";
 import { ICommandResponse } from "@/app/api/game/command/route";
-import { Button } from "react-bootstrap";
+import { Button, Col, Row } from "react-bootstrap";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import DiceCitiesCard from "./DiceCitiesCard";
 import DiceCitiesCardStack from "./DiceCitiesCardStack";
@@ -110,20 +110,32 @@ export default function DiceCitiesPlayer({playerState, userName, currentTurn, ha
             : ""}
             <h3>Money: {playerState.money}</h3>
             <h3>Cards</h3>
-            {playerState.cards.map(cardCount => {
-                if (cardCount.amount === 0) return;
-                const card: IDiceCitiesCard = DiceCitiesCards[cardCount.card];
-                return (
-                    <div key={cardCount.card} title={card.text}><DiceCitiesCardStack card={card} amount={cardCount.amount} disabled={false}></DiceCitiesCardStack> {
-                        awaitingBCSelection && myTurn && card.type !== "landmark" ? <Button onClick={() => {selectForBC(cardCount.card)}}>Select to {isMe ? "Give" : "Receive"}</Button> : ""
-                    }</div>
-                )
-            })}
+            <Row>
+                {playerState.cards.map(cardCount => {
+                    if (cardCount.amount === 0) return;
+                    const card: IDiceCitiesCard = DiceCitiesCards[cardCount.card];
+                    return (
+                        <Col key={cardCount.card} title={card.text}><DiceCitiesCardStack card={card} amount={cardCount.amount} disabled={false}></DiceCitiesCardStack> {
+                            awaitingBCSelection && myTurn && card.type !== "landmark" ? <Button onClick={() => {selectForBC(cardCount.card)}}>Select to {isMe ? "Give" : "Receive"}</Button> : ""
+                        }</Col>
+                    )
+                })}
+            </Row>
             <h3>Landmarks</h3>
-            <div title={DiceCitiesCards[DiceCitiesCardIds.SHOPPING_MALL].text}><DiceCitiesCard card={DiceCitiesCards[DiceCitiesCardIds.SHOPPING_MALL]} disabled={!playerState.bonusDiningAndStore}></DiceCitiesCard> {myTurn && isMe && hasRolled && playerState && !playerState.bonusDiningAndStore ? <Button onClick={purchaseShoppingMall} disabled={DiceCitiesCards[DiceCitiesCardIds.SHOPPING_MALL].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</div>
-            <div title={DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION].text}><DiceCitiesCard card={DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION]} disabled={!playerState.doubleUnlocked}></DiceCitiesCard> {myTurn && isMe && hasRolled && playerState && !playerState.doubleUnlocked ? <Button onClick={purchaseTrainStation} disabled={DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</div>
-            <div title={DiceCitiesCards[DiceCitiesCardIds.AMUSEMENT_PARK].text}><DiceCitiesCard card={DiceCitiesCards[DiceCitiesCardIds.AMUSEMENT_PARK]} disabled={!playerState.oneReroll}></DiceCitiesCard> {myTurn && isMe && hasRolled && playerState && !playerState.oneReroll ? <Button onClick={purchaseAmusementPark} disabled={DiceCitiesCards[DiceCitiesCardIds.AMUSEMENT_PARK].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</div>
-            <div title={DiceCitiesCards[DiceCitiesCardIds.RADIO_TOWER].text}><DiceCitiesCard card={DiceCitiesCards[DiceCitiesCardIds.RADIO_TOWER]} disabled={!playerState.rerollDoubles}></DiceCitiesCard> {myTurn && isMe && hasRolled && playerState && !playerState.rerollDoubles ? <Button onClick={purchaseRadioTower} disabled={DiceCitiesCards[DiceCitiesCardIds.RADIO_TOWER].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</div>
+            <Row>
+                <Col>
+                    <div title={DiceCitiesCards[DiceCitiesCardIds.SHOPPING_MALL].text}><DiceCitiesCard card={DiceCitiesCards[DiceCitiesCardIds.SHOPPING_MALL]} disabled={!playerState.bonusDiningAndStore}></DiceCitiesCard> {myTurn && isMe && hasRolled && playerState && !playerState.bonusDiningAndStore ? <Button onClick={purchaseShoppingMall} disabled={DiceCitiesCards[DiceCitiesCardIds.SHOPPING_MALL].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</div>
+                </Col>
+                <Col>
+                    <div title={DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION].text}><DiceCitiesCard card={DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION]} disabled={!playerState.doubleUnlocked}></DiceCitiesCard> {myTurn && isMe && hasRolled && playerState && !playerState.doubleUnlocked ? <Button onClick={purchaseTrainStation} disabled={DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</div>
+                </Col>
+                <Col>
+                    <div title={DiceCitiesCards[DiceCitiesCardIds.AMUSEMENT_PARK].text}><DiceCitiesCard card={DiceCitiesCards[DiceCitiesCardIds.AMUSEMENT_PARK]} disabled={!playerState.oneReroll}></DiceCitiesCard> {myTurn && isMe && hasRolled && playerState && !playerState.oneReroll ? <Button onClick={purchaseAmusementPark} disabled={DiceCitiesCards[DiceCitiesCardIds.AMUSEMENT_PARK].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</div>
+                </Col>
+                <Col>
+                    <div title={DiceCitiesCards[DiceCitiesCardIds.RADIO_TOWER].text}><DiceCitiesCard card={DiceCitiesCards[DiceCitiesCardIds.RADIO_TOWER]} disabled={!playerState.rerollDoubles}></DiceCitiesCard> {myTurn && isMe && hasRolled && playerState && !playerState.rerollDoubles ? <Button onClick={purchaseRadioTower} disabled={DiceCitiesCards[DiceCitiesCardIds.RADIO_TOWER].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</div>
+                </Col>
+            </Row>
             {isMe && currentTurn === user?.id ? (
                 <>
                     <h3>Actions</h3>
