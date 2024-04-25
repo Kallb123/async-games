@@ -6,6 +6,7 @@ import { DiceCitiesRequestCardPurchase, IGameCommand } from "@/utils/apiModels/G
 import { useUser } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import { Button } from "react-bootstrap";
+import DiceCitiesCard from "./DiceCitiesCard";
 
 interface DiceCitiesBankProps {
     gameState: IDiceCitiesGameStateResponse,
@@ -64,23 +65,18 @@ export default function DiceCitiesBank({gameState, currentTurn, submitCommand}: 
     return (
         <>
             <h2>Bank</h2>
-            <ul>
-                {/* <li>Money: ???</li> */}
-                <li>
-                    <ul>
-                        {currentUserState && gameState && gameState.bankCards.map(cardCount => {
-                            const card: IDiceCitiesCard = DiceCitiesCards[cardCount.card];
-                            return (
-                                <li key={cardCount.card} title={card.text}>{card.title} x{cardCount.amount} (Cost: {card.cost}) {
-                                    isLoaded && user?.id === currentTurn && gameState.hasRolled ?
-                                        <Button onClick={() => {handlePurchase(card.cardId)}} disabled={isDisabled(card, cardCount, currentUserState)}>Purchase</Button>
-                                    : ""
-                                }</li>
-                            )
-                        })}
-                    </ul>
-                </li>
-            </ul>
+            <h3>Money: Lots</h3>
+            <h3>Cards</h3>
+            {currentUserState && gameState && gameState.bankCards.map(cardCount => {
+                const card: IDiceCitiesCard = DiceCitiesCards[cardCount.card];
+                return (
+                    <div key={cardCount.card} title={card.text}><DiceCitiesCard card={card} disabled={false}></DiceCitiesCard> x{cardCount.amount} {
+                        isLoaded && user?.id === currentTurn && gameState.hasRolled ?
+                            <Button onClick={() => {handlePurchase(card.cardId)}} disabled={isDisabled(card, cardCount, currentUserState)}>Purchase</Button>
+                        : ""
+                    }</div>
+                )
+            })}
         </>
     );
 }

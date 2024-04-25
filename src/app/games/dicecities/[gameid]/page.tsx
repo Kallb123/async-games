@@ -116,6 +116,7 @@ export default function GameDiceCities({ params }: { params: { gameid: uuidStrin
                         <DiceCitiesBank gameState={gameData?.specificGameState} currentTurn={gameData.currentTurn} submitCommand={submitCommand} />
                     </Col>
                 </Row>
+                <h2>History</h2>
                 <Row>
                     <Col>
                         <ul>
