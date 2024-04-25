@@ -98,24 +98,18 @@ export default function GameDiceCities({ params }: { params: { gameid: uuidStrin
             <h1>Dice Cities</h1>
             <h2><a href="/">Home</a></h2>
             <Form>
-                <Row>
-                    <Col>
-                        {gameData?.specificGameState?.playerStates ? Object.keys(gameData.specificGameState.playerStates).map(userName => (
-                            <DiceCitiesPlayer key={userName}
-                            userName={userName}
-                            currentTurn={gameData.currentTurn}
-                            hasRolled={gameData.specificGameState.hasRolled}
-                            hasReRolled={gameData.specificGameState.hasReRolled}
-                            awaitingTSSelection={gameData.specificGameState.awaitingTSSelection}
-                            awaitingBCSelection={gameData.specificGameState.awaitingBCSelectionOwn || gameData.specificGameState.awaitingBCSelectionOpponent}
-                            submitCommand={submitCommand}
-                            playerState={gameData.specificGameState.playerStates[userName]} />
-                        )) : ("")}
-                    </Col>
-                    <Col>
-                        <DiceCitiesBank gameState={gameData?.specificGameState} currentTurn={gameData.currentTurn} submitCommand={submitCommand} />
-                    </Col>
-                </Row>
+                {gameData?.specificGameState?.playerStates ? Object.keys(gameData.specificGameState.playerStates).map(userName => (
+                    <DiceCitiesPlayer key={userName}
+                    userName={userName}
+                    currentTurn={gameData.currentTurn}
+                    hasRolled={gameData.specificGameState.hasRolled}
+                    hasReRolled={gameData.specificGameState.hasReRolled}
+                    awaitingTSSelection={gameData.specificGameState.awaitingTSSelection}
+                    awaitingBCSelection={gameData.specificGameState.awaitingBCSelectionOwn || gameData.specificGameState.awaitingBCSelectionOpponent}
+                    submitCommand={submitCommand}
+                    playerState={gameData.specificGameState.playerStates[userName]} />
+                )) : ("")}
+                <DiceCitiesBank gameState={gameData?.specificGameState} currentTurn={gameData.currentTurn} submitCommand={submitCommand} />
                 <h2>History</h2>
                 <Row>
                     <Col>
