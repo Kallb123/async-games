@@ -68,7 +68,7 @@ export default function DiceCitiesBank({gameState, currentTurn, submitCommand}: 
             <h2>Bank</h2>
             <h3>Money: Lots</h3>
             <h3>Cards</h3>
-            {currentUserState && gameState && gameState.bankCards.map(cardCount => {
+            {currentUserState && gameState && [...gameState.bankCards].sort((cc1, cc2) => DiceCitiesCards[cc1.card].rollNumber[0] - DiceCitiesCards[cc2.card].rollNumber[0]).map(cardCount => {
                 const card: IDiceCitiesCard = DiceCitiesCards[cardCount.card];
                 return (
                     <div key={cardCount.card} title={card.text}><DiceCitiesCardStack card={card} amount={cardCount.amount} disabled={false}></DiceCitiesCardStack> {

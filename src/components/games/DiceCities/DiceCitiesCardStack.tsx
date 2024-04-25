@@ -22,8 +22,8 @@ export default function DiceCitiesCardStack({card, amount, disabled}: DiceCities
         <div style={{position: "relative", width: `${162+(amount-1)*30}px`, height: "250px"}}>
         {
             [...Array(amount)].map((e, index) => (
-                <div style={{position: "absolute", left: `${index*30}px`}}>
-                    <DiceCitiesCard key={e} card={card} disabled={disabled}></DiceCitiesCard>
+                <div key={index} style={{position: "absolute", left: `${index*30}px`}}>
+                    <DiceCitiesCard card={card} disabled={disabled}></DiceCitiesCard>
                 </div>
             ))
         }

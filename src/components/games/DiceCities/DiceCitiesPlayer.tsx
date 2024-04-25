@@ -111,7 +111,7 @@ export default function DiceCitiesPlayer({playerState, userName, currentTurn, ha
             <h3>Money: {playerState.money}</h3>
             <h3>Cards</h3>
             <Row>
-                {playerState.cards.map(cardCount => {
+                {[...playerState.cards].sort((cc1, cc2) => DiceCitiesCards[cc1.card].rollNumber[0] - DiceCitiesCards[cc2.card].rollNumber[0]).map(cardCount => {
                     if (cardCount.amount === 0) return;
                     const card: IDiceCitiesCard = DiceCitiesCards[cardCount.card];
                     return (
