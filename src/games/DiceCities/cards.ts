@@ -108,7 +108,7 @@ const familyRestaurant: IDiceCitiesCard = {
     cost: 3,
     rollNumber: [9,10],
     text: "Get 2 coins from the player who rolled the dice.",
-    art: "fammily-restaurant.png",
+    art: "family-restaurant.png",
     type: "dining",
     icon: "",
     ownLimit: 20,
