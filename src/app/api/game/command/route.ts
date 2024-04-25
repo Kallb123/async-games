@@ -2,7 +2,7 @@ import TimedToken from '@/utils/firebase/TimedToken';
 import { auth, clerkClient, currentUser } from '@clerk/nextjs';
 import { credential } from 'firebase-admin';
 import { getApp, getApps, initializeApp } from 'firebase-admin/app';
-import { getMessaging } from 'firebase-admin/messaging';
+import { Message, getMessaging } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { DiceCitiesRequestRadioTowerReroll, ICommandOutcome, IGameCommand, IGameType } from '@/utils/apiModels/GameLogic';
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
   const turnTokens = (turnUser.privateMetadata.notificationTokens as TimedToken[]).filter(token => token);
   if (turnTokens.length) {
     messaging.sendEach(turnTokens.map((token) => {
-        return {
+      const message: Message = {
             token: token.token,
             data: {
                 event: 'YourTurn',
@@ -126,9 +126,26 @@ export async function POST(request: NextRequest) {
             },
             notification: {
                 title: "Your Turn",
-                body: `It's your turn to play!`
+                body: `It's your turn to play!`,
+                imageUrl: `https://async-games.vercel.app/art/dicecities/icon.png`
             },
+            apns: {
+              fcmOptions: {
+                imageUrl: `https://async-games.vercel.app/art/dicecities/icon.png`
+              }
+            },
+            android: {
+              notification: {
+                imageUrl: `https://async-games.vercel.app/art/dicecities/icon.png`
+              }
+            },
+            webpush: {
+              headers: {
+                "image": `https://async-games.vercel.app/art/dicecities/icon.png`
+              }
+            }
         }
+      return message;
     }));
   }
 

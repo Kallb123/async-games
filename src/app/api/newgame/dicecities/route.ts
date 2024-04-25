@@ -73,11 +73,27 @@ export async function POST(request: NextRequest) {
             token: token.token,
             notification: {
                 title: "Game Invite",
-                body: `${thisUser?.username} has invited you to play Dice Cities!`
+                body: `${thisUser?.username} has invited you to play Dice Cities!`,
+                imageUrl: `https://async-games.vercel.app/art/dicecities/icon.png`
             },
             data: {
               event: "NewInvite",
               inviteId: invite.inviteId,
+            },
+            apns: {
+              fcmOptions: {
+                imageUrl: `https://async-games.vercel.app/art/dicecities/icon.png`
+              }
+            },
+            android: {
+              notification: {
+                imageUrl: `https://async-games.vercel.app/art/dicecities/icon.png`
+              }
+            },
+            webpush: {
+              headers: {
+                "image": `https://async-games.vercel.app/art/dicecities/icon.png`
+              }
             }
         }
     }));
