@@ -124,10 +124,10 @@ export default function DiceCitiesPlayer({playerState, userName, currentTurn, ha
             <h3>Landmarks</h3>
             <Row>
                 <Col>
-                    <div title={DiceCitiesCards[DiceCitiesCardIds.SHOPPING_MALL].text}><DiceCitiesCard card={DiceCitiesCards[DiceCitiesCardIds.SHOPPING_MALL]} disabled={!playerState.bonusDiningAndStore}></DiceCitiesCard> {myTurn && isMe && hasRolled && playerState && !playerState.bonusDiningAndStore ? <Button onClick={purchaseShoppingMall} disabled={DiceCitiesCards[DiceCitiesCardIds.SHOPPING_MALL].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</div>
+                    <div title={DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION].text}><DiceCitiesCard card={DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION]} disabled={!playerState.doubleUnlocked}></DiceCitiesCard> {myTurn && isMe && hasRolled && playerState && !playerState.doubleUnlocked ? <Button onClick={purchaseTrainStation} disabled={DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</div>
                 </Col>
                 <Col>
-                    <div title={DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION].text}><DiceCitiesCard card={DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION]} disabled={!playerState.doubleUnlocked}></DiceCitiesCard> {myTurn && isMe && hasRolled && playerState && !playerState.doubleUnlocked ? <Button onClick={purchaseTrainStation} disabled={DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</div>
+                    <div title={DiceCitiesCards[DiceCitiesCardIds.SHOPPING_MALL].text}><DiceCitiesCard card={DiceCitiesCards[DiceCitiesCardIds.SHOPPING_MALL]} disabled={!playerState.bonusDiningAndStore}></DiceCitiesCard> {myTurn && isMe && hasRolled && playerState && !playerState.bonusDiningAndStore ? <Button onClick={purchaseShoppingMall} disabled={DiceCitiesCards[DiceCitiesCardIds.SHOPPING_MALL].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</div>
                 </Col>
                 <Col>
                     <div title={DiceCitiesCards[DiceCitiesCardIds.AMUSEMENT_PARK].text}><DiceCitiesCard card={DiceCitiesCards[DiceCitiesCardIds.AMUSEMENT_PARK]} disabled={!playerState.oneReroll}></DiceCitiesCard> {myTurn && isMe && hasRolled && playerState && !playerState.oneReroll ? <Button onClick={purchaseAmusementPark} disabled={DiceCitiesCards[DiceCitiesCardIds.AMUSEMENT_PARK].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</div>
