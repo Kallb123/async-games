@@ -9,10 +9,11 @@ import { Button } from "react-bootstrap";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 
 interface DiceCitiesCardProps {
-    card: IDiceCitiesCard
+    card: IDiceCitiesCard,
+    disabled: boolean
 }
 
-export default function DiceCitiesCard({card}: DiceCitiesCardProps) {
+export default function DiceCitiesCard({card, disabled}: DiceCitiesCardProps) {
     const { user, isLoaded } = useUser();
     const [isMe, setIsMe] = useState(false);
     const [myTurn, setMyTurn] = useState(false);
@@ -26,7 +27,7 @@ export default function DiceCitiesCard({card}: DiceCitiesCardProps) {
     return (
         <>
             {card.art ?
-                <img src={`/art/dicecities/japanese/${card.art}`} />
+                <img src={`/art/dicecities/japanese/${card.art}`} style={disabled ? {filter: "saturate(0)"} : {}} />
             : 
             <li title={card.text}>{card.title}</li>}
         </>

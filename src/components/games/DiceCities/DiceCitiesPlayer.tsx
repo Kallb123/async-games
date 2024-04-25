@@ -107,29 +107,27 @@ export default function DiceCitiesPlayer({playerState, userName, currentTurn, ha
             {awaitingTSSelection && !isMe && myTurn ? 
             <Button onClick={selectForTS}>Steal up to 5 coins</Button>
             : ""}
-            <ul>
-                <li>Money: {playerState.money}</li>
-                <li>
-                    <ul>
-                        <li>Cards</li>
-                        {playerState.cards.map(cardCount => {
-                            if (cardCount.amount === 0) return;
-                            const card: IDiceCitiesCard = DiceCitiesCards[cardCount.card];
-                            return (
-                                <li key={cardCount.card} title={card.text}><DiceCitiesCard card={card}></DiceCitiesCard> x{cardCount.amount} {
-                                    awaitingBCSelection && myTurn && card.type !== "landmark" ? <Button onClick={() => {selectForBC(cardCount.card)}}>Select to {isMe ? "Give" : "Receive"}</Button> : ""
-                                }</li>
-                            )
-                        })}
-                    </ul>
-                </li>
-                <li title={DiceCitiesCards[DiceCitiesCardIds.SHOPPING_MALL].text}>Shopping Mall: {playerState.bonusDiningAndStore ? "True" : "False"} {myTurn && isMe && hasRolled && playerState && !playerState.bonusDiningAndStore ? <Button onClick={purchaseShoppingMall} disabled={DiceCitiesCards[DiceCitiesCardIds.SHOPPING_MALL].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</li>
-                <li title={DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION].text}>Train Station: {playerState.doubleUnlocked ? "True" : "False"} {myTurn && isMe && hasRolled && playerState && !playerState.doubleUnlocked ? <Button onClick={purchaseTrainStation} disabled={DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</li>
-                <li title={DiceCitiesCards[DiceCitiesCardIds.AMUSEMENT_PARK].text}>Amusement Park: {playerState.oneReroll ? "True" : "False"} {myTurn && isMe && hasRolled && playerState && !playerState.oneReroll ? <Button onClick={purchaseAmusementPark} disabled={DiceCitiesCards[DiceCitiesCardIds.AMUSEMENT_PARK].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</li>
-                <li title={DiceCitiesCards[DiceCitiesCardIds.RADIO_TOWER].text}>Radio Tower: {playerState.rerollDoubles ? "True" : "False"} {myTurn && isMe && hasRolled && playerState && !playerState.rerollDoubles ? <Button onClick={purchaseRadioTower} disabled={DiceCitiesCards[DiceCitiesCardIds.RADIO_TOWER].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</li>
-            </ul>
+            <h3>Money: {playerState.money}</h3>
+            <h3>Cards</h3>
+            {playerState.cards.map(cardCount => {
+                if (cardCount.amount === 0) return;
+                const card: IDiceCitiesCard = DiceCitiesCards[cardCount.card];
+                return (
+                    <div key={cardCount.card} title={card.text}><DiceCitiesCard card={card} disabled={false}></DiceCitiesCard> x{cardCount.amount} {
+                        awaitingBCSelection && myTurn && card.type !== "landmark" ? <Button onClick={() => {selectForBC(cardCount.card)}}>Select to {isMe ? "Give" : "Receive"}</Button> : ""
+                    }</div>
+                )
+            })}
+            <h3>Landmarks</h3>
+            <div title={DiceCitiesCards[DiceCitiesCardIds.SHOPPING_MALL].text}><DiceCitiesCard card={DiceCitiesCards[DiceCitiesCardIds.SHOPPING_MALL]} disabled={!playerState.bonusDiningAndStore}></DiceCitiesCard> {myTurn && isMe && hasRolled && playerState && !playerState.bonusDiningAndStore ? <Button onClick={purchaseShoppingMall} disabled={DiceCitiesCards[DiceCitiesCardIds.SHOPPING_MALL].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</div>
+            <div title={DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION].text}><DiceCitiesCard card={DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION]} disabled={!playerState.doubleUnlocked}></DiceCitiesCard> {myTurn && isMe && hasRolled && playerState && !playerState.doubleUnlocked ? <Button onClick={purchaseTrainStation} disabled={DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</div>
+            <div title={DiceCitiesCards[DiceCitiesCardIds.AMUSEMENT_PARK].text}><DiceCitiesCard card={DiceCitiesCards[DiceCitiesCardIds.AMUSEMENT_PARK]} disabled={!playerState.oneReroll}></DiceCitiesCard> {myTurn && isMe && hasRolled && playerState && !playerState.oneReroll ? <Button onClick={purchaseAmusementPark} disabled={DiceCitiesCards[DiceCitiesCardIds.AMUSEMENT_PARK].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</div>
+            <div title={DiceCitiesCards[DiceCitiesCardIds.RADIO_TOWER].text}><DiceCitiesCard card={DiceCitiesCards[DiceCitiesCardIds.RADIO_TOWER]} disabled={!playerState.rerollDoubles}></DiceCitiesCard> {myTurn && isMe && hasRolled && playerState && !playerState.rerollDoubles ? <Button onClick={purchaseRadioTower} disabled={DiceCitiesCards[DiceCitiesCardIds.RADIO_TOWER].cost > playerState.money || !hasRolled}>Unlock</Button> : ""}</div>
             {isMe && currentTurn === user?.id ? (
-                <DiceCitiesPlayerActions playerState={playerState} hasRolled={hasRolled} hasReRolled={hasReRolled} awaitingSteal={awaitingTSSelection || awaitingBCSelection} submitCommand={submitCommand} />
+                <>
+                    <h3>Actions</h3>
+                    <DiceCitiesPlayerActions playerState={playerState} hasRolled={hasRolled} hasReRolled={hasReRolled} awaitingSteal={awaitingTSSelection || awaitingBCSelection} submitCommand={submitCommand} />
+                </>
             ) : null}
         </>
     );
