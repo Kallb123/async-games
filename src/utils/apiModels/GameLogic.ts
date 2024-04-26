@@ -883,10 +883,7 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
 
         const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
         dcGameData.gameState.history.unshift(`${senderUsername} re-rolled for a ${totalRoll}${outcome.roll2 ? ` (${outcome.roll1} and ${outcome.roll2})` : ""}`);
-        return {
-            turnOver: false,
-            validMove: true
-        };
+        return outcome;
     }
 
     Undo (gameData: IGameData) {
