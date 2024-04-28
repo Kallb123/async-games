@@ -145,6 +145,7 @@ export async function POST(request: NextRequest) {
               }
             }
         }
+        console.log(`Sending YourTurn to ${turnUser.username} via ${token.token}`);
       return message;
     }));
   }
