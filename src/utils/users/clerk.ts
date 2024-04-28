@@ -13,6 +13,19 @@ export async function userIdListToUsernameList(userIdList: string[]): Promise<st
     return usernameList;
 }
 
+export async function userIdListToUsernameMap(userIdList: string[]): Promise<Map<string, string>> {
+    const users = await clerkClient.users.getUserList({userId: userIdList});
+    const usernameMap: Map<string, string> = new Map;
+    userIdList.forEach(userId => {
+        const user = users.find(u => u.id === userId);
+        if (!user) {
+            return;
+        }
+        usernameMap.set(userId, user.username ?? "No username");
+    });
+    return usernameMap;
+}
+
 export async function usernameListToUserIdList(usernameList: string[]): Promise<string[]> {
     const users = await clerkClient.users.getUserList({username: usernameList});
     const userIdList: string[] = [];

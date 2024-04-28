@@ -18,7 +18,7 @@ export interface IInvitationData {
 
 export interface IInvitationDataDocument extends IInvitationData, Document {
     // Instance methods
-    CreateGame: (invite: IInvitationData, userIdList: string[]) => IGameData;
+    CreateGame: (invite: IInvitationData, userIdList: string[]) => Promise<IGameData>;
 }
 
 export interface IInvitationDataModel extends Model<IInvitationDataDocument> {
@@ -37,7 +37,7 @@ export var InvitationSchema = new Schema<IInvitationDataDocument> ({
     gameType: String,
     gameFriendlyName: String
 }, {discriminatorKey: 'kind'});
-InvitationSchema.methods.CreateGame = function(invite: IInvitationData, userIdList: string[]) {
+InvitationSchema.methods.CreateGame = async function(invite: IInvitationData, userIdList: string[]) {
     console.log("CreateGame: Generic game");
 };
 export var InvitationModel = models.Invitation || model<IInvitationDataDocument, IInvitationDataModel>('Invitation', InvitationSchema);

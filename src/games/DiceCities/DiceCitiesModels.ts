@@ -5,8 +5,9 @@ import { DiceCitiesCardIds } from "./cards";
 import { IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "./apiModels";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { v4 as uuidv4 } from 'uuid';
-import { userIdListToUsernameList } from "@/utils/users/clerk";
+import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
 import { DiceCitiesGameType } from "@/utils/apiModels/GameLogic";
+import { DiceRoll } from "@/utils/games/DiceRoll";
 
 export interface DiceCitiesInvitationRequest extends IInvitationRequest {
     enabledDocks: boolean,
@@ -26,16 +27,58 @@ export interface IDiceCitiesInvitationDataModel extends Model<IDiceCitiesInvitat
 // Model methods
 }
 
+function SortUsersByRoll(userIdList: string[], usernameMap: Map<string, string>, turnOrder: string[], history: string[], dieToRoll: number) {
+    // Get turn order
+    // Roll for each user
+    let turnRolls = userIdList.map((userId) => {
+        return {userId, diceRoll: DiceRoll(dieToRoll)};
+    });
+    let distinctRolls: Map<number, string[]> = new Map;
+    // Make lists of users that rolled each value
+    turnRolls.forEach(turnRoll => {
+        const lookup = distinctRolls.get(turnRoll.diceRoll);
+        if (lookup) {
+            lookup.push(turnRoll.userId);
+        } else {
+            distinctRolls.set(turnRoll.diceRoll, [turnRoll.userId]);
+        }
+    });
+    // Sort in descending order, so highest roll is first
+    const sortedRolls = [...distinctRolls.keys()].sort((a, b) => b-a);
+    // Consider each list of users
+    sortedRolls.forEach(roll => {
+        const usersInRoll = distinctRolls.get(roll);
+        if (!usersInRoll) {
+            return;
+        }
+        if (usersInRoll.length > 1) {
+            // Need to re-roll these users
+            const usernamesInRoll = usersInRoll.map(userId => usernameMap.get(userId));
+            history.push(`${usernamesInRoll.join(" & ")} rolled a ${roll} and are re-rolling`);
+            SortUsersByRoll(usersInRoll, usernameMap, turnOrder, history, dieToRoll);
+        } else {
+            turnOrder.push(usersInRoll[0]);
+            history.push(`${usernameMap.get(usersInRoll[0])} rolled a ${roll}`);
+        }
+    });
+}
+
 var DiceCitiesInvitationSchema = new Schema<IDiceCitiesInvitationDataDocument>({
     enabledDocks: Boolean,
     enabledBillionaireRow: Boolean
 }, {discriminatorKey: 'kind'});
-DiceCitiesInvitationSchema.methods.CreateGame = function(invite: IDiceCitiesInvitationData, userIdList: string[]) {
+DiceCitiesInvitationSchema.methods.CreateGame = async function(invite: IDiceCitiesInvitationData, userIdList: string[]) {
     console.log("CreateGame: Dice Cities game");
 
     const gameType = new DiceCitiesGameType();
 
-    const turnOrder = userIdList;
+    const turnOrder: string[] = [];
+    const history: string[] = [];
+
+    const usernameMap = await userIdListToUsernameMap(userIdList);
+
+    SortUsersByRoll(userIdList, usernameMap, turnOrder, history, 6);
+
     const gameData: IDiceCitiesGameData = {
         gameId: uuidv4() as uuidString,
         gameType: gameType,
@@ -47,7 +90,7 @@ DiceCitiesInvitationSchema.methods.CreateGame = function(invite: IDiceCitiesInvi
         // url: "dicecities",
         gameState: {
             turnOrder,
-            history: [],
+            history,
             commandHistory: []
         },
         specificGameState: {

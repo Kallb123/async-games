@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Create game
-  const gameData = inviteData.CreateGame(inviteData, userIdList.concat(inviteData.senderId));
+  const gameData = await inviteData.CreateGame(inviteData, userIdList.concat(inviteData.senderId));
   const gameDataM = new DiceCitiesGameDataModel(gameData);
 
   await gameDataM.save();
