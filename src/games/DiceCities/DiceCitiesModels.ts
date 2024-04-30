@@ -93,6 +93,8 @@ DiceCitiesInvitationSchema.methods.CreateGame = async function(invite: IDiceCiti
             history,
             commandHistory: []
         },
+        complete: false,
+        winner: "",
         specificGameState: {
             bankCards: [{
                 card: DiceCitiesCardIds.WHEAT_FIELD,
@@ -269,6 +271,8 @@ DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(): Promise<
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
         gameState: gameDataDocument.gameState,
+        complete: gameDataDocument.complete,
+        winner: gameDataDocument.winner,
         enabledDocks: gameDataDocument.enabledDocks,
         enabledBillionaireRow: gameDataDocument.enabledBillionaireRow,
         specificGameState: gameStateToModel(gameDataDocument.specificGameState, userIdNameMap)

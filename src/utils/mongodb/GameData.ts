@@ -16,7 +16,9 @@ export interface IGameData {
     turnTimer: string,
     currentTurn: string,
     lastTurnTimestamp: string,
-    gameState: IGameState
+    gameState: IGameState,
+    complete: boolean,
+    winner: string
 }
 
 export interface IGameDataDocument extends IGameData, Document {
@@ -56,7 +58,9 @@ export var GameDataSchema = new Schema<IGameDataDocument> ({
             //     className: String
             // }
         ]
-    }
+    },
+    complete: Boolean,
+    winner: String
 }, {discriminatorKey: 'kind'});
 GameDataSchema.methods.CreateResponse = async function(): Promise<IGameResponse> {
     console.log("CreateResponse: Generic game");
@@ -71,6 +75,8 @@ GameDataSchema.methods.CreateResponse = async function(): Promise<IGameResponse>
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
         url: gameDataDocument.gameType.url,
+        complete: gameDataDocument.complete,
+        winner: (await userIdListToUsernameList([gameDataDocument.winner]))[0]
     }
 };
 GameDataSchema.methods.CreateDataResponse = async function(): Promise<IGameDataResponse> {
@@ -84,6 +90,8 @@ GameDataSchema.methods.CreateDataResponse = async function(): Promise<IGameDataR
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
         gameState: gameDataDocument.gameState,
+        complete: gameDataDocument.complete,
+        winner: gameDataDocument.winner
     }
 };
 export var GameDataModel = models.GameData || model<IGameDataDocument, IGameDataModel>('GameData', GameDataSchema);

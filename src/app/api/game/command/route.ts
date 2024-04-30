@@ -65,8 +65,49 @@ export async function POST(request: NextRequest) {
   gameData.gameState.commandHistory.push(commandRequest);
   gameData.markModified('gameState.commandHistory');
 
+  // initialise Firebase
+  if (!getApps().length) {
+    initializeApp({
+      credential: credential.cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      })
+    }, 'adminApp');
+  }
+  const firebaseApp = getApp('adminApp');
+  const messaging = getMessaging(firebaseApp);
+
   // Checks whether the turn should be progressed and actions it if so
   const gameType: IGameType = deserializeJSON(JSON.stringify(gameData.gameType));
+  if (gameType.CheckGameOver(gameData)) {
+    await gameData.save();
+
+    const response: ICommandResponse = {
+      outcome: commandOutcome,
+      gameData: await gameData.CreateDataResponse()
+    }
+
+    const userList = await clerkClient.users.getUserList({
+      userId: gameData.userIdList
+    });
+    const tokens = userList.flatMap((user) => user.privateMetadata.notificationTokens as TimedToken[]).filter(token => token);
+    if (tokens.length) {
+      messaging.sendEach(tokens.map((token) => {
+          return {
+              token: token.token,
+              data: {
+                  event: 'GameOver',
+                  gameId: commandRequest.gameId
+              }
+              // TODO: Maybe include a notification?
+          }
+      }));
+    }
+
+    return NextResponse.json(response, {status: 200});
+  }
+  
   gameType.CheckEndTurn(gameData, commandOutcome);
 
   await gameData.save();
@@ -88,19 +129,6 @@ export async function POST(request: NextRequest) {
   if (!turnUser) {
     return NextResponse.json({}, {status: 400, statusText: "Next user not found"});
   }
-
-  // initialise Firebase
-  if (!getApps().length) {
-    initializeApp({
-      credential: credential.cert({
-          projectId: process.env.FIREBASE_PROJECT_ID,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      })
-    }, 'adminApp');
-  }
-  const firebaseApp = getApp('adminApp');
-  const messaging = getMessaging(firebaseApp);
 
   const tokens = userList.flatMap((user) => user.privateMetadata.notificationTokens as TimedToken[]).filter(token => token);
   if (tokens.length) {

@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs'
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from "../../../../utils/mongodb/mongodb";
-import { IGameDataDocument, GameDataModel } from '@/utils/mongodb/GameData';
+import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { IGameResponse } from '@/utils/apiModels/GameDataApi';
 
 export async function GET(request: NextRequest) {
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   
   await dbConnect();
 
-  const gameDatas: IGameDataDocument[] = await GameDataModel.find({userIdList: userId, complete: false, currentTurn: {$ne: userId}}).exec();
+  const gameDatas: IGameDataDocument[] = await GameDataModel.find({complete: true, userIdList: userId}).exec();
 
   const gameResponses: IGameResponse[] = await Promise.all(gameDatas.map(async gameData => await gameData.CreateResponse()));
 

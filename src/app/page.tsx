@@ -10,6 +10,7 @@ import OutgoingInviteList from "@/components/OutgoingInviteList";
 import MyTurnList from "@/components/MyTurnList";
 import TheirTurnList from "@/components/TheirTurnList";
 import DevTools from "@/components/DevTools";
+import MyCompleteList from "@/components/MyCompleteList";
 
 export default function Home() {
   const pathName = usePathname();
@@ -44,6 +45,8 @@ export default function Home() {
       <TheirTurnList />
       <hr />
       <OutgoingInviteList />
+      <hr />
+      <MyCompleteList />
       <hr />
       <CurrentUserInfo />
       <DevTools />

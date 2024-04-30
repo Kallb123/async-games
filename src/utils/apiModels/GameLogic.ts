@@ -33,6 +33,7 @@ export interface IGameType {
     readonly className: string;
 
     CheckEndTurn: (gameData: IGameData, commandOutcome: ICommandOutcome) => void;
+    CheckGameOver: (gameData: IGameData) => boolean;
 }
 
 export interface IDiceCitiesDiceRollOutcome extends ICommandOutcome {
@@ -66,6 +67,20 @@ export class DiceCitiesGameType implements IGameType {
 
         return;
     };
+
+    CheckGameOver (gameData: IGameData) {
+        const dcGameData: IDiceCitiesGameData = gameData as IDiceCitiesGameData;
+        let isFinished = false;
+        dcGameData.specificGameState.playerStates.forEach((playerState, userId) => {
+            if (playerState.bonusDiningAndStore && playerState.doubleUnlocked && playerState.oneReroll && playerState.rerollDoubles) {
+                isFinished = true;
+                dcGameData.complete = true;
+                dcGameData.winner = userId;
+                dcGameData.currentTurn = "";
+            }
+        });
+        return isFinished;
+    }
 }
 
 @serializable
