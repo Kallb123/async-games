@@ -2,9 +2,15 @@
 import CurrentUserInfo from "@/components/CurrentUserInfo";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useUser } from "@clerk/nextjs";
-import { User } from "@clerk/nextjs/server";
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from "react";
+
+interface PublicUser {
+  id: string;
+  username: string | null;
+  firstName: string | null;
+  lastName: string | null;
+}
 
 export default function Users() {
   const pathName = usePathname();
@@ -12,7 +18,7 @@ export default function Users() {
   const { user, isLoaded } = useUser();
   const router = useRouter();
 
-  const [users, setUsers] = useState([] as User[]);
+  const [users, setUsers] = useState([] as PublicUser[]);
 
   useEffect(() => {
     if (isLoaded) {

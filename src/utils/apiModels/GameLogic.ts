@@ -1,12 +1,11 @@
-import { IDiceCitiesGameData, IDiceCitiesPlayerState } from "@/games/DiceCities/DiceCitiesModels";
-import { IGameData } from "../mongodb/GameData";
+import type { IDiceCitiesGameData, IDiceCitiesPlayerState } from "@/games/DiceCities/DiceCitiesModels";
+import type { IGameData } from "../mongodb/GameData";
 import { uuidString } from "./GameDataApi";
 import { deserializeJSON, serializable } from "./Serialisable";
 import { DiceRoll } from "../games/DiceRoll";
 import { DiceCitiesCardIds, DiceCitiesCards } from "@/games/DiceCities/cards";
 import { IDiceCitiesCard } from "@/games/DiceCities/apiModels";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
-import { userIdListToUsernameList, usernameListToUserIdList } from "../users/clerk";
 
 export interface ICommandOutcome {
     validMove: boolean,
@@ -18,6 +17,7 @@ export interface IGameCommand {
     timestamp: string;
     gameId: uuidString;
     senderId: string;
+    senderUsername: string;
     readonly className: string;
 
     myString: () => string;
@@ -89,6 +89,7 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
     timestamp: string = (new Date()).toISOString();
     gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
+    senderUsername: string = "Unknown";
     doubleDice: boolean = false;
     moneyChanges: Map<string, number> = new Map;
     readonly className = "DiceCitiesRequestDiceRoll";
@@ -130,7 +131,7 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
         this.moneyChanges = outcome.moneyChanges;
         let totalRoll = this.doubleDice && outcome.roll2 ? outcome.roll1 + outcome.roll2 : outcome.roll1;
 
-        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
+        const senderUsername = this.senderUsername;
         dcGameData.gameState.history.unshift(`${senderUsername} rolled a ${totalRoll}${outcome.roll2 ? ` (${outcome.roll1} and ${outcome.roll2})` : ""}`);
 
         // TODO: Maybe end turn if nothin available to buy?
@@ -166,6 +167,7 @@ export class DiceCitiesRequestCardPurchase implements IGameCommand {
     timestamp: string = (new Date()).toISOString();
     gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
+    senderUsername: string = "Unknown";
     cardId: uuidString = NIL_UUID as uuidString;
     readonly className = "DiceCitiesRequestCardPurchase";
 
@@ -230,7 +232,7 @@ export class DiceCitiesRequestCardPurchase implements IGameCommand {
         }
 
         dcGameData.specificGameState.hasRolled = false;
-        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
+        const senderUsername = this.senderUsername;
         dcGameData.gameState.history.unshift(`${senderUsername} bought a ${cardObject.title}`);
         return {
             turnOver: true,
@@ -250,6 +252,7 @@ export class DiceCitiesRequestPassTurn implements IGameCommand {
     timestamp: string = (new Date()).toISOString();
     gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
+    senderUsername: string = "Unknown";
     readonly className = "DiceCitiesRequestPassTurn";
 
     myString() {
@@ -265,7 +268,7 @@ export class DiceCitiesRequestPassTurn implements IGameCommand {
             }
         }
         dcGameData.specificGameState.hasRolled = false;
-        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
+        const senderUsername = this.senderUsername;
         dcGameData.gameState.history.unshift(`${senderUsername} passed their turn`);
         return {
             turnOver: true,
@@ -285,6 +288,7 @@ export class DiceCitiesRequestUnlockTrainStation implements IGameCommand {
     timestamp: string = (new Date()).toISOString();
     gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
+    senderUsername: string = "Unknown";
     readonly className = "DiceCitiesRequestUnlockTrainStation";
 
     myString() {
@@ -331,7 +335,7 @@ export class DiceCitiesRequestUnlockTrainStation implements IGameCommand {
         currentPlayerState.doubleUnlocked = true;
 
         dcGameData.specificGameState.hasRolled = false;
-        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
+        const senderUsername = this.senderUsername;
         dcGameData.gameState.history.unshift(`${senderUsername} bought a ${cardObject.title}`);
         return {
             turnOver: true,
@@ -351,6 +355,7 @@ export class DiceCitiesRequestUnlockShoppingMall implements IGameCommand {
     timestamp: string = (new Date()).toISOString();
     gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
+    senderUsername: string = "Unknown";
     readonly className = "DiceCitiesRequestUnlockShoppingMall";
 
     myString() {
@@ -397,7 +402,7 @@ export class DiceCitiesRequestUnlockShoppingMall implements IGameCommand {
         currentPlayerState.bonusDiningAndStore = true;
 
         dcGameData.specificGameState.hasRolled = false;
-        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
+        const senderUsername = this.senderUsername;
         dcGameData.gameState.history.unshift(`${senderUsername} bought a ${cardObject.title}`);
         return {
             turnOver: true,
@@ -417,6 +422,7 @@ export class DiceCitiesRequestUnlockAmusementPark implements IGameCommand {
     timestamp: string = (new Date()).toISOString();
     gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
+    senderUsername: string = "Unknown";
     readonly className = "DiceCitiesRequestUnlockAmusementPark";
 
     myString() {
@@ -463,7 +469,7 @@ export class DiceCitiesRequestUnlockAmusementPark implements IGameCommand {
         currentPlayerState.oneReroll = true;
 
         dcGameData.specificGameState.hasRolled = false;
-        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
+        const senderUsername = this.senderUsername;
         dcGameData.gameState.history.unshift(`${senderUsername} bought a ${cardObject.title}`);
         return {
             turnOver: true,
@@ -483,6 +489,7 @@ export class DiceCitiesRequestUnlockRadioTower implements IGameCommand {
     timestamp: string = (new Date()).toISOString();
     gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
+    senderUsername: string = "Unknown";
     readonly className = "DiceCitiesRequestUnlockRadioTower";
 
     myString() {
@@ -529,7 +536,7 @@ export class DiceCitiesRequestUnlockRadioTower implements IGameCommand {
         currentPlayerState.rerollDoubles = true;
 
         dcGameData.specificGameState.hasRolled = false;
-        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
+        const senderUsername = this.senderUsername;
         dcGameData.gameState.history.unshift(`${senderUsername} bought a ${cardObject.title}`);
         return {
             turnOver: true,
@@ -549,6 +556,7 @@ export class DiceCitiesRequestTvStationSelection implements IGameCommand {
     timestamp: string = (new Date()).toISOString();
     gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
+    senderUsername: string = "Unknown";
     selectedUser: string = "";
     readonly className = "DiceCitiesRequestTvStationSelection";
 
@@ -572,7 +580,7 @@ export class DiceCitiesRequestTvStationSelection implements IGameCommand {
             }
         }
 
-        const selectedId = (await usernameListToUserIdList([this.selectedUser]))[0];
+        const selectedId = this.selectedUser;
         const selectedState = dcGameData.specificGameState.playerStates.get(selectedId);
         if (!selectedState) {
             return {
@@ -595,7 +603,7 @@ export class DiceCitiesRequestTvStationSelection implements IGameCommand {
         selectedState.money -= amountToSteal;
         rollerState.money += amountToSteal;
 
-        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
+        const senderUsername = this.senderUsername;
         dcGameData.gameState.history.unshift(`${senderUsername} stole ${amountToSteal} coins from ${this.selectedUser}`);
         dcGameData.specificGameState.awaitingTSSelection = false;
         if (!dcGameData.specificGameState.awaitingBCSelectionOwn && !dcGameData.specificGameState.awaitingBCSelectionOpponent) {
@@ -619,6 +627,7 @@ export class DiceCitiesRequestBusinessCenterOwnSelection implements IGameCommand
     timestamp: string = (new Date()).toISOString();
     gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
+    senderUsername: string = "Unknown";
     selectedCard: uuidString = NIL_UUID as uuidString;
     readonly className = "DiceCitiesRequestBusinessCenterOwnSelection";
 
@@ -706,8 +715,8 @@ export class DiceCitiesRequestBusinessCenterOwnSelection implements IGameCommand
         removeCardFromPlayerState(dcGameData.specificGameState.bcSelectedOpponentCard, selectedOpponentState);
         addCardToPlayerState(dcGameData.specificGameState.bcSelectedOpponentCard, rollerState);
 
-        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
-        const selectedOpponentUsername = (await userIdListToUsernameList([dcGameData.specificGameState.bcSelectedOpponent]))[0];
+        const senderUsername = this.senderUsername;
+        const selectedOpponentUsername = dcGameData.specificGameState.bcSelectedOpponent;
         dcGameData.gameState.history.unshift(`${senderUsername} stole a ${selectedOpponentCard.title} for a ${selectedOwnCard.title} coins from ${selectedOpponentUsername}`);
         dcGameData.specificGameState.bcSelectedOpponent = "";
         dcGameData.specificGameState.bcSelectedOpponent = "";
@@ -733,6 +742,7 @@ export class DiceCitiesRequestBusinessCenterOpponentSelection implements IGameCo
     timestamp: string = (new Date()).toISOString();
     gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
+    senderUsername: string = "Unknown";
     selectedUser: string = "Unknown";
     selectedCard: uuidString = NIL_UUID as uuidString;
     readonly className = "DiceCitiesRequestBusinessCenterOpponentSelection";
@@ -823,8 +833,8 @@ export class DiceCitiesRequestBusinessCenterOpponentSelection implements IGameCo
         removeCardFromPlayerState(this.selectedCard, opponentState);
         addCardToPlayerState(this.selectedCard, rollerState);
 
-        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
-        const selectedOpponentUsername = (await userIdListToUsernameList([dcGameData.specificGameState.bcSelectedOpponent]))[0];
+        const senderUsername = this.senderUsername;
+        const selectedOpponentUsername = dcGameData.specificGameState.bcSelectedOpponent;
         dcGameData.gameState.history.unshift(`${senderUsername} stole a ${selectedOpponentCard.title} for a ${selectedOwnCard.title} coins from ${selectedOpponentUsername}`);
         dcGameData.specificGameState.bcSelectedOpponent = "";
         dcGameData.specificGameState.bcSelectedOpponent = "";
@@ -850,6 +860,7 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
     timestamp: string = (new Date()).toISOString();
     gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
+    senderUsername: string = "Unknown";
     readonly className = "DiceCitiesRequestRadioTowerReroll";
 
     myString() {
@@ -896,7 +907,7 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
         const outcome: IDiceCitiesDiceRollOutcome = doDiceRoll(dcGameData, doubleDice);
         let totalRoll = doubleDice && outcome.roll2 ? outcome.roll1 + outcome.roll2 : outcome.roll1;
 
-        const senderUsername = (await userIdListToUsernameList([this.senderId]))[0];
+        const senderUsername = this.senderUsername;
         dcGameData.gameState.history.unshift(`${senderUsername} re-rolled for a ${totalRoll}${outcome.roll2 ? ` (${outcome.roll1} and ${outcome.roll2})` : ""}`);
         return outcome;
     }

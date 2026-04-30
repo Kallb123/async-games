@@ -1,7 +1,7 @@
-import { clerkClient } from "@clerk/nextjs";
+import { clerkClient } from "@clerk/nextjs/server";
 
 export async function userIdListToUsernameList(userIdList: string[]): Promise<string[]> {
-    const users = await clerkClient.users.getUserList({userId: userIdList});
+    const { data: users } = await (await clerkClient()).users.getUserList({userId: userIdList});
     const usernameList: string[] = [];
     userIdList.forEach(userId => {
         const user = users.find(u => u.id === userId);
@@ -14,7 +14,7 @@ export async function userIdListToUsernameList(userIdList: string[]): Promise<st
 }
 
 export async function userIdListToUsernameMap(userIdList: string[]): Promise<Map<string, string>> {
-    const users = await clerkClient.users.getUserList({userId: userIdList});
+    const { data: users } = await (await clerkClient()).users.getUserList({userId: userIdList});
     const usernameMap: Map<string, string> = new Map;
     userIdList.forEach(userId => {
         const user = users.find(u => u.id === userId);
@@ -27,7 +27,7 @@ export async function userIdListToUsernameMap(userIdList: string[]): Promise<Map
 }
 
 export async function usernameListToUserIdList(usernameList: string[]): Promise<string[]> {
-    const users = await clerkClient.users.getUserList({username: usernameList});
+    const { data: users } = await (await clerkClient()).users.getUserList({username: usernameList});
     const userIdList: string[] = [];
     usernameList.forEach(username => {
         const user = users.find(u => u.username === username);

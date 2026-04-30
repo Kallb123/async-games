@@ -1,5 +1,5 @@
 import TimedToken from '@/utils/firebase/TimedToken';
-import { auth, clerkClient, currentUser } from '@clerk/nextjs';
+import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, {status: 401, statusText: "Missing token from request body"});
   }
 
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
   }
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  await clerkClient.users.updateUserMetadata(userId, {
+  await (await clerkClient()).users.updateUserMetadata(userId, {
     privateMetadata: privateMetadata
   });
 

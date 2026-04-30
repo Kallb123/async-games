@@ -1,5 +1,5 @@
 import { IGameDataResponse, uuidString } from "@/utils/apiModels/GameDataApi";
-import { cardType } from "./DiceCitiesModels";
+import type { cardType } from "./DiceCitiesModels";
 
 export interface IDiceCitiesCard {
     cardId: uuidString,

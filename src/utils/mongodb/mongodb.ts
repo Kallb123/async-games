@@ -6,14 +6,6 @@ declare global {
   var mongoose: any; // This must be a `var` and not a `let / const`
 }
 
-const MONGODB_URI = process.env.MONGODB_URI!;
-
-if (!MONGODB_URI) {
-  throw new Error(
-    "Please define the MONGODB_URI environment variable inside .env.local",
-  );
-}
-
 let cached = global.mongoose;
 
 if (!cached) {
@@ -21,6 +13,14 @@ if (!cached) {
 }
 
 export async function dbConnect() {
+  const MONGODB_URI = process.env.MONGODB_URI!;
+
+  if (!MONGODB_URI) {
+    throw new Error(
+      "Please define the MONGODB_URI environment variable inside .env.local",
+    );
+  }
+
   if (cached.conn) {
     initialiseDiscriminators();
     return cached.conn;
@@ -43,7 +43,6 @@ export async function dbConnect() {
   initialiseDiscriminators();
   return cached.conn;
 }
-dbConnect();
 
 function initialiseDiscriminators() {
   const Invitation = InvitationModel;

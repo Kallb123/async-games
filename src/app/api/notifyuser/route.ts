@@ -1,5 +1,5 @@
 import TimedToken from '@/utils/firebase/TimedToken';
-import { auth, clerkClient } from '@clerk/nextjs';
+import { auth, clerkClient } from '@clerk/nextjs/server';
 import { credential } from 'firebase-admin';
 import { initializeApp, getApp, getApps } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
@@ -7,14 +7,14 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
-  const authResponse = auth();
+  const authResponse = await auth();
 
   if (!authResponse.userId) {
     return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
   }
   
   const { userId } = await request.json();
-  const user = await clerkClient.users.getUser(userId);
+  const user = await (await clerkClient()).users.getUser(userId);
 
   if (!getApps().length) {
     initializeApp({

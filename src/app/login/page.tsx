@@ -1,12 +1,9 @@
 import CurrentUserInfo from "@/components/CurrentUserInfo";
-import { auth, currentUser } from "@clerk/nextjs";
-import { usePathname } from "next/navigation";
+import { auth, currentUser } from "@clerk/nextjs/server";
 
 export default async function Login() {
-  const pathName = usePathname();
-  console.log(`GET ${pathName}`);
   // Get the userId from auth() -- if null, the user is not signed in
-  const { userId } = auth();
+  const { userId } = await auth();
  
   if (userId) {
     // Query DB for user specific information or display assets only to signed in users 

@@ -1,6 +1,6 @@
 import TimedToken from '@/utils/firebase/TimedToken';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { auth, clerkClient } from '@clerk/nextjs';
+import { auth, clerkClient } from '@clerk/nextjs/server';
 import { credential } from 'firebase-admin';
 import { initializeApp, getApp, getApps } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
@@ -12,7 +12,7 @@ import { uuidString } from '@/utils/apiModels/GameDataApi';
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
 
-  const authResponse = auth();
+  const authResponse = await auth();
   if (!authResponse.userId) {
     return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
   }
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
   const messaging = getMessaging(firebaseApp);
 
   const userIdList = inviteData.userIdList.map(uid => uid.userId);
-  const userList = await clerkClient.users.getUserList({
+  const { data: userList } = await (await clerkClient()).users.getUserList({
     userId: userIdList
   });
 
