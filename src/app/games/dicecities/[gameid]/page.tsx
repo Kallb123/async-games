@@ -100,7 +100,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const getWinnerDisplayName = (): string => {
         const playerStates = gameData?.specificGameState?.playerStates;
         if (!playerStates) return gameData?.winner ?? "";
-        return Object.values(playerStates).find(p => p.userId === gameData.winner)?.username ?? gameData.winner;
+        return Object.values(playerStates).find(p => p.userId === gameData.winner)?.username ?? gameData?.winner ?? "";
     };
 
     return (
