@@ -12,6 +12,7 @@ import DiceCitiesBank from "@/components/games/DiceCities/DiceCitiesBank";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { IGameCommand } from "@/utils/apiModels/GameLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
+import GameResult from "@/components/GameResult";
 
 export default function GameDiceCities({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
@@ -96,10 +97,17 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
         });
     }
 
+    const getWinnerDisplayName = (): string => {
+        const playerStates = gameData?.specificGameState?.playerStates;
+        if (!playerStates) return gameData?.winner ?? "";
+        return Object.values(playerStates).find(p => p.userId === gameData.winner)?.username ?? gameData.winner;
+    };
+
     return (
         <main>
             <h1>Dice Cities</h1>
             <h2><a href="/">Home</a></h2>
+            <GameResult complete={gameData?.complete ?? false} winnerId={gameData?.winner ?? ""} currentUserId={user?.id} winnerDisplayName={getWinnerDisplayName()} />
             <Form>
                 {gameData?.specificGameState?.playerStates ? Object.keys(gameData.specificGameState.playerStates).map(userName => (
                     <DiceCitiesPlayer key={userName}
