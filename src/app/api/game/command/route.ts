@@ -91,17 +91,81 @@ export async function POST(request: NextRequest) {
     const { data: userList } = await (await clerkClient()).users.getUserList({
       userId: gameData.userIdList
     });
-    const tokens = userList.flatMap((user) => user.privateMetadata.notificationTokens as TimedToken[]).filter(token => token);
-    if (tokens.length) {
-      messaging.sendEach(tokens.map((token) => {
-          return {
-              token: token.token,
-              data: {
-                  event: 'GameOver',
-                  gameId: commandRequest.gameId
-              }
-              // TODO: Maybe include a notification?
+
+    const winnerUser = userList.find(u => u.id === gameData.winner);
+    const winnerUsername = winnerUser?.username ?? winnerUser?.firstName ?? gameData.winner;
+    const gameIconUrl = `https://async-games.vercel.app/art/dicecities/icon.png`;
+
+    const winnerTokens = (winnerUser?.privateMetadata.notificationTokens as TimedToken[] ?? []).filter(token => token);
+    if (winnerTokens.length) {
+      messaging.sendEach(winnerTokens.map((token) => {
+        const message: Message = {
+          token: token.token,
+          data: {
+            event: 'GameOver',
+            gameId: commandRequest.gameId
+          },
+          notification: {
+            title: "You won! 🎉",
+            body: `Congratulations, you won the game!`,
+            imageUrl: gameIconUrl
+          },
+          apns: {
+            fcmOptions: {
+              imageUrl: gameIconUrl
+            }
+          },
+          android: {
+            notification: {
+              imageUrl: gameIconUrl
+            }
+          },
+          webpush: {
+            headers: {
+              "image": gameIconUrl
+            }
           }
+        };
+        console.log(`Sending GameOver (won) to ${winnerUsername} via ${token.token}`);
+        return message;
+      }));
+    }
+
+    const loserTokens = userList
+      .filter(u => u.id !== gameData.winner)
+      .flatMap((user) => user.privateMetadata.notificationTokens as TimedToken[])
+      .filter(token => token);
+    if (loserTokens.length) {
+      messaging.sendEach(loserTokens.map((token) => {
+        const message: Message = {
+          token: token.token,
+          data: {
+            event: 'GameOver',
+            gameId: commandRequest.gameId
+          },
+          notification: {
+            title: "Game Over",
+            body: `${winnerUsername} won the game. Better luck next time!`,
+            imageUrl: gameIconUrl
+          },
+          apns: {
+            fcmOptions: {
+              imageUrl: gameIconUrl
+            }
+          },
+          android: {
+            notification: {
+              imageUrl: gameIconUrl
+            }
+          },
+          webpush: {
+            headers: {
+              "image": gameIconUrl
+            }
+          }
+        };
+        console.log(`Sending GameOver (lost) to user via ${token.token}`);
+        return message;
       }));
     }
 
