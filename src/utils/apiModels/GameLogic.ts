@@ -558,10 +558,11 @@ export class DiceCitiesRequestTvStationSelection implements IGameCommand {
     senderId: string = "Unknown";
     senderUsername: string = "Unknown";
     selectedUser: string = "";
+    selectedUserName: string = "";
     readonly className = "DiceCitiesRequestTvStationSelection";
 
     myString() {
-        return `TV Station Selection: ${this.selectedUser}!`;
+        return `TV Station Selection: ${this.selectedUserName || this.selectedUser}!`;
     }
 
     async Execute(gameData: IGameData) {
@@ -580,8 +581,8 @@ export class DiceCitiesRequestTvStationSelection implements IGameCommand {
             }
         }
 
-        const selectedId = this.selectedUser;
-        const selectedState = dcGameData.specificGameState.playerStates.get(selectedId);
+        const selectedUserId = this.selectedUser;
+        const selectedState = dcGameData.specificGameState.playerStates.get(selectedUserId);
         if (!selectedState) {
             return {
                 turnOver: false,
@@ -604,7 +605,7 @@ export class DiceCitiesRequestTvStationSelection implements IGameCommand {
         rollerState.money += amountToSteal;
 
         const senderUsername = this.senderUsername;
-        dcGameData.gameState.history.unshift(`${senderUsername} stole ${amountToSteal} coins from ${this.selectedUser}`);
+        dcGameData.gameState.history.unshift(`${senderUsername} stole ${amountToSteal} coins from ${this.selectedUserName || this.selectedUser}`);
         dcGameData.specificGameState.awaitingTSSelection = false;
         if (!dcGameData.specificGameState.awaitingBCSelectionOwn && !dcGameData.specificGameState.awaitingBCSelectionOpponent) {
             dcGameData.specificGameState.hasRolled = true;

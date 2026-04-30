@@ -72,6 +72,7 @@ export default function DiceCitiesPlayer({playerState, userName, currentTurn, ha
     const selectForTS = () => {
         const command = new DiceCitiesRequestTvStationSelection();
         command.selectedUser = playerState.userId;
+        command.selectedUserName = userName;
         submitCommand(command, (commandResponse) => {
             console.log(commandResponse);
         });
