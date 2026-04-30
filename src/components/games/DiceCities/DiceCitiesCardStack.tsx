@@ -26,7 +26,7 @@ export default function DiceCitiesCardStack({card, amount, disabled}: DiceCities
             <AnimatePresence>
                 {
                     [...Array(amount)].map((e, index) => (
-                        <motion.div key={index} transition={{duration: 1.0, damping: "spring"}} initial={{translateX: "150vw"}} animate={{ translateX: "0vw" }} exit={{ translateX: "150vw" }} style={{position: "absolute", left: `${index*CARD_STACK_OFFSET}px`}}>
+                        <motion.div key={index} transition={{duration: 1.0, type: "spring"}} initial={{translateX: "150vw"}} animate={{ translateX: "0vw" }} exit={{ translateX: "150vw" }} style={{position: "absolute", left: `${index*CARD_STACK_OFFSET}px`}}>
                             <DiceCitiesCard card={card} disabled={disabled}></DiceCitiesCard>
                         </motion.div>
                     ))

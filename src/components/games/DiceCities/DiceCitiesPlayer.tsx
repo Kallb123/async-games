@@ -4,7 +4,7 @@ import { useUser } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import DiceCitiesPlayerActions from "./DiceCitiesPlayerActions";
 import { DiceCitiesRequestBusinessCenterOpponentSelection, DiceCitiesRequestBusinessCenterOwnSelection, DiceCitiesRequestTvStationSelection, DiceCitiesRequestUnlockAmusementPark, DiceCitiesRequestUnlockRadioTower, DiceCitiesRequestUnlockShoppingMall, DiceCitiesRequestUnlockTrainStation, IGameCommand } from "@/utils/apiModels/GameLogic";
-import { ICommandResponse } from "@/app/api/game/command/route";
+import type { ICommandResponse } from "@/app/api/game/command/route";
 import { Button, Col, Row } from "react-bootstrap";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import DiceCitiesCard from "./DiceCitiesCard";
@@ -71,7 +71,8 @@ export default function DiceCitiesPlayer({playerState, userName, currentTurn, ha
 
     const selectForTS = () => {
         const command = new DiceCitiesRequestTvStationSelection();
-        command.selectedUser = userName;
+        command.selectedUser = playerState.userId;
+        command.selectedUserName = userName;
         submitCommand(command, (commandResponse) => {
             console.log(commandResponse);
         });

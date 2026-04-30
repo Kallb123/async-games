@@ -1,4 +1,5 @@
 'use client'
+import { use } from "react";
 import { useUser } from "@clerk/nextjs";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useRouter, usePathname } from "next/navigation";
@@ -10,16 +11,17 @@ import { IDiceCitiesGameDataResponse } from "@/games/DiceCities/apiModels";
 import DiceCitiesBank from "@/components/games/DiceCities/DiceCitiesBank";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { IGameCommand } from "@/utils/apiModels/GameLogic";
-import { ICommandResponse } from "@/app/api/game/command/route";
+import type { ICommandResponse } from "@/app/api/game/command/route";
 
-export default function GameDiceCities({ params }: { params: { gameid: uuidString } }) {
+export default function GameDiceCities({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
     const { user, isLoaded } = useUser();
     const [gameData, setGameData] = useState({} as IDiceCitiesGameDataResponse);
     const router = useRouter();
 
-    const gameId = params.gameid;
+    const { gameid } = use(params);
+    const gameId = gameid;
 
     useEffect(() => {
         if (isLoaded) {
@@ -68,6 +70,7 @@ export default function GameDiceCities({ params }: { params: { gameid: uuidStrin
             return;
         }
         command.senderId = user.id;
+        command.senderUsername = user.username || user.firstName || user.id;
         fetch('/api/game/command', {
             method: "POST",
             headers: {

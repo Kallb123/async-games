@@ -1,4 +1,4 @@
-import { IGameType } from "./GameLogic";
+import type { IGameType } from "./GameLogic";
 
 export type uuidString = `${string}-${string}-${string}-${string}-${string}`;
 

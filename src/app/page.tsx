@@ -22,6 +22,7 @@ export default function Home() {
     if (isLoaded) {
         if (!user) {
             router.push('/login');
+            return;
         }
 
         // Use `user` to render user details or create UI elements
@@ -31,7 +32,7 @@ export default function Home() {
           router.push('/unlockaccess');
         }
     }
-  }, [isLoaded]);
+  }, [isLoaded, user]);
 
   return (
     <main>

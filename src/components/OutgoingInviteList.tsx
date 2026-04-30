@@ -4,7 +4,7 @@ import { IInvitationResponse } from "@/utils/mongodb/InvitationData";
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import Moment from 'react-moment';
+import moment from 'moment';
 
 export default function OutgoingInviteList() {
     const { user, isLoaded } = useUser();
@@ -54,7 +54,7 @@ export default function OutgoingInviteList() {
             {inviteList.map((invite: IInvitationResponse) => (
                 <div key={invite.inviteId}>
                     You invited <span style={{fontWeight: "bold"}}>{invite.userList.map(user => (<span key={user}>{user}</span>))}</span> to play <span style={{fontWeight: "bold"}}>{invite.gameFriendlyName}</span><br />
-                    <span><Moment fromNow>{invite.timestamp}</Moment></span>
+                    <span>{moment(invite.timestamp).fromNow()}</span>
                 </div>
             ))}
         </>

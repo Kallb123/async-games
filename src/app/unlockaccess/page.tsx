@@ -14,22 +14,14 @@ export default function UnlockAccess() {
   const { user, isLoaded } = useUser();
 
   useEffect(() => {
-    if (isLoaded) {
-        if (!user) {
-            router.push('/login');
-        }
-
-        // Use `user` to render user details or create UI elements
-        const unlocked = user?.publicMetadata.unlocked;
-      
-        if (unlocked !== true) {
-          router.push('/unlockaccess');
-        }
+    if (isLoaded && !user) {
+        router.push('/login');
     }
-  }, [isLoaded]);
+  }, [isLoaded, user]);
 
-  // Use `user` to render user details or create UI elements
-  const unlocked = user?.publicMetadata.unlocked;
+  if (!isLoaded || !user) {
+    return null;
+  }
 
   return (
     <main>

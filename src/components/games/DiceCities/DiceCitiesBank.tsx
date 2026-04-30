@@ -1,4 +1,4 @@
-import { ICommandResponse } from "@/app/api/game/command/route";
+import type { ICommandResponse } from "@/app/api/game/command/route";
 import { IDiceCitiesCard, IDiceCitiesCardCountResponse, IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
 import { DiceCitiesCards } from "@/games/DiceCities/cards";
 import { uuidString } from "@/utils/apiModels/GameDataApi";

@@ -1,4 +1,4 @@
-import { ICommandResponse } from "@/app/api/game/command/route";
+import type { ICommandResponse } from "@/app/api/game/command/route";
 import AnimatedDice from "@/components/AnimatedDice";
 import { IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
 import { DiceCitiesRequestDiceRoll, DiceCitiesRequestPassTurn, DiceCitiesRequestRadioTowerReroll, IDiceCitiesDiceRollOutcome, IGameCommand } from "@/utils/apiModels/GameLogic";
@@ -104,7 +104,7 @@ export default function DiceCitiesPlayerActions({playerState, hasRolled, hasReRo
                 <Col>
                     <AnimatePresence>
                         {showDie1 ?
-                            <motion.div transition={{duration: 0.5, damping: "spring"}} initial={{translateX: "150vw", opacity: 1 }} animate={{ translateX: "0vw", opacity: 1 }} exit={{ translateX: "0vw", opacity: 0 }} style={{position: "relative"}}>
+                            <motion.div transition={{duration: 0.5, type: "spring"}} initial={{translateX: "150vw", opacity: 1 }} animate={{ translateX: "0vw", opacity: 1 }} exit={{ translateX: "0vw", opacity: 0 }} style={{position: "relative"}}>
                                 <AnimatedDice number={roll1Number} color={"#72b4db"} />
                             </motion.div>
                         : ""}
@@ -113,7 +113,7 @@ export default function DiceCitiesPlayerActions({playerState, hasRolled, hasReRo
                 <Col>
                     <AnimatePresence>
                     {showDie2 ?
-                            <motion.div transition={{duration: 0.5, damping: "spring"}} initial={{translateX: "150vw", opacity: 1 }} animate={{ translateX: "0vw", opacity: 1 }} exit={{ translateX: "0vw", opacity: 0 }} style={{position: "relative"}}>
+                            <motion.div transition={{duration: 0.5, type: "spring"}} initial={{translateX: "150vw", opacity: 1 }} animate={{ translateX: "0vw", opacity: 1 }} exit={{ translateX: "0vw", opacity: 0 }} style={{position: "relative"}}>
                                 <AnimatedDice number={roll2Number} color={"#8eb37d"} />
                             </motion.div>
                     : ""}

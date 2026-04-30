@@ -1,11 +1,8 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import 'bootstrap/dist/css/bootstrap.css';
 import "./globals.css";
 import { ClerkProvider } from '@clerk/nextjs'
 import { Container } from "react-bootstrap";
-
-const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Async Games",
@@ -44,6 +41,7 @@ export default function RootLayout({
           {/* <link rel="mask-icon" href="/icons/safari-pinned-tab.svg" color="#5bbad5" />
           <link rel="shortcut icon" href="/favicon.ico" /> */}
           <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500" />
+          <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" />
 
           <meta name="twitter:card" content="summary" />
           <meta name="twitter:url" content="https://async-games.vercel.app" />
@@ -58,7 +56,7 @@ export default function RootLayout({
           <meta property="og:url" content="https://async-games.vercel.app" />
           {/* <meta property="og:image" content="https://async-games.vercel.app/icons/apple-touch-icon.png" /> */}
         </head>
-        <body className={inter.className}>
+        <body>
           <Container>
             {children}
           </Container>

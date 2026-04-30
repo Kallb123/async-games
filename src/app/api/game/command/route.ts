@@ -1,5 +1,5 @@
 import TimedToken from '@/utils/firebase/TimedToken';
-import { auth, clerkClient, currentUser } from '@clerk/nextjs';
+import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { credential } from 'firebase-admin';
 import { getApp, getApps, initializeApp } from 'firebase-admin/app';
 import { Message, getMessaging } from 'firebase-admin/messaging';
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
   // console.log(commandRequest);
   console.log(commandRequest.myString());
 
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
   }
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       gameData: await gameData.CreateDataResponse()
     }
 
-    const userList = await clerkClient.users.getUserList({
+    const { data: userList } = await (await clerkClient()).users.getUserList({
       userId: gameData.userIdList
     });
     const tokens = userList.flatMap((user) => user.privateMetadata.notificationTokens as TimedToken[]).filter(token => token);
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(response, {status: 200});
   }
 
-  const userList = await clerkClient.users.getUserList({
+  const { data: userList } = await (await clerkClient()).users.getUserList({
     userId: gameData.userIdList
   });
   const turnUser = userList.find(u => u.id === gameData.currentTurn);

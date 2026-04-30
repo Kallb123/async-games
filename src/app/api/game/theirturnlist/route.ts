@@ -1,4 +1,4 @@
-import { auth } from '@clerk/nextjs'
+import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from "../../../../utils/mongodb/mongodb";
 import { IGameDataDocument, GameDataModel } from '@/utils/mongodb/GameData';
@@ -7,7 +7,7 @@ import { IGameResponse } from '@/utils/apiModels/GameDataApi';
 export async function GET(request: NextRequest) {
   console.log(`GET ${request.nextUrl.pathname}`);
 
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
   }
