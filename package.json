@@ -21,7 +21,6 @@
     "react": "^19",
     "react-bootstrap": "^2",
     "react-dom": "^19",
-    "react-moment": "^1",
     "uuid": "^14"
   },
   "devDependencies": {
