@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     }
 
     const messaging = getAdminMessaging();
-    const gameIconUrl = `https://async-games.vercel.app/art/dicecities/icon.png`;
+    const gameIconBaseUrl = `https://async-games.vercel.app/art`;
 
     let expired = 0;
     let warned = 0;
@@ -45,12 +45,14 @@ export async function GET(request: NextRequest) {
                 userId: gameData.userIdList
             });
 
+            const gameIconUrl = `${gameIconBaseUrl}/${gameData.gameType.url}/icon.png`;
+
             // Silent data notification to all players (refresh game state)
             const allTokens = userList
                 .flatMap(u => u.privateMetadata.notificationTokens as TimedToken[])
                 .filter(t => t);
             if (allTokens.length) {
-                messaging.sendEach(allTokens.map(token => ({
+                await messaging.sendEach(allTokens.map(token => ({
                     token: token.token,
                     data: {
                         event: 'TurnExpired',
@@ -64,7 +66,7 @@ export async function GET(request: NextRequest) {
             if (turnUser) {
                 const turnTokens = (turnUser.privateMetadata.notificationTokens as TimedToken[]).filter(t => t);
                 if (turnTokens.length) {
-                    messaging.sendEach(turnTokens.map(token => {
+                    await messaging.sendEach(turnTokens.map(token => {
                         const message: Message = {
                             token: token.token,
                             data: {
@@ -95,12 +97,14 @@ export async function GET(request: NextRequest) {
                 userId: gameData.userIdList
             });
 
+            const gameIconUrl = `${gameIconBaseUrl}/${gameData.gameType.url}/icon.png`;
+
             const activeUser = userList.find(u => u.id === currentTurn);
             if (activeUser) {
                 const warnTokens = (activeUser.privateMetadata.notificationTokens as TimedToken[]).filter(t => t);
                 const timeLeft = formatRemainingTime(lastTurnTimestamp, turnTimer);
                 if (warnTokens.length) {
-                    messaging.sendEach(warnTokens.map(token => {
+                    await messaging.sendEach(warnTokens.map(token => {
                         const message: Message = {
                             token: token.token,
                             data: {
