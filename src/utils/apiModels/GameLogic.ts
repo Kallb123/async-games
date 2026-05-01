@@ -1068,7 +1068,7 @@ export class SnakesAndLaddersRequestDiceRoll implements IGameCommand {
         } else if (landedOnLadder) {
             slGameData.gameState.history.unshift(`${senderUsername} rolled a ${roll} and climbed a ladder to square ${newPosition}`);
         } else if (rawPosition > 100) {
-            slGameData.gameState.history.unshift(`${senderUsername} rolled a ${roll} but needs exactly ${100 - playerState.position + roll} to win – no move`);
+            slGameData.gameState.history.unshift(`${senderUsername} rolled a ${roll} but needs exactly ${100 - playerState.position} to win – no move`);
         } else {
             slGameData.gameState.history.unshift(`${senderUsername} rolled a ${roll} and moved to square ${newPosition}`);
         }
