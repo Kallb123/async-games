@@ -16,6 +16,7 @@ export interface IGameData {
     turnTimer: string,
     currentTurn: string,
     lastTurnTimestamp: string,
+    timerWarningNotificationSent: boolean,
     gameState: IGameState,
     complete: boolean,
     winner: string
@@ -45,6 +46,7 @@ export var GameDataSchema = new Schema<IGameDataDocument> ({
     turnTimer: String,
     currentTurn: String,
     lastTurnTimestamp: String,
+    timerWarningNotificationSent: { type: Boolean, default: false },
     gameState: {
         turnOrder: [String],
         history: [String],

@@ -1,8 +1,6 @@
 import TimedToken from '@/utils/firebase/TimedToken';
+import { getAdminMessaging } from '@/utils/firebase/adminFirebase';
 import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
-import { credential } from 'firebase-admin';
-import { getApp, getApps, initializeApp } from 'firebase-admin/app';
-import { getMessaging } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { dbConnect } from '@/utils/mongodb/mongodb';
@@ -55,17 +53,7 @@ export async function POST(request: NextRequest) {
   await invite.save();
 
   // Send notifications
-  if (!getApps().length) {
-    initializeApp({
-      credential: credential.cert({
-          projectId: process.env.FIREBASE_PROJECT_ID,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      })
-    }, 'adminApp');
-  }
-  const firebaseApp = getApp('adminApp');
-  const messaging = getMessaging(firebaseApp);
+  const messaging = getAdminMessaging();
   const tokens = userList.flatMap((user) => user.privateMetadata.notificationTokens as TimedToken[]).filter(token => token);
   if (tokens.length) {
     messaging.sendEach(tokens.map((token) => {

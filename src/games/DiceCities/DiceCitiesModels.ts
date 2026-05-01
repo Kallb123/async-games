@@ -87,6 +87,7 @@ DiceCitiesInvitationSchema.methods.CreateGame = async function(invite: IDiceCiti
         turnTimer: this.turnTimer,
         currentTurn: turnOrder[0],
         lastTurnTimestamp: (new Date()).toISOString(),
+        timerWarningNotificationSent: false,
         // url: "dicecities",
         gameState: {
             turnOrder,

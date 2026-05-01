@@ -1,9 +1,7 @@
 import TimedToken from '@/utils/firebase/TimedToken';
+import { getAdminMessaging } from '@/utils/firebase/adminFirebase';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { auth, clerkClient } from '@clerk/nextjs/server';
-import { credential } from 'firebase-admin';
-import { initializeApp, getApp, getApps } from 'firebase-admin/app';
-import { getMessaging } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
 import { IInvitationDataDocument, InvitationModel } from '@/utils/mongodb/InvitationData';
 import { DiceCitiesGameDataModel } from '@/games/DiceCities/DiceCitiesModels';
@@ -31,17 +29,7 @@ export async function POST(request: NextRequest) {
   }
 
   // initialise Firebase
-  if (!getApps().length) {
-    initializeApp({
-      credential: credential.cert({
-          projectId: process.env.FIREBASE_PROJECT_ID,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      })
-    }, 'adminApp');
-  }
-  const firebaseApp = getApp('adminApp');
-  const messaging = getMessaging(firebaseApp);
+  const messaging = getAdminMessaging();
 
   const userIdList = inviteData.userIdList.map(uid => uid.userId);
   const { data: userList } = await (await clerkClient()).users.getUserList({
