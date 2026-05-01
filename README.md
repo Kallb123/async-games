@@ -29,6 +29,30 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
 
+## Environment Variables
+
+Copy `.env.example` to `.env.local` and fill in the values. All variables listed there are required for a full deployment except `ACCESS_PASSWORD`.
+
+## Cron / Turn Timer
+
+The turn-timer cron job runs at `/api/cron/turntimer`. It checks all active games, advances any expired turns, and sends push notifications.
+
+**Why an external cron service?**  
+Vercel Hobby plan limits cron jobs to once per day. Since the shortest supported turn timer is 12 hours, a daily Vercel cron (`0 0 * * *` in `vercel.json`) acts only as a backstop. For reliable sub-day enforcement use a free external scheduler such as [cron-job.org](https://cron-job.org).
+
+**Setting up cron-job.org:**
+
+1. Create a free account at [cron-job.org](https://cron-job.org).
+2. Add a new cron job with:
+   - **URL:** `https://async-games.vercel.app/api/cron/turntimer`
+   - **Schedule:** every 15 minutes (or whatever granularity you need)
+   - **Request method:** GET
+   - **Header:** `Authorization: Bearer <CRON_SECRET>`  
+     (use the same value set as `CRON_SECRET` in your Vercel environment variables)
+3. Save and enable the job.
+
+The endpoint returns `{ processed, expired, warned }` — cron-job.org will show this in the execution log.
+
 ## Deploy on Vercel
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.

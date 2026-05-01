@@ -1,8 +1,7 @@
 import TimedToken from '@/utils/firebase/TimedToken';
+import { getAdminMessaging } from '@/utils/firebase/adminFirebase';
 import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
-import { credential } from 'firebase-admin';
-import { getApp, getApps, initializeApp } from 'firebase-admin/app';
-import { Message, getMessaging } from 'firebase-admin/messaging';
+import { Message } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { DiceCitiesRequestRadioTowerReroll, ICommandOutcome, IGameCommand, IGameType } from '@/utils/apiModels/GameLogic';
@@ -66,17 +65,7 @@ export async function POST(request: NextRequest) {
   gameData.markModified('gameState.commandHistory');
 
   // initialise Firebase
-  if (!getApps().length) {
-    initializeApp({
-      credential: credential.cert({
-          projectId: process.env.FIREBASE_PROJECT_ID,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      })
-    }, 'adminApp');
-  }
-  const firebaseApp = getApp('adminApp');
-  const messaging = getMessaging(firebaseApp);
+  const messaging = getAdminMessaging();
 
   // Checks whether the turn should be progressed and actions it if so
   const gameType: IGameType = deserializeJSON(JSON.stringify(gameData.gameType));
@@ -173,6 +162,11 @@ export async function POST(request: NextRequest) {
   }
   
   gameType.CheckEndTurn(gameData, commandOutcome);
+
+  if (commandOutcome.turnOver) {
+    gameData.lastTurnTimestamp = new Date().toISOString();
+    gameData.timerWarningNotificationSent = false;
+  }
 
   await gameData.save();
 

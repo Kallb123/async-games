@@ -1,9 +1,7 @@
 import TimedToken from '@/utils/firebase/TimedToken';
+import { getAdminMessaging } from '@/utils/firebase/adminFirebase';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { auth, clerkClient } from '@clerk/nextjs/server';
-import { credential } from 'firebase-admin';
-import { initializeApp, getApp, getApps } from 'firebase-admin/app';
-import { getMessaging } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 
@@ -27,6 +25,8 @@ export async function POST(request: NextRequest) {
   const currentIndex = gameData.gameState.turnOrder.findIndex(to => to === gameData.currentTurn);
   const nextTurn = gameData.gameState.turnOrder[(currentIndex+1)%gameData.gameState.turnOrder.length];
   gameData.currentTurn = nextTurn;
+  gameData.lastTurnTimestamp = new Date().toISOString();
+  gameData.timerWarningNotificationSent = false;
 
   const { data: userList } = await (await clerkClient()).users.getUserList({
     userId: gameData.userIdList
@@ -39,18 +39,7 @@ export async function POST(request: NextRequest) {
 
   await gameData.save();
 
-  // initialise Firebase
-  if (!getApps().length) {
-    initializeApp({
-      credential: credential.cert({
-          projectId: process.env.FIREBASE_PROJECT_ID,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      })
-    }, 'adminApp');
-  }
-  const firebaseApp = getApp('adminApp');
-  const messaging = getMessaging(firebaseApp);
+  const messaging = getAdminMessaging();
 
   const tokens = userList.flatMap((user) => user.privateMetadata.notificationTokens as TimedToken[]).filter(token => token);
   if (tokens.length) {

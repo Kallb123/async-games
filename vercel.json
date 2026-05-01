@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/turntimer",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}
