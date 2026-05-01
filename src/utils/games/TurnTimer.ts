@@ -1,15 +1,12 @@
 const TIMER_MS: Record<string, number> = {
-    '10m': 10 * 60 * 1000,
-    '30m': 30 * 60 * 1000,
-    '1h':  1 * 60 * 60 * 1000,
-    '3h':  3 * 60 * 60 * 1000,
+    '12h': 12 * 60 * 60 * 1000,
     '1d':  1 * 24 * 60 * 60 * 1000,
     '3d':  3 * 24 * 60 * 60 * 1000,
     '7d':  7 * 24 * 60 * 60 * 1000,
 };
 
 const WARNING_RATIO = 0.2;
-const WARNING_MIN_MS = 2 * 60 * 1000; // 2 minutes
+const WARNING_MIN_MS = 60 * 60 * 1000; // 1 hour (matches cron granularity)
 
 export function parseTurnTimerMs(turnTimer: string): number {
     return TIMER_MS[turnTimer] ?? 0;

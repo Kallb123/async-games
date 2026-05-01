@@ -111,10 +111,7 @@ export default function NewGameDiceCities() {
                 <Form.Label column>Turn Time Limit</Form.Label>
                 <Col sm={8}>
                   <Form.Select as={Col} value={turnTimer} onChange={(e) => setTurnTimer(e.target.value)} aria-label="Turn timer select">
-                    <option value="10m">10 minutes</option>
-                    <option value="30m">30 minutes</option>
-                    <option value="1h">1 hour</option>
-                    <option value="3h">3 hours</option>
+                    <option value="12h">12 hours</option>
                     <option value="1d">1 day</option>
                     <option value="3d">3 days</option>
                     <option value="7d">7 days</option>
