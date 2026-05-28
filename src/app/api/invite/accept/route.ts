@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (!allAccepted) {
-    return NextResponse.json({success: true});
+    return NextResponse.json({success: true, gameStarted: false});
   }
 
   // Create game
@@ -87,5 +87,5 @@ export async function POST(request: NextRequest) {
     }));
   }
 
-  return NextResponse.json({success: true});
+  return NextResponse.json({success: true, gameStarted: true, gameId: gameData.gameId, gameUrl: gameData.gameType.url});
 }

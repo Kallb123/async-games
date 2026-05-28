@@ -5,10 +5,12 @@ import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import moment from 'moment';
+import { useToast } from "@/components/ToastContext";
 
 export default function IncomingInviteList() {
     const { user, isLoaded } = useUser();
     const router = useRouter();
+    const { showToast } = useToast();
     const [inviteList, setInviteList] = useState([] as IInvitationResponse[]);
 
     useEffect(() => {
@@ -59,8 +61,24 @@ export default function IncomingInviteList() {
             },
             body: JSON.stringify({inviteId})
         })
-        .then(response => response.json())
-        .then(data => {});
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to accept invite');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.gameStarted) {
+                showToast('Game is starting! Redirecting you now...', 'success', 'Game Started');
+                router.push(`/games/${data.gameUrl}/${data.gameId}`);
+            } else {
+                showToast('Invite accepted! Waiting for other players to accept.', 'success', 'Invite Accepted');
+                refreshContent();
+            }
+        })
+        .catch(() => {
+            showToast('Failed to accept the invite. Please try again.', 'danger');
+        });
     }
 
     return (

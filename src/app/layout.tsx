@@ -3,6 +3,7 @@ import 'bootstrap/dist/css/bootstrap.css';
 import "./globals.css";
 import { ClerkProvider } from '@clerk/nextjs'
 import { Container } from "react-bootstrap";
+import Providers from "@/components/Providers";
 
 export const metadata: Metadata = {
   title: "Async Games",
@@ -57,9 +58,11 @@ export default function RootLayout({
           {/* <meta property="og:image" content="https://async-games.vercel.app/icons/apple-touch-icon.png" /> */}
         </head>
         <body>
-          <Container>
-            {children}
-          </Container>
+          <Providers>
+            <Container>
+              {children}
+            </Container>
+          </Providers>
         </body>
       </html>
     </ClerkProvider>
