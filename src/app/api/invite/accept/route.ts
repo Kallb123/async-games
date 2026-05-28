@@ -5,7 +5,9 @@ import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { IInvitationDataDocument, InvitationModel } from '@/utils/mongodb/InvitationData';
 import { DiceCitiesGameDataModel } from '@/games/DiceCities/DiceCitiesModels';
+import { SnakesAndLaddersGameDataModel } from '@/games/SnakesAndLadders/SnakesAndLaddersModels';
 import { uuidString } from '@/utils/apiModels/GameDataApi';
+import { IGameDataDocument } from '@/utils/mongodb/GameData';
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
@@ -61,7 +63,12 @@ export async function POST(request: NextRequest) {
 
   // Create game
   const gameData = await inviteData.CreateGame(inviteData, userIdList.concat(inviteData.senderId));
-  const gameDataM = new DiceCitiesGameDataModel(gameData);
+  let gameDataM: IGameDataDocument;
+  if (inviteData.gameType === 'SnakesAndLadders') {
+    gameDataM = new SnakesAndLaddersGameDataModel(gameData);
+  } else {
+    gameDataM = new DiceCitiesGameDataModel(gameData);
+  }
 
   await gameDataM.save();
   

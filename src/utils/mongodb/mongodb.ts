@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { GameDataModel } from './GameData';
 import { DiceCitiesGameDataModel, DiceCitiesInvitationModel } from '@/games/DiceCities/DiceCitiesModels';
+import { SnakesAndLaddersGameDataModel, SnakesAndLaddersInvitationModel } from '@/games/SnakesAndLadders/SnakesAndLaddersModels';
 import { InvitationModel } from './InvitationData';
 declare global {
   var mongoose: any; // This must be a `var` and not a `let / const`
@@ -47,6 +48,8 @@ export async function dbConnect() {
 function initialiseDiscriminators() {
   const Invitation = InvitationModel;
   const DiceCitiesInvitation = DiceCitiesInvitationModel;
+  const SnakesAndLaddersInvitation = SnakesAndLaddersInvitationModel;
   const GameData = GameDataModel;
   const DiceCitiesGameData = DiceCitiesGameDataModel;
+  const SnakesAndLaddersGameData = SnakesAndLaddersGameDataModel;
 }

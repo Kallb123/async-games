@@ -4,7 +4,7 @@ import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { Message } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { DiceCitiesRequestRadioTowerReroll, ICommandOutcome, IGameCommand, IGameType } from '@/utils/apiModels/GameLogic';
+import { DiceCitiesRequestRadioTowerReroll, ICommandOutcome, IGameCommand, IGameType, SnakesAndLaddersGameType, SnakesAndLaddersRequestDiceRoll } from '@/utils/apiModels/GameLogic';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { DiceCitiesGameType, DiceCitiesRequestBusinessCenterOpponentSelection, DiceCitiesRequestBusinessCenterOwnSelection, DiceCitiesRequestCardPurchase, DiceCitiesRequestDiceRoll, DiceCitiesRequestPassTurn, DiceCitiesRequestTvStationSelection, DiceCitiesRequestUnlockAmusementPark, DiceCitiesRequestUnlockRadioTower, DiceCitiesRequestUnlockShoppingMall, DiceCitiesRequestUnlockTrainStation } from '@/utils/apiModels/GameLogic';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
@@ -30,7 +30,9 @@ export async function POST(request: NextRequest) {
     new DiceCitiesRequestBusinessCenterOwnSelection(),
     new DiceCitiesRequestBusinessCenterOpponentSelection(),
     new DiceCitiesRequestRadioTowerReroll(),
-    new DiceCitiesGameType()
+    new DiceCitiesGameType(),
+    new SnakesAndLaddersRequestDiceRoll(),
+    new SnakesAndLaddersGameType()
   ];
   // console.log(commandRequest);
   console.log(commandRequest.myString());
