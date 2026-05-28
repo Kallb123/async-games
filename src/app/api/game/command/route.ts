@@ -7,6 +7,7 @@ import { dbConnect } from '@/utils/mongodb/mongodb';
 import { DiceCitiesRequestRadioTowerReroll, ICommandOutcome, IGameCommand, IGameType, SnakesAndLaddersGameType, SnakesAndLaddersRequestDiceRoll } from '@/utils/apiModels/GameLogic';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { DiceCitiesGameType, DiceCitiesRequestBusinessCenterOpponentSelection, DiceCitiesRequestBusinessCenterOwnSelection, DiceCitiesRequestCardPurchase, DiceCitiesRequestDiceRoll, DiceCitiesRequestPassTurn, DiceCitiesRequestTvStationSelection, DiceCitiesRequestUnlockAmusementPark, DiceCitiesRequestUnlockRadioTower, DiceCitiesRequestUnlockShoppingMall, DiceCitiesRequestUnlockTrainStation } from '@/utils/apiModels/GameLogic';
+import { SettlementsAndCitiesGameType, SACPlaceSettlementSetup, SACPlaceRoadSetup, SACPlayKnight, SACRollDice, SACMoveRobber, SACBuildRoad, SACBuildSettlement, SACBuildCity, SACBuyDevCard, SACPlayRoadBuilding, SACPlayYearOfPlenty, SACPlayMonopoly, SACMaritimeTrade, SACEndTurn } from '@/utils/apiModels/GameLogic';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
 import { IGameDataResponse } from '@/utils/apiModels/GameDataApi';
 
@@ -32,7 +33,22 @@ export async function POST(request: NextRequest) {
     new DiceCitiesRequestRadioTowerReroll(),
     new DiceCitiesGameType(),
     new SnakesAndLaddersRequestDiceRoll(),
-    new SnakesAndLaddersGameType()
+    new SnakesAndLaddersGameType(),
+    new SACPlaceSettlementSetup(),
+    new SACPlaceRoadSetup(),
+    new SACPlayKnight(),
+    new SACRollDice(),
+    new SACMoveRobber(),
+    new SACBuildRoad(),
+    new SACBuildSettlement(),
+    new SACBuildCity(),
+    new SACBuyDevCard(),
+    new SACPlayRoadBuilding(),
+    new SACPlayYearOfPlenty(),
+    new SACPlayMonopoly(),
+    new SACMaritimeTrade(),
+    new SACEndTurn(),
+    new SettlementsAndCitiesGameType(),
   ];
   // console.log(commandRequest);
   console.log(commandRequest.myString());

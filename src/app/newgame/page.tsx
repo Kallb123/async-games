@@ -37,7 +37,7 @@ export default function NewGame() {
         <Button disabled>Ludo</Button><br />
         <Button disabled>Chess</Button><br />
         <Button href="/newgame/dicecities">Dice Cities</Button><br />
-        <Button disabled>Settlements and Cities</Button><br />
+        <Button href="/newgame/settlementsandcities">Settlements and Cities</Button><br />
         <Button disabled>Haunted Campground</Button>
         <CurrentUserInfo />
         <FcmTokenComp />

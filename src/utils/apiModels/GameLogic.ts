@@ -1,5 +1,8 @@
 import type { IDiceCitiesGameData, IDiceCitiesPlayerState } from "@/games/DiceCities/DiceCitiesModels";
 import type { ISnakesAndLaddersGameData } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
+import type { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
+import type { SAC_Resource, SAC_DevCard, ISACPlayerState } from "@/games/SettlementsAndCities/board";
+import { BOARD_TOPOLOGY, TERRAIN_TO_RESOURCE, calculateLongestRoad, calculateTotalVP, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
 import type { IGameData } from "../mongodb/GameData";
 import { uuidString } from "./GameDataApi";
 import { deserializeJSON, serializable } from "./Serialisable";
@@ -1254,4 +1257,814 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean): IDiceCi
         moneyChanges
     }
     return outcome;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  SETTLEMENTS AND CITIES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Helper: randomly discard half of a player's cards ───────────────────────
+function sacDiscardHalf(ps: ISACPlayerState): void {
+    const total = sacTotalResources(ps);
+    if (total <= 7) return;
+    let toDiscard = Math.floor(total / 2);
+    const pool: SAC_Resource[] = [];
+    const resourceKeys: SAC_Resource[] = ['lumber', 'wool', 'grain', 'brick', 'ore'];
+    for (const r of resourceKeys) {
+        for (let i = 0; i < ps.resources[r]; i++) pool.push(r);
+    }
+    // Fisher-Yates shuffle the pool then take first `toDiscard`
+    for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    for (let i = 0; i < toDiscard; i++) {
+        ps.resources[pool[i]]--;
+    }
+}
+
+function sacTotalResources(ps: ISACPlayerState): number {
+    return ps.resources.lumber + ps.resources.wool + ps.resources.grain +
+           ps.resources.brick + ps.resources.ore;
+}
+
+// ─── Helper: update longest road / largest army ───────────────────────────────
+function sacUpdateLongestRoad(sacData: ISettlementsAndCitiesGameData): void {
+    const gs = sacData.specificGameState;
+    let maxLen = 0;
+    let maxPlayer: string | null = null;
+    for (const [userId] of gs.playerStates) {
+        const len = calculateLongestRoad(userId, gs.vertices, gs.edges);
+        if (len > maxLen) { maxLen = len; maxPlayer = userId; }
+    }
+    if (maxLen >= 5) {
+        if (gs.longestRoadOwner === null) {
+            if (maxPlayer) gs.longestRoadOwner = maxPlayer;
+        } else {
+            const currentLen = calculateLongestRoad(gs.longestRoadOwner, gs.vertices, gs.edges);
+            if (maxLen > currentLen && maxPlayer && maxPlayer !== gs.longestRoadOwner) {
+                gs.longestRoadOwner = maxPlayer;
+            }
+        }
+    }
+}
+
+function sacUpdateLargestArmy(sacData: ISettlementsAndCitiesGameData): void {
+    const gs = sacData.specificGameState;
+    let maxKnights = 0;
+    let maxPlayer: string | null = null;
+    for (const [userId, ps] of gs.playerStates) {
+        if (ps.knightsPlayed > maxKnights) { maxKnights = ps.knightsPlayed; maxPlayer = userId; }
+    }
+    if (maxKnights >= 3) {
+        if (gs.largestArmyOwner === null) {
+            if (maxPlayer) gs.largestArmyOwner = maxPlayer;
+        } else {
+            const currentKnights = gs.playerStates.get(gs.largestArmyOwner)?.knightsPlayed ?? 0;
+            if (maxKnights > currentKnights && maxPlayer && maxPlayer !== gs.largestArmyOwner) {
+                gs.largestArmyOwner = maxPlayer;
+            }
+        }
+    }
+}
+
+// ─── Helper: advance setup turn ──────────────────────────────────────────────
+function sacAdvanceSetup(sacData: ISettlementsAndCitiesGameData): void {
+    const gs = sacData.specificGameState;
+    const N = sacData.gameState.turnOrder.length;
+    gs.setupStep++;
+    if (gs.setupStep >= 2 * N) {
+        // Setup complete – start main game
+        gs.phase = 'main';
+        gs.setupStep = 0;
+        sacData.currentTurn = sacData.gameState.turnOrder[0];
+    } else {
+        const s = gs.setupStep;
+        const idx = s < N ? s : 2 * N - 1 - s;
+        sacData.currentTurn = sacData.gameState.turnOrder[idx];
+    }
+}
+
+// ─── Game type ────────────────────────────────────────────────────────────────
+
+@serializable
+export class SettlementsAndCitiesGameType implements IGameType {
+    gameId: uuidString = uuidv4() as uuidString;
+    gameType: string = "SettlementsAndCities";
+    friendlyName: string = "Settlements and Cities";
+    icon: string = "";
+    url: string = "settlementsandcities";
+    readonly className: string = "SettlementsAndCitiesGameType";
+
+    CheckEndTurn(gameData: IGameData, commandOutcome: ICommandOutcome): void {
+        const sacData = gameData as ISettlementsAndCitiesGameData;
+        const gs = sacData.specificGameState;
+        if (!commandOutcome.turnOver) return;
+
+        if (gs.phase === 'setup') {
+            sacAdvanceSetup(sacData);
+        } else {
+            // Reset per-turn flags
+            gs.hasRolled = false;
+            gs.lastRoll = null;
+            gs.pendingRobber = false;
+            gs.pendingRoadBuilding = 0;
+            gs.playedDevCard = false;
+            // Promote newDevCards to playable devCards
+            for (const [, ps] of gs.playerStates) {
+                const keys: SAC_DevCard[] = ['knight', 'victoryPoint', 'roadBuilding', 'yearOfPlenty', 'monopoly'];
+                for (const k of keys) {
+                    ps.devCards[k] += ps.newDevCards[k];
+                    ps.newDevCards[k] = 0;
+                }
+            }
+            const currentIndex = gameData.gameState.turnOrder.findIndex(t => t === gameData.currentTurn);
+            gameData.currentTurn = gameData.gameState.turnOrder[(currentIndex + 1) % gameData.gameState.turnOrder.length];
+        }
+    }
+
+    CheckGameOver(gameData: IGameData): boolean {
+        const sacData = gameData as ISettlementsAndCitiesGameData;
+        const gs = sacData.specificGameState;
+        if (gs.phase !== 'main') return false;
+        for (const [userId, ps] of gs.playerStates) {
+            const vp = calculateTotalVP(userId, gs.vertices, ps.devCards, gs.longestRoadOwner, gs.largestArmyOwner);
+            if (vp >= 10) {
+                sacData.complete = true;
+                sacData.winner = userId;
+                sacData.currentTurn = '';
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+// ─── Setup commands ───────────────────────────────────────────────────────────
+
+@serializable
+export class SACPlaceSettlementSetup implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    vertexId: number = 0;
+    readonly className = 'SACPlaceSettlementSetup';
+
+    myString() { return `SAC PlaceSettlementSetup vertex=${this.vertexId}`; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const sacData = gameData as ISettlementsAndCitiesGameData;
+        const gs = sacData.specificGameState;
+
+        if (gs.phase !== 'setup' || gs.pendingRoadSetup) return { validMove: false, turnOver: false };
+        if (!isValidSettlementVertex(this.vertexId, gs.vertices)) return { validMove: false, turnOver: false };
+
+        gs.vertices[this.vertexId].building = 'settlement';
+        gs.vertices[this.vertexId].owner = this.senderId;
+
+        const ps = gs.playerStates.get(this.senderId);
+        if (ps) {
+            ps.remainingSettlements--;
+            // Give starting resources for the second round of placements
+            const N = sacData.gameState.turnOrder.length;
+            if (gs.setupStep >= N) {
+                for (const hexId of BOARD_TOPOLOGY.vertexHexes[this.vertexId]) {
+                    const hex = gs.hexes[hexId];
+                    if (hex.numberToken !== null) {
+                        const resource = TERRAIN_TO_RESOURCE[hex.terrain];
+                        if (resource) ps.resources[resource]++;
+                    }
+                }
+            }
+        }
+
+        gs.pendingRoadSetup = true;
+        gs.lastSetupSettlementVertex = this.vertexId;
+
+        sacData.gameState.history.unshift(
+            `${this.senderUsername} placed a settlement (setup)`
+        );
+        return { validMove: true, turnOver: false };
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
+    }
+}
+
+@serializable
+export class SACPlaceRoadSetup implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    edgeId: number = 0;
+    readonly className = 'SACPlaceRoadSetup';
+
+    myString() { return `SAC PlaceRoadSetup edge=${this.edgeId}`; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const sacData = gameData as ISettlementsAndCitiesGameData;
+        const gs = sacData.specificGameState;
+
+        if (gs.phase !== 'setup' || !gs.pendingRoadSetup) return { validMove: false, turnOver: false };
+        if (gs.lastSetupSettlementVertex === null) return { validMove: false, turnOver: false };
+        if (!isValidSetupRoadEdge(this.edgeId, gs.lastSetupSettlementVertex, gs.edges)) {
+            return { validMove: false, turnOver: false };
+        }
+
+        gs.edges[this.edgeId].hasRoad = true;
+        gs.edges[this.edgeId].owner = this.senderId;
+
+        const ps = gs.playerStates.get(this.senderId);
+        if (ps) ps.remainingRoads--;
+
+        gs.pendingRoadSetup = false;
+        gs.lastSetupSettlementVertex = null;
+
+        sacData.gameState.history.unshift(`${this.senderUsername} placed a road (setup)`);
+        return { validMove: true, turnOver: true };
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
+    }
+}
+
+// ─── Main-phase pre-roll: play knight ─────────────────────────────────────────
+
+@serializable
+export class SACPlayKnight implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    readonly className = 'SACPlayKnight';
+
+    myString() { return `SAC PlayKnight`; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const sacData = gameData as ISettlementsAndCitiesGameData;
+        const gs = sacData.specificGameState;
+
+        if (gs.phase !== 'main') return { validMove: false, turnOver: false };
+        if (gs.hasRolled) return { validMove: false, turnOver: false };
+        if (gs.playedDevCard) return { validMove: false, turnOver: false };
+
+        const ps = gs.playerStates.get(this.senderId);
+        if (!ps || ps.devCards.knight < 1) return { validMove: false, turnOver: false };
+
+        ps.devCards.knight--;
+        ps.knightsPlayed++;
+        gs.playedDevCard = true;
+        gs.pendingRobber = true;
+
+        sacUpdateLargestArmy(sacData);
+
+        sacData.gameState.history.unshift(`${this.senderUsername} played a Knight card`);
+        return { validMove: true, turnOver: false };
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
+    }
+}
+
+// ─── Roll dice ────────────────────────────────────────────────────────────────
+
+@serializable
+export class SACRollDice implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    readonly className = 'SACRollDice';
+
+    myString() { return `SAC RollDice`; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const sacData = gameData as ISettlementsAndCitiesGameData;
+        const gs = sacData.specificGameState;
+
+        if (gs.phase !== 'main') return { validMove: false, turnOver: false };
+        if (gs.hasRolled) return { validMove: false, turnOver: false };
+        if (gs.pendingRobber) return { validMove: false, turnOver: false };
+
+        const roll = DiceRoll(6) + DiceRoll(6);
+        gs.lastRoll = roll;
+
+        sacData.gameState.history.unshift(`${this.senderUsername} rolled a ${roll}`);
+
+        if (roll === 7) {
+            // Discard phase: auto-discard for all players with >7 cards
+            for (const [, ps] of gs.playerStates) {
+                sacDiscardHalf(ps);
+            }
+            gs.pendingRobber = true;
+        } else {
+            // Distribute resources
+            for (const [hexId, hex] of gs.hexes.entries()) {
+                if (hex.numberToken !== roll) continue;
+                if (hexId === gs.robberHexIndex) continue;
+                const resource = TERRAIN_TO_RESOURCE[hex.terrain];
+                if (!resource) continue;
+
+                for (const vertexId of BOARD_TOPOLOGY.hexVertices[hexId]) {
+                    const vertex = gs.vertices[vertexId];
+                    if (!vertex.owner) continue;
+                    const ps = gs.playerStates.get(vertex.owner);
+                    if (!ps) continue;
+                    const amount = vertex.building === 'city' ? 2 : 1;
+                    ps.resources[resource] += amount;
+                }
+            }
+        }
+
+        gs.hasRolled = true;
+        return { validMove: true, turnOver: false };
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
+    }
+}
+
+// ─── Move robber ──────────────────────────────────────────────────────────────
+
+@serializable
+export class SACMoveRobber implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    hexId: number = 0;
+    stealFromUserId: string | null = null;
+    readonly className = 'SACMoveRobber';
+
+    myString() { return `SAC MoveRobber hex=${this.hexId} stealFrom=${this.stealFromUserId}`; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const sacData = gameData as ISettlementsAndCitiesGameData;
+        const gs = sacData.specificGameState;
+
+        if (!gs.pendingRobber) return { validMove: false, turnOver: false };
+        if (this.hexId === gs.robberHexIndex) return { validMove: false, turnOver: false };
+        if (this.hexId < 0 || this.hexId >= gs.hexes.length) return { validMove: false, turnOver: false };
+
+        // Determine eligible players (have settlement/city adjacent, have resources, not self)
+        const adjacentUserIds = new Set<string>();
+        for (const vertexId of BOARD_TOPOLOGY.hexVertices[this.hexId]) {
+            const v = gs.vertices[vertexId];
+            if (v.owner && v.owner !== this.senderId && v.building) {
+                const tps = gs.playerStates.get(v.owner);
+                if (tps && sacTotalResources(tps) > 0) adjacentUserIds.add(v.owner);
+            }
+        }
+
+        if (this.stealFromUserId !== null) {
+            if (!adjacentUserIds.has(this.stealFromUserId)) return { validMove: false, turnOver: false };
+            // Steal one random resource
+            const victim = gs.playerStates.get(this.stealFromUserId)!;
+            const pool: SAC_Resource[] = [];
+            const resourceKeys: SAC_Resource[] = ['lumber', 'wool', 'grain', 'brick', 'ore'];
+            for (const r of resourceKeys) {
+                for (let i = 0; i < victim.resources[r]; i++) pool.push(r);
+            }
+            if (pool.length > 0) {
+                const stolen = pool[Math.floor(Math.random() * pool.length)];
+                victim.resources[stolen]--;
+                const thief = gs.playerStates.get(this.senderId);
+                if (thief) thief.resources[stolen]++;
+                sacData.gameState.history.unshift(
+                    `${this.senderUsername} moved the robber and stole a resource`
+                );
+            }
+        } else if (adjacentUserIds.size > 0) {
+            // Must specify someone to steal from
+            return { validMove: false, turnOver: false };
+        } else {
+            sacData.gameState.history.unshift(`${this.senderUsername} moved the robber`);
+        }
+
+        gs.robberHexIndex = this.hexId;
+        gs.pendingRobber = false;
+        return { validMove: true, turnOver: false };
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
+    }
+}
+
+// ─── Build road ───────────────────────────────────────────────────────────────
+
+@serializable
+export class SACBuildRoad implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    edgeId: number = 0;
+    readonly className = 'SACBuildRoad';
+
+    myString() { return `SAC BuildRoad edge=${this.edgeId}`; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const sacData = gameData as ISettlementsAndCitiesGameData;
+        const gs = sacData.specificGameState;
+
+        if (gs.phase !== 'main') return { validMove: false, turnOver: false };
+        if (gs.pendingRobber) return { validMove: false, turnOver: false };
+
+        const isFreeRoad = gs.pendingRoadBuilding > 0;
+        if (!isFreeRoad && !gs.hasRolled) return { validMove: false, turnOver: false };
+
+        if (!isValidRoadEdge(this.edgeId, this.senderId, gs.vertices, gs.edges)) {
+            return { validMove: false, turnOver: false };
+        }
+
+        const ps = gs.playerStates.get(this.senderId);
+        if (!ps) return { validMove: false, turnOver: false };
+        if (ps.remainingRoads <= 0) return { validMove: false, turnOver: false };
+
+        if (!isFreeRoad) {
+            if (ps.resources.brick < 1 || ps.resources.lumber < 1) return { validMove: false, turnOver: false };
+            ps.resources.brick--;
+            ps.resources.lumber--;
+        } else {
+            gs.pendingRoadBuilding--;
+        }
+
+        gs.edges[this.edgeId].hasRoad = true;
+        gs.edges[this.edgeId].owner = this.senderId;
+        ps.remainingRoads--;
+
+        sacUpdateLongestRoad(sacData);
+        sacData.gameState.history.unshift(`${this.senderUsername} built a road`);
+        return { validMove: true, turnOver: false };
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
+    }
+}
+
+// ─── Build settlement ─────────────────────────────────────────────────────────
+
+@serializable
+export class SACBuildSettlement implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    vertexId: number = 0;
+    readonly className = 'SACBuildSettlement';
+
+    myString() { return `SAC BuildSettlement vertex=${this.vertexId}`; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const sacData = gameData as ISettlementsAndCitiesGameData;
+        const gs = sacData.specificGameState;
+
+        if (gs.phase !== 'main' || !gs.hasRolled) return { validMove: false, turnOver: false };
+        if (gs.pendingRobber) return { validMove: false, turnOver: false };
+
+        if (!isValidSettlementVertex(this.vertexId, gs.vertices)) return { validMove: false, turnOver: false };
+
+        // Must be connected by own road
+        const connectedByRoad = BOARD_TOPOLOGY.vertexEdges[this.vertexId].some(
+            eid => gs.edges[eid].hasRoad && gs.edges[eid].owner === this.senderId
+        );
+        if (!connectedByRoad) return { validMove: false, turnOver: false };
+
+        const ps = gs.playerStates.get(this.senderId);
+        if (!ps) return { validMove: false, turnOver: false };
+        if (ps.remainingSettlements <= 0) return { validMove: false, turnOver: false };
+        if (ps.resources.brick < 1 || ps.resources.lumber < 1 ||
+            ps.resources.wool < 1 || ps.resources.grain < 1) {
+            return { validMove: false, turnOver: false };
+        }
+
+        ps.resources.brick--;
+        ps.resources.lumber--;
+        ps.resources.wool--;
+        ps.resources.grain--;
+        ps.remainingSettlements--;
+
+        gs.vertices[this.vertexId].building = 'settlement';
+        gs.vertices[this.vertexId].owner = this.senderId;
+
+        sacData.gameState.history.unshift(`${this.senderUsername} built a settlement`);
+        return { validMove: true, turnOver: false };
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
+    }
+}
+
+// ─── Build city ───────────────────────────────────────────────────────────────
+
+@serializable
+export class SACBuildCity implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    vertexId: number = 0;
+    readonly className = 'SACBuildCity';
+
+    myString() { return `SAC BuildCity vertex=${this.vertexId}`; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const sacData = gameData as ISettlementsAndCitiesGameData;
+        const gs = sacData.specificGameState;
+
+        if (gs.phase !== 'main' || !gs.hasRolled) return { validMove: false, turnOver: false };
+        if (gs.pendingRobber) return { validMove: false, turnOver: false };
+
+        const vertex = gs.vertices[this.vertexId];
+        if (vertex.building !== 'settlement' || vertex.owner !== this.senderId) {
+            return { validMove: false, turnOver: false };
+        }
+
+        const ps = gs.playerStates.get(this.senderId);
+        if (!ps) return { validMove: false, turnOver: false };
+        if (ps.remainingCities <= 0) return { validMove: false, turnOver: false };
+        if (ps.resources.grain < 2 || ps.resources.ore < 3) return { validMove: false, turnOver: false };
+
+        ps.resources.grain -= 2;
+        ps.resources.ore -= 3;
+        ps.remainingCities--;
+        ps.remainingSettlements++;
+
+        gs.vertices[this.vertexId].building = 'city';
+
+        sacData.gameState.history.unshift(`${this.senderUsername} built a city`);
+        return { validMove: true, turnOver: false };
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
+    }
+}
+
+// ─── Buy dev card ─────────────────────────────────────────────────────────────
+
+@serializable
+export class SACBuyDevCard implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    readonly className = 'SACBuyDevCard';
+
+    myString() { return `SAC BuyDevCard`; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const sacData = gameData as ISettlementsAndCitiesGameData;
+        const gs = sacData.specificGameState;
+
+        if (gs.phase !== 'main' || !gs.hasRolled) return { validMove: false, turnOver: false };
+        if (gs.pendingRobber) return { validMove: false, turnOver: false };
+        if (gs.devCardDeck.length === 0) return { validMove: false, turnOver: false };
+
+        const ps = gs.playerStates.get(this.senderId);
+        if (!ps) return { validMove: false, turnOver: false };
+        if (ps.resources.wool < 1 || ps.resources.grain < 1 || ps.resources.ore < 1) {
+            return { validMove: false, turnOver: false };
+        }
+
+        ps.resources.wool--;
+        ps.resources.grain--;
+        ps.resources.ore--;
+
+        const card = gs.devCardDeck.pop()!;
+        ps.newDevCards[card]++;
+
+        sacData.gameState.history.unshift(`${this.senderUsername} bought a development card`);
+        return { validMove: true, turnOver: false };
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
+    }
+}
+
+// ─── Play Road Building ───────────────────────────────────────────────────────
+
+@serializable
+export class SACPlayRoadBuilding implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    readonly className = 'SACPlayRoadBuilding';
+
+    myString() { return `SAC PlayRoadBuilding`; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const sacData = gameData as ISettlementsAndCitiesGameData;
+        const gs = sacData.specificGameState;
+
+        if (gs.phase !== 'main' || !gs.hasRolled) return { validMove: false, turnOver: false };
+        if (gs.pendingRobber || gs.playedDevCard) return { validMove: false, turnOver: false };
+
+        const ps = gs.playerStates.get(this.senderId);
+        if (!ps || ps.devCards.roadBuilding < 1) return { validMove: false, turnOver: false };
+
+        ps.devCards.roadBuilding--;
+        gs.playedDevCard = true;
+        gs.pendingRoadBuilding = 2;
+
+        sacData.gameState.history.unshift(`${this.senderUsername} played Road Building`);
+        return { validMove: true, turnOver: false };
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
+    }
+}
+
+// ─── Play Year of Plenty ──────────────────────────────────────────────────────
+
+@serializable
+export class SACPlayYearOfPlenty implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    resource1: SAC_Resource = 'lumber';
+    resource2: SAC_Resource = 'lumber';
+    readonly className = 'SACPlayYearOfPlenty';
+
+    myString() { return `SAC PlayYearOfPlenty r1=${this.resource1} r2=${this.resource2}`; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const sacData = gameData as ISettlementsAndCitiesGameData;
+        const gs = sacData.specificGameState;
+
+        if (gs.phase !== 'main' || !gs.hasRolled) return { validMove: false, turnOver: false };
+        if (gs.pendingRobber || gs.playedDevCard) return { validMove: false, turnOver: false };
+
+        const ps = gs.playerStates.get(this.senderId);
+        if (!ps || ps.devCards.yearOfPlenty < 1) return { validMove: false, turnOver: false };
+
+        ps.devCards.yearOfPlenty--;
+        gs.playedDevCard = true;
+        ps.resources[this.resource1]++;
+        ps.resources[this.resource2]++;
+
+        sacData.gameState.history.unshift(
+            `${this.senderUsername} played Year of Plenty (+${this.resource1}, +${this.resource2})`
+        );
+        return { validMove: true, turnOver: false };
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
+    }
+}
+
+// ─── Play Monopoly ────────────────────────────────────────────────────────────
+
+@serializable
+export class SACPlayMonopoly implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    resource: SAC_Resource = 'lumber';
+    readonly className = 'SACPlayMonopoly';
+
+    myString() { return `SAC PlayMonopoly resource=${this.resource}`; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const sacData = gameData as ISettlementsAndCitiesGameData;
+        const gs = sacData.specificGameState;
+
+        if (gs.phase !== 'main' || !gs.hasRolled) return { validMove: false, turnOver: false };
+        if (gs.pendingRobber || gs.playedDevCard) return { validMove: false, turnOver: false };
+
+        const ps = gs.playerStates.get(this.senderId);
+        if (!ps || ps.devCards.monopoly < 1) return { validMove: false, turnOver: false };
+
+        ps.devCards.monopoly--;
+        gs.playedDevCard = true;
+
+        let total = 0;
+        for (const [userId, other] of gs.playerStates) {
+            if (userId === this.senderId) continue;
+            total += other.resources[this.resource];
+            other.resources[this.resource] = 0;
+        }
+        ps.resources[this.resource] += total;
+
+        sacData.gameState.history.unshift(
+            `${this.senderUsername} played Monopoly on ${this.resource} (+${total})`
+        );
+        return { validMove: true, turnOver: false };
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
+    }
+}
+
+// ─── Maritime trade ───────────────────────────────────────────────────────────
+
+@serializable
+export class SACMaritimeTrade implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    offerResource: SAC_Resource = 'lumber';
+    wantResource: SAC_Resource = 'wool';
+    readonly className = 'SACMaritimeTrade';
+
+    myString() { return `SAC MaritimeTrade offer=${this.offerResource} want=${this.wantResource}`; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const sacData = gameData as ISettlementsAndCitiesGameData;
+        const gs = sacData.specificGameState;
+
+        if (gs.phase !== 'main' || !gs.hasRolled) return { validMove: false, turnOver: false };
+        if (gs.pendingRobber) return { validMove: false, turnOver: false };
+        if (this.offerResource === this.wantResource) return { validMove: false, turnOver: false };
+
+        const ps = gs.playerStates.get(this.senderId);
+        if (!ps) return { validMove: false, turnOver: false };
+
+        // Determine trade ratio
+        let ratio = 4;
+        for (const harbor of gs.harbors) {
+            const hasAccess = harbor.vertices.some(vid => {
+                const v = gs.vertices[vid];
+                return v.owner === this.senderId && v.building !== null;
+            });
+            if (!hasAccess) continue;
+            if (harbor.type === '3to1' && ratio > 3) ratio = 3;
+            if (harbor.type === this.offerResource) { ratio = 2; break; }
+        }
+
+        if (ps.resources[this.offerResource] < ratio) return { validMove: false, turnOver: false };
+
+        ps.resources[this.offerResource] -= ratio;
+        ps.resources[this.wantResource]++;
+
+        sacData.gameState.history.unshift(
+            `${this.senderUsername} traded ${ratio}x ${this.offerResource} → 1x ${this.wantResource}`
+        );
+        return { validMove: true, turnOver: false };
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
+    }
+}
+
+// ─── End turn ─────────────────────────────────────────────────────────────────
+
+@serializable
+export class SACEndTurn implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    readonly className = 'SACEndTurn';
+
+    myString() { return `SAC EndTurn`; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const sacData = gameData as ISettlementsAndCitiesGameData;
+        const gs = sacData.specificGameState;
+
+        if (gs.phase !== 'main') return { validMove: false, turnOver: false };
+        if (!gs.hasRolled) return { validMove: false, turnOver: false };
+        if (gs.pendingRobber) return { validMove: false, turnOver: false };
+        if (gs.pendingRoadBuilding > 0) return { validMove: false, turnOver: false };
+
+        sacData.gameState.history.unshift(`${this.senderUsername} ended their turn`);
+        return { validMove: true, turnOver: true };
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
+    }
 }
