@@ -196,7 +196,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
         }
 
         const stealFrom = adjacentUsernames.size > 0
-            ? usernameToUserId[[...adjacentUsernames][0]] ?? null
+            ? usernameToUserId[Array.from(adjacentUsernames)[0]] ?? null
             : null;
 
         const cmd = new SACMoveRobber();

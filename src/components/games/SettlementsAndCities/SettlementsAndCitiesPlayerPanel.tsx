@@ -53,11 +53,11 @@ export default function SettlementsAndCitiesPlayerPanel({
                 <div className="mb-1" style={{ fontSize: '0.85rem' }}>
                     <strong>Resources ({totalCards}):</strong>{' '}
                     {(['lumber', 'wool', 'grain', 'brick', 'ore'] as const).map(r => (
-                        resources[r] > 0 && (
+                        resources[r] > 0 ? (
                             <span key={r} className="me-1">
                                 {RESOURCE_EMOJI[r]}{resources[r]}
                             </span>
-                        )
+                        ) : null
                     ))}
                     {totalCards === 0 && <span className="text-muted">none</span>}
                 </div>
