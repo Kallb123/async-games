@@ -54,24 +54,19 @@ export async function dbConnect() {
 }
 
 function initialiseDiscriminators() {
-  // These Records act as a compile-time exhaustiveness check: every key in the
-  // union types above must map to a model here.  A missing entry is a TypeScript
-  // error, so forgetting to register a new game's discriminators is caught at
-  // build time rather than at runtime.
-  const gameDataModels: Record<GameDataDiscriminatorKey, unknown> = {
+  // Evaluating these model variables ensures Mongoose has registered every
+  // discriminator before the connection is used.  The typed Record also acts
+  // as a compile-time exhaustiveness check: adding a key to the union types
+  // above but omitting the corresponding model here is a TypeScript error.
+  const _gameData: Record<GameDataDiscriminatorKey, unknown> = {
     DiceCitiesGameData: DiceCitiesGameDataModel,
     SnakesAndLaddersGameData: SnakesAndLaddersGameDataModel,
     SettlementsAndCitiesGameData: SettlementsAndCitiesGameDataModel,
   };
-  const invitationModels: Record<InvitationDiscriminatorKey, unknown> = {
+  const _invitations: Record<InvitationDiscriminatorKey, unknown> = {
     DiceCitiesInvitation: DiceCitiesInvitationModel,
     SnakesAndLaddersInvitation: SnakesAndLaddersInvitationModel,
     SettlementsAndCitiesInvitation: SettlementsAndCitiesInvitationModel,
   };
-  // Reference base models so they are also initialised in the module cache.
-  void InvitationModel;
-  void GameDataModel;
-  // Prevent "assigned but never read" warnings on the registry objects.
-  void gameDataModels;
-  void invitationModels;
+  void _gameData, _invitations;
 }
