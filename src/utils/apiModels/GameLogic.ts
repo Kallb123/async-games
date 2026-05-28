@@ -982,7 +982,9 @@ export class SnakesAndLaddersGameType implements IGameType {
     CheckEndTurn(gameData: IGameData, commandOutcome: ICommandOutcome) {
         if (commandOutcome.turnOver) {
             const slGameData = gameData as ISnakesAndLaddersGameData;
-            slGameData.specificGameState.hasRolled = false;
+            if (slGameData.specificGameState) {
+                slGameData.specificGameState.hasRolled = false;
+            }
             const currentIndex = gameData.gameState.turnOrder.findIndex(to => to === gameData.currentTurn);
             const nextTurn = gameData.gameState.turnOrder[(currentIndex + 1) % gameData.gameState.turnOrder.length];
             gameData.currentTurn = nextTurn;
