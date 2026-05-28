@@ -7,6 +7,7 @@ import { Button, Col, Form, Row } from "react-bootstrap";
 import CurrentUserInfo from "@/components/CurrentUserInfo";
 import UserInviteList from "@/components/UserInviteList";
 import { SnakesAndLaddersInvitationRequest } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
+import { useToast } from "@/components/ToastContext";
 
 export default function NewGameSnakesAndLadders() {
   const pathName = usePathname();
@@ -15,6 +16,7 @@ export default function NewGameSnakesAndLadders() {
   const [userList, setUserList] = useState([""] as string[]);
   const [turnTimer, setTurnTimer] = useState("1d");
   const router = useRouter();
+  const { showToast } = useToast();
 
   useEffect(() => {
     if (isLoaded) {
@@ -66,15 +68,21 @@ export default function NewGameSnakesAndLadders() {
         userList: filteredUserList,
         turnTimer
       };
-      await fetch('/api/newgame/snakesandladders', {
+      const response = await fetch('/api/newgame/snakesandladders', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(data)
       });
+      if (!response.ok) {
+        throw new Error('Failed to send invite');
+      }
+      showToast('Invitation sent! Waiting for players to accept.', 'success', 'Invite Sent');
+      router.push('/');
     } catch (error) {
       console.error(error);
+      showToast('Failed to send the invitation. Please try again.', 'danger');
     }
   }
 

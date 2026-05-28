@@ -2,10 +2,12 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from "react";
+import { useToast } from "@/components/ToastContext";
 
 export default function PasswordForm() {
     const [password, setPassword] = useState('');
     const router = useRouter();
+    const { showToast } = useToast();
     
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
@@ -26,6 +28,7 @@ export default function PasswordForm() {
         router.push('/');
       } catch (error) {
         console.error(error);
+        showToast('Incorrect password. Please try again.', 'danger', 'Access Denied');
       }
     }
 
