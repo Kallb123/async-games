@@ -1,4 +1,4 @@
-name: CI
+name: Type Check and Build
 
 on:
   push:
