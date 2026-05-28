@@ -48,10 +48,12 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             }
             getGameData();
         }
-        window.addEventListener('TurnTaken', () => {
+        const handleTurnTaken = () => {
             console.log(`SettlementsAndCitiesPage: TurnTaken`);
             getGameData();
-        });
+        };
+        window.addEventListener('TurnTaken', handleTurnTaken);
+        return () => window.removeEventListener('TurnTaken', handleTurnTaken);
     }, [isLoaded]);
 
     const getGameData = async () => {

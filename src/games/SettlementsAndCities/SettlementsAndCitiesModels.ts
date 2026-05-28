@@ -12,6 +12,7 @@ import {
     createInitialPlayerState,
     DEV_CARD_DECK,
     calculateVisibleVP,
+    BOARD_TOPOLOGY,
     ISACHex,
     ISACVertex,
     ISACEdge,
@@ -93,15 +94,8 @@ SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
         playerStates.set(userId, createInitialPlayerState());
     }
 
-    const numVertices = hexes.length > 0 ? (() => {
-        // Compute numVertices from the topology (import at module level avoids circular)
-        const { BOARD_TOPOLOGY } = require('./board');
-        return BOARD_TOPOLOGY.numVertices;
-    })() : 54;
-    const numEdges = hexes.length > 0 ? (() => {
-        const { BOARD_TOPOLOGY } = require('./board');
-        return BOARD_TOPOLOGY.numEdges;
-    })() : 72;
+    const numVertices = BOARD_TOPOLOGY.numVertices;
+    const numEdges = BOARD_TOPOLOGY.numEdges;
 
     const vertices: ISACVertex[] = Array.from({ length: numVertices }, () => ({
         building: null,
