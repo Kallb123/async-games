@@ -63,12 +63,12 @@ export default function SettlementsAndCitiesPlayerPanel({
                 </div>
                 <div style={{ fontSize: '0.85rem' }}>
                     <strong>Pieces:</strong>{' '}
-                    🏘️ {playerState.remainingSettlements} settlements &middot;{' '}
-                    🏰 {playerState.remainingCities} cities &middot;{' '}
-                    🛤️ {playerState.remainingRoads} roads
+                    🏘️ {playerState.remainingSettlements ?? 0} settlements &middot;{' '}
+                    🏰 {playerState.remainingCities ?? 0} cities &middot;{' '}
+                    🛤️ {playerState.remainingRoads ?? 0} roads
                 </div>
                 <div style={{ fontSize: '0.85rem' }}>
-                    <strong>Knights played:</strong> {playerState.knightsPlayed}
+                    <strong>Knights played:</strong> {playerState.knightsPlayed ?? 0}
                     {isMe && devCards && (
                         <span className="ms-2">
                             <strong>Dev cards:</strong>{' '}
@@ -80,8 +80,8 @@ export default function SettlementsAndCitiesPlayerPanel({
                     )}
                     {!isMe && (
                         <span className="ms-2 text-muted">
-                            {playerState.devCardCount > 0
-                                ? `${playerState.devCardCount} dev card${playerState.devCardCount !== 1 ? 's' : ''}`
+                            {playerState.devCardCount ?? 0 > 0
+                                ? `${playerState.devCardCount ?? 0} dev card${(playerState.devCardCount ?? 0) !== 1 ? 's' : ''}`
                                 : ''}
                         </span>
                     )}

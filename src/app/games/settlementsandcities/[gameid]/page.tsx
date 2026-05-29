@@ -237,7 +237,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                         Phase: <strong>{gs.phase}</strong>
                         {gs.phase === 'setup' && ` (step ${gs.setupStep + 1})`}
                         &nbsp;· Active: <strong>{currentTurnUsername}</strong>
-                        &nbsp;· Dev deck: {gs.devCardDeckSize} cards
+                        &nbsp;· Dev deck: {gs.devCardDeckSize ?? 0} cards
                     </p>
 
                     <Row>
