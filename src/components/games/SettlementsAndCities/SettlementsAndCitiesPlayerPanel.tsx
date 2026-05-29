@@ -31,7 +31,7 @@ export default function SettlementsAndCitiesPlayerPanel({
 }: SettlementsAndCitiesPlayerPanelProps) {
     if (!playerState) return null;
 
-    const resources = playerState.resources;
+    const resources = playerState.resources ?? {};
     const totalCards = Object.values(resources).reduce((s, n) => s + n, 0);
 
     return (
