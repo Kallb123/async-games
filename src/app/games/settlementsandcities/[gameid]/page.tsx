@@ -192,7 +192,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             const v = gs.vertices[vid];
             if (v.owner && v.owner !== myUsername && v.building) {
                 const ps = gs.playerStates[v.owner];
-                const total = ps ? Object.values(ps.resources).reduce((s, n) => s + n, 0) : 0;
+                const total = ps ? Object.values(ps.resources ?? {}).reduce((s, n) => s + n, 0) : 0;
                 if (total > 0) adjacentUsernames.add(v.owner);
             }
         }
