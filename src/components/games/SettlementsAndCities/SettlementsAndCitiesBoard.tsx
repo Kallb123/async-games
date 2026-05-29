@@ -1,6 +1,7 @@
 'use client'
 import React from 'react';
 import { BOARD_TOPOLOGY, HEX_POSITIONS } from '@/games/SettlementsAndCities/board';
+import type { SAC_Resource } from '@/games/SettlementsAndCities/board';
 import type { ISACHexResponse, ISACVertexResponse, ISACEdgeResponse, ISACHarborResponse } from '@/games/SettlementsAndCities/apiModels';
 
 const HEX_SIZE = 52;
@@ -27,6 +28,7 @@ const HARBOR_COLORS: Record<string, string> = {
     brick: '#e67e22',
     ore: '#95a5a6',
 };
+const RESOURCE_TYPES: SAC_Resource[] = ['lumber', 'wool', 'grain', 'brick', 'ore'];
 const RESOURCE_EMOJI: Record<string, string> = {
     lumber: '🪵', wool: '🐑', grain: '🌾', brick: '🧱', ore: '⛏️',
 };
@@ -81,13 +83,14 @@ export default function SettlementsAndCitiesBoard({
     }
 
     return (
-        <svg
-            width={SVG_W}
-            height={SVG_H}
-            style={{ display: 'block', margin: '0 auto', background: '#85c1e9' }}
-        >
-            {/* ── Hex tiles ── */}
-            {hexes.map((hex, hexId) => {
+        <>
+            <svg
+                width={SVG_W}
+                height={SVG_H}
+                style={{ display: 'block', margin: '0 auto', background: '#85c1e9' }}
+            >
+                {/* ── Hex tiles ── */}
+                {hexes.map((hex, hexId) => {
                 const [cx, cy] = hexCenterPx(hexId);
                 const isRobber = hexId === robberHexIndex;
                 const isValid = validHexes.has(hexId);
@@ -214,5 +217,35 @@ export default function SettlementsAndCitiesBoard({
                 );
             })}
         </svg>
-    );
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '10px', marginTop: '12px' }}>
+            {RESOURCE_TYPES.map((resource) => (
+                <div
+                    key={resource}
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 10px',
+                        background: '#ffffffee',
+                        border: '1px solid #d0d0d0',
+                        borderRadius: '12px',
+                        fontSize: '0.85rem',
+                    }}
+                >
+                    <span
+                        style={{
+                            width: 16,
+                            height: 16,
+                            borderRadius: '50%',
+                            background: HARBOR_COLORS[resource],
+                            display: 'inline-block',
+                            boxShadow: '0 0 0 1px rgba(0,0,0,0.12)',
+                        }}
+                    />
+                    <span>{RESOURCE_EMOJI[resource]} {resource}</span>
+                </div>
+            ))}
+        </div>
+    </>
+);
 }
