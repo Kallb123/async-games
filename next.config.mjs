@@ -1,4 +1,7 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {};
+const nextConfig = {
+  swcMinify: false,
+  productionBrowserSourceMaps: true,
+};
 
 export default nextConfig;
