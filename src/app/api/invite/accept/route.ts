@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { IInvitationDataDocument, InvitationModel } from '@/utils/mongodb/InvitationData';
 import { DiceCitiesGameDataModel } from '@/games/DiceCities/DiceCitiesModels';
 import { SnakesAndLaddersGameDataModel } from '@/games/SnakesAndLadders/SnakesAndLaddersModels';
+import { SettlementsAndCitiesGameDataModel } from '@/games/SettlementsAndCities/SettlementsAndCitiesModels';
 import { uuidString } from '@/utils/apiModels/GameDataApi';
 import { IGameDataDocument } from '@/utils/mongodb/GameData';
 
@@ -66,8 +67,12 @@ export async function POST(request: NextRequest) {
   let gameDataM: IGameDataDocument;
   if (inviteData.gameType === 'SnakesAndLadders') {
     gameDataM = new SnakesAndLaddersGameDataModel(gameData);
-  } else {
+  } else if (inviteData.gameType === 'SettlementsAndCities') {
+    gameDataM = new SettlementsAndCitiesGameDataModel(gameData);
+  } else if (inviteData.gameType === 'DiceCities') {
     gameDataM = new DiceCitiesGameDataModel(gameData);
+  } else {
+    throw new Error(`Unsupported game type: ${inviteData.gameType}`);
   }
 
   await gameDataM.save();
