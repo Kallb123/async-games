@@ -213,9 +213,9 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
         return Object.values(playerStates).find(p => p.userId === gameData.winner)?.username ?? gameData?.winner ?? '';
     };
 
-    const currentTurnUsername = usernameList[
-        gameData?.gameState?.turnOrder?.indexOf(gameData?.currentTurn) ?? -1
-    ] ?? gameData?.currentTurn ?? '';
+    const currentTurnUsername = gs
+        ? Object.values(gs.playerStates).find(p => p.userId === gameData?.currentTurn)?.username ?? gameData?.currentTurn ?? ''
+        : gameData?.currentTurn ?? '';
 
     return (
         <main>
