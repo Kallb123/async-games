@@ -5,11 +5,13 @@ import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import moment from 'moment';
+import { Spinner } from "react-bootstrap";
 
 export default function OutgoingInviteList() {
     const { user, isLoaded } = useUser();
     const router = useRouter();
     const [inviteList, setInviteList] = useState([] as IInvitationResponse[]);
+    const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
         window.addEventListener('NewInvite', () => {
@@ -42,15 +44,19 @@ export default function OutgoingInviteList() {
               router.push('/unlockaccess');
             }
 
+            setIsLoading(true);
             fetch('/api/user/outgoinginvites')
             .then(response => response.json())
-            .then(data => {if (data && data.inviteList) setInviteList(data.inviteList)});
+            .then(data => {if (data && data.inviteList) setInviteList(data.inviteList)})
+            .catch(error => console.error('Failed to load outgoing invites', error))
+            .finally(() => setIsLoading(false));
         }
     }
 
     return (
         <>
             <h2>Awaiting Response</h2>
+            {isLoading && <Spinner animation="border" role="status" size="sm"><span className="visually-hidden">Loading...</span></Spinner>}
             {inviteList.map((invite: IInvitationResponse) => (
                 <div key={invite.inviteId}>
                     You invited <span style={{fontWeight: "bold"}}>{invite.userList.map(user => (<span key={user}>{user}</span>))}</span> to play <span style={{fontWeight: "bold"}}>{invite.gameFriendlyName}</span><br />

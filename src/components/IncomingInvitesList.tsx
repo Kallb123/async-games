@@ -5,6 +5,7 @@ import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import moment from 'moment';
+import { Spinner } from "react-bootstrap";
 import { useToast } from "@/components/ToastContext";
 
 export default function IncomingInviteList() {
@@ -12,6 +13,7 @@ export default function IncomingInviteList() {
     const router = useRouter();
     const { showToast } = useToast();
     const [inviteList, setInviteList] = useState([] as IInvitationResponse[]);
+    const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
         window.addEventListener('NewInvite', () => {
@@ -45,9 +47,12 @@ export default function IncomingInviteList() {
             }
 
             console.log("Attempting to update incoming invite list");
+            setIsLoading(true);
             fetch('/api/user/incominginvites')
             .then(response => response.json())
-            .then(data => {if (data && data.inviteList) setInviteList(data.inviteList);});
+            .then(data => {if (data && data.inviteList) setInviteList(data.inviteList);})
+            .catch(error => console.error('Failed to load incoming invites', error))
+            .finally(() => setIsLoading(false));
         } else {
             console.log("Refresh failed, isLoaded", isLoaded);
         }
@@ -84,6 +89,7 @@ export default function IncomingInviteList() {
     return (
         <>
             <h2>Incoming Invites</h2>
+            {isLoading && <Spinner animation="border" role="status" size="sm"><span className="visually-hidden">Loading...</span></Spinner>}
             {inviteList.map((invite: IInvitationResponse) => (
                 <div key={invite.inviteId}>
                     <span style={{fontWeight: "bold"}}>{invite.sender}</span> has invited you to play <span style={{fontWeight: "bold"}}>{invite.gameFriendlyName}</span><br />
