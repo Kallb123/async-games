@@ -230,6 +230,7 @@ export default function SettlementsAndCitiesBoard({
                         border: '1px solid #d0d0d0',
                         borderRadius: '12px',
                         fontSize: '0.85rem',
+                        color: '#333',
                     }}
                 >
                     <span
