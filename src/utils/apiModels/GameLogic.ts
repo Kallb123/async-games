@@ -1558,15 +1558,15 @@ export class SACRollDice implements IGameCommand {
         const roll = DiceRoll(6) + DiceRoll(6);
         gs.lastRoll = roll;
 
-        sacData.gameState.history.unshift(`${this.senderUsername} rolled a ${roll}`);
-
         if (roll === 7) {
+            sacData.gameState.history.unshift(`${this.senderUsername} rolled a ${roll}`);
             // Discard phase: auto-discard for all players with >7 cards
             for (const [, ps] of gs.playerStates) {
                 sacDiscardHalf(ps);
             }
             gs.pendingRobber = true;
         } else {
+            const resourceDistributions = new Map<string, Partial<Record<SAC_Resource, number>>>();
             // Distribute resources
             for (const [hexId, hex] of gs.hexes.entries()) {
                 if (hex.numberToken !== roll) continue;
@@ -1581,8 +1581,23 @@ export class SACRollDice implements IGameCommand {
                     if (!ps) continue;
                     const amount = vertex.building === 'city' ? 2 : 1;
                     ps.resources[resource] += amount;
+
+                    const playerResources = resourceDistributions.get(vertex.owner) ?? {};
+                    playerResources[resource] = (playerResources[resource] ?? 0) + amount;
+                    resourceDistributions.set(vertex.owner, playerResources);
                 }
             }
+
+            const summary = Array.from(resourceDistributions.entries()).map(([userId, resources]) => {
+                const resourceList = Object.entries(resources)
+                    .map(([resource, amount]) => `${amount} ${resource}`)
+                    .join(', ');
+                return `${userId} received ${resourceList}`;
+            }).join('; ');
+
+            sacData.gameState.history.unshift(
+                `${this.senderUsername} rolled a ${roll}${summary ? `: ${summary}` : ''}`
+            );
         }
 
         gs.hasRolled = true;
