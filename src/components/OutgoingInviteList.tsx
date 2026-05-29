@@ -53,6 +53,24 @@ export default function OutgoingInviteList() {
         }
     }
 
+    const handleCancel = async (inviteId: `${string}-${string}-${string}-${string}-${string}`) => {
+        fetch('/api/invite/cancel', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ inviteId })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to cancel invite');
+            }
+            return response.json();
+        })
+        .then(() => refreshContent())
+        .catch(error => console.error('Failed to cancel invite', error));
+    }
+
     return (
         <>
             <h2>Awaiting Response</h2>
@@ -61,6 +79,7 @@ export default function OutgoingInviteList() {
                 <div key={invite.inviteId}>
                     You invited <span style={{fontWeight: "bold"}}>{invite.userList.map(user => (<span key={user}>{user}</span>))}</span> to play <span style={{fontWeight: "bold"}}>{invite.gameFriendlyName}</span><br />
                     <span>{moment(invite.timestamp).fromNow()}</span>
+                    <button type="button" className="btn btn-link p-0 ms-2" onClick={() => handleCancel(invite.inviteId)}>Cancel invite</button>
                 </div>
             ))}
         </>

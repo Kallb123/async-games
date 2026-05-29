@@ -52,6 +52,24 @@ export default function TheirTurnList() {
         }
     }
 
+    const handleEndGame = async (gameId: `${string}-${string}-${string}-${string}-${string}`) => {
+        fetch('/api/game/end', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ gameId })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to end game');
+            }
+            return response.json();
+        })
+        .then(() => refreshContent())
+        .catch(error => console.error('Failed to end game', error));
+    }
+
     return (
         <>
             <h2>Their Turn</h2>
@@ -59,6 +77,7 @@ export default function TheirTurnList() {
             {gameList.map((game: IGameResponse) => (
                 <div key={game.gameId}>
                     <a href={`/games/${game.url}/${game.gameId}`}>Not your turn in <span style={{fontWeight: "bold"}}>{game.friendlyName}</span> with <span style={{fontWeight: "bold"}}>{game.usernameList.filter(u => u !== user?.username).map(user => (<span key={user}>{user} </span>))}</span></a>
+                    <button type="button" className="btn btn-link p-0 ms-2" onClick={() => handleEndGame(game.gameId)}>End game</button>
                 </div>
             ))}
         </>
