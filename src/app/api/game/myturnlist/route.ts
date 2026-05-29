@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   
   await dbConnect();
 
-  const gameDatas: IGameDataDocument[] = await GameDataModel.find({currentTurn: userId}).exec();
+  const gameDatas: IGameDataDocument[] = await GameDataModel.find({currentTurn: userId, complete: false}).exec();
 
   const gameResponses: IGameResponse[] = await Promise.all(gameDatas.map(async gameData => await gameData.CreateResponse()));
 
