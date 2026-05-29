@@ -239,12 +239,26 @@ SettlementsAndCitiesGameDataSchema.methods.CreateDataResponse = async function()
         usernameList,
         turnTimer: doc.turnTimer,
         currentTurn: doc.currentTurn,
-        gameState: doc.gameState,
+        gameState: {
+            ...doc.gameState,
+            history: replaceHistoryUserIds(doc.gameState.history, userIdNameMap),
+        },
         complete: doc.complete,
         winner: doc.winner,
         specificGameState: gameStateToResponse(doc.specificGameState, userIdNameMap),
     };
 };
+
+function replaceHistoryUserIds(history: string[], userIdNameMap: { [key: string]: string }): string[] {
+    return history.map(entry => {
+        let updated = entry;
+        for (const [userId, username] of Object.entries(userIdNameMap)) {
+            if (!userId) continue;
+            updated = updated.split(userId).join(username);
+        }
+        return updated;
+    });
+}
 
 function gameStateToResponse(
     gs: ISACSpecificGameState,
