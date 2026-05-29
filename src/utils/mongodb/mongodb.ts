@@ -2,7 +2,15 @@ import mongoose from 'mongoose';
 import { GameDataModel } from './GameData';
 import { DiceCitiesGameDataModel, DiceCitiesInvitationModel } from '@/games/DiceCities/DiceCitiesModels';
 import { SnakesAndLaddersGameDataModel, SnakesAndLaddersInvitationModel } from '@/games/SnakesAndLadders/SnakesAndLaddersModels';
+import { SettlementsAndCitiesGameDataModel, SettlementsAndCitiesInvitationModel } from '@/games/SettlementsAndCities/SettlementsAndCitiesModels';
 import { InvitationModel } from './InvitationData';
+
+// Add new game discriminator keys here whenever a new game is introduced.
+// TypeScript will produce a compile error if a key is listed but its model is
+// not present in the records inside initialiseDiscriminators().
+type GameDataDiscriminatorKey = 'DiceCitiesGameData' | 'SnakesAndLaddersGameData' | 'SettlementsAndCitiesGameData';
+type InvitationDiscriminatorKey = 'DiceCitiesInvitation' | 'SnakesAndLaddersInvitation' | 'SettlementsAndCitiesInvitation';
+
 declare global {
   var mongoose: any; // This must be a `var` and not a `let / const`
 }
@@ -46,10 +54,19 @@ export async function dbConnect() {
 }
 
 function initialiseDiscriminators() {
-  const Invitation = InvitationModel;
-  const DiceCitiesInvitation = DiceCitiesInvitationModel;
-  const SnakesAndLaddersInvitation = SnakesAndLaddersInvitationModel;
-  const GameData = GameDataModel;
-  const DiceCitiesGameData = DiceCitiesGameDataModel;
-  const SnakesAndLaddersGameData = SnakesAndLaddersGameDataModel;
+  // Evaluating these model variables ensures Mongoose has registered every
+  // discriminator before the connection is used.  The typed Record also acts
+  // as a compile-time exhaustiveness check: adding a key to the union types
+  // above but omitting the corresponding model here is a TypeScript error.
+  const _gameData: Record<GameDataDiscriminatorKey, unknown> = {
+    DiceCitiesGameData: DiceCitiesGameDataModel,
+    SnakesAndLaddersGameData: SnakesAndLaddersGameDataModel,
+    SettlementsAndCitiesGameData: SettlementsAndCitiesGameDataModel,
+  };
+  const _invitations: Record<InvitationDiscriminatorKey, unknown> = {
+    DiceCitiesInvitation: DiceCitiesInvitationModel,
+    SnakesAndLaddersInvitation: SnakesAndLaddersInvitationModel,
+    SettlementsAndCitiesInvitation: SettlementsAndCitiesInvitationModel,
+  };
+  void _gameData, _invitations;
 }
