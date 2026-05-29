@@ -9,6 +9,7 @@ import { deserializeJSON, serializable } from "./Serialisable";
 import { DiceRoll } from "../games/DiceRoll";
 import { DiceCitiesCardIds, DiceCitiesCards } from "@/games/DiceCities/cards";
 import { IDiceCitiesCard } from "@/games/DiceCities/apiModels";
+import { userIdListToUsernameMap } from "@/utils/users/clerk";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 
 export interface ICommandOutcome {
@@ -1566,6 +1567,7 @@ export class SACRollDice implements IGameCommand {
             }
             gs.pendingRobber = true;
         } else {
+            const usernameMap = await userIdListToUsernameMap(gameData.userIdList);
             const resourceDistributions = new Map<string, Partial<Record<SAC_Resource, number>>>();
             // Distribute resources
             for (const [hexId, hex] of gs.hexes.entries()) {
@@ -1589,10 +1591,11 @@ export class SACRollDice implements IGameCommand {
             }
 
             const summary = Array.from(resourceDistributions.entries()).map(([userId, resources]) => {
+                const username = usernameMap.get(userId) ?? userId;
                 const resourceList = Object.entries(resources)
                     .map(([resource, amount]) => `${amount} ${resource}`)
                     .join(', ');
-                return `${userId} received ${resourceList}`;
+                return `${username} received ${resourceList}`;
             }).join('; ');
 
             sacData.gameState.history.unshift(
