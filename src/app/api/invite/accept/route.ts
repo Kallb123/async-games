@@ -7,6 +7,7 @@ import { IInvitationDataDocument, InvitationModel } from '@/utils/mongodb/Invita
 import { DiceCitiesGameDataModel } from '@/games/DiceCities/DiceCitiesModels';
 import { SnakesAndLaddersGameDataModel } from '@/games/SnakesAndLadders/SnakesAndLaddersModels';
 import { SettlementsAndCitiesGameDataModel } from '@/games/SettlementsAndCities/SettlementsAndCitiesModels';
+import { SmartthinkGameDataModel } from '@/games/Smartthink/SmartthinkModels';
 import { uuidString } from '@/utils/apiModels/GameDataApi';
 import { IGameDataDocument } from '@/utils/mongodb/GameData';
 
@@ -71,6 +72,8 @@ export async function POST(request: NextRequest) {
     gameDataM = new SettlementsAndCitiesGameDataModel(gameData);
   } else if (inviteData.gameType === 'DiceCities') {
     gameDataM = new DiceCitiesGameDataModel(gameData);
+  } else if (inviteData.gameType === 'Smartthink') {
+    gameDataM = new SmartthinkGameDataModel(gameData);
   } else {
     throw new Error(`Unsupported game type: ${inviteData.gameType}`);
   }
