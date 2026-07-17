@@ -32,6 +32,8 @@ export interface ISmartthinkGameState {
     secretCodeSet: boolean;
     codeSetterId: string;
     codeSetterUsername: string;
+    codeBreakerId: string;
+    codeBreakerUsername: string;
     maxGuesses: number;
 }
 
@@ -87,6 +89,8 @@ SmartthinkInvitationSchema.methods.CreateGame = async function(invite: ISmartthi
 
     const codeSetterId = turnOrder[0];
     const codeSetterUsername = usernameMap.get(codeSetterId) ?? "";
+    const codeBreakerId = turnOrder[1];
+    const codeBreakerUsername = usernameMap.get(codeBreakerId) ?? "";
 
     const gameData: ISmartthinkGameData = {
         gameId: uuidv4() as uuidString,
@@ -109,6 +113,8 @@ SmartthinkInvitationSchema.methods.CreateGame = async function(invite: ISmartthi
             secretCodeSet: false,
             codeSetterId,
             codeSetterUsername,
+            codeBreakerId,
+            codeBreakerUsername,
             maxGuesses: 10
         }
     };
@@ -144,8 +150,8 @@ function gameStateToModel(gameState: ISmartthinkGameState, userIdNameMap: { [key
         secretCodeSet: gameState.secretCodeSet,
         codeSetterId: gameState.codeSetterId,
         codeSetterUsername: gameState.codeSetterUsername,
-        codeBreakerId: codeBreaker?.userId ?? "",
-        codeBreakerUsername: codeBreaker?.username ?? "",
+        codeBreakerId: gameState.codeBreakerId || codeBreaker?.userId || "",
+        codeBreakerUsername: gameState.codeBreakerUsername || codeBreaker?.username || "",
         guessRows: gameState.guessRows.map((row) => ({
             guess: row.guess,
             black: row.black,
@@ -168,6 +174,8 @@ var SmartthinkGameDataSchema = new Schema<ISmartthinkGameDataDocument>({
         secretCodeSet: Boolean,
         codeSetterId: String,
         codeSetterUsername: String,
+        codeBreakerId: String,
+        codeBreakerUsername: String,
         maxGuesses: Number
     }
 }, { discriminatorKey: 'kind' });

@@ -950,11 +950,6 @@ function removeCardFromPlayerState(cardId: uuidString, playerState: IDiceCitiesP
     }
 }
 
-export interface ISmartthinkGuessOutcome extends ICommandOutcome {
-    black: number,
-    white: number
-}
-
 @serializable
 export class SmartthinkGameType implements IGameType {
     gameId: uuidString = uuidv4() as uuidString;
@@ -967,6 +962,13 @@ export class SmartthinkGameType implements IGameType {
     CheckEndTurn(gameData: IGameData, commandOutcome: ICommandOutcome) {
         if (commandOutcome.turnOver) {
             const stGameData = gameData as ISmartthinkGameData;
+            // Setting the secret code hands the turn to the codebreaker. From then on
+            // the codebreaker keeps guessing every turn until the game ends, so the turn
+            // never returns to the codemaker (feedback is calculated automatically).
+            if (stGameData.specificGameState.secretCodeSet) {
+                gameData.currentTurn = stGameData.specificGameState.codeBreakerId;
+                return;
+            }
             const currentIndex = gameData.gameState.turnOrder.findIndex(to => to === gameData.currentTurn);
             const nextTurn = gameData.gameState.turnOrder[(currentIndex + 1) % gameData.gameState.turnOrder.length];
             gameData.currentTurn = nextTurn;
