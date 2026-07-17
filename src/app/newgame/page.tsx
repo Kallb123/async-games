@@ -34,6 +34,7 @@ export default function NewGame() {
         <h2><a href="/">Home</a></h2>
         <h2>Select a Game</h2>
         <Button href="/newgame/snakesandladders">Snakes and Ladders</Button><br />
+        <Button href="/newgame/smartthink">Smartthink</Button><br />
         <Button disabled>Ludo</Button><br />
         <Button disabled>Chess</Button><br />
         <Button href="/newgame/dicecities">Dice Cities</Button><br />
