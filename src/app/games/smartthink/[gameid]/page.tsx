@@ -95,9 +95,11 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
     };
 
     const getWinnerDisplayName = (): string => {
-        const playerStates = gameData?.specificGameState?.players;
-        if (!playerStates) return gameData?.winner ?? "";
-        return playerStates.find(p => p.userId === gameData.winner)?.username ?? gameData?.winner ?? "";
+        const state = gameData?.specificGameState;
+        if (!state) return gameData?.winner ?? "";
+        if (gameData.winner === state.codeSetterId) return state.codeSetterUsername || gameData.winner;
+        if (gameData.winner === state.codeBreakerId) return state.codeBreakerUsername || gameData.winner;
+        return state.players?.find(p => p.userId === gameData.winner)?.username ?? gameData?.winner ?? "";
     };
 
     const isCodeSetter = user?.id === gameData?.specificGameState?.codeSetterId;
