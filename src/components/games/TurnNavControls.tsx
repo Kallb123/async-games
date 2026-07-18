@@ -19,6 +19,10 @@ export default function TurnNavControls({ nav, planningActions, canPlan = true }
         border: "1px solid #dee2e6",
         borderRadius: "8px",
         background: nav.isPlannedView ? "#fff8e1" : "#f8f9fa",
+        // Pin dark text so the panel stays readable regardless of the page theme
+        // (the app's default text colour is light, which would vanish on this
+        // light/yellow background).
+        color: "#212529",
     };
 
     if (nav.isLive) {
@@ -67,17 +71,16 @@ export default function TurnNavControls({ nav, planningActions, canPlan = true }
             <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                 <strong>{nav.mode === "planning" ? "🧭 Planning" : "🕐 Review"}</strong>
                 <ButtonGroup size="sm">
-                    <Button variant="outline-secondary" onClick={nav.jumpToStart} disabled={!nav.canBack}>⏮</Button>
-                    <Button variant="outline-secondary" onClick={nav.stepBack} disabled={!nav.canBack}>◀</Button>
-                    <Button variant="outline-secondary" onClick={nav.stepForward} disabled={!nav.canForward}>▶</Button>
-                    <Button variant="outline-secondary" onClick={nav.jumpToCurrent} disabled={nav.atCurrent}>Now</Button>
+                    <Button variant="outline-secondary" onClick={nav.jumpToStart} disabled={!nav.canBack} title="Jump to start of game">⏮</Button>
+                    <Button variant="outline-secondary" onClick={nav.stepBack} disabled={!nav.canBack} title="Previous turn">◀</Button>
+                    <Button variant="outline-secondary" onClick={nav.stepForward} disabled={!nav.canForward} title="Next turn">▶</Button>
                 </ButtonGroup>
                 <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
                     <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>{relativeLabel}</span>
-                    <span style={{ fontSize: "0.75rem", color: "#777" }}>{positionLabel}</span>
+                    <span style={{ fontSize: "0.75rem", color: "#5c5c5c" }}>{positionLabel}</span>
                 </span>
-                <Button variant="secondary" size="sm" onClick={nav.returnToLive} style={{ marginLeft: "auto" }}>
-                    Return to current
+                <Button variant="secondary" size="sm" onClick={nav.returnToLive} style={{ marginLeft: "auto" }} title="Leave this view and resume the live game">
+                    Back to live game
                 </Button>
             </div>
 
@@ -88,14 +91,14 @@ export default function TurnNavControls({ nav, planningActions, canPlan = true }
             {nav.mode === "planning" && (
                 <div style={{ marginTop: "10px" }}>
                     {nav.atCurrent && !nav.isPlannedView && (
-                        <div style={{ fontSize: "0.85rem", color: "#777", marginBottom: "6px" }}>
+                        <div style={{ fontSize: "0.85rem", color: "#5c5c5c", marginBottom: "6px" }}>
                             You&apos;re at the current position. Make a hypothetical move to plan ahead.
                         </div>
                     )}
                     {planningActions}
                     {nav.plannedCount > 0 && (
-                        <Button variant="outline-danger" size="sm" onClick={nav.clearPlan} style={{ marginTop: "8px" }}>
-                            Clear plan
+                        <Button variant="outline-danger" size="sm" onClick={nav.clearPlan} style={{ marginTop: "8px" }} title="Remove your hypothetical moves and start the plan over">
+                            Discard plan
                         </Button>
                     )}
                 </div>
