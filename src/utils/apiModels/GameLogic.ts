@@ -1164,6 +1164,10 @@ export class SnakesAndLaddersRequestDiceRoll implements IGameCommand {
     senderId: string = "Unknown";
     senderUsername: string = "Unknown";
     readonly className = "SnakesAndLaddersRequestDiceRoll";
+    // Recorded RNG outcome. Left unset until the first time Execute runs, then
+    // populated so the command can be deterministically replayed (turn recap /
+    // planning). Persisted as part of gameState.commandHistory.
+    recordedRoll?: number;
 
     myString() {
         return `SnakesAndLadders DiceRoll!`;
@@ -1195,7 +1199,10 @@ export class SnakesAndLaddersRequestDiceRoll implements IGameCommand {
             };
         }
 
-        const roll = DiceRoll(6);
+        // Reuse a previously recorded roll when replaying; otherwise roll fresh
+        // and record it so future replays are deterministic.
+        const roll = this.recordedRoll ?? DiceRoll(6);
+        this.recordedRoll = roll;
         const rawPosition = playerState.position + roll;
 
         let newPosition = playerState.position;
