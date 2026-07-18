@@ -2,6 +2,9 @@ import { IGameData } from "../mongodb/GameData";
 import { IGameCommand, IGameType } from "../apiModels/GameLogic";
 import { deserializeJSON } from "../apiModels/Serialisable";
 import { buildInitialSnakesAndLaddersState, gameStateToModel } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
+// Side-effect import: evaluating GameLogic registers every @serializable command
+// class so deserializeJSON can rehydrate them during replay.
+import "../apiModels/GameLogic";
 
 // A single point on a game's timeline: the reconstructed (response-shaped) state
 // after zero or more commands have been applied. Index 0 is the initial state.

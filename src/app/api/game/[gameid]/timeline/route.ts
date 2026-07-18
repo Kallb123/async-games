@@ -6,9 +6,6 @@ import { userIdListToUsernameMap } from '@/utils/users/clerk';
 import { buildTimeline } from '@/utils/games/replay';
 import { IGameCommand } from '@/utils/apiModels/GameLogic';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
-// Importing the command route pulls in (and registers) every serialisable
-// command class, so deserializeJSON can rehydrate planned commands here too.
-import '@/app/api/game/command/route';
 
 export interface IGetTimelineParams {
     gameid: string;
