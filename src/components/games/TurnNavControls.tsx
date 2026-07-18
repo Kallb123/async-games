@@ -39,8 +39,19 @@ export default function TurnNavControls({ nav, planningActions, canPlan = true }
         );
     }
 
-    const label = nav.isPlannedView
-        ? `Planned move ${nav.viewIndex - nav.currentIndex} of ${nav.plannedCount}`
+    // How far the viewed turn is from the live current state.
+    const delta = nav.viewIndex - nav.currentIndex;
+    const plural = (n: number) => (n === 1 ? "" : "s");
+    const relativeLabel =
+        delta === 0
+            ? "Current turn"
+            : delta < 0
+              ? `${-delta} turn${plural(-delta)} ago`
+              : `Planning ${delta} turn${plural(delta)} ahead`;
+
+    // Secondary absolute position, e.g. "Turn 2 of 5" or "Start of game".
+    const positionLabel = nav.isPlannedView
+        ? `Planned move ${delta} of ${nav.plannedCount}`
         : nav.viewIndex === 0
           ? "Start of game"
           : `Turn ${nav.viewIndex} of ${nav.currentIndex}`;
@@ -61,7 +72,10 @@ export default function TurnNavControls({ nav, planningActions, canPlan = true }
                     <Button variant="outline-secondary" onClick={nav.stepForward} disabled={!nav.canForward}>▶</Button>
                     <Button variant="outline-secondary" onClick={nav.jumpToCurrent} disabled={nav.atCurrent}>Now</Button>
                 </ButtonGroup>
-                <span style={{ fontSize: "0.9rem" }}>{label}</span>
+                <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
+                    <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>{relativeLabel}</span>
+                    <span style={{ fontSize: "0.75rem", color: "#777" }}>{positionLabel}</span>
+                </span>
                 <Button variant="secondary" size="sm" onClick={nav.returnToLive} style={{ marginLeft: "auto" }}>
                     Return to current
                 </Button>
