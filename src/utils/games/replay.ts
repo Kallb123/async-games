@@ -1,7 +1,9 @@
 import { IGameData } from "../mongodb/GameData";
 import { IGameCommand, IGameType } from "../apiModels/GameLogic";
 import { deserializeJSON } from "../apiModels/Serialisable";
-import { buildInitialSnakesAndLaddersState, gameStateToModel } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
+import { buildInitialSnakesAndLaddersState, gameStateToModel as snakesAndLaddersStateToModel } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
+import { buildInitialDiceCitiesState, gameStateToModel as diceCitiesStateToModel } from "@/games/DiceCities/DiceCitiesModels";
+import { buildInitialSmartthinkState, gameStateToModel as smartthinkStateToModel } from "@/games/Smartthink/SmartthinkModels";
 // Side-effect import: evaluating GameLogic registers every @serializable command
 // class so deserializeJSON can rehydrate them during replay.
 import "../apiModels/GameLogic";
@@ -42,7 +44,10 @@ export interface ITimeline {
 // renders. All game rules themselves are reused via each command's Execute().
 export interface IReplayAdapter {
     className: string; // gameType.className
-    buildInitialSpecificGameState(userIdList: string[]): unknown;
+    // Builds the deterministic starting specificGameState. Receives the full
+    // persisted gameData so it can read static creation-time fields (e.g.
+    // Smartthink's solo secret code) that never change during play.
+    buildInitialSpecificGameState(gameData: IGameData): unknown;
     toResponseState(specificGameState: unknown, userIdNameMap: { [key: string]: string }): unknown;
 }
 
@@ -56,9 +61,25 @@ export function getReplayAdapter(className: string): IReplayAdapter | undefined 
 
 registerReplayAdapter({
     className: "SnakesAndLaddersGameType",
-    buildInitialSpecificGameState: (userIdList) => buildInitialSnakesAndLaddersState(userIdList),
+    buildInitialSpecificGameState: (gameData) => buildInitialSnakesAndLaddersState(gameData.userIdList),
     toResponseState: (specificGameState, userIdNameMap) =>
-        gameStateToModel(specificGameState as never, userIdNameMap),
+        snakesAndLaddersStateToModel(specificGameState as never, userIdNameMap),
+});
+
+registerReplayAdapter({
+    className: "DiceCitiesGameType",
+    buildInitialSpecificGameState: (gameData) => buildInitialDiceCitiesState(gameData.userIdList),
+    toResponseState: (specificGameState, userIdNameMap) =>
+        diceCitiesStateToModel(specificGameState as never, userIdNameMap),
+});
+
+registerReplayAdapter({
+    className: "SmartthinkGameType",
+    buildInitialSpecificGameState: (gameData) =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        buildInitialSmartthinkState((gameData as any).specificGameState),
+    toResponseState: (specificGameState, userIdNameMap) =>
+        smartthinkStateToModel(specificGameState as never, userIdNameMap),
 });
 
 // Reconstructs a game's full timeline by replaying its recorded commandHistory
@@ -95,7 +116,7 @@ export async function buildTimeline(
         },
         complete: false,
         winner: "",
-        specificGameState: adapter.buildInitialSpecificGameState(gameData.userIdList),
+        specificGameState: adapter.buildInitialSpecificGameState(gameData),
     };
 
     const snapshots: ITurnSnapshot[] = [];

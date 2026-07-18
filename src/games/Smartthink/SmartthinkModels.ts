@@ -172,7 +172,25 @@ export interface ISmartthinkPlayerResponse {
     role: 'Codemaker' | 'Codebreaker';
 }
 
-function gameStateToModel(gameState: ISmartthinkGameState, userIdNameMap: { [key: string]: string }): ISmartthinkGameStateResponse {
+// Builds the starting specificGameState for replay. The secret code is the only
+// creation-time randomness; in solo games it's set at creation (and never
+// changes), so we seed it from the persisted state. In 2-player games it starts
+// empty and is restored by replaying the SmartthinkSetSecretCode command.
+export function buildInitialSmartthinkState(gameState: ISmartthinkGameState): ISmartthinkGameState {
+    const isSolo = gameState.codeSetterId === SMARTTHINK_COMPUTER_ID;
+    return {
+        secretCode: isSolo ? [...gameState.secretCode] : [],
+        guessRows: [],
+        secretCodeSet: isSolo,
+        codeSetterId: gameState.codeSetterId,
+        codeSetterUsername: gameState.codeSetterUsername,
+        codeBreakerId: gameState.codeBreakerId,
+        codeBreakerUsername: gameState.codeBreakerUsername,
+        maxGuesses: gameState.maxGuesses,
+    };
+}
+
+export function gameStateToModel(gameState: ISmartthinkGameState, userIdNameMap: { [key: string]: string }): ISmartthinkGameStateResponse {
     const players: ISmartthinkPlayerResponse[] = Object.keys(userIdNameMap).map(userId => {
         const username = userIdNameMap[userId];
         return {
