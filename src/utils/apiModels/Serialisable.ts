@@ -16,7 +16,7 @@ export function serializable<T extends Serialisable>(constructor: T) {
 // and is in the registry, create a new instance of the class and copy
 // the properties of the value into the new instance.
 const reviver = (k: string, v: any) =>
-    ((typeof v === "object") && ("className" in v) && (v.className in registry)) ?
+    ((typeof v === "object") && (v !== null) && ("className" in v) && (v.className in registry)) ?
       Object.assign(new registry[v.className](), v) : v;
   
 // use this to deserialize JSON instead of plain JSON.parse        

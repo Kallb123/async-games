@@ -63,6 +63,55 @@ function SortUsersByRoll(userIdList: string[], usernameMap: Map<string, string>,
     });
 }
 
+// Builds the deterministic starting specificGameState for a Dice Cities game.
+// Used both at game creation and by the replay engine to reconstruct historical
+// / planned states from commandHistory.
+export function buildInitialDiceCitiesState(userIdList: string[]): IDiceCitiesGameState {
+    const playerStates = new Map<string, IDiceCitiesPlayerState>();
+    for (const userId of userIdList) {
+        playerStates.set(userId, {
+            cards: [
+                { card: DiceCitiesCardIds.WHEAT_FIELD, amount: 1 },
+                { card: DiceCitiesCardIds.BAKERY, amount: 1 },
+            ],
+            money: 3,
+            doubleUnlocked: false,
+            bonusDiningAndStore: false,
+            rerollDoubles: false,
+            oneReroll: false,
+        });
+    }
+    return {
+        bankCards: [
+            { card: DiceCitiesCardIds.WHEAT_FIELD, amount: 6 },
+            { card: DiceCitiesCardIds.BAKERY, amount: 6 },
+            { card: DiceCitiesCardIds.CAFE, amount: 6 },
+            { card: DiceCitiesCardIds.RANCH, amount: 6 },
+            { card: DiceCitiesCardIds.FOREST, amount: 6 },
+            { card: DiceCitiesCardIds.MINE, amount: 6 },
+            { card: DiceCitiesCardIds.APPLE_ORCHARD, amount: 6 },
+            { card: DiceCitiesCardIds.CONVENIENCE_STORE, amount: 6 },
+            { card: DiceCitiesCardIds.CHEESE_FACTORY, amount: 6 },
+            { card: DiceCitiesCardIds.FURNITURE_FACTORY, amount: 6 },
+            { card: DiceCitiesCardIds.FRUIT_MARKET, amount: 6 },
+            { card: DiceCitiesCardIds.FAMILY_RESTAURANT, amount: 6 },
+            { card: DiceCitiesCardIds.STADIUM, amount: userIdList.length },
+            { card: DiceCitiesCardIds.TV_STATION, amount: userIdList.length },
+            { card: DiceCitiesCardIds.BUSINESS_CENTER, amount: userIdList.length },
+        ],
+        playerStates,
+        hasRolled: false,
+        awaitingTSSelection: false,
+        awaitingBCSelectionOwn: false,
+        awaitingBCSelectionOpponent: false,
+        bcSelectedOwnCard: null,
+        bcSelectedOpponent: null,
+        bcSelectedOpponentCard: null,
+        awaitingDoubleReroll: false,
+        hasReRolled: false,
+    };
+}
+
 var DiceCitiesInvitationSchema = new Schema<IDiceCitiesInvitationDataDocument>({
     enabledDocks: Boolean,
     enabledBillionaireRow: Boolean
@@ -96,82 +145,9 @@ DiceCitiesInvitationSchema.methods.CreateGame = async function(invite: IDiceCiti
         },
         complete: false,
         winner: "",
-        specificGameState: {
-            bankCards: [{
-                card: DiceCitiesCardIds.WHEAT_FIELD,
-                amount: 6
-            }, {
-                card: DiceCitiesCardIds.BAKERY,
-                amount: 6
-            }, {
-                card: DiceCitiesCardIds.CAFE,
-                amount: 6
-            }, {
-                card: DiceCitiesCardIds.RANCH,
-                amount: 6
-            }, {
-                card: DiceCitiesCardIds.FOREST,
-                amount: 6
-            }, {
-                card: DiceCitiesCardIds.MINE,
-                amount: 6
-            }, {
-                card: DiceCitiesCardIds.APPLE_ORCHARD,
-                amount: 6
-            }, {
-                card: DiceCitiesCardIds.CONVENIENCE_STORE,
-                amount: 6
-            }, {
-                card: DiceCitiesCardIds.CHEESE_FACTORY,
-                amount: 6
-            }, {
-                card: DiceCitiesCardIds.FURNITURE_FACTORY,
-                amount: 6
-            }, {
-                card: DiceCitiesCardIds.FRUIT_MARKET,
-                amount: 6
-            }, {
-                card: DiceCitiesCardIds.FAMILY_RESTAURANT,
-                amount: 6
-            }, {
-                card: DiceCitiesCardIds.STADIUM,
-                amount: userIdList.length
-            }, {
-                card: DiceCitiesCardIds.TV_STATION,
-                amount: userIdList.length
-            }, {
-                card: DiceCitiesCardIds.BUSINESS_CENTER,
-                amount: userIdList.length
-            }],
-            playerStates: new Map<string, IDiceCitiesPlayerState>(),
-            hasRolled: false,
-            awaitingTSSelection: false,
-            awaitingBCSelectionOwn: false,
-            awaitingBCSelectionOpponent: false,
-            bcSelectedOwnCard: null,
-            bcSelectedOpponent: null,
-            bcSelectedOpponentCard: null,
-            awaitingDoubleReroll: false,
-            hasReRolled: false
-        },
+        specificGameState: buildInitialDiceCitiesState(userIdList),
         enabledDocks: this.enabledDocks,
         enabledBillionaireRow: this.enabledBillionaireRow
-    }
-    for (const userId of userIdList) {
-        gameData.specificGameState.playerStates.set(userId, {
-            cards: [{
-                card: DiceCitiesCardIds.WHEAT_FIELD,
-                amount: 1
-            }, {
-                card: DiceCitiesCardIds.BAKERY,
-                amount: 1
-            }],
-            money: 3,
-            doubleUnlocked: false,
-            bonusDiningAndStore: false,
-            rerollDoubles: false,
-            oneReroll: false
-        });
     }
     return gameData;
 };
@@ -280,7 +256,7 @@ DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(): Promise<
     };
 };
 
-function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap: { [key: string]: string}) : IDiceCitiesGameStateResponse {
+export function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap: { [key: string]: string}) : IDiceCitiesGameStateResponse {
     const playerStates: { [key: string]: IDiceCitiesPlayerStateResponse; } = {};
     for (const [userId, playerStateModel] of gameState.playerStates) {
         playerStates[userIdNameMap[userId]] = {

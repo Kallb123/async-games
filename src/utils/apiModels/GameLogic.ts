@@ -102,6 +102,10 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
     senderUsername: string = "Unknown";
     doubleDice: boolean = false;
     moneyChanges: Map<string, number> = new Map;
+    // Recorded RNG outcomes, populated on first Execute so the roll can be
+    // deterministically replayed (turn recap / planning).
+    recordedRoll1?: number;
+    recordedRoll2?: number | null;
     readonly className = "DiceCitiesRequestDiceRoll";
 
     myString() {
@@ -136,7 +140,9 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
                 };
             }
         }
-        const outcome: IDiceCitiesDiceRollOutcome = doDiceRoll(dcGameData, this.doubleDice);
+        const outcome: IDiceCitiesDiceRollOutcome = doDiceRoll(dcGameData, this.doubleDice, recordedRolls(this.recordedRoll1, this.recordedRoll2));
+        this.recordedRoll1 = outcome.roll1;
+        this.recordedRoll2 = outcome.roll2;
         dcGameData.specificGameState.hasReRolled = false;
         this.moneyChanges = outcome.moneyChanges;
         let totalRoll = this.doubleDice && outcome.roll2 ? outcome.roll1 + outcome.roll2 : outcome.roll1;
@@ -872,6 +878,9 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
     gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
     senderUsername: string = "Unknown";
+    // Recorded RNG outcomes for the re-roll, so it can be deterministically replayed.
+    recordedRoll1?: number;
+    recordedRoll2?: number | null;
     readonly className = "DiceCitiesRequestRadioTowerReroll";
 
     myString() {
@@ -915,7 +924,9 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
         dcGameData.specificGameState.bcSelectedOpponentCard = NIL_UUID as uuidString;
         dcGameData.specificGameState.hasReRolled = true;
 
-        const outcome: IDiceCitiesDiceRollOutcome = doDiceRoll(dcGameData, doubleDice);
+        const outcome: IDiceCitiesDiceRollOutcome = doDiceRoll(dcGameData, doubleDice, recordedRolls(this.recordedRoll1, this.recordedRoll2));
+        this.recordedRoll1 = outcome.roll1;
+        this.recordedRoll2 = outcome.roll2;
         let totalRoll = doubleDice && outcome.roll2 ? outcome.roll1 + outcome.roll2 : outcome.roll1;
 
         const senderUsername = this.senderUsername;
@@ -1164,6 +1175,10 @@ export class SnakesAndLaddersRequestDiceRoll implements IGameCommand {
     senderId: string = "Unknown";
     senderUsername: string = "Unknown";
     readonly className = "SnakesAndLaddersRequestDiceRoll";
+    // Recorded RNG outcome. Left unset until the first time Execute runs, then
+    // populated so the command can be deterministically replayed (turn recap /
+    // planning). Persisted as part of gameState.commandHistory.
+    recordedRoll?: number;
 
     myString() {
         return `SnakesAndLadders DiceRoll!`;
@@ -1195,7 +1210,10 @@ export class SnakesAndLaddersRequestDiceRoll implements IGameCommand {
             };
         }
 
-        const roll = DiceRoll(6);
+        // Reuse a previously recorded roll when replaying; otherwise roll fresh
+        // and record it so future replays are deterministic.
+        const roll = this.recordedRoll ?? DiceRoll(6);
+        this.recordedRoll = roll;
         const rawPosition = playerState.position + roll;
 
         let newPosition = playerState.position;
@@ -1244,12 +1262,17 @@ export class SnakesAndLaddersRequestDiceRoll implements IGameCommand {
     }
 }
 
-function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean): IDiceCitiesDiceRollOutcome {
-    const roll1 = DiceRoll(6);
+// Bundles recorded dice values for replay, or returns undefined for a fresh roll.
+function recordedRolls(roll1?: number, roll2?: number | null): { roll1: number, roll2: number | null } | undefined {
+    return roll1 === undefined ? undefined : { roll1, roll2: roll2 ?? null };
+}
+
+function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean, recorded?: { roll1: number, roll2: number | null }): IDiceCitiesDiceRollOutcome {
+    const roll1 = recorded?.roll1 ?? DiceRoll(6);
     let roll2: number | null = null;
     let totalRoll = roll1;
     if (isDouble) {
-        roll2 = DiceRoll(6);
+        roll2 = recorded?.roll2 ?? DiceRoll(6);
         totalRoll += roll2;
     }
     const rollerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);

@@ -13,6 +13,10 @@ import type { ICommandResponse } from "@/app/api/game/command/route";
 import GameResult from "@/components/GameResult";
 import SnakesAndLaddersBoard from "@/components/games/SnakesAndLadders/SnakesAndLaddersBoard";
 import SnakesAndLaddersPlayerActions from "@/components/games/SnakesAndLadders/SnakesAndLaddersPlayerActions";
+import TurnNavControls from "@/components/games/TurnNavControls";
+import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
+import { ISnakesAndLaddersGameStateResponse } from "@/games/SnakesAndLadders/apiModels";
+import { ISnakesAndLaddersDiceRollOutcome } from "@/utils/apiModels/GameLogic";
 
 export default function GameSnakesAndLadders({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
@@ -102,15 +106,58 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
 
     const isMyTurn = user?.id === gameData?.currentTurn;
 
+    const live = {
+        specificGameState: gameData?.specificGameState,
+        currentTurn: gameData?.currentTurn ?? "",
+        complete: gameData?.complete ?? false,
+        winner: gameData?.winner ?? "",
+        history: gameData?.gameState?.history ?? [],
+    };
+    const nav = useTurnNavigation<ISnakesAndLaddersGameStateResponse>(gameId, live);
+
+    // Planning submit: instead of persisting a move, add it as a hypothetical
+    // planned turn and reuse the same action panel + dice animation.
+    const planSubmit = async (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => {
+        if (!user) {
+            return;
+        }
+        command.gameId = gameId;
+        command.senderId = user.id;
+        command.senderUsername = user.username || user.firstName || user.id;
+        const result = await nav.planMove(command);
+        const roll = (result?.resolvedCommand as { recordedRoll?: number } | undefined)?.recordedRoll;
+        const outcome: ISnakesAndLaddersDiceRollOutcome = {
+            validMove: true,
+            turnOver: true,
+            roll: roll ?? 0,
+            newPosition: 0,
+            landedOnSnake: false,
+            landedOnLadder: false,
+        };
+        callback({ outcome, gameData } as ICommandResponse);
+    };
+
+    const boardState = nav.displayedState;
+
     return (
         <main>
             <h1>Snakes and Ladders</h1>
             <h2><a href="/">Home</a></h2>
             <GameResult complete={gameData?.complete ?? false} winnerId={gameData?.winner ?? ""} currentUserId={user?.id} winnerDisplayName={getWinnerDisplayName()} />
-            {gameData?.specificGameState?.playerStates &&
-                <SnakesAndLaddersBoard playerStates={gameData.specificGameState.playerStates} />
+            {boardState?.playerStates &&
+                <SnakesAndLaddersBoard playerStates={boardState.playerStates} />
             }
-            {isMyTurn && !gameData?.complete && (
+            <TurnNavControls
+                nav={nav as unknown as ReturnType<typeof useTurnNavigation>}
+                canPlan={!gameData?.complete}
+                planningActions={
+                    <SnakesAndLaddersPlayerActions
+                        hasRolled={false}
+                        submitCommand={planSubmit}
+                    />
+                }
+            />
+            {isMyTurn && !gameData?.complete && nav.isLive && (
                 <>
                     <h3>Your Turn</h3>
                     <SnakesAndLaddersPlayerActions
@@ -123,9 +170,9 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
             <Row>
                 <Col>
                     <ul>
-                        {gameData?.gameState?.history ? gameData.gameState.history.map((historyString, index) => (
+                        {nav.displayedHistory.map((historyString, index) => (
                             <li key={index}>{historyString}</li>
-                        )) : ""}
+                        ))}
                     </ul>
                 </Col>
             </Row>

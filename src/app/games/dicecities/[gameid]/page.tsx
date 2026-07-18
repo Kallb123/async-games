@@ -7,12 +7,19 @@ import { useEffect, useState } from "react";
 import { Col, Form, Row } from "react-bootstrap";
 import CurrentUserInfo from "@/components/CurrentUserInfo";
 import DiceCitiesPlayer from "@/components/games/DiceCities/DiceCitiesPlayer";
-import { IDiceCitiesGameDataResponse } from "@/games/DiceCities/apiModels";
+import { IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
 import DiceCitiesBank from "@/components/games/DiceCities/DiceCitiesBank";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { IGameCommand } from "@/utils/apiModels/GameLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import GameResult from "@/components/GameResult";
+import TurnNavControls from "@/components/games/TurnNavControls";
+import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
+
+// Sentinel used as "current turn" while reviewing a past turn, so no player's
+// interactive controls activate (they gate on currentTurn === the logged-in user).
+const NO_ACTIVE_TURN = "__recap__";
+const noopSubmit = async () => {};
 
 export default function GameDiceCities({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
@@ -103,31 +110,45 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
         return Object.values(playerStates).find(p => p.userId === gameData.winner)?.username ?? gameData?.winner ?? "";
     };
 
+    const live = {
+        specificGameState: gameData?.specificGameState,
+        currentTurn: gameData?.currentTurn ?? "",
+        complete: gameData?.complete ?? false,
+        winner: gameData?.winner ?? "",
+        history: gameData?.gameState?.history ?? [],
+    };
+    const nav = useTurnNavigation<IDiceCitiesGameStateResponse>(gameId, live);
+    const displayed = nav.displayedState;
+    // While reviewing a past turn, disable all interactive controls.
+    const controlsCurrentTurn = nav.isLive ? nav.displayedCurrentTurn : NO_ACTIVE_TURN;
+    const controlsSubmit = nav.isLive ? submitCommand : noopSubmit;
+
     return (
         <main>
             <h1>Dice Cities</h1>
             <h2><a href="/">Home</a></h2>
             <GameResult complete={gameData?.complete ?? false} winnerId={gameData?.winner ?? ""} currentUserId={user?.id} winnerDisplayName={getWinnerDisplayName()} />
+            <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} />
             <Form>
-                {gameData?.specificGameState?.playerStates ? Object.keys(gameData.specificGameState.playerStates).map(userName => (
+                {displayed?.playerStates ? Object.keys(displayed.playerStates).map(userName => (
                     <DiceCitiesPlayer key={userName}
                     userName={userName}
-                    currentTurn={gameData.currentTurn}
-                    hasRolled={gameData.specificGameState.hasRolled}
-                    hasReRolled={gameData.specificGameState.hasReRolled}
-                    awaitingTSSelection={gameData.specificGameState.awaitingTSSelection}
-                    awaitingBCSelection={gameData.specificGameState.awaitingBCSelectionOwn || gameData.specificGameState.awaitingBCSelectionOpponent}
-                    submitCommand={submitCommand}
-                    playerState={gameData.specificGameState.playerStates[userName]} />
+                    currentTurn={controlsCurrentTurn}
+                    hasRolled={displayed.hasRolled}
+                    hasReRolled={displayed.hasReRolled}
+                    awaitingTSSelection={displayed.awaitingTSSelection}
+                    awaitingBCSelection={displayed.awaitingBCSelectionOwn || displayed.awaitingBCSelectionOpponent}
+                    submitCommand={controlsSubmit}
+                    playerState={displayed.playerStates[userName]} />
                 )) : ("")}
-                <DiceCitiesBank gameState={gameData?.specificGameState} currentTurn={gameData.currentTurn} submitCommand={submitCommand} />
+                {displayed && <DiceCitiesBank gameState={displayed} currentTurn={controlsCurrentTurn} submitCommand={controlsSubmit} />}
                 <h2>History</h2>
                 <Row>
                     <Col>
                         <ul>
-                            {gameData?.gameState?.history ? gameData.gameState.history.map((historyString, index) => (
+                            {nav.displayedHistory.map((historyString, index) => (
                                 <li key={index}>{historyString}</li>
-                            )) : ("")}
+                            ))}
                         </ul>
                     </Col>
                 </Row>

@@ -13,6 +13,9 @@ import type { ICommandResponse } from "@/app/api/game/command/route";
 import type { ISmartthinkGameDataResponse } from "@/games/Smartthink/apiModels";
 import SmartthinkBoard from "@/components/games/Smartthink/SmartthinkBoard";
 import SmartthinkPlayerActions from "@/components/games/Smartthink/SmartthinkPlayerActions";
+import TurnNavControls from "@/components/games/TurnNavControls";
+import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
+import type { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
 
 export default function GameSmartthink({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
@@ -106,20 +109,31 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
     const isCodeBreaker = user?.id === gameData?.specificGameState?.codeBreakerId;
     const isMyTurn = user?.id === gameData?.currentTurn;
 
+    const live = {
+        specificGameState: gameData?.specificGameState,
+        currentTurn: gameData?.currentTurn ?? "",
+        complete: gameData?.complete ?? false,
+        winner: gameData?.winner ?? "",
+        history: gameData?.gameState?.history ?? [],
+    };
+    const nav = useTurnNavigation<ISmartthinkGameStateResponse>(gameId, live);
+    const displayed = nav.displayedState;
+
     return (
         <main>
             <h1>Smartthink</h1>
             <h2><a href="/">Home</a></h2>
             <GameResult complete={gameData?.complete ?? false} winnerId={gameData?.winner ?? ""} currentUserId={user?.id} winnerDisplayName={getWinnerDisplayName()} />
-            {gameData?.specificGameState && (
+            {displayed && (
                 <>
                     <SmartthinkBoard
-                        guessRows={gameData.specificGameState.guessRows}
-                        maxGuesses={gameData.specificGameState.maxGuesses}
-                        codeSetterUsername={gameData.specificGameState.codeSetterUsername}
-                        codeBreakerUsername={gameData.specificGameState.codeBreakerUsername}
+                        guessRows={displayed.guessRows}
+                        maxGuesses={displayed.maxGuesses}
+                        codeSetterUsername={displayed.codeSetterUsername}
+                        codeBreakerUsername={displayed.codeBreakerUsername}
                     />
-                    {isMyTurn && !gameData?.complete && (
+                    <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} />
+                    {isMyTurn && !gameData?.complete && nav.isLive && (
                         <SmartthinkPlayerActions
                             gameState={gameData.specificGameState}
                             isCodeSetter={isCodeSetter}
@@ -133,9 +147,9 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
             <Row>
                 <Col>
                     <ul>
-                        {gameData?.gameState?.history ? gameData.gameState.history.map((historyString, index) => (
+                        {nav.displayedHistory.map((historyString, index) => (
                             <li key={index}>{historyString}</li>
-                        )) : ""}
+                        ))}
                     </ul>
                 </Col>
             </Row>

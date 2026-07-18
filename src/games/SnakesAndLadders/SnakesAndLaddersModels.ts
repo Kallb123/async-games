@@ -63,10 +63,7 @@ SnakesAndLaddersInvitationSchema.methods.CreateGame = async function(invite: ISn
 
     SortUsersByRoll(userIdList, usernameMap, turnOrder, history, 6);
 
-    const playerPositions = new Map<string, ISnakesAndLaddersPlayerState>();
-    for (const userId of userIdList) {
-        playerPositions.set(userId, { position: 0 });
-    }
+    const initialSpecificGameState = buildInitialSnakesAndLaddersState(userIdList);
 
     const gameData: ISnakesAndLaddersGameData = {
         gameId: uuidv4() as uuidString,
@@ -83,10 +80,7 @@ SnakesAndLaddersInvitationSchema.methods.CreateGame = async function(invite: ISn
         },
         complete: false,
         winner: "",
-        specificGameState: {
-            playerPositions,
-            hasRolled: false
-        }
+        specificGameState: initialSpecificGameState
     };
     return gameData;
 };
@@ -146,7 +140,21 @@ SnakesAndLaddersGameDataSchema.methods.CreateDataResponse = async function(): Pr
     };
 };
 
-function gameStateToModel(gameState: ISnakesAndLaddersGameState, userIdNameMap: { [key: string]: string }): ISnakesAndLaddersGameStateResponse {
+// Builds the deterministic starting specificGameState for a Snakes & Ladders
+// game. Used both at game creation and by the replay engine to reconstruct
+// historical / planned states from commandHistory.
+export function buildInitialSnakesAndLaddersState(userIdList: string[]): ISnakesAndLaddersGameState {
+    const playerPositions = new Map<string, ISnakesAndLaddersPlayerState>();
+    for (const userId of userIdList) {
+        playerPositions.set(userId, { position: 0 });
+    }
+    return {
+        playerPositions,
+        hasRolled: false
+    };
+}
+
+export function gameStateToModel(gameState: ISnakesAndLaddersGameState, userIdNameMap: { [key: string]: string }): ISnakesAndLaddersGameStateResponse {
     const playerStates: { [key: string]: { username: string, userId: string, position: number } } = {};
     for (const [userId, playerStateModel] of gameState.playerPositions) {
         playerStates[userIdNameMap[userId]] = {
