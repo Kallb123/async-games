@@ -1,5 +1,4 @@
-import TimedToken from '@/utils/firebase/TimedToken';
-import { getAdminMessaging } from '@/utils/firebase/adminFirebase';
+import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
@@ -46,36 +45,17 @@ export async function POST(request: NextRequest) {
 
   await invite.save();
 
-  const messaging = getAdminMessaging();
-  const tokens = userList
-    .flatMap(user => user.privateMetadata.notificationTokens as TimedToken[])
-    .filter(token => token);
-  if (tokens.length) {
-    messaging.sendEach(
-      tokens.map(token => ({
-        token: token.token,
-        notification: {
-          title: 'Game Invite',
-          body: `${thisUser?.username} has invited you to play Settlements and Cities!`,
-        },
-        data: {
-          event: 'NewInvite',
-          inviteId: invite.inviteId,
-        },
-      })),
-    );
-  }
-  const tokensSender = (thisUser.privateMetadata.notificationTokens as TimedToken[]).filter(
-    token => token,
-  );
-  if (tokensSender.length) {
-    messaging.sendEach(
-      tokensSender.map(token => ({
-        token: token.token,
-        data: { event: 'NewInvite', inviteId: invite.inviteId },
-      })),
-    );
-  }
+  await sendPushToUsers(userList, {
+    event: 'NewInvite',
+    inviteId: invite.inviteId,
+  }, {
+    title: 'Game Invite',
+    body: `${thisUser.username} has invited you to play Settlements and Cities!`,
+  });
+  await sendPushToUsers([thisUser], {
+    event: 'NewInvite',
+    inviteId: invite.inviteId,
+  });
 
   return NextResponse.json({ success: true });
 }

@@ -1,9 +1,7 @@
-import TimedToken from '@/utils/firebase/TimedToken';
-import { getAdminMessaging } from '@/utils/firebase/adminFirebase';
+import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { clerkClient } from '@clerk/nextjs/server';
-import { Message } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
 import { isExpired, isWarningThreshold, formatRemainingTime } from '@/utils/games/TurnTimer';
 
@@ -23,7 +21,6 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ processed: 0 });
     }
 
-    const messaging = getAdminMessaging();
     const gameIconBaseUrl = `https://async-games.vercel.app/art`;
 
     let expired = 0;
@@ -48,44 +45,22 @@ export async function GET(request: NextRequest) {
             const gameIconUrl = `${gameIconBaseUrl}/${gameData.gameType.url}/icon.png`;
 
             // Silent data notification to all players (refresh game state)
-            const allTokens = userList
-                .flatMap(u => u.privateMetadata.notificationTokens as TimedToken[])
-                .filter(t => t);
-            if (allTokens.length) {
-                await messaging.sendEach(allTokens.map(token => ({
-                    token: token.token,
-                    data: {
-                        event: 'TurnExpired',
-                        gameId: gameData.gameId
-                    }
-                })));
-            }
+            await sendPushToUsers(userList, {
+                event: 'TurnExpired',
+                gameId: gameData.gameId
+            });
 
             // Push notification to the newly active player
             const turnUser = userList.find(u => u.id === gameData.currentTurn);
             if (turnUser) {
-                const turnTokens = (turnUser.privateMetadata.notificationTokens as TimedToken[]).filter(t => t);
-                if (turnTokens.length) {
-                    await messaging.sendEach(turnTokens.map(token => {
-                        const message: Message = {
-                            token: token.token,
-                            data: {
-                                event: 'YourTurn',
-                                gameId: gameData.gameId
-                            },
-                            notification: {
-                                title: "Your Turn",
-                                body: `It's your turn to play!`,
-                                imageUrl: gameIconUrl
-                            },
-                            apns: { fcmOptions: { imageUrl: gameIconUrl } },
-                            android: { notification: { imageUrl: gameIconUrl } },
-                            webpush: { headers: { image: gameIconUrl } }
-                        };
-                        console.log(`[cron/turntimer] Sending YourTurn to ${turnUser.username} via ${token.token}`);
-                        return message;
-                    }));
-                }
+                await sendPushToUsers([turnUser], {
+                    event: 'YourTurn',
+                    gameId: gameData.gameId
+                }, {
+                    title: "Your Turn",
+                    body: `It's your turn to play!`,
+                    imageUrl: gameIconUrl
+                });
             }
 
             expired++;
@@ -101,29 +76,15 @@ export async function GET(request: NextRequest) {
 
             const activeUser = userList.find(u => u.id === currentTurn);
             if (activeUser) {
-                const warnTokens = (activeUser.privateMetadata.notificationTokens as TimedToken[]).filter(t => t);
                 const timeLeft = formatRemainingTime(lastTurnTimestamp, turnTimer);
-                if (warnTokens.length) {
-                    await messaging.sendEach(warnTokens.map(token => {
-                        const message: Message = {
-                            token: token.token,
-                            data: {
-                                event: 'TurnExpiringSoon',
-                                gameId: gameData.gameId
-                            },
-                            notification: {
-                                title: "Time Running Out!",
-                                body: `You have less than ${timeLeft} left to take your turn!`,
-                                imageUrl: gameIconUrl
-                            },
-                            apns: { fcmOptions: { imageUrl: gameIconUrl } },
-                            android: { notification: { imageUrl: gameIconUrl } },
-                            webpush: { headers: { image: gameIconUrl } }
-                        };
-                        console.log(`[cron/turntimer] Sending TurnExpiringSoon to ${activeUser.username} via ${token.token}`);
-                        return message;
-                    }));
-                }
+                await sendPushToUsers([activeUser], {
+                    event: 'TurnExpiringSoon',
+                    gameId: gameData.gameId
+                }, {
+                    title: "Time Running Out!",
+                    body: `You have less than ${timeLeft} left to take your turn!`,
+                    imageUrl: gameIconUrl
+                });
             }
 
             warned++;

@@ -1,7 +1,5 @@
-import TimedToken from '@/utils/firebase/TimedToken';
-import { getAdminMessaging } from '@/utils/firebase/adminFirebase';
+import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
-import { Message } from 'firebase-admin/messaging';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { DiceCitiesRequestRadioTowerReroll, ICommandOutcome, IGameCommand, IGameType, SmartthinkGameType, SmartthinkSetSecretCode, SmartthinkSubmitGuess, SnakesAndLaddersGameType, SnakesAndLaddersRequestDiceRoll } from '@/utils/apiModels/GameLogic';
@@ -85,9 +83,6 @@ export async function POST(request: NextRequest) {
   gameData.gameState.commandHistory.push(commandRequest);
   gameData.markModified('gameState.commandHistory');
 
-  // initialise Firebase
-  const messaging = getAdminMessaging();
-
   // Checks whether the turn should be progressed and actions it if so
   const gameType: IGameType = deserializeJSON(JSON.stringify(gameData.gameType));
   if (gameType.CheckGameOver(gameData)) {
@@ -106,78 +101,26 @@ export async function POST(request: NextRequest) {
     const winnerUsername = winnerUser?.username ?? winnerUser?.firstName ?? gameData.winner;
     const gameIconUrl = `https://async-games.vercel.app/art/dicecities/icon.png`;
 
-    const winnerTokens = (winnerUser?.privateMetadata.notificationTokens as TimedToken[] ?? []).filter(token => token);
-    if (winnerTokens.length) {
-      messaging.sendEach(winnerTokens.map((token) => {
-        const message: Message = {
-          token: token.token,
-          data: {
-            event: 'GameOver',
-            gameId: commandRequest.gameId
-          },
-          notification: {
-            title: "You won! 🎉",
-            body: `Congratulations, you won the game!`,
-            imageUrl: gameIconUrl
-          },
-          apns: {
-            fcmOptions: {
-              imageUrl: gameIconUrl
-            }
-          },
-          android: {
-            notification: {
-              imageUrl: gameIconUrl
-            }
-          },
-          webpush: {
-            headers: {
-              "image": gameIconUrl
-            }
-          }
-        };
-        console.log(`Sending GameOver (won) to ${winnerUsername} via ${token.token}`);
-        return message;
-      }));
+    if (winnerUser) {
+      await sendPushToUsers([winnerUser], {
+        event: 'GameOver',
+        gameId: commandRequest.gameId
+      }, {
+        title: "You won! 🎉",
+        body: `Congratulations, you won the game!`,
+        imageUrl: gameIconUrl
+      });
     }
 
-    const loserTokens = userList
-      .filter(u => u.id !== gameData.winner)
-      .flatMap((user) => user.privateMetadata.notificationTokens as TimedToken[])
-      .filter(token => token);
-    if (loserTokens.length) {
-      messaging.sendEach(loserTokens.map((token) => {
-        const message: Message = {
-          token: token.token,
-          data: {
-            event: 'GameOver',
-            gameId: commandRequest.gameId
-          },
-          notification: {
-            title: "Game Over",
-            body: `${winnerUsername} won the game. Better luck next time!`,
-            imageUrl: gameIconUrl
-          },
-          apns: {
-            fcmOptions: {
-              imageUrl: gameIconUrl
-            }
-          },
-          android: {
-            notification: {
-              imageUrl: gameIconUrl
-            }
-          },
-          webpush: {
-            headers: {
-              "image": gameIconUrl
-            }
-          }
-        };
-        console.log(`Sending GameOver (lost) to user via ${token.token}`);
-        return message;
-      }));
-    }
+    const losers = userList.filter(u => u.id !== gameData.winner);
+    await sendPushToUsers(losers, {
+      event: 'GameOver',
+      gameId: commandRequest.gameId
+    }, {
+      title: "Game Over",
+      body: `${winnerUsername} won the game. Better luck next time!`,
+      imageUrl: gameIconUrl
+    });
 
     return NextResponse.json(response, {status: 200});
   }
@@ -209,53 +152,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, {status: 400, statusText: "Next user not found"});
   }
 
-  const tokens = userList.flatMap((user) => user.privateMetadata.notificationTokens as TimedToken[]).filter(token => token);
-  if (tokens.length) {
-    messaging.sendEach(tokens.map((token) => {
-        return {
-            token: token.token,
-            data: {
-                event: 'TurnTaken',
-                gameId: commandRequest.gameId
-            }
-        }
-    }));
-  }
+  await sendPushToUsers(userList, {
+    event: 'TurnTaken',
+    gameId: commandRequest.gameId
+  });
 
-  const turnTokens = (turnUser.privateMetadata.notificationTokens as TimedToken[]).filter(token => token);
-  if (turnTokens.length) {
-    messaging.sendEach(turnTokens.map((token) => {
-      const message: Message = {
-            token: token.token,
-            data: {
-                event: 'YourTurn',
-                gameId: commandRequest.gameId
-            },
-            notification: {
-                title: "Your Turn",
-                body: `It's your turn to play!`,
-                imageUrl: `https://async-games.vercel.app/art/dicecities/icon.png`
-            },
-            apns: {
-              fcmOptions: {
-                imageUrl: `https://async-games.vercel.app/art/dicecities/icon.png`
-              }
-            },
-            android: {
-              notification: {
-                imageUrl: `https://async-games.vercel.app/art/dicecities/icon.png`
-              }
-            },
-            webpush: {
-              headers: {
-                "image": `https://async-games.vercel.app/art/dicecities/icon.png`
-              }
-            }
-        }
-        console.log(`Sending YourTurn to ${turnUser.username} via ${token.token}`);
-      return message;
-    }));
-  }
+  await sendPushToUsers([turnUser], {
+    event: 'YourTurn',
+    gameId: commandRequest.gameId
+  }, {
+    title: "Your Turn",
+    body: `It's your turn to play!`,
+    imageUrl: `https://async-games.vercel.app/art/dicecities/icon.png`
+  });
 
   return NextResponse.json(response, {status: 200});
 }

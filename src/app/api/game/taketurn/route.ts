@@ -1,5 +1,4 @@
-import TimedToken from '@/utils/firebase/TimedToken';
-import { getAdminMessaging } from '@/utils/firebase/adminFirebase';
+import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
@@ -39,37 +38,18 @@ export async function POST(request: NextRequest) {
 
   await gameData.save();
 
-  const messaging = getAdminMessaging();
+  await sendPushToUsers(userList, {
+    event: 'TurnTaken',
+    gameId
+  });
 
-  const tokens = userList.flatMap((user) => user.privateMetadata.notificationTokens as TimedToken[]).filter(token => token);
-  if (tokens.length) {
-    messaging.sendEach(tokens.map((token) => {
-        return {
-            token: token.token,
-            data: {
-                event: 'TurnTaken',
-                gameId
-            }
-        }
-    }));
-  }
-
-  const turnTokens = (turnUser.privateMetadata.notificationTokens as TimedToken[]).filter(token => token);
-  if (turnTokens.length) {
-    messaging.sendEach(turnTokens.map((token) => {
-        return {
-            token: token.token,
-            data: {
-                event: 'YourTurn',
-                gameId
-            },
-            notification: {
-                title: "Your Turn",
-                body: `It's your turn to play!`
-            },
-        }
-    }));
-  }
+  await sendPushToUsers([turnUser], {
+    event: 'YourTurn',
+    gameId
+  }, {
+    title: "Your Turn",
+    body: `It's your turn to play!`
+  });
 
   return NextResponse.json({success: true});
 }
