@@ -38,7 +38,8 @@ export default function Home() {
     <main>
       <FcmTokenComp />
       <h1>Async Gaming</h1>
-      <Button href="/newgame">New Game</Button>
+      <Button href="/newgame">New Game</Button>{' '}
+      <Button href="/profile" variant="secondary">My Profile</Button>
       <MyTurnList />
       <hr />
       <IncomingInviteList />
