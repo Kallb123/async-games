@@ -2,11 +2,14 @@ import { GameDataModel, IGameData, IGameDataDocument } from "@/utils/mongodb/Gam
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { ISmartthinkGameDataResponse, ISmartthinkGameStateResponse } from "./apiModels";
-import { uuidString } from "@/utils/apiModels/GameDataApi";
+import { IGameResponse, uuidString } from "@/utils/apiModels/GameDataApi";
 import { v4 as uuidv4 } from 'uuid';
 import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
 import { SmartthinkGameType } from "@/utils/apiModels/GameLogic";
 import { DiceRoll } from "@/utils/games/DiceRoll";
+
+export const SMARTTHINK_COMPUTER_ID = "Computer";
+export const SMARTTHINK_COMPUTER_USERNAME = "Computer";
 
 export interface SmartthinkInvitationRequest extends IInvitationRequest {
 }
@@ -73,6 +76,41 @@ function SortUsersByRoll(userIdList: string[], usernameMap: Map<string, string>,
             history.push(`${usernameMap.get(usersInRoll[0])} rolled a ${roll}`);
         }
     });
+}
+
+function generateSmartthinkSecretCode(): number[] {
+    return Array.from({ length: 4 }, () => Math.floor(Math.random() * 6));
+}
+
+export function CreateSmartthinkSoloGameData(userId: string, username: string, turnTimer: string): ISmartthinkGameData {
+    const gameType = new SmartthinkGameType();
+
+    return {
+        gameId: uuidv4() as uuidString,
+        gameType,
+        userIdList: [userId],
+        turnTimer,
+        currentTurn: userId,
+        lastTurnTimestamp: (new Date()).toISOString(),
+        timerWarningNotificationSent: false,
+        gameState: {
+            turnOrder: [userId],
+            history: [`${SMARTTHINK_COMPUTER_USERNAME} set the secret code`],
+            commandHistory: []
+        },
+        complete: false,
+        winner: "",
+        specificGameState: {
+            secretCode: generateSmartthinkSecretCode(),
+            guessRows: [],
+            secretCodeSet: true,
+            codeSetterId: SMARTTHINK_COMPUTER_ID,
+            codeSetterUsername: SMARTTHINK_COMPUTER_USERNAME,
+            codeBreakerId: userId,
+            codeBreakerUsername: username,
+            maxGuesses: 10
+        }
+    };
 }
 
 var SmartthinkInvitationSchema = new Schema<ISmartthinkInvitationDataDocument>({}, { discriminatorKey: 'kind' });
@@ -179,6 +217,33 @@ var SmartthinkGameDataSchema = new Schema<ISmartthinkGameDataDocument>({
         maxGuesses: Number
     }
 }, { discriminatorKey: 'kind' });
+
+SmartthinkGameDataSchema.methods.CreateResponse = async function(): Promise<IGameResponse> {
+    console.log("CreateResponse: Smartthink game");
+
+    const gameDataDocument: ISmartthinkGameData = this as ISmartthinkGameData;
+
+    const usernameList = await userIdListToUsernameList(gameDataDocument.userIdList);
+    if (gameDataDocument.specificGameState.codeSetterId === SMARTTHINK_COMPUTER_ID) {
+        usernameList.push(SMARTTHINK_COMPUTER_USERNAME);
+    }
+
+    const winner = gameDataDocument.winner === SMARTTHINK_COMPUTER_ID
+        ? SMARTTHINK_COMPUTER_USERNAME
+        : (await userIdListToUsernameList([gameDataDocument.winner]))[0];
+
+    return {
+        gameId: gameDataDocument.gameId,
+        gameType: gameDataDocument.gameType.gameType,
+        friendlyName: gameDataDocument.gameType.friendlyName,
+        usernameList,
+        turnTimer: gameDataDocument.turnTimer,
+        currentTurn: gameDataDocument.currentTurn,
+        url: gameDataDocument.gameType.url,
+        complete: gameDataDocument.complete,
+        winner
+    };
+};
 
 SmartthinkGameDataSchema.methods.CreateDataResponse = async function(): Promise<ISmartthinkGameDataResponse> {
     console.log("CreateDataResponse: Smartthink game");

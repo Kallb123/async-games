@@ -71,10 +71,33 @@ export default function NewGameSmartthink() {
     }
   };
 
+  const handlePlaySolo = async () => {
+    try {
+      const response = await fetch('/api/newgame/smartthink/solo', {
+        method: 'POST'
+      });
+      if (!response.ok) {
+        throw new Error('Failed to start solo game');
+      }
+      const data = await response.json();
+      router.push(`/games/${data.gameUrl}/${data.gameId}`);
+    } catch (error) {
+      console.error(error);
+      showToast('Failed to start the solo game. Please try again.', 'danger');
+    }
+  };
+
   return (
     <main>
       <h1>New Game: Smartthink</h1>
       <h2><a href="/">Home</a></h2>
+      <Row className="mb-3">
+        <Col>
+          <Button variant="secondary" onClick={handlePlaySolo}>Play Solo</Button>
+          <div><small>Play against an automatically-generated code, right away.</small></div>
+        </Col>
+      </Row>
+      <h3>Or invite a friend</h3>
       <Form onSubmit={handleSubmit}>
         <Row>
           <Col>
