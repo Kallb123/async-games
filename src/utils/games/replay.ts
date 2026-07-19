@@ -4,6 +4,8 @@ import { deserializeJSON } from "../apiModels/Serialisable";
 import { buildInitialSnakesAndLaddersState, gameStateToModel as snakesAndLaddersStateToModel } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
 import { buildInitialDiceCitiesState, gameStateToModel as diceCitiesStateToModel } from "@/games/DiceCities/DiceCitiesModels";
 import { buildInitialSmartthinkState, gameStateToModel as smartthinkStateToModel } from "@/games/Smartthink/SmartthinkModels";
+import { buildInitialSettlementsAndCitiesState, gameStateToResponse as settlementsAndCitiesStateToModel } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
+import { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 // Side-effect import: evaluating GameLogic registers every @serializable command
 // class so deserializeJSON can rehydrate them during replay.
 import "../apiModels/GameLogic";
@@ -71,6 +73,14 @@ registerReplayAdapter({
     buildInitialSpecificGameState: (gameData) => buildInitialDiceCitiesState(gameData.userIdList),
     toResponseState: (specificGameState, userIdNameMap) =>
         diceCitiesStateToModel(specificGameState as never, userIdNameMap),
+});
+
+registerReplayAdapter({
+    className: "SettlementsAndCitiesGameType",
+    buildInitialSpecificGameState: (gameData) =>
+        buildInitialSettlementsAndCitiesState(gameData as ISettlementsAndCitiesGameData),
+    toResponseState: (specificGameState, userIdNameMap) =>
+        settlementsAndCitiesStateToModel(specificGameState as never, userIdNameMap),
 });
 
 registerReplayAdapter({

@@ -59,4 +59,8 @@ export interface ISACSpecificGameStateResponse {
 
 export interface ISACGameDataResponse extends IGameDataResponse {
     specificGameState: ISACSpecificGameStateResponse;
+    // True when the game carries the stored initial-state snapshot needed for
+    // turn recap (games created after recap support). Drives whether the recap
+    // controls are offered.
+    recapAvailable?: boolean;
 }

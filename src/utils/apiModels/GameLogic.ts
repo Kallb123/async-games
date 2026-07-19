@@ -1435,7 +1435,38 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean, recorded
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── Helper: randomly discard half of a player's cards ───────────────────────
-function sacDiscardHalf(ps: ISACPlayerState): void {
+// Records the raw Math.random() draws a command consumes the first time it runs
+// so an identical sequence can be replayed later (turn recap). Construct with a
+// previously recorded log to replay it, or with nothing to record fresh. Used
+// for the SAC discard shuffle, whose number of draws varies per roll. The log
+// is persisted as part of the command in commandHistory (Schema.Types.Mixed).
+export class SACRandomLog {
+    private draws: number[];
+    private cursor = 0;
+    readonly replaying: boolean;
+
+    constructor(recorded?: number[]) {
+        this.replaying = Array.isArray(recorded);
+        this.draws = recorded ? [...recorded] : [];
+    }
+
+    // Next raw draw in [0, 1). Falls back to a fresh draw if a replay log runs
+    // short (defensive — should never happen for a faithfully recorded log).
+    next(): number {
+        if (this.replaying) {
+            return this.draws[this.cursor++] ?? Math.random();
+        }
+        const value = Math.random();
+        this.draws.push(value);
+        return value;
+    }
+
+    get log(): number[] {
+        return this.draws;
+    }
+}
+
+function sacDiscardHalf(ps: ISACPlayerState, rng: SACRandomLog): void {
     const total = sacTotalResources(ps);
     if (total <= 7) return;
     let toDiscard = Math.floor(total / 2);
@@ -1446,7 +1477,7 @@ function sacDiscardHalf(ps: ISACPlayerState): void {
     }
     // Fisher-Yates shuffle the pool then take first `toDiscard`
     for (let i = pool.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = Math.floor(rng.next() * (i + 1));
         [pool[i], pool[j]] = [pool[j], pool[i]];
     }
     for (let i = 0; i < toDiscard; i++) {
@@ -1715,6 +1746,13 @@ export class SACRollDice implements IGameCommand {
     senderId: string = 'Unknown';
     senderUsername: string = 'Unknown';
     readonly className = 'SACRollDice';
+    // Recorded RNG outcomes, populated on first execution so the command can be
+    // deterministically replayed (turn recap). Persisted in commandHistory.
+    recordedRoll1?: number;
+    recordedRoll2?: number;
+    // Raw draws consumed by the discard shuffle when a 7 is rolled (variable
+    // length — one shuffle per player holding >7 cards).
+    recordedDiscards?: number[];
 
     myString() { return `SAC RollDice`; }
 
@@ -1726,15 +1764,25 @@ export class SACRollDice implements IGameCommand {
         if (gs.hasRolled) return { validMove: false, turnOver: false };
         if (gs.pendingRobber) return { validMove: false, turnOver: false };
 
-        const roll = DiceRoll(6) + DiceRoll(6);
+        // Reuse recorded dice when replaying; otherwise roll fresh and record.
+        const die1 = this.recordedRoll1 ?? DiceRoll(6);
+        const die2 = this.recordedRoll2 ?? DiceRoll(6);
+        this.recordedRoll1 = die1;
+        this.recordedRoll2 = die2;
+        const roll = die1 + die2;
         gs.lastRoll = roll;
 
         if (roll === 7) {
             sacData.gameState.history.unshift(`${this.senderUsername} rolled a ${roll}`);
-            // Discard phase: auto-discard for all players with >7 cards
+            // Discard phase: auto-discard for all players with >7 cards. The
+            // shuffle draws are recorded so replay discards the same cards. The
+            // playerStates iteration order is stable (userIdList order), so the
+            // recorded draws line up with the same players on replay.
+            const rng = new SACRandomLog(this.recordedDiscards);
             for (const [, ps] of gs.playerStates) {
-                sacDiscardHalf(ps);
+                sacDiscardHalf(ps, rng);
             }
+            this.recordedDiscards = rng.log;
             gs.pendingRobber = true;
         } else {
             const resourceDistributions = new Map<string, Partial<Record<SAC_Resource, number>>>();
@@ -1792,6 +1840,10 @@ export class SACMoveRobber implements IGameCommand {
     hexId: number = 0;
     stealFromUserId: string | null = null;
     readonly className = 'SACMoveRobber';
+    // Index into the victim's (deterministically reconstructed) resource pool of
+    // the stolen resource. Recorded on first execution so replay steals the same
+    // resource. Persisted in commandHistory.
+    recordedStealIndex?: number;
 
     myString() { return `SAC MoveRobber hex=${this.hexId} stealFrom=${this.stealFromUserId}`; }
 
@@ -1823,7 +1875,9 @@ export class SACMoveRobber implements IGameCommand {
                 for (let i = 0; i < victim.resources[r]; i++) pool.push(r);
             }
             if (pool.length > 0) {
-                const stolen = pool[Math.floor(Math.random() * pool.length)];
+                const stealIndex = this.recordedStealIndex ?? Math.floor(Math.random() * pool.length);
+                this.recordedStealIndex = stealIndex;
+                const stolen = pool[stealIndex];
                 victim.resources[stolen]--;
                 const thief = gs.playerStates.get(this.senderId);
                 if (thief) thief.resources[stolen]++;
