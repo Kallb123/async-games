@@ -1,5 +1,4 @@
-import TimedToken from '@/utils/firebase/TimedToken';
-import { getAdminMessaging } from '@/utils/firebase/adminFirebase';
+import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
@@ -32,9 +31,6 @@ export async function POST(request: NextRequest) {
     acceptance.inviteAccepted = true;
   }
 
-  // initialise Firebase
-  const messaging = getAdminMessaging();
-
   const userIdList = inviteData.userIdList.map(uid => uid.userId);
   const { data: userList } = await (await clerkClient()).users.getUserList({
     userId: userIdList
@@ -46,18 +42,10 @@ export async function POST(request: NextRequest) {
     await inviteData.save();
   }
 
-  const tokens = userList.flatMap((user) => user.privateMetadata.notificationTokens as TimedToken[]).filter(token => token);
-  if (tokens.length) {
-    messaging.sendEach(tokens.map((token) => {
-        return {
-            token: token.token,
-            data: {
-                event: 'InviteAccepted',
-                inviteId: inviteId
-            }
-        }
-    }));
-  }
+  await sendPushToUsers(userList, {
+    event: 'InviteAccepted',
+    inviteId: inviteId
+  });
 
   if (!allAccepted) {
     return NextResponse.json({success: true, gameStarted: false});
@@ -82,18 +70,11 @@ export async function POST(request: NextRequest) {
   
   await inviteData.deleteOne();
 
-  if (tokens.length) {
-    messaging.sendEach(tokens.map((token) => {
-        return {
-            token: token.token,
-            data: {
-                event: 'GameStart',
-                inviteId: inviteId,
-                gameId: gameData.gameId.toString() as uuidString
-            }
-        }
-    }));
-  }
+  await sendPushToUsers(userList, {
+    event: 'GameStart',
+    inviteId: inviteId,
+    gameId: gameData.gameId.toString() as uuidString
+  });
 
   return NextResponse.json({success: true, gameStarted: true, gameId: gameData.gameId, gameUrl: gameData.gameType.url});
 }

@@ -1,23 +1,42 @@
 import { User } from '@clerk/nextjs/server';
+import { Message } from 'firebase-admin/messaging';
 import TimedToken from './TimedToken';
 import { getAdminMessaging } from './adminFirebase';
 
-export async function sendPushToUsers(users: User[], title: string, body: string, data: Record<string, string>) {
+export interface PushNotification {
+    title: string;
+    body?: string;
+    imageUrl?: string;
+}
+
+// Sends a push to every registered device of the given users. Omit `notification`
+// for a silent data-only message (e.g. to refresh client state).
+export async function sendPushToUsers(users: User[], data: Record<string, string>, notification?: PushNotification) {
     const tokens = users
         .flatMap((user) => (user.privateMetadata.notificationTokens as TimedToken[] | undefined) ?? [])
         .filter(token => token);
     if (!tokens.length) {
         return;
     }
+    console.log(`Sending ${data.event ?? notification?.title ?? 'push'} to ${tokens.length} device token(s)`);
     const messaging = getAdminMessaging();
     await messaging.sendEach(tokens.map((token) => {
-        return {
+        const message: Message = {
             token: token.token,
-            notification: {
-                title,
-                body
-            },
             data
         };
+        if (notification) {
+            message.notification = {
+                title: notification.title,
+                body: notification.body,
+                imageUrl: notification.imageUrl
+            };
+            if (notification.imageUrl) {
+                message.apns = { fcmOptions: { imageUrl: notification.imageUrl } };
+                message.android = { notification: { imageUrl: notification.imageUrl } };
+                message.webpush = { headers: { image: notification.imageUrl } };
+            }
+        }
+        return message;
     }));
 }

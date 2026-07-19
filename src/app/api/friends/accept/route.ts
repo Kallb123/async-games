@@ -36,9 +36,12 @@ export async function POST(request: NextRequest) {
   await friendship.save();
 
   const requester = await (await clerkClient()).users.getUser(friendship.requesterId);
-  await sendPushToUsers([requester], "Friend Request Accepted", `${thisUser.username} accepted your friend request!`, {
+  await sendPushToUsers([requester], {
     event: "FriendAccepted",
     friendshipId: friendship.friendshipId
+  }, {
+    title: "Friend Request Accepted",
+    body: `${thisUser.username} accepted your friend request!`
   });
 
   return NextResponse.json({success: true});

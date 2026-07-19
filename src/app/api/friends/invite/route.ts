@@ -54,9 +54,12 @@ export async function POST(request: NextRequest) {
   });
   await friendship.save();
 
-  await sendPushToUsers([recipient], "Friend Request", `${thisUser.username} sent you a friend request!`, {
+  await sendPushToUsers([recipient], {
     event: "FriendInvite",
     friendshipId: friendship.friendshipId
+  }, {
+    title: "Friend Request",
+    body: `${thisUser.username} sent you a friend request!`
   });
 
   return NextResponse.json({success: true, username: recipient.username});

@@ -1,5 +1,4 @@
-import TimedToken from '@/utils/firebase/TimedToken';
-import { getAdminMessaging } from '@/utils/firebase/adminFirebase';
+import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
@@ -53,51 +52,18 @@ export async function POST(request: NextRequest) {
   await invite.save();
 
   // Send notifications
-  const messaging = getAdminMessaging();
-  const tokens = userList.flatMap((user) => user.privateMetadata.notificationTokens as TimedToken[]).filter(token => token);
-  if (tokens.length) {
-    messaging.sendEach(tokens.map((token) => {
-        return {
-            token: token.token,
-            notification: {
-                title: "Game Invite",
-                body: `${thisUser?.username} has invited you to play Dice Cities!`,
-                imageUrl: `https://async-games.vercel.app/art/dicecities/icon.png`
-            },
-            data: {
-              event: "NewInvite",
-              inviteId: invite.inviteId,
-            },
-            apns: {
-              fcmOptions: {
-                imageUrl: `https://async-games.vercel.app/art/dicecities/icon.png`
-              }
-            },
-            android: {
-              notification: {
-                imageUrl: `https://async-games.vercel.app/art/dicecities/icon.png`
-              }
-            },
-            webpush: {
-              headers: {
-                "image": `https://async-games.vercel.app/art/dicecities/icon.png`
-              }
-            }
-        }
-    }));
-  }
-  const tokensSender = (thisUser.privateMetadata.notificationTokens as TimedToken[]).filter(token => token);
-  if (tokensSender.length) {
-    messaging.sendEach(tokensSender.map((token) => {
-        return {
-            token: token.token,
-            data: {
-              event: "NewInvite",
-              inviteId: invite.inviteId,
-            }
-        }
-    }));
-  }
+  await sendPushToUsers(userList, {
+    event: "NewInvite",
+    inviteId: invite.inviteId,
+  }, {
+    title: "Game Invite",
+    body: `${thisUser.username} has invited you to play Dice Cities!`,
+    imageUrl: `https://async-games.vercel.app/art/dicecities/icon.png`
+  });
+  await sendPushToUsers([thisUser], {
+    event: "NewInvite",
+    inviteId: invite.inviteId,
+  });
 
   return NextResponse.json({success: true});
 }
