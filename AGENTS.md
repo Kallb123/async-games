@@ -8,6 +8,10 @@ Async Games is a Next.js (App Router) app for playing turn-based games
 asynchronously. Auth is handled by Clerk, persistence by MongoDB/Mongoose,
 and push notifications by Firebase Cloud Messaging.
 
+For a detailed tour of the app and repo architecture — the game engine and
+command pattern, the data model, the turn lifecycle, push notifications, and
+how to add a new game — see [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+
 ## Component reuse — the most important rule
 
 **Build reusable components and reuse them wherever possible.** The UI was
