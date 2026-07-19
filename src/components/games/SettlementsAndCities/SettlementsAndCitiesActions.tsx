@@ -1,6 +1,6 @@
 'use client'
 import React, { useState } from 'react';
-import { Button, ButtonGroup, Form, Modal, Row, Col } from 'react-bootstrap';
+import { Button, Form, Modal } from 'react-bootstrap';
 import type { ISACSpecificGameStateResponse } from '@/games/SettlementsAndCities/apiModels';
 import type { SAC_Resource } from '@/games/SettlementsAndCities/board';
 import { IGameCommand } from '@/utils/apiModels/GameLogic';
@@ -30,6 +30,22 @@ const RESOURCE_EMOJI: Record<SAC_Resource, string> = {
     lumber: '🪵', wool: '🐑', grain: '🌾', brick: '🧱', ore: '⛏️',
 };
 
+type Cost = Partial<Record<SAC_Resource, number>>;
+
+function costText(cost: Cost): string {
+    return (Object.keys(cost) as SAC_Resource[])
+        .map(r => `${RESOURCE_EMOJI[r]}${cost[r]}`)
+        .join(' ');
+}
+
+/** Short "need N more 🧱" hint for the first resource the player is short on. */
+function shortfall(cost: Cost, res: Record<SAC_Resource, number>): string | null {
+    const parts = (Object.keys(cost) as SAC_Resource[])
+        .filter(r => (res[r] ?? 0) < (cost[r] ?? 0))
+        .map(r => `${(cost[r] ?? 0) - (res[r] ?? 0)} more ${RESOURCE_EMOJI[r]}`);
+    return parts.length ? `need ${parts.join(', ')}` : null;
+}
+
 interface SettlementsAndCitiesActionsProps {
     gs: ISACSpecificGameStateResponse;
     myUsername: string;
@@ -42,7 +58,6 @@ interface SettlementsAndCitiesActionsProps {
 export default function SettlementsAndCitiesActions({
     gs,
     myUsername,
-    myUserId,
     boardMode,
     setBoardMode,
     submitCommand,
@@ -72,62 +87,66 @@ export default function SettlementsAndCitiesActions({
     function submit<T extends IGameCommand>(cmd: T) {
         submitCommand(cmd, () => { setBoardMode('idle'); });
     }
+    function toggleMode(mode: SACBoardMode) {
+        setBoardMode(boardMode === mode ? 'idle' : mode);
+    }
 
     // ── Setup mode ────────────────────────────────────────────────────────────
     if (isSetup) {
-        if (!gs.pendingRoadSetup) {
-            return (
-                <div>
-                    <p>Setup: Place your settlement</p>
-                    <Button
-                        variant={boardMode === 'placeSettlementSetup' ? 'warning' : 'primary'}
-                        onClick={() => setBoardMode(boardMode === 'placeSettlementSetup' ? 'idle' : 'placeSettlementSetup')}
-                    >
-                        {boardMode === 'placeSettlementSetup' ? '↩ Cancel' : 'Place Settlement'}
-                    </Button>
-                </div>
-            );
-        } else {
-            return (
-                <div>
-                    <p>Setup: Place a road next to your settlement</p>
-                    <Button
-                        variant={boardMode === 'placeRoadSetup' ? 'warning' : 'primary'}
-                        onClick={() => setBoardMode(boardMode === 'placeRoadSetup' ? 'idle' : 'placeRoadSetup')}
-                    >
-                        {boardMode === 'placeRoadSetup' ? '↩ Cancel' : 'Place Road'}
-                    </Button>
-                </div>
-            );
-        }
+        const placing = !gs.pendingRoadSetup;
+        const mode: SACBoardMode = placing ? 'placeSettlementSetup' : 'placeRoadSetup';
+        const active = boardMode === mode;
+        return (
+            <div className="ag-actionsheet">
+                <button
+                    className={`ag-btn ${active ? 'ag-btn--dark' : 'ag-btn--primary'} ag-btn--block`}
+                    onClick={() => toggleMode(mode)}
+                >
+                    {active
+                        ? '↩ Cancel'
+                        : placing ? '🛖 Place your settlement' : '🛤️ Place a road next to it'}
+                </button>
+                <p className="ag-action-hint">
+                    {active
+                        ? 'Tap a highlighted spot on the board.'
+                        : placing
+                            ? 'Setup — choose where your settlement goes.'
+                            : 'Setup — connect a road to your new settlement.'}
+                </p>
+            </div>
+        );
     }
 
     // ── Robber ────────────────────────────────────────────────────────────────
     if (pendingRobber) {
+        const active = boardMode === 'moveRobber';
         return (
-            <div>
-                <p>Move the Robber to a new hex</p>
-                <Button
-                    variant={boardMode === 'moveRobber' ? 'warning' : 'danger'}
-                    onClick={() => setBoardMode(boardMode === 'moveRobber' ? 'idle' : 'moveRobber')}
+            <div className="ag-actionsheet">
+                <button
+                    className={`ag-btn ${active ? 'ag-btn--dark' : 'ag-btn--primary'} ag-btn--block`}
+                    onClick={() => toggleMode('moveRobber')}
                 >
-                    {boardMode === 'moveRobber' ? '↩ Cancel' : 'Move Robber'}
-                </Button>
+                    {active ? '↩ Cancel' : '🏴‍☠️ Move the robber'}
+                </button>
+                <p className="ag-action-hint">
+                    {active ? 'Tap a hex to move the robber there.' : 'You rolled 7 — move the robber to a new hex.'}
+                </p>
             </div>
         );
     }
 
     // ── Pending road building ─────────────────────────────────────────────────
     if (pendingRoadBuilding > 0) {
+        const active = boardMode === 'placeRoad';
         return (
-            <div>
-                <p>Road Building: place {pendingRoadBuilding} free road{pendingRoadBuilding > 1 ? 's' : ''}</p>
-                <Button
-                    variant={boardMode === 'placeRoad' ? 'warning' : 'success'}
-                    onClick={() => setBoardMode(boardMode === 'placeRoad' ? 'idle' : 'placeRoad')}
+            <div className="ag-actionsheet">
+                <button
+                    className={`ag-btn ${active ? 'ag-btn--dark' : 'ag-btn--primary'} ag-btn--block`}
+                    onClick={() => toggleMode('placeRoad')}
                 >
-                    {boardMode === 'placeRoad' ? '↩ Cancel' : 'Place Free Road'}
-                </Button>
+                    {active ? '↩ Cancel' : `🛤️ Place ${pendingRoadBuilding} free road${pendingRoadBuilding > 1 ? 's' : ''}`}
+                </button>
+                <p className="ag-action-hint">Road Building — free roads from your dev card.</p>
             </div>
         );
     }
@@ -136,105 +155,115 @@ export default function SettlementsAndCitiesActions({
     if (!hasRolled) {
         const canPlayKnight = myDevCards && myDevCards.knight > 0 && !playedDevCard;
         return (
-            <div>
+            <div className="ag-actionsheet">
+                <button
+                    className="ag-btn ag-btn--primary ag-btn--roll ag-btn--block"
+                    style={{ padding: '16px 0', fontSize: 16 }}
+                    onClick={() => submit(new SACRollDice())}
+                >
+                    🎲 Roll the dice
+                </button>
                 {canPlayKnight && (
-                    <Button variant="outline-secondary" className="me-2"
+                    <button className="ag-btn ag-btn--ghost ag-btn--block" style={{ marginTop: 8 }}
                         onClick={() => submit(new SACPlayKnight())}>
-                        ⚔️ Play Knight
-                    </Button>
+                        ⚔️ Play Knight first
+                    </button>
                 )}
-                <Button variant="primary" onClick={() => submit(new SACRollDice())}>
-                    🎲 Roll Dice
-                </Button>
             </div>
         );
     }
 
     // ── Post-roll ─────────────────────────────────────────────────────────────
     const res = myState.resources;
-    const canBuildRoad = res.brick >= 1 && res.lumber >= 1 && myState.remainingRoads > 0;
-    const canBuildSettlement = res.brick >= 1 && res.lumber >= 1 && res.wool >= 1 && res.grain >= 1 && myState.remainingSettlements > 0;
-    const canBuildCity = res.grain >= 2 && res.ore >= 3 && myState.remainingCities > 0;
+
+    const ROAD_COST: Cost = { brick: 1, lumber: 1 };
+    const SETTLEMENT_COST: Cost = { brick: 1, lumber: 1, wool: 1, grain: 1 };
+    const CITY_COST: Cost = { grain: 2, ore: 3 };
+
+    interface BuildDef {
+        mode: SACBoardMode;
+        icon: string;
+        name: string;
+        cost: Cost;
+        suffix: string;
+        piecesLeft: number;
+    }
+    const builds: BuildDef[] = [
+        { mode: 'placeSettlement', icon: '🛖', name: 'Settlement', cost: SETTLEMENT_COST, suffix: '+1 VP', piecesLeft: myState.remainingSettlements },
+        { mode: 'placeRoad', icon: '🛤️', name: 'Road', cost: ROAD_COST, suffix: 'reach new spots', piecesLeft: myState.remainingRoads },
+        { mode: 'placeCity', icon: '🏰', name: 'City', cost: CITY_COST, suffix: '+2 VP', piecesLeft: myState.remainingCities },
+    ];
+
     const canBuyDevCard = res.wool >= 1 && res.grain >= 1 && res.ore >= 1 && gs.devCardDeckSize > 0;
     const canPlayRoadBuilding = myDevCards && myDevCards.roadBuilding > 0 && !playedDevCard;
     const canPlayYoP = myDevCards && myDevCards.yearOfPlenty > 0 && !playedDevCard;
     const canPlayMonopoly = myDevCards && myDevCards.monopoly > 0 && !playedDevCard;
 
     return (
-        <div>
-            <Row className="g-1 mb-2">
-                <Col xs="auto">
-                    <Button
-                        variant={boardMode === 'placeRoad' ? 'warning' : canBuildRoad ? 'outline-primary' : 'outline-secondary'}
-                        disabled={!canBuildRoad && boardMode !== 'placeRoad'}
-                        onClick={() => setBoardMode(boardMode === 'placeRoad' ? 'idle' : 'placeRoad')}
-                        title="1🧱 1🪵"
-                    >
-                        {boardMode === 'placeRoad' ? '↩ Cancel Road' : '🛤️ Road (1🧱1🪵)'}
-                    </Button>
-                </Col>
-                <Col xs="auto">
-                    <Button
-                        variant={boardMode === 'placeSettlement' ? 'warning' : canBuildSettlement ? 'outline-primary' : 'outline-secondary'}
-                        disabled={!canBuildSettlement && boardMode !== 'placeSettlement'}
-                        onClick={() => setBoardMode(boardMode === 'placeSettlement' ? 'idle' : 'placeSettlement')}
-                        title="1🧱 1🪵 1🐑 1🌾"
-                    >
-                        {boardMode === 'placeSettlement' ? '↩ Cancel Settlement' : '🏘️ Settlement (1🧱1🪵1🐑1🌾)'}
-                    </Button>
-                </Col>
-                <Col xs="auto">
-                    <Button
-                        variant={boardMode === 'placeCity' ? 'warning' : canBuildCity ? 'outline-primary' : 'outline-secondary'}
-                        disabled={!canBuildCity && boardMode !== 'placeCity'}
-                        onClick={() => setBoardMode(boardMode === 'placeCity' ? 'idle' : 'placeCity')}
-                        title="2🌾 3⛏️"
-                    >
-                        {boardMode === 'placeCity' ? '↩ Cancel City' : '🏰 City (2🌾3⛏️)'}
-                    </Button>
-                </Col>
-                <Col xs="auto">
-                    <Button
-                        variant="outline-primary"
-                        disabled={!canBuyDevCard}
-                        onClick={() => submit(new SACBuyDevCard())}
-                        title="1🐑 1🌾 1⛏️"
-                    >
-                        🃏 Buy Dev Card (1🐑1🌾1⛏️)
-                    </Button>
-                </Col>
-            </Row>
-            <Row className="g-1 mb-2">
-                {canPlayRoadBuilding && (
-                    <Col xs="auto">
-                        <Button variant="outline-info" onClick={() => submit(new SACPlayRoadBuilding())}>
-                            🃏 Road Building
-                        </Button>
-                    </Col>
+        <div className="ag-actionsheet">
+            <div className="ag-build-list">
+                {builds.map(b => {
+                    const short = shortfall(b.cost, res);
+                    const noPieces = b.piecesLeft <= 0;
+                    const affordable = !short && !noPieces;
+                    const active = boardMode === b.mode;
+                    const disabled = !affordable && !active;
+                    const reason = noPieces ? 'No pieces left' : short;
+                    return (
+                        <button
+                            key={b.mode}
+                            className={`ag-build-row${active ? ' ag-build-row--active' : ''}${disabled ? ' ag-build-row--disabled' : ''}`}
+                            disabled={disabled}
+                            onClick={() => !disabled && toggleMode(b.mode)}
+                        >
+                            <span className="ag-build-icon">{b.icon}</span>
+                            <span className="ag-build-main">
+                                <span className="ag-build-name">{b.name}</span>
+                                <span className="ag-build-cost">{costText(b.cost)} · {b.suffix}</span>
+                            </span>
+                            {affordable
+                                ? <span className="ag-build-tag">{active ? 'Cancel' : 'Build'}</span>
+                                : <span className="ag-build-tag ag-build-tag--muted">{reason}</span>}
+                        </button>
+                    );
+                })}
+
+                <div className="ag-action-grid">
+                    <button className="ag-btn ag-btn--light" disabled={!canBuyDevCard}
+                        onClick={() => submit(new SACBuyDevCard())}>
+                        🃏 Dev card
+                    </button>
+                    <button className="ag-btn ag-btn--light" onClick={() => setShowTradeModal(true)}>
+                        ⚖️ Trade
+                    </button>
+                </div>
+
+                {(canPlayRoadBuilding || canPlayYoP || canPlayMonopoly) && (
+                    <div className="ag-action-grid" style={{ flexWrap: 'wrap' }}>
+                        {canPlayRoadBuilding && (
+                            <button className="ag-btn ag-btn--light" onClick={() => submit(new SACPlayRoadBuilding())}>
+                                🃏 Road Building
+                            </button>
+                        )}
+                        {canPlayYoP && (
+                            <button className="ag-btn ag-btn--light" onClick={() => setShowYopModal(true)}>
+                                🃏 Year of Plenty
+                            </button>
+                        )}
+                        {canPlayMonopoly && (
+                            <button className="ag-btn ag-btn--light" onClick={() => setShowMonopolyModal(true)}>
+                                🃏 Monopoly
+                            </button>
+                        )}
+                    </div>
                 )}
-                {canPlayYoP && (
-                    <Col xs="auto">
-                        <Button variant="outline-info" onClick={() => setShowYopModal(true)}>
-                            🃏 Year of Plenty
-                        </Button>
-                    </Col>
-                )}
-                {canPlayMonopoly && (
-                    <Col xs="auto">
-                        <Button variant="outline-info" onClick={() => setShowMonopolyModal(true)}>
-                            🃏 Monopoly
-                        </Button>
-                    </Col>
-                )}
-                <Col xs="auto">
-                    <Button variant="outline-secondary" onClick={() => setShowTradeModal(true)}>
-                        ⚖️ Maritime Trade
-                    </Button>
-                </Col>
-            </Row>
-            <Button variant="success" onClick={() => submit(new SACEndTurn())}>
-                ✅ End Turn
-            </Button>
+            </div>
+
+            <button className="ag-btn ag-btn--success ag-btn--block" style={{ marginTop: 12, padding: '14px 0', fontSize: 15 }}
+                onClick={() => submit(new SACEndTurn())}>
+                ✓ End turn
+            </button>
+            <p className="ag-action-hint">We&apos;ll let the next player know it&apos;s their move.</p>
 
             {/* ── Year of Plenty modal ── */}
             <Modal show={showYopModal} onHide={() => setShowYopModal(false)}>

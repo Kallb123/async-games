@@ -57,6 +57,10 @@ interface SettlementsAndCitiesBoardProps {
     validVertices?: Set<number>;
     validEdges?: Set<number>;
     validHexes?: Set<number>;
+    // Chrome shown around the board within the shell
+    lastRoll?: number | null;
+    /** When set, a translucent prompt is shown over the board (e.g. "Tap to place"). */
+    placementPrompt?: string | null;
 }
 
 export default function SettlementsAndCitiesBoard({
@@ -72,6 +76,8 @@ export default function SettlementsAndCitiesBoard({
     validVertices = new Set(),
     validEdges = new Set(),
     validHexes = new Set(),
+    lastRoll = null,
+    placementPrompt = null,
 }: SettlementsAndCitiesBoardProps) {
     if (!hexes || hexes.length === 0) return null;
 
@@ -84,11 +90,14 @@ export default function SettlementsAndCitiesBoard({
 
     return (
         <>
-            <svg
-                width={SVG_W}
-                height={SVG_H}
-                style={{ display: 'block', margin: '0 auto', background: '#85c1e9' }}
-            >
+            <div className="ag-board-frame">
+                {lastRoll !== null && (
+                    <div className="ag-board-tag">🎲 Last roll: {lastRoll}</div>
+                )}
+                {placementPrompt && (
+                    <div className="ag-board-overlay"><div>{placementPrompt}</div></div>
+                )}
+                <svg viewBox={`0 0 ${SVG_W} ${SVG_H}`} width={SVG_W} height={SVG_H}>
                 {/* ── Hex tiles ── */}
                 {hexes.map((hex, hexId) => {
                 const [cx, cy] = hexCenterPx(hexId);
@@ -113,6 +122,7 @@ export default function SettlementsAndCitiesBoard({
                                     fill={hex.numberToken === 6 || hex.numberToken === 8 ? '#ffd5d5' : '#fffde7'}
                                     stroke="#ccc"
                                     strokeWidth={1}
+                                    style={{ pointerEvents: 'none' }}
                                 />
                                 <text
                                     x={cx}
@@ -121,13 +131,14 @@ export default function SettlementsAndCitiesBoard({
                                     fontSize={13}
                                     fontWeight="bold"
                                     fill={hex.numberToken === 6 || hex.numberToken === 8 ? '#c0392b' : '#333'}
+                                    style={{ pointerEvents: 'none' }}
                                 >
                                     {hex.numberToken}
                                 </text>
                             </>
                         )}
                         {isRobber && (
-                            <text x={cx} y={cy - 16} textAnchor="middle" fontSize={20}>🏴‍☠️</text>
+                            <text x={cx} y={cy - 16} textAnchor="middle" fontSize={20} style={{ pointerEvents: 'none' }}>🏴‍☠️</text>
                         )}
                     </g>
                 );
@@ -142,7 +153,7 @@ export default function SettlementsAndCitiesBoard({
                 const my = (y1 + y2) / 2;
                 const label = harbor.type === '3to1' ? '3:1' : `2:1 ${RESOURCE_EMOJI[harbor.type] ?? harbor.type}`;
                 return (
-                    <g key={i}>
+                    <g key={i} style={{ pointerEvents: 'none' }}>
                         <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={HARBOR_COLORS[harbor.type]} strokeWidth={4} strokeDasharray="4 2" />
                         <text x={mx} y={my - 6} textAnchor="middle" fontSize={9} fill={HARBOR_COLORS[harbor.type]} fontWeight="bold">
                             {label}
@@ -158,17 +169,29 @@ export default function SettlementsAndCitiesBoard({
                 const [x2, y2] = vertexPx(v2);
                 const isValid = validEdges.has(edgeId);
                 if (!edge.hasRoad && !isValid) return null;
+                const clickable = isValid && !!onEdgeClick;
                 return (
-                    <line
-                        key={edgeId}
-                        x1={x1} y1={y1} x2={x2} y2={y2}
-                        stroke={edge.hasRoad ? usernameToColor(edge.owner) : '#ffe000'}
-                        strokeWidth={edge.hasRoad ? 6 : 4}
-                        strokeLinecap="round"
-                        strokeOpacity={isValid && !edge.hasRoad ? 0.6 : 1}
-                        style={{ cursor: isValid && onEdgeClick ? 'pointer' : 'default' }}
-                        onClick={() => isValid && onEdgeClick && onEdgeClick(edgeId)}
-                    />
+                    <g key={edgeId}>
+                        <line
+                            x1={x1} y1={y1} x2={x2} y2={y2}
+                            stroke={edge.hasRoad ? usernameToColor(edge.owner) : '#ffe000'}
+                            strokeWidth={edge.hasRoad ? 6 : 7}
+                            strokeLinecap="round"
+                            strokeOpacity={isValid && !edge.hasRoad ? 0.75 : 1}
+                            style={{ pointerEvents: 'none' }}
+                        />
+                        {clickable && (
+                            // Fat transparent hit area so roads are easy to tap.
+                            <line
+                                x1={x1} y1={y1} x2={x2} y2={y2}
+                                stroke="transparent"
+                                strokeWidth={22}
+                                strokeLinecap="round"
+                                style={{ cursor: 'pointer' }}
+                                onClick={() => onEdgeClick && onEdgeClick(edgeId)}
+                            />
+                        )}
+                    </g>
                 );
             })}
 
@@ -179,74 +202,75 @@ export default function SettlementsAndCitiesBoard({
 
                 if (!vertex.building && !isValid) return null;
 
+                const clickable = isValid && !!onVertexClick;
+                const parts: React.ReactNode[] = [];
+
+                // Building visual (never intercepts clicks — the hit circle handles it).
                 if (vertex.building === 'settlement') {
-                    return (
+                    parts.push(
                         <rect
-                            key={vertexId}
+                            key="b"
                             x={vx - 7} y={vy - 7}
                             width={14} height={14}
                             fill={usernameToColor(vertex.owner)}
                             stroke="#fff"
                             strokeWidth={1.5}
                             rx={2}
+                            style={{ pointerEvents: 'none' }}
                         />
                     );
-                }
-                if (vertex.building === 'city') {
-                    return (
-                        <g key={vertexId}>
+                } else if (vertex.building === 'city') {
+                    parts.push(
+                        <g key="b" style={{ pointerEvents: 'none' }}>
                             <rect x={vx - 9} y={vy - 9} width={18} height={18} fill={usernameToColor(vertex.owner)} stroke="#fff" strokeWidth={1.5} rx={3} />
                             <rect x={vx - 5} y={vy - 14} width={10} height={8} fill={usernameToColor(vertex.owner)} stroke="#fff" strokeWidth={1} rx={1} />
                         </g>
                     );
                 }
 
-                // Valid placement indicator
-                return (
-                    <circle
-                        key={vertexId}
-                        cx={vx} cy={vy}
-                        r={8}
-                        fill="#ffe000"
-                        fillOpacity={0.7}
-                        stroke="#e67e22"
-                        strokeWidth={1.5}
-                        style={{ cursor: 'pointer' }}
-                        onClick={() => onVertexClick && onVertexClick(vertexId)}
-                    />
-                );
+                // Valid highlight ring — a filled dot on empty spots, an outline
+                // around an existing settlement being upgraded to a city.
+                if (isValid) {
+                    parts.push(
+                        <circle
+                            key="hi"
+                            cx={vx} cy={vy}
+                            r={vertex.building ? 13 : 11}
+                            fill={vertex.building ? 'none' : '#ffe000'}
+                            fillOpacity={0.7}
+                            stroke="#e67e22"
+                            strokeWidth={2.5}
+                            style={{ pointerEvents: 'none' }}
+                        />
+                    );
+                }
+
+                // Fat transparent hit circle so nodes are easy to tap.
+                if (clickable) {
+                    parts.push(
+                        <circle
+                            key="hit"
+                            cx={vx} cy={vy}
+                            r={16}
+                            fill="transparent"
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => onVertexClick && onVertexClick(vertexId)}
+                        />
+                    );
+                }
+
+                return <g key={vertexId}>{parts}</g>;
             })}
-        </svg>
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '10px', marginTop: '12px' }}>
-            {RESOURCE_TYPES.map((resource) => (
-                <div
-                    key={resource}
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '6px 10px',
-                        background: '#ffffffee',
-                        border: '1px solid #d0d0d0',
-                        borderRadius: '12px',
-                        fontSize: '0.85rem',
-                        color: '#333',
-                    }}
-                >
-                    <span
-                        style={{
-                            width: 16,
-                            height: 16,
-                            borderRadius: '50%',
-                            background: HARBOR_COLORS[resource],
-                            display: 'inline-block',
-                            boxShadow: '0 0 0 1px rgba(0,0,0,0.12)',
-                        }}
-                    />
-                    <span>{RESOURCE_EMOJI[resource]} {resource}</span>
-                </div>
-            ))}
-        </div>
-    </>
-);
+                </svg>
+            </div>
+            <div className="ag-reslegend">
+                {RESOURCE_TYPES.map((resource) => (
+                    <div key={resource} className="ag-reslegend-pill">
+                        <span className="ag-reslegend-dot" style={{ background: HARBOR_COLORS[resource] }} />
+                        <span>{RESOURCE_EMOJI[resource]} {resource}</span>
+                    </div>
+                ))}
+            </div>
+        </>
+    );
 }
