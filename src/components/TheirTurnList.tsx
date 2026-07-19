@@ -4,82 +4,76 @@ import { IGameResponse } from "@/utils/apiModels/GameDataApi";
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Spinner } from "react-bootstrap";
+import { opponents } from "@/utils/ui/players";
 
 export default function TheirTurnList() {
     const { user, isLoaded } = useUser();
     const router = useRouter();
     const [gameList, setGameList] = useState([] as IGameResponse[]);
-    const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
-        window.addEventListener('NewInvite', () => {
-            console.log(`TheirTurnList message received: NewInvite`);
-            refreshContent();
-        });
-        window.addEventListener('GameStart', () => {
-            console.log(`TheirTurnList message received: GameStart`);
-            refreshContent();
-        });
-        window.addEventListener('TurnTaken', () => {
-            console.log(`TheirTurnList message received: TurnTaken`);
-            refreshContent();
-        });
+        window.addEventListener('NewInvite', () => refreshContent());
+        window.addEventListener('GameStart', () => refreshContent());
+        window.addEventListener('TurnTaken', () => refreshContent());
 
         refreshContent();
     }, [isLoaded]);
 
     const refreshContent = async () => {
-        console.log('Refresh their turn list');
         if (isLoaded) {
             if (!user) {
                 router.push('/login');
             }
-    
-            // Use `user` to render user details or create UI elements
             const unlocked = user?.publicMetadata.unlocked;
-          
             if (unlocked !== true) {
-              router.push('/unlockaccess');
+                router.push('/unlockaccess');
             }
 
-            setIsLoading(true);
             fetch('/api/game/theirturnlist')
             .then(response => response.json())
             .then(data => {if (data && data.gameList) setGameList(data.gameList)})
-            .catch(error => console.error('Failed to load their turn list', error))
-            .finally(() => setIsLoading(false));
+            .catch(error => console.error('Failed to load their turn list', error));
         }
     }
 
     const handleEndGame = async (gameId: `${string}-${string}-${string}-${string}-${string}`) => {
         fetch('/api/game/end', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ gameId })
         })
         .then(response => {
-            if (!response.ok) {
-                throw new Error('Failed to end game');
-            }
+            if (!response.ok) throw new Error('Failed to end game');
             return response.json();
         })
         .then(() => refreshContent())
         .catch(error => console.error('Failed to end game', error));
     }
 
+    if (gameList.length === 0) return null;
+
     return (
-        <>
-            <h2>Their Turn</h2>
-            {isLoading && <Spinner animation="border" role="status" size="sm"><span className="visually-hidden">Loading...</span></Spinner>}
-            {gameList.map((game: IGameResponse) => (
-                <div key={game.gameId}>
-                    <a href={`/games/${game.url}/${game.gameId}`}>Not your turn in <span style={{fontWeight: "bold"}}>{game.friendlyName}</span> with <span style={{fontWeight: "bold"}}>{game.usernameList.filter(u => u !== user?.username).map(user => (<span key={user}>{user} </span>))}</span></a>
-                    <button type="button" className="btn btn-link p-0 ms-2" onClick={() => handleEndGame(game.gameId)}>End game</button>
-                </div>
-            ))}
-        </>
+        <div className="ag-section">
+            <div className="ag-section-head">
+                <h2 className="ag-section-label">Waiting on others</h2>
+            </div>
+            <div className="ag-list">
+                {gameList.map((game) => (
+                    <div key={game.gameId} className="ag-list-row">
+                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: "oklch(0.7 0.05 60)", flex: "none" }} />
+                        <a
+                            href={`/games/${game.url}/${game.gameId}`}
+                            className="ag-list-row-main"
+                            style={{ textDecoration: "none", color: "var(--ag-ink)" }}
+                        >
+                            <div style={{ font: "600 13px/1.35 var(--ag-font)" }}>
+                                {game.friendlyName} · <span style={{ color: "var(--ag-ink-soft)" }}>{opponents(game, user?.username, "them")}&apos;s turn</span>
+                            </div>
+                        </a>
+                        <button type="button" className="ag-link-muted" onClick={() => handleEndGame(game.gameId)}>End</button>
+                    </div>
+                ))}
+            </div>
+        </div>
     );
 }

@@ -33,13 +33,20 @@ export default function PasswordForm() {
     }
 
     return (
-        <form onSubmit={handleSubmit}>
-            <label>
-            Password:
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-            </label>
-            <br />
-            <button type="submit">Enter</button>
+        <form onSubmit={handleSubmit} className="ag-card" style={{ padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
+            <div>
+                <label htmlFor="access-password" className="ag-section-label" style={{ display: "block", marginBottom: 8 }}>Access password</label>
+                <input
+                    id="access-password"
+                    className="ag-input"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter password"
+                    required
+                />
+            </div>
+            <button type="submit" className="ag-btn ag-btn--primary ag-btn--block">Unlock</button>
         </form>
     );
 }

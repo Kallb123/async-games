@@ -1,56 +1,98 @@
 'use client'
 import { IFriendRequestResponse } from '@/utils/mongodb/FriendshipData';
+import { useUser } from '@clerk/nextjs';
 import { useEffect, useState } from 'react';
-import { Button, Form } from 'react-bootstrap';
+import Avatar from '@/components/ui/Avatar';
 
 interface UserInviteProps {
     userList: string[],
     setItem: (index: number, value: string) => void
 }
 
-export default function UserInviteList({userList, setItem}: UserInviteProps) {
+export default function UserInviteList({ userList, setItem }: UserInviteProps) {
+    const { user } = useUser();
     const [friends, setFriends] = useState([] as IFriendRequestResponse[]);
+    const [draft, setDraft] = useState("");
 
     useEffect(() => {
         fetch('/api/friends')
         .then(response => response.json())
-        .then(data => {if (data && data.friends) setFriends(data.friends);})
+        .then(data => { if (data && data.friends) setFriends(data.friends); })
         .catch(error => console.error('Failed to load friends', error));
     }, []);
 
-    const addFriend = (username: string) => {
-        if (userList.includes(username)) {
-            return;
+    const added = userList.filter(u => u !== "");
+
+    const addUser = (username: string) => {
+        const name = username.trim();
+        if (!name || added.includes(name)) return;
+        const emptyIndex = userList.findIndex(u => u === "");
+        setItem(emptyIndex === -1 ? userList.length : emptyIndex, name);
+    };
+
+    const removeUser = (username: string) => {
+        const index = userList.findIndex(u => u === username);
+        if (index !== -1) setItem(index, "");
+    };
+
+    const commitDraft = () => {
+        if (draft.trim()) {
+            addUser(draft);
+            setDraft("");
         }
-        const emptyIndex = userList.findIndex(user => user === "");
-        setItem(emptyIndex === -1 ? userList.length : emptyIndex, username);
-    }
+    };
+
+    const suggestions = friends.filter(f => f.user.username && !added.includes(f.user.username));
 
     return (
-        <>
-            <h3>Invite Users</h3>
-            {friends.length > 0 && (
-                <div className="mb-2">
-                    <div>Friends</div>
-                    {friends.map((friend) => friend.user.username && (
-                        <Button
-                            key={friend.friendshipId}
-                            variant={userList.includes(friend.user.username) ? "secondary" : "outline-primary"}
-                            size="sm"
-                            className="me-1 mb-1"
-                            disabled={userList.includes(friend.user.username)}
-                            onClick={() => addFriend(friend.user.username!)}
-                        >
-                            {friend.user.username}
-                        </Button>
+        <div className="ag-section">
+            <div className="ag-section-head">
+                <h2 className="ag-section-label">Who&apos;s playing</h2>
+            </div>
+
+            <div className="ag-chips">
+                <span className="ag-person-chip ag-person-chip--you">
+                    <Avatar name={user?.firstName || user?.username || "You"} size={28} />
+                    You
+                </span>
+                {added.map(username => (
+                    <span key={username} className="ag-person-chip">
+                        <Avatar name={username} size={28} />
+                        {username}
+                        <button type="button" aria-label={`Remove ${username}`} onClick={() => removeUser(username)}>✕</button>
+                    </span>
+                ))}
+            </div>
+
+            <input
+                className="ag-input"
+                style={{ marginTop: 12 }}
+                type="text"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === ",") {
+                        e.preventDefault();
+                        commitDraft();
+                    }
+                }}
+                onBlur={commitDraft}
+                placeholder="Add by username or email"
+            />
+
+            {suggestions.length > 0 && (
+                <div className="ag-list" style={{ marginTop: 12 }}>
+                    {suggestions.map(friend => (
+                        <div key={friend.friendshipId} className="ag-list-row">
+                            <Avatar name={friend.user.username} size={30} />
+                            <div className="ag-list-row-main">
+                                <div className="ag-list-row-title">{friend.user.username}</div>
+                            </div>
+                            <button type="button" className="ag-pill-action" onClick={() => addUser(friend.user.username!)}>Add</button>
+                        </div>
                     ))}
                 </div>
             )}
-            <div>
-                {userList.map((user, i) => (
-                    <Form.Control type="text" key={i} value={user} onChange={(e) => setItem(i, e.target.value)} placeholder="Username or email" />
-                ))}
-            </div>
-        </>
+        </div>
     );
 }

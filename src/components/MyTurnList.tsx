@@ -4,7 +4,9 @@ import { IGameResponse } from "@/utils/apiModels/GameDataApi";
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Spinner } from "react-bootstrap";
+import { metaForGame } from "@/utils/ui/games";
+import { opponents } from "@/utils/ui/players";
+import GameThumb, { accentVar } from "@/components/ui/GameThumb";
 
 export default function MyTurnList() {
     const { user, isLoaded } = useUser();
@@ -13,34 +15,21 @@ export default function MyTurnList() {
     const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
-        window.addEventListener('NewInvite', () => {
-            console.log(`MyTurnList message received: NewInvite`);
-            refreshContent();
-        });
-        window.addEventListener('GameStart', () => {
-            console.log(`MyTurnList message received: GameStart`);
-            refreshContent();
-        });
-        window.addEventListener('TurnTaken', () => {
-            console.log(`MyTurnList message received: TurnTaken`);
-            refreshContent();
-        });
+        window.addEventListener('NewInvite', () => refreshContent());
+        window.addEventListener('GameStart', () => refreshContent());
+        window.addEventListener('TurnTaken', () => refreshContent());
 
         refreshContent();
     }, [isLoaded]);
 
     const refreshContent = async () => {
-        console.log('Refresh my turn list');
         if (isLoaded) {
             if (!user) {
                 router.push('/login');
             }
-    
-            // Use `user` to render user details or create UI elements
             const unlocked = user?.publicMetadata.unlocked;
-          
             if (unlocked !== true) {
-              router.push('/unlockaccess');
+                router.push('/unlockaccess');
             }
 
             setIsLoading(true);
@@ -52,46 +41,85 @@ export default function MyTurnList() {
         }
     }
 
-    const handleClick = async (gameId: `${string}-${string}-${string}-${string}-${string}`) => {
-        fetch('/api/game/taketurn', {
-            method: "POST",
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({gameId})
-        })
-        .then(response => response.json())
-        .then(data => console.log(data));
-    }
-
-    const handleEndGame = async (gameId: `${string}-${string}-${string}-${string}-${string}`) => {
+    const handleEndGame = async (e: React.MouseEvent, gameId: `${string}-${string}-${string}-${string}-${string}`) => {
+        e.stopPropagation();
         fetch('/api/game/end', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ gameId })
         })
         .then(response => {
-            if (!response.ok) {
-                throw new Error('Failed to end game');
-            }
+            if (!response.ok) throw new Error('Failed to end game');
             return response.json();
         })
         .then(() => refreshContent())
         .catch(error => console.error('Failed to end game', error));
     }
 
+    const count = gameList.length;
+
     return (
         <>
-            <h2>Your Turn</h2>
-            {isLoading && <Spinner animation="border" role="status" size="sm"><span className="visually-hidden">Loading...</span></Spinner>}
-            {gameList.map((game: IGameResponse) => (
-                <div key={game.gameId}>
-                    <a href={`/games/${game.url}/${game.gameId}`}>It&apos;s your turn in <span style={{fontWeight: "bold"}}>{game.friendlyName}</span> with <span style={{fontWeight: "bold"}}>{game.usernameList.filter(u => u !== user?.username).map(user => (<span key={user}>{user} </span>))}</span></a>
-                    <button type="button" className="btn btn-link p-0 ms-2" onClick={() => handleEndGame(game.gameId)}>End game</button>
+            <div className="ag-hero">
+                <h1 className="ag-hero-title">
+                    {count > 0 ? <>It&apos;s your<br />move{count > 1 ? ` ×${count}` : ""}</> : "All caught up"}
+                </h1>
+                <p className="ag-hero-sub">
+                    {count > 0
+                        ? "These games are waiting on you."
+                        : "No turns to take right now — start something new below."}
+                </p>
+            </div>
+
+            {isLoading && count === 0 && <div className="ag-section"><div className="ag-loading">Loading your games…</div></div>}
+
+            {count > 0 && (
+                <div className="ag-section">
+                    <div className="ag-stack">
+                        {gameList.map((game) => {
+                            const meta = metaForGame({ url: game.url, friendlyName: game.friendlyName });
+                            const accent = meta ? accentVar(meta.accent) : "var(--ag-terracotta)";
+                            return (
+                                <div
+                                    key={game.gameId}
+                                    className="ag-turn-card"
+                                    style={{ background: accent, cursor: "pointer" }}
+                                    onClick={() => router.push(`/games/${game.url}/${game.gameId}`)}
+                                    role="button"
+                                    tabIndex={0}
+                                    onKeyDown={(e) => { if (e.key === "Enter") router.push(`/games/${game.url}/${game.gameId}`); }}
+                                >
+                                    <div className="ag-turn-card-head">
+                                        {meta
+                                            ? <GameThumb meta={meta} size={52} radius={12} />
+                                            : <div style={{ width: 52 }} />}
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div className="ag-turn-card-title">{game.friendlyName}</div>
+                                            <div className="ag-turn-card-sub">vs {opponents(game, user?.username)}</div>
+                                        </div>
+                                    </div>
+                                    <div className="ag-turn-card-cta" style={{ color: accent }}>
+                                        Take your turn
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => handleEndGame(e, game.gameId)}
+                                        style={{
+                                            position: "absolute", top: 12, right: 14,
+                                            background: "rgba(255,255,255,0.18)", border: "none",
+                                            color: "var(--ag-on-dark)", borderRadius: 99,
+                                            padding: "5px 11px", font: "700 11px var(--ag-font)",
+                                            cursor: "pointer",
+                                        }}
+                                    >
+                                        End
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
-            ))}
+            )}
         </>
     );
 }

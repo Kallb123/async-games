@@ -25,8 +25,17 @@ export default function UnlockAccess() {
 
   return (
     <main>
-      <CurrentUserInfo />
-      <PasswordForm></PasswordForm>
+      <div className="ag-topbar">
+        <span className="ag-wordmark">Async Games</span>
+      </div>
+      <div className="ag-hero">
+        <h1 className="ag-hero-title">One more step</h1>
+        <p className="ag-hero-sub">Enter the access password to unlock your games.</p>
+      </div>
+      <div className="ag-section">
+        <PasswordForm></PasswordForm>
+      </div>
+      <div className="ag-footer"><CurrentUserInfo /></div>
     </main>
   );
 }
