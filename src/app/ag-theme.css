@@ -396,28 +396,24 @@ body {
 .ag-input:focus { border-color: var(--ag-terracotta); }
 .ag-input::placeholder { color: var(--ag-ink-softer); font-weight: 500; }
 
-/* ---- Timer segmented control ---- */
-.ag-timer-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-}
-.ag-timer-opt {
-    text-align: center;
-    background: var(--ag-surface);
+/* ---- Select dropdown ---- */
+.ag-select {
+    width: 100%;
+    appearance: none;
+    -webkit-appearance: none;
+    background-color: var(--ag-surface);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%238a8178' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
     border: 1.5px solid var(--ag-line);
-    border-radius: 12px;
-    padding: 10px 4px;
-    font: 700 12.5px var(--ag-font);
-    color: var(--ag-ink-soft);
+    border-radius: 14px;
+    padding: 12px 40px 12px 14px;
+    font: 700 14px var(--ag-font);
+    color: var(--ag-ink);
     cursor: pointer;
+    outline: none;
 }
-.ag-timer-opt--active {
-    background: var(--ag-dark);
-    color: var(--ag-on-dark);
-    border-color: var(--ag-dark);
-    font-weight: 800;
-}
+.ag-select:focus { border-color: var(--ag-terracotta); }
 
 .ag-hint {
     font: 500 11px/1.4 var(--ag-font);
