@@ -154,6 +154,13 @@ export function useTurnNavigation<TState>(gameId: string, live: LiveGameView<TSt
         atCurrent: viewIndex === currentIndex,
         isPlannedView: activeSnapshot?.planned ?? false,
         plannedCount: plannedCommands.length,
+        // How many entries at the front of displayedHistory are hypothetical
+        // planned moves rather than real turns. Planned commands prepend their
+        // entries on top of the real history, so it's the length difference
+        // between the viewed snapshot and the live current snapshot.
+        plannedHistoryCount: activeSnapshot?.planned
+            ? Math.max(0, activeSnapshot.history.length - (snapshots[currentIndex]?.history.length ?? 0))
+            : 0,
         canBack: !isLive && viewIndex > 0,
         canForward: !isLive && viewIndex < maxIndex,
         // Navigation

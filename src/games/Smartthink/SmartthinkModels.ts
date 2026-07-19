@@ -69,11 +69,12 @@ function SortUsersByRoll(userIdList: string[], usernameMap: Map<string, string>,
         }
         if (usersInRoll.length > 1) {
             const usernamesInRoll = usersInRoll.map(userId => usernameMap.get(userId));
-            history.push(`${usernamesInRoll.join(" & ")} rolled a ${roll} and are re-rolling`);
+            history.push(`Setup: ${usernamesInRoll.join(" & ")} rolled a ${roll} and are re-rolling`);
             SortUsersByRoll(usersInRoll, usernameMap, turnOrder, history, dieToRoll);
         } else {
             turnOrder.push(usersInRoll[0]);
-            history.push(`${usernameMap.get(usersInRoll[0])} rolled a ${roll}`);
+            // The first player settled into turnOrder is the roll-off winner.
+            history.push(`Setup: ${usernameMap.get(usersInRoll[0])} rolled a ${roll}${turnOrder.length === 1 ? " and goes first" : ""}`);
         }
     });
 }
@@ -95,7 +96,7 @@ export function CreateSmartthinkSoloGameData(userId: string, username: string, t
         timerWarningNotificationSent: false,
         gameState: {
             turnOrder: [userId],
-            history: [`${SMARTTHINK_COMPUTER_USERNAME} set the secret code`],
+            history: [`Setup: ${SMARTTHINK_COMPUTER_USERNAME} set the secret code`],
             commandHistory: []
         },
         complete: false,

@@ -14,6 +14,7 @@ import { IGameCommand } from "@/utils/apiModels/GameLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import GameResult from "@/components/GameResult";
 import TurnNavControls from "@/components/games/TurnNavControls";
+import GameHistoryList from "@/components/games/GameHistoryList";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 
 // Sentinel used as "current turn" while reviewing a past turn, so no player's
@@ -145,11 +146,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
                 <h2>History</h2>
                 <Row>
                     <Col>
-                        <ul>
-                            {nav.displayedHistory.map((historyString, index) => (
-                                <li key={index}>{historyString}</li>
-                            ))}
-                        </ul>
+                        <GameHistoryList history={nav.displayedHistory} plannedCount={nav.plannedHistoryCount} />
                     </Col>
                 </Row>
             </Form>

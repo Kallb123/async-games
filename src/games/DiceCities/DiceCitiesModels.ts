@@ -54,11 +54,12 @@ function SortUsersByRoll(userIdList: string[], usernameMap: Map<string, string>,
         if (usersInRoll.length > 1) {
             // Need to re-roll these users
             const usernamesInRoll = usersInRoll.map(userId => usernameMap.get(userId));
-            history.push(`${usernamesInRoll.join(" & ")} rolled a ${roll} and are re-rolling`);
+            history.push(`Setup: ${usernamesInRoll.join(" & ")} rolled a ${roll} and are re-rolling`);
             SortUsersByRoll(usersInRoll, usernameMap, turnOrder, history, dieToRoll);
         } else {
             turnOrder.push(usersInRoll[0]);
-            history.push(`${usernameMap.get(usersInRoll[0])} rolled a ${roll}`);
+            // The first player settled into turnOrder is the roll-off winner.
+            history.push(`Setup: ${usernameMap.get(usersInRoll[0])} rolled a ${roll}${turnOrder.length === 1 ? " and goes first" : ""}`);
         }
     });
 }
