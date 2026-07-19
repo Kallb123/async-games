@@ -47,6 +47,10 @@ export default function SmartthinkBoard({ guessRows, maxGuesses, codeSetterUsern
                 <div><strong>Codemaker:</strong> {codeSetterUsername}</div>
                 <div><strong>Codebreaker:</strong> {codeBreakerUsername}</div>
             </div>
+            <div style={{ marginBottom: '12px', fontSize: '0.9em', color: '#555' }}>
+                <div><strong>Black:</strong> a peg is the right colour in the right position</div>
+                <div><strong>White:</strong> a peg is the right colour but in the wrong position</div>
+            </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '420px' }}>
                 <thead>
                     <tr>
