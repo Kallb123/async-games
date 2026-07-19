@@ -622,9 +622,13 @@ body {
  * ============================================================= */
 
 .ag-game { display: flex; flex-direction: column; min-height: 100vh; background: var(--ag-surface); }
-/* The in-game shell is full-bleed — drop the app column's bottom padding so
-   no cream strip peeks out below the board/actions. */
-.ag-app:has(.ag-game) { padding-bottom: 0; }
+/* The in-game shell is full-bleed: unlike the rest of the app it fills the
+   whole screen rather than sitting in the centred mobile column, so no cream
+   letterboxing shows around the dark header or below the board/actions. */
+.ag-app:has(.ag-game) {
+    max-width: none;
+    padding-bottom: 0;
+}
 
 /* ---- Dark top bar ---- */
 .ag-game-topbar {
