@@ -14,6 +14,7 @@ import GameResult from "@/components/GameResult";
 import SnakesAndLaddersBoard from "@/components/games/SnakesAndLadders/SnakesAndLaddersBoard";
 import SnakesAndLaddersPlayerActions from "@/components/games/SnakesAndLadders/SnakesAndLaddersPlayerActions";
 import TurnNavControls from "@/components/games/TurnNavControls";
+import GameHistoryList from "@/components/games/GameHistoryList";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { ISnakesAndLaddersGameStateResponse } from "@/games/SnakesAndLadders/apiModels";
 import { ISnakesAndLaddersDiceRollOutcome } from "@/utils/apiModels/GameLogic";
@@ -169,11 +170,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
             <h2>History</h2>
             <Row>
                 <Col>
-                    <ul>
-                        {nav.displayedHistory.map((historyString, index) => (
-                            <li key={index}>{historyString}</li>
-                        ))}
-                    </ul>
+                    <GameHistoryList history={nav.displayedHistory} plannedCount={nav.plannedHistoryCount} />
                 </Col>
             </Row>
             <CurrentUserInfo />

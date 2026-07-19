@@ -51,11 +51,12 @@ function SortUsersByRoll(
         const users = distinctRolls.get(roll)!;
         if (users.length > 1) {
             const names = users.map(u => usernameMap.get(u));
-            history.push(`${names.join(' & ')} rolled a ${roll} and are re-rolling`);
+            history.push(`Setup: ${names.join(' & ')} rolled a ${roll} and are re-rolling`);
             SortUsersByRoll(users, usernameMap, turnOrder, history, dieToRoll);
         } else {
             turnOrder.push(users[0]);
-            history.push(`${usernameMap.get(users[0])} rolled a ${roll}`);
+            // The first player settled into turnOrder is the roll-off winner.
+            history.push(`Setup: ${usernameMap.get(users[0])} rolled a ${roll}${turnOrder.length === 1 ? ' and goes first' : ''}`);
         }
     });
 }

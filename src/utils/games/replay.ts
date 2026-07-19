@@ -176,9 +176,21 @@ export async function buildTimeline(
     const gameOver = await applyCommands(gameData.gameState.commandHistory ?? [], false, null);
     const currentIndex = snapshots.length - 1;
 
+    // Creation-time setup entries (e.g. the turn-order roll-off) predate
+    // commandHistory, so replaying can't regenerate them. Commands unshift newer
+    // entries in front, so the setup entries are the persisted history's tail
+    // beyond what the replayed commands produced. Append them to every snapshot
+    // so the setup steps stay visible throughout recap/planning.
+    const persistedHistory = gameData.gameState.history ?? [];
+    const setupHistory = persistedHistory.slice(state.gameState.history.length);
+
     const resolvedPlannedCommands: unknown[] = [];
     if (!gameOver && plannedCommands.length) {
         await applyCommands(plannedCommands, true, resolvedPlannedCommands);
+    }
+
+    if (setupHistory.length) {
+        snapshots.forEach((s) => s.history.push(...setupHistory));
     }
 
     return { currentIndex, snapshots, resolvedPlannedCommands };

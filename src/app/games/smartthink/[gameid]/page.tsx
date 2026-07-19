@@ -14,6 +14,7 @@ import type { ISmartthinkGameDataResponse } from "@/games/Smartthink/apiModels";
 import SmartthinkBoard from "@/components/games/Smartthink/SmartthinkBoard";
 import SmartthinkPlayerActions from "@/components/games/Smartthink/SmartthinkPlayerActions";
 import TurnNavControls from "@/components/games/TurnNavControls";
+import GameHistoryList from "@/components/games/GameHistoryList";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import type { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
 
@@ -146,11 +147,7 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
             <h2>History</h2>
             <Row>
                 <Col>
-                    <ul>
-                        {nav.displayedHistory.map((historyString, index) => (
-                            <li key={index}>{historyString}</li>
-                        ))}
-                    </ul>
+                    <GameHistoryList history={nav.displayedHistory} plannedCount={nav.plannedHistoryCount} />
                 </Col>
             </Row>
             <CurrentUserInfo />
