@@ -7,12 +7,14 @@ import { useEffect, useState } from "react";
 import moment from 'moment';
 import { useToast } from "@/components/ToastContext";
 import Avatar from "@/components/ui/Avatar";
+import { SkeletonList } from "@/components/ui/Skeleton";
 
 export default function IncomingInviteList() {
     const { user, isLoaded } = useUser();
     const router = useRouter();
     const { showToast } = useToast();
     const [inviteList, setInviteList] = useState([] as IInvitationResponse[]);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         window.addEventListener('NewInvite', () => refreshContent());
@@ -35,7 +37,8 @@ export default function IncomingInviteList() {
             fetch('/api/user/incominginvites')
             .then(response => response.json())
             .then(data => {if (data && data.inviteList) setInviteList(data.inviteList);})
-            .catch(error => console.error('Failed to load incoming invites', error));
+            .catch(error => console.error('Failed to load incoming invites', error))
+            .finally(() => setIsLoading(false));
         }
     }
 
@@ -61,7 +64,7 @@ export default function IncomingInviteList() {
         .catch(() => showToast('Failed to accept the invite. Please try again.', 'danger'));
     }
 
-    if (inviteList.length === 0) return null;
+    if (inviteList.length === 0) return isLoading ? <SkeletonList rows={2} label /> : null;
 
     return (
         <div className="ag-section">

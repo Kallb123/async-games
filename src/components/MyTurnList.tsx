@@ -7,12 +7,13 @@ import { useEffect, useState } from "react";
 import { metaForGame } from "@/utils/ui/games";
 import { opponents } from "@/utils/ui/players";
 import GameThumb, { accentVar } from "@/components/ui/GameThumb";
+import { SkeletonTurnCards } from "@/components/ui/Skeleton";
 
 export default function MyTurnList() {
     const { user, isLoaded } = useUser();
     const router = useRouter();
     const [gameList, setGameList] = useState([] as IGameResponse[]);
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         window.addEventListener('NewInvite', () => refreshContent());
@@ -71,7 +72,7 @@ export default function MyTurnList() {
                 </p>
             </div>
 
-            {isLoading && count === 0 && <div className="ag-section"><div className="ag-loading">Loading your games…</div></div>}
+            {isLoading && count === 0 && <SkeletonTurnCards count={2} />}
 
             {count > 0 && (
                 <div className="ag-section">

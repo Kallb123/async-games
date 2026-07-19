@@ -5,11 +5,13 @@ import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { opponents } from "@/utils/ui/players";
+import { SkeletonList } from "@/components/ui/Skeleton";
 
 export default function TheirTurnList() {
     const { user, isLoaded } = useUser();
     const router = useRouter();
     const [gameList, setGameList] = useState([] as IGameResponse[]);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         window.addEventListener('NewInvite', () => refreshContent());
@@ -32,7 +34,8 @@ export default function TheirTurnList() {
             fetch('/api/game/theirturnlist')
             .then(response => response.json())
             .then(data => {if (data && data.gameList) setGameList(data.gameList)})
-            .catch(error => console.error('Failed to load their turn list', error));
+            .catch(error => console.error('Failed to load their turn list', error))
+            .finally(() => setIsLoading(false));
         }
     }
 
@@ -50,7 +53,7 @@ export default function TheirTurnList() {
         .catch(error => console.error('Failed to end game', error));
     }
 
-    if (gameList.length === 0) return null;
+    if (gameList.length === 0) return isLoading ? <SkeletonList rows={2} avatar={false} label /> : null;
 
     return (
         <div className="ag-section">
