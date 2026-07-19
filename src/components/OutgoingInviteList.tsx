@@ -5,11 +5,13 @@ import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import moment from 'moment';
+import { SkeletonList } from "@/components/ui/Skeleton";
 
 export default function OutgoingInviteList() {
     const { user, isLoaded } = useUser();
     const router = useRouter();
     const [inviteList, setInviteList] = useState([] as IInvitationResponse[]);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         window.addEventListener('NewInvite', () => refreshContent());
@@ -32,7 +34,8 @@ export default function OutgoingInviteList() {
             fetch('/api/user/outgoinginvites')
             .then(response => response.json())
             .then(data => {if (data && data.inviteList) setInviteList(data.inviteList)})
-            .catch(error => console.error('Failed to load outgoing invites', error));
+            .catch(error => console.error('Failed to load outgoing invites', error))
+            .finally(() => setIsLoading(false));
         }
     }
 
@@ -50,7 +53,7 @@ export default function OutgoingInviteList() {
         .catch(error => console.error('Failed to cancel invite', error));
     }
 
-    if (inviteList.length === 0) return null;
+    if (inviteList.length === 0) return isLoading ? <SkeletonList rows={2} avatar={false} label /> : null;
 
     return (
         <div className="ag-section">

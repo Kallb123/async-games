@@ -3,6 +3,7 @@ import CurrentUserInfo from "@/components/CurrentUserInfo";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useToast } from "@/components/ToastContext";
 import Avatar from "@/components/ui/Avatar";
+import { SkeletonRow } from "@/components/ui/Skeleton";
 import { IFriendRequestResponse, IFriendUser } from "@/utils/mongodb/FriendshipData";
 import useFcmToken from "@/utils/hooks/useFcmToken";
 import { useUser, useClerk } from "@clerk/nextjs";
@@ -31,6 +32,7 @@ export default function Profile() {
     const [inviteUsername, setInviteUsername] = useState("");
     const [isSending, setIsSending] = useState(false);
     const [showAdd, setShowAdd] = useState(false);
+    const [isLoadingFriends, setIsLoadingFriends] = useState(true);
 
     useEffect(() => {
         window.addEventListener('FriendInvite', () => refreshFriends());
@@ -59,7 +61,8 @@ export default function Profile() {
                 setOutgoingRequests(data.outgoingRequests);
             }
         })
-        .catch(error => console.error('Failed to load friends', error));
+        .catch(error => console.error('Failed to load friends', error))
+        .finally(() => setIsLoadingFriends(false));
     }
 
     const handleInvite = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -203,7 +206,15 @@ export default function Profile() {
                     </form>
                 )}
 
-                {friends.length === 0
+                {isLoadingFriends && friends.length === 0
+                    ? (
+                        <div className="ag-list" aria-busy="true">
+                            <SkeletonRow />
+                            <SkeletonRow />
+                            <SkeletonRow />
+                        </div>
+                    )
+                    : friends.length === 0
                     ? <div className="ag-empty">No friends yet. Add someone to start a game together.</div>
                     : (
                         <div className="ag-list">
