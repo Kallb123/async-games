@@ -66,7 +66,7 @@ seeds the initial state from those persisted fields.
 | Snakes & Ladders | ✅ | ✅ | Pilot. Records the dice roll (`recordedRoll`). |
 | Dice Cities | ✅ | ✖ | Records dice in `doDiceRoll` (roll + radio-tower reroll). Planning deferred — multi-step per-player turns. |
 | Smartthink | ✅ | ✖ (by design) | No command changes: initial state seeded from the doc (solo secret code is static; 2-player codes restored by replaying `SmartthinkSetSecretCode`). Planning **intentionally disabled** — testing hypothetical guesses would leak free feedback and break the deduction game. |
-| Settlements & Cities | ✖ (deferred) | ✖ | See below. |
+| Settlements & Cities | ✅ | ✖ | Replays from a stored initial-state snapshot (board + dev-card deck aren't reconstructable). Records dice + the 7-roll discard shuffle (`SACRollDice`) and the stolen resource (`SACMoveRobber`). Recap only for games created after the change (gated on `recapAvailable`). Planning deferred — low value here. See below. |
 
 During recap the board is read-only: interactive controls are hidden either by
 gating on `nav.isLive` (Smartthink) or by passing a sentinel `currentTurn` +
@@ -87,11 +87,12 @@ no-op submit so no player's controls activate (Dice Cities).
    `nav.displayedHistory`, and disable interactive controls while
    `!nav.isLive`.
 
-## Deferred: Settlements & Cities
+## Settlements & Cities
 
-SAC cannot use the reconstruct-from-scratch approach the other games use, because
-**two sources of creation-time randomness are unrecoverable from the current
-state**:
+Recap is **implemented** (planning is still deferred — it holds little value in
+this game). SAC could not use the reconstruct-from-scratch approach the other
+games use, because **two sources of creation-time randomness are unrecoverable
+from the current state**:
 
 - `generateBoard()` randomizes hex terrain/number tokens and harbors.
 - `shuffleDeck(DEV_CARD_DECK)` randomizes the dev-card deck order.
@@ -101,38 +102,41 @@ read back, but the dev-card deck **shrinks** as cards are drawn and the drawn
 order is lost — so the initial deck cannot be reconstructed. Replaying
 `SACBuyDevCard` from a wrong deck order would diverge.
 
-### Required design
+### How it's implemented
 
-Store a **one-time initial-state snapshot** at game creation, then replay from it
-with in-play RNG recorded:
+A **one-time initial-state snapshot** is stored at game creation and replayed
+from, with in-play RNG recorded:
 
-1. **Persist the initial `specificGameState`** in `CreateGame` (a new field, e.g.
-   `initialSpecificGameState`). Note the `playerStates` Map — store it in a
-   serialization-friendly form (e.g. a plain object keyed by userId) and rebuild
-   the Map in **userIdList order** so iteration order matches the original
-   (important for the discard loop below). Pre-existing games won't have this
-   field, so recap is only available for games created after the change — surface
-   that gracefully.
-2. The SAC replay adapter's `buildInitialSpecificGameState` deep-clones that
-   stored snapshot (instead of reconstructing).
-3. **Record in-play RNG** on the relevant commands (same `recorded…` pattern):
-   - `SACRollDice` — the two dice, **and** the Fisher-Yates discard in
-     `sacDiscardHalf` (called per player with >7 cards on a 7). Thread a recorded
-     random sequence through `DiceRoll` and `sacDiscardHalf` (a small
-     `RandomLog`-style recorder that stores the raw draws is the cleanest way to
-     capture a variable number of draws).
-   - `SACMoveRobber` — the randomly stolen resource.
+1. **The initial `specificGameState` is persisted** in `CreateGame` as
+   `initialSpecificGameState` (a deep clone via `cloneSACState`, a second Mongoose
+   path with the same sub-schema). `buildInitialSettlementsAndCitiesState`
+   deep-clones it back for replay and **rebuilds the `playerStates` Map in
+   `userIdList` order** so iteration order matches the original (important for the
+   discard loop below). Pre-existing games lack the field: `CreateDataResponse`
+   exposes `recapAvailable`, and the game page only offers the recap controls when
+   it's true.
+2. The SAC replay adapter (`replay.ts`) uses that helper for its
+   `buildInitialSpecificGameState` and `gameStateToResponse` for the response shape.
+3. **In-play RNG is recorded** on the relevant commands (same `recorded…` pattern):
+   - `SACRollDice` — `recordedRoll1`/`recordedRoll2` for the dice, **and**
+     `recordedDiscards` for the Fisher-Yates discard in `sacDiscardHalf` (run per
+     player with >7 cards on a 7). A small `SACRandomLog` recorder threads the raw
+     draws through `sacDiscardHalf`, capturing a variable number of draws.
+   - `SACMoveRobber` — `recordedStealIndex`, the index of the stolen resource in
+     the victim's (deterministically reconstructed) pool.
    - `SACBuyDevCard` — **no** recording needed; it draws from the (now
      snapshot-preserved) `devCardDeck`, which is deterministic.
-4. Wire `useTurnNavigation` + `TurnNavControls` into
-   `src/app/games/settlementsandcities/[gameid]/page.tsx` for recap, disabling the
-   board/action controls while reviewing.
+4. `useTurnNavigation` + `TurnNavControls` are wired into
+   `src/app/games/settlementsandcities/[gameid]/page.tsx`: the board/scoreboard/hand
+   render `nav.displayedState`, and interactive controls are disabled while
+   reviewing (`isMyTurn` requires `nav.isLive`).
 
 ### Verification
 
-The engine tests in this feature use synthetic games run through
-`buildTimeline` and assert `recap == live`. For SAC, add equivalent tests
-covering a 7-roll (discard), a robber steal, and a dev-card draw. Because SAC is
-the most randomness-heavy game and its interactions are hard to exercise fully in
-a unit test, also **sanity-check recap in the live app** on a real game before
-relying on it.
+Because there's no test runner wired into CI, determinism is verified by a
+synthetic harness that mirrors `buildTimeline` (Execute → CheckGameOver →
+CheckEndTurn), runs a command sequence with seeded RNG, then replays the
+persisted commands from a fresh initial state **with `Math.random` disabled** and
+asserts `recap == live`. It covers a 7-roll (discard), a robber steal, and a
+dev-card draw. Since SAC is the most randomness-heavy game, also
+**sanity-check recap in the live app** on a real game before relying on it.

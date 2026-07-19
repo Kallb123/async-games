@@ -18,6 +18,8 @@ import {
     ISACEdge,
     ISACHarbor,
     ISACPlayerState,
+    ISACResources,
+    ISACDevCards,
     ISACSpecificGameState,
 } from "./board";
 
@@ -69,6 +71,93 @@ function shuffleDeck<T>(arr: T[]): T[] {
         [a[i], a[j]] = [a[j], a[i]];
     }
     return a;
+}
+
+// ─── Initial-state snapshot (turn recap) ───────────────────────────────────────
+// SAC's board and dev-card deck are randomised at creation and can't be
+// reconstructed from later state (the deck shrinks as cards are drawn), so the
+// starting specificGameState is persisted at creation and deep-cloned to seed
+// replay. See docs/turn-recap-and-planning.md.
+
+function cloneResources(r: ISACResources): ISACResources {
+    return { lumber: r.lumber, wool: r.wool, grain: r.grain, brick: r.brick, ore: r.ore };
+}
+
+function cloneDevCards(d: ISACDevCards): ISACDevCards {
+    return {
+        knight: d.knight,
+        victoryPoint: d.victoryPoint,
+        roadBuilding: d.roadBuilding,
+        yearOfPlenty: d.yearOfPlenty,
+        monopoly: d.monopoly,
+    };
+}
+
+function clonePlayerState(ps: ISACPlayerState): ISACPlayerState {
+    return {
+        resources: cloneResources(ps.resources),
+        devCards: cloneDevCards(ps.devCards),
+        newDevCards: cloneDevCards(ps.newDevCards),
+        knightsPlayed: ps.knightsPlayed,
+        remainingRoads: ps.remainingRoads,
+        remainingSettlements: ps.remainingSettlements,
+        remainingCities: ps.remainingCities,
+    };
+}
+
+// Deep-clones a SAC game state into independent plain objects. playerStates is
+// rebuilt as a fresh Map in `userIdList` order so replay iteration (e.g. the
+// 7-roll discard loop) matches the original creation order. Accepts a state
+// whose playerStates is either a Map (in-memory) or a plain object (as read
+// back from Mongo after storage).
+export function cloneSACState(
+    gs: ISACSpecificGameState,
+    userIdList: string[],
+): ISACSpecificGameState {
+    const source: Map<string, ISACPlayerState> = gs.playerStates instanceof Map
+        ? gs.playerStates
+        : new Map(Object.entries(gs.playerStates as unknown as Record<string, ISACPlayerState>));
+
+    const playerStates = new Map<string, ISACPlayerState>();
+    for (const userId of userIdList) {
+        const ps = source.get(userId);
+        if (ps) playerStates.set(userId, clonePlayerState(ps));
+    }
+
+    return {
+        hexes: gs.hexes.map((h): ISACHex => ({ terrain: h.terrain, numberToken: h.numberToken })),
+        vertices: gs.vertices.map((v): ISACVertex => ({ building: v.building, owner: v.owner })),
+        edges: gs.edges.map((e): ISACEdge => ({ hasRoad: e.hasRoad, owner: e.owner })),
+        harbors: gs.harbors.map((h): ISACHarbor => ({ type: h.type, vertices: [h.vertices[0], h.vertices[1]] })),
+        playerStates,
+        robberHexIndex: gs.robberHexIndex,
+        phase: gs.phase,
+        setupStep: gs.setupStep,
+        pendingRoadSetup: gs.pendingRoadSetup,
+        lastSetupSettlementVertex: gs.lastSetupSettlementVertex,
+        hasRolled: gs.hasRolled,
+        lastRoll: gs.lastRoll,
+        pendingRobber: gs.pendingRobber,
+        longestRoadOwner: gs.longestRoadOwner,
+        largestArmyOwner: gs.largestArmyOwner,
+        devCardDeck: [...gs.devCardDeck],
+        pendingRoadBuilding: gs.pendingRoadBuilding,
+        playedDevCard: gs.playedDevCard,
+    };
+}
+
+// Seeds the replay engine's starting state by deep-cloning the initial snapshot
+// stored at creation. Games created before recap support lack the snapshot;
+// recap is gated on `recapAvailable` in the response so this path shouldn't be
+// hit for those, but it throws clearly if it ever is.
+export function buildInitialSettlementsAndCitiesState(
+    gameData: ISettlementsAndCitiesGameData,
+): ISACSpecificGameState {
+    const snapshot = gameData.initialSpecificGameState;
+    if (!snapshot) {
+        throw new Error("Turn recap is unavailable for this game (created before recap support).");
+    }
+    return cloneSACState(snapshot, gameData.userIdList);
 }
 
 var SettlementsAndCitiesInvitationSchema = new Schema<ISettlementsAndCitiesInvitationDataDocument>(
@@ -148,6 +237,9 @@ SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
         complete: false,
         winner: '',
         specificGameState,
+        // Persist an independent copy of the starting state so turn recap can
+        // replay from it (the board + dev-card deck aren't reconstructable later).
+        initialSpecificGameState: cloneSACState(specificGameState, userIdList),
     };
     return gameData;
 };
@@ -162,6 +254,9 @@ export var SettlementsAndCitiesInvitationModel =
 
 export interface ISettlementsAndCitiesGameData extends IGameData {
     specificGameState: ISACSpecificGameState;
+    // Immutable copy of the starting state, persisted at creation so turn recap
+    // can replay from it. Absent on games created before recap support.
+    initialSpecificGameState?: ISACSpecificGameState;
 }
 
 export interface ISettlementsAndCitiesGameDataDocument
@@ -188,39 +283,47 @@ const resourcesSubSchema = {
     ore: Number,
 };
 
+// The specificGameState sub-schema, produced fresh per path so `specificGameState`
+// (the live, mutable state) and `initialSpecificGameState` (the immutable recap
+// snapshot) don't share a schema definition object.
+function makeSACStateSchemaDef() {
+    return {
+        hexes: [{ terrain: String, numberToken: { type: Number, default: null } }],
+        vertices: [{ building: { type: String, default: null }, owner: { type: String, default: null } }],
+        edges: [{ hasRoad: Boolean, owner: { type: String, default: null } }],
+        harbors: [{ type: { type: String }, vertices: [Number] }],
+        playerStates: {
+            type: Schema.Types.Map,
+            of: {
+                resources: resourcesSubSchema,
+                devCards: devCardsSubSchema,
+                newDevCards: devCardsSubSchema,
+                knightsPlayed: Number,
+                remainingRoads: Number,
+                remainingSettlements: Number,
+                remainingCities: Number,
+            },
+        },
+        robberHexIndex: Number,
+        phase: String,
+        setupStep: Number,
+        pendingRoadSetup: Boolean,
+        lastSetupSettlementVertex: { type: Number, default: null },
+        hasRolled: Boolean,
+        lastRoll: { type: Number, default: null },
+        pendingRobber: Boolean,
+        longestRoadOwner: { type: String, default: null },
+        largestArmyOwner: { type: String, default: null },
+        devCardDeck: [String],
+        pendingRoadBuilding: Number,
+        playedDevCard: Boolean,
+    };
+}
+
 var SettlementsAndCitiesGameDataSchema = new Schema<ISettlementsAndCitiesGameDataDocument>(
     {
-        specificGameState: {
-            hexes: [{ terrain: String, numberToken: { type: Number, default: null } }],
-            vertices: [{ building: { type: String, default: null }, owner: { type: String, default: null } }],
-            edges: [{ hasRoad: Boolean, owner: { type: String, default: null } }],
-            harbors: [{ type: { type: String }, vertices: [Number] }],
-            playerStates: {
-                type: Schema.Types.Map,
-                of: {
-                    resources: resourcesSubSchema,
-                    devCards: devCardsSubSchema,
-                    newDevCards: devCardsSubSchema,
-                    knightsPlayed: Number,
-                    remainingRoads: Number,
-                    remainingSettlements: Number,
-                    remainingCities: Number,
-                },
-            },
-            robberHexIndex: Number,
-            phase: String,
-            setupStep: Number,
-            pendingRoadSetup: Boolean,
-            lastSetupSettlementVertex: { type: Number, default: null },
-            hasRolled: Boolean,
-            lastRoll: { type: Number, default: null },
-            pendingRobber: Boolean,
-            longestRoadOwner: { type: String, default: null },
-            largestArmyOwner: { type: String, default: null },
-            devCardDeck: [String],
-            pendingRoadBuilding: Number,
-            playedDevCard: Boolean,
-        },
+        specificGameState: makeSACStateSchemaDef(),
+        initialSpecificGameState: makeSACStateSchemaDef(),
     },
     { discriminatorKey: 'kind' },
 );
@@ -247,6 +350,9 @@ SettlementsAndCitiesGameDataSchema.methods.CreateDataResponse = async function()
         complete: doc.complete,
         winner: doc.winner,
         specificGameState: gameStateToResponse(doc.specificGameState, userIdNameMap),
+        // Turn recap replays from the stored initial snapshot; only games created
+        // after recap support carry it, so the UI gates its controls on this.
+        recapAvailable: !!doc.initialSpecificGameState,
     };
 };
 
@@ -261,7 +367,7 @@ function replaceHistoryUserIds(history: string[], userIdNameMap: { [key: string]
     });
 }
 
-function gameStateToResponse(
+export function gameStateToResponse(
     gs: ISACSpecificGameState,
     userIdNameMap: { [key: string]: string },
 ): ISACSpecificGameStateResponse {

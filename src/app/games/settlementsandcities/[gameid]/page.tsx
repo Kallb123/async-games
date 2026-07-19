@@ -7,13 +7,15 @@ import { useEffect, useState } from "react";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { IGameCommand } from "@/utils/apiModels/GameLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
-import type { ISACGameDataResponse } from "@/games/SettlementsAndCities/apiModels";
+import type { ISACGameDataResponse, ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
 import type { SAC_Resource } from "@/games/SettlementsAndCities/board";
 import { BOARD_TOPOLOGY, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
 import SettlementsAndCitiesBoard from "@/components/games/SettlementsAndCities/SettlementsAndCitiesBoard";
 import SettlementsAndCitiesActions, { SACBoardMode } from "@/components/games/SettlementsAndCities/SettlementsAndCitiesActions";
 import GameShell from "@/components/ui/GameShell";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
+import TurnNavControls from "@/components/games/TurnNavControls";
+import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import {
     SACPlaceSettlementSetup,
     SACPlaceRoadSetup,
@@ -104,8 +106,23 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             });
     };
 
-    const gs = gameData?.specificGameState;
-    const isMyTurn = user?.id === gameData?.currentTurn;
+    // Turn recap: replay past turns and render the reconstructed board read-only.
+    // While reviewing (nav not live) `gs` is the historical snapshot rather than
+    // the live state, and interactive controls are disabled.
+    const live = {
+        specificGameState: gameData?.specificGameState,
+        currentTurn: gameData?.currentTurn ?? "",
+        complete: gameData?.complete ?? false,
+        winner: gameData?.winner ?? "",
+        history: gameData?.gameState?.history ?? [],
+    };
+    const nav = useTurnNavigation<ISACSpecificGameStateResponse>(gameId, live);
+    const recapAvailable = gameData?.recapAvailable ?? false;
+
+    const gs = nav.displayedState;
+    const complete = nav.displayedComplete;
+    // Only the live active player can act; reviewing a past turn is read-only.
+    const isMyTurn = nav.isLive && user?.id === gameData?.currentTurn;
     const myUsername = user?.username || user?.firstName || user?.id || '';
 
     // Map username → color
@@ -221,18 +238,20 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
         submitCommand(cmd, () => { });
     };
 
+    const displayedWinner = nav.displayedWinner;
+    const displayedCurrentTurn = nav.displayedCurrentTurn;
+
     const getWinnerDisplayName = (): string => {
         const playerStates = gs?.playerStates;
-        if (!playerStates) return gameData?.winner ?? '';
-        return Object.values(playerStates).find(p => p.userId === gameData.winner)?.username ?? gameData?.winner ?? '';
+        if (!playerStates) return displayedWinner ?? '';
+        return Object.values(playerStates).find(p => p.userId === displayedWinner)?.username ?? displayedWinner ?? '';
     };
 
     const currentTurnUsername = gs
-        ? Object.values(gs.playerStates).find(p => p.userId === gameData?.currentTurn)?.username ?? gameData?.currentTurn ?? ''
-        : gameData?.currentTurn ?? '';
+        ? Object.values(gs.playerStates).find(p => p.userId === displayedCurrentTurn)?.username ?? displayedCurrentTurn ?? ''
+        : displayedCurrentTurn ?? '';
 
-    const complete = gameData?.complete ?? false;
-    const currentUserWon = complete && user?.id !== undefined && user.id === gameData?.winner;
+    const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
 
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
@@ -294,6 +313,10 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
+
+            {recapAvailable && gs && (
+                <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} />
+            )}
 
             {complete && (
                 <div className="ag-game-result">
@@ -358,10 +381,10 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                     {showLog && (
                         <div className="ag-log">
                             <ul className="ag-log-list">
-                                {(gameData?.gameState?.history ?? []).slice().reverse().map((h, i) => (
+                                {nav.displayedHistory.slice().reverse().map((h, i) => (
                                     <li key={i} className="ag-log-item">{h}</li>
                                 ))}
-                                {(gameData?.gameState?.history?.length ?? 0) === 0 && (
+                                {nav.displayedHistory.length === 0 && (
                                     <li className="ag-log-item">No moves yet.</li>
                                 )}
                             </ul>
