@@ -1093,7 +1093,7 @@ export class SmartthinkSubmitGuess implements IGameCommand {
         }
 
         const feedback = calculateSmartthinkFeedback(stGameData.specificGameState.secretCode, this.guess);
-        stGameData.specificGameState.guessRows.unshift({ guess: this.guess, black: feedback.black, white: feedback.white });
+        stGameData.specificGameState.guessRows.push({ guess: this.guess, black: feedback.black, white: feedback.white });
         stGameData.gameState.history.unshift(`${this.senderUsername} guessed ${this.guess.map(v => v + 1).join('-')} and received ${feedback.black} black, ${feedback.white} white`);
         return { turnOver: true, validMove: true, black: feedback.black, white: feedback.white } as ISmartthinkGuessOutcome;
     }
