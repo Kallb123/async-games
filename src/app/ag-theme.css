@@ -621,7 +621,10 @@ body {
  *  it are game-specific. See design section 3.
  * ============================================================= */
 
-.ag-game { display: flex; flex-direction: column; min-height: 100vh; }
+.ag-game { display: flex; flex-direction: column; min-height: 100vh; background: var(--ag-surface); }
+/* The in-game shell is full-bleed — drop the app column's bottom padding so
+   no cream strip peeks out below the board/actions. */
+.ag-app:has(.ag-game) { padding-bottom: 0; }
 
 /* ---- Dark top bar ---- */
 .ag-game-topbar {
@@ -733,8 +736,6 @@ body {
     position: absolute;
     inset: 6px;
     z-index: 3;
-    background: oklch(0.28 0.04 40 / 0.32);
-    border-radius: 12px;
     display: flex;
     align-items: flex-start;
     justify-content: center;
