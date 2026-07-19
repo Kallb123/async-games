@@ -4,17 +4,16 @@ import { useUser } from "@clerk/nextjs";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Col, Row } from "react-bootstrap";
-import CurrentUserInfo from "@/components/CurrentUserInfo";
-import GameResult from "@/components/GameResult";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { IGameCommand } from "@/utils/apiModels/GameLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import type { ISACGameDataResponse } from "@/games/SettlementsAndCities/apiModels";
+import type { SAC_Resource } from "@/games/SettlementsAndCities/board";
 import { BOARD_TOPOLOGY, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
 import SettlementsAndCitiesBoard from "@/components/games/SettlementsAndCities/SettlementsAndCitiesBoard";
-import SettlementsAndCitiesPlayerPanel from "@/components/games/SettlementsAndCities/SettlementsAndCitiesPlayerPanel";
 import SettlementsAndCitiesActions, { SACBoardMode } from "@/components/games/SettlementsAndCities/SettlementsAndCitiesActions";
+import GameShell from "@/components/ui/GameShell";
+import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import {
     SACPlaceSettlementSetup,
     SACPlaceRoadSetup,
@@ -26,12 +25,27 @@ import {
 
 const PLAYER_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c'];
 
+const RESOURCE_ORDER: SAC_Resource[] = ['lumber', 'wool', 'grain', 'brick', 'ore'];
+const RESOURCE_EMOJI: Record<SAC_Resource, string> = {
+    lumber: '🪵', wool: '🐑', grain: '🌾', brick: '🧱', ore: '⛏️',
+};
+
+const PLACEMENT_PROMPT: Partial<Record<SACBoardMode, string>> = {
+    placeSettlementSetup: 'Tap a spot to place your settlement →',
+    placeSettlement: 'Tap a spot to build a settlement →',
+    placeCity: 'Tap a settlement to upgrade →',
+    placeRoadSetup: 'Tap an edge to place your road →',
+    placeRoad: 'Tap an edge to place a road →',
+    moveRobber: 'Tap a hex to move the robber →',
+};
+
 export default function GameSettlementsAndCities({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
     const { user, isLoaded } = useUser();
     const [gameData, setGameData] = useState({} as ISACGameDataResponse);
     const [boardMode, setBoardMode] = useState<SACBoardMode>('idle');
+    const [showLog, setShowLog] = useState(false);
     const router = useRouter();
 
     const { gameid } = use(params);
@@ -217,95 +231,144 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
         ? Object.values(gs.playerStates).find(p => p.userId === gameData?.currentTurn)?.username ?? gameData?.currentTurn ?? ''
         : gameData?.currentTurn ?? '';
 
+    const complete = gameData?.complete ?? false;
+    const currentUserWon = complete && user?.id !== undefined && user.id === gameData?.winner;
+
+    // ── Top-bar status line ──────────────────────────────────────────────────
+    let subtitle: React.ReactNode = 'Loading…';
+    if (gs) {
+        if (complete) {
+            subtitle = currentUserWon ? '🏆 You won!' : `${getWinnerDisplayName()} won`;
+        } else if (gs.phase === 'setup') {
+            subtitle = <><b>Setup</b> · step {gs.setupStep + 1} · {isMyTurn ? 'your move' : `${currentTurnUsername}'s move`}</>;
+        } else if (isMyTurn) {
+            subtitle = gs.hasRolled
+                ? <>You rolled <b>{gs.lastRoll}</b> · build or end turn</>
+                : <><span className="ag-hi">Your move</span> · roll the dice</>;
+        } else {
+            subtitle = <>{currentTurnUsername}&apos;s move</>;
+        }
+    }
+
+    // ── Scoreboard entries ───────────────────────────────────────────────────
+    const scoreEntries: ScoreEntry[] = gs
+        ? usernameList.flatMap((username, i): ScoreEntry[] => {
+            const ps = gs.playerStates?.[username];
+            if (!ps) return [];
+            const isMe = username === myUsername;
+            const isActive = username === currentTurnUsername && !complete;
+            const totalCards = Object.values(ps.resources ?? {}).reduce((s, n) => s + n, 0);
+            let sub: React.ReactNode;
+            if (isActive) sub = '▶ now';
+            else if (gs.longestRoadOwner === username) sub = '🛣️ LR';
+            else if (gs.largestArmyOwner === username) sub = '⚔️ LA';
+            else sub = `${totalCards} cards`;
+            return [{
+                id: username,
+                name: isMe ? 'You' : username,
+                color: PLAYER_COLORS[i % PLAYER_COLORS.length],
+                sub,
+                score: ps.visibleVP,
+                isMe,
+                isActive,
+            }];
+        })
+        : [];
+
+    // ── Your hand ────────────────────────────────────────────────────────────
+    const myState = gs?.playerStates?.[myUsername];
+    const myDevCards = gs?.playerDevCards?.[myUsername];
+    const myDevCount = myDevCards ? Object.values(myDevCards).reduce((s, n) => s + n, 0) : 0;
+    const myHandTotal = myState ? Object.values(myState.resources ?? {}).reduce((s, n) => s + n, 0) : 0;
+
+    const logButton = gs ? (
+        <button
+            className={`ag-game-topbar-btn${showLog ? ' ag-game-topbar-btn--on' : ''}`}
+            onClick={() => setShowLog(v => !v)}
+            aria-label="Game log"
+        >📜</button>
+    ) : undefined;
+
     return (
-        <main>
-            <h1>Settlements and Cities</h1>
-            <h2><a href="/">Home</a></h2>
-            <GameResult
-                complete={gameData?.complete ?? false}
-                winnerId={gameData?.winner ?? ''}
-                currentUserId={user?.id}
-                winnerDisplayName={getWinnerDisplayName()}
-            />
+        <GameShell title="Settlements & Cities" subtitle={subtitle} right={logButton}>
+            <FcmTokenComp />
+
+            {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
+
+            {complete && (
+                <div className="ag-game-result">
+                    <h2>{currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}</h2>
+                </div>
+            )}
 
             {gs && (
                 <>
-                    {gs.lastRoll !== null && (
-                        <p>Last roll: <strong>{gs.lastRoll}</strong></p>
+                    <div className="ag-board-area">
+                        <SettlementsAndCitiesBoard
+                            hexes={gs.hexes}
+                            vertices={gs.vertices}
+                            edges={gs.edges}
+                            harbors={gs.harbors}
+                            robberHexIndex={gs.robberHexIndex}
+                            usernameToColor={usernameToColor}
+                            onVertexClick={isMyTurn && !complete ? handleVertexClick : undefined}
+                            onEdgeClick={isMyTurn && !complete ? handleEdgeClick : undefined}
+                            onHexClick={isMyTurn && !complete ? handleHexClick : undefined}
+                            validVertices={validVertices}
+                            validEdges={validEdges}
+                            validHexes={validHexes}
+                            lastRoll={gs.lastRoll}
+                            placementPrompt={boardMode !== 'idle' ? PLACEMENT_PROMPT[boardMode] ?? null : null}
+                        />
+                    </div>
+
+                    {myState && !complete && (
+                        <div className="ag-hand">
+                            <div className="ag-hand-head">
+                                <span className="ag-hand-title">Your hand · {myHandTotal} card{myHandTotal !== 1 ? 's' : ''}</span>
+                                {myDevCount > 0 && (
+                                    <span className="ag-hand-note">🃏 {myDevCount} dev card{myDevCount !== 1 ? 's' : ''}</span>
+                                )}
+                            </div>
+                            <div className="ag-hand-cards">
+                                {RESOURCE_ORDER.map(r => {
+                                    const n = myState.resources?.[r] ?? 0;
+                                    return (
+                                        <div key={r} className={`ag-hand-card${n === 0 ? ' ag-hand-card--empty' : ''}`}>
+                                            <div className="ag-hand-emoji">{RESOURCE_EMOJI[r]}</div>
+                                            <div className="ag-hand-count">{n}</div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
                     )}
-                    <p>
-                        Phase: <strong>{gs.phase}</strong>
-                        {gs.phase === 'setup' && ` (step ${gs.setupStep + 1})`}
-                        &nbsp;· Active: <strong>{currentTurnUsername}</strong>
-                        &nbsp;· Dev deck: {gs.devCardDeckSize ?? 0} cards
-                    </p>
 
-                    <Row>
-                        <Col md={8}>
-                            <SettlementsAndCitiesBoard
-                                hexes={gs.hexes}
-                                vertices={gs.vertices}
-                                edges={gs.edges}
-                                harbors={gs.harbors}
-                                robberHexIndex={gs.robberHexIndex}
-                                usernameToColor={usernameToColor}
-                                onVertexClick={isMyTurn && !gameData.complete ? handleVertexClick : undefined}
-                                onEdgeClick={isMyTurn && !gameData.complete ? handleEdgeClick : undefined}
-                                onHexClick={isMyTurn && !gameData.complete ? handleHexClick : undefined}
-                                validVertices={validVertices}
-                                validEdges={validEdges}
-                                validHexes={validHexes}
-                            />
-                        </Col>
-                        <Col md={4}>
-                            {usernameList.map((username, i) => {
-                                const ps = gs.playerStates?.[username];
-                                if (!ps) return null;
-                                return (
-                                    <SettlementsAndCitiesPlayerPanel
-                                        key={username}
-                                        username={username}
-                                        playerState={ps}
-                                        devCards={gs.playerDevCards?.[username]}
-                                        color={PLAYER_COLORS[i % PLAYER_COLORS.length]}
-                                        isCurrentTurn={username === currentTurnUsername}
-                                        isMe={username === myUsername}
-                                        longestRoadOwner={gs.longestRoadOwner}
-                                        largestArmyOwner={gs.largestArmyOwner}
-                                    />
-                                );
-                            })}
+                    {isMyTurn && !complete && (
+                        <SettlementsAndCitiesActions
+                            gs={gs}
+                            myUsername={myUsername}
+                            myUserId={user?.id ?? ''}
+                            boardMode={boardMode}
+                            setBoardMode={setBoardMode}
+                            submitCommand={submitCommand}
+                        />
+                    )}
 
-                            {isMyTurn && !gameData?.complete && (
-                                <div className="mt-3">
-                                    <h5>Your Turn</h5>
-                                    <SettlementsAndCitiesActions
-                                        gs={gs}
-                                        myUsername={myUsername}
-                                        myUserId={user?.id ?? ''}
-                                        boardMode={boardMode}
-                                        setBoardMode={setBoardMode}
-                                        submitCommand={submitCommand}
-                                    />
-                                </div>
-                            )}
-                        </Col>
-                    </Row>
+                    {showLog && (
+                        <div className="ag-log">
+                            <ul className="ag-log-list">
+                                {(gameData?.gameState?.history ?? []).slice().reverse().map((h, i) => (
+                                    <li key={i} className="ag-log-item">{h}</li>
+                                ))}
+                                {(gameData?.gameState?.history?.length ?? 0) === 0 && (
+                                    <li className="ag-log-item">No moves yet.</li>
+                                )}
+                            </ul>
+                        </div>
+                    )}
                 </>
             )}
-
-            <h2>History</h2>
-            <Row>
-                <Col>
-                    <ul>
-                        {gameData?.gameState?.history?.map((h, i) => (
-                            <li key={i}>{h}</li>
-                        ))}
-                    </ul>
-                </Col>
-            </Row>
-            <CurrentUserInfo />
-            <FcmTokenComp />
-        </main>
+        </GameShell>
     );
 }

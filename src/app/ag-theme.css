@@ -614,3 +614,266 @@ body {
     color: var(--ag-ink-softer);
     padding: 4px 0;
 }
+
+/* ============================================================= *
+ *  In-game shell — the "Game Night" chrome around a game board.
+ *  Shared by every game; only the board + build actions inside
+ *  it are game-specific. See design section 3.
+ * ============================================================= */
+
+.ag-game { display: flex; flex-direction: column; min-height: 100vh; }
+
+/* ---- Dark top bar ---- */
+.ag-game-topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    background: var(--ag-dark);
+    color: var(--ag-on-dark);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+}
+.ag-game-topbar-btn {
+    width: 34px;
+    height: 34px;
+    flex: none;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.12);
+    border: none;
+    color: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font: 700 15px var(--ag-font);
+    cursor: pointer;
+    text-decoration: none;
+}
+.ag-game-topbar-btn:hover { background: rgba(255, 255, 255, 0.22); color: inherit; }
+.ag-game-topbar-btn--on { background: var(--ag-terracotta); }
+.ag-game-topbar-main { flex: 1; min-width: 0; }
+.ag-game-topbar-title {
+    font: 800 15px/1.1 var(--ag-font);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ag-game-topbar-sub { font: 500 10.5px/1.2 var(--ag-font); opacity: 0.72; margin-top: 2px; }
+.ag-game-topbar-sub b { color: var(--ag-on-dark); opacity: 1; font-weight: 700; }
+.ag-hi { color: var(--ag-gold); font-weight: 700; }
+
+/* ---- Scoreboard strip ---- */
+.ag-scorestrip {
+    display: flex;
+    gap: 6px;
+    padding: 10px 12px;
+    background: oklch(0.32 0.04 42);
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.ag-scorestrip::-webkit-scrollbar { display: none; }
+.ag-score-pill {
+    flex: 1 0 auto;
+    min-width: 84px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--ag-surface);
+    border: 1px solid var(--ag-line);
+    border-radius: 10px;
+    padding: 6px 8px;
+    color: var(--ag-ink);
+}
+.ag-score-pill--me {
+    background: var(--ag-terracotta);
+    color: var(--ag-on-dark);
+    border-color: transparent;
+    box-shadow: 0 0 0 2px var(--ag-gold);
+}
+.ag-score-dot { width: 9px; height: 9px; flex: none; border-radius: 2px; }
+.ag-score-pill--me .ag-score-dot { outline: 1.5px solid var(--ag-on-dark); }
+.ag-score-main { flex: 1; min-width: 0; }
+.ag-score-name {
+    font: 800 11px/1 var(--ag-font);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ag-score-sub { font: 600 9px/1.1 var(--ag-font); opacity: 0.85; margin-top: 3px; }
+.ag-score-vp { font: 800 15px var(--ag-font); }
+
+/* ---- Board area (the "sea") + framed board ---- */
+.ag-board-area {
+    padding: 14px 12px;
+    background: radial-gradient(circle at 50% 30%, oklch(0.85 0.06 230), oklch(0.72 0.09 235));
+}
+.ag-board-frame {
+    position: relative;
+    background: #85c1e9;
+    border-radius: 18px;
+    padding: 6px;
+    box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.13), 0 4px 0 oklch(0.6 0.09 235);
+}
+.ag-board-frame svg { display: block; width: 100%; height: auto; border-radius: 12px; }
+.ag-board-tag {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 2;
+    background: var(--ag-dark);
+    color: var(--ag-on-dark);
+    border-radius: 99px;
+    padding: 5px 11px;
+    font: 800 11px var(--ag-font);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.19);
+    white-space: nowrap;
+}
+.ag-board-overlay {
+    position: absolute;
+    inset: 6px;
+    z-index: 3;
+    background: oklch(0.28 0.04 40 / 0.32);
+    border-radius: 12px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 22px;
+    pointer-events: none;
+}
+.ag-board-overlay > * {
+    background: var(--ag-terracotta);
+    color: var(--ag-on-dark);
+    border-radius: 99px;
+    padding: 7px 16px;
+    font: 800 12px var(--ag-font);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
+}
+
+/* ---- Resource legend (below board, on the sea) ---- */
+.ag-reslegend { display: flex; justify-content: center; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.ag-reslegend-pill {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(255, 253, 249, 0.82);
+    border-radius: 99px;
+    padding: 3px 9px;
+    font: 700 10px var(--ag-font);
+    color: var(--ag-ink);
+}
+.ag-reslegend-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+/* ---- Your hand ---- */
+.ag-hand {
+    background: var(--ag-surface);
+    border-top: 1px solid var(--ag-line);
+    padding: 12px 16px 8px;
+}
+.ag-hand-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+.ag-hand-title {
+    font: 800 11px var(--ag-font);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ag-ink-soft);
+}
+.ag-hand-note { font: 600 10.5px var(--ag-font); color: var(--ag-ink-soft); }
+.ag-hand-cards { display: flex; gap: 7px; }
+.ag-hand-card {
+    flex: 1;
+    border-radius: 10px;
+    padding: 8px 0;
+    text-align: center;
+    background: var(--ag-surface-2);
+    border: 1px solid var(--ag-line);
+}
+.ag-hand-card--empty { opacity: 0.45; }
+.ag-hand-emoji { font-size: 17px; line-height: 1.1; }
+.ag-hand-count { font: 800 13px var(--ag-font); }
+
+/* ---- Action sheet (roll prompt / build list) ---- */
+.ag-actionsheet { background: var(--ag-surface); padding: 10px 16px 20px; }
+.ag-action-hint {
+    font: 500 11px/1.4 var(--ag-font);
+    color: var(--ag-ink-soft);
+    text-align: center;
+    margin: 8px 0 0;
+}
+
+.ag-build-list { display: flex; flex-direction: column; gap: 8px; }
+.ag-build-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    text-align: left;
+    background: var(--ag-surface);
+    border: 1.5px solid var(--ag-line);
+    border-radius: 14px;
+    padding: 12px 14px;
+    cursor: pointer;
+    font-family: var(--ag-font);
+    color: var(--ag-ink);
+}
+.ag-build-row--active { border-color: var(--ag-terracotta); box-shadow: 0 0 0 1px var(--ag-terracotta); }
+.ag-build-row--disabled { background: var(--ag-surface-2); opacity: 0.6; cursor: not-allowed; }
+.ag-build-icon {
+    width: 38px;
+    height: 38px;
+    flex: none;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    background: var(--ag-surface-2);
+}
+.ag-build-main { flex: 1; min-width: 0; }
+.ag-build-name { display: block; font: 800 14px var(--ag-font); }
+.ag-build-cost { display: block; font: 600 10.5px/1.3 var(--ag-font); color: var(--ag-ink-soft); margin-top: 1px; }
+.ag-build-tag { font: 800 12.5px var(--ag-font); color: var(--ag-terracotta); white-space: nowrap; }
+.ag-build-tag--muted { color: var(--ag-ink-softer); font-weight: 700; font-size: 11px; }
+
+.ag-action-grid { display: flex; gap: 8px; }
+.ag-action-grid > * { flex: 1; }
+
+/* Big end-turn / roll CTAs reuse .ag-btn; a "success" variant for end turn */
+.ag-btn--success {
+    background: oklch(0.5 0.1 145);
+    color: var(--ag-on-dark);
+    box-shadow: 0 3px 0 oklch(0.42 0.09 145);
+}
+.ag-btn--success:hover { color: var(--ag-on-dark); filter: brightness(1.05); }
+.ag-btn--roll { box-shadow: 0 3px 0 var(--ag-terracotta-deep); }
+
+/* In-game history / log */
+.ag-log {
+    background: var(--ag-surface);
+    padding: 4px 16px 20px;
+}
+.ag-log-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 240px;
+    overflow-y: auto;
+}
+.ag-log-item {
+    font: 500 12px/1.45 var(--ag-font);
+    color: var(--ag-ink-soft);
+    padding: 7px 0;
+    border-bottom: 1px dashed var(--ag-line-dashed);
+}
+.ag-log-item:last-child { border-bottom: none; }
+
+/* In-game result banner */
+.ag-game-result {
+    margin: 12px 16px 0;
+    background: var(--ag-terracotta);
+    color: var(--ag-on-dark);
+    border-radius: 16px;
+    padding: 16px 18px;
+    text-align: center;
+    box-shadow: var(--ag-shadow-lift);
+}
+.ag-game-result h2 { font: 800 20px var(--ag-font); margin: 0; }

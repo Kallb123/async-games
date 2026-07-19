@@ -57,6 +57,10 @@ interface SettlementsAndCitiesBoardProps {
     validVertices?: Set<number>;
     validEdges?: Set<number>;
     validHexes?: Set<number>;
+    // Chrome shown around the board within the shell
+    lastRoll?: number | null;
+    /** When set, a translucent prompt is shown over the board (e.g. "Tap to place"). */
+    placementPrompt?: string | null;
 }
 
 export default function SettlementsAndCitiesBoard({
@@ -72,6 +76,8 @@ export default function SettlementsAndCitiesBoard({
     validVertices = new Set(),
     validEdges = new Set(),
     validHexes = new Set(),
+    lastRoll = null,
+    placementPrompt = null,
 }: SettlementsAndCitiesBoardProps) {
     if (!hexes || hexes.length === 0) return null;
 
@@ -84,11 +90,14 @@ export default function SettlementsAndCitiesBoard({
 
     return (
         <>
-            <svg
-                width={SVG_W}
-                height={SVG_H}
-                style={{ display: 'block', margin: '0 auto', background: '#85c1e9' }}
-            >
+            <div className="ag-board-frame">
+                {lastRoll !== null && (
+                    <div className="ag-board-tag">🎲 Last roll: {lastRoll}</div>
+                )}
+                {placementPrompt && (
+                    <div className="ag-board-overlay"><div>{placementPrompt}</div></div>
+                )}
+                <svg viewBox={`0 0 ${SVG_W} ${SVG_H}`} width={SVG_W} height={SVG_H}>
                 {/* ── Hex tiles ── */}
                 {hexes.map((hex, hexId) => {
                 const [cx, cy] = hexCenterPx(hexId);
@@ -216,37 +225,16 @@ export default function SettlementsAndCitiesBoard({
                     />
                 );
             })}
-        </svg>
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '10px', marginTop: '12px' }}>
-            {RESOURCE_TYPES.map((resource) => (
-                <div
-                    key={resource}
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '6px 10px',
-                        background: '#ffffffee',
-                        border: '1px solid #d0d0d0',
-                        borderRadius: '12px',
-                        fontSize: '0.85rem',
-                        color: '#333',
-                    }}
-                >
-                    <span
-                        style={{
-                            width: 16,
-                            height: 16,
-                            borderRadius: '50%',
-                            background: HARBOR_COLORS[resource],
-                            display: 'inline-block',
-                            boxShadow: '0 0 0 1px rgba(0,0,0,0.12)',
-                        }}
-                    />
-                    <span>{RESOURCE_EMOJI[resource]} {resource}</span>
-                </div>
-            ))}
-        </div>
-    </>
-);
+                </svg>
+            </div>
+            <div className="ag-reslegend">
+                {RESOURCE_TYPES.map((resource) => (
+                    <div key={resource} className="ag-reslegend-pill">
+                        <span className="ag-reslegend-dot" style={{ background: HARBOR_COLORS[resource] }} />
+                        <span>{RESOURCE_EMOJI[resource]} {resource}</span>
+                    </div>
+                ))}
+            </div>
+        </>
+    );
 }
