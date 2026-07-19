@@ -7,6 +7,7 @@ import CurrentUserInfo from "@/components/CurrentUserInfo";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
+import usePlayerList from "@/utils/hooks/usePlayerList";
 import { GAME_META } from "@/utils/ui/games";
 import { SnakesAndLaddersInvitationRequest } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
 import { useToast } from "@/components/ToastContext";
@@ -15,7 +16,7 @@ export default function NewGameSnakesAndLadders() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
   const { user, isLoaded } = useUser();
-  const [userList, setUserList] = useState([""] as string[]);
+  const { userList, setItem, players } = usePlayerList();
   const [turnTimer, setTurnTimer] = useState("1d");
   const router = useRouter();
   const { showToast } = useToast();
@@ -32,25 +33,12 @@ export default function NewGameSnakesAndLadders() {
     }
   }, [isLoaded]);
 
-  const setUserListItem = (index: number, value: string) => {
-    const changedList = userList.map((user, i) => (i === index ? value : user));
-    const filteredList = changedList.filter((user) => user !== "");
-    if (filteredList.length === 0) {
-      setUserList([""]);
-    } else if (filteredList[filteredList.length - 1] === "") {
-      setUserList(filteredList);
-    } else {
-      setUserList([...filteredList, ""]);
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const filteredUserList = userList.filter((user) => user !== "");
 
     try {
       const data: SnakesAndLaddersInvitationRequest = {
-        userList: filteredUserList,
+        userList: players,
         turnTimer
       };
       const response = await fetch('/api/newgame/snakesandladders', {
@@ -74,10 +62,10 @@ export default function NewGameSnakesAndLadders() {
       meta={GAME_META.snakesandladders}
       onSubmit={handleSubmit}
       actionLabel="Send invites & start"
-      actionDisabled={userList.filter(u => u !== "").length === 0}
+      actionDisabled={players.length === 0}
       footnote="Game begins once everyone accepts"
     >
-      <UserInviteList userList={userList} setItem={setUserListItem} />
+      <UserInviteList userList={userList} setItem={setItem} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
       <div className="ag-footer"><CurrentUserInfo /></div>
       <FcmTokenComp />

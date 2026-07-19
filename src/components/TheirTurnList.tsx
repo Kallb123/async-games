@@ -4,13 +4,7 @@ import { IGameResponse } from "@/utils/apiModels/GameDataApi";
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-
-function opponents(game: IGameResponse, me: string | null | undefined): string {
-    const others = game.usernameList.filter(u => u !== me);
-    if (others.length === 0) return "them";
-    if (others.length === 1) return others[0];
-    return `${others[0]} & ${others.length - 1} others`;
-}
+import { opponents } from "@/utils/ui/players";
 
 export default function TheirTurnList() {
     const { user, isLoaded } = useUser();
@@ -73,7 +67,7 @@ export default function TheirTurnList() {
                             style={{ textDecoration: "none", color: "var(--ag-ink)" }}
                         >
                             <div style={{ font: "600 13px/1.35 var(--ag-font)" }}>
-                                {game.friendlyName} · <span style={{ color: "var(--ag-ink-soft)" }}>{opponents(game, user?.username)}&apos;s turn</span>
+                                {game.friendlyName} · <span style={{ color: "var(--ag-ink-soft)" }}>{opponents(game, user?.username, "them")}&apos;s turn</span>
                             </div>
                         </a>
                         <button type="button" className="ag-link-muted" onClick={() => handleEndGame(game.gameId)}>End</button>

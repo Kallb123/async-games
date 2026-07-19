@@ -5,15 +5,8 @@ import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { metaForGame } from "@/utils/ui/games";
+import { opponents } from "@/utils/ui/players";
 import GameThumb, { accentVar } from "@/components/ui/GameThumb";
-
-function opponents(game: IGameResponse, me: string | null | undefined): string {
-    const others = game.usernameList.filter(u => u !== me);
-    if (others.length === 0) return "solo";
-    if (others.length === 1) return others[0];
-    if (others.length === 2) return `${others[0]} & ${others[1]}`;
-    return `${others[0]} & ${others.length - 1} others`;
-}
 
 export default function MyTurnList() {
     const { user, isLoaded } = useUser();

@@ -7,6 +7,7 @@ import CurrentUserInfo from "@/components/CurrentUserInfo";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
+import usePlayerList from "@/utils/hooks/usePlayerList";
 import { GAME_META } from "@/utils/ui/games";
 import { DiceCitiesInvitationRequest } from "@/games/DiceCities/DiceCitiesModels";
 import { useToast } from "@/components/ToastContext";
@@ -15,7 +16,7 @@ export default function NewGameDiceCities() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
   const { user, isLoaded } = useUser();
-  const [userList, setUserList] = useState([""] as string[]);
+  const { userList, setItem, players } = usePlayerList();
   const [enabledDocks, setEnabledDocks] = useState(false);
   const [enabledBillionaireRow, setEnabledBillionaireRow] = useState(false);
   const [turnTimer, setTurnTimer] = useState("1d");
@@ -34,25 +35,12 @@ export default function NewGameDiceCities() {
     }
   }, [isLoaded]);
 
-  const setUserListItem = (index: number, value: string) => {
-    const changedList = userList.map((user, i) => (i === index ? value : user));
-    const filteredList = changedList.filter((user) => user !== "");
-    if (filteredList.length === 0) {
-      setUserList([""]);
-    } else if (filteredList[filteredList.length - 1] === "") {
-      setUserList(filteredList);
-    } else {
-      setUserList([...filteredList, ""]);
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const filteredUserList = userList.filter((user) => user !== "");
 
     try {
       const data: DiceCitiesInvitationRequest = {
-        userList: filteredUserList,
+        userList: players,
         enabledDocks,
         enabledBillionaireRow,
         turnTimer
@@ -78,10 +66,10 @@ export default function NewGameDiceCities() {
       meta={GAME_META.dicecities}
       onSubmit={handleSubmit}
       actionLabel="Send invites & start"
-      actionDisabled={userList.filter(u => u !== "").length === 0}
+      actionDisabled={players.length === 0}
       footnote="Game begins once everyone accepts"
     >
-      <UserInviteList userList={userList} setItem={setUserListItem} />
+      <UserInviteList userList={userList} setItem={setItem} />
 
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
 

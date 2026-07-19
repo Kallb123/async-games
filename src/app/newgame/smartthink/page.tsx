@@ -7,6 +7,7 @@ import CurrentUserInfo from "@/components/CurrentUserInfo";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
+import usePlayerList from "@/utils/hooks/usePlayerList";
 import { GAME_META } from "@/utils/ui/games";
 import { SmartthinkInvitationRequest } from "@/games/Smartthink/SmartthinkModels";
 import { useToast } from "@/components/ToastContext";
@@ -15,7 +16,7 @@ export default function NewGameSmartthink() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
   const { user, isLoaded } = useUser();
-  const [userList, setUserList] = useState([""] as string[]);
+  const { userList, setItem, players } = usePlayerList();
   const [turnTimer, setTurnTimer] = useState("1d");
   const router = useRouter();
   const { showToast } = useToast();
@@ -32,24 +33,11 @@ export default function NewGameSmartthink() {
     }
   }, [isLoaded]);
 
-  const setUserListItem = (index: number, value: string) => {
-    const changedList = userList.map((u, i) => (i === index ? value : u));
-    const filteredList = changedList.filter((u) => u !== "");
-    if (filteredList.length === 0) {
-      setUserList([""]);
-    } else if (filteredList[filteredList.length - 1] === "") {
-      setUserList(filteredList);
-    } else {
-      setUserList([...filteredList, ""]);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const filteredUserList = userList.filter((u) => u !== "");
     try {
       const data: SmartthinkInvitationRequest = {
-        userList: filteredUserList,
+        userList: players,
         turnTimer
       };
       const response = await fetch('/api/newgame/smartthink', {
@@ -87,7 +75,7 @@ export default function NewGameSmartthink() {
       meta={GAME_META.smartthink}
       onSubmit={handleSubmit}
       actionLabel="Send invites & start"
-      actionDisabled={userList.filter(u => u !== "").length === 0}
+      actionDisabled={players.length === 0}
       footnote="Game begins once everyone accepts"
     >
       <div className="ag-section">
@@ -100,7 +88,7 @@ export default function NewGameSmartthink() {
         </div>
       </div>
 
-      <UserInviteList userList={userList} setItem={setUserListItem} />
+      <UserInviteList userList={userList} setItem={setItem} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
       <div className="ag-footer"><CurrentUserInfo /></div>
       <FcmTokenComp />
