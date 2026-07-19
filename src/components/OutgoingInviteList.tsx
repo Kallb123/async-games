@@ -5,83 +5,76 @@ import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import moment from 'moment';
-import { Spinner } from "react-bootstrap";
 
 export default function OutgoingInviteList() {
     const { user, isLoaded } = useUser();
     const router = useRouter();
     const [inviteList, setInviteList] = useState([] as IInvitationResponse[]);
-    const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
-        window.addEventListener('NewInvite', () => {
-            console.log(`OutgoingInviteList message received: NewInvite`);
-            refreshContent();
-        });
-        window.addEventListener('InviteAccepted', () => {
-            console.log(`OutgoingInviteList message received: InviteAccepted`);
-            refreshContent();
-        });
-        window.addEventListener('GameStart', () => {
-            console.log(`OutgoingInviteList message received: GameStart`);
-            refreshContent();
-        });
+        window.addEventListener('NewInvite', () => refreshContent());
+        window.addEventListener('InviteAccepted', () => refreshContent());
+        window.addEventListener('GameStart', () => refreshContent());
 
         refreshContent();
     }, [isLoaded]);
 
     const refreshContent = async () => {
-        console.log('Refresh outgoing invite');
         if (isLoaded) {
             if (!user) {
                 router.push('/login');
             }
-    
-            // Use `user` to render user details or create UI elements
             const unlocked = user?.publicMetadata.unlocked;
-          
             if (unlocked !== true) {
-              router.push('/unlockaccess');
+                router.push('/unlockaccess');
             }
 
-            setIsLoading(true);
             fetch('/api/user/outgoinginvites')
             .then(response => response.json())
             .then(data => {if (data && data.inviteList) setInviteList(data.inviteList)})
-            .catch(error => console.error('Failed to load outgoing invites', error))
-            .finally(() => setIsLoading(false));
+            .catch(error => console.error('Failed to load outgoing invites', error));
         }
     }
 
     const handleCancel = async (inviteId: `${string}-${string}-${string}-${string}-${string}`) => {
         fetch('/api/invite/cancel', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ inviteId })
         })
         .then(response => {
-            if (!response.ok) {
-                throw new Error('Failed to cancel invite');
-            }
+            if (!response.ok) throw new Error('Failed to cancel invite');
             return response.json();
         })
         .then(() => refreshContent())
         .catch(error => console.error('Failed to cancel invite', error));
     }
 
+    if (inviteList.length === 0) return null;
+
     return (
-        <>
-            <h2>Awaiting Response</h2>
-            {isLoading && <Spinner animation="border" role="status" size="sm"><span className="visually-hidden">Loading...</span></Spinner>}
-            {inviteList.map((invite: IInvitationResponse) => (
-                <div key={invite.inviteId}>
-                    You invited <span style={{fontWeight: "bold"}}>{invite.userList.map(user => (<span key={user}>{user}</span>))}</span> to play <span style={{fontWeight: "bold"}}>{invite.gameFriendlyName}</span><br />
-                    <span>{moment(invite.timestamp).fromNow()}</span>
-                    <button type="button" className="btn btn-link p-0 ms-2" onClick={() => handleCancel(invite.inviteId)}>Cancel invite</button>
-                </div>
-            ))}
-        </>
+        <div className="ag-section">
+            <div className="ag-section-head">
+                <h2 className="ag-section-label">Awaiting response</h2>
+            </div>
+            <div className="ag-list">
+                {inviteList.map((invite) => (
+                    <div key={invite.inviteId} className="ag-list-row">
+                        <div style={{
+                            width: 8, height: 8, borderRadius: "50%", flex: "none",
+                            background: "oklch(0.75 0.03 60)", outline: "1.5px dashed oklch(0.7 0.05 60)", outlineOffset: 2,
+                        }} />
+                        <div className="ag-list-row-main">
+                            <div style={{ font: "600 13px/1.35 var(--ag-font)" }}>
+                                Invite to <strong style={{ fontWeight: 800 }}>{invite.userList.join(", ")}</strong>
+                                <span style={{ color: "var(--ag-ink-soft)", fontWeight: 500 }}> · {invite.gameFriendlyName}</span>
+                            </div>
+                            <div className="ag-list-row-sub">Sent {moment(invite.timestamp).fromNow()}</div>
+                        </div>
+                        <button type="button" className="ag-link-muted" onClick={() => handleCancel(invite.inviteId)}>Cancel</button>
+                    </div>
+                ))}
+            </div>
+        </div>
     );
 }

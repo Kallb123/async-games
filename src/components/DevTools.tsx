@@ -1,16 +1,26 @@
 'use client'
 
-import { Button } from "react-bootstrap";
-
 export default function DevTools() {
     const clearAll = async () => {
         await fetch('/api/dev/clearall');
     }
 
     return (
-        <>
-            <h2>Dev Tools</h2>
-            <Button onClick={clearAll}>Clear All</Button>
-        </>
+        <div style={{ marginTop: 10 }}>
+            <button
+                type="button"
+                onClick={clearAll}
+                style={{
+                    background: "none",
+                    border: "none",
+                    font: "500 11px var(--ag-font)",
+                    color: "var(--ag-ink-softer)",
+                    textDecoration: "underline",
+                    cursor: "pointer",
+                }}
+            >
+                Dev: clear all
+            </button>
+        </div>
     );
 }

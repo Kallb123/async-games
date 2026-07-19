@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import 'bootstrap/dist/css/bootstrap.css';
 import "./globals.css";
+import "./ag-theme.css";
 import { ClerkProvider } from '@clerk/nextjs'
-import { Container } from "react-bootstrap";
 import Providers from "@/components/Providers";
 
 export const metadata: Metadata = {
@@ -29,7 +29,7 @@ export default function RootLayout({
           <meta name="msapplication-config" content="/icons/browserconfig.xml" />
           <meta name="msapplication-TileColor" content="#2B5797" />
           <meta name="msapplication-tap-highlight" content="no" />
-          <meta name="theme-color" content="#FFFFFF" />
+          <meta name="theme-color" content="#F0EEE9" />
 
           {/* <link rel="apple-touch-icon" href="/icons/touch-icon-iphone.png" />
           <link rel="apple-touch-icon" sizes="152x152" href="/icons/touch-icon-ipad.png" />
@@ -41,8 +41,9 @@ export default function RootLayout({
           <link rel="manifest" href="/manifest.json" />
           {/* <link rel="mask-icon" href="/icons/safari-pinned-tab.svg" color="#5bbad5" />
           <link rel="shortcut icon" href="/favicon.ico" /> */}
-          <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500" />
-          <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" />
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+          <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&display=swap" />
 
           <meta name="twitter:card" content="summary" />
           <meta name="twitter:url" content="https://async-games.vercel.app" />
@@ -59,9 +60,9 @@ export default function RootLayout({
         </head>
         <body>
           <Providers>
-            <Container>
+            <div className="ag-app">
               {children}
-            </Container>
+            </div>
           </Providers>
         </body>
       </html>
