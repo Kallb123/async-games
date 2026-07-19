@@ -23,18 +23,17 @@ export default function TurnTimerSelect({ value, onChange }: TurnTimerSelectProp
             <div className="ag-section-head">
                 <h2 className="ag-section-label">Turn timer</h2>
             </div>
-            <div className="ag-timer-grid">
+            <select
+                className="ag-select"
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+            >
                 {OPTIONS.map(opt => (
-                    <button
-                        key={opt.value}
-                        type="button"
-                        className={`ag-timer-opt ${value === opt.value ? "ag-timer-opt--active" : ""}`}
-                        onClick={() => onChange(opt.value)}
-                    >
+                    <option key={opt.value} value={opt.value}>
                         {opt.label}
-                    </button>
+                    </option>
                 ))}
-            </div>
+            </select>
             <p className="ag-hint">If time runs out the turn is skipped. We&apos;ll nudge everyone before that happens.</p>
         </div>
     );
