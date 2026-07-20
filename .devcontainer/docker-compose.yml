@@ -1,0 +1,54 @@
+# Compose stack for the Async Games dev container.
+#
+#   app    – the workspace where VS Code / Claude attaches; runs Node 20.
+#   mongo  – a local MongoDB 7 instance so the app and any DB-backed flows
+#            work without a hosted Atlas cluster.
+#
+# The app talks to Mongo over the internal Compose network at host `mongo`,
+# which is wired up through MONGODB_URI in devcontainer.json.
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Keep the container alive; VS Code / the dev container CLI runs commands
+    # inside it. The actual dev server is started manually with `npm run dev`.
+    command: sleep infinity
+    volumes:
+      - ..:/workspaces/async-games:cached
+      # Keep node_modules on a named volume so it isn't shadowed by / doesn't
+      # fight with the host bind mount, and survives rebuilds.
+      - node_modules:/workspaces/async-games/node_modules
+    environment:
+      # Default local connection string; overridable in .env.local.
+      MONGODB_URI: mongodb://mongo:27017/async-games
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - async-games
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    # Not published to the host by default; reachable from `app` as `mongo`.
+    # Uncomment to connect from tools on the host machine.
+    # ports:
+    #   - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - async-games
+
+volumes:
+  node_modules:
+  mongo-data:
+
+networks:
+  async-games:
