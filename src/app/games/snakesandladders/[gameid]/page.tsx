@@ -12,10 +12,11 @@ import GameShell from "@/components/ui/GameShell";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import SnakesAndLaddersBoard from "@/components/games/SnakesAndLadders/SnakesAndLaddersBoard";
 import SnakesAndLaddersPlayerActions from "@/components/games/SnakesAndLadders/SnakesAndLaddersPlayerActions";
+import SnakesAndLaddersRollResult, { buildRollResult, RollResult } from "@/components/games/SnakesAndLadders/SnakesAndLaddersRollResult";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { ISnakesAndLaddersGameStateResponse } from "@/games/SnakesAndLadders/apiModels";
-import { ISnakesAndLaddersDiceRollOutcome } from "@/utils/apiModels/GameLogic";
+import { ISnakesAndLaddersDiceRollOutcome, SnakesAndLaddersRequestDiceRoll } from "@/utils/apiModels/GameLogic";
 
 const PLAYER_COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c"];
 
@@ -25,6 +26,9 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     const { user, isLoaded } = useUser();
     const [gameData, setGameData] = useState({} as ISnakesAndLaddersGameDataResponse);
     const [showLog, setShowLog] = useState(false);
+    // The post-roll payoff screen lives here (not in the actions component) so
+    // it survives the roll advancing the turn to the next player.
+    const [rollResult, setRollResult] = useState<RollResult | null>(null);
     const router = useRouter();
 
     const { gameid } = use(params);
@@ -195,6 +199,17 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
         ? Object.values(gameData.specificGameState.playerStates).find(p => p.userId === user?.id)?.position ?? 0
         : 0;
 
+    // Roll live: capture the pre-roll square, submit, then show the payoff
+    // screen. Rolling ends the turn server-side, so the actions unmount — the
+    // result screen is rendered from the page and stays put.
+    const handleRoll = () => {
+        const from = myPosition;
+        submitCommand(new SnakesAndLaddersRequestDiceRoll(), (commandResponse) => {
+            const outcome = commandResponse.outcome as ISnakesAndLaddersDiceRollOutcome;
+            setRollResult(buildRollResult(from, outcome));
+        });
+    };
+
     const logButton = boardState ? (
         <button
             className={`ag-game-topbar-btn${showLog ? ' ag-game-topbar-btn--on' : ''}`}
@@ -238,9 +253,15 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
             {isMyTurn && !complete && (
                 <SnakesAndLaddersPlayerActions
                     hasRolled={gameData?.specificGameState?.hasRolled ?? false}
-                    myPosition={myPosition}
-                    onResolved={getGameData}
-                    submitCommand={submitCommand}
+                    mode="live"
+                    onRoll={handleRoll}
+                />
+            )}
+
+            {rollResult && (
+                <SnakesAndLaddersRollResult
+                    result={rollResult}
+                    onEndTurn={() => { setRollResult(null); getGameData(); }}
                 />
             )}
 
