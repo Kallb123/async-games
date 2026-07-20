@@ -3,14 +3,17 @@
 
 export type GameCategory = "Dice" | "Strategy" | "Word" | "Puzzle";
 
+export type ThemeAccent = "terracotta" | "green" | "gold" | "purple";
+
 export interface GameMeta {
     url: string;
     name: string;
     categories: GameCategory[];
     players: string;
     tagline: string;
-    // A named accent from the theme palette used for tinting the card.
-    accent: "terracotta" | "green" | "gold" | "purple";
+    // Either a named accent from the theme palette, or a raw hex colour
+    // (e.g. "#009DCA") for games that need a bespoke tint.
+    accent: ThemeAccent | (string & {});
     // Optional artwork; when absent a glyph block is shown instead.
     art?: string;
     glyph?: string;
@@ -24,7 +27,7 @@ export const GAME_META: Record<string, GameMeta> = {
         categories: ["Dice", "Strategy"],
         players: "2–4 players",
         tagline: "Roll, build, and grow your city faster than your friends.",
-        accent: "terracotta", // #009DCA
+        accent: "#009DCA",
         art: "/art/dicecities/icon.png",
         available: true,
     },

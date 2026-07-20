@@ -1,16 +1,18 @@
 'use client'
 
-import { GameMeta } from "@/utils/ui/games";
+import { GameMeta, ThemeAccent } from "@/utils/ui/games";
 
-const ACCENT_VAR: Record<GameMeta["accent"], string> = {
+const ACCENT_VAR: Record<ThemeAccent, string> = {
     terracotta: "var(--ag-terracotta)",
     green: "var(--ag-green)",
     gold: "var(--ag-gold)",
     purple: "var(--ag-purple)",
 };
 
+// Named accents resolve to a theme token; anything else (e.g. a hex code)
+// is treated as a raw CSS colour and passed through as-is.
 export function accentVar(accent: GameMeta["accent"]) {
-    return ACCENT_VAR[accent];
+    return ACCENT_VAR[accent as ThemeAccent] ?? accent;
 }
 
 interface GameThumbProps {
@@ -37,7 +39,7 @@ export default function GameThumb({ meta, size = 48, radius = 12 }: GameThumbPro
                 height: size,
                 borderRadius: radius,
                 flex: "none",
-                background: ACCENT_VAR[meta.accent],
+                background: accentVar(meta.accent),
                 color: "var(--ag-on-dark)",
                 display: "flex",
                 alignItems: "center",
