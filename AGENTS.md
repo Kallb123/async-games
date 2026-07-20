@@ -69,4 +69,6 @@ screen rather than rebuilding the form.
 - Preserve existing data flows and API contracts when restyling — the UI
   overhaul is presentational and must not change request/response shapes.
 - Before committing UI changes, run `npm run build` and `npx tsc --noEmit`;
-  both must pass.
+  both must pass. If you touch the game engine (`src/utils/apiModels/`), also run
+  `npm test` — the serializable-registry test guards that every game's rules
+  module stays wired into the `GameLogic` barrel.

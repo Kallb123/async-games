@@ -81,7 +81,14 @@ src/
 │
 ├── utils/
 │   ├── apiModels/              # the generic game engine (see §6)
-│   │   ├── GameLogic.ts        # IGameCommand / IGameType + every game's commands
+│   │   ├── gameCommand.ts      # shared contracts: ICommandOutcome / IGameCommand / IGameType
+│   │   ├── GameLogic.ts        # barrel: re-exports gameCommand + every game's rules module
+│   │   ├── games/              # per-game rules (one module per game)
+│   │   │   ├── DiceCitiesLogic.ts
+│   │   │   ├── SmartthinkLogic.ts
+│   │   │   ├── SnakesAndLaddersLogic.ts
+│   │   │   ├── SettlementsAndCitiesLogic.ts
+│   │   │   └── serializableRegistry.test.ts  # asserts every @serializable class is wired
 │   │   ├── GameDataApi.ts      # shared response/DTO types + uuidString
 │   │   └── Serialisable.ts     # @serializable registry + deserializeJSON reviver
 │   ├── mongodb/                # base schemas: GameData, InvitationData, FriendshipData, connection
@@ -203,8 +210,13 @@ live in `src/utils/apiModels/GameDataApi.ts` and each game's `apiModels.ts`.
 
 ## 6. The game engine: command pattern
 
-All game rules live in `src/utils/apiModels/GameLogic.ts` as classes implementing
-two interfaces.
+Game rules are expressed as classes implementing two interfaces. The two
+interfaces themselves live in `src/utils/apiModels/gameCommand.ts`; each game's
+rule classes live in its own module under `src/utils/apiModels/games/`
+(`DiceCitiesLogic.ts`, `SmartthinkLogic.ts`, `SnakesAndLaddersLogic.ts`,
+`SettlementsAndCitiesLogic.ts`). `src/utils/apiModels/GameLogic.ts` is a **barrel**
+that re-exports the shared contracts plus every game module, so the rest of the
+app imports rules from that one path regardless of which game they belong to.
 
 ### `IGameCommand` — a single move
 
@@ -259,6 +271,16 @@ handled by `src/utils/apiModels/Serialisable.ts`:
 
 Every command / game-type class is annotated `@serializable`. This is what makes
 the loosely-typed `commandHistory` and `gameType` documents executable again.
+
+Because the decorator runs on **module load**, a game's rule module must actually
+be imported for its classes to register — the barrel's `export *` lines do that,
+and importing anything from `GameLogic.ts` therefore populates the whole registry.
+A class that is defined but never wired in (its module missing from the barrel, or
+its class missing from the command route's `registration` array) can't be
+rehydrated, and would silently fail to replay or execute. That invariant is guarded
+by a test — `src/utils/apiModels/games/serializableRegistry.test.ts` scans the
+source for every `@serializable` class and asserts each one is registered after
+importing the barrel and referenced by the command route (see §13).
 
 ### The command pipeline (`POST /api/game/command`)
 
@@ -411,13 +433,17 @@ The engine is designed so a new game is additive. Roughly:
      adapter); and a `gameStateToModel()` response converter.
    - `apiModels.ts`: the response/DTO interfaces.
    - static data files as needed (`board.ts`, `cards.ts`, …).
-2. **Rules** — in `src/utils/apiModels/GameLogic.ts`: a `@serializable
+2. **Rules** — add `src/utils/apiModels/games/<Game>Logic.ts`: a `@serializable
    <Game>GameType implements IGameType` and one `@serializable` command class per
-   move type, each `implements IGameCommand`.
+   move type, each `implements IGameCommand` (import the shared interfaces from
+   `../gameCommand`). Then add an `export * from "./games/<Game>Logic";` line to the
+   `src/utils/apiModels/GameLogic.ts` barrel so the new classes register and stay
+   importable from the usual `@/utils/apiModels/GameLogic` path.
 3. **Register** the discriminator keys/models in
    `src/utils/mongodb/mongodb.ts` (the typed unions enforce this at compile time),
    and add the new command/type instances to the `registration` array in
-   `src/app/api/game/command/route.ts`.
+   `src/app/api/game/command/route.ts`. (The serializable-registry test fails if you
+   miss either the barrel export or the `registration` entry.)
 4. **Wire invite creation & acceptance** — a `POST /api/newgame/<game>` route and
    a branch in `src/app/api/invite/accept/route.ts` that instantiates the right
    game model.
@@ -439,10 +465,17 @@ The engine is designed so a new game is additive. Roughly:
   `ACCESS_PASSWORD`. The Firebase **client** config (in
   `src/utils/firebase/firebase.ts` and the service worker) is public by design.
 - **CI** (`.github/workflows/ci.yml`): on push/PR to `main`, runs
-  `npx tsc --noEmit` (type check) and `npx next build`. Both must pass before
-  merge. Locally, run `npm run build` and `npx tsc --noEmit` before committing —
-  there is no test suite wired into CI, so the type checker and build are the
+  `npx tsc --noEmit` (type check), `npm test` (Vitest), and `npx next build`. All
+  must pass before merge. Locally, run `npm run build`, `npx tsc --noEmit`, and
+  `npm test` before committing — the type checker, build, and test suite are the
   safety net.
+- **Tests** run on [Vitest](https://vitest.dev) (`npm test`). The suite is
+  deliberately small; the flagship test,
+  `src/utils/apiModels/games/serializableRegistry.test.ts`, guards the
+  serialisation registry (§6) — it scans the source for every `@serializable`
+  class and asserts each is registered when the `GameLogic` barrel is imported and
+  wired into the command route, so a game whose rules module is never imported
+  fails CI instead of breaking at runtime.
 
 ## 14. Data flow at a glance
 
