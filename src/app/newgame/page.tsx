@@ -3,10 +3,10 @@ import { useUser } from "@clerk/nextjs";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { GAME_META, COMING_SOON, GameCategory } from "@/utils/ui/games";
+import { GAME_META, COMING_SOON, GAME_CATEGORIES, GameCategory } from "@/utils/ui/games";
 import GameThumb, { accentVar } from "@/components/ui/GameThumb";
 
-const FILTERS: ("All" | GameCategory)[] = ["All", "Dice", "Strategy", "Word"];
+const FILTERS: ("All" | GameCategory)[] = ["All", ...GAME_CATEGORIES];
 
 export default function NewGame() {
   const pathName = usePathname();
@@ -30,8 +30,8 @@ export default function NewGame() {
   const featured = GAME_META.dicecities;
   const otherGames = Object.values(GAME_META)
     .filter(g => g.url !== featured.url)
-    .filter(g => filter === "All" || g.category === filter);
-  const featuredVisible = filter === "All" || featured.category === filter;
+    .filter(g => filter === "All" || g.categories.includes(filter));
+  const featuredVisible = filter === "All" || featured.categories.includes(filter);
 
   return (
     <main>
@@ -83,7 +83,7 @@ export default function NewGame() {
               </div>
               <div className="ag-game-body">
                 <div className="ag-game-name">{game.name}</div>
-                <div className="ag-game-meta">{game.category} · {game.players.replace(" players", "")}</div>
+                <div className="ag-game-meta">{game.categories.join(", ")} · {game.players.replace(" players", "")}</div>
               </div>
             </a>
           ))}
