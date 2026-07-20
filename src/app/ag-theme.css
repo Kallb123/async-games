@@ -1022,8 +1022,10 @@ body {
     display: flex;
     flex-direction: column;
     background: var(--ag-surface);
-    max-width: 480px;
-    margin: 0 auto;
+    /* Full-bleed to match the in-game shell (which drops its max-width when a
+       game is showing). Centring the overlay at a max-width instead leaves a
+       sliver of the app background at the edges on viewports just over 480px. */
+    width: 100%;
 }
 .ag-sl-roll-stage {
     flex: 1;
