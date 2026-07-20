@@ -10,12 +10,12 @@ import type { ICommandResponse } from "@/app/api/game/command/route";
 import type { ISmartthinkGameDataResponse } from "@/games/Smartthink/apiModels";
 import GameShell from "@/components/ui/GameShell";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
-import SmartthinkBoard from "@/components/games/Smartthink/SmartthinkBoard";
-import SmartthinkPlayerActions from "@/components/games/Smartthink/SmartthinkPlayerActions";
+import SmartthinkBoard from "@/games/Smartthink/components/SmartthinkBoard";
+import SmartthinkPlayerActions from "@/games/Smartthink/components/SmartthinkPlayerActions";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import type { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
-import { SMARTTHINK_CODE_LENGTH } from "@/utils/ui/smartthink";
+import { SMARTTHINK_CODE_LENGTH } from "@/games/Smartthink/ui";
 
 const PLAYER_COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c"];
 const emptyGuess = (): (number | null)[] => Array(SMARTTHINK_CODE_LENGTH).fill(null);

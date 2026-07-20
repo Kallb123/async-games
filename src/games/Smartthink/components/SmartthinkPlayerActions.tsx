@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
 import { IGameCommand, SmartthinkSetSecretCode, SmartthinkSubmitGuess } from "@/utils/apiModels/GameLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
-import { SMARTTHINK_CODE_LENGTH, SMARTTHINK_PEGS } from "@/utils/ui/smartthink";
+import { SMARTTHINK_CODE_LENGTH, SMARTTHINK_PEGS } from "@/games/Smartthink/ui";
 
 interface SmartthinkPlayerActionsProps {
     gameState: ISmartthinkGameStateResponse;

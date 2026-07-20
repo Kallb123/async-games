@@ -1,0 +1,12 @@
+import type { GameMeta } from "@/utils/ui/games";
+
+export const meta: GameMeta = {
+    url: "smartthink",
+    name: "Smartthink",
+    categories: ["Puzzle"],
+    players: "1-2 players",
+    tagline: "Crack the hidden code before guesses run out.",
+    accent: "green",
+    glyph: "S?",
+    available: true,
+};

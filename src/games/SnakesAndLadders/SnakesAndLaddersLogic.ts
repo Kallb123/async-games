@@ -1,9 +1,9 @@
 import type { ISnakesAndLaddersGameData } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
-import type { IGameData } from "../../mongodb/GameData";
-import type { uuidString } from "../GameDataApi";
-import type { ICommandOutcome, IGameCommand, IGameType } from "../gameCommand";
-import { serializable } from "../Serialisable";
-import { DiceRoll } from "../../games/DiceRoll";
+import type { IGameData } from "@/utils/mongodb/GameData";
+import type { uuidString } from "@/utils/apiModels/GameDataApi";
+import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
+import { serializable } from "@/utils/apiModels/Serialisable";
+import { DiceRoll } from "@/utils/games/DiceRoll";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 
 export const SNAKES_AND_LADDERS_LADDERS: Record<number, number> = {

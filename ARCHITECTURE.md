@@ -69,43 +69,51 @@ src/
 │       ├── notifyuser/  notificationtoken/       # push plumbing
 │       └── dev/  unlock/  users/  utils/         # misc
 │
-├── components/                 # React components
+├── components/                 # cross-game React components
 │   ├── ui/                     # reusable presentational primitives (Avatar, GameThumb, …)
-│   ├── games/<Game>/           # per-game board + action components
-│   └── *.tsx                   # dashboard lists, providers, toasts, dev tools
+│   └── *.tsx                   # dashboard lists, providers, toasts, dev tools,
+│                                #   TurnNavControls / GameHistoryList (game-agnostic)
 │
-├── games/<Game>/               # per-game DOMAIN layer (persistence + wire shapes)
+├── games/<Game>/               # EVERYTHING about one game lives here
 │   ├── <Game>Models.ts         # Mongoose discriminator + CreateGame + state builders
 │   ├── apiModels.ts            # response/DTO interfaces sent to the client
+│   ├── <Game>Logic.ts          # rules: the @serializable command classes + IGameType
+│   ├── meta.ts                 # library/home-card metadata (name, art, accent, players)
+│   ├── ui.ts                   # (optional) pure presentation helpers specific to this game
+│   ├── components/             # board + action React components for this game
 │   └── (board.ts / cards.ts …) # static game data
 │
 ├── utils/
-│   ├── apiModels/              # the generic game engine (see §6)
+│   ├── apiModels/              # the generic game engine (see §6) — game-agnostic only
 │   │   ├── gameCommand.ts      # shared contracts: ICommandOutcome / IGameCommand / IGameType
-│   │   ├── GameLogic.ts        # barrel: re-exports gameCommand + every game's rules module
-│   │   ├── games/              # per-game rules (one module per game)
-│   │   │   ├── DiceCitiesLogic.ts
-│   │   │   ├── SmartthinkLogic.ts
-│   │   │   ├── SnakesAndLaddersLogic.ts
-│   │   │   ├── SettlementsAndCitiesLogic.ts
-│   │   │   └── serializableRegistry.test.ts  # asserts every @serializable class is wired
-│   │   ├── GameDataApi.ts      # shared response/DTO types + uuidString
-│   │   └── Serialisable.ts     # @serializable registry + deserializeJSON reviver
+│   │   ├── GameLogic.ts        # barrel: re-exports gameCommand + every game's <Game>Logic.ts
+│   │   └── GameDataApi.ts      # shared response/DTO types + uuidString
+│   ├── apiModels/games/serializableRegistry.test.ts  # asserts every @serializable class is wired
 │   ├── mongodb/                # base schemas: GameData, InvitationData, FriendshipData, connection
 │   ├── firebase/               # client app + admin SDK + push helper
 │   ├── games/                  # cross-game helpers: DiceRoll, TurnTimer, replay engine
 │   ├── hooks/                  # usePlayerList, useFcmToken, useTurnNavigation
-│   └── ui/                     # pure presentation helpers: games.ts, avatar.ts, players.ts
+│   └── ui/                     # cross-game glue only: games.ts (aggregates each game's
+│                                #   meta.ts into one lookup), avatar.ts, players.ts
 │
 └── middleware.ts               # Clerk auth middleware
 ```
 
-Two things are worth internalising about this layout:
-
-- **`src/games/<Game>/` vs `src/components/games/<Game>/`** — the former is the
-  *domain/persistence* layer (Mongoose models, DTO shapes, static data); the
-  latter is the *presentation* layer (React board + action panels). They are kept
-  separate on purpose.
+One thing is worth internalising about this layout: **`src/games/<Game>/` is the
+single home for a game** — domain/persistence (Mongoose models, DTO shapes,
+static data), rules (the command/game-type classes), and presentation (board +
+action components, per-game UI helpers, library metadata) all live in one
+folder. This is deliberate: the previous layout spread one game's code across
+`src/games/<Game>/`, `src/components/games/<Game>/`, and
+`src/utils/apiModels/games/<Game>Logic.ts`, so adding or understanding a game
+meant touching three unrelated trees. `src/components/` and `src/utils/`
+now hold only what's genuinely cross-game — shared primitives, the
+game-agnostic engine, and small aggregator files that stitch each game's own
+exports (its rules module, its metadata) into one barrel/lookup. Next.js App
+Router still requires `page.tsx`/`route.ts` files to live at fixed paths under
+`src/app/**`, so those remain thin screens that import their game's
+components/helpers from `src/games/<Game>/` rather than owning any game logic
+themselves.
 - **`src/utils/apiModels/` is the engine.** Game *rules* live in `GameLogic.ts`
   as command classes; everything else composes them.
 
@@ -212,11 +220,12 @@ live in `src/utils/apiModels/GameDataApi.ts` and each game's `apiModels.ts`.
 
 Game rules are expressed as classes implementing two interfaces. The two
 interfaces themselves live in `src/utils/apiModels/gameCommand.ts`; each game's
-rule classes live in its own module under `src/utils/apiModels/games/`
-(`DiceCitiesLogic.ts`, `SmartthinkLogic.ts`, `SnakesAndLaddersLogic.ts`,
-`SettlementsAndCitiesLogic.ts`). `src/utils/apiModels/GameLogic.ts` is a **barrel**
-that re-exports the shared contracts plus every game module, so the rest of the
-app imports rules from that one path regardless of which game they belong to.
+rule classes live alongside the rest of that game, in its own
+`src/games/<Game>/<Game>Logic.ts` (`DiceCitiesLogic.ts`, `SmartthinkLogic.ts`,
+`SnakesAndLaddersLogic.ts`, `SettlementsAndCitiesLogic.ts`).
+`src/utils/apiModels/GameLogic.ts` is a **barrel** that re-exports the shared
+contracts plus every game's rules module, so the rest of the app imports rules
+from that one path regardless of which game they belong to.
 
 ### `IGameCommand` — a single move
 
@@ -423,9 +432,10 @@ layout) rendered inside a centred `.ag-app` column.
 
 ## 12. Adding a new game
 
-The engine is designed so a new game is additive. Roughly:
+The engine is designed so a new game is additive, and everything about it lives
+in one new folder, `src/games/<Game>/`. Roughly:
 
-1. **Domain layer** — `src/games/<Game>/`:
+1. **Domain layer** — in `src/games/<Game>/`:
    - `<Game>Models.ts`: the `GameDataModel.discriminator` with a
      `specificGameState` sub-schema; the `InvitationModel.discriminator` with a
      `CreateGame()` that rolls turn order and seeds initial state; a
@@ -433,10 +443,11 @@ The engine is designed so a new game is additive. Roughly:
      adapter); and a `gameStateToModel()` response converter.
    - `apiModels.ts`: the response/DTO interfaces.
    - static data files as needed (`board.ts`, `cards.ts`, …).
-2. **Rules** — add `src/utils/apiModels/games/<Game>Logic.ts`: a `@serializable
+2. **Rules** — add `src/games/<Game>/<Game>Logic.ts`: a `@serializable
    <Game>GameType implements IGameType` and one `@serializable` command class per
    move type, each `implements IGameCommand` (import the shared interfaces from
-   `../gameCommand`). Then add an `export * from "./games/<Game>Logic";` line to the
+   `@/utils/apiModels/gameCommand`). Then add an
+   `export * from "@/games/<Game>/<Game>Logic";` line to the
    `src/utils/apiModels/GameLogic.ts` barrel so the new classes register and stay
    importable from the usual `@/utils/apiModels/GameLogic` path.
 3. **Register** the discriminator keys/models in
@@ -447,10 +458,16 @@ The engine is designed so a new game is additive. Roughly:
 4. **Wire invite creation & acceptance** — a `POST /api/newgame/<game>` route and
    a branch in `src/app/api/invite/accept/route.ts` that instantiates the right
    game model.
-5. **UI** — a setup screen under `src/app/newgame/<game>/`, a board screen under
-   `src/app/games/<game>/[gameid]/`, board/action components under
-   `src/components/games/<Game>/`, and an entry in `src/utils/ui/games.ts`.
-   Reuse `GameSetupLayout`, `UserInviteList`, and `TurnTimerSelect` for setup.
+5. **UI** — board/action components under `src/games/<Game>/components/` and
+   (if the game needs bespoke rendering helpers) a `src/games/<Game>/ui.ts`;
+   a `meta.ts` in the same folder with the library-card metadata, wired into
+   `src/utils/ui/games.ts`'s `GAME_META` aggregator with one import + one line.
+   The actual routed screens stay thin: a setup screen under
+   `src/app/newgame/<game>/` and a board screen under
+   `src/app/games/<game>/[gameid]/` that just import from `src/games/<Game>/`
+   (App Router requires `page.tsx` to live under `src/app/**`, so these can't
+   move into the game folder themselves). Reuse `GameSetupLayout`,
+   `UserInviteList`, and `TurnTimerSelect` for setup.
 6. *(Optional)* Add a replay `IReplayAdapter` for turn recap — see
    `docs/turn-recap-and-planning.md`.
 

@@ -1,11 +1,11 @@
 import type { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import type { SAC_Resource, SAC_DevCard, ISACPlayerState } from "@/games/SettlementsAndCities/board";
 import { BOARD_TOPOLOGY, TERRAIN_TO_RESOURCE, calculateLongestRoad, calculateTotalVP, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
-import type { IGameData } from "../../mongodb/GameData";
-import type { uuidString } from "../GameDataApi";
-import type { ICommandOutcome, IGameCommand, IGameType } from "../gameCommand";
-import { serializable } from "../Serialisable";
-import { DiceRoll } from "../../games/DiceRoll";
+import type { IGameData } from "@/utils/mongodb/GameData";
+import type { uuidString } from "@/utils/apiModels/GameDataApi";
+import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
+import { serializable } from "@/utils/apiModels/Serialisable";
+import { DiceRoll } from "@/utils/games/DiceRoll";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 
 // ═══════════════════════════════════════════════════════════════════════════════
