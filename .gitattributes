@@ -1,0 +1,5 @@
+* text=auto eol=lf
+
+# Shell scripts run inside Linux containers; CRLF breaks them (e.g. heredoc
+# terminators no longer match), so force LF regardless of core.autocrlf.
+*.sh text eol=lf

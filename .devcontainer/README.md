@@ -1,6 +1,6 @@
 # Dev Container
 
-A ready-to-use development environment for Async Games. It provisions Node 20
+A ready-to-use development environment for Async Games. It provisions Node 22
 (matching CI) and a local MongoDB instance so you can develop and test the whole
 repo without installing anything on your host.
 
@@ -8,22 +8,26 @@ repo without installing anything on your host.
 
 | Piece | Purpose |
 |---|---|
-| `Dockerfile` | Node 20 base image (`mcr.microsoft.com/devcontainers/javascript-node`) + `mongosh`; installs the app's dependencies (`npm ci`) at build time. |
+| `Dockerfile` | Node 22 base image (`mcr.microsoft.com/devcontainers/javascript-node`) + `mongosh`; installs the app's dependencies (`npm ci`) at build time. |
 | `docker-compose.yml` | Two services: `app` (your workspace) and `mongo` (MongoDB 7). |
 | `devcontainer.json` | Wires the workspace to the `app` service, forwards port 3000, installs the GitHub CLI feature, and configures VS Code. |
 | `post-create.sh` | Scaffolds `.env.local` on first create. |
+| `post-start.sh` | Starts the Next.js dev server in the background on every container start. |
 
 ## Getting started
 
 **VS Code / Cursor:** install the *Dev Containers* extension, open the repo, and
-choose **Reopen in Container**. First build runs `post-create.sh` automatically.
+choose **Reopen in Container**. First build runs `post-create.sh` automatically,
+and the dev server starts automatically via `post-start.sh` — port 3000 should
+be forwarded within a few seconds without running anything by hand.
 
 **Dev Containers CLI:**
 
 ```bash
 npm i -g @devcontainers/cli
 devcontainer up --workspace-folder .
-devcontainer exec --workspace-folder . npm run dev
+# the dev server is already running (started by postStartCommand); logs are at
+# /tmp/next-dev.log inside the container
 ```
 
 ## Environment variables
@@ -42,6 +46,9 @@ Type-checking and the Vitest suite run without any of these; the dev server and 
 production `build` need at least the Clerk keys.
 
 ## Common commands
+
+`npm run dev` is already running (started by `post-start.sh`); re-run it yourself
+only if you need to restart the server, e.g. after changing `.env.local`.
 
 ```bash
 npm run dev        # Next.js dev server → http://localhost:3000 (forwarded)
