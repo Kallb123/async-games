@@ -9,8 +9,15 @@
   // secrets — copy .env.example to .env.local and fill them in (postCreate
   // scaffolds the file for you).
   "features": {
-    "ghcr.io/devcontainers/features/github-cli:1": {}
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
   },
+  "mounts": [
+    // Persists your Claude login and settings across container rebuilds.
+    // Without this you'd have to sign in every time you rebuild.
+    "source=claude-code-config-${devcontainerId},target=/home/vscode/.claude,type=volume"
+  ],
 
   "forwardPorts": [3000],
   "portsAttributes": {

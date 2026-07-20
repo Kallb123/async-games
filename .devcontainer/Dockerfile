@@ -20,6 +20,14 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*; \
     npm install -g npm@latest
 
+
+# Pre-create these dirs owned by vscode so that when Docker initializes a fresh
+# named volume over .claude (login persistence), it copies vscode ownership onto
+# the volume root — otherwise the volume defaults to root:root and the non-root
+# vscode user can't write credentials, breaking login.
+RUN mkdir -p /home/vscode/.kube/cache /tmp/kube-cache /home/vscode/.claude \
+ && chown -R vscode:vscode /home/vscode/.kube /tmp/kube-cache /home/vscode/.claude
+
 # Install the app's dependencies at build time so they are baked into the
 # image. Only the manifest + lockfile are copied first, so this layer is cached
 # and only re-runs when dependencies change. At runtime a named volume is
