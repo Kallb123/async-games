@@ -8,6 +8,13 @@
 // Each expansion is adapted from the classic Catan expansion line; the notes
 // below mirror the design doc's compatibility matrix (§8.6) and player-count
 // summary (§8.7).
+//
+// TODO(expansions): only the selection framework is implemented here —
+// compatibility/player-count validation, persistence, and the victory-point
+// target. The deep per-expansion mechanics (ships & sea maps, commodities &
+// knights combat, the Traders & Raiders scenarios, the Explorers & Pirates
+// campaign, and the 5–6 Special Build Phase) are not yet built. Outstanding
+// work is tracked in docs/games/settlements-and-cities.md §9.
 
 export type SACExpansionId =
     | 'seasAndSailors'

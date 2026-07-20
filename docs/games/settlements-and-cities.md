@@ -287,3 +287,34 @@ played on top of the base rules in Sections 4–7.
   matching extension for each layered expansion.
 * *Explorers & Pirates* is the odd one out: it never mixes with other
   expansions, so treat it as a separate mode rather than a layer.
+
+---
+
+## 9. Implementation status & outstanding work
+
+The expansion **framework** is implemented — selection, compatibility and
+player-count validation, persistence into the game model, and the
+expansion-derived victory-point target. The single source of truth for this is
+[`src/games/SettlementsAndCities/expansions.ts`](../../src/games/SettlementsAndCities/expansions.ts).
+
+The **deep per-expansion subsystems** described above are **not yet
+implemented**. Selecting an expansion currently affects the player-count rules
+and the victory target, but does not yet add its unique mechanics. Outstanding
+work, by expansion:
+
+* **Seas & Sailors (§8.1):** sea/gold-field hexes, Ships as sea-edge roads,
+  the Pirate pawn, and scenario maps with bonus-VP goals.
+* **Knights & Commerce (§8.2):** commodity cards (Coin/Cloth/Paper), the three
+  city-improvement tracks and metropolises, Progress-card decks, activatable
+  Knights, and the barbarian-invasion loop driven by an Event Die.
+* **Traders & Raiders (§8.3):** the per-scenario subsystems (rivers/money,
+  caravans, cooperative defence, fishing) and the official 2-player rules.
+* **Explorers & Pirates (§8.4):** face-down sea-tile exploration, cargo ships
+  carrying crews/settlers, and the mission-based scoring campaign.
+* **5–6 Player Extension (§8.5):** the Special Build Phase between turns (extra
+  components already covered by the scaling board/piece counts).
+
+Each of these is a substantial feature in its own right. They should be added
+incrementally on top of the existing framework — new commands in
+`GameLogic.ts`, new `specificGameState` fields, and expansion-gated branches
+keyed off `specificGameState.expansions`.
