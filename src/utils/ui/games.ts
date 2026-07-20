@@ -1,7 +1,7 @@
 // Shared presentation metadata for each game, keyed by its url slug.
 // Keeps the library, home cards and setup headers visually consistent.
 
-export type GameCategory = "Dice" | "Strategy" | "Word";
+export type GameCategory = "Dice" | "Strategy" | "Word" | "Puzzle";
 
 export interface GameMeta {
     url: string;
@@ -24,16 +24,16 @@ export const GAME_META: Record<string, GameMeta> = {
         category: "Dice",
         players: "2–4 players",
         tagline: "Roll, build, and grow your city faster than your friends.",
-        accent: "terracotta",
+        accent: "terracotta", // #009DCA
         art: "/art/dicecities/icon.png",
         available: true,
     },
     smartthink: {
         url: "smartthink",
         name: "Smartthink",
-        category: "Word",
-        players: "2–8 players",
-        tagline: "Crack the hidden code before anyone else does.",
+        category: "Puzzle",
+        players: "1-2 players",
+        tagline: "Crack the hidden code before guesses run out.",
         accent: "green",
         glyph: "S?",
         available: true,
@@ -43,7 +43,7 @@ export const GAME_META: Record<string, GameMeta> = {
         name: "Settlements & Cities",
         category: "Strategy",
         players: "2–6 players",
-        tagline: "Trade, build and out-manoeuvre for the longest road.",
+        tagline: "Trade, build and out-manoeuvre for the most victory points.",
         accent: "gold",
         art: "/art/dicecities/japanese/forest.png",
         available: true,
