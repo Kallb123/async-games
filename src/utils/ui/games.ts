@@ -6,7 +6,7 @@ export type GameCategory = "Dice" | "Strategy" | "Word" | "Puzzle";
 export interface GameMeta {
     url: string;
     name: string;
-    category: GameCategory;
+    categories: GameCategory[];
     players: string;
     tagline: string;
     // A named accent from the theme palette used for tinting the card.
@@ -21,7 +21,7 @@ export const GAME_META: Record<string, GameMeta> = {
     dicecities: {
         url: "dicecities",
         name: "Dice Cities",
-        category: "Dice",
+        categories: ["Dice", "Strategy"],
         players: "2–4 players",
         tagline: "Roll, build, and grow your city faster than your friends.",
         accent: "terracotta", // #009DCA
@@ -31,7 +31,7 @@ export const GAME_META: Record<string, GameMeta> = {
     smartthink: {
         url: "smartthink",
         name: "Smartthink",
-        category: "Puzzle",
+        categories: ["Puzzle"],
         players: "1-2 players",
         tagline: "Crack the hidden code before guesses run out.",
         accent: "green",
@@ -41,7 +41,7 @@ export const GAME_META: Record<string, GameMeta> = {
     settlementsandcities: {
         url: "settlementsandcities",
         name: "Settlements & Cities",
-        category: "Strategy",
+        categories: ["Strategy", "Dice"],
         players: "2–6 players",
         tagline: "Trade, build and out-manoeuvre for the most victory points.",
         accent: "gold",
@@ -51,7 +51,7 @@ export const GAME_META: Record<string, GameMeta> = {
     snakesandladders: {
         url: "snakesandladders",
         name: "Snakes & Ladders",
-        category: "Dice",
+        categories: ["Dice"],
         players: "2–6 players",
         tagline: "Climb the ladders, dodge the snakes, race to 100.",
         accent: "purple",
