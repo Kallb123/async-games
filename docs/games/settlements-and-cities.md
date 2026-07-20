@@ -315,8 +315,8 @@ mechanics. Outstanding work, by expansion:
 
 Each of these is a substantial feature in its own right. They should be added
 incrementally on top of the existing framework — new commands in
-`GameLogic.ts`, new `specificGameState` fields, and expansion-gated branches
-keyed off `specificGameState.expansions`.
+`games/SettlementsAndCitiesLogic.ts`, new `specificGameState` fields, and
+expansion-gated branches keyed off `specificGameState.expansions`.
 
 ### 9.1 Implemented: the 5–6 Player Extension Special Build Phase (§8.5)
 
@@ -349,6 +349,6 @@ player is given the board (and a push notification) for a quick build.
   screen can label the phase and whose move it is.
 
 The relevant code is the special-build helpers and the rewritten `CheckEndTurn`
-in [`src/utils/apiModels/GameLogic.ts`](../../src/utils/apiModels/GameLogic.ts),
+in [`src/utils/apiModels/games/SettlementsAndCitiesLogic.ts`](../../src/utils/apiModels/games/SettlementsAndCitiesLogic.ts),
 plus the special-build branch in the actions sheet
 ([`SettlementsAndCitiesActions.tsx`](../../src/components/games/SettlementsAndCities/SettlementsAndCitiesActions.tsx)).

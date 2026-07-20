@@ -19,7 +19,15 @@ const reviver = (k: string, v: any) =>
     ((typeof v === "object") && (v !== null) && ("className" in v) && (v.className in registry)) ?
       Object.assign(new registry[v.className](), v) : v;
   
-// use this to deserialize JSON instead of plain JSON.parse        
+// use this to deserialize JSON instead of plain JSON.parse
 export function deserializeJSON(json: string) {
     return JSON.parse(json, reviver);
+}
+
+// The class names currently registered as serialisable. Useful for asserting
+// (e.g. in tests) that every @serializable class has actually been loaded and
+// registered — an unregistered command/game-type cannot be rehydrated from
+// commandHistory and would fail to replay or execute.
+export function registeredClassNames(): string[] {
+    return Object.keys(registry);
 }
