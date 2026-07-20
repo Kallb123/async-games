@@ -16,8 +16,9 @@ services:
     command: sleep infinity
     volumes:
       - ..:/workspaces/async-games:cached
-      # Keep node_modules on a named volume so it isn't shadowed by / doesn't
-      # fight with the host bind mount, and survives rebuilds.
+      # node_modules lives on a named volume so the workspace bind mount doesn't
+      # shadow the dependencies installed in the Dockerfile. Docker seeds this
+      # empty volume from the image's node_modules on first create.
       - node_modules:/workspaces/async-games/node_modules
     environment:
       # Default local connection string; overridable in .env.local.

@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 # Runs once after the dev container is created.
-#   1. Installs dependencies with a clean, lockfile-faithful install.
-#   2. Scaffolds .env.local from .env.example (without clobbering an existing
-#      one) and points MONGODB_URI at the bundled Mongo service so the dev
-#      server can start out of the box.
+#
+# Dependencies are installed in the Dockerfile (baked into the image), so this
+# script only handles runtime setup that can't live in the image: scaffolding
+# .env.local from .env.example (the repo is bind-mounted at runtime, not at
+# image build time) and pointing MONGODB_URI at the bundled Mongo service so the
+# dev server can start out of the box.
 set -euo pipefail
-
-echo "==> Installing npm dependencies (npm ci)"
-npm ci
 
 if [ ! -f .env.local ]; then
   echo "==> Creating .env.local from .env.example"

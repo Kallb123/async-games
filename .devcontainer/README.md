@@ -8,10 +8,10 @@ repo without installing anything on your host.
 
 | Piece | Purpose |
 |---|---|
-| `Dockerfile` | Node 20 base image (`mcr.microsoft.com/devcontainers/javascript-node`) + `mongosh`. |
+| `Dockerfile` | Node 20 base image (`mcr.microsoft.com/devcontainers/javascript-node`) + `mongosh`; installs the app's dependencies (`npm ci`) at build time. |
 | `docker-compose.yml` | Two services: `app` (your workspace) and `mongo` (MongoDB 7). |
 | `devcontainer.json` | Wires the workspace to the `app` service, forwards port 3000, installs the GitHub CLI feature, and configures VS Code. |
-| `post-create.sh` | Runs `npm ci` and scaffolds `.env.local` on first create. |
+| `post-create.sh` | Scaffolds `.env.local` on first create. |
 
 ## Getting started
 
@@ -28,8 +28,10 @@ devcontainer exec --workspace-folder . npm run dev
 
 ## Environment variables
 
-`post-create.sh` copies `.env.example` to `.env.local` and sets `MONGODB_URI` to
-the bundled Mongo service (`mongodb://mongo:27017/async-games`). Everything else
+Dependencies are installed in the image, so the container is ready as soon as it
+builds. `post-create.sh` then copies `.env.example` to `.env.local` and sets
+`MONGODB_URI` to the bundled Mongo service (`mongodb://mongo:27017/async-games`).
+Everything else
 talks to **external** services you must supply keys for:
 
 - **Clerk** — `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`

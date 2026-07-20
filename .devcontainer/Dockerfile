@@ -20,5 +20,16 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*; \
     npm install -g npm@latest
 
+# Install the app's dependencies at build time so they are baked into the
+# image. Only the manifest + lockfile are copied first, so this layer is cached
+# and only re-runs when dependencies change. At runtime a named volume is
+# mounted over node_modules (see docker-compose.yml); Docker seeds that empty
+# volume from the image's node_modules on first create, so these installed
+# packages are what the container uses.
+WORKDIR /workspaces/async-games
+COPY --chown=node:node package.json package-lock.json ./
+USER node
+RUN npm ci
+
 # Next.js dev server.
 EXPOSE 3000
