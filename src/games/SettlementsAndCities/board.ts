@@ -78,6 +78,19 @@ export interface ISACSpecificGameState {
     devCardDeck: SAC_DevCard[];
     pendingRoadBuilding: number;
     playedDevCard: boolean;
+    // ─── 5–6 Player Extension: Special Build Phase (design doc §8.5) ───────────
+    // After the active player ends their turn, every *other* player (in turn
+    // order) gets one chance to build and trade with the bank before the dice
+    // pass on. We model each such chance as its own currentTurn so the existing
+    // async turn-passing + notification machinery drives it.
+    //
+    // `specialBuildActive` is true while the phase is running; `specialBuildQueue`
+    // holds the userIds still owed a special-build turn (front = whose turn it is
+    // now); `specialBuildMainPlayer` remembers the player whose main turn opened
+    // the phase, so the dice can resume from the correct seat afterwards.
+    specialBuildActive: boolean;
+    specialBuildQueue: string[];
+    specialBuildMainPlayer: string | null;
     // Which optional expansions are active for this game (design doc §8).
     expansions: SACExpansions;
     // VP needed to win. Base game is 10; expansions can raise it (§7, §8).

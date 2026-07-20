@@ -297,10 +297,11 @@ player-count validation, persistence into the game model, and the
 expansion-derived victory-point target. The single source of truth for this is
 [`src/games/SettlementsAndCities/expansions.ts`](../../src/games/SettlementsAndCities/expansions.ts).
 
-The **deep per-expansion subsystems** described above are **not yet
-implemented**. Selecting an expansion currently affects the player-count rules
-and the victory target, but does not yet add its unique mechanics. Outstanding
-work, by expansion:
+The **5–6 Player Extension's Special Build Phase (§8.5) is now implemented** —
+see below. The remaining **deep per-expansion subsystems** are **not yet
+implemented**. Selecting one of those expansions currently affects the
+player-count rules and the victory target, but does not yet add its unique
+mechanics. Outstanding work, by expansion:
 
 * **Seas & Sailors (§8.1):** sea/gold-field hexes, Ships as sea-edge roads,
   the Pirate pawn, and scenario maps with bonus-VP goals.
@@ -311,10 +312,43 @@ work, by expansion:
   caravans, cooperative defence, fishing) and the official 2-player rules.
 * **Explorers & Pirates (§8.4):** face-down sea-tile exploration, cargo ships
   carrying crews/settlers, and the mission-based scoring campaign.
-* **5–6 Player Extension (§8.5):** the Special Build Phase between turns (extra
-  components already covered by the scaling board/piece counts).
 
 Each of these is a substantial feature in its own right. They should be added
 incrementally on top of the existing framework — new commands in
 `GameLogic.ts`, new `specificGameState` fields, and expansion-gated branches
 keyed off `specificGameState.expansions`.
+
+### 9.1 Implemented: the 5–6 Player Extension Special Build Phase (§8.5)
+
+When the **5–6 Player Extension** is enabled, a **Special Build Phase** runs
+between every player's turns, exactly as described in §8.5. It is a natural fit
+for asynchronous play: rather than sitting idle while the dice pass, each other
+player is given the board (and a push notification) for a quick build.
+
+* **Turn model.** Each special-build opportunity is modelled as its own
+  `currentTurn`, so it reuses the app's existing turn-passing, push-notification
+  and turn-timer machinery. After the active player ends their turn,
+  `CheckEndTurn` opens the phase: it fills `specialBuildQueue` with every *other*
+  player in turn order (starting after the active player), remembers the active
+  player in `specialBuildMainPlayer`, sets `specialBuildActive`, and hands
+  `currentTurn` to the first queued player. Each player finishing their special
+  build advances the queue; once it drains, the phase closes and the dice pass on
+  from the seat that opened it.
+* **What a special-build player may do.** Build roads, settlements and cities,
+  buy a development card, and trade with the bank (maritime trade) — gated by the
+  shared `sacCanBuildOrTrade` helper, which lets them act without having rolled.
+* **What they may not do.** Roll the dice, move the robber, play a Knight or any
+  progress card, or take free Road-Building roads. These are explicitly blocked
+  while `specialBuildActive` is true.
+* **Winning.** A player can reach the victory target during their special build;
+  `CheckGameOver` runs after every command and is unaffected by the phase.
+* **State/serialisation.** The three new fields
+  (`specialBuildActive`, `specialBuildQueue`, `specialBuildMainPlayer`) live on
+  `ISACSpecificGameState`, are persisted in the Mongoose schema, deep-cloned for
+  turn recap, and surfaced to the client (queue mapped to usernames) so the game
+  screen can label the phase and whose move it is.
+
+The relevant code is the special-build helpers and the rewritten `CheckEndTurn`
+in [`src/utils/apiModels/GameLogic.ts`](../../src/utils/apiModels/GameLogic.ts),
+plus the special-build branch in the actions sheet
+([`SettlementsAndCitiesActions.tsx`](../../src/components/games/SettlementsAndCities/SettlementsAndCitiesActions.tsx)).

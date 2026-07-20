@@ -56,6 +56,13 @@ export interface ISACSpecificGameStateResponse {
     playedDevCard: boolean;
     // Own dev cards (only sent for the requesting user, but for simplicity we always include all)
     playerDevCards: { [username: string]: { [K in SAC_DevCard]: number } };
+    // 5–6 Player Extension Special Build Phase (§8.5). `specialBuildActive` is
+    // true while other players take their between-turns build; `specialBuildQueue`
+    // lists the usernames still owed a special-build turn (index 0 = active now);
+    // `specialBuildMainPlayer` is the player whose main turn opened the phase.
+    specialBuildActive: boolean;
+    specialBuildQueue: string[];
+    specialBuildMainPlayer: string | null;
     // Active expansions and the VP target they imply (design doc §8).
     expansions: SACExpansions;
     victoryTarget: number;

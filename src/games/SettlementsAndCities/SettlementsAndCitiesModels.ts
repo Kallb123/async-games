@@ -153,6 +153,9 @@ export function cloneSACState(
         devCardDeck: [...gs.devCardDeck],
         pendingRoadBuilding: gs.pendingRoadBuilding,
         playedDevCard: gs.playedDevCard,
+        specialBuildActive: gs.specialBuildActive ?? false,
+        specialBuildQueue: [...(gs.specialBuildQueue ?? [])],
+        specialBuildMainPlayer: gs.specialBuildMainPlayer ?? null,
         expansions: normaliseExpansions(gs.expansions),
         victoryTarget: gs.victoryTarget ?? 10,
     };
@@ -250,6 +253,9 @@ SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
         devCardDeck: shuffleDeck(DEV_CARD_DECK),
         pendingRoadBuilding: 0,
         playedDevCard: false,
+        specialBuildActive: false,
+        specialBuildQueue: [],
+        specialBuildMainPlayer: null,
         expansions,
         victoryTarget,
     };
@@ -350,6 +356,9 @@ function makeSACStateSchemaDef() {
         devCardDeck: [String],
         pendingRoadBuilding: Number,
         playedDevCard: Boolean,
+        specialBuildActive: Boolean,
+        specialBuildQueue: [String],
+        specialBuildMainPlayer: { type: String, default: null },
         expansions: expansionsSubSchema,
         victoryTarget: Number,
     };
@@ -438,6 +447,13 @@ export function gameStateToResponse(
     const longestRoadOwner = gs.longestRoadOwner ? (userIdNameMap[gs.longestRoadOwner] ?? gs.longestRoadOwner) : null;
     const largestArmyOwner = gs.largestArmyOwner ? (userIdNameMap[gs.largestArmyOwner] ?? gs.largestArmyOwner) : null;
 
+    // Special Build Phase (§8.5) — surface the queue as usernames so the client
+    // can show whose special-build turn it is and who is still waiting.
+    const specialBuildQueue = (gs.specialBuildQueue ?? []).map(uid => userIdNameMap[uid] ?? uid);
+    const specialBuildMainPlayer = gs.specialBuildMainPlayer
+        ? (userIdNameMap[gs.specialBuildMainPlayer] ?? gs.specialBuildMainPlayer)
+        : null;
+
     return {
         hexes: gs.hexes.map(h => ({ terrain: h.terrain, numberToken: h.numberToken })),
         vertices,
@@ -458,6 +474,9 @@ export function gameStateToResponse(
         pendingRoadBuilding: gs.pendingRoadBuilding,
         playedDevCard: gs.playedDevCard,
         playerDevCards,
+        specialBuildActive: gs.specialBuildActive ?? false,
+        specialBuildQueue,
+        specialBuildMainPlayer,
         expansions: normaliseExpansions(gs.expansions),
         victoryTarget: gs.victoryTarget ?? 10,
     };

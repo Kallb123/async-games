@@ -1547,6 +1547,79 @@ function sacAdvanceSetup(sacData: ISettlementsAndCitiesGameData): void {
     }
 }
 
+// ─── 5–6 Player Extension: Special Build Phase (design doc §8.5) ────────────────
+
+// True while it's a player's regular main turn (they are the active player and
+// have rolled) OR their between-turns special-build turn. The build/trade
+// commands share this gate so a special-build player can act without rolling.
+function sacCanBuildOrTrade(gs: ISettlementsAndCitiesGameData['specificGameState']): boolean {
+    if (gs.phase !== 'main') return false;
+    if (gs.pendingRobber) return false;
+    if (gs.specialBuildActive) return true;
+    return gs.hasRolled;
+}
+
+// Ends a regular main turn: reset per-turn flags, promote freshly-bought dev
+// cards to playable, and pass the dice to the next seat in turn order.
+function sacAdvanceMainTurn(sacData: ISettlementsAndCitiesGameData): void {
+    const gs = sacData.specificGameState;
+    gs.hasRolled = false;
+    gs.lastRoll = null;
+    gs.pendingRobber = false;
+    gs.pendingRoadBuilding = 0;
+    gs.playedDevCard = false;
+    // Promote newDevCards to playable devCards
+    for (const [, ps] of gs.playerStates) {
+        const keys: SAC_DevCard[] = ['knight', 'victoryPoint', 'roadBuilding', 'yearOfPlenty', 'monopoly'];
+        for (const k of keys) {
+            ps.devCards[k] += ps.newDevCards[k];
+            ps.newDevCards[k] = 0;
+        }
+    }
+    const order = sacData.gameState.turnOrder;
+    const currentIndex = order.findIndex(t => t === sacData.currentTurn);
+    sacData.currentTurn = order[(currentIndex + 1) % order.length];
+}
+
+// Opens the Special Build Phase after the active player ends their main turn:
+// every *other* player, in turn order starting after the active player, gets one
+// build-and-trade turn before the dice pass on. Returns false (no phase opened)
+// when there are no other players to offer it to.
+function sacStartSpecialBuild(sacData: ISettlementsAndCitiesGameData): boolean {
+    const gs = sacData.specificGameState;
+    const order = sacData.gameState.turnOrder;
+    const activeIndex = order.findIndex(t => t === sacData.currentTurn);
+    const queue: string[] = [];
+    for (let i = 1; i < order.length; i++) {
+        queue.push(order[(activeIndex + i) % order.length]);
+    }
+    if (queue.length === 0) return false;
+
+    gs.specialBuildActive = true;
+    gs.specialBuildQueue = queue;
+    gs.specialBuildMainPlayer = sacData.currentTurn;
+    sacData.currentTurn = queue[0];
+    sacData.gameState.history.unshift('Special Build Phase — other players may build & trade with the bank');
+    return true;
+}
+
+// Advances the Special Build Phase after a player finishes their special-build
+// turn: hand off to the next queued player, or close the phase and pass the dice
+// on from the seat that opened it.
+function sacAdvanceSpecialBuild(sacData: ISettlementsAndCitiesGameData): void {
+    const gs = sacData.specificGameState;
+    gs.specialBuildQueue.shift();
+    if (gs.specialBuildQueue.length > 0) {
+        sacData.currentTurn = gs.specialBuildQueue[0];
+        return;
+    }
+    // Phase over — resume the regular rotation from the player who opened it.
+    gs.specialBuildActive = false;
+    sacData.currentTurn = gs.specialBuildMainPlayer ?? sacData.currentTurn;
+    gs.specialBuildMainPlayer = null;
+    sacAdvanceMainTurn(sacData);
+}
+
 // ─── Game type ────────────────────────────────────────────────────────────────
 
 @serializable
@@ -1565,24 +1638,23 @@ export class SettlementsAndCitiesGameType implements IGameType {
 
         if (gs.phase === 'setup') {
             sacAdvanceSetup(sacData);
-        } else {
-            // Reset per-turn flags
-            gs.hasRolled = false;
-            gs.lastRoll = null;
-            gs.pendingRobber = false;
-            gs.pendingRoadBuilding = 0;
-            gs.playedDevCard = false;
-            // Promote newDevCards to playable devCards
-            for (const [, ps] of gs.playerStates) {
-                const keys: SAC_DevCard[] = ['knight', 'victoryPoint', 'roadBuilding', 'yearOfPlenty', 'monopoly'];
-                for (const k of keys) {
-                    ps.devCards[k] += ps.newDevCards[k];
-                    ps.newDevCards[k] = 0;
-                }
-            }
-            const currentIndex = gameData.gameState.turnOrder.findIndex(t => t === gameData.currentTurn);
-            gameData.currentTurn = gameData.gameState.turnOrder[(currentIndex + 1) % gameData.gameState.turnOrder.length];
+            return;
         }
+
+        // A player finishing their between-turns special build hands off to the
+        // next queued player (or closes the phase and passes the dice on).
+        if (gs.specialBuildActive) {
+            sacAdvanceSpecialBuild(sacData);
+            return;
+        }
+
+        // The active player just ended their main turn. With the 5–6 Player
+        // Extension, open a Special Build Phase for everyone else before the dice
+        // move on; otherwise pass the dice straight to the next seat.
+        if (gs.expansions?.fiveSixPlayerExtension && sacStartSpecialBuild(sacData)) {
+            return;
+        }
+        sacAdvanceMainTurn(sacData);
     }
 
     CheckGameOver(gameData: IGameData): boolean {
@@ -1717,6 +1789,7 @@ export class SACPlayKnight implements IGameCommand {
         const gs = sacData.specificGameState;
 
         if (gs.phase !== 'main') return { validMove: false, turnOver: false };
+        if (gs.specialBuildActive) return { validMove: false, turnOver: false };
         if (gs.hasRolled) return { validMove: false, turnOver: false };
         if (gs.playedDevCard) return { validMove: false, turnOver: false };
 
@@ -1764,6 +1837,7 @@ export class SACRollDice implements IGameCommand {
         const gs = sacData.specificGameState;
 
         if (gs.phase !== 'main') return { validMove: false, turnOver: false };
+        if (gs.specialBuildActive) return { validMove: false, turnOver: false };
         if (gs.hasRolled) return { validMove: false, turnOver: false };
         if (gs.pendingRobber) return { validMove: false, turnOver: false };
 
@@ -1926,8 +2000,10 @@ export class SACBuildRoad implements IGameCommand {
         if (gs.phase !== 'main') return { validMove: false, turnOver: false };
         if (gs.pendingRobber) return { validMove: false, turnOver: false };
 
-        const isFreeRoad = gs.pendingRoadBuilding > 0;
-        if (!isFreeRoad && !gs.hasRolled) return { validMove: false, turnOver: false };
+        // Free roads come from a Road Building card (main turn only); a special-
+        // build player pays normally and never has pending free roads.
+        const isFreeRoad = !gs.specialBuildActive && gs.pendingRoadBuilding > 0;
+        if (!isFreeRoad && !sacCanBuildOrTrade(gs)) return { validMove: false, turnOver: false };
 
         if (!isValidRoadEdge(this.edgeId, this.senderId, gs.vertices, gs.edges)) {
             return { validMove: false, turnOver: false };
@@ -1977,8 +2053,7 @@ export class SACBuildSettlement implements IGameCommand {
         const sacData = gameData as ISettlementsAndCitiesGameData;
         const gs = sacData.specificGameState;
 
-        if (gs.phase !== 'main' || !gs.hasRolled) return { validMove: false, turnOver: false };
-        if (gs.pendingRobber) return { validMove: false, turnOver: false };
+        if (!sacCanBuildOrTrade(gs)) return { validMove: false, turnOver: false };
 
         if (!isValidSettlementVertex(this.vertexId, gs.vertices)) return { validMove: false, turnOver: false };
 
@@ -2032,8 +2107,7 @@ export class SACBuildCity implements IGameCommand {
         const sacData = gameData as ISettlementsAndCitiesGameData;
         const gs = sacData.specificGameState;
 
-        if (gs.phase !== 'main' || !gs.hasRolled) return { validMove: false, turnOver: false };
-        if (gs.pendingRobber) return { validMove: false, turnOver: false };
+        if (!sacCanBuildOrTrade(gs)) return { validMove: false, turnOver: false };
 
         const vertex = gs.vertices[this.vertexId];
         if (vertex.building !== 'settlement' || vertex.owner !== this.senderId) {
@@ -2078,8 +2152,7 @@ export class SACBuyDevCard implements IGameCommand {
         const sacData = gameData as ISettlementsAndCitiesGameData;
         const gs = sacData.specificGameState;
 
-        if (gs.phase !== 'main' || !gs.hasRolled) return { validMove: false, turnOver: false };
-        if (gs.pendingRobber) return { validMove: false, turnOver: false };
+        if (!sacCanBuildOrTrade(gs)) return { validMove: false, turnOver: false };
         if (gs.devCardDeck.length === 0) return { validMove: false, turnOver: false };
 
         const ps = gs.playerStates.get(this.senderId);
@@ -2123,6 +2196,8 @@ export class SACPlayRoadBuilding implements IGameCommand {
 
         if (gs.phase !== 'main' || !gs.hasRolled) return { validMove: false, turnOver: false };
         if (gs.pendingRobber || gs.playedDevCard) return { validMove: false, turnOver: false };
+        // Progress/dev cards can't be played during another player's Special Build.
+        if (gs.specialBuildActive) return { validMove: false, turnOver: false };
 
         const ps = gs.playerStates.get(this.senderId);
         if (!ps || ps.devCards.roadBuilding < 1) return { validMove: false, turnOver: false };
@@ -2161,6 +2236,8 @@ export class SACPlayYearOfPlenty implements IGameCommand {
 
         if (gs.phase !== 'main' || !gs.hasRolled) return { validMove: false, turnOver: false };
         if (gs.pendingRobber || gs.playedDevCard) return { validMove: false, turnOver: false };
+        // Progress/dev cards can't be played during another player's Special Build.
+        if (gs.specialBuildActive) return { validMove: false, turnOver: false };
 
         const ps = gs.playerStates.get(this.senderId);
         if (!ps || ps.devCards.yearOfPlenty < 1) return { validMove: false, turnOver: false };
@@ -2201,6 +2278,8 @@ export class SACPlayMonopoly implements IGameCommand {
 
         if (gs.phase !== 'main' || !gs.hasRolled) return { validMove: false, turnOver: false };
         if (gs.pendingRobber || gs.playedDevCard) return { validMove: false, turnOver: false };
+        // Progress/dev cards can't be played during another player's Special Build.
+        if (gs.specialBuildActive) return { validMove: false, turnOver: false };
 
         const ps = gs.playerStates.get(this.senderId);
         if (!ps || ps.devCards.monopoly < 1) return { validMove: false, turnOver: false };
@@ -2246,8 +2325,7 @@ export class SACMaritimeTrade implements IGameCommand {
         const sacData = gameData as ISettlementsAndCitiesGameData;
         const gs = sacData.specificGameState;
 
-        if (gs.phase !== 'main' || !gs.hasRolled) return { validMove: false, turnOver: false };
-        if (gs.pendingRobber) return { validMove: false, turnOver: false };
+        if (!sacCanBuildOrTrade(gs)) return { validMove: false, turnOver: false };
         if (this.offerResource === this.wantResource) return { validMove: false, turnOver: false };
 
         const ps = gs.playerStates.get(this.senderId);
@@ -2299,11 +2377,16 @@ export class SACEndTurn implements IGameCommand {
         const gs = sacData.specificGameState;
 
         if (gs.phase !== 'main') return { validMove: false, turnOver: false };
-        if (!gs.hasRolled) return { validMove: false, turnOver: false };
         if (gs.pendingRobber) return { validMove: false, turnOver: false };
         if (gs.pendingRoadBuilding > 0) return { validMove: false, turnOver: false };
+        // Main turn requires a roll first; a special-build turn does not.
+        if (!gs.specialBuildActive && !gs.hasRolled) return { validMove: false, turnOver: false };
 
-        sacData.gameState.history.unshift(`${this.senderUsername} ended their turn`);
+        sacData.gameState.history.unshift(
+            gs.specialBuildActive
+                ? `${this.senderUsername} finished their special build`
+                : `${this.senderUsername} ended their turn`
+        );
         return { validMove: true, turnOver: true };
     }
 
