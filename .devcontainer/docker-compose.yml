@@ -1,6 +1,6 @@
 # Compose stack for the Async Games dev container.
 #
-#   app    – the workspace where VS Code / Claude attaches; runs Node 20.
+#   app    – the workspace where VS Code / Claude attaches; runs Node 22.
 #   mongo  – a local MongoDB 7 instance so the app and any DB-backed flows
 #            work without a hosted Atlas cluster.
 #
@@ -9,8 +9,8 @@
 services:
   app:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
     # Keep the container alive; VS Code / the dev container CLI runs commands
     # inside it. The actual dev server is started manually with `npm run dev`.
     command: sleep infinity

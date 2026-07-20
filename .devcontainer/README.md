@@ -1,6 +1,6 @@
 # Dev Container
 
-A ready-to-use development environment for Async Games. It provisions Node 20
+A ready-to-use development environment for Async Games. It provisions Node 22
 (matching CI) and a local MongoDB instance so you can develop and test the whole
 repo without installing anything on your host.
 
@@ -8,7 +8,7 @@ repo without installing anything on your host.
 
 | Piece | Purpose |
 |---|---|
-| `Dockerfile` | Node 20 base image (`mcr.microsoft.com/devcontainers/javascript-node`) + `mongosh`; installs the app's dependencies (`npm ci`) at build time. |
+| `Dockerfile` | Node 22 base image (`mcr.microsoft.com/devcontainers/javascript-node`) + `mongosh`; installs the app's dependencies (`npm ci`) at build time. |
 | `docker-compose.yml` | Two services: `app` (your workspace) and `mongo` (MongoDB 7). |
 | `devcontainer.json` | Wires the workspace to the `app` service, forwards port 3000, installs the GitHub CLI feature, and configures VS Code. |
 | `post-create.sh` | Scaffolds `.env.local` on first create. |
