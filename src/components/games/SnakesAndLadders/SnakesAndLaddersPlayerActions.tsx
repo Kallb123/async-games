@@ -1,46 +1,159 @@
 import type { ICommandResponse } from "@/app/api/game/command/route";
-import AnimatedDice from "@/components/AnimatedDice";
+import DieFace from "@/components/ui/DieFace";
 import { ISnakesAndLaddersDiceRollOutcome, IGameCommand, SnakesAndLaddersRequestDiceRoll } from "@/utils/apiModels/GameLogic";
-import { AnimatePresence, motion } from "framer-motion";
 import { useState } from "react";
-import { Button, Col, Row } from "react-bootstrap";
 
 interface SnakesAndLaddersPlayerActionsProps {
-    hasRolled: boolean,
-    submitCommand: (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => Promise<void>
+    hasRolled: boolean;
+    /** The viewer's square before this roll — used to animate the climb/slide. */
+    myPosition?: number;
+    /** Called after the player dismisses the roll-result screen (live only). */
+    onResolved?: () => void;
+    /** 'plan' hides the payoff sheet since a hypothetical roll has no verdict. */
+    mode?: 'live' | 'plan';
+    submitCommand: (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => Promise<void>;
 }
 
-export default function SnakesAndLaddersPlayerActions({ hasRolled, submitCommand }: SnakesAndLaddersPlayerActionsProps) {
-    const [rollNumber, setRollNumber] = useState(1);
-    const [showDie, setShowDie] = useState(false);
+type Verdict = 'snake' | 'ladder' | 'plain' | 'nomove' | 'win';
+
+interface RollResult {
+    roll: number;
+    from: number;
+    landing: number;
+    newPosition: number;
+    verdict: Verdict;
+}
+
+const VERDICT_ICON: Record<Verdict, string> = {
+    snake: '🐍', ladder: '🪜', plain: '👣', nomove: '🎯', win: '🏁',
+};
+
+const VERDICT_TITLE: Record<Verdict, string> = {
+    snake: 'Oof — a snake!',
+    ladder: 'Up you go — a ladder!',
+    plain: 'On the move',
+    nomove: 'So close!',
+    win: 'You reached 100! 🎉',
+};
+
+export default function SnakesAndLaddersPlayerActions({ hasRolled, myPosition = 0, onResolved, mode = 'live', submitCommand }: SnakesAndLaddersPlayerActionsProps) {
+    const [result, setResult] = useState<RollResult | null>(null);
+    const [planRoll, setPlanRoll] = useState<number | null>(null);
+    const [rolling, setRolling] = useState(false);
 
     const rollDice = async () => {
+        if (rolling || hasRolled) return;
+        setRolling(true);
         const diceRoll = new SnakesAndLaddersRequestDiceRoll();
         submitCommand(diceRoll, (commandResponse) => {
-            console.log(commandResponse);
-            const rollOutcome = commandResponse.outcome as ISnakesAndLaddersDiceRollOutcome;
-            setRollNumber(rollOutcome.roll);
-            setShowDie(true);
-            setTimeout(() => {
-                setShowDie(false);
-            }, 5000);
+            const outcome = commandResponse.outcome as ISnakesAndLaddersDiceRollOutcome;
+            setRolling(false);
+            if (mode === 'plan') {
+                setPlanRoll(outcome.roll);
+                return;
+            }
+            const from = myPosition;
+            const landing = from + outcome.roll;
+            let verdict: Verdict = 'plain';
+            if (outcome.newPosition === 100) verdict = 'win';
+            else if (outcome.landedOnSnake) verdict = 'snake';
+            else if (outcome.landedOnLadder) verdict = 'ladder';
+            else if (outcome.newPosition === from) verdict = 'nomove';
+            setResult({ roll: outcome.roll, from, landing, newPosition: outcome.newPosition, verdict });
         });
     };
 
+    const endTurn = () => {
+        setResult(null);
+        onResolved?.();
+    };
+
+    // ── Planning mode: a lightweight roll with no verdict payoff ──────────────
+    if (mode === 'plan') {
+        return (
+            <div className="ag-actionsheet">
+                <button className="ag-btn ag-btn--primary ag-btn--block ag-btn--roll" onClick={rollDice} disabled={rolling}>
+                    🎲 Roll (planned)
+                </button>
+                {planRoll != null && (
+                    <p className="ag-action-hint">Planned roll: <b>{planRoll}</b></p>
+                )}
+            </div>
+        );
+    }
+
     return (
         <>
-            <Button onClick={rollDice} disabled={hasRolled}>Roll Dice</Button>
-            <Row>
-                <Col>
-                    <AnimatePresence>
-                        {showDie ?
-                            <motion.div transition={{ duration: 0.5, type: "spring" }} initial={{ translateX: "150vw", opacity: 1 }} animate={{ translateX: "0vw", opacity: 1 }} exit={{ translateX: "0vw", opacity: 0 }} style={{ position: "relative" }}>
-                                <AnimatedDice number={rollNumber} color={"#72b4db"} />
-                            </motion.div>
-                            : ""}
-                    </AnimatePresence>
-                </Col>
-            </Row>
+            <div className="ag-actionsheet">
+                <button className="ag-btn ag-btn--primary ag-btn--block ag-btn--roll" onClick={rollDice} disabled={rolling || hasRolled}>
+                    🎲 Roll the die
+                </button>
+                <p className="ag-action-hint">The die decides — no strategy here, just fate.</p>
+            </div>
+
+            {result && <RollResultScreen result={result} onEndTurn={endTurn} />}
         </>
+    );
+}
+
+function RollResultScreen({ result, onEndTurn }: { result: RollResult; onEndTurn: () => void }) {
+    const { roll, from, landing, newPosition, verdict } = result;
+    const stageClass =
+        verdict === 'snake' ? 'ag-sl-roll-stage ag-sl-roll-stage--snake'
+            : verdict === 'ladder' || verdict === 'win' ? 'ag-sl-roll-stage ag-sl-roll-stage--ladder'
+                : 'ag-sl-roll-stage ag-sl-roll-stage--plain';
+
+    // The square shown on the right of the move pill: for a snake/ladder that's
+    // the square you *landed* on before the slide/climb; otherwise your new one.
+    const pillTo = verdict === 'snake' || verdict === 'ladder' ? Math.min(landing, 100) : newPosition;
+
+    let sub: React.ReactNode;
+    if (verdict === 'snake') sub = <>You landed on {Math.min(landing, 100)} and slid down to <b>square {newPosition}</b>.</>;
+    else if (verdict === 'ladder') sub = <>You landed on {Math.min(landing, 100)} and climbed up to <b>square {newPosition}</b>.</>;
+    else if (verdict === 'win') sub = <>You raced home to <b>square 100</b> and won the game!</>;
+    else if (verdict === 'nomove') sub = <>You need exactly {100 - from} to finish — you stay on <b>square {from}</b>.</>;
+    else sub = <>You moved up to <b>square {newPosition}</b>.</>;
+
+    return (
+        <div className="ag-sl-roll">
+            <div className="ag-game-topbar">
+                <button className="ag-game-topbar-btn" onClick={onEndTurn} aria-label="Close">←</button>
+                <div className="ag-game-topbar-main">
+                    <div className="ag-game-topbar-title">Snakes &amp; Ladders</div>
+                    <div className="ag-game-topbar-sub">You rolled a {roll}</div>
+                </div>
+            </div>
+
+            <div className={stageClass}>
+                <div className="ag-sl-roll-die">
+                    <DieFace value={roll} />
+                    <div className="ag-sl-roll-num">{roll}</div>
+                </div>
+                <div className="ag-sl-move-pill">
+                    <span className="ag-sl-move-from">{from}</span>
+                    <span>→</span>
+                    <span>{pillTo}</span>
+                </div>
+                <div className="ag-sl-verdict-icon">{VERDICT_ICON[verdict]}</div>
+                <div>
+                    <div className="ag-sl-verdict-title">{VERDICT_TITLE[verdict]}</div>
+                    <div className="ag-sl-verdict-sub">{sub}</div>
+                </div>
+                <div className="ag-sl-newsquare">
+                    <span className="ag-sl-newsquare-label">New square</span>
+                    <span className="ag-sl-newsquare-num">{newPosition}</span>
+                </div>
+            </div>
+
+            <div className="ag-sl-roll-sheet">
+                <div className="ag-sl-roll-grip" />
+                <div className="ag-sl-roll-note">
+                    <span style={{ fontSize: 20 }}>🎲</span>
+                    <span>Nothing to decide here — the die did it. Tap below to hand the roll to the next player.</span>
+                </div>
+                <button className="ag-btn ag-btn--success ag-btn--block" onClick={onEndTurn}>✓ End turn</button>
+                <div className="ag-sl-roll-foot">We&apos;ll let the next player know it&apos;s their roll</div>
+            </div>
+        </div>
     );
 }

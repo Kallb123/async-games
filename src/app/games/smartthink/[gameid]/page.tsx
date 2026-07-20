@@ -4,25 +4,29 @@ import { useUser } from "@clerk/nextjs";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Col, Row } from "react-bootstrap";
-import CurrentUserInfo from "@/components/CurrentUserInfo";
-import GameResult from "@/components/GameResult";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { IGameCommand } from "@/utils/apiModels/GameLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import type { ISmartthinkGameDataResponse } from "@/games/Smartthink/apiModels";
+import GameShell from "@/components/ui/GameShell";
+import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import SmartthinkBoard from "@/components/games/Smartthink/SmartthinkBoard";
 import SmartthinkPlayerActions from "@/components/games/Smartthink/SmartthinkPlayerActions";
 import TurnNavControls from "@/components/games/TurnNavControls";
-import GameHistoryList from "@/components/games/GameHistoryList";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import type { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
+import { SMARTTHINK_CODE_LENGTH } from "@/utils/ui/smartthink";
+
+const PLAYER_COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c"];
+const emptyGuess = (): (number | null)[] => Array(SMARTTHINK_CODE_LENGTH).fill(null);
 
 export default function GameSmartthink({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
     const { user, isLoaded } = useUser();
     const [gameData, setGameData] = useState({} as ISmartthinkGameDataResponse);
+    const [currentGuess, setCurrentGuess] = useState<(number | null)[]>(emptyGuess());
+    const [showLog, setShowLog] = useState(false);
     const router = useRouter();
 
     const { gameid } = use(params);
@@ -42,10 +46,12 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
 
             getGameData();
         }
-        window.addEventListener('TurnTaken', () => {
+        const handleTurnTaken = () => {
             console.log(`SmartthinkPage message received: TurnTaken`);
             getGameData();
-        });
+        };
+        window.addEventListener('TurnTaken', handleTurnTaken);
+        return () => window.removeEventListener('TurnTaken', handleTurnTaken);
     }, [isLoaded]);
 
     const getGameData = async () => {
@@ -98,17 +104,8 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
             });
     };
 
-    const getWinnerDisplayName = (): string => {
-        const state = gameData?.specificGameState;
-        if (!state) return gameData?.winner ?? "";
-        if (gameData.winner === state.codeSetterId) return state.codeSetterUsername || gameData.winner;
-        if (gameData.winner === state.codeBreakerId) return state.codeBreakerUsername || gameData.winner;
-        return state.players?.find(p => p.userId === gameData.winner)?.username ?? gameData?.winner ?? "";
-    };
-
     const isCodeSetter = user?.id === gameData?.specificGameState?.codeSetterId;
     const isCodeBreaker = user?.id === gameData?.specificGameState?.codeBreakerId;
-    const isMyTurn = user?.id === gameData?.currentTurn;
 
     const live = {
         specificGameState: gameData?.specificGameState,
@@ -119,39 +116,113 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
     };
     const nav = useTurnNavigation<ISmartthinkGameStateResponse>(gameId, live);
     const displayed = nav.displayedState;
+    const complete = nav.displayedComplete;
+    const isMyTurn = nav.isLive && user?.id === gameData?.currentTurn && !complete;
+
+    const state = gameData?.specificGameState;
+
+    const getWinnerDisplayName = (): string => {
+        if (!state) return gameData?.winner ?? "";
+        if (gameData.winner === state.codeSetterId) return state.codeSetterUsername || gameData.winner;
+        if (gameData.winner === state.codeBreakerId) return state.codeBreakerUsername || gameData.winner;
+        return state.players?.find(p => p.userId === gameData.winner)?.username ?? gameData?.winner ?? "";
+    };
+    const currentUserWon = complete && user?.id !== undefined && user.id === nav.displayedWinner;
+
+    // ── Top-bar status line ──────────────────────────────────────────────────
+    let subtitle: React.ReactNode = 'Loading…';
+    if (displayed) {
+        if (complete) {
+            subtitle = currentUserWon ? '🏆 You cracked it!' : `${getWinnerDisplayName()} won`;
+        } else if (!displayed.secretCodeSet) {
+            subtitle = isCodeSetter
+                ? <><span className="ag-hi">Your move</span> · hide a code for {displayed.codeBreakerUsername}</>
+                : <>Waiting for {displayed.codeSetterUsername} to set a code</>;
+        } else if (isMyTurn && isCodeBreaker) {
+            subtitle = <><span className="ag-hi">Your move</span> · crack {displayed.codeSetterUsername}&apos;s code</>;
+        } else {
+            subtitle = <>Waiting on {displayed.codeBreakerUsername}&apos;s guess</>;
+        }
+    }
+
+    // ── Scoreboard: setter/breaker roles + guesses made ──────────────────────
+    const scoreEntries: ScoreEntry[] = displayed
+        ? (displayed.players ?? []).map((p, i): ScoreEntry => {
+            const isMe = p.userId === user?.id;
+            const isSetter = p.userId === displayed.codeSetterId;
+            const isActive = p.userId === nav.displayedCurrentTurn && !complete;
+            let sub: React.ReactNode;
+            if (isActive) sub = '▶ now';
+            else if (isSetter) sub = '🔒 setter';
+            else sub = '🔓 breaker';
+            return {
+                id: p.userId,
+                name: isMe ? 'You' : p.username,
+                color: PLAYER_COLORS[i % PLAYER_COLORS.length],
+                sub,
+                score: isSetter ? '🔒' : displayed.guessRows.length,
+                isMe,
+                isActive,
+            };
+        })
+        : [];
+
+    const showCurrentRow = isMyTurn && isCodeBreaker && (displayed?.secretCodeSet ?? false);
+
+    const logButton = displayed ? (
+        <button
+            className={`ag-game-topbar-btn${showLog ? ' ag-game-topbar-btn--on' : ''}`}
+            onClick={() => setShowLog(v => !v)}
+            aria-label="Game log"
+        >📜</button>
+    ) : undefined;
 
     return (
-        <main>
-            <h1>Smartthink</h1>
-            <h2><a href="/">Home</a></h2>
-            <GameResult complete={gameData?.complete ?? false} winnerId={gameData?.winner ?? ""} currentUserId={user?.id} winnerDisplayName={getWinnerDisplayName()} />
-            {displayed && (
-                <>
-                    <SmartthinkBoard
-                        guessRows={displayed.guessRows}
-                        maxGuesses={displayed.maxGuesses}
-                        codeSetterUsername={displayed.codeSetterUsername}
-                        codeBreakerUsername={displayed.codeBreakerUsername}
-                    />
-                    <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} />
-                    {isMyTurn && !gameData?.complete && nav.isLive && (
-                        <SmartthinkPlayerActions
-                            gameState={gameData.specificGameState}
-                            isCodeSetter={isCodeSetter}
-                            isCodeBreaker={isCodeBreaker}
-                            submitCommand={submitCommand}
-                        />
-                    )}
-                </>
-            )}
-            <h2>History</h2>
-            <Row>
-                <Col>
-                    <GameHistoryList history={nav.displayedHistory} plannedCount={nav.plannedHistoryCount} />
-                </Col>
-            </Row>
-            <CurrentUserInfo />
+        <GameShell title="Smartthink" subtitle={subtitle} right={logButton}>
             <FcmTokenComp />
-        </main>
+
+            {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
+
+            <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} />
+
+            {complete && (
+                <div className="ag-game-result">
+                    <h2>{currentUserWon ? 'You cracked it! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}</h2>
+                </div>
+            )}
+
+            {displayed && (
+                <SmartthinkBoard
+                    guessRows={displayed.guessRows}
+                    maxGuesses={displayed.maxGuesses}
+                    currentGuess={currentGuess}
+                    showCurrentRow={showCurrentRow}
+                />
+            )}
+
+            {isMyTurn && state && (
+                <SmartthinkPlayerActions
+                    gameState={state}
+                    isCodeSetter={isCodeSetter}
+                    isCodeBreaker={isCodeBreaker}
+                    currentGuess={currentGuess}
+                    setCurrentGuess={setCurrentGuess}
+                    submitCommand={submitCommand}
+                />
+            )}
+
+            {showLog && (
+                <div className="ag-log">
+                    <ul className="ag-log-list">
+                        {nav.displayedHistory.slice().reverse().map((h, i) => (
+                            <li key={i} className="ag-log-item">{h}</li>
+                        ))}
+                        {nav.displayedHistory.length === 0 && (
+                            <li className="ag-log-item">No moves yet.</li>
+                        )}
+                    </ul>
+                </div>
+            )}
+        </GameShell>
     );
 }
