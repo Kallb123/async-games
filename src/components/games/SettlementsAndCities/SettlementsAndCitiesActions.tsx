@@ -83,6 +83,7 @@ export default function SettlementsAndCitiesActions({
     const pendingRobber = gs.pendingRobber;
     const pendingRoadBuilding = gs.pendingRoadBuilding;
     const playedDevCard = gs.playedDevCard;
+    const specialBuild = gs.specialBuildActive;
 
     function submit<T extends IGameCommand>(cmd: T) {
         submitCommand(cmd, () => { setBoardMode('idle'); });
@@ -90,6 +91,100 @@ export default function SettlementsAndCitiesActions({
     function toggleMode(mode: SACBoardMode) {
         setBoardMode(boardMode === mode ? 'idle' : mode);
     }
+
+    // ── Shared build list (settlement / road / city + dev card + bank trade) ────
+    // Reused by the post-roll main turn and the 5–6 Special Build Phase, which
+    // both let a player spend resources on the board and trade with the bank.
+    const res = myState.resources;
+    const ROAD_COST: Cost = { brick: 1, lumber: 1 };
+    const SETTLEMENT_COST: Cost = { brick: 1, lumber: 1, wool: 1, grain: 1 };
+    const CITY_COST: Cost = { grain: 2, ore: 3 };
+
+    interface BuildDef {
+        mode: SACBoardMode;
+        icon: string;
+        name: string;
+        cost: Cost;
+        suffix: string;
+        piecesLeft: number;
+    }
+    const builds: BuildDef[] = [
+        { mode: 'placeSettlement', icon: '🛖', name: 'Settlement', cost: SETTLEMENT_COST, suffix: '+1 VP', piecesLeft: myState.remainingSettlements },
+        { mode: 'placeRoad', icon: '🛤️', name: 'Road', cost: ROAD_COST, suffix: 'reach new spots', piecesLeft: myState.remainingRoads },
+        { mode: 'placeCity', icon: '🏰', name: 'City', cost: CITY_COST, suffix: '+2 VP', piecesLeft: myState.remainingCities },
+    ];
+    const canBuyDevCard = res.wool >= 1 && res.grain >= 1 && res.ore >= 1 && gs.devCardDeckSize > 0;
+
+    const buildList = (
+        <div className="ag-build-list">
+            {builds.map(b => {
+                const short = shortfall(b.cost, res);
+                const noPieces = b.piecesLeft <= 0;
+                const affordable = !short && !noPieces;
+                const active = boardMode === b.mode;
+                const disabled = !affordable && !active;
+                const reason = noPieces ? 'No pieces left' : short;
+                return (
+                    <button
+                        key={b.mode}
+                        className={`ag-build-row${active ? ' ag-build-row--active' : ''}${disabled ? ' ag-build-row--disabled' : ''}`}
+                        disabled={disabled}
+                        onClick={() => !disabled && toggleMode(b.mode)}
+                    >
+                        <span className="ag-build-icon">{b.icon}</span>
+                        <span className="ag-build-main">
+                            <span className="ag-build-name">{b.name}</span>
+                            <span className="ag-build-cost">{costText(b.cost)} · {b.suffix}</span>
+                        </span>
+                        {affordable
+                            ? <span className="ag-build-tag">{active ? 'Cancel' : 'Build'}</span>
+                            : <span className="ag-build-tag ag-build-tag--muted">{reason}</span>}
+                    </button>
+                );
+            })}
+
+            <div className="ag-action-grid">
+                <button className="ag-btn ag-btn--light" disabled={!canBuyDevCard}
+                    onClick={() => submit(new SACBuyDevCard())}>
+                    🃏 Dev card
+                </button>
+                <button className="ag-btn ag-btn--light" onClick={() => setShowTradeModal(true)}>
+                    ⚖️ Trade
+                </button>
+            </div>
+        </div>
+    );
+
+    // ── Maritime trade modal (needed by both the main turn and Special Build) ───
+    const tradeModal = (
+        <Modal show={showTradeModal} onHide={() => setShowTradeModal(false)}>
+            <Modal.Header closeButton><Modal.Title>Maritime Trade</Modal.Title></Modal.Header>
+            <Modal.Body>
+                <Form.Group className="mb-2">
+                    <Form.Label>Offer (give)</Form.Label>
+                    <Form.Select value={tradeOffer} onChange={e => setTradeOffer(e.target.value as SAC_Resource)}>
+                        {RESOURCES.map(r => <option key={r} value={r}>{RESOURCE_EMOJI[r]} {r} (have: {res[r]})</option>)}
+                    </Form.Select>
+                </Form.Group>
+                <Form.Group>
+                    <Form.Label>Want (receive)</Form.Label>
+                    <Form.Select value={tradeWant} onChange={e => setTradeWant(e.target.value as SAC_Resource)}>
+                        {RESOURCES.map(r => <option key={r} value={r}>{RESOURCE_EMOJI[r]} {r}</option>)}
+                    </Form.Select>
+                </Form.Group>
+            </Modal.Body>
+            <Modal.Footer>
+                <Button variant="secondary" onClick={() => setShowTradeModal(false)}>Cancel</Button>
+                <Button variant="primary" onClick={() => {
+                    const cmd = new SACMaritimeTrade();
+                    cmd.offerResource = tradeOffer;
+                    cmd.wantResource = tradeWant;
+                    submit(cmd);
+                    setShowTradeModal(false);
+                }}>Trade</Button>
+            </Modal.Footer>
+        </Modal>
+    );
 
     // ── Setup mode ────────────────────────────────────────────────────────────
     if (isSetup) {
@@ -113,6 +208,26 @@ export default function SettlementsAndCitiesActions({
                             ? 'Setup — choose where your settlement goes.'
                             : 'Setup — connect a road to your new settlement.'}
                 </p>
+            </div>
+        );
+    }
+
+    // ── Special Build Phase (5–6 Player Extension, §8.5) ────────────────────────
+    // Between the active player's turns, every other player may build and trade
+    // with the bank once — no rolling, robber or dev-card plays.
+    if (specialBuild) {
+        return (
+            <div className="ag-actionsheet">
+                <div className="ag-callout" style={{ marginBottom: 10 }}>
+                    <b>⚡ Special Build</b> · spend resources to build or trade with the bank, then pass.
+                </div>
+                {buildList}
+                <button className="ag-btn ag-btn--success ag-btn--block" style={{ marginTop: 12, padding: '14px 0', fontSize: 15 }}
+                    onClick={() => submit(new SACEndTurn())}>
+                    ✓ Done building
+                </button>
+                <p className="ag-action-hint">Nothing to build? Just pass — the dice move on once everyone&apos;s had a chance.</p>
+                {tradeModal}
             </div>
         );
     }
@@ -174,90 +289,33 @@ export default function SettlementsAndCitiesActions({
     }
 
     // ── Post-roll ─────────────────────────────────────────────────────────────
-    const res = myState.resources;
-
-    const ROAD_COST: Cost = { brick: 1, lumber: 1 };
-    const SETTLEMENT_COST: Cost = { brick: 1, lumber: 1, wool: 1, grain: 1 };
-    const CITY_COST: Cost = { grain: 2, ore: 3 };
-
-    interface BuildDef {
-        mode: SACBoardMode;
-        icon: string;
-        name: string;
-        cost: Cost;
-        suffix: string;
-        piecesLeft: number;
-    }
-    const builds: BuildDef[] = [
-        { mode: 'placeSettlement', icon: '🛖', name: 'Settlement', cost: SETTLEMENT_COST, suffix: '+1 VP', piecesLeft: myState.remainingSettlements },
-        { mode: 'placeRoad', icon: '🛤️', name: 'Road', cost: ROAD_COST, suffix: 'reach new spots', piecesLeft: myState.remainingRoads },
-        { mode: 'placeCity', icon: '🏰', name: 'City', cost: CITY_COST, suffix: '+2 VP', piecesLeft: myState.remainingCities },
-    ];
-
-    const canBuyDevCard = res.wool >= 1 && res.grain >= 1 && res.ore >= 1 && gs.devCardDeckSize > 0;
     const canPlayRoadBuilding = myDevCards && myDevCards.roadBuilding > 0 && !playedDevCard;
     const canPlayYoP = myDevCards && myDevCards.yearOfPlenty > 0 && !playedDevCard;
     const canPlayMonopoly = myDevCards && myDevCards.monopoly > 0 && !playedDevCard;
 
     return (
         <div className="ag-actionsheet">
-            <div className="ag-build-list">
-                {builds.map(b => {
-                    const short = shortfall(b.cost, res);
-                    const noPieces = b.piecesLeft <= 0;
-                    const affordable = !short && !noPieces;
-                    const active = boardMode === b.mode;
-                    const disabled = !affordable && !active;
-                    const reason = noPieces ? 'No pieces left' : short;
-                    return (
-                        <button
-                            key={b.mode}
-                            className={`ag-build-row${active ? ' ag-build-row--active' : ''}${disabled ? ' ag-build-row--disabled' : ''}`}
-                            disabled={disabled}
-                            onClick={() => !disabled && toggleMode(b.mode)}
-                        >
-                            <span className="ag-build-icon">{b.icon}</span>
-                            <span className="ag-build-main">
-                                <span className="ag-build-name">{b.name}</span>
-                                <span className="ag-build-cost">{costText(b.cost)} · {b.suffix}</span>
-                            </span>
-                            {affordable
-                                ? <span className="ag-build-tag">{active ? 'Cancel' : 'Build'}</span>
-                                : <span className="ag-build-tag ag-build-tag--muted">{reason}</span>}
+            {buildList}
+
+            {(canPlayRoadBuilding || canPlayYoP || canPlayMonopoly) && (
+                <div className="ag-action-grid" style={{ flexWrap: 'wrap', marginTop: 8 }}>
+                    {canPlayRoadBuilding && (
+                        <button className="ag-btn ag-btn--light" onClick={() => submit(new SACPlayRoadBuilding())}>
+                            🃏 Road Building
                         </button>
-                    );
-                })}
-
-                <div className="ag-action-grid">
-                    <button className="ag-btn ag-btn--light" disabled={!canBuyDevCard}
-                        onClick={() => submit(new SACBuyDevCard())}>
-                        🃏 Dev card
-                    </button>
-                    <button className="ag-btn ag-btn--light" onClick={() => setShowTradeModal(true)}>
-                        ⚖️ Trade
-                    </button>
+                    )}
+                    {canPlayYoP && (
+                        <button className="ag-btn ag-btn--light" onClick={() => setShowYopModal(true)}>
+                            🃏 Year of Plenty
+                        </button>
+                    )}
+                    {canPlayMonopoly && (
+                        <button className="ag-btn ag-btn--light" onClick={() => setShowMonopolyModal(true)}>
+                            🃏 Monopoly
+                        </button>
+                    )}
                 </div>
-
-                {(canPlayRoadBuilding || canPlayYoP || canPlayMonopoly) && (
-                    <div className="ag-action-grid" style={{ flexWrap: 'wrap' }}>
-                        {canPlayRoadBuilding && (
-                            <button className="ag-btn ag-btn--light" onClick={() => submit(new SACPlayRoadBuilding())}>
-                                🃏 Road Building
-                            </button>
-                        )}
-                        {canPlayYoP && (
-                            <button className="ag-btn ag-btn--light" onClick={() => setShowYopModal(true)}>
-                                🃏 Year of Plenty
-                            </button>
-                        )}
-                        {canPlayMonopoly && (
-                            <button className="ag-btn ag-btn--light" onClick={() => setShowMonopolyModal(true)}>
-                                🃏 Monopoly
-                            </button>
-                        )}
-                    </div>
-                )}
-            </div>
+            )}
 
             <button className="ag-btn ag-btn--success ag-btn--block" style={{ marginTop: 12, padding: '14px 0', fontSize: 15 }}
                 onClick={() => submit(new SACEndTurn())}>
@@ -317,33 +375,7 @@ export default function SettlementsAndCitiesActions({
             </Modal>
 
             {/* ── Maritime trade modal ── */}
-            <Modal show={showTradeModal} onHide={() => setShowTradeModal(false)}>
-                <Modal.Header closeButton><Modal.Title>Maritime Trade</Modal.Title></Modal.Header>
-                <Modal.Body>
-                    <Form.Group className="mb-2">
-                        <Form.Label>Offer (give)</Form.Label>
-                        <Form.Select value={tradeOffer} onChange={e => setTradeOffer(e.target.value as SAC_Resource)}>
-                            {RESOURCES.map(r => <option key={r} value={r}>{RESOURCE_EMOJI[r]} {r} (have: {res[r]})</option>)}
-                        </Form.Select>
-                    </Form.Group>
-                    <Form.Group>
-                        <Form.Label>Want (receive)</Form.Label>
-                        <Form.Select value={tradeWant} onChange={e => setTradeWant(e.target.value as SAC_Resource)}>
-                            {RESOURCES.map(r => <option key={r} value={r}>{RESOURCE_EMOJI[r]} {r}</option>)}
-                        </Form.Select>
-                    </Form.Group>
-                </Modal.Body>
-                <Modal.Footer>
-                    <Button variant="secondary" onClick={() => setShowTradeModal(false)}>Cancel</Button>
-                    <Button variant="primary" onClick={() => {
-                        const cmd = new SACMaritimeTrade();
-                        cmd.offerResource = tradeOffer;
-                        cmd.wantResource = tradeWant;
-                        submit(cmd);
-                        setShowTradeModal(false);
-                    }}>Trade</Button>
-                </Modal.Footer>
-            </Modal>
+            {tradeModal}
         </div>
     );
 }

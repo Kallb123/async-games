@@ -9,12 +9,13 @@
 // below mirror the design doc's compatibility matrix (§8.6) and player-count
 // summary (§8.7).
 //
-// TODO(expansions): only the selection framework is implemented here —
+// TODO(expansions): this module holds the selection framework —
 // compatibility/player-count validation, persistence, and the victory-point
-// target. The deep per-expansion mechanics (ships & sea maps, commodities &
-// knights combat, the Traders & Raiders scenarios, the Explorers & Pirates
-// campaign, and the 5–6 Special Build Phase) are not yet built. Outstanding
-// work is tracked in docs/games/settlements-and-cities.md §9.
+// target. The 5–6 Player Extension's Special Build Phase is now fully
+// implemented (see GameLogic.ts + docs §9.1). The remaining deep per-expansion
+// mechanics (ships & sea maps, commodities & knights combat, the Traders &
+// Raiders scenarios, and the Explorers & Pirates campaign) are not yet built.
+// Outstanding work is tracked in docs/games/settlements-and-cities.md §9.
 
 export type SACExpansionId =
     | 'seasAndSailors'

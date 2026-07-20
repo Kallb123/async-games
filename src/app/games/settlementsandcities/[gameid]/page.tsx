@@ -261,6 +261,10 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             subtitle = currentUserWon ? '🏆 You won!' : `${getWinnerDisplayName()} won`;
         } else if (gs.phase === 'setup') {
             subtitle = <><b>Setup</b> · step {gs.setupStep + 1} · {isMyTurn ? 'your move' : `${currentTurnUsername}'s move`}</>;
+        } else if (gs.specialBuildActive) {
+            subtitle = isMyTurn
+                ? <><span className="ag-hi">⚡ Special Build</span> · build or trade, then pass</>
+                : <>⚡ Special Build · {currentTurnUsername}&apos;s move</>;
         } else if (isMyTurn) {
             subtitle = gs.hasRolled
                 ? <>You rolled <b>{gs.lastRoll}</b> · build or end turn</>
