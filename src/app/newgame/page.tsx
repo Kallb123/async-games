@@ -3,10 +3,10 @@ import { useUser } from "@clerk/nextjs";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { GAME_META, COMING_SOON, GameCategory } from "@/utils/ui/games";
+import { GAME_META, COMING_SOON, GAME_CATEGORIES, GameCategory } from "@/utils/ui/games";
 import GameThumb, { accentVar } from "@/components/ui/GameThumb";
 
-const FILTERS: ("All" | GameCategory)[] = ["All", "Dice", "Strategy", "Word"];
+const FILTERS: ("All" | GameCategory)[] = ["All", ...GAME_CATEGORIES];
 
 export default function NewGame() {
   const pathName = usePathname();
