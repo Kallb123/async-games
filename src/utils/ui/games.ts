@@ -1,7 +1,12 @@
 // Shared presentation metadata for each game, keyed by its url slug.
 // Keeps the library, home cards and setup headers visually consistent.
 
-export type GameCategory = "Dice" | "Strategy" | "Word" | "Puzzle";
+// The canonical, ordered list of game categories. This is the single source
+// of truth — the library's filter chips and the GameCategory type both derive
+// from it, so adding a category here surfaces it everywhere.
+export const GAME_CATEGORIES = ["Dice", "Strategy", "Word", "Puzzle"] as const;
+
+export type GameCategory = (typeof GAME_CATEGORIES)[number];
 
 export type ThemeAccent = "terracotta" | "green" | "gold" | "purple";
 
