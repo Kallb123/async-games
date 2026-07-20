@@ -29,6 +29,8 @@
 
   // Install dependencies and scaffold local env after the container is created.
   "postCreateCommand": "bash .devcontainer/post-create.sh",
+  // Start the Next.js dev server in the background every time the container starts.
+  "postStartCommand": "bash .devcontainer/post-start.sh",
 
   "customizations": {
     "vscode": {

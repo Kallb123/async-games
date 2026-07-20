@@ -12,7 +12,8 @@ services:
       context: ..
       dockerfile: .devcontainer/Dockerfile
     # Keep the container alive; VS Code / the dev container CLI runs commands
-    # inside it. The actual dev server is started manually with `npm run dev`.
+    # inside it. The dev server itself is started by postStartCommand
+    # (.devcontainer/post-start.sh) once the container is up.
     command: sleep infinity
     volumes:
       - ..:/workspaces/async-games:cached
