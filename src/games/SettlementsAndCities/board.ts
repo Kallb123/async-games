@@ -1,3 +1,5 @@
+import type { SACExpansions } from './expansions';
+
 // ─── Resource / Terrain / Card types ──────────────────────────────────────────
 
 export type SAC_Resource = 'lumber' | 'wool' | 'grain' | 'brick' | 'ore';
@@ -76,6 +78,10 @@ export interface ISACSpecificGameState {
     devCardDeck: SAC_DevCard[];
     pendingRoadBuilding: number;
     playedDevCard: boolean;
+    // Which optional expansions are active for this game (design doc §8).
+    expansions: SACExpansions;
+    // VP needed to win. Base game is 10; expansions can raise it (§7, §8).
+    victoryTarget: number;
 }
 
 // ─── Hex positions (axial coordinates) ───────────────────────────────────────

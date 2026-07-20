@@ -25,7 +25,7 @@ Currently implemented games:
 |---|---|---|---|
 | Dice Cities | `dicecities` | Dice | 2–4 |
 | Smartthink (Mastermind) | `smartthink` | Word/logic | 2–8 |
-| Settlements & Cities (Catan-like) | `settlementsandcities` | Strategy | 3–4 |
+| Settlements & Cities (Catan-like) | `settlementsandcities` | Strategy | 3–4 (2–6 with expansions) |
 | Snakes & Ladders | `snakesandladders` | Dice | 2–6 |
 
 ## 2. Tech stack
