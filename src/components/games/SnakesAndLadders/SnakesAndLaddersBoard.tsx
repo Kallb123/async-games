@@ -21,8 +21,8 @@ export default function SnakesAndLaddersBoard({ playerStates, colorFor, myUserId
 
     const cellClass = (square: number): string => {
         if (square === 100) return "ag-sl-cell ag-sl-cell--finish";
-        if (SNAKES_AND_LADDERS_LADDERS[square] !== undefined) return "ag-sl-cell ag-sl-cell--ladder";
-        if (SNAKES_AND_LADDERS_SNAKES[square] !== undefined) return "ag-sl-cell ag-sl-cell--snake";
+        if (SNAKES_AND_LADDERS_LADDERS[square] !== undefined) return "ag-sl-cell ag-sl-cell--ladder ag-sl-cell--marker";
+        if (SNAKES_AND_LADDERS_SNAKES[square] !== undefined) return "ag-sl-cell ag-sl-cell--snake ag-sl-cell--marker";
         return "ag-sl-cell";
     };
 
@@ -30,6 +30,13 @@ export default function SnakesAndLaddersBoard({ playerStates, colorFor, myUserId
         if (square === 100) return "🏁";
         if (SNAKES_AND_LADDERS_LADDERS[square] !== undefined) return "🪜";
         if (SNAKES_AND_LADDERS_SNAKES[square] !== undefined) return "🐍";
+        return null;
+    };
+
+    // Where a ladder climbs to / a snake slides down to, shown on the tile.
+    const cellDest = (square: number): number | null => {
+        if (SNAKES_AND_LADDERS_LADDERS[square] !== undefined) return SNAKES_AND_LADDERS_LADDERS[square];
+        if (SNAKES_AND_LADDERS_SNAKES[square] !== undefined) return SNAKES_AND_LADDERS_SNAKES[square];
         return null;
     };
 
@@ -42,10 +49,12 @@ export default function SnakesAndLaddersBoard({ playerStates, colorFor, myUserId
         for (let col = 0; col < 10; col++) {
             const square = row % 2 === 0 ? row * 10 + col + 1 : row * 10 + (9 - col) + 1;
             const icon = cellIcon(square);
+            const dest = cellDest(square);
             const here = tokensOnSquare(square);
             cells.push(
                 <div key={square} className={cellClass(square)}>
                     {icon ? <span className="ag-sl-cell-icon">{icon}</span> : <span className="ag-sl-cell-num">{square}</span>}
+                    {dest !== null && <span className="ag-sl-cell-dest">→{dest}</span>}
                     {here.length > 0 && (
                         <span className="ag-sl-tokens">
                             {here.map(p => (

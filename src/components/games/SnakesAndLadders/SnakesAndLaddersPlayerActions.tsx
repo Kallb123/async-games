@@ -1,7 +1,7 @@
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import DieFace from "@/components/ui/DieFace";
 import { ISnakesAndLaddersDiceRollOutcome, IGameCommand, SnakesAndLaddersRequestDiceRoll } from "@/utils/apiModels/GameLogic";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface SnakesAndLaddersPlayerActionsProps {
     hasRolled: boolean;
@@ -98,8 +98,25 @@ export default function SnakesAndLaddersPlayerActions({ hasRolled, myPosition = 
 
 function RollResultScreen({ result, onEndTurn }: { result: RollResult; onEndTurn: () => void }) {
     const { roll, from, landing, newPosition, verdict } = result;
-    const stageClass =
-        verdict === 'snake' ? 'ag-sl-roll-stage ag-sl-roll-stage--snake'
+
+    // Tumble the die for a beat, cycling random faces, then settle on the real
+    // roll and reveal the outcome — so the async payoff actually animates.
+    const [rolling, setRolling] = useState(true);
+    const [face, setFace] = useState(roll);
+    useEffect(() => {
+        setRolling(true);
+        const cycle = setInterval(() => setFace(1 + Math.floor(Math.random() * 6)), 90);
+        const settle = setTimeout(() => {
+            clearInterval(cycle);
+            setFace(roll);
+            setRolling(false);
+        }, 950);
+        return () => { clearInterval(cycle); clearTimeout(settle); };
+    }, [result, roll]);
+
+    const stageClass = rolling
+        ? 'ag-sl-roll-stage ag-sl-roll-stage--plain'
+        : verdict === 'snake' ? 'ag-sl-roll-stage ag-sl-roll-stage--snake'
             : verdict === 'ladder' || verdict === 'win' ? 'ag-sl-roll-stage ag-sl-roll-stage--ladder'
                 : 'ag-sl-roll-stage ag-sl-roll-stage--plain';
 
@@ -126,23 +143,32 @@ function RollResultScreen({ result, onEndTurn }: { result: RollResult; onEndTurn
 
             <div className={stageClass}>
                 <div className="ag-sl-roll-die">
-                    <DieFace value={roll} />
-                    <div className="ag-sl-roll-num">{roll}</div>
+                    <span className={`ag-sl-die-wrap${rolling ? ' ag-sl-die-wrap--rolling' : ''}`}>
+                        <DieFace value={face} />
+                    </span>
+                    <div className="ag-sl-roll-num">{face}</div>
                 </div>
-                <div className="ag-sl-move-pill">
-                    <span className="ag-sl-move-from">{from}</span>
-                    <span>→</span>
-                    <span>{pillTo}</span>
-                </div>
-                <div className="ag-sl-verdict-icon">{VERDICT_ICON[verdict]}</div>
-                <div>
-                    <div className="ag-sl-verdict-title">{VERDICT_TITLE[verdict]}</div>
-                    <div className="ag-sl-verdict-sub">{sub}</div>
-                </div>
-                <div className="ag-sl-newsquare">
-                    <span className="ag-sl-newsquare-label">New square</span>
-                    <span className="ag-sl-newsquare-num">{newPosition}</span>
-                </div>
+
+                {rolling ? (
+                    <div className="ag-sl-verdict-title">Rolling…</div>
+                ) : (
+                    <>
+                        <div className="ag-sl-move-pill ag-sl-reveal">
+                            <span className="ag-sl-move-from">{from}</span>
+                            <span>→</span>
+                            <span>{pillTo}</span>
+                        </div>
+                        <div className="ag-sl-verdict-icon ag-sl-reveal">{VERDICT_ICON[verdict]}</div>
+                        <div className="ag-sl-reveal">
+                            <div className="ag-sl-verdict-title">{VERDICT_TITLE[verdict]}</div>
+                            <div className="ag-sl-verdict-sub">{sub}</div>
+                        </div>
+                        <div className="ag-sl-newsquare ag-sl-reveal">
+                            <span className="ag-sl-newsquare-label">New square</span>
+                            <span className="ag-sl-newsquare-num">{newPosition}</span>
+                        </div>
+                    </>
+                )}
             </div>
 
             <div className="ag-sl-roll-sheet">
