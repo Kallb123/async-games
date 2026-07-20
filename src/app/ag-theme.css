@@ -912,3 +912,298 @@ body {
     box-shadow: var(--ag-shadow-lift);
 }
 .ag-game-result h2 { font: 800 20px var(--ag-font); margin: 0; }
+
+/* ==========================================================================
+   Snakes & Ladders — the walnut 100-square board, tokens and roll-result sheet
+   ========================================================================== */
+
+/* Warm "table felt" the board sits on. */
+.ag-sl-area {
+    padding: 16px 14px;
+    background: radial-gradient(circle at 50% 25%, oklch(0.78 0.07 60), oklch(0.68 0.09 55));
+}
+.ag-sl-frame {
+    position: relative;
+    background: oklch(0.42 0.06 45);
+    border-radius: 16px;
+    padding: 7px;
+    box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.13), 0 4px 0 oklch(0.34 0.05 45);
+}
+.ag-sl-grid {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 2px;
+}
+.ag-sl-cell {
+    position: relative;
+    aspect-ratio: 1;
+    background: #fff8ec;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+.ag-sl-cell--ladder { background: oklch(0.9 0.06 145); }
+.ag-sl-cell--snake { background: oklch(0.88 0.07 30); }
+.ag-sl-cell--finish { background: oklch(0.92 0.07 145); }
+.ag-sl-cell-num { font: 700 8px var(--ag-font); color: oklch(0.5 0.03 60); }
+.ag-sl-cell-icon { font-size: 11px; line-height: 1; }
+/* Snake/ladder tiles stack the icon over the square it leads to. */
+.ag-sl-cell--marker { flex-direction: column; gap: 0; line-height: 1; }
+.ag-sl-cell--marker .ag-sl-cell-icon { font-size: 10px; }
+.ag-sl-cell-dest { font: 800 7px var(--ag-font); line-height: 1; margin-top: 1px; }
+.ag-sl-cell--ladder .ag-sl-cell-dest { color: oklch(0.4 0.1 150); }
+.ag-sl-cell--snake .ag-sl-cell-dest { color: oklch(0.45 0.14 30); }
+/* Player tokens clustered in the top-right of their square. */
+.ag-sl-tokens {
+    position: absolute;
+    top: 1.5px;
+    right: 1.5px;
+    display: flex;
+    flex-wrap: wrap-reverse;
+    justify-content: flex-end;
+    gap: 1px;
+    max-width: 70%;
+}
+.ag-sl-token {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    outline: 1.5px solid #fff;
+}
+.ag-sl-legend {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    margin-top: 11px;
+    flex-wrap: wrap;
+    font: 700 10px var(--ag-font);
+    color: oklch(0.32 0.05 45);
+}
+.ag-sl-legend span { display: flex; align-items: center; gap: 4px; }
+.ag-sl-legend-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+/* ---- Die face (shared DieFace primitive) ---- */
+.ag-die {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    padding: 11px;
+    background: var(--ag-surface);
+    border-radius: 16px;
+    box-shadow: 0 6px 0 oklch(0.75 0.05 60), 0 8px 14px rgba(0, 0, 0, 0.2);
+}
+.ag-die-pip { width: 9px; height: 9px; border-radius: 50%; align-self: center; justify-self: center; }
+.ag-die-pip--on { background: var(--ag-dark); }
+
+/* The die tumbles while the roll is resolving, then settles on its face. */
+.ag-sl-die-wrap { display: inline-flex; }
+.ag-sl-die-wrap--rolling { animation: ag-sl-tumble 0.32s ease-in-out infinite; }
+@keyframes ag-sl-tumble {
+    0% { transform: rotate(-16deg) scale(0.92); }
+    25% { transform: rotate(12deg) scale(1.06); }
+    50% { transform: rotate(-9deg) scale(0.96); }
+    75% { transform: rotate(14deg) scale(1.04); }
+    100% { transform: rotate(0) scale(1); }
+}
+/* The move / verdict / new-square reveal fades in once the die settles. */
+.ag-sl-reveal { animation: ag-sl-fade-in 0.35s ease both; }
+@keyframes ag-sl-fade-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+}
+
+/* ---- Roll-result screen (the async payoff) ---- */
+.ag-sl-roll {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    background: var(--ag-surface);
+    /* Full-bleed to match the in-game shell (which drops its max-width when a
+       game is showing). Centring the overlay at a max-width instead leaves a
+       sliver of the app background at the edges on viewports just over 480px. */
+    width: 100%;
+}
+.ag-sl-roll-stage {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 24px 22px;
+    text-align: center;
+}
+.ag-sl-roll-stage--snake { background: radial-gradient(circle at 50% 30%, oklch(0.78 0.09 30), oklch(0.62 0.12 28)); }
+.ag-sl-roll-stage--ladder { background: radial-gradient(circle at 50% 30%, oklch(0.82 0.09 150), oklch(0.6 0.11 150)); }
+.ag-sl-roll-stage--plain { background: radial-gradient(circle at 50% 30%, oklch(0.8 0.07 60), oklch(0.68 0.09 55)); }
+.ag-sl-roll-die { display: flex; align-items: center; gap: 14px; }
+.ag-sl-roll-num { font: 800 40px var(--ag-font); color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.19); }
+.ag-sl-move-pill {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.17);
+    border-radius: 99px;
+    padding: 8px 16px;
+    color: #fff;
+    font: 800 14px var(--ag-font);
+}
+.ag-sl-move-pill .ag-sl-move-from { opacity: 0.85; }
+.ag-sl-verdict-icon {
+    width: 96px;
+    height: 96px;
+    border-radius: 26px;
+    background: var(--ag-surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 52px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    transform: rotate(-4deg);
+}
+.ag-sl-verdict-title { font: 800 27px/1.1 var(--ag-font); color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.19); }
+.ag-sl-verdict-sub { font: 600 13px/1.5 var(--ag-font); color: #fff; opacity: 0.92; margin-top: 5px; max-width: 260px; }
+.ag-sl-verdict-sub b { font-weight: 800; }
+.ag-sl-newsquare {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--ag-dark);
+    border-radius: 14px;
+    padding: 10px 16px;
+    color: #fff;
+}
+.ag-sl-newsquare-label { font: 600 11px var(--ag-font); opacity: 0.8; }
+.ag-sl-newsquare-num { font: 800 20px var(--ag-font); color: var(--ag-gold); }
+.ag-sl-roll-sheet {
+    background: var(--ag-surface);
+    border-radius: 22px 22px 0 0;
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.12);
+    padding: 16px 16px 18px;
+}
+.ag-sl-roll-grip { width: 38px; height: 4px; border-radius: 99px; background: var(--ag-line); margin: 0 auto 14px; }
+.ag-sl-roll-note {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--ag-surface-2);
+    border-radius: 12px;
+    padding: 10px 13px;
+    margin-bottom: 12px;
+    font: 600 11.5px/1.4 var(--ag-font);
+    color: var(--ag-ink-soft);
+}
+.ag-sl-roll-foot { font: 500 10.5px var(--ag-font); color: var(--ag-ink-softer); text-align: center; margin-top: 7px; }
+
+/* ==========================================================================
+   Smartthink — the deduction board, feedback pegs and peg palette
+   ========================================================================== */
+
+.ag-st-area {
+    padding: 16px 14px;
+    background: radial-gradient(circle at 50% 25%, oklch(0.72 0.05 155), oklch(0.58 0.06 158));
+}
+.ag-st-frame {
+    background: oklch(0.5 0.05 158);
+    border-radius: 18px;
+    padding: 14px 12px;
+    box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.13), 0 4px 0 oklch(0.42 0.05 158);
+}
+.ag-st-frame-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    gap: 8px;
+}
+.ag-st-secret {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    background: var(--ag-dark);
+    border-radius: 12px;
+    padding: 6px 9px;
+}
+.ag-st-secret-label { font: 800 10px var(--ag-font); color: var(--ag-gold); letter-spacing: 0.04em; }
+.ag-st-secret-pegs { display: flex; gap: 4px; }
+.ag-st-secret-peg {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font: 800 11px var(--ag-font);
+    color: #fff;
+    background: repeating-linear-gradient(45deg, #5b6770, #5b6770 3px, #4a555d 3px, #4a555d 6px);
+}
+.ag-st-progress { font: 700 10px var(--ag-font); color: oklch(0.85 0.03 90); white-space: nowrap; }
+.ag-st-rows { display: flex; flex-direction: column; gap: 8px; }
+.ag-st-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: oklch(0.56 0.05 158);
+    border-radius: 11px;
+    padding: 6px 8px;
+}
+.ag-st-row--current { background: oklch(0.62 0.07 158); box-shadow: 0 0 0 2px var(--ag-gold); }
+.ag-st-row-num { width: 16px; font: 800 10px var(--ag-font); color: oklch(0.9 0.03 90); text-align: center; }
+.ag-st-guess { display: flex; gap: 6px; flex: 1; }
+.ag-st-peg {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.2), inset 0 2px 2px rgba(255, 255, 255, 0.33);
+}
+.ag-st-peg--empty { background: oklch(0.42 0.04 158); box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2); }
+.ag-st-peg--slot { cursor: pointer; }
+.ag-st-peg--next { box-shadow: inset 0 0 0 2px var(--ag-gold); }
+.ag-st-row-hint { font: 700 9px var(--ag-font); color: oklch(0.9 0.03 90); width: 34px; text-align: center; line-height: 1.15; }
+.ag-st-feedback {
+    display: grid;
+    grid-template-columns: repeat(2, 8px);
+    grid-template-rows: repeat(2, 8px);
+    gap: 3px;
+    padding: 4px;
+    background: oklch(0.42 0.05 158);
+    border-radius: 6px;
+    flex: none;
+}
+.ag-st-fb { width: 8px; height: 8px; border-radius: 50%; }
+.ag-st-fb--black { background: oklch(0.2 0.02 40); }
+.ag-st-fb--white { background: transparent; box-shadow: inset 0 0 0 1.5px oklch(0.92 0.02 90); }
+.ag-st-fb--none { background: oklch(0.75 0.04 158); }
+.ag-st-legend {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    margin-top: 12px;
+    font: 600 9.5px var(--ag-font);
+    color: oklch(0.9 0.02 90);
+}
+.ag-st-legend span { display: flex; align-items: center; gap: 4px; }
+.ag-st-legend-dot { width: 9px; height: 9px; border-radius: 50%; }
+.ag-st-legend-dot--white { box-shadow: inset 0 0 0 1.5px oklch(0.92 0.02 90); }
+
+/* ---- Peg palette (the "your hand" slot for Smartthink) ---- */
+.ag-st-palette-wrap { background: var(--ag-surface); border-top: 1px solid var(--ag-line); padding: 12px 16px 8px; }
+.ag-st-palette-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 9px; }
+.ag-st-palette-note { font: 600 10.5px var(--ag-font); color: var(--ag-ink-soft); }
+.ag-st-palette { display: flex; gap: 9px; justify-content: space-between; }
+.ag-st-palette-peg {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    padding: 0;
+    border: none;
+    cursor: pointer;
+    box-shadow: inset 0 -3px 4px rgba(0, 0, 0, 0.2), inset 0 3px 3px rgba(255, 255, 255, 0.4), 0 1px 2px rgba(0, 0, 0, 0.13);
+}
+.ag-st-palette-peg:disabled { cursor: not-allowed; opacity: 0.5; }
+

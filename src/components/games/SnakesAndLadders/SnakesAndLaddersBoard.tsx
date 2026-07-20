@@ -2,107 +2,85 @@ import { SNAKES_AND_LADDERS_LADDERS, SNAKES_AND_LADDERS_SNAKES } from "@/utils/a
 import { ISnakesAndLaddersPlayerStateResponse } from "@/games/SnakesAndLadders/apiModels";
 
 interface SnakesAndLaddersBoardProps {
-    playerStates: { [key: string]: ISnakesAndLaddersPlayerStateResponse }
+    playerStates: { [key: string]: ISnakesAndLaddersPlayerStateResponse };
+    /** Colour per player, keyed by userId — shared with the scoreboard. */
+    colorFor: (userId: string) => string;
+    /** The viewer's userId, so their token/legend can be highlighted. */
+    myUserId?: string;
 }
 
-const PLAYER_COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c"];
-
-export default function SnakesAndLaddersBoard({ playerStates }: SnakesAndLaddersBoardProps) {
+/**
+ * The 100-square walnut board: a boustrophedon 10×10 grid (square 1 bottom-left,
+ * 100 top-left) with ladder/snake markers and each player's token sitting on
+ * their current square. Purely presentational — position data comes from state.
+ */
+export default function SnakesAndLaddersBoard({ playerStates, colorFor, myUserId }: SnakesAndLaddersBoardProps) {
     const players = Object.values(playerStates);
 
-    const getPlayersOnSquare = (square: number) => {
-        return players.filter(p => p.position === square);
+    const tokensOnSquare = (square: number) => players.filter(p => p.position === square);
+
+    const cellClass = (square: number): string => {
+        if (square === 100) return "ag-sl-cell ag-sl-cell--finish";
+        if (SNAKES_AND_LADDERS_LADDERS[square] !== undefined) return "ag-sl-cell ag-sl-cell--ladder ag-sl-cell--marker";
+        if (SNAKES_AND_LADDERS_SNAKES[square] !== undefined) return "ag-sl-cell ag-sl-cell--snake ag-sl-cell--marker";
+        return "ag-sl-cell";
     };
 
-    const getCellStyle = (square: number): React.CSSProperties => {
-        if (SNAKES_AND_LADDERS_LADDERS[square] !== undefined) {
-            return { backgroundColor: "#d5f5e3", border: "2px solid #27ae60" };
-        }
-        if (SNAKES_AND_LADDERS_SNAKES[square] !== undefined) {
-            return { backgroundColor: "#fadbd8", border: "2px solid #e74c3c" };
-        }
-        return { border: "1px solid #bdc3c7" };
+    const cellIcon = (square: number): string | null => {
+        if (square === 100) return "🏁";
+        if (SNAKES_AND_LADDERS_LADDERS[square] !== undefined) return "🪜";
+        if (SNAKES_AND_LADDERS_SNAKES[square] !== undefined) return "🐍";
+        return null;
     };
 
-    const getCellLabel = (square: number): string => {
-        if (SNAKES_AND_LADDERS_LADDERS[square] !== undefined) {
-            return `🪜→${SNAKES_AND_LADDERS_LADDERS[square]}`;
-        }
-        if (SNAKES_AND_LADDERS_SNAKES[square] !== undefined) {
-            return `🐍→${SNAKES_AND_LADDERS_SNAKES[square]}`;
-        }
-        return "";
+    // Where a ladder climbs to / a snake slides down to, shown on the tile.
+    const cellDest = (square: number): number | null => {
+        if (SNAKES_AND_LADDERS_LADDERS[square] !== undefined) return SNAKES_AND_LADDERS_LADDERS[square];
+        if (SNAKES_AND_LADDERS_SNAKES[square] !== undefined) return SNAKES_AND_LADDERS_SNAKES[square];
+        return null;
     };
 
-    const renderBoard = () => {
-        const rows = [];
-        for (let row = 9; row >= 0; row--) {
-            const cells = [];
-            for (let col = 0; col < 10; col++) {
-                // Alternate direction of numbering per row (snake pattern)
-                const squareNumber = row % 2 === 0
-                    ? row * 10 + col + 1
-                    : row * 10 + (9 - col) + 1;
+    const me = myUserId ? players.find(p => p.userId === myUserId) : undefined;
 
-                const playersHere = getPlayersOnSquare(squareNumber);
-
-                cells.push(
-                    <td key={squareNumber} style={{
-                        width: "9%",
-                        height: "60px",
-                        textAlign: "center",
-                        verticalAlign: "middle",
-                        fontSize: "0.7rem",
-                        padding: "2px",
-                        ...getCellStyle(squareNumber)
-                    }}>
-                        <div style={{ fontWeight: "bold", fontSize: "0.75rem" }}>{squareNumber}</div>
-                        <div style={{ fontSize: "0.65rem", color: "#555" }}>{getCellLabel(squareNumber)}</div>
-                        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "2px" }}>
-                            {playersHere.map((p, i) => (
-                                <span
-                                    key={p.userId}
-                                    title={p.username}
-                                    style={{
-                                        display: "inline-block",
-                                        width: "14px",
-                                        height: "14px",
-                                        borderRadius: "50%",
-                                        backgroundColor: PLAYER_COLORS[players.indexOf(p) % PLAYER_COLORS.length],
-                                        border: "1px solid #333"
-                                    }}
-                                />
+    const cells = [];
+    // Render the top row (91–100) first down to the bottom row (1–10); numbering
+    // snakes back and forth so consecutive squares stay adjacent.
+    for (let row = 9; row >= 0; row--) {
+        for (let col = 0; col < 10; col++) {
+            const square = row % 2 === 0 ? row * 10 + col + 1 : row * 10 + (9 - col) + 1;
+            const icon = cellIcon(square);
+            const dest = cellDest(square);
+            const here = tokensOnSquare(square);
+            cells.push(
+                <div key={square} className={cellClass(square)}>
+                    {icon ? <span className="ag-sl-cell-icon">{icon}</span> : <span className="ag-sl-cell-num">{square}</span>}
+                    {dest !== null && <span className="ag-sl-cell-dest">→{dest}</span>}
+                    {here.length > 0 && (
+                        <span className="ag-sl-tokens">
+                            {here.map(p => (
+                                <span key={p.userId} className="ag-sl-token" style={{ background: colorFor(p.userId) }} title={p.username} />
                             ))}
-                        </div>
-                    </td>
-                );
-            }
-            rows.push(<tr key={row}>{cells}</tr>);
+                        </span>
+                    )}
+                </div>
+            );
         }
-        return rows;
-    };
+    }
 
     return (
-        <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-                <tbody>
-                    {renderBoard()}
-                </tbody>
-            </table>
-            <div style={{ marginTop: "8px", display: "flex", gap: "16px", flexWrap: "wrap" }}>
-                {players.map((p, i) => (
-                    <span key={p.userId} style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "0.85rem" }}>
-                        <span style={{
-                            display: "inline-block",
-                            width: "14px",
-                            height: "14px",
-                            borderRadius: "50%",
-                            backgroundColor: PLAYER_COLORS[i % PLAYER_COLORS.length],
-                            border: "1px solid #333"
-                        }} />
-                        {p.username} (sq. {p.position})
+        <div className="ag-sl-area">
+            <div className="ag-sl-frame">
+                <div className="ag-sl-grid">{cells}</div>
+            </div>
+            <div className="ag-sl-legend">
+                <span>🪜 climb up</span>
+                <span>🐍 slide down</span>
+                {me && (
+                    <span>
+                        <span className="ag-sl-legend-dot" style={{ background: colorFor(me.userId) }} />
+                        you · sq {me.position}
                     </span>
-                ))}
+                )}
             </div>
         </div>
     );

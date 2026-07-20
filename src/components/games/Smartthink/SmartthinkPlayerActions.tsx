@@ -1,90 +1,98 @@
-import { useMemo, useState } from "react";
-import { Button } from "react-bootstrap";
+import { useState } from "react";
 import { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
 import { IGameCommand, SmartthinkSetSecretCode, SmartthinkSubmitGuess } from "@/utils/apiModels/GameLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
-
-const COLOURS = [
-    { name: 'Red', value: 0, hex: '#e74c3c' },
-    { name: 'Blue', value: 1, hex: '#3498db' },
-    { name: 'Green', value: 2, hex: '#2ecc71' },
-    { name: 'Yellow', value: 3, hex: '#f1c40f' },
-    { name: 'Black', value: 4, hex: '#34495e' },
-    { name: 'White', value: 5, hex: '#ecf0f1' }
-];
+import { SMARTTHINK_CODE_LENGTH, SMARTTHINK_PEGS } from "@/utils/ui/smartthink";
 
 interface SmartthinkPlayerActionsProps {
     gameState: ISmartthinkGameStateResponse;
     isCodeSetter: boolean;
     isCodeBreaker: boolean;
+    /** The in-progress code/guess, one peg value per slot (or null). */
+    currentGuess: (number | null)[];
+    setCurrentGuess: (next: (number | null)[]) => void;
     submitCommand: (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => Promise<void>;
 }
 
-export default function SmartthinkPlayerActions({ gameState, isCodeSetter, isCodeBreaker, submitCommand }: SmartthinkPlayerActionsProps) {
-    const [selectedPegs, setSelectedPegs] = useState<number[]>([0, 0, 0, 0]);
+export default function SmartthinkPlayerActions({
+    gameState,
+    isCodeSetter,
+    isCodeBreaker,
+    currentGuess,
+    setCurrentGuess,
+    submitCommand,
+}: SmartthinkPlayerActionsProps) {
     const [submitDisabled, setSubmitDisabled] = useState(false);
 
-    const role = useMemo(() => {
-        if (!gameState.secretCodeSet && isCodeSetter) return 'Set secret code';
-        if (gameState.secretCodeSet && isCodeBreaker) return 'Submit guess';
-        return 'Waiting';
-    }, [gameState.secretCodeSet, isCodeSetter, isCodeBreaker]);
+    const settingSecret = !gameState.secretCodeSet && isCodeSetter;
+    const guessing = gameState.secretCodeSet && isCodeBreaker;
+    if (!settingSecret && !guessing) return null;
 
-    const handleSelectPeg = (index: number, value: number) => {
-        const next = [...selectedPegs];
-        next[index] = value;
-        setSelectedPegs(next);
+    const placePeg = (value: number) => {
+        const next = [...currentGuess];
+        const slot = next.findIndex(v => v === null || v === undefined);
+        if (slot === -1) return; // all filled — Clear first
+        next[slot] = value;
+        setCurrentGuess(next);
     };
 
-    const handleSubmit = async () => {
-        if (submitDisabled) return;
-        if (!gameState.secretCodeSet && !isCodeSetter) return;
-        if (gameState.secretCodeSet && !isCodeBreaker) return;
+    const clear = () => setCurrentGuess(Array(SMARTTHINK_CODE_LENGTH).fill(null));
 
-        const command = gameState.secretCodeSet ? new SmartthinkSubmitGuess() : new SmartthinkSetSecretCode();
-        if (gameState.secretCodeSet) {
-            (command as SmartthinkSubmitGuess).guess = [...selectedPegs];
-        } else {
-            (command as SmartthinkSetSecretCode).secretCode = [...selectedPegs];
-        }
+    const filled = currentGuess.every(v => v !== null && v !== undefined);
+
+    const handleSubmit = async () => {
+        if (submitDisabled || !filled) return;
+        const code = currentGuess.map(v => v as number);
+        const command = settingSecret ? new SmartthinkSetSecretCode() : new SmartthinkSubmitGuess();
+        if (settingSecret) (command as SmartthinkSetSecretCode).secretCode = code;
+        else (command as SmartthinkSubmitGuess).guess = code;
 
         setSubmitDisabled(true);
         await submitCommand(command, () => {
             setSubmitDisabled(false);
+            clear();
         });
     };
 
     return (
-        <div style={{ marginTop: '16px' }}>
-            <h3>{role}</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(48px, 1fr))', gap: '8px', marginBottom: '16px' }}>
-                {selectedPegs.map((selected, index) => (
-                    <div key={index} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                        <div style={{ width: '42px', height: '42px', borderRadius: '50%', backgroundColor: COLOURS[selected].hex, border: '2px solid #333', marginBottom: '8px' }} />
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', justifyContent: 'center' }}>
-                            {COLOURS.map((colour) => (
-                                <button
-                                    key={colour.value}
-                                    type="button"
-                                    onClick={() => handleSelectPeg(index, colour.value)}
-                                    style={{
-                                        width: '18px',
-                                        height: '18px',
-                                        borderRadius: '50%',
-                                        border: selected === colour.value ? '2px solid #000' : '1px solid #555',
-                                        backgroundColor: colour.hex,
-                                        cursor: 'pointer'
-                                    }}
-                                    aria-label={`${colour.name} peg for position ${index + 1}`}
-                                />
-                            ))}
-                        </div>
-                    </div>
-                ))}
+        <>
+            <div className="ag-st-palette-wrap">
+                <div className="ag-st-palette-head">
+                    <span className="ag-hand-title">{settingSecret ? 'Choose your code' : 'Peg palette'}</span>
+                    <span className="ag-st-palette-note">tap to place · {SMARTTHINK_PEGS.length} colours</span>
+                </div>
+                <div className="ag-st-palette">
+                    {SMARTTHINK_PEGS.map((peg, value) => (
+                        <button
+                            key={value}
+                            type="button"
+                            className="ag-st-palette-peg"
+                            style={{ background: peg.hex }}
+                            onClick={() => placePeg(value)}
+                            disabled={filled}
+                            aria-label={`Place ${peg.name} peg`}
+                        />
+                    ))}
+                </div>
             </div>
-            <Button onClick={handleSubmit} disabled={submitDisabled || role === 'Waiting'}>
-                {gameState.secretCodeSet ? 'Submit Guess' : 'Set Secret Code'}
-            </Button>
-        </div>
+
+            <div className="ag-actionsheet">
+                {settingSecret && (
+                    <p className="ag-action-hint" style={{ marginTop: 0, marginBottom: 8 }}>
+                        Pick {SMARTTHINK_CODE_LENGTH} pegs — only you will see it. Your opponent tries to crack it.
+                    </p>
+                )}
+                <div className="ag-action-grid">
+                    <button
+                        className={`ag-btn ag-btn--block ${settingSecret ? 'ag-btn--success' : 'ag-btn--primary ag-btn--roll'}`}
+                        onClick={handleSubmit}
+                        disabled={submitDisabled || !filled}
+                    >
+                        {settingSecret ? '🔒 Set secret code' : '🔓 Submit guess'}
+                    </button>
+                    <button className="ag-btn ag-btn--light" onClick={clear} style={{ flex: '0 0 auto' }}>↺ Clear</button>
+                </div>
+            </div>
+        </>
     );
 }

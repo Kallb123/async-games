@@ -4,26 +4,31 @@ import { useUser } from "@clerk/nextjs";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Col, Row } from "react-bootstrap";
-import CurrentUserInfo from "@/components/CurrentUserInfo";
 import { ISnakesAndLaddersGameDataResponse } from "@/games/SnakesAndLadders/apiModels";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { IGameCommand } from "@/utils/apiModels/GameLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
-import GameResult from "@/components/GameResult";
+import GameShell from "@/components/ui/GameShell";
+import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import SnakesAndLaddersBoard from "@/components/games/SnakesAndLadders/SnakesAndLaddersBoard";
 import SnakesAndLaddersPlayerActions from "@/components/games/SnakesAndLadders/SnakesAndLaddersPlayerActions";
+import SnakesAndLaddersRollResult, { buildRollResult, RollResult } from "@/components/games/SnakesAndLadders/SnakesAndLaddersRollResult";
 import TurnNavControls from "@/components/games/TurnNavControls";
-import GameHistoryList from "@/components/games/GameHistoryList";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { ISnakesAndLaddersGameStateResponse } from "@/games/SnakesAndLadders/apiModels";
-import { ISnakesAndLaddersDiceRollOutcome } from "@/utils/apiModels/GameLogic";
+import { ISnakesAndLaddersDiceRollOutcome, SnakesAndLaddersRequestDiceRoll } from "@/utils/apiModels/GameLogic";
+
+const PLAYER_COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c"];
 
 export default function GameSnakesAndLadders({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
     const { user, isLoaded } = useUser();
     const [gameData, setGameData] = useState({} as ISnakesAndLaddersGameDataResponse);
+    const [showLog, setShowLog] = useState(false);
+    // The post-roll payoff screen lives here (not in the actions component) so
+    // it survives the roll advancing the turn to the next player.
+    const [rollResult, setRollResult] = useState<RollResult | null>(null);
     const router = useRouter();
 
     const { gameid } = use(params);
@@ -43,10 +48,12 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
 
             getGameData();
         }
-        window.addEventListener('TurnTaken', () => {
+        const handleTurnTaken = () => {
             console.log(`SnakesAndLaddersPage message received: TurnTaken`);
             getGameData();
-        });
+        };
+        window.addEventListener('TurnTaken', handleTurnTaken);
+        return () => window.removeEventListener('TurnTaken', handleTurnTaken);
     }, [isLoaded]);
 
     const getGameData = async () => {
@@ -99,14 +106,6 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
             });
     };
 
-    const getWinnerDisplayName = (): string => {
-        const playerStates = gameData?.specificGameState?.playerStates;
-        if (!playerStates) return gameData?.winner ?? "";
-        return Object.values(playerStates).find(p => p.userId === gameData.winner)?.username ?? gameData?.winner ?? "";
-    };
-
-    const isMyTurn = user?.id === gameData?.currentTurn;
-
     const live = {
         specificGameState: gameData?.specificGameState,
         currentTurn: gameData?.currentTurn ?? "",
@@ -139,42 +138,145 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     };
 
     const boardState = nav.displayedState;
+    const complete = nav.displayedComplete;
+    const isMyTurn = nav.isLive && user?.id === gameData?.currentTurn;
+
+    // userId → colour, following the persistent usernameList ordering so a
+    // player keeps the same swatch on the board and the scoreboard.
+    const usernameList = gameData?.usernameList ?? [];
+    const players = boardState?.playerStates ? Object.values(boardState.playerStates) : [];
+    const colorForUserId = (userId: string): string => {
+        const ps = players.find(p => p.userId === userId);
+        const idx = ps ? usernameList.indexOf(ps.username) : -1;
+        return PLAYER_COLORS[(idx >= 0 ? idx : 0) % PLAYER_COLORS.length];
+    };
+
+    const displayedCurrentTurn = nav.displayedCurrentTurn;
+    const displayedWinner = nav.displayedWinner;
+    const leaderPosition = players.reduce((m, p) => Math.max(m, p.position), 0);
+
+    const getWinnerDisplayName = (): string =>
+        players.find(p => p.userId === displayedWinner)?.username ?? displayedWinner ?? "";
+    const currentTurnUsername = players.find(p => p.userId === displayedCurrentTurn)?.username ?? "";
+    const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
+
+    // ── Top-bar status line ──────────────────────────────────────────────────
+    let subtitle: React.ReactNode = 'Loading…';
+    if (boardState) {
+        if (complete) {
+            subtitle = currentUserWon ? '🏆 You won!' : `${getWinnerDisplayName()} won`;
+        } else if (isMyTurn) {
+            subtitle = <><span className="ag-hi">Your move</span> · roll the die</>;
+        } else {
+            subtitle = <>{currentTurnUsername}&apos;s move</>;
+        }
+    }
+
+    // ── Scoreboard: each player's square is their score ──────────────────────
+    const scoreEntries: ScoreEntry[] = boardState
+        ? usernameList.flatMap((username, i): ScoreEntry[] => {
+            const ps = boardState.playerStates?.[username];
+            if (!ps) return [];
+            const isMe = ps.userId === user?.id;
+            const isActive = ps.userId === displayedCurrentTurn && !complete;
+            let sub: React.ReactNode;
+            if (isActive) sub = '▶ now';
+            else if (ps.position === leaderPosition && leaderPosition > 0) sub = '👑 lead';
+            else sub = `sq ${ps.position}`;
+            return [{
+                id: username,
+                name: isMe ? 'You' : username,
+                color: PLAYER_COLORS[i % PLAYER_COLORS.length],
+                sub,
+                score: ps.position,
+                isMe,
+                isActive,
+            }];
+        })
+        : [];
+
+    const myPosition = gameData?.specificGameState?.playerStates
+        ? Object.values(gameData.specificGameState.playerStates).find(p => p.userId === user?.id)?.position ?? 0
+        : 0;
+
+    // Roll live: capture the pre-roll square, submit, then show the payoff
+    // screen. Rolling ends the turn server-side, so the actions unmount — the
+    // result screen is rendered from the page and stays put.
+    const handleRoll = () => {
+        const from = myPosition;
+        submitCommand(new SnakesAndLaddersRequestDiceRoll(), (commandResponse) => {
+            const outcome = commandResponse.outcome as ISnakesAndLaddersDiceRollOutcome;
+            setRollResult(buildRollResult(from, outcome));
+        });
+    };
+
+    const logButton = boardState ? (
+        <button
+            className={`ag-game-topbar-btn${showLog ? ' ag-game-topbar-btn--on' : ''}`}
+            onClick={() => setShowLog(v => !v)}
+            aria-label="Game log"
+        >📜</button>
+    ) : undefined;
 
     return (
-        <main>
-            <h1>Snakes and Ladders</h1>
-            <h2><a href="/">Home</a></h2>
-            <GameResult complete={gameData?.complete ?? false} winnerId={gameData?.winner ?? ""} currentUserId={user?.id} winnerDisplayName={getWinnerDisplayName()} />
-            {boardState?.playerStates &&
-                <SnakesAndLaddersBoard playerStates={boardState.playerStates} />
-            }
+        <GameShell title="Snakes & Ladders" subtitle={subtitle} right={logButton}>
+            <FcmTokenComp />
+
+            {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
+
             <TurnNavControls
                 nav={nav as unknown as ReturnType<typeof useTurnNavigation>}
-                canPlan={!gameData?.complete}
+                canPlan={!complete}
                 planningActions={
                     <SnakesAndLaddersPlayerActions
                         hasRolled={false}
+                        mode="plan"
                         submitCommand={planSubmit}
                     />
                 }
             />
-            {isMyTurn && !gameData?.complete && nav.isLive && (
-                <>
-                    <h3>Your Turn</h3>
-                    <SnakesAndLaddersPlayerActions
-                        hasRolled={gameData?.specificGameState?.hasRolled ?? false}
-                        submitCommand={submitCommand}
-                    />
-                </>
+
+            {complete && (
+                <div className="ag-game-result">
+                    <h2>{currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}</h2>
+                </div>
             )}
-            <h2>History</h2>
-            <Row>
-                <Col>
-                    <GameHistoryList history={nav.displayedHistory} plannedCount={nav.plannedHistoryCount} />
-                </Col>
-            </Row>
-            <CurrentUserInfo />
-            <FcmTokenComp />
-        </main>
+
+            {boardState?.playerStates && (
+                <SnakesAndLaddersBoard
+                    playerStates={boardState.playerStates}
+                    colorFor={colorForUserId}
+                    myUserId={user?.id}
+                />
+            )}
+
+            {isMyTurn && !complete && (
+                <SnakesAndLaddersPlayerActions
+                    hasRolled={gameData?.specificGameState?.hasRolled ?? false}
+                    mode="live"
+                    onRoll={handleRoll}
+                />
+            )}
+
+            {rollResult && (
+                <SnakesAndLaddersRollResult
+                    result={rollResult}
+                    onEndTurn={() => { setRollResult(null); getGameData(); }}
+                />
+            )}
+
+            {showLog && (
+                <div className="ag-log">
+                    <ul className="ag-log-list">
+                        {nav.displayedHistory.slice().reverse().map((h, i) => (
+                            <li key={i} className="ag-log-item">{h}</li>
+                        ))}
+                        {nav.displayedHistory.length === 0 && (
+                            <li className="ag-log-item">No moves yet.</li>
+                        )}
+                    </ul>
+                </div>
+            )}
+        </GameShell>
     );
 }
