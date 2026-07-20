@@ -825,6 +825,16 @@ body {
     margin: 8px 0 0;
 }
 
+/* Highlighted inline notice (e.g. the Special Build Phase banner). */
+.ag-callout {
+    background: color-mix(in oklch, var(--ag-gold) 16%, var(--ag-surface));
+    border: 1px solid color-mix(in oklch, var(--ag-gold) 45%, transparent);
+    border-radius: 12px;
+    padding: 10px 12px;
+    font: 500 12px/1.45 var(--ag-font);
+    color: var(--ag-ink);
+}
+
 .ag-build-list { display: flex; flex-direction: column; gap: 8px; }
 .ag-build-row {
     display: flex;

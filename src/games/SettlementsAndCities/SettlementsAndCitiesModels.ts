@@ -22,12 +22,22 @@ import {
     ISACDevCards,
     ISACSpecificGameState,
 } from "./board";
+import {
+    SACExpansions,
+    normaliseExpansions,
+    computeVictoryTarget,
+    enabledExpansionNames,
+} from "./expansions";
 
 // ─── Invitation ──────────────────────────────────────────────────────────────
 
-export interface SettlementsAndCitiesInvitationRequest extends IInvitationRequest {}
+export interface SettlementsAndCitiesInvitationRequest extends IInvitationRequest {
+    expansions: SACExpansions;
+}
 
-export interface ISettlementsAndCitiesInvitationData extends IInvitationData {}
+export interface ISettlementsAndCitiesInvitationData extends IInvitationData {
+    expansions: SACExpansions;
+}
 
 export interface ISettlementsAndCitiesInvitationDataDocument
     extends ISettlementsAndCitiesInvitationData, IInvitationDataDocument {}
@@ -143,6 +153,11 @@ export function cloneSACState(
         devCardDeck: [...gs.devCardDeck],
         pendingRoadBuilding: gs.pendingRoadBuilding,
         playedDevCard: gs.playedDevCard,
+        specialBuildActive: gs.specialBuildActive ?? false,
+        specialBuildQueue: [...(gs.specialBuildQueue ?? [])],
+        specialBuildMainPlayer: gs.specialBuildMainPlayer ?? null,
+        expansions: normaliseExpansions(gs.expansions),
+        victoryTarget: gs.victoryTarget ?? 10,
     };
 }
 
@@ -160,8 +175,18 @@ export function buildInitialSettlementsAndCitiesState(
     return cloneSACState(snapshot, gameData.userIdList);
 }
 
+const expansionsSubSchema = {
+    seasAndSailors: Boolean,
+    knightsAndCommerce: Boolean,
+    tradersAndRaiders: Boolean,
+    explorersAndPirates: Boolean,
+    fiveSixPlayerExtension: Boolean,
+};
+
 var SettlementsAndCitiesInvitationSchema = new Schema<ISettlementsAndCitiesInvitationDataDocument>(
-    {},
+    {
+        expansions: expansionsSubSchema,
+    },
     { discriminatorKey: 'kind' },
 );
 SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
@@ -172,10 +197,19 @@ SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
 
     const gameType = new SettlementsAndCitiesGameType();
 
+    const expansions = normaliseExpansions(this.expansions);
+    const victoryTarget = computeVictoryTarget(expansions);
+
     const turnOrder: string[] = [];
     const history: string[] = [];
     const usernameMap = await userIdListToUsernameMap(userIdList);
     SortUsersByRoll(userIdList, usernameMap, turnOrder, history, 6);
+
+    const enabledNames = enabledExpansionNames(expansions);
+    if (enabledNames.length > 0) {
+        history.push(`Setup: expansions enabled — ${enabledNames.join(', ')}`);
+    }
+    history.push(`Setup: first to ${victoryTarget} victory points wins`);
 
     const { hexes, harbors, desertHexIndex } = generateBoard();
 
@@ -219,6 +253,11 @@ SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
         devCardDeck: shuffleDeck(DEV_CARD_DECK),
         pendingRoadBuilding: 0,
         playedDevCard: false,
+        specialBuildActive: false,
+        specialBuildQueue: [],
+        specialBuildMainPlayer: null,
+        expansions,
+        victoryTarget,
     };
 
     const gameData: ISettlementsAndCitiesGameData = {
@@ -317,6 +356,11 @@ function makeSACStateSchemaDef() {
         devCardDeck: [String],
         pendingRoadBuilding: Number,
         playedDevCard: Boolean,
+        specialBuildActive: Boolean,
+        specialBuildQueue: [String],
+        specialBuildMainPlayer: { type: String, default: null },
+        expansions: expansionsSubSchema,
+        victoryTarget: Number,
     };
 }
 
@@ -403,6 +447,13 @@ export function gameStateToResponse(
     const longestRoadOwner = gs.longestRoadOwner ? (userIdNameMap[gs.longestRoadOwner] ?? gs.longestRoadOwner) : null;
     const largestArmyOwner = gs.largestArmyOwner ? (userIdNameMap[gs.largestArmyOwner] ?? gs.largestArmyOwner) : null;
 
+    // Special Build Phase (§8.5) — surface the queue as usernames so the client
+    // can show whose special-build turn it is and who is still waiting.
+    const specialBuildQueue = (gs.specialBuildQueue ?? []).map(uid => userIdNameMap[uid] ?? uid);
+    const specialBuildMainPlayer = gs.specialBuildMainPlayer
+        ? (userIdNameMap[gs.specialBuildMainPlayer] ?? gs.specialBuildMainPlayer)
+        : null;
+
     return {
         hexes: gs.hexes.map(h => ({ terrain: h.terrain, numberToken: h.numberToken })),
         vertices,
@@ -423,6 +474,11 @@ export function gameStateToResponse(
         pendingRoadBuilding: gs.pendingRoadBuilding,
         playedDevCard: gs.playedDevCard,
         playerDevCards,
+        specialBuildActive: gs.specialBuildActive ?? false,
+        specialBuildQueue,
+        specialBuildMainPlayer,
+        expansions: normaliseExpansions(gs.expansions),
+        victoryTarget: gs.victoryTarget ?? 10,
     };
 }
 

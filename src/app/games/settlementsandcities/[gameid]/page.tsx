@@ -10,6 +10,7 @@ import type { ICommandResponse } from "@/app/api/game/command/route";
 import type { ISACGameDataResponse, ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
 import type { SAC_Resource } from "@/games/SettlementsAndCities/board";
 import { BOARD_TOPOLOGY, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
+import { enabledExpansionNames, normaliseExpansions } from "@/games/SettlementsAndCities/expansions";
 import SettlementsAndCitiesBoard from "@/components/games/SettlementsAndCities/SettlementsAndCitiesBoard";
 import SettlementsAndCitiesActions, { SACBoardMode } from "@/components/games/SettlementsAndCities/SettlementsAndCitiesActions";
 import GameShell from "@/components/ui/GameShell";
@@ -260,6 +261,10 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             subtitle = currentUserWon ? '🏆 You won!' : `${getWinnerDisplayName()} won`;
         } else if (gs.phase === 'setup') {
             subtitle = <><b>Setup</b> · step {gs.setupStep + 1} · {isMyTurn ? 'your move' : `${currentTurnUsername}'s move`}</>;
+        } else if (gs.specialBuildActive) {
+            subtitle = isMyTurn
+                ? <><span className="ag-hi">⚡ Special Build</span> · build or trade, then pass</>
+                : <>⚡ Special Build · {currentTurnUsername}&apos;s move</>;
         } else if (isMyTurn) {
             subtitle = gs.hasRolled
                 ? <>You rolled <b>{gs.lastRoll}</b> · build or end turn</>
@@ -313,6 +318,18 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
+
+            {gs && (
+                <p className="ag-hint" style={{ textAlign: "center", marginTop: 4 }}>
+                    {(() => {
+                        const names = enabledExpansionNames(normaliseExpansions(gs.expansions));
+                        const target = gs.victoryTarget ?? 10;
+                        return names.length > 0
+                            ? <>First to <b>{target} VP</b> · {names.join(' + ')}</>
+                            : <>First to <b>{target} VP</b> wins</>;
+                    })()}
+                </p>
+            )}
 
             {recapAvailable && gs && (
                 <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} />

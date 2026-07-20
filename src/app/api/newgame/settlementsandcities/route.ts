@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { SettlementsAndCitiesInvitationModel, SettlementsAndCitiesInvitationRequest } from '@/games/SettlementsAndCities/SettlementsAndCitiesModels';
 import { IInvitationDataDocument } from '@/utils/mongodb/InvitationData';
+import { normaliseExpansions, validateExpansions } from '@/games/SettlementsAndCities/expansions';
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
@@ -31,6 +32,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, { status: 404, statusText: 'User not found' });
   }
 
+  // Validate the chosen expansions and the resulting player count (invitees +
+  // the sender) against the compatibility matrix and player-count rules (§8).
+  const expansions = normaliseExpansions(sacInvitation.expansions);
+  const playerCount = userList.length + 1;
+  const validation = validateExpansions(expansions, playerCount);
+  if (!validation.ok) {
+    return NextResponse.json(
+      { errors: validation.errors },
+      { status: 400, statusText: validation.errors.join(' ') },
+    );
+  }
+
   await dbConnect();
 
   const invite: IInvitationDataDocument = new SettlementsAndCitiesInvitationModel({
@@ -41,6 +54,7 @@ export async function POST(request: NextRequest) {
     timestamp: new Date().toISOString(),
     gameType: 'SettlementsAndCities',
     gameFriendlyName: 'Settlements and Cities',
+    expansions,
   });
 
   await invite.save();
