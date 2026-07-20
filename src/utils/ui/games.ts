@@ -42,7 +42,7 @@ export const GAME_META: Record<string, GameMeta> = {
         url: "settlementsandcities",
         name: "Settlements & Cities",
         category: "Strategy",
-        players: "3–4 players",
+        players: "2–6 players",
         tagline: "Trade, build and out-manoeuvre for the longest road.",
         accent: "gold",
         art: "/art/dicecities/japanese/forest.png",

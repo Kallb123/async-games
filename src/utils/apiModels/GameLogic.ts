@@ -1589,9 +1589,12 @@ export class SettlementsAndCitiesGameType implements IGameType {
         const sacData = gameData as ISettlementsAndCitiesGameData;
         const gs = sacData.specificGameState;
         if (gs.phase !== 'main') return false;
+        // The VP target varies with the active expansions (base 10; higher for
+        // Knights & Commerce / Seas & Sailors — see design doc §8).
+        const victoryTarget = gs.victoryTarget ?? 10;
         for (const [userId, ps] of gs.playerStates) {
             const vp = calculateTotalVP(userId, gs.vertices, ps.devCards, gs.longestRoadOwner, gs.largestArmyOwner);
-            if (vp >= 10) {
+            if (vp >= victoryTarget) {
                 sacData.complete = true;
                 sacData.winner = userId;
                 sacData.currentTurn = '';

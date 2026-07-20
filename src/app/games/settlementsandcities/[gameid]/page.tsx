@@ -10,6 +10,7 @@ import type { ICommandResponse } from "@/app/api/game/command/route";
 import type { ISACGameDataResponse, ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
 import type { SAC_Resource } from "@/games/SettlementsAndCities/board";
 import { BOARD_TOPOLOGY, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
+import { enabledExpansionNames, normaliseExpansions } from "@/games/SettlementsAndCities/expansions";
 import SettlementsAndCitiesBoard from "@/components/games/SettlementsAndCities/SettlementsAndCitiesBoard";
 import SettlementsAndCitiesActions, { SACBoardMode } from "@/components/games/SettlementsAndCities/SettlementsAndCitiesActions";
 import GameShell from "@/components/ui/GameShell";
@@ -313,6 +314,18 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
+
+            {gs && (
+                <p className="ag-hint" style={{ textAlign: "center", marginTop: 4 }}>
+                    {(() => {
+                        const names = enabledExpansionNames(normaliseExpansions(gs.expansions));
+                        const target = gs.victoryTarget ?? 10;
+                        return names.length > 0
+                            ? <>First to <b>{target} VP</b> · {names.join(' + ')}</>
+                            : <>First to <b>{target} VP</b> wins</>;
+                    })()}
+                </p>
+            )}
 
             {recapAvailable && gs && (
                 <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} />
