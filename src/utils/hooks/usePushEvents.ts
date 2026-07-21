@@ -27,10 +27,24 @@ interface PushEventsOptions {
 }
 
 /**
+ * How long (ms) to collapse a burst of triggers into a single `handler` call.
+ * A turn change delivers two pushes back-to-back (`TurnTaken` + `YourTurn`),
+ * and a foreground return can coincide with an arriving push — all of which map
+ * to the same "refetch latest state" action, so we fire it once per burst
+ * rather than once per trigger. Small enough to stay imperceptible.
+ */
+const COALESCE_MS = 200;
+
+/**
  * Subscribe to a set of `window` events (the FCM pushes re-dispatched by
  * `FcmTokenComp`) and invoke `handler` whenever any of them fires. The handler
  * is held in a ref so callers can pass an inline function without needing to
  * memoise it, and the listeners are always cleaned up on unmount.
+ *
+ * Triggers are coalesced (see `COALESCE_MS`): any number of events (plus a
+ * foreground return) within the window result in a single `handler` call, so a
+ * screen refetches once per burst instead of once per push. This is safe
+ * because the handler always fetches current state.
  *
  * Pass `{ refreshOnVisible: true }` for screens that must also re-sync when the
  * tab is brought back to the foreground (see `PushEventsOptions`).
@@ -45,12 +59,24 @@ export function usePushEvents(
     handlerRef.current = handler;
 
     useEffect(() => {
-        const listener = () => handlerRef.current();
-        events.forEach((event) => window.addEventListener(event, listener));
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        // Schedule a single trailing call; further triggers while one is pending
+        // are absorbed into it rather than queuing extra refetches.
+        const schedule = () => {
+            if (timer !== null) {
+                return;
+            }
+            timer = setTimeout(() => {
+                timer = null;
+                handlerRef.current();
+            }, COALESCE_MS);
+        };
+
+        events.forEach((event) => window.addEventListener(event, schedule));
 
         const onVisibility = () => {
             if (document.visibilityState === 'visible') {
-                handlerRef.current();
+                schedule();
             }
         };
         if (refreshOnVisible) {
@@ -58,7 +84,10 @@ export function usePushEvents(
         }
 
         return () => {
-            events.forEach((event) => window.removeEventListener(event, listener));
+            if (timer !== null) {
+                clearTimeout(timer);
+            }
+            events.forEach((event) => window.removeEventListener(event, schedule));
             if (refreshOnVisible) {
                 document.removeEventListener('visibilitychange', onVisibility);
             }
