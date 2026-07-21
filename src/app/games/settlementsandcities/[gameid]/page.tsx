@@ -10,6 +10,7 @@ import type { ICommandResponse } from "@/app/api/game/command/route";
 import type { ISACGameDataResponse, ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
 import type { SAC_Resource } from "@/games/SettlementsAndCities/board";
 import { BOARD_TOPOLOGY, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
+import { enabledExpansionNames, normaliseExpansions } from "@/games/SettlementsAndCities/expansions";
 import SettlementsAndCitiesBoard from "@/games/SettlementsAndCities/components/SettlementsAndCitiesBoard";
 import SettlementsAndCitiesActions, { SACBoardMode } from "@/games/SettlementsAndCities/components/SettlementsAndCitiesActions";
 import GameShell from "@/components/ui/GameShell";
@@ -260,18 +261,25 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     if (gs) {
         if (complete) {
             subtitle = currentUserWon ? '🏆 You won!' : `${getWinnerDisplayName()} won`;
-        } else if (gs.phase === 'setup') {
-            subtitle = <><b>Setup</b> · step {gs.setupStep + 1} · {isMyTurn ? 'your move' : `${currentTurnUsername}'s move`}</>;
-        } else if (gs.specialBuildActive) {
-            subtitle = isMyTurn
-                ? <><span className="ag-hi">⚡ Special Build</span> · build or trade, then pass</>
-                : <>⚡ Special Build · {currentTurnUsername}&apos;s move</>;
-        } else if (isMyTurn) {
-            subtitle = gs.hasRolled
-                ? <>You rolled <b>{gs.lastRoll}</b> · build or end turn</>
-                : <><span className="ag-hi">Your move</span> · roll the dice</>;
         } else {
-            subtitle = <>{currentTurnUsername}&apos;s move</>;
+            let turnText: React.ReactNode;
+            if (gs.phase === 'setup') {
+                turnText = <><b>Setup</b> · step {gs.setupStep + 1} · {isMyTurn ? 'your move' : `${currentTurnUsername}'s move`}</>;
+            } else if (gs.specialBuildActive) {
+                turnText = isMyTurn
+                    ? <><span className="ag-hi">⚡ Special Build</span> · build or trade, then pass</>
+                    : <>⚡ Special Build · {currentTurnUsername}&apos;s move</>;
+            } else if (isMyTurn) {
+                turnText = gs.hasRolled
+                    ? <>You rolled <b>{gs.lastRoll}</b> · build or end turn</>
+                    : <><span className="ag-hi">Your move</span> · roll the dice</>;
+            } else {
+                turnText = <>{currentTurnUsername}&apos;s move</>;
+            }
+            const expansionNames = enabledExpansionNames(normaliseExpansions(gs.expansions));
+            subtitle = expansionNames.length > 0
+                ? <>{turnText} · {expansionNames.join(' + ')}</>
+                : turnText;
         }
     }
 
