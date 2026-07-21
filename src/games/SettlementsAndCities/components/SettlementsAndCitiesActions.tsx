@@ -114,7 +114,10 @@ export default function SettlementsAndCitiesActions({
         { mode: 'placeRoad', icon: '🛤️', name: 'Road', cost: ROAD_COST, suffix: 'reach new spots', piecesLeft: myState.remainingRoads },
         { mode: 'placeCity', icon: '🏰', name: 'City', cost: CITY_COST, suffix: '+2 VP', piecesLeft: myState.remainingCities },
     ];
-    const canBuyDevCard = res.wool >= 1 && res.grain >= 1 && res.ore >= 1 && gs.devCardDeckSize > 0;
+    const DEV_CARD_COST: Cost = { wool: 1, grain: 1, ore: 1 };
+    const devShort = shortfall(DEV_CARD_COST, res);
+    const devDeckEmpty = gs.devCardDeckSize <= 0;
+    const canBuyDevCard = !devShort && !devDeckEmpty;
 
     const buildList = (
         <div className="ag-build-list">
@@ -144,13 +147,24 @@ export default function SettlementsAndCitiesActions({
                 );
             })}
 
+            <button
+                className={`ag-build-row${!canBuyDevCard ? ' ag-build-row--disabled' : ''}`}
+                disabled={!canBuyDevCard}
+                onClick={() => canBuyDevCard && submit(new SACBuyDevCard())}
+            >
+                <span className="ag-build-icon">🃏</span>
+                <span className="ag-build-main">
+                    <span className="ag-build-name">Dev card</span>
+                    <span className="ag-build-cost">{costText(DEV_CARD_COST)} · draw a development card</span>
+                </span>
+                {canBuyDevCard
+                    ? <span className="ag-build-tag">Buy</span>
+                    : <span className="ag-build-tag ag-build-tag--muted">{devDeckEmpty ? 'Deck empty' : devShort}</span>}
+            </button>
+
             <div className="ag-action-grid">
-                <button className="ag-btn ag-btn--light" disabled={!canBuyDevCard}
-                    onClick={() => submit(new SACBuyDevCard())}>
-                    🃏 Dev card
-                </button>
                 <button className="ag-btn ag-btn--light" onClick={() => setShowTradeModal(true)}>
-                    ⚖️ Trade
+                    ⚖️ Trade with the bank
                 </button>
             </div>
         </div>
