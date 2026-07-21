@@ -14,11 +14,12 @@ import SnakesAndLaddersBoard from "@/games/SnakesAndLadders/components/SnakesAnd
 import SnakesAndLaddersPlayerActions from "@/games/SnakesAndLadders/components/SnakesAndLaddersPlayerActions";
 import SnakesAndLaddersRollResult, { buildRollResult, RollResult } from "@/games/SnakesAndLadders/components/SnakesAndLaddersRollResult";
 import TurnNavControls from "@/components/games/TurnNavControls";
+import TurnRecap from "@/components/games/TurnRecap";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
+import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { ISnakesAndLaddersGameStateResponse } from "@/games/SnakesAndLadders/apiModels";
 import { ISnakesAndLaddersDiceRollOutcome, SnakesAndLaddersRequestDiceRoll } from "@/utils/apiModels/GameLogic";
-
-const PLAYER_COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c"];
+import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
 
 export default function GameSnakesAndLadders({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
@@ -115,6 +116,10 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     };
     const nav = useTurnNavigation<ISnakesAndLaddersGameStateResponse>(gameId, live);
 
+    // "Since you were last here": on open, if turns elapsed since our last move,
+    // show the recap intro before the board. Dismissing (or the CTA) reveals it.
+    const recap = useTurnRecap(gameId);
+
     // Planning submit: instead of persisting a move, add it as a hypothetical
     // planned turn and reuse the same action panel + dice animation.
     const planSubmit = async (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => {
@@ -148,7 +153,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     const colorForUserId = (userId: string): string => {
         const ps = players.find(p => p.userId === userId);
         const idx = ps ? usernameList.indexOf(ps.username) : -1;
-        return PLAYER_COLORS[(idx >= 0 ? idx : 0) % PLAYER_COLORS.length];
+        return PLAYER_COLOURS[(idx >= 0 ? idx : 0) % PLAYER_COLOURS.length];
     };
 
     const displayedCurrentTurn = nav.displayedCurrentTurn;
@@ -186,7 +191,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
             return [{
                 id: username,
                 name: isMe ? 'You' : username,
-                color: PLAYER_COLORS[i % PLAYER_COLORS.length],
+                color: PLAYER_COLOURS[i % PLAYER_COLOURS.length],
                 sub,
                 score: ps.position,
                 isMe,
@@ -217,6 +222,29 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
             aria-label="Game log"
         >📜</button>
     ) : undefined;
+
+    // Recap intro: a standalone welcome-back screen shown before the board when
+    // it's our turn and moves happened while we were away.
+    if (recap.show && recap.recap?.hasRecap && recap.recap.header && recap.recap.summary && recap.recap.events) {
+        const r = recap.recap;
+        return (
+            <TurnRecap
+                header={r.header!}
+                summary={r.summary!}
+                events={r.events!.map((e) => ({
+                    id: e.id,
+                    glyph: e.glyph,
+                    title: e.title,
+                    detail: e.detail,
+                    timestamp: e.timestamp,
+                    dotColour: e.dotColour,
+                }))}
+                tip={r.tip}
+                cta={{ label: "Roll the die →", onClick: recap.dismiss }}
+                backHref="/"
+            />
+        );
+    }
 
     return (
         <GameShell title="Snakes & Ladders" subtitle={subtitle} right={logButton}>

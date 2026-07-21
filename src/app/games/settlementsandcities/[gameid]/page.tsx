@@ -16,7 +16,10 @@ import SettlementsAndCitiesActions, { SACBoardMode } from "@/games/SettlementsAn
 import GameShell from "@/components/ui/GameShell";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import TurnNavControls from "@/components/games/TurnNavControls";
+import TurnRecap from "@/components/games/TurnRecap";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
+import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
+import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
 import {
     SACPlaceSettlementSetup,
     SACPlaceRoadSetup,
@@ -25,8 +28,6 @@ import {
     SACBuildCity,
     SACMoveRobber,
 } from "@/utils/apiModels/GameLogic";
-
-const PLAYER_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c'];
 
 const RESOURCE_ORDER: SAC_Resource[] = ['lumber', 'wool', 'grain', 'brick', 'ore'];
 const RESOURCE_EMOJI: Record<SAC_Resource, string> = {
@@ -120,6 +121,10 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     const nav = useTurnNavigation<ISACSpecificGameStateResponse>(gameId, live);
     const recapAvailable = gameData?.recapAvailable ?? false;
 
+    // "Since you were last here": on open, if opponents moved since our last turn,
+    // show the recap intro before the board. Dismissing (or the CTA) reveals it.
+    const recap = useTurnRecap(gameId);
+
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
     // Only the live active player can act; reviewing a past turn is read-only.
@@ -131,7 +136,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     function usernameToColor(username: string | null): string {
         if (!username) return '#888';
         const idx = usernameList.indexOf(username);
-        return PLAYER_COLORS[idx >= 0 ? idx % PLAYER_COLORS.length : 0];
+        return PLAYER_COLOURS[idx >= 0 ? idx % PLAYER_COLOURS.length : 0];
     }
 
     // Build username → userId from playerStates (each has a userId field)
@@ -290,7 +295,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             return [{
                 id: username,
                 name: isMe ? 'You' : username,
-                color: PLAYER_COLORS[i % PLAYER_COLORS.length],
+                color: PLAYER_COLOURS[i % PLAYER_COLOURS.length],
                 sub,
                 score: ps.visibleVP,
                 isMe,
@@ -312,6 +317,29 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             aria-label="Game log"
         >📜</button>
     ) : undefined;
+
+    // Recap intro: a standalone welcome-back screen shown before the board when
+    // it's our turn and moves happened while we were away.
+    if (recap.show && recap.recap?.hasRecap && recap.recap.header && recap.recap.summary && recap.recap.events) {
+        const r = recap.recap;
+        return (
+            <TurnRecap
+                header={r.header!}
+                summary={r.summary!}
+                events={r.events!.map((e) => ({
+                    id: e.id,
+                    glyph: e.glyph,
+                    title: e.title,
+                    detail: e.detail,
+                    timestamp: e.timestamp,
+                    dotColour: e.dotColour,
+                }))}
+                tip={r.tip}
+                cta={{ label: "Take your turn →", onClick: recap.dismiss }}
+                backHref="/"
+            />
+        );
+    }
 
     return (
         <GameShell title="Settlements & Cities" subtitle={subtitle} right={logButton}>

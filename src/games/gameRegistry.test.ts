@@ -74,6 +74,25 @@ describe("game registry completeness", () => {
         ).toEqual([]);
     });
 
+    it("wires every game's recap adapter into the recap engine", () => {
+        // Turn recap ("since you were last here") is opt-in per game via a
+        // src/games/<Game>/recap.ts that registers an IRecapAdapter. Games
+        // without one (e.g. Smartthink, by design) simply have no recap. But a
+        // game that ships a recap.ts must be imported by the engine, or its
+        // adapter never registers and buildEventFeed silently returns nothing.
+        const recapEngine = read("src/utils/games/recap.ts");
+        const withRecap = gameNames.filter((name) =>
+            existsSync(path.join(gamesRoot, name, "recap.ts")),
+        );
+        const missing = withRecap.filter((name) => !recapEngine.includes(`@/games/${name}/recap`));
+        expect(
+            missing,
+            `These games have a recap.ts that isn't imported by ` +
+                `src/utils/games/recap.ts, so their recap adapter never registers. Add:\n` +
+                missing.map((n) => `  import "@/games/${n}/recap";`).join("\n"),
+        ).toEqual([]);
+    });
+
     it("handles every game's game-start branch in the invite accept route", () => {
         const acceptRoute = read("src/app/api/invite/accept/route.ts");
         const missing = gameNames.filter((name) => !acceptRoute.includes(`${name}GameDataModel`));
