@@ -71,7 +71,7 @@ export default function TheirTurnList() {
                             style={{ textDecoration: "none", color: "var(--ag-ink)" }}
                         >
                             <div style={{ font: "600 13px/1.35 var(--ag-font)" }}>
-                                {game.friendlyName} · <span style={{ color: "var(--ag-ink-soft)" }}>{opponents(game, user?.username, "them")}&apos;s turn</span>
+                                {game.friendlyName} · <span style={{ color: "var(--ag-ink-soft)" }}>{game.currentTurnUsername || opponents(game, user?.username, "them")}&apos;s turn</span>
                             </div>
                         </a>
                         <button type="button" className="ag-link-muted" onClick={() => handleEndGame(game.gameId)}>End</button>

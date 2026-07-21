@@ -251,6 +251,10 @@ SmartthinkGameDataSchema.methods.CreateResponse = async function(): Promise<IGam
         ? SMARTTHINK_COMPUTER_USERNAME
         : (await userIdListToUsernameList([gameDataDocument.winner]))[0];
 
+    const currentTurnUsername = gameDataDocument.currentTurn === SMARTTHINK_COMPUTER_ID
+        ? SMARTTHINK_COMPUTER_USERNAME
+        : (await userIdListToUsernameList([gameDataDocument.currentTurn]))[0];
+
     return {
         gameId: gameDataDocument.gameId,
         gameType: gameDataDocument.gameType.gameType,
@@ -258,6 +262,7 @@ SmartthinkGameDataSchema.methods.CreateResponse = async function(): Promise<IGam
         usernameList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
+        currentTurnUsername,
         url: gameDataDocument.gameType.url,
         complete: gameDataDocument.complete,
         winner
