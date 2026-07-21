@@ -11,7 +11,7 @@ export interface ScoreEntry {
     /** Small status under the name (e.g. "▶ now", "🛣️ LR", "4 cards"). */
     sub?: React.ReactNode;
     /** The big number on the right — victory points. */
-    score: number | string;
+    score: React.ReactNode;
     isMe?: boolean;
     isActive?: boolean;
 }
