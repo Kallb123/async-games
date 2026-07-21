@@ -69,13 +69,17 @@ GameDataSchema.methods.CreateResponse = async function(): Promise<IGameResponse>
 
     const gameDataDocument: IGameData = this as IGameData;
 
-    return {  
+    const usernameList = await userIdListToUsernameList(gameDataDocument.userIdList);
+    const currentTurnIndex = gameDataDocument.userIdList.indexOf(gameDataDocument.currentTurn);
+
+    return {
         gameId: gameDataDocument.gameId,
         gameType: gameDataDocument.gameType.gameType,
         friendlyName: gameDataDocument.gameType.friendlyName,
-        usernameList: await userIdListToUsernameList(gameDataDocument.userIdList),
+        usernameList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
+        currentTurnUsername: currentTurnIndex >= 0 ? usernameList[currentTurnIndex] : "",
         url: gameDataDocument.gameType.url,
         complete: gameDataDocument.complete,
         winner: (await userIdListToUsernameList([gameDataDocument.winner]))[0]
