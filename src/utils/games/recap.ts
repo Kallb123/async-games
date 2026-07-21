@@ -2,6 +2,8 @@ import { IGameData } from "../mongodb/GameData";
 import { IGameCommand, ICommandOutcome } from "../apiModels/GameLogic";
 import { buildTimeline, ITurnSnapshot, IReplayStep } from "./replay";
 import { snakesAndLaddersRecapAdapter } from "@/games/SnakesAndLadders/recap";
+import { diceCitiesRecapAdapter } from "@/games/DiceCities/recap";
+import { settlementsAndCitiesRecapAdapter } from "@/games/SettlementsAndCities/recap";
 
 // A single "here's what happened" entry in a since-you-were-last-here recap.
 // Games synthesise these from replayed turns via an IRecapAdapter; the generic
@@ -95,11 +97,21 @@ export async function buildEventFeed(
     }
 
     const steps: IReplayStep[] = [];
-    const timeline = await buildTimeline(gameData, userIdNameMap, [], (step) => {
-        if (!step.planned) {
-            steps.push(step);
-        }
-    });
+    let timeline;
+    try {
+        timeline = await buildTimeline(gameData, userIdNameMap, [], (step) => {
+            if (!step.planned) {
+                steps.push(step);
+            }
+        });
+    } catch {
+        // Some games can't be replayed for every historical game (e.g. Settlements
+        // & Cities games created before recap support lack the stored initial-state
+        // snapshot and throw). Treat an un-replayable game as simply having no
+        // recap rather than surfacing an error — the same graceful no-op the
+        // client already handles for adapter-less games.
+        return empty;
+    }
 
     const allEvents: IGameEvent[] = [];
     for (const step of steps) {
@@ -135,3 +147,5 @@ export async function buildEventFeed(
 // recap by adding a recap.ts and one line here; games without one (Smartthink)
 // intentionally have no recap. Guarded by src/games/gameRegistry.test.ts.
 registerRecapAdapter(snakesAndLaddersRecapAdapter);
+registerRecapAdapter(diceCitiesRecapAdapter);
+registerRecapAdapter(settlementsAndCitiesRecapAdapter);
