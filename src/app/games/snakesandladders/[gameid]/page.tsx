@@ -249,18 +249,6 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 
-            <TurnNavControls
-                nav={nav as unknown as ReturnType<typeof useTurnNavigation>}
-                canPlan={!complete}
-                planningActions={
-                    <SnakesAndLaddersPlayerActions
-                        hasRolled={false}
-                        mode="plan"
-                        submitCommand={planSubmit}
-                    />
-                }
-            />
-
             {complete && (
                 <div className="ag-game-result">
                     <h2>{currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}</h2>
@@ -289,6 +277,18 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
                     onEndTurn={() => { setRollResult(null); getGameData(); }}
                 />
             )}
+
+            <TurnNavControls
+                nav={nav as unknown as ReturnType<typeof useTurnNavigation>}
+                canPlan={!complete}
+                planningActions={
+                    <SnakesAndLaddersPlayerActions
+                        hasRolled={false}
+                        mode="plan"
+                        submitCommand={planSubmit}
+                    />
+                }
+            />
 
             {showLog && (
                 <div className="ag-log">
