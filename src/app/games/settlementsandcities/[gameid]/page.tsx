@@ -356,10 +356,6 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                 </p>
             )}
 
-            {recapAvailable && gs && (
-                <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} />
-            )}
-
             {complete && (
                 <div className="ag-game-result">
                     <h2>{currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}</h2>
@@ -418,6 +414,10 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                             setBoardMode={setBoardMode}
                             submitCommand={submitCommand}
                         />
+                    )}
+
+                    {recapAvailable && (
+                        <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} />
                     )}
 
                     {showLog && (

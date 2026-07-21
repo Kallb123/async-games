@@ -213,8 +213,6 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 
-            <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} />
-
             {complete && (
                 <div className="ag-game-result">
                     <h2>{currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}</h2>
@@ -236,6 +234,8 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
                     submitCommand={controlsSubmit}
                 />
             )}
+
+            <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} />
 
             {showLog && (
                 <div className="ag-log">

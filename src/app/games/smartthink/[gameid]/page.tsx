@@ -180,8 +180,6 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 
-            <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} />
-
             {complete && (
                 <div className="ag-game-result">
                     <h2>{currentUserWon ? 'You cracked it! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}</h2>
@@ -207,6 +205,8 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
                     submitCommand={submitCommand}
                 />
             )}
+
+            <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} />
 
             {showLog && (
                 <div className="ag-log">
