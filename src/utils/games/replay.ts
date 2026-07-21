@@ -1,5 +1,5 @@
 import { IGameData } from "../mongodb/GameData";
-import { IGameCommand, IGameType } from "../apiModels/GameLogic";
+import { IGameCommand, IGameType, ICommandOutcome } from "../apiModels/GameLogic";
 import { deserializeJSON } from "../apiModels/Serialisable";
 import { buildInitialSnakesAndLaddersState, gameStateToModel as snakesAndLaddersStateToModel } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
 import { buildInitialDiceCitiesState, gameStateToModel as diceCitiesStateToModel } from "@/games/DiceCities/DiceCitiesModels";
@@ -39,6 +39,19 @@ export interface ITimeline {
     // Planned commands with their RNG outcomes resolved/recorded, so the client can
     // resend them and keep earlier planned rolls stable while adding new ones.
     resolvedPlannedCommands: unknown[];
+}
+
+// One applied step of the replay, surfaced to an optional observer. Unlike the
+// public ITurnSnapshot (response-shaped, sent to the client), a step also carries
+// the rehydrated command instance (with its recorded RNG) and its outcome, so
+// server-side consumers like the recap engine can read game-specific details
+// without re-running the pipeline themselves.
+export interface IReplayStep {
+    prev: ITurnSnapshot;
+    next: ITurnSnapshot;
+    command: IGameCommand;
+    outcome: ICommandOutcome;
+    planned: boolean;
 }
 
 // A per-game adapter tells the generic engine how to (a) build the deterministic
@@ -99,7 +112,11 @@ registerReplayAdapter({
 export async function buildTimeline(
     gameData: IGameData,
     userIdNameMap: { [key: string]: string },
-    plannedCommands: IGameCommand[] = []
+    plannedCommands: IGameCommand[] = [],
+    // Optional observer invoked once per applied command (real or planned) with
+    // the surrounding snapshots plus the command/outcome. Additive: existing
+    // callers that only want the snapshots can ignore it.
+    onStep?: (step: IReplayStep) => void
 ): Promise<ITimeline> {
     const adapter = getReplayAdapter(gameData.gameType.className);
     if (!adapter) {
@@ -175,10 +192,24 @@ export async function buildTimeline(
             }
             if (gameType.CheckGameOver(state)) {
                 snapshot(command, planned);
+                onStep?.({
+                    prev: snapshots[snapshots.length - 2],
+                    next: snapshots[snapshots.length - 1],
+                    command,
+                    outcome,
+                    planned,
+                });
                 return true;
             }
             gameType.CheckEndTurn(state, outcome);
             snapshot(command, planned);
+            onStep?.({
+                prev: snapshots[snapshots.length - 2],
+                next: snapshots[snapshots.length - 1],
+                command,
+                outcome,
+                planned,
+            });
         }
         return false;
     };
