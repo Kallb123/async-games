@@ -20,7 +20,7 @@ export default function TheirTurnList() {
         refreshContent();
     }, [isLoaded]);
 
-    usePushEvents(THEIR_TURN_EVENTS, () => refreshContent());
+    usePushEvents(THEIR_TURN_EVENTS, () => refreshContent(), { refreshOnVisible: true });
 
     const refreshContent = async () => {
         if (isLoaded) {

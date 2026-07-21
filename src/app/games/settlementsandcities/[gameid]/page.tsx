@@ -69,7 +69,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
         }
     }, [isLoaded]);
 
-    usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData());
+    usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 
     const getGameData = async () => {
         fetch(`/api/game/${gameId}`)

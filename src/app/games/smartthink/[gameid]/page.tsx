@@ -49,7 +49,7 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
         }
     }, [isLoaded]);
 
-    usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData());
+    usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 
     const getGameData = async () => {
         fetch(`/api/game/${gameId}`)
