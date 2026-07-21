@@ -417,6 +417,7 @@ export function gameStateToResponse(
 ): ISACSpecificGameStateResponse {
     const playerStates: ISACSpecificGameStateResponse['playerStates'] = {};
     const playerDevCards: ISACSpecificGameStateResponse['playerDevCards'] = {};
+    const playerNewDevCards: ISACSpecificGameStateResponse['playerNewDevCards'] = {};
 
     for (const [userId, ps] of gs.playerStates) {
         const username = userIdNameMap[userId];
@@ -432,6 +433,7 @@ export function gameStateToResponse(
             visibleVP: calculateVisibleVP(userId, gs.vertices, gs.longestRoadOwner, gs.largestArmyOwner),
         };
         playerDevCards[username] = { ...ps.devCards };
+        playerNewDevCards[username] = { ...ps.newDevCards };
     }
 
     // Convert owner userId → username in vertices and edges
@@ -474,6 +476,7 @@ export function gameStateToResponse(
         pendingRoadBuilding: gs.pendingRoadBuilding,
         playedDevCard: gs.playedDevCard,
         playerDevCards,
+        playerNewDevCards,
         specialBuildActive: gs.specialBuildActive ?? false,
         specialBuildQueue,
         specialBuildMainPlayer,

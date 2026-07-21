@@ -2,7 +2,8 @@
 import React, { useState } from 'react';
 import { Button, Form, Modal } from 'react-bootstrap';
 import type { ISACSpecificGameStateResponse } from '@/games/SettlementsAndCities/apiModels';
-import type { SAC_Resource } from '@/games/SettlementsAndCities/board';
+import type { SAC_Resource, SAC_DevCard } from '@/games/SettlementsAndCities/board';
+import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER } from '@/games/SettlementsAndCities/ui';
 import { IGameCommand } from '@/utils/apiModels/GameLogic';
 import type { ICommandResponse } from '@/app/api/game/command/route';
 import {
@@ -186,6 +187,124 @@ export default function SettlementsAndCitiesActions({
         </Modal>
     );
 
+    // ── Development cards ───────────────────────────────────────────────────────
+    // One shared panel, rendered both before and after the roll: a dev card may
+    // be played at any point on your own main turn (one per turn). Playable cards
+    // (Knight / Road Building / Year of Plenty / Monopoly) get a Play button;
+    // hidden Victory Points and cards bought this turn are shown as passive notes.
+    const myNewDevCards = gs.playerNewDevCards?.[myUsername];
+    const canPlayDevCards = !isSetup && !specialBuild && !pendingRobber && pendingRoadBuilding === 0 && !playedDevCard;
+    const heldPlayable = SAC_DEV_CARD_ORDER.filter(
+        c => SAC_DEV_CARD_META[c].playable && (myDevCards?.[c] ?? 0) > 0,
+    );
+    const vpCount = myDevCards?.victoryPoint ?? 0;
+    const newDevTotal = myNewDevCards
+        ? Object.values(myNewDevCards).reduce((s, n) => s + n, 0)
+        : 0;
+
+    function playDevCard(card: SAC_DevCard) {
+        if (card === 'knight') submit(new SACPlayKnight());
+        else if (card === 'roadBuilding') submit(new SACPlayRoadBuilding());
+        else if (card === 'yearOfPlenty') setShowYopModal(true);
+        else if (card === 'monopoly') setShowMonopolyModal(true);
+    }
+
+    const devCardSection = (heldPlayable.length > 0 || vpCount > 0 || newDevTotal > 0) ? (
+        <div className="ag-devcards">
+            <div className="ag-devcards-head">🃏 Development cards</div>
+            {heldPlayable.map(card => {
+                const meta = SAC_DEV_CARD_META[card];
+                const count = myDevCards?.[card] ?? 0;
+                const disabled = !canPlayDevCards;
+                return (
+                    <button
+                        key={card}
+                        className={`ag-build-row${disabled ? ' ag-build-row--disabled' : ''}`}
+                        disabled={disabled}
+                        onClick={() => !disabled && playDevCard(card)}
+                    >
+                        <span className="ag-build-icon">{meta.emoji}</span>
+                        <span className="ag-build-main">
+                            <span className="ag-build-name">{meta.name}{count > 1 ? ` ×${count}` : ''}</span>
+                            <span className="ag-build-cost">{meta.blurb}</span>
+                        </span>
+                        <span className={`ag-build-tag${disabled ? ' ag-build-tag--muted' : ''}`}>
+                            {playedDevCard ? 'Played' : 'Play'}
+                        </span>
+                    </button>
+                );
+            })}
+            {vpCount > 0 && (
+                <div className="ag-devcard-note ag-devcard-note--vp">
+                    🏆 {vpCount} Victory Point card{vpCount > 1 ? 's' : ''} · worth +{vpCount} VP, revealed automatically when you can win.
+                </div>
+            )}
+            {newDevTotal > 0 && (
+                <div className="ag-devcard-note">
+                    🃏 {newDevTotal} card{newDevTotal > 1 ? 's' : ''} bought this turn — playable next turn.
+                </div>
+            )}
+            {playedDevCard && heldPlayable.length > 0 && (
+                <div className="ag-devcard-note">One development card per turn — you&apos;ve played yours.</div>
+            )}
+        </div>
+    ) : null;
+
+    // ── Year of Plenty modal (shared by pre- and post-roll) ─────────────────────
+    const yopModal = (
+        <Modal show={showYopModal} onHide={() => setShowYopModal(false)}>
+            <Modal.Header closeButton><Modal.Title>Year of Plenty</Modal.Title></Modal.Header>
+            <Modal.Body>
+                <Form.Group className="mb-2">
+                    <Form.Label>First resource</Form.Label>
+                    <Form.Select value={yopR1} onChange={e => setYopR1(e.target.value as SAC_Resource)}>
+                        {RESOURCES.map(r => <option key={r} value={r}>{RESOURCE_EMOJI[r]} {r}</option>)}
+                    </Form.Select>
+                </Form.Group>
+                <Form.Group>
+                    <Form.Label>Second resource</Form.Label>
+                    <Form.Select value={yopR2} onChange={e => setYopR2(e.target.value as SAC_Resource)}>
+                        {RESOURCES.map(r => <option key={r} value={r}>{RESOURCE_EMOJI[r]} {r}</option>)}
+                    </Form.Select>
+                </Form.Group>
+            </Modal.Body>
+            <Modal.Footer>
+                <Button variant="secondary" onClick={() => setShowYopModal(false)}>Cancel</Button>
+                <Button variant="primary" onClick={() => {
+                    const cmd = new SACPlayYearOfPlenty();
+                    cmd.resource1 = yopR1;
+                    cmd.resource2 = yopR2;
+                    submit(cmd);
+                    setShowYopModal(false);
+                }}>Confirm</Button>
+            </Modal.Footer>
+        </Modal>
+    );
+
+    // ── Monopoly modal (shared by pre- and post-roll) ───────────────────────────
+    const monopolyModal = (
+        <Modal show={showMonopolyModal} onHide={() => setShowMonopolyModal(false)}>
+            <Modal.Header closeButton><Modal.Title>Monopoly</Modal.Title></Modal.Header>
+            <Modal.Body>
+                <Form.Group>
+                    <Form.Label>Choose a resource to monopolise</Form.Label>
+                    <Form.Select value={monopolyR} onChange={e => setMonopolyR(e.target.value as SAC_Resource)}>
+                        {RESOURCES.map(r => <option key={r} value={r}>{RESOURCE_EMOJI[r]} {r}</option>)}
+                    </Form.Select>
+                </Form.Group>
+            </Modal.Body>
+            <Modal.Footer>
+                <Button variant="secondary" onClick={() => setShowMonopolyModal(false)}>Cancel</Button>
+                <Button variant="primary" onClick={() => {
+                    const cmd = new SACPlayMonopoly();
+                    cmd.resource = monopolyR;
+                    submit(cmd);
+                    setShowMonopolyModal(false);
+                }}>Confirm</Button>
+            </Modal.Footer>
+        </Modal>
+    );
+
     // ── Setup mode ────────────────────────────────────────────────────────────
     if (isSetup) {
         const placing = !gs.pendingRoadSetup;
@@ -268,7 +387,6 @@ export default function SettlementsAndCitiesActions({
 
     // ── Pre-roll ──────────────────────────────────────────────────────────────
     if (!hasRolled) {
-        const canPlayKnight = myDevCards && myDevCards.knight > 0 && !playedDevCard;
         return (
             <div className="ag-actionsheet">
                 <button
@@ -278,44 +396,19 @@ export default function SettlementsAndCitiesActions({
                 >
                     🎲 Roll the dice
                 </button>
-                {canPlayKnight && (
-                    <button className="ag-btn ag-btn--ghost ag-btn--block" style={{ marginTop: 8 }}
-                        onClick={() => submit(new SACPlayKnight())}>
-                        ⚔️ Play Knight first
-                    </button>
-                )}
+                {devCardSection && <div style={{ marginTop: 12 }}>{devCardSection}</div>}
+                {yopModal}
+                {monopolyModal}
             </div>
         );
     }
 
     // ── Post-roll ─────────────────────────────────────────────────────────────
-    const canPlayRoadBuilding = myDevCards && myDevCards.roadBuilding > 0 && !playedDevCard;
-    const canPlayYoP = myDevCards && myDevCards.yearOfPlenty > 0 && !playedDevCard;
-    const canPlayMonopoly = myDevCards && myDevCards.monopoly > 0 && !playedDevCard;
-
     return (
         <div className="ag-actionsheet">
             {buildList}
 
-            {(canPlayRoadBuilding || canPlayYoP || canPlayMonopoly) && (
-                <div className="ag-action-grid" style={{ flexWrap: 'wrap', marginTop: 8 }}>
-                    {canPlayRoadBuilding && (
-                        <button className="ag-btn ag-btn--light" onClick={() => submit(new SACPlayRoadBuilding())}>
-                            🃏 Road Building
-                        </button>
-                    )}
-                    {canPlayYoP && (
-                        <button className="ag-btn ag-btn--light" onClick={() => setShowYopModal(true)}>
-                            🃏 Year of Plenty
-                        </button>
-                    )}
-                    {canPlayMonopoly && (
-                        <button className="ag-btn ag-btn--light" onClick={() => setShowMonopolyModal(true)}>
-                            🃏 Monopoly
-                        </button>
-                    )}
-                </div>
-            )}
+            {devCardSection && <div style={{ marginTop: 12 }}>{devCardSection}</div>}
 
             <button className="ag-btn ag-btn--success ag-btn--block" style={{ marginTop: 12, padding: '14px 0', fontSize: 15 }}
                 onClick={() => submit(new SACEndTurn())}>
@@ -323,58 +416,8 @@ export default function SettlementsAndCitiesActions({
             </button>
             <p className="ag-action-hint">We&apos;ll let the next player know it&apos;s their move.</p>
 
-            {/* ── Year of Plenty modal ── */}
-            <Modal show={showYopModal} onHide={() => setShowYopModal(false)}>
-                <Modal.Header closeButton><Modal.Title>Year of Plenty</Modal.Title></Modal.Header>
-                <Modal.Body>
-                    <Form.Group className="mb-2">
-                        <Form.Label>First resource</Form.Label>
-                        <Form.Select value={yopR1} onChange={e => setYopR1(e.target.value as SAC_Resource)}>
-                            {RESOURCES.map(r => <option key={r} value={r}>{RESOURCE_EMOJI[r]} {r}</option>)}
-                        </Form.Select>
-                    </Form.Group>
-                    <Form.Group>
-                        <Form.Label>Second resource</Form.Label>
-                        <Form.Select value={yopR2} onChange={e => setYopR2(e.target.value as SAC_Resource)}>
-                            {RESOURCES.map(r => <option key={r} value={r}>{RESOURCE_EMOJI[r]} {r}</option>)}
-                        </Form.Select>
-                    </Form.Group>
-                </Modal.Body>
-                <Modal.Footer>
-                    <Button variant="secondary" onClick={() => setShowYopModal(false)}>Cancel</Button>
-                    <Button variant="primary" onClick={() => {
-                        const cmd = new SACPlayYearOfPlenty();
-                        cmd.resource1 = yopR1;
-                        cmd.resource2 = yopR2;
-                        submit(cmd);
-                        setShowYopModal(false);
-                    }}>Confirm</Button>
-                </Modal.Footer>
-            </Modal>
-
-            {/* ── Monopoly modal ── */}
-            <Modal show={showMonopolyModal} onHide={() => setShowMonopolyModal(false)}>
-                <Modal.Header closeButton><Modal.Title>Monopoly</Modal.Title></Modal.Header>
-                <Modal.Body>
-                    <Form.Group>
-                        <Form.Label>Choose a resource to monopolise</Form.Label>
-                        <Form.Select value={monopolyR} onChange={e => setMonopolyR(e.target.value as SAC_Resource)}>
-                            {RESOURCES.map(r => <option key={r} value={r}>{RESOURCE_EMOJI[r]} {r}</option>)}
-                        </Form.Select>
-                    </Form.Group>
-                </Modal.Body>
-                <Modal.Footer>
-                    <Button variant="secondary" onClick={() => setShowMonopolyModal(false)}>Cancel</Button>
-                    <Button variant="primary" onClick={() => {
-                        const cmd = new SACPlayMonopoly();
-                        cmd.resource = monopolyR;
-                        submit(cmd);
-                        setShowMonopolyModal(false);
-                    }}>Confirm</Button>
-                </Modal.Footer>
-            </Modal>
-
-            {/* ── Maritime trade modal ── */}
+            {yopModal}
+            {monopolyModal}
             {tradeModal}
         </div>
     );
