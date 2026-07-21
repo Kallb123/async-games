@@ -82,6 +82,8 @@ src/
 │   ├── ui.ts                   # (optional) pure presentation helpers specific to this game
 │   ├── components/             # board + action React components for this game
 │   └── (board.ts / cards.ts …) # static game data
+├── games/gameRegistry.test.ts   # asserts every game folder is wired into the
+│                                #   shared files outside it (see §12)
 │
 ├── utils/
 │   ├── apiModels/              # the generic game engine (see §6) — game-agnostic only
@@ -453,8 +455,7 @@ in one new folder, `src/games/<Game>/`. Roughly:
 3. **Register** the discriminator keys/models in
    `src/utils/mongodb/mongodb.ts` (the typed unions enforce this at compile time),
    and add the new command/type instances to the `registration` array in
-   `src/app/api/game/command/route.ts`. (The serializable-registry test fails if you
-   miss either the barrel export or the `registration` entry.)
+   `src/app/api/game/command/route.ts`.
 4. **Wire invite creation & acceptance** — a `POST /api/newgame/<game>` route and
    a branch in `src/app/api/invite/accept/route.ts` that instantiates the right
    game model.
@@ -470,6 +471,27 @@ in one new folder, `src/games/<Game>/`. Roughly:
    `UserInviteList`, and `TurnTimerSelect` for setup.
 6. *(Optional)* Add a replay `IReplayAdapter` for turn recap — see
    `docs/turn-recap-and-planning.md`.
+
+### One-liners outside the game folder — and what guards each
+
+Steps 2–5 above each add a single line to a shared file *outside*
+`src/games/<Game>/`. Every one of them is enforced by an automated test, so a
+game folder that's missing one fails CI instead of breaking silently at
+runtime:
+
+| Shared file | What to add | Guarded by |
+|---|---|---|
+| `src/utils/apiModels/GameLogic.ts` | `export * from "@/games/<Game>/<Game>Logic";` | `src/games/gameRegistry.test.ts` ("wires every game's rules module into the GameLogic barrel"); the classes it exports are additionally checked by `serializableRegistry.test.ts` |
+| `src/utils/mongodb/mongodb.ts` | the discriminator key in both union types, and the model in both records inside `initialiseDiscriminators()` | TypeScript (the typed `Record`s are a compile-time exhaustiveness check) **and** `src/games/gameRegistry.test.ts` ("registers every game's Mongoose discriminator models") |
+| `src/app/api/game/command/route.ts` | every command/game-type instance in the `registration` array | `serializableRegistry.test.ts` ("wires every command/game-type class into the command route's registration array") |
+| `src/app/api/invite/accept/route.ts` | an `else if` branch instantiating the game's `<Game>GameDataModel` | `src/games/gameRegistry.test.ts` ("handles every game's game-start branch in the invite accept route") |
+| `src/utils/ui/games.ts` | import the game's `meta.ts` and add it to `GAME_META` | `src/games/gameRegistry.test.ts` ("wires every game's metadata into GAME_META") |
+
+`src/games/gameRegistry.test.ts` discovers games the same way
+`serializableRegistry.test.ts` discovers `@serializable` classes: by scanning,
+not a hand-maintained list (here, every subfolder of `src/games/` that has a
+`meta.ts`), so a new game folder is picked up automatically and any missing
+one-liner fails with a message naming the exact file and line to add.
 
 ## 13. Deployment, environment & CI
 
@@ -487,12 +509,21 @@ in one new folder, `src/games/<Game>/`. Roughly:
   `npm test` before committing — the type checker, build, and test suite are the
   safety net.
 - **Tests** run on [Vitest](https://vitest.dev) (`npm test`). The suite is
-  deliberately small; the flagship test,
-  `src/utils/apiModels/games/serializableRegistry.test.ts`, guards the
-  serialisation registry (§6) — it scans the source for every `@serializable`
-  class and asserts each is registered when the `GameLogic` barrel is imported and
-  wired into the command route, so a game whose rules module is never imported
-  fails CI instead of breaking at runtime.
+  deliberately small, and both tests in it work the same way — scan the source
+  for what should exist per game, then assert every shared file that should
+  reference it does — so a new game is checked automatically with no
+  hand-maintained list to keep in sync:
+  - `src/utils/apiModels/games/serializableRegistry.test.ts` guards the
+    serialisation registry (§6) — it scans the source for every `@serializable`
+    class and asserts each is registered when the `GameLogic` barrel is imported
+    and wired into the command route, so a game whose rules module is never
+    imported fails CI instead of breaking at runtime.
+  - `src/games/gameRegistry.test.ts` guards the other one-line registrations a
+    new game needs outside its own folder (§12): the `GameLogic` barrel export,
+    `mongodb.ts`'s discriminator models, the invite-accept route's game-start
+    branch, and `games.ts`'s `GAME_META` entry. It discovers games by scanning
+    `src/games/` for folders with a `meta.ts`, so a new game folder missing any
+    of these fails CI with a message naming the exact file to edit.
 
 ## 14. Data flow at a glance
 
