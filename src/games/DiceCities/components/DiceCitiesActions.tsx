@@ -17,7 +17,7 @@ import {
     IDiceCitiesDiceRollOutcome,
     IGameCommand,
 } from "@/utils/apiModels/GameLogic";
-import { ACTIVATION_META, LANDMARKS, activationFor, cardArt, rollLabel, yieldLabel } from "@/utils/ui/diceCities";
+import { ACTIVATION_META, LANDMARKS, activationFor, cardArt, rollLabel, yieldLabel } from "@/games/DiceCities/ui";
 import { useEffect, useRef, useState } from "react";
 
 interface DiceCitiesActionsProps {

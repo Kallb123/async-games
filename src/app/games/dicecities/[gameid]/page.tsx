@@ -10,11 +10,11 @@ import { IGameCommand } from "@/utils/apiModels/GameLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import GameShell from "@/components/ui/GameShell";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
-import DiceCitiesBoard from "@/components/games/DiceCities/DiceCitiesBoard";
-import DiceCitiesActions from "@/components/games/DiceCities/DiceCitiesActions";
+import DiceCitiesBoard from "@/games/DiceCities/components/DiceCitiesBoard";
+import DiceCitiesActions from "@/games/DiceCities/components/DiceCitiesActions";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
-import { landmarkCount } from "@/utils/ui/diceCities";
+import { landmarkCount } from "@/games/DiceCities/ui";
 
 const PLAYER_COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c"];
 

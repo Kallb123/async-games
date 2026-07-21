@@ -8,7 +8,7 @@ import {
     cardArt,
     rollLabel,
     yieldLabel,
-} from "@/utils/ui/diceCities";
+} from "@/games/DiceCities/ui";
 
 interface DiceCitiesBoardProps {
     /** The city being shown — usually the viewer's own. */

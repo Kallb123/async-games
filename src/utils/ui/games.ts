@@ -1,5 +1,11 @@
 // Shared presentation metadata for each game, keyed by its url slug.
 // Keeps the library, home cards and setup headers visually consistent.
+//
+// Each game owns its own metadata as a `meta` export next to its models,
+// rules and components under src/games/<Game>/meta.ts — this file only
+// declares the shared shape/vocabulary and aggregates every game's entry into
+// one lookup. Adding a new game means adding one import + one line below,
+// not editing a shared object literal.
 
 // The canonical, ordered list of game categories. This is the single source
 // of truth — the library's filter chips and the GameCategory type both derive
@@ -25,47 +31,16 @@ export interface GameMeta {
     available: boolean;
 }
 
+import { meta as diceCitiesMeta } from "@/games/DiceCities/meta";
+import { meta as smartthinkMeta } from "@/games/Smartthink/meta";
+import { meta as settlementsAndCitiesMeta } from "@/games/SettlementsAndCities/meta";
+import { meta as snakesAndLaddersMeta } from "@/games/SnakesAndLadders/meta";
+
 export const GAME_META: Record<string, GameMeta> = {
-    dicecities: {
-        url: "dicecities",
-        name: "Dice Cities",
-        categories: ["Dice", "Strategy"],
-        players: "2–4 players",
-        tagline: "Roll, build, and grow your city faster than your friends.",
-        accent: "#009DCA",
-        art: "/art/dicecities/icon.png",
-        available: true,
-    },
-    smartthink: {
-        url: "smartthink",
-        name: "Smartthink",
-        categories: ["Puzzle"],
-        players: "1-2 players",
-        tagline: "Crack the hidden code before guesses run out.",
-        accent: "green",
-        glyph: "S?",
-        available: true,
-    },
-    settlementsandcities: {
-        url: "settlementsandcities",
-        name: "Settlements & Cities",
-        categories: ["Strategy", "Dice"],
-        players: "2–6 players",
-        tagline: "Trade, build and out-manoeuvre for the most victory points.",
-        accent: "gold",
-        art: "/art/dicecities/japanese/forest.png",
-        available: true,
-    },
-    snakesandladders: {
-        url: "snakesandladders",
-        name: "Snakes & Ladders",
-        categories: ["Dice"],
-        players: "2–6 players",
-        tagline: "Climb the ladders, dodge the snakes, race to 100.",
-        accent: "purple",
-        glyph: "1→100",
-        available: true,
-    },
+    dicecities: diceCitiesMeta,
+    smartthink: smartthinkMeta,
+    settlementsandcities: settlementsAndCitiesMeta,
+    snakesandladders: snakesAndLaddersMeta,
 };
 
 // Games that don't have an implementation yet but are teased in the library.

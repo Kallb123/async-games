@@ -1,10 +1,10 @@
 import type { IDiceCitiesGameData, IDiceCitiesPlayerState } from "@/games/DiceCities/DiceCitiesModels";
 import type { IDiceCitiesCard } from "@/games/DiceCities/apiModels";
-import type { IGameData } from "../../mongodb/GameData";
-import type { uuidString } from "../GameDataApi";
-import type { ICommandOutcome, IGameCommand, IGameType } from "../gameCommand";
-import { deserializeJSON, serializable } from "../Serialisable";
-import { DiceRoll } from "../../games/DiceRoll";
+import type { IGameData } from "@/utils/mongodb/GameData";
+import type { uuidString } from "@/utils/apiModels/GameDataApi";
+import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
+import { deserializeJSON, serializable } from "@/utils/apiModels/Serialisable";
+import { DiceRoll } from "@/utils/games/DiceRoll";
 import { DiceCitiesCardIds, DiceCitiesCards } from "@/games/DiceCities/cards";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 

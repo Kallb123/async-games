@@ -349,6 +349,6 @@ player is given the board (and a push notification) for a quick build.
   screen can label the phase and whose move it is.
 
 The relevant code is the special-build helpers and the rewritten `CheckEndTurn`
-in [`src/utils/apiModels/games/SettlementsAndCitiesLogic.ts`](../../src/utils/apiModels/games/SettlementsAndCitiesLogic.ts),
+in [`src/games/SettlementsAndCities/SettlementsAndCitiesLogic.ts`](../../src/games/SettlementsAndCities/SettlementsAndCitiesLogic.ts),
 plus the special-build branch in the actions sheet
-([`SettlementsAndCitiesActions.tsx`](../../src/components/games/SettlementsAndCities/SettlementsAndCitiesActions.tsx)).
+([`SettlementsAndCitiesActions.tsx`](../../src/games/SettlementsAndCities/components/SettlementsAndCitiesActions.tsx)).

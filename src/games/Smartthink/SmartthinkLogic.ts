@@ -1,8 +1,8 @@
 import type { ISmartthinkGameData } from "@/games/Smartthink/SmartthinkModels";
-import type { IGameData } from "../../mongodb/GameData";
-import type { uuidString } from "../GameDataApi";
-import type { ICommandOutcome, IGameCommand, IGameType } from "../gameCommand";
-import { serializable } from "../Serialisable";
+import type { IGameData } from "@/utils/mongodb/GameData";
+import type { uuidString } from "@/utils/apiModels/GameDataApi";
+import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
+import { serializable } from "@/utils/apiModels/Serialisable";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 
 export interface ISmartthinkGuessOutcome extends ICommandOutcome {

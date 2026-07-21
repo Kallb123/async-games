@@ -1,5 +1,5 @@
 import { ISmartthinkGuessRowResponse } from "@/games/Smartthink/apiModels";
-import { SMARTTHINK_CODE_LENGTH, SMARTTHINK_PEGS } from "@/utils/ui/smartthink";
+import { SMARTTHINK_CODE_LENGTH, SMARTTHINK_PEGS } from "@/games/Smartthink/ui";
 
 interface SmartthinkBoardProps {
     guessRows: ISmartthinkGuessRowResponse[];
