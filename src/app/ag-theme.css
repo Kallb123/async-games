@@ -729,6 +729,7 @@ body {
 }
 .ag-score-sub { font: 600 9px/1.1 var(--ag-font); opacity: 0.85; margin-top: 3px; }
 .ag-score-vp { font: 800 15px var(--ag-font); }
+.ag-score-vp-target { font-size: 0.7em; font-weight: 700; opacity: 0.55; }
 
 /* ---- Board area (the "sea") + framed board ---- */
 .ag-board-area {
@@ -1347,7 +1348,7 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
-    margin: 0 16px;
+    margin: 8px 16px 0;
     background: var(--ag-dark);
     border-radius: 16px;
     padding: 12px 14px;

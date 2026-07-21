@@ -261,22 +261,30 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     if (gs) {
         if (complete) {
             subtitle = currentUserWon ? '🏆 You won!' : `${getWinnerDisplayName()} won`;
-        } else if (gs.phase === 'setup') {
-            subtitle = <><b>Setup</b> · step {gs.setupStep + 1} · {isMyTurn ? 'your move' : `${currentTurnUsername}'s move`}</>;
-        } else if (gs.specialBuildActive) {
-            subtitle = isMyTurn
-                ? <><span className="ag-hi">⚡ Special Build</span> · build or trade, then pass</>
-                : <>⚡ Special Build · {currentTurnUsername}&apos;s move</>;
-        } else if (isMyTurn) {
-            subtitle = gs.hasRolled
-                ? <>You rolled <b>{gs.lastRoll}</b> · build or end turn</>
-                : <><span className="ag-hi">Your move</span> · roll the dice</>;
         } else {
-            subtitle = <>{currentTurnUsername}&apos;s move</>;
+            let turnText: React.ReactNode;
+            if (gs.phase === 'setup') {
+                turnText = <><b>Setup</b> · step {gs.setupStep + 1} · {isMyTurn ? 'your move' : `${currentTurnUsername}'s move`}</>;
+            } else if (gs.specialBuildActive) {
+                turnText = isMyTurn
+                    ? <><span className="ag-hi">⚡ Special Build</span> · build or trade, then pass</>
+                    : <>⚡ Special Build · {currentTurnUsername}&apos;s move</>;
+            } else if (isMyTurn) {
+                turnText = gs.hasRolled
+                    ? <>You rolled <b>{gs.lastRoll}</b> · build or end turn</>
+                    : <><span className="ag-hi">Your move</span> · roll the dice</>;
+            } else {
+                turnText = <>{currentTurnUsername}&apos;s move</>;
+            }
+            const expansionNames = enabledExpansionNames(normaliseExpansions(gs.expansions));
+            subtitle = expansionNames.length > 0
+                ? <>{turnText} · {expansionNames.join(' + ')}</>
+                : turnText;
         }
     }
 
     // ── Scoreboard entries ───────────────────────────────────────────────────
+    const victoryTarget = gs?.victoryTarget ?? 10;
     const scoreEntries: ScoreEntry[] = gs
         ? usernameList.flatMap((username, i): ScoreEntry[] => {
             const ps = gs.playerStates?.[username];
@@ -294,7 +302,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                 name: isMe ? 'You' : username,
                 color: PLAYER_COLOURS[i % PLAYER_COLOURS.length],
                 sub,
-                score: ps.visibleVP,
+                score: <>{ps.visibleVP}<span className="ag-score-vp-target">/{victoryTarget}</span></>,
                 isMe,
                 isActive,
             }];
@@ -343,18 +351,6 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
-
-            {gs && (
-                <p className="ag-hint" style={{ textAlign: "center", marginTop: 4 }}>
-                    {(() => {
-                        const names = enabledExpansionNames(normaliseExpansions(gs.expansions));
-                        const target = gs.victoryTarget ?? 10;
-                        return names.length > 0
-                            ? <>First to <b>{target} VP</b> · {names.join(' + ')}</>
-                            : <>First to <b>{target} VP</b> wins</>;
-                    })()}
-                </p>
-            )}
 
             {complete && (
                 <div className="ag-game-result">
