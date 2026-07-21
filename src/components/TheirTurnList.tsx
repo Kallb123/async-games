@@ -6,6 +6,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { opponents } from "@/utils/ui/players";
 import { SkeletonList } from "@/components/ui/Skeleton";
+import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
+
+const THEIR_TURN_EVENTS = ['NewInvite', 'GameStart', ...TURN_ADVANCED_EVENTS];
 
 export default function TheirTurnList() {
     const { user, isLoaded } = useUser();
@@ -14,12 +17,10 @@ export default function TheirTurnList() {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        window.addEventListener('NewInvite', () => refreshContent());
-        window.addEventListener('GameStart', () => refreshContent());
-        window.addEventListener('TurnTaken', () => refreshContent());
-
         refreshContent();
     }, [isLoaded]);
+
+    usePushEvents(THEIR_TURN_EVENTS, () => refreshContent(), { refreshOnVisible: true });
 
     const refreshContent = async () => {
         if (isLoaded) {

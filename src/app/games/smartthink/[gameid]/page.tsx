@@ -14,6 +14,7 @@ import SmartthinkBoard from "@/games/Smartthink/components/SmartthinkBoard";
 import SmartthinkPlayerActions from "@/games/Smartthink/components/SmartthinkPlayerActions";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
+import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import type { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
 import { SMARTTHINK_CODE_LENGTH } from "@/games/Smartthink/ui";
 
@@ -46,13 +47,9 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
 
             getGameData();
         }
-        const handleTurnTaken = () => {
-            console.log(`SmartthinkPage message received: TurnTaken`);
-            getGameData();
-        };
-        window.addEventListener('TurnTaken', handleTurnTaken);
-        return () => window.removeEventListener('TurnTaken', handleTurnTaken);
     }, [isLoaded]);
+
+    usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 
     const getGameData = async () => {
         fetch(`/api/game/${gameId}`)

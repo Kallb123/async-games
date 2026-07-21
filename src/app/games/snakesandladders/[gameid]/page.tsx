@@ -17,6 +17,7 @@ import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecap from "@/components/games/TurnRecap";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
+import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { ISnakesAndLaddersGameStateResponse } from "@/games/SnakesAndLadders/apiModels";
 import { ISnakesAndLaddersDiceRollOutcome, SnakesAndLaddersRequestDiceRoll } from "@/utils/apiModels/GameLogic";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
@@ -49,13 +50,9 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
 
             getGameData();
         }
-        const handleTurnTaken = () => {
-            console.log(`SnakesAndLaddersPage message received: TurnTaken`);
-            getGameData();
-        };
-        window.addEventListener('TurnTaken', handleTurnTaken);
-        return () => window.removeEventListener('TurnTaken', handleTurnTaken);
     }, [isLoaded]);
+
+    usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 
     const getGameData = async () => {
         fetch(`/api/game/${gameId}`)

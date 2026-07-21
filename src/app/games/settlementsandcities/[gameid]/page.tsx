@@ -19,6 +19,7 @@ import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecap from "@/components/games/TurnRecap";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
+import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
 import {
     SACPlaceSettlementSetup,
@@ -66,13 +67,9 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             }
             getGameData();
         }
-        const handleTurnTaken = () => {
-            console.log(`SettlementsAndCitiesPage: TurnTaken`);
-            getGameData();
-        };
-        window.addEventListener('TurnTaken', handleTurnTaken);
-        return () => window.removeEventListener('TurnTaken', handleTurnTaken);
     }, [isLoaded]);
+
+    usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 
     const getGameData = async () => {
         fetch(`/api/game/${gameId}`)
