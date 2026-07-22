@@ -1,6 +1,7 @@
 'use client'
 import React from 'react';
 import { formatRelativeTime } from '@/utils/ui/time';
+import ReactionPicker from '@/components/ui/ReactionPicker';
 
 export interface TurnRecapEvent {
     id: string;
@@ -9,6 +10,8 @@ export interface TurnRecapEvent {
     detail?: string;
     timestamp: string;
     dotColour: string;
+    /** The reaction already sent for this action (there's only ever the viewer's), or null. */
+    reaction?: string | null;
 }
 
 interface TurnRecapProps {
@@ -19,6 +22,8 @@ interface TurnRecapProps {
     cta: { label: string; onClick: () => void };
     /** Where the header's back control goes. Defaults to the home dashboard. */
     backHref?: string;
+    /** Called when the player reacts to one action in the timeline. Omit to hide reactions entirely. */
+    onReact?: (eventId: string, reaction: string) => void;
 }
 
 // Named theme accents get a design-system class; a raw hex accent is applied
@@ -29,7 +34,7 @@ const ACCENT_CLASSES = new Set(['terracotta', 'green', 'gold', 'purple']);
 // welcome-back headline, a player-coloured timeline of what happened while you
 // were away, an optional strategic tip, and a call-to-action into the board.
 // One component, every game — driven entirely by props.
-export default function TurnRecap({ header, summary, events, tip, cta, backHref = '/' }: TurnRecapProps) {
+export default function TurnRecap({ header, summary, events, tip, cta, backHref = '/', onReact }: TurnRecapProps) {
     const accentClass = ACCENT_CLASSES.has(header.accent) ? `ag-accent-${header.accent}` : undefined;
     const accentStyle = accentClass ? undefined : { background: header.accent };
 
@@ -62,9 +67,17 @@ export default function TurnRecap({ header, summary, events, tip, cta, backHref 
                             <li key={event.id} className="ag-recap-event">
                                 <span className="ag-recap-dot" style={{ background: event.dotColour }} />
                                 <div className="ag-recap-event-card">
-                                    <div className="ag-recap-event-title">
-                                        {event.title}
-                                        {event.glyph ? ` ${event.glyph}` : ''}
+                                    <div className="ag-recap-event-row">
+                                        <div className="ag-recap-event-title">
+                                            {event.title}
+                                            {event.glyph ? ` ${event.glyph}` : ''}
+                                        </div>
+                                        {onReact && (
+                                            <ReactionPicker
+                                                reacted={event.reaction}
+                                                onReact={(reaction) => onReact(event.id, reaction)}
+                                            />
+                                        )}
                                     </div>
                                     {detail && <div className="ag-recap-event-detail">{detail}</div>}
                                 </div>

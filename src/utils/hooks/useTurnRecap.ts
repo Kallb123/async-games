@@ -81,6 +81,31 @@ export function useTurnRecap(gameId: string, enabled: boolean = true) {
     // it's been dismissed this visit.
     const reshow = useCallback(() => setDismissed(false), []);
 
+    // Sends a reaction for one recap event. Applied optimistically (the picker
+    // in TurnRecap immediately swaps to the sent-reaction pill); on failure —
+    // most likely a race where the same action already got a reaction — we
+    // just refetch to pick up the server's actual state.
+    const react = useCallback((eventId: string, reaction: string) => {
+        setRecap((prev) => {
+            if (!prev?.events) return prev;
+            return {
+                ...prev,
+                events: prev.events.map((event) =>
+                    event.id === eventId ? { ...event, reaction } : event
+                ),
+            };
+        });
+        fetch(`/api/game/${gameId}/reaction`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ eventId, reaction }),
+        })
+            .then((res) => {
+                if (!res.ok) fetchRecap();
+            })
+            .catch(() => fetchRecap());
+    }, [gameId, fetchRecap]);
+
     return {
         recap,
         loading,
@@ -91,5 +116,6 @@ export function useTurnRecap(gameId: string, enabled: boolean = true) {
         hasRecap: !loading && !!recap?.hasRecap,
         dismiss,
         reshow,
+        react,
     };
 }

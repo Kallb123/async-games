@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
+import { ReactionModel } from '@/utils/mongodb/ReactionData';
 import { userIdListToUsernameMap } from '@/utils/users/clerk';
 import { buildEventFeed, IGameEvent } from '@/utils/games/recap';
 import { metaForGame } from '@/utils/ui/games';
@@ -12,10 +13,12 @@ export interface IGetRecapParams {
 }
 
 // One recap row as sent to the client: the game-agnostic event plus the actor's
-// player colour (for the timeline dot) and a pre-formatted "affects you" flag.
+// player colour (for the timeline dot), a pre-formatted "affects you" flag,
+// and the reaction already dropped on it (there's only ever one — the viewer's).
 export interface IRecapEventResponse extends IGameEvent {
     dotColour: string;
     affectsMe: boolean;
+    reaction: string | null;
 }
 
 export interface IRecapResponse {
@@ -64,10 +67,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IG
         }
 
         const meta = metaForGame({ url: gameData.gameType.url, friendlyName: gameData.gameType.friendlyName });
+        const reactions = await ReactionModel.find({ gameId: gameid, eventId: { $in: feed.events.map((e) => e.id) } }).exec();
+        const reactionByEventId = new Map(reactions.map((r) => [r.eventId, r.reaction as string]));
         const events: IRecapEventResponse[] = feed.events.map((event) => ({
             ...event,
             dotColour: playerColour(gameData.userIdList.indexOf(event.actorId)),
             affectsMe: event.affectedIds?.includes(userId) ?? false,
+            reaction: reactionByEventId.get(event.id) ?? null,
         }));
 
         const response: IRecapResponse = {

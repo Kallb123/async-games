@@ -1762,6 +1762,29 @@ body {
 .ag-recap-event-title { font: 800 15px/1.25 var(--ag-font); color: var(--ag-ink); }
 .ag-recap-event-detail { font: 500 12.5px/1.4 var(--ag-font); color: var(--ag-ink-soft); margin-top: 3px; }
 
+.ag-recap-event-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+
+/* ---- Reaction picker (recap timeline) ---- */
+/* Trigger/sent state reuse .ag-pill-action; the popup shell and text rows
+   reuse .ag-gom-menu / .ag-gom-item. Only the emoji row below is new. */
+.ag-reaction-menu-emojis {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 4px 2px;
+    border-top: 1px solid var(--ag-line);
+    margin-top: 4px;
+}
+.ag-reaction-menu-emoji {
+    background: transparent;
+    border: none;
+    border-radius: 9px;
+    padding: 4px 6px;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+}
+.ag-reaction-menu-emoji:hover { background: var(--ag-surface-2); }
+
 .ag-recap-tip {
     display: flex;
     gap: 12px;
