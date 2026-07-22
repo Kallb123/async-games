@@ -312,6 +312,7 @@ body {
     white-space: nowrap;
 }
 .ag-pill-action:hover { background: var(--ag-dark); color: var(--ag-on-dark); }
+.ag-pill-action:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .ag-pill-action--solid {
     background: var(--ag-dark);

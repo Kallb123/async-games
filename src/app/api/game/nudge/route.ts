@@ -39,7 +39,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, {status: 400, statusText: "It's already your turn"});
   }
 
-  const turnUser = await (await clerkClient()).users.getUser(gameData.currentTurn);
+  const { data: userList } = await (await clerkClient()).users.getUserList({
+    userId: [gameData.currentTurn]
+  });
+  const turnUser = userList.find(u => u.id === gameData.currentTurn);
+  if (!turnUser) {
+    return NextResponse.json({}, {status: 400, statusText: "Current turn user not found"});
+  }
+
   const nudgerName = thisUser.username || thisUser.firstName || "Someone";
 
   await sendPushToUsers([turnUser], {
