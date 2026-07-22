@@ -1,6 +1,6 @@
 import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
-import { buildDefaultNotificationPreferences, getNotificationPreferences, NotificationChannel, NotificationPreferences } from '@/utils/firebase/notificationPreferences';
+import { ALL_NOTIFICATION_CHANNELS, buildDefaultNotificationPreferences, getNotificationPreferences, NotificationChannel, NotificationPreferences } from '@/utils/firebase/notificationPreferences';
 
 export async function GET() {
     const { userId } = await auth();
@@ -34,18 +34,8 @@ export async function POST(request: NextRequest) {
         channels: { ...current.channels }
     };
 
-    const validChannels: NotificationChannel[] = [
-        'yourTurn',
-        'turnNudge',
-        'playerReaction',
-        'chat',
-        'friendInvite',
-        'gameInvite',
-        'turnExpiringSoon'
-    ];
-
     if (body.channels && typeof body.channels === 'object') {
-        for (const channel of validChannels) {
+        for (const channel of ALL_NOTIFICATION_CHANNELS) {
             if (typeof body.channels[channel] === 'boolean') {
                 next.channels[channel] = body.channels[channel];
             }
@@ -53,9 +43,10 @@ export async function POST(request: NextRequest) {
     }
 
     // If this is the first time saving preferences, ensure all defaults are present.
-    for (const channel of validChannels) {
+    const defaults = buildDefaultNotificationPreferences();
+    for (const channel of ALL_NOTIFICATION_CHANNELS) {
         if (!(channel in next.channels)) {
-            next.channels[channel] = buildDefaultNotificationPreferences().channels[channel];
+            next.channels[channel] = defaults.channels[channel];
         }
     }
 

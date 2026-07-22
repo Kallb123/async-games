@@ -249,7 +249,7 @@ export default function Profile() {
                 {!hasPrefPermission && (
                     <div className="ag-cta" style={{ background: "oklch(0.35 0.04 45)", color: "var(--ag-on-dark)" }}>
                         <div className="ag-cta-main">
-                            <div className="ag-cta-title">Turn notifications</div>
+                            <div className="ag-cta-title">Push notifications</div>
                             <div className="ag-cta-sub">Enable push so we can nudge you when it&apos;s your move.</div>
                         </div>
                         <button type="button" className="ag-btn ag-btn--light" onClick={enableNotifications}>Enable</button>
@@ -257,7 +257,7 @@ export default function Profile() {
                 )}
 
                 {hasPrefPermission && (
-                    <div className="ag-list">
+                    <div className="ag-list" aria-describedby={prefs && !prefs.enabled ? "notifications-paused-hint" : undefined}>
                         <OptionToggleRow
                             title="All notifications"
                             description="Pause everything, or choose per channel below"
@@ -270,7 +270,7 @@ export default function Profile() {
                 )}
 
                 {hasPrefPermission && prefs && !prefs.enabled && (
-                    <p className="ag-disabled-hint">Notifications are paused. Channel settings will take effect again once you turn notifications back on.</p>
+                    <p id="notifications-paused-hint" className="ag-disabled-hint">Notifications are paused. Channel settings will take effect again once you turn notifications back on.</p>
                 )}
 
                 {hasPrefPermission && prefs?.enabled && (

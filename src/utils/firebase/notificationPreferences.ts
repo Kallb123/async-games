@@ -1,13 +1,16 @@
 import { User } from '@clerk/nextjs/server';
 
-export type NotificationChannel =
-    | 'yourTurn'
-    | 'turnNudge'
-    | 'playerReaction'
-    | 'chat'
-    | 'friendInvite'
-    | 'gameInvite'
-    | 'turnExpiringSoon';
+export const ALL_NOTIFICATION_CHANNELS = [
+    'yourTurn',
+    'turnNudge',
+    'playerReaction',
+    'chat',
+    'friendInvite',
+    'gameInvite',
+    'turnExpiringSoon'
+] as const;
+
+export type NotificationChannel = typeof ALL_NOTIFICATION_CHANNELS[number];
 
 export interface NotificationPreferences {
     /** Master switch. When false, no notification channels should send to this user. */
@@ -70,5 +73,5 @@ export function isChannelEnabled(prefs: NotificationPreferences, channel: Notifi
 }
 
 export function buildDefaultNotificationPreferences(): NotificationPreferences {
-    return structuredClone ? structuredClone(DEFAULT_PREFERENCES) : JSON.parse(JSON.stringify(DEFAULT_PREFERENCES));
+    return structuredClone(DEFAULT_PREFERENCES);
 }
