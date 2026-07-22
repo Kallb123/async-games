@@ -72,3 +72,10 @@ screen rather than rebuilding the form.
   both must pass. If you touch the game engine (`src/utils/apiModels/`), also run
   `npm test` — the serializable-registry test guards that every game's rules
   module stays wired into the `GameLogic` barrel.
+- After writing or changing UI, components, hooks, or game code, review it
+  with the **`caveman`** agent before committing. It guards the component-reuse
+  rule above — flagging duplicated markup, copy-pasted logic, and bespoke code
+  that an existing component/hook/helper/`ag-*` class already provides. It only
+  reports findings (never edits); apply the fixes yourself. Humans can also
+  invoke its skills directly: `caveman-review` (full checklist) and
+  `spot-duplication` (prove a block duplicates something that already exists).
