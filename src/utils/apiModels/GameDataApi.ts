@@ -10,6 +10,7 @@ export interface IGameResponse {
     turnTimer: string,
     currentTurn: string,
     currentTurnUsername: string,
+    lastTurnTimestamp: string,
     url: string,
     complete: boolean,
     winner: string

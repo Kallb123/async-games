@@ -9,6 +9,7 @@ import { opponents } from "@/utils/ui/players";
 import GameThumb, { accentVar } from "@/components/ui/GameThumb";
 import { SkeletonTurnCards } from "@/components/ui/Skeleton";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
+import { formatRemainingTimeShort } from "@/utils/games/TurnTimer";
 
 const MY_TURN_EVENTS = ['NewInvite', 'GameStart', ...TURN_ADVANCED_EVENTS];
 
@@ -43,21 +44,6 @@ export default function MyTurnList() {
         }
     }
 
-    const handleEndGame = async (e: React.MouseEvent, gameId: `${string}-${string}-${string}-${string}-${string}`) => {
-        e.stopPropagation();
-        fetch('/api/game/end', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ gameId })
-        })
-        .then(response => {
-            if (!response.ok) throw new Error('Failed to end game');
-            return response.json();
-        })
-        .then(() => refreshContent())
-        .catch(error => console.error('Failed to end game', error));
-    }
-
     const count = gameList.length;
 
     return (
@@ -81,6 +67,7 @@ export default function MyTurnList() {
                         {gameList.map((game) => {
                             const meta = metaForGame({ url: game.url, friendlyName: game.friendlyName });
                             const accent = meta ? accentVar(meta.accent) : "var(--ag-terracotta)";
+                            const timeLeft = formatRemainingTimeShort(game.lastTurnTimestamp, game.turnTimer);
                             return (
                                 <div
                                     key={game.gameId}
@@ -103,19 +90,7 @@ export default function MyTurnList() {
                                     <div className="ag-turn-card-cta" style={{ color: accent }}>
                                         Take your turn
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={(e) => handleEndGame(e, game.gameId)}
-                                        style={{
-                                            position: "absolute", top: 12, right: 14,
-                                            background: "rgba(255,255,255,0.18)", border: "none",
-                                            color: "var(--ag-on-dark)", borderRadius: 99,
-                                            padding: "5px 11px", font: "700 11px var(--ag-font)",
-                                            cursor: "pointer",
-                                        }}
-                                    >
-                                        End
-                                    </button>
+                                    {timeLeft && <div className="ag-turn-card-badge">{timeLeft}</div>}
                                 </div>
                             );
                         })}

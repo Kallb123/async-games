@@ -244,6 +244,17 @@ body {
     cursor: pointer;
 }
 
+.ag-turn-card-badge {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    background: rgba(255,255,255,0.18);
+    border-radius: 99px;
+    padding: 5px 11px;
+    font: 700 11px var(--ag-font);
+    color: var(--ag-on-dark);
+}
+
 .ag-stack { display: flex; flex-direction: column; gap: 12px; }
 
 /* ---- Buttons & pills ---- */
@@ -316,17 +327,24 @@ body {
 }
 .ag-pill-action--accept:hover { color: var(--ag-on-dark); filter: brightness(1.05); }
 
+.ag-link-muted, .ag-list-row-time {
+    font: 600 11.5px var(--ag-font);
+    color: var(--ag-ink-softer);
+    white-space: nowrap;
+}
+
 .ag-link-muted {
     background: none;
     border: none;
     padding: 0;
-    font: 600 11.5px var(--ag-font);
-    color: var(--ag-ink-softer);
     cursor: pointer;
     text-decoration: none;
-    white-space: nowrap;
 }
 .ag-link-muted:hover { color: var(--ag-terracotta); }
+
+.ag-list-row-time {
+    flex: none;
+}
 
 /* Filter / choice chips */
 .ag-chips { display: flex; gap: 8px; flex-wrap: wrap; }
