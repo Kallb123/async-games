@@ -3,6 +3,7 @@ import CurrentUserInfo from "@/components/CurrentUserInfo";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useToast } from "@/components/ToastContext";
 import Avatar from "@/components/ui/Avatar";
+import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import { SkeletonRow } from "@/components/ui/Skeleton";
 import { IFriendRequestResponse, IFriendUser } from "@/utils/mongodb/FriendshipData";
 import { formatRelativeTime } from "@/utils/ui/time";
@@ -257,20 +258,14 @@ export default function Profile() {
 
                 {hasPrefPermission && (
                     <div className="ag-list">
-                        <div className="ag-option-row" style={{ justifyContent: "space-between" }}>
-                            <div>
-                                <div className="ag-option-title">All notifications</div>
-                                <div className="ag-option-desc">Pause everything, or choose per channel below</div>
-                            </div>
-                            <button
-                                type="button"
-                                className={`ag-toggle ${prefs?.enabled ? "ag-toggle--on" : ""}`}
-                                onClick={toggleMaster}
-                                aria-pressed={prefs?.enabled ?? false}
-                                disabled={isSavingPrefs}
-                                aria-label="Toggle all notifications"
-                            />
-                        </div>
+                        <OptionToggleRow
+                            title="All notifications"
+                            description="Pause everything, or choose per channel below"
+                            on={prefs?.enabled ?? false}
+                            onToggle={toggleMaster}
+                            disabled={isSavingPrefs}
+                            ariaLabel="Toggle all notifications"
+                        />
                     </div>
                 )}
 
@@ -281,20 +276,15 @@ export default function Profile() {
                 {hasPrefPermission && prefs?.enabled && (
                     <div className="ag-list" style={{ marginTop: 12 }}>
                         {NOTIFICATION_CHANNELS.map((channel) => (
-                            <div key={channel.key} className="ag-option-row" style={{ justifyContent: "space-between" }}>
-                                <div>
-                                    <div className="ag-option-title">{channel.label}</div>
-                                    <div className="ag-option-desc">{channel.description}</div>
-                                </div>
-                                <button
-                                    type="button"
-                                    className={`ag-toggle ${prefs.channels[channel.key] ? "ag-toggle--on" : ""}`}
-                                    onClick={() => toggleChannel(channel.key)}
-                                    aria-pressed={prefs.channels[channel.key]}
-                                    disabled={isSavingPrefs}
-                                    aria-label={`Toggle ${channel.label} notifications`}
-                                />
-                            </div>
+                            <OptionToggleRow
+                                key={channel.key}
+                                title={channel.label}
+                                description={channel.description}
+                                on={prefs.channels[channel.key]}
+                                onToggle={() => toggleChannel(channel.key)}
+                                disabled={isSavingPrefs}
+                                ariaLabel={`Toggle ${channel.label} notifications`}
+                            />
                         ))}
                     </div>
                 )}
