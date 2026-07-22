@@ -9,11 +9,13 @@ import { IGameCommand } from "@/utils/apiModels/GameLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import type { ISmartthinkGameDataResponse } from "@/games/Smartthink/apiModels";
 import GameShell from "@/components/ui/GameShell";
+import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import SmartthinkBoard from "@/games/Smartthink/components/SmartthinkBoard";
 import SmartthinkPlayerActions from "@/games/Smartthink/components/SmartthinkPlayerActions";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
+import { useEndGame } from "@/utils/hooks/useEndGame";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import type { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
 import { SMARTTHINK_CODE_LENGTH } from "@/games/Smartthink/ui";
@@ -112,6 +114,7 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
         history: gameData?.gameState?.history ?? [],
     };
     const nav = useTurnNavigation<ISmartthinkGameStateResponse>(gameId, live);
+    const { endGame } = useEndGame(gameId);
     const displayed = nav.displayedState;
     const complete = nav.displayedComplete;
     const isMyTurn = nav.isLive && user?.id === gameData?.currentTurn && !complete;
@@ -166,16 +169,26 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
 
     const showCurrentRow = isMyTurn && isCodeBreaker && (displayed?.secretCodeSet ?? false);
 
-    const logButton = displayed ? (
-        <button
-            className={`ag-game-topbar-btn${showLog ? ' ag-game-topbar-btn--on' : ''}`}
-            onClick={() => setShowLog(v => !v)}
-            aria-label="Game log"
-        >📜</button>
-    ) : undefined;
+    const menuOptions: GameOption[] = [
+        {
+            key: 'history',
+            label: 'Turn history',
+            icon: '📜',
+            active: showLog,
+            onClick: () => setShowLog(v => !v),
+        },
+        ...(!complete ? [{
+            key: 'end',
+            label: 'End game',
+            icon: '🏳️',
+            danger: true,
+            onClick: endGame,
+        }] : []),
+    ];
+    const optionsMenu = displayed ? <GameOptionsMenu options={menuOptions} /> : undefined;
 
     return (
-        <GameShell title="Smartthink" subtitle={subtitle} right={logButton}>
+        <GameShell title="Smartthink" subtitle={subtitle} right={optionsMenu}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}

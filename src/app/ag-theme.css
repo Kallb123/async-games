@@ -679,6 +679,47 @@ body {
 }
 .ag-game-topbar-btn:hover { background: rgba(255, 255, 255, 0.22); color: inherit; }
 .ag-game-topbar-btn--on { background: var(--ag-terracotta); }
+
+/* ---- Game options (kebab) menu ---- */
+.ag-gom { position: relative; flex: none; }
+.ag-gom-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 208px;
+    background: var(--ag-surface);
+    border: 1px solid var(--ag-line);
+    border-radius: 14px;
+    box-shadow: var(--ag-shadow-lift);
+    padding: 6px;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.ag-gom-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-radius: 9px;
+    padding: 10px 11px;
+    font: 600 13px var(--ag-font);
+    color: var(--ag-ink);
+    cursor: pointer;
+    text-align: left;
+}
+.ag-gom-item:hover { background: var(--ag-surface-2); }
+.ag-gom-item:disabled { opacity: 0.5; cursor: default; }
+.ag-gom-item:disabled:hover { background: transparent; }
+.ag-gom-item-icon { width: 18px; flex: none; text-align: center; font-size: 14px; }
+.ag-gom-item-label { flex: 1; min-width: 0; }
+.ag-gom-item-check { color: var(--ag-terracotta); font-weight: 800; }
+.ag-gom-item--active { color: var(--ag-terracotta); }
+.ag-gom-item--danger { color: #c0392b; }
+.ag-gom-item--danger:hover { background: rgba(192, 57, 43, 0.1); }
 .ag-game-topbar-main { flex: 1; min-width: 0; }
 .ag-game-topbar-title {
     font: 800 15px/1.1 var(--ag-font);
