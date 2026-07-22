@@ -7,6 +7,7 @@ import CurrentUserInfo from "@/components/CurrentUserInfo";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
+import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import usePlayerList from "@/utils/hooks/usePlayerList";
 import { GAME_META } from "@/utils/ui/games";
 import { SettlementsAndCitiesInvitationRequest } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
@@ -33,22 +34,18 @@ function ExpansionToggle({
   onToggle: () => void;
 }) {
   return (
-    <div className="ag-option-row">
-      <div style={{ flex: 1 }}>
-        <div className="ag-option-title">
+    <OptionToggleRow
+      title={
+        <>
           {title}
           <span style={{ color: "var(--ag-ink-softer)", fontWeight: 600 }}> · {source}</span>
-        </div>
-        <div className="ag-option-desc">{desc}</div>
-      </div>
-      <button
-        type="button"
-        className={`ag-toggle ${on ? "ag-toggle--on" : ""}`}
-        aria-pressed={on}
-        aria-label={`Toggle ${title}`}
-        onClick={onToggle}
-      />
-    </div>
+        </>
+      }
+      description={desc}
+      on={on}
+      onToggle={onToggle}
+      ariaLabel={`Toggle ${title}`}
+    />
   );
 }
 

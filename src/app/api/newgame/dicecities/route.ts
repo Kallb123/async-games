@@ -59,6 +59,8 @@ export async function POST(request: NextRequest) {
     title: "Game Invite",
     body: `${thisUser.username} has invited you to play Dice Cities!`,
     imageUrl: `https://async-games.vercel.app/art/dicecities/icon.png`
+  }, {
+    channel: 'gameInvite'
   });
   await sendPushToUsers([thisUser], {
     event: "NewInvite",

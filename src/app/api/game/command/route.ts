@@ -109,6 +109,8 @@ export async function POST(request: NextRequest) {
         title: "You won! 🎉",
         body: `Congratulations, you won the game!`,
         imageUrl: gameIconUrl
+      }, {
+        channel: 'yourTurn'
       });
     }
 
@@ -164,6 +166,8 @@ export async function POST(request: NextRequest) {
     title: "Your Turn",
     body: `It's your turn to play!`,
     imageUrl: `https://async-games.vercel.app/art/dicecities/icon.png`
+  }, {
+    channel: 'yourTurn'
   });
 
   return NextResponse.json(response, {status: 200});

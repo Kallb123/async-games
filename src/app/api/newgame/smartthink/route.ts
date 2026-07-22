@@ -54,6 +54,8 @@ export async function POST(request: NextRequest) {
     title: "Game Invite",
     body: `${thisUser.username} has invited you to play Smartthink!`,
     imageUrl: `https://async-games.vercel.app/art/smartthink/icon.png`
+  }, {
+    channel: 'gameInvite'
   });
   await sendPushToUsers([thisUser], {
     event: "NewInvite",

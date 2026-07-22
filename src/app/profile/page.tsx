@@ -3,15 +3,22 @@ import CurrentUserInfo from "@/components/CurrentUserInfo";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useToast } from "@/components/ToastContext";
 import Avatar from "@/components/ui/Avatar";
+import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import { SkeletonRow } from "@/components/ui/Skeleton";
 import { IFriendRequestResponse, IFriendUser } from "@/utils/mongodb/FriendshipData";
 import { formatRelativeTime } from "@/utils/ui/time";
 import useFcmToken from "@/utils/hooks/useFcmToken";
 import { usePushEvents, FRIEND_EVENTS } from "@/utils/hooks/usePushEvents";
+import { NotificationChannel, NOTIFICATION_CHANNELS } from "@/utils/firebase/notificationPreferences";
 import { useUser, useClerk } from "@clerk/nextjs";
 import moment from 'moment';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from "react";
+
+interface NotificationPreferencesState {
+    enabled: boolean;
+    channels: Record<NotificationChannel, boolean>;
+}
 
 function friendDisplayName(user: IFriendUser) {
     const fullName = [user.firstName, user.lastName].filter(name => name).join(" ");
@@ -36,6 +43,10 @@ export default function Profile() {
     const [showAdd, setShowAdd] = useState(false);
     const [isLoadingFriends, setIsLoadingFriends] = useState(true);
 
+    const [prefs, setPrefs] = useState<NotificationPreferencesState | null>(null);
+    const [isSavingPrefs, setIsSavingPrefs] = useState(false);
+    const [hasPrefPermission, setHasPrefPermission] = useState(false);
+
     useEffect(() => {
         if (isLoaded) {
             if (!user) {
@@ -47,8 +58,15 @@ export default function Profile() {
                 router.push('/unlockaccess');
             }
             refreshFriends();
+            refreshPreferences();
         }
     }, [isLoaded]);
+
+    useEffect(() => {
+        if (typeof window !== 'undefined' && 'Notification' in window) {
+            setHasPrefPermission(Notification.permission === 'granted');
+        }
+    }, []);
 
     usePushEvents(FRIEND_EVENTS, () => refreshFriends(), { refreshOnVisible: true });
 
@@ -64,6 +82,17 @@ export default function Profile() {
         })
         .catch(error => console.error('Failed to load friends', error))
         .finally(() => setIsLoadingFriends(false));
+    }
+
+    const refreshPreferences = () => {
+        fetch('/api/notificationpreferences')
+            .then(response => response.json())
+            .then(data => {
+                if (data && data.preferences) {
+                    setPrefs(data.preferences);
+                }
+            })
+            .catch(error => console.error('Failed to load notification preferences', error));
     }
 
     const handleInvite = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -132,6 +161,47 @@ export default function Profile() {
         }
     };
 
+    const updatePreferences = async (patch: { enabled?: boolean; channels?: Partial<Record<NotificationChannel, boolean>> }) => {
+        if (!prefs || isSavingPrefs) return;
+        setIsSavingPrefs(true);
+        const next: NotificationPreferencesState = {
+            enabled: patch.enabled !== undefined ? patch.enabled : prefs.enabled,
+            channels: { ...prefs.channels, ...(patch.channels ?? {}) }
+        };
+        setPrefs(next);
+        try {
+            const response = await fetch('/api/notificationpreferences', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(next)
+            });
+            if (!response.ok) throw new Error('Failed to save preferences');
+            const data = await response.json();
+            if (data.preferences) {
+                setPrefs(data.preferences);
+            }
+        } catch (error) {
+            console.error(error);
+            showToast('Failed to save notification preferences.', 'danger');
+            refreshPreferences();
+        } finally {
+            setIsSavingPrefs(false);
+        }
+    };
+
+    const toggleMaster = () => {
+        if (!hasPrefPermission) {
+            enableNotifications();
+            return;
+        }
+        updatePreferences({ enabled: !prefs?.enabled });
+    };
+
+    const toggleChannel = (channel: NotificationChannel) => {
+        if (!prefs) return;
+        updatePreferences({ channels: { [channel]: !prefs.channels[channel] } });
+    };
+
     return (
         <main>
             <div className="ag-topbar">
@@ -172,17 +242,52 @@ export default function Profile() {
 
             {/* Notifications */}
             <div className="ag-section">
-                <div className="ag-cta" style={{ background: "oklch(0.35 0.04 45)", color: "var(--ag-on-dark)" }}>
-                    <div className="ag-cta-main">
-                        <div className="ag-cta-title">Turn notifications</div>
-                        <div className="ag-cta-sub">
-                            {notificationsOn ? "Push on this device is on" : "Get nudged when it's your move"}
-                        </div>
-                    </div>
-                    {notificationsOn
-                        ? <div className="ag-toggle ag-toggle--on" aria-hidden style={{ pointerEvents: "none" }} />
-                        : <button type="button" className="ag-btn ag-btn--light" onClick={enableNotifications}>Enable</button>}
+                <div className="ag-section-head">
+                    <h2 className="ag-section-label">Notifications</h2>
                 </div>
+
+                {!hasPrefPermission && (
+                    <div className="ag-cta" style={{ background: "oklch(0.35 0.04 45)", color: "var(--ag-on-dark)" }}>
+                        <div className="ag-cta-main">
+                            <div className="ag-cta-title">Push notifications</div>
+                            <div className="ag-cta-sub">Enable push so we can nudge you when it&apos;s your move.</div>
+                        </div>
+                        <button type="button" className="ag-btn ag-btn--light" onClick={enableNotifications}>Enable</button>
+                    </div>
+                )}
+
+                {hasPrefPermission && (
+                    <div className="ag-list" aria-describedby={prefs && !prefs.enabled ? "notifications-paused-hint" : undefined}>
+                        <OptionToggleRow
+                            title="All notifications"
+                            description="Pause everything, or choose per channel below"
+                            on={prefs?.enabled ?? false}
+                            onToggle={toggleMaster}
+                            disabled={isSavingPrefs}
+                            ariaLabel="Toggle all notifications"
+                        />
+                    </div>
+                )}
+
+                {hasPrefPermission && prefs && !prefs.enabled && (
+                    <p id="notifications-paused-hint" className="ag-disabled-hint">Notifications are paused. Channel settings will take effect again once you turn notifications back on.</p>
+                )}
+
+                {hasPrefPermission && prefs?.enabled && (
+                    <div className="ag-list" style={{ marginTop: 12 }}>
+                        {NOTIFICATION_CHANNELS.map((channel) => (
+                            <OptionToggleRow
+                                key={channel.key}
+                                title={channel.label}
+                                description={channel.description}
+                                on={prefs.channels[channel.key]}
+                                onToggle={() => toggleChannel(channel.key)}
+                                disabled={isSavingPrefs}
+                                ariaLabel={`Toggle ${channel.label} notifications`}
+                            />
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Friends */}

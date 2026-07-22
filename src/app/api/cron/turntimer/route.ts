@@ -60,6 +60,8 @@ export async function GET(request: NextRequest) {
                     title: "Your Turn",
                     body: `It's your turn to play!`,
                     imageUrl: gameIconUrl
+                }, {
+                    channel: 'yourTurn'
                 });
             }
 
@@ -84,6 +86,8 @@ export async function GET(request: NextRequest) {
                     title: "Time Running Out!",
                     body: `You have less than ${timeLeft} left to take your turn!`,
                     imageUrl: gameIconUrl
+                }, {
+                    channel: 'turnExpiringSoon'
                 });
             }
 

@@ -65,6 +65,8 @@ export async function POST(request: NextRequest) {
   }, {
     title: 'Game Invite',
     body: `${thisUser.username} has invited you to play Settlements and Cities!`,
+  }, {
+    channel: 'gameInvite'
   });
   await sendPushToUsers([thisUser], {
     event: 'NewInvite',

@@ -7,6 +7,7 @@ import CurrentUserInfo from "@/components/CurrentUserInfo";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
+import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import usePlayerList from "@/utils/hooks/usePlayerList";
 import { GAME_META } from "@/utils/ui/games";
 import { DiceCitiesInvitationRequest } from "@/games/DiceCities/DiceCitiesModels";
@@ -78,32 +79,20 @@ export default function NewGameDiceCities() {
           <h2 className="ag-section-label">Dice Cities options</h2>
         </div>
         <div className="ag-card" style={{ padding: "4px 16px" }}>
-          <div className="ag-option-row">
-            <div style={{ flex: 1 }}>
-              <div className="ag-option-title">Docks</div>
-              <div className="ag-option-desc">Adds ports and a wider die spread</div>
-            </div>
-            <button
-              type="button"
-              className={`ag-toggle ${enabledDocks ? "ag-toggle--on" : ""}`}
-              aria-pressed={enabledDocks}
-              aria-label="Toggle docks expansion"
-              onClick={() => setEnabledDocks(v => !v)}
-            />
-          </div>
-          <div className="ag-option-row">
-            <div style={{ flex: 1 }}>
-              <div className="ag-option-title">Billionaire&apos;s Row</div>
-              <div className="ag-option-desc">Higher-value landmark cards</div>
-            </div>
-            <button
-              type="button"
-              className={`ag-toggle ${enabledBillionaireRow ? "ag-toggle--on" : ""}`}
-              aria-pressed={enabledBillionaireRow}
-              aria-label="Toggle Billionaire's Row expansion"
-              onClick={() => setEnabledBillionaireRow(v => !v)}
-            />
-          </div>
+          <OptionToggleRow
+            title="Docks"
+            description="Adds ports and a wider die spread"
+            on={enabledDocks}
+            onToggle={() => setEnabledDocks(v => !v)}
+            ariaLabel="Toggle docks expansion"
+          />
+          <OptionToggleRow
+            title="Billionaire&apos;s Row"
+            description="Higher-value landmark cards"
+            on={enabledBillionaireRow}
+            onToggle={() => setEnabledBillionaireRow(v => !v)}
+            ariaLabel="Toggle Billionaire's Row expansion"
+          />
         </div>
       </div>
 
