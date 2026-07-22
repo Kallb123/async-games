@@ -1,7 +1,8 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { FriendshipModel } from '@/utils/mongodb/FriendshipData';
+import { FriendshipModel, IFriendshipDataDocument } from '@/utils/mongodb/FriendshipData';
+import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 
 // Removes a friendship record: declines an incoming request, cancels an
 // outgoing request, or unfriends an accepted friend.
@@ -20,13 +21,24 @@ export async function POST(request: NextRequest) {
 
   await dbConnect();
 
-  const result = await FriendshipModel.deleteOne({
+  const friendship: IFriendshipDataDocument | null = await FriendshipModel.findOne({
     friendshipId,
     $or: [{requesterId: userId}, {recipientId: userId}]
   });
-  if (result.deletedCount === 0) {
+  if (!friendship) {
     return NextResponse.json({}, {status: 404, statusText: "Friendship not found"});
   }
+
+  await FriendshipModel.deleteOne({ friendshipId }).exec();
+
+  // Refresh the other party live so the removed friendship / request disappears
+  // from their profile (covers decline, cancel, and unfriend) — silent push.
+  const otherUserId = friendship.requesterId === userId ? friendship.recipientId : friendship.requesterId;
+  const otherUser = await (await clerkClient()).users.getUser(otherUserId);
+  await sendPushToUsers([otherUser], {
+    event: "FriendRemoved",
+    friendshipId
+  });
 
   return NextResponse.json({success: true});
 }
