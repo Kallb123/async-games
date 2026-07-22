@@ -5,6 +5,7 @@ import { useToast } from "@/components/ToastContext";
 import Avatar from "@/components/ui/Avatar";
 import { SkeletonRow } from "@/components/ui/Skeleton";
 import { IFriendRequestResponse, IFriendUser } from "@/utils/mongodb/FriendshipData";
+import { formatRelativeTime } from "@/utils/ui/time";
 import useFcmToken from "@/utils/hooks/useFcmToken";
 import { usePushEvents, FRIEND_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useUser, useClerk } from "@clerk/nextjs";
@@ -222,8 +223,12 @@ export default function Profile() {
                                 <div key={friend.friendshipId} className="ag-list-row">
                                     <Avatar name={friend.user.username} size={36} />
                                     <div className="ag-list-row-main">
-                                        <div className="ag-list-row-title">{friend.user.username}</div>
-                                        <div className="ag-list-row-sub">{friendDisplayName(friend.user)}</div>
+                                        <div className="ag-list-row-title">{friendDisplayName(friend.user)}</div>
+                                        <div className="ag-list-row-sub">
+                                            {friend.user.lastActionTimestamp
+                                                ? `Last active ${formatRelativeTime(friend.user.lastActionTimestamp)}`
+                                                : "No activity yet"}
+                                        </div>
                                     </div>
                                     <a href="/newgame" className="ag-pill-action">Challenge</a>
                                     <button

@@ -2,6 +2,7 @@ import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { FriendshipModel, IFriendshipDataDocument, IFriendRequestResponse, IFriendsResponse, IFriendUser } from '@/utils/mongodb/FriendshipData';
+import { GameDataModel } from '@/utils/mongodb/GameData';
 
 export async function GET(request: NextRequest) {
   console.log(`GET ${request.nextUrl.pathname}`);
@@ -21,6 +22,23 @@ export async function GET(request: NextRequest) {
     friendship.requesterId === userId ? friendship.recipientId : friendship.requesterId
   );
 
+  // Each friend's "last action" is the most recent command they authored across
+  // any of their games. commandHistory timestamps are ISO 8601 strings, so a
+  // lexicographic $max sorts them chronologically.
+  const lastActionByUserId: Map<string, string> = new Map;
+  if (otherUserIds.length) {
+    const lastActions: { _id: string, lastActionTimestamp: string }[] = await GameDataModel.aggregate([
+      { $match: { userIdList: { $in: otherUserIds } } },
+      { $unwind: '$gameState.commandHistory' },
+      { $match: { 'gameState.commandHistory.senderId': { $in: otherUserIds } } },
+      { $group: {
+        _id: '$gameState.commandHistory.senderId',
+        lastActionTimestamp: { $max: '$gameState.commandHistory.timestamp' }
+      } }
+    ]);
+    lastActions.forEach(({ _id, lastActionTimestamp }) => lastActionByUserId.set(_id, lastActionTimestamp));
+  }
+
   const userMap: Map<string, IFriendUser> = new Map;
   if (otherUserIds.length) {
     const { data: users } = await (await clerkClient()).users.getUserList({userId: otherUserIds, limit: 500});
@@ -29,7 +47,8 @@ export async function GET(request: NextRequest) {
         userId: user.id,
         username: user.username,
         firstName: user.firstName,
-        lastName: user.lastName
+        lastName: user.lastName,
+        lastActionTimestamp: lastActionByUserId.get(user.id) ?? null
       });
     });
   }
