@@ -49,7 +49,7 @@ export function getNotificationPreferences(user: User): NotificationPreferences 
     }
 
     const prefs = metadata as Partial<NotificationPreferences>;
-    const channels = prefs.channels ?? {};
+    const channels = (prefs.channels ?? {}) as Partial<Record<NotificationChannel, boolean>>;
 
     return {
         enabled: prefs.enabled ?? DEFAULT_PREFERENCES.enabled,

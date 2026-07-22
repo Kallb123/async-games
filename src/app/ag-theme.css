@@ -439,6 +439,16 @@ body {
     margin-top: 8px;
 }
 
+.ag-disabled-hint {
+    font: 500 11px/1.4 var(--ag-font);
+    color: var(--ag-ink-softer);
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    background: var(--ag-surface-2);
+    border: 1.5px dashed var(--ag-line-dashed);
+    border-radius: 12px;
+}
+
 /* ---- Toggle switch ---- */
 .ag-toggle {
     width: 44px;
