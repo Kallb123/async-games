@@ -1,5 +1,7 @@
 'use client'
 
+import { UNLIMITED_TURN_TIMER, isUnlimitedTurnTimer } from "@/utils/games/TurnTimer";
+
 const OPTIONS: { value: string; label: string }[] = [
     { value: "10m", label: "10 min" },
     { value: "30m", label: "30 min" },
@@ -10,6 +12,7 @@ const OPTIONS: { value: string; label: string }[] = [
     { value: "1d", label: "1 day" },
     { value: "3d", label: "3 days" },
     { value: "7d", label: "7 days" },
+    { value: UNLIMITED_TURN_TIMER, label: "Unlimited" },
 ];
 
 interface TurnTimerSelectProps {
@@ -34,7 +37,11 @@ export default function TurnTimerSelect({ value, onChange }: TurnTimerSelectProp
                     </option>
                 ))}
             </select>
-            <p className="ag-hint">If time runs out the turn is skipped. We&apos;ll nudge everyone before that happens.</p>
+            <p className="ag-hint">
+                {isUnlimitedTurnTimer(value)
+                    ? "Turns never expire — players can take as long as they like."
+                    : "If time runs out the turn is skipped. We'll nudge everyone before that happens."}
+            </p>
         </div>
     );
 }
