@@ -930,6 +930,92 @@ body {
 .ag-btn--success:hover { color: var(--ag-on-dark); filter: brightness(1.05); }
 .ag-btn--roll { box-shadow: 0 3px 0 var(--ag-terracotta-deep); }
 
+/* ---- Themed modal shell (Bootstrap Modal in the design-system skin) ---- */
+/* Modals render in a body-level portal outside .ag-app, so these rules key off
+   the .ag-modal dialog class and the :root design tokens rather than .ag-app. */
+.ag-modal .modal-content {
+    background: var(--ag-surface);
+    border: 1.5px solid var(--ag-line);
+    border-radius: 18px;
+    font-family: var(--ag-font);
+    color: var(--ag-ink);
+    overflow: hidden;
+    box-shadow: var(--ag-shadow-lift);
+}
+.ag-modal .modal-header { border-bottom: 1px solid var(--ag-line); padding: 15px 18px; }
+.ag-modal .modal-title { font: 800 17px var(--ag-font); color: var(--ag-ink); }
+.ag-modal .modal-body { padding: 16px 18px; }
+.ag-modal .modal-footer {
+    border-top: 1px solid var(--ag-line);
+    padding: 12px 18px;
+    gap: 8px;
+}
+.ag-modal .modal-footer > * { margin: 0; }
+
+/* ---- Maritime trade picker ---- */
+.ag-trade-section { margin-bottom: 14px; }
+.ag-trade-label {
+    font: 800 11px var(--ag-font);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ag-ink-soft);
+    margin-bottom: 7px;
+}
+.ag-trade-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.ag-trade-opt {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    background: var(--ag-surface);
+    border: 1.5px solid var(--ag-line);
+    border-radius: 12px;
+    padding: 8px 2px 6px;
+    cursor: pointer;
+    font-family: var(--ag-font);
+    color: var(--ag-ink);
+}
+.ag-trade-opt--active {
+    border-color: var(--ag-terracotta);
+    box-shadow: 0 0 0 1px var(--ag-terracotta);
+    background: color-mix(in oklch, var(--ag-terracotta) 8%, var(--ag-surface));
+}
+.ag-trade-opt--disabled { opacity: 0.4; cursor: not-allowed; }
+.ag-trade-opt-emoji { font-size: 20px; line-height: 1; }
+.ag-trade-opt-ratio { font: 800 10px var(--ag-font); color: var(--ag-terracotta); }
+.ag-trade-opt-have { font: 700 9.5px var(--ag-font); color: var(--ag-ink-soft); }
+
+.ag-trade-preview {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: var(--ag-surface-2);
+    border-radius: 12px;
+    padding: 12px;
+    font: 800 17px var(--ag-font);
+    color: var(--ag-ink);
+}
+.ag-trade-preview-arrow { color: var(--ag-terracotta); }
+
+.ag-trade-docks {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font: 600 11px/1.4 var(--ag-font);
+    color: var(--ag-ink-soft);
+    margin-bottom: 14px;
+}
+.ag-trade-dock-pill {
+    background: color-mix(in oklch, var(--ag-terracotta) 12%, var(--ag-surface));
+    border: 1px solid color-mix(in oklch, var(--ag-terracotta) 35%, transparent);
+    border-radius: 99px;
+    padding: 3px 9px;
+    font: 800 10.5px var(--ag-font);
+    color: var(--ag-terracotta-deep);
+}
+
 /* In-game history / log */
 .ag-log {
     background: var(--ag-surface);
