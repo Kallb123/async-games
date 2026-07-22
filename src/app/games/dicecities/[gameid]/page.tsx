@@ -218,10 +218,12 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
                     detail: e.detail,
                     timestamp: e.timestamp,
                     dotColour: e.dotColour,
+                    reaction: e.reaction,
                 }))}
                 tip={r.tip}
                 cta={{ label: "Roll the dice →", onClick: recap.dismiss }}
                 backHref="/"
+                onReact={recap.react}
             />
         );
     }

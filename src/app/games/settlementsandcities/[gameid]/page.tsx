@@ -360,10 +360,12 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                     detail: e.detail,
                     timestamp: e.timestamp,
                     dotColour: e.dotColour,
+                    reaction: e.reaction,
                 }))}
                 tip={r.tip}
                 cta={{ label: "Take your turn →", onClick: recap.dismiss }}
                 backHref="/"
+                onReact={recap.react}
             />
         );
     }

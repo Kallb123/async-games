@@ -1,5 +1,6 @@
 'use client'
-import React, { useEffect, useRef, useState } from 'react';
+import React from 'react';
+import { useDismissablePopup } from '@/utils/hooks/useDismissablePopup';
 
 export interface GameOption {
     /** Stable key for React. */
@@ -32,27 +33,7 @@ interface GameOptionsMenuProps {
  * this and just supplies its own `options`.
  */
 export default function GameOptionsMenu({ options, label = 'Game options' }: GameOptionsMenuProps) {
-    const [open, setOpen] = useState(false);
-    const rootRef = useRef<HTMLDivElement>(null);
-
-    // Close on outside click or Escape while the menu is open.
-    useEffect(() => {
-        if (!open) return;
-        const onPointerDown = (e: PointerEvent) => {
-            if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-                setOpen(false);
-            }
-        };
-        const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') setOpen(false);
-        };
-        document.addEventListener('pointerdown', onPointerDown);
-        document.addEventListener('keydown', onKeyDown);
-        return () => {
-            document.removeEventListener('pointerdown', onPointerDown);
-            document.removeEventListener('keydown', onKeyDown);
-        };
-    }, [open]);
+    const { open, setOpen, rootRef } = useDismissablePopup<HTMLDivElement>();
 
     if (options.length === 0) return null;
 

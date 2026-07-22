@@ -254,10 +254,12 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
                     detail: e.detail,
                     timestamp: e.timestamp,
                     dotColour: e.dotColour,
+                    reaction: e.reaction,
                 }))}
                 tip={r.tip}
                 cta={{ label: "Roll the die →", onClick: recap.dismiss }}
                 backHref="/"
+                onReact={recap.react}
             />
         );
     }
