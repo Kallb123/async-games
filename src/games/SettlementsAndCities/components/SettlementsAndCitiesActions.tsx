@@ -6,6 +6,7 @@ import type { SAC_Resource, SAC_DevCard } from '@/games/SettlementsAndCities/boa
 import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER } from '@/games/SettlementsAndCities/ui';
 import { IGameCommand } from '@/utils/apiModels/GameLogic';
 import type { ICommandResponse } from '@/app/api/game/command/route';
+import { useToast } from '@/components/ToastContext';
 import {
     SACRollDice,
     SACEndTurn,
@@ -73,6 +74,7 @@ export default function SettlementsAndCitiesActions({
     const [showTradeModal, setShowTradeModal] = useState(false);
     const [tradeOffer, setTradeOffer] = useState<SAC_Resource>('lumber');
     const [tradeWant, setTradeWant] = useState<SAC_Resource>('wool');
+    const { showToast } = useToast();
 
     const myState = gs.playerStates[myUsername];
     const myDevCards = gs.playerDevCards?.[myUsername];
@@ -163,7 +165,7 @@ export default function SettlementsAndCitiesActions({
             </button>
 
             <div className="ag-action-grid">
-                <button className="ag-btn ag-btn--light" onClick={() => setShowTradeModal(true)}>
+                <button className="ag-btn ag-btn--light" onClick={openTradeModal}>
                     ⚖️ Trade with the bank
                 </button>
             </div>
@@ -171,32 +173,147 @@ export default function SettlementsAndCitiesActions({
     );
 
     // ── Maritime trade modal (needed by both the main turn and Special Build) ───
+    // The trade ratio the bank gives for a resource depends on the harbours the
+    // player has a settlement/city on: a matching 2:1 dock, a generic 3:1 dock,
+    // else the default 4:1. Mirrors SACMaritimeTrade.Execute so the UI only ever
+    // offers trades the engine will accept. (Vertex owners arrive as usernames.)
+    const myHarbors = gs.harbors.filter(h =>
+        h.vertices.some(vid => {
+            const v = gs.vertices[vid];
+            return v?.owner === myUsername && v.building !== null;
+        }),
+    );
+    const has3to1Dock = myHarbors.some(h => h.type === '3to1');
+    const dockResources = [...new Set(myHarbors.map(h => h.type))]
+        .filter((t): t is SAC_Resource => t !== '3to1');
+
+    function tradeRatio(r: SAC_Resource): number {
+        if (dockResources.includes(r)) return 2;
+        if (has3to1Dock) return 3;
+        return 4;
+    }
+    function canOffer(r: SAC_Resource): boolean {
+        return (res[r] ?? 0) >= tradeRatio(r);
+    }
+
+    const offerRatio = tradeRatio(tradeOffer);
+    const canTrade = tradeOffer !== tradeWant && canOffer(tradeOffer);
+    const anyTradeable = RESOURCES.some(canOffer);
+
+    // Open the modal with a sensible, fulfillable default selection so the player
+    // isn't greeted by a disabled Trade button when their default offer is short.
+    function openTradeModal() {
+        const firstAffordable = RESOURCES.find(canOffer);
+        if (firstAffordable) {
+            setTradeOffer(firstAffordable);
+            if (tradeWant === firstAffordable) {
+                setTradeWant(RESOURCES.find(r => r !== firstAffordable)!);
+            }
+        }
+        setShowTradeModal(true);
+    }
+    function pickOffer(r: SAC_Resource) {
+        setTradeOffer(r);
+        if (tradeWant === r) setTradeWant(RESOURCES.find(x => x !== r)!);
+    }
+    function confirmTrade() {
+        if (!canTrade) return;
+        const cmd = new SACMaritimeTrade();
+        cmd.offerResource = tradeOffer;
+        cmd.wantResource = tradeWant;
+        submitCommand(cmd, () => {
+            setBoardMode('idle');
+            setShowTradeModal(false);
+            showToast(
+                `Traded ${offerRatio} ${RESOURCE_EMOJI[tradeOffer]} for 1 ${RESOURCE_EMOJI[tradeWant]}`,
+                'success',
+                'Trade complete',
+            );
+        });
+    }
+
     const tradeModal = (
-        <Modal show={showTradeModal} onHide={() => setShowTradeModal(false)}>
-            <Modal.Header closeButton><Modal.Title>Maritime Trade</Modal.Title></Modal.Header>
+        <Modal show={showTradeModal} onHide={() => setShowTradeModal(false)} dialogClassName="ag-modal">
+            <Modal.Header closeButton><Modal.Title>⚖️ Trade with the bank</Modal.Title></Modal.Header>
             <Modal.Body>
-                <Form.Group className="mb-2">
-                    <Form.Label>Offer (give)</Form.Label>
-                    <Form.Select value={tradeOffer} onChange={e => setTradeOffer(e.target.value as SAC_Resource)}>
-                        {RESOURCES.map(r => <option key={r} value={r}>{RESOURCE_EMOJI[r]} {r} (have: {res[r]})</option>)}
-                    </Form.Select>
-                </Form.Group>
-                <Form.Group>
-                    <Form.Label>Want (receive)</Form.Label>
-                    <Form.Select value={tradeWant} onChange={e => setTradeWant(e.target.value as SAC_Resource)}>
-                        {RESOURCES.map(r => <option key={r} value={r}>{RESOURCE_EMOJI[r]} {r}</option>)}
-                    </Form.Select>
-                </Form.Group>
+                <div className="ag-trade-docks">
+                    {myHarbors.length === 0
+                        ? <>⚓ No docks connected yet — every trade is <b>4:1</b>. Build on a harbour to trade cheaper.</>
+                        : <>
+                            <span>⚓ Your docks:</span>
+                            {has3to1Dock && <span className="ag-trade-dock-pill">3:1 any</span>}
+                            {dockResources.map(r => (
+                                <span key={r} className="ag-trade-dock-pill">2:1 {RESOURCE_EMOJI[r]}</span>
+                            ))}
+                        </>}
+                </div>
+
+                <div className="ag-trade-section">
+                    <div className="ag-trade-label">You give</div>
+                    <div className="ag-trade-grid">
+                        {RESOURCES.map(r => {
+                            const ratio = tradeRatio(r);
+                            const affordable = canOffer(r);
+                            const active = tradeOffer === r;
+                            return (
+                                <button
+                                    key={r}
+                                    type="button"
+                                    className={`ag-trade-opt${active ? ' ag-trade-opt--active' : ''}${!affordable ? ' ag-trade-opt--disabled' : ''}`}
+                                    disabled={!affordable}
+                                    onClick={() => affordable && pickOffer(r)}
+                                >
+                                    <span className="ag-trade-opt-emoji">{RESOURCE_EMOJI[r]}</span>
+                                    <span className="ag-trade-opt-ratio">{ratio}:1</span>
+                                    <span className="ag-trade-opt-have">have {res[r] ?? 0}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div className="ag-trade-section">
+                    <div className="ag-trade-label">You get</div>
+                    <div className="ag-trade-grid">
+                        {RESOURCES.map(r => {
+                            const active = tradeWant === r;
+                            const isOffer = tradeOffer === r;
+                            return (
+                                <button
+                                    key={r}
+                                    type="button"
+                                    className={`ag-trade-opt${active ? ' ag-trade-opt--active' : ''}${isOffer ? ' ag-trade-opt--disabled' : ''}`}
+                                    disabled={isOffer}
+                                    onClick={() => !isOffer && setTradeWant(r)}
+                                >
+                                    <span className="ag-trade-opt-emoji">{RESOURCE_EMOJI[r]}</span>
+                                    <span className="ag-trade-opt-have">{isOffer ? 'giving' : '+1'}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div className="ag-trade-preview">
+                    <span>{offerRatio} {RESOURCE_EMOJI[tradeOffer]}</span>
+                    <span className="ag-trade-preview-arrow">→</span>
+                    <span>1 {RESOURCE_EMOJI[tradeWant]}</span>
+                </div>
+                {!anyTradeable && (
+                    <p className="ag-action-hint" style={{ marginTop: 6 }}>
+                        You don&apos;t have enough of any resource to trade with the bank yet.
+                    </p>
+                )}
             </Modal.Body>
             <Modal.Footer>
-                <Button variant="secondary" onClick={() => setShowTradeModal(false)}>Cancel</Button>
-                <Button variant="primary" onClick={() => {
-                    const cmd = new SACMaritimeTrade();
-                    cmd.offerResource = tradeOffer;
-                    cmd.wantResource = tradeWant;
-                    submit(cmd);
-                    setShowTradeModal(false);
-                }}>Trade</Button>
+                <button className="ag-btn ag-btn--light" onClick={() => setShowTradeModal(false)}>Cancel</button>
+                <button
+                    className="ag-btn ag-btn--primary"
+                    disabled={!canTrade}
+                    onClick={confirmTrade}
+                >
+                    {canTrade ? `Trade ${offerRatio}:1` : `Need ${offerRatio} ${RESOURCE_EMOJI[tradeOffer]}`}
+                </button>
             </Modal.Footer>
         </Modal>
     );
