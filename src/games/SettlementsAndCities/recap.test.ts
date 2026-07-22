@@ -38,6 +38,7 @@ function state(players: ISACPlayerStateResponse[], overrides: Partial<ISACSpecif
         pendingRoadBuilding: 0,
         playedDevCard: false,
         playerDevCards: {},
+        playerNewDevCards: {},
         specialBuildActive: false,
         specialBuildQueue: [],
         specialBuildMainPlayer: null,

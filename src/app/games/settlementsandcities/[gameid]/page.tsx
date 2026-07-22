@@ -11,6 +11,7 @@ import type { ISACGameDataResponse, ISACSpecificGameStateResponse } from "@/game
 import type { SAC_Resource } from "@/games/SettlementsAndCities/board";
 import { BOARD_TOPOLOGY, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
 import { enabledExpansionNames, normaliseExpansions } from "@/games/SettlementsAndCities/expansions";
+import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER } from "@/games/SettlementsAndCities/ui";
 import SettlementsAndCitiesBoard from "@/games/SettlementsAndCities/components/SettlementsAndCitiesBoard";
 import SettlementsAndCitiesActions, { SACBoardMode } from "@/games/SettlementsAndCities/components/SettlementsAndCitiesActions";
 import GameShell from "@/components/ui/GameShell";
@@ -312,7 +313,9 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     // ── Your hand ────────────────────────────────────────────────────────────
     const myState = gs?.playerStates?.[myUsername];
     const myDevCards = gs?.playerDevCards?.[myUsername];
+    const myNewDevCards = gs?.playerNewDevCards?.[myUsername];
     const myDevCount = myDevCards ? Object.values(myDevCards).reduce((s, n) => s + n, 0) : 0;
+    const myNewDevCount = myNewDevCards ? Object.values(myNewDevCards).reduce((s, n) => s + n, 0) : 0;
     const myHandTotal = myState ? Object.values(myState.resources ?? {}).reduce((s, n) => s + n, 0) : 0;
 
     const logButton = gs ? (
@@ -398,6 +401,26 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                                     );
                                 })}
                             </div>
+
+                            {(myDevCount > 0 || myNewDevCount > 0) && (
+                                <div className="ag-hand-devs">
+                                    {SAC_DEV_CARD_ORDER.map(card => {
+                                        const meta = SAC_DEV_CARD_META[card];
+                                        const playable = myDevCards?.[card] ?? 0;
+                                        const fresh = myNewDevCards?.[card] ?? 0;
+                                        const total = playable + fresh;
+                                        if (total === 0) return null;
+                                        return (
+                                            <span key={card} className="ag-devchip" title={meta.blurb}>
+                                                <span className="ag-devchip-emoji">{meta.emoji}</span>
+                                                <span className="ag-devchip-name">{meta.name}</span>
+                                                <span className="ag-devchip-count">{total}</span>
+                                                {fresh > 0 && <span className="ag-devchip-new" title="Bought this turn — playable next turn">+{fresh} new</span>}
+                                            </span>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     )}
 

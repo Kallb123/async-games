@@ -817,6 +817,54 @@ body {
 .ag-hand-emoji { font-size: 17px; line-height: 1.1; }
 .ag-hand-count { font: 800 13px var(--ag-font); }
 
+/* Dev-card chips shown under the resource hand */
+.ag-hand-devs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ag-devchip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    border-radius: 999px;
+    background: var(--ag-surface-2);
+    border: 1px solid var(--ag-line);
+    font: 700 11px var(--ag-font);
+    color: var(--ag-ink);
+}
+.ag-devchip-emoji { font-size: 13px; }
+.ag-devchip-name { color: var(--ag-ink-soft); }
+.ag-devchip-count {
+    font-weight: 800;
+    min-width: 15px;
+    text-align: center;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--ag-dark);
+    color: var(--ag-on-dark);
+}
+.ag-devchip-new { font: 700 10px var(--ag-font); color: var(--ag-terracotta); }
+
+/* Dev-card play panel in the action sheet */
+.ag-devcards { display: flex; flex-direction: column; gap: 8px; }
+.ag-devcards-head {
+    font: 800 11px var(--ag-font);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ag-ink-soft);
+}
+.ag-devcard-note {
+    font: 500 11px/1.4 var(--ag-font);
+    color: var(--ag-ink-soft);
+    padding: 2px 2px 0;
+}
+.ag-devcard-note--vp {
+    background: color-mix(in oklch, var(--ag-gold) 14%, var(--ag-surface));
+    border: 1px solid color-mix(in oklch, var(--ag-gold) 40%, transparent);
+    border-radius: 12px;
+    padding: 8px 11px;
+    color: var(--ag-ink);
+    font-weight: 600;
+}
+
 /* ---- Action sheet (roll prompt / build list) ---- */
 .ag-actionsheet { background: var(--ag-surface); padding: 10px 16px 20px; }
 .ag-action-hint {

@@ -56,6 +56,10 @@ export interface ISACSpecificGameStateResponse {
     playedDevCard: boolean;
     // Own dev cards (only sent for the requesting user, but for simplicity we always include all)
     playerDevCards: { [username: string]: { [K in SAC_DevCard]: number } };
+    // Dev cards bought this turn — held but not yet playable until the turn ends
+    // (they're promoted into playerDevCards on end-of-turn). Surfaced so the hand
+    // can distinguish a just-bought card from a playable one.
+    playerNewDevCards: { [username: string]: { [K in SAC_DevCard]: number } };
     // 5–6 Player Extension Special Build Phase (§8.5). `specialBuildActive` is
     // true while other players take their between-turns build; `specialBuildQueue`
     // lists the usernames still owed a special-build turn (index 0 = active now);

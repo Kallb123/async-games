@@ -1,6 +1,6 @@
 import type { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import type { SAC_Resource, SAC_DevCard, ISACPlayerState } from "@/games/SettlementsAndCities/board";
-import { BOARD_TOPOLOGY, TERRAIN_TO_RESOURCE, calculateLongestRoad, calculateTotalVP, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
+import { BOARD_TOPOLOGY, TERRAIN_TO_RESOURCE, calculateLongestRoad, calculateVisibleVP, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
 import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
@@ -137,6 +137,22 @@ function sacCanBuildOrTrade(gs: ISettlementsAndCitiesGameData['specificGameState
     return gs.hasRolled;
 }
 
+// True when the active player may play a development card right now. Catan's
+// rule is one dev card per turn, playable at any point during your own main
+// turn — before *or* after the roll — so (unlike build/trade) we deliberately
+// do NOT require hasRolled. Blocked while a robber move or free-road placement
+// is still outstanding, during another player's Special Build, and once a dev
+// card has already been played this turn. Cards bought this turn live in
+// newDevCards (not yet playable) and are handled by the per-command hand check.
+function sacCanPlayDevCard(gs: ISettlementsAndCitiesGameData['specificGameState']): boolean {
+    if (gs.phase !== 'main') return false;
+    if (gs.specialBuildActive) return false;
+    if (gs.pendingRobber) return false;
+    if (gs.pendingRoadBuilding > 0) return false;
+    if (gs.playedDevCard) return false;
+    return true;
+}
+
 // Ends a regular main turn: reset per-turn flags, promote freshly-bought dev
 // cards to playable, and pass the dice to the next seat in turn order.
 function sacAdvanceMainTurn(sacData: ISettlementsAndCitiesGameData): void {
@@ -243,7 +259,14 @@ export class SettlementsAndCitiesGameType implements IGameType {
         // Knights & Commerce / Seas & Sailors — see design doc §8).
         const victoryTarget = gs.victoryTarget ?? 10;
         for (const [userId, ps] of gs.playerStates) {
-            const vp = calculateTotalVP(userId, gs.vertices, ps.devCards, gs.longestRoadOwner, gs.largestArmyOwner);
+            // Hidden Victory Point cards count toward the win the moment they'd
+            // reach the target (they're auto-revealed). A VP card bought this
+            // turn sits in newDevCards, so for the player whose turn it is we
+            // include those too — buying your final VP wins immediately.
+            let victoryPointCards = ps.devCards.victoryPoint;
+            if (userId === sacData.currentTurn) victoryPointCards += ps.newDevCards.victoryPoint;
+            const vp = calculateVisibleVP(userId, gs.vertices, gs.longestRoadOwner, gs.largestArmyOwner)
+                + victoryPointCards;
             if (vp >= victoryTarget) {
                 sacData.complete = true;
                 sacData.winner = userId;
@@ -349,7 +372,7 @@ export class SACPlaceRoadSetup implements IGameCommand {
     }
 }
 
-// ─── Main-phase pre-roll: play knight ─────────────────────────────────────────
+// ─── Play Knight (before or after the roll) ───────────────────────────────────
 
 @serializable
 export class SACPlayKnight implements IGameCommand {
@@ -366,10 +389,8 @@ export class SACPlayKnight implements IGameCommand {
         const sacData = gameData as ISettlementsAndCitiesGameData;
         const gs = sacData.specificGameState;
 
-        if (gs.phase !== 'main') return { validMove: false, turnOver: false };
-        if (gs.specialBuildActive) return { validMove: false, turnOver: false };
-        if (gs.hasRolled) return { validMove: false, turnOver: false };
-        if (gs.playedDevCard) return { validMove: false, turnOver: false };
+        // Knights may be played before or after rolling (one dev card per turn).
+        if (!sacCanPlayDevCard(gs)) return { validMove: false, turnOver: false };
 
         const ps = gs.playerStates.get(this.senderId);
         if (!ps || ps.devCards.knight < 1) return { validMove: false, turnOver: false };
@@ -418,6 +439,8 @@ export class SACRollDice implements IGameCommand {
         if (gs.specialBuildActive) return { validMove: false, turnOver: false };
         if (gs.hasRolled) return { validMove: false, turnOver: false };
         if (gs.pendingRobber) return { validMove: false, turnOver: false };
+        // Finish placing any free roads from a pre-roll Road Building card first.
+        if (gs.pendingRoadBuilding > 0) return { validMove: false, turnOver: false };
 
         // Reuse recorded dice when replaying; otherwise roll fresh and record.
         const die1 = this.recordedRoll1 ?? DiceRoll(6);
@@ -772,10 +795,7 @@ export class SACPlayRoadBuilding implements IGameCommand {
         const sacData = gameData as ISettlementsAndCitiesGameData;
         const gs = sacData.specificGameState;
 
-        if (gs.phase !== 'main' || !gs.hasRolled) return { validMove: false, turnOver: false };
-        if (gs.pendingRobber || gs.playedDevCard) return { validMove: false, turnOver: false };
-        // Progress/dev cards can't be played during another player's Special Build.
-        if (gs.specialBuildActive) return { validMove: false, turnOver: false };
+        if (!sacCanPlayDevCard(gs)) return { validMove: false, turnOver: false };
 
         const ps = gs.playerStates.get(this.senderId);
         if (!ps || ps.devCards.roadBuilding < 1) return { validMove: false, turnOver: false };
@@ -812,10 +832,7 @@ export class SACPlayYearOfPlenty implements IGameCommand {
         const sacData = gameData as ISettlementsAndCitiesGameData;
         const gs = sacData.specificGameState;
 
-        if (gs.phase !== 'main' || !gs.hasRolled) return { validMove: false, turnOver: false };
-        if (gs.pendingRobber || gs.playedDevCard) return { validMove: false, turnOver: false };
-        // Progress/dev cards can't be played during another player's Special Build.
-        if (gs.specialBuildActive) return { validMove: false, turnOver: false };
+        if (!sacCanPlayDevCard(gs)) return { validMove: false, turnOver: false };
 
         const ps = gs.playerStates.get(this.senderId);
         if (!ps || ps.devCards.yearOfPlenty < 1) return { validMove: false, turnOver: false };
@@ -854,10 +871,7 @@ export class SACPlayMonopoly implements IGameCommand {
         const sacData = gameData as ISettlementsAndCitiesGameData;
         const gs = sacData.specificGameState;
 
-        if (gs.phase !== 'main' || !gs.hasRolled) return { validMove: false, turnOver: false };
-        if (gs.pendingRobber || gs.playedDevCard) return { validMove: false, turnOver: false };
-        // Progress/dev cards can't be played during another player's Special Build.
-        if (gs.specialBuildActive) return { validMove: false, turnOver: false };
+        if (!sacCanPlayDevCard(gs)) return { validMove: false, turnOver: false };
 
         const ps = gs.playerStates.get(this.senderId);
         if (!ps || ps.devCards.monopoly < 1) return { validMove: false, turnOver: false };
