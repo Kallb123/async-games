@@ -1,3 +1,5 @@
+export const UNLIMITED_TURN_TIMER = 'unlimited';
+
 const TIMER_MS: Record<string, number> = {
     '10m': 10 * 60 * 1000,
     '30m': 30 * 60 * 1000,
@@ -13,6 +15,10 @@ const TIMER_MS: Record<string, number> = {
 const WARNING_RATIO = 0.2;
 const WARNING_MIN_MS = 5 * 60 * 1000; // 5 minutes (matches external cron granularity)
 
+export function isUnlimitedTurnTimer(turnTimer: string): boolean {
+    return turnTimer === UNLIMITED_TURN_TIMER;
+}
+
 export function parseTurnTimerMs(turnTimer: string): number {
     return TIMER_MS[turnTimer] ?? 0;
 }
@@ -23,11 +29,15 @@ export function warningThresholdMs(turnTimer: string): number {
 }
 
 export function isExpired(lastTurnTimestamp: string, turnTimer: string): boolean {
+    // Unlimited timers never expire, so the cron notifier must never skip their turn.
+    if (isUnlimitedTurnTimer(turnTimer)) return false;
     const elapsed = Date.now() - new Date(lastTurnTimestamp).getTime();
     return elapsed >= parseTurnTimerMs(turnTimer);
 }
 
 export function isWarningThreshold(lastTurnTimestamp: string, turnTimer: string): boolean {
+    // Unlimited timers never run out, so there is nothing to warn about.
+    if (isUnlimitedTurnTimer(turnTimer)) return false;
     const total = parseTurnTimerMs(turnTimer);
     const elapsed = Date.now() - new Date(lastTurnTimestamp).getTime();
     const remaining = total - elapsed;
@@ -35,6 +45,7 @@ export function isWarningThreshold(lastTurnTimestamp: string, turnTimer: string)
 }
 
 export function formatRemainingTime(lastTurnTimestamp: string, turnTimer: string): string {
+    if (isUnlimitedTurnTimer(turnTimer)) return 'unlimited';
     const total = parseTurnTimerMs(turnTimer);
     const elapsed = Date.now() - new Date(lastTurnTimestamp).getTime();
     const remainingMs = Math.max(total - elapsed, 0);
