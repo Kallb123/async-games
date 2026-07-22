@@ -263,6 +263,7 @@ SmartthinkGameDataSchema.methods.CreateResponse = async function(): Promise<IGam
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
         currentTurnUsername,
+        lastTurnTimestamp: gameDataDocument.lastTurnTimestamp,
         url: gameDataDocument.gameType.url,
         complete: gameDataDocument.complete,
         winner

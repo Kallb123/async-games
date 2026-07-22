@@ -58,3 +58,20 @@ export function formatRemainingTime(lastTurnTimestamp: string, turnTimer: string
     if (hours >= 1) return `${hours} hour${hours !== 1 ? 's' : ''}`;
     return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
 }
+
+/** Short "1h left" style label for game lists. Null for unlimited timers. */
+export function formatRemainingTimeShort(lastTurnTimestamp: string, turnTimer: string): string | null {
+    if (isUnlimitedTurnTimer(turnTimer)) return null;
+    const total = parseTurnTimerMs(turnTimer);
+    const elapsed = Date.now() - new Date(lastTurnTimestamp).getTime();
+    const remainingMs = Math.max(total - elapsed, 0);
+
+    const minutes = Math.floor(remainingMs / (60 * 1000));
+    const hours = Math.floor(remainingMs / (60 * 60 * 1000));
+    const days = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
+
+    if (days >= 1) return `${days}d left`;
+    if (hours >= 1) return `${hours}h left`;
+    if (minutes >= 1) return `${minutes}m left`;
+    return `<1m left`;
+}

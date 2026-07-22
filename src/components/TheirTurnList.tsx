@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { opponents } from "@/utils/ui/players";
 import { SkeletonList } from "@/components/ui/Skeleton";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
+import { formatRemainingTimeShort } from "@/utils/games/TurnTimer";
 
 const THEIR_TURN_EVENTS = ['NewInvite', 'GameStart', ...TURN_ADVANCED_EVENTS];
 
@@ -40,20 +41,6 @@ export default function TheirTurnList() {
         }
     }
 
-    const handleEndGame = async (gameId: `${string}-${string}-${string}-${string}-${string}`) => {
-        fetch('/api/game/end', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ gameId })
-        })
-        .then(response => {
-            if (!response.ok) throw new Error('Failed to end game');
-            return response.json();
-        })
-        .then(() => refreshContent())
-        .catch(error => console.error('Failed to end game', error));
-    }
-
     if (gameList.length === 0) return isLoading ? <SkeletonList rows={2} avatar={false} label /> : null;
 
     return (
@@ -62,21 +49,24 @@ export default function TheirTurnList() {
                 <h2 className="ag-section-label">Waiting on others</h2>
             </div>
             <div className="ag-list">
-                {gameList.map((game) => (
-                    <div key={game.gameId} className="ag-list-row">
-                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: "oklch(0.7 0.05 60)", flex: "none" }} />
-                        <a
-                            href={`/games/${game.url}/${game.gameId}`}
-                            className="ag-list-row-main"
-                            style={{ textDecoration: "none", color: "var(--ag-ink)" }}
-                        >
-                            <div style={{ font: "600 13px/1.35 var(--ag-font)" }}>
-                                {game.friendlyName} · <span style={{ color: "var(--ag-ink-soft)" }}>{game.currentTurnUsername || opponents(game, user?.username, "them")}&apos;s turn</span>
-                            </div>
-                        </a>
-                        <button type="button" className="ag-link-muted" onClick={() => handleEndGame(game.gameId)}>End</button>
-                    </div>
-                ))}
+                {gameList.map((game) => {
+                    const timeLeft = formatRemainingTimeShort(game.lastTurnTimestamp, game.turnTimer);
+                    return (
+                        <div key={game.gameId} className="ag-list-row">
+                            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "oklch(0.7 0.05 60)", flex: "none" }} />
+                            <a
+                                href={`/games/${game.url}/${game.gameId}`}
+                                className="ag-list-row-main"
+                                style={{ textDecoration: "none", color: "var(--ag-ink)" }}
+                            >
+                                <div style={{ font: "600 13px/1.35 var(--ag-font)" }}>
+                                    {game.friendlyName} · <span style={{ color: "var(--ag-ink-soft)" }}>{game.currentTurnUsername || opponents(game, user?.username, "them")}&apos;s turn</span>
+                                </div>
+                            </a>
+                            {timeLeft && <span className="ag-list-row-time">{timeLeft}</span>}
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );

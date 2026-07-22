@@ -80,6 +80,7 @@ GameDataSchema.methods.CreateResponse = async function(): Promise<IGameResponse>
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
         currentTurnUsername: currentTurnIndex >= 0 ? usernameList[currentTurnIndex] : "",
+        lastTurnTimestamp: gameDataDocument.lastTurnTimestamp,
         url: gameDataDocument.gameType.url,
         complete: gameDataDocument.complete,
         winner: (await userIdListToUsernameList([gameDataDocument.winner]))[0]
