@@ -4,6 +4,7 @@ import { IGameResponse } from "@/utils/apiModels/GameDataApi";
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { usePushEvents, COMPLETED_GAME_EVENTS } from "@/utils/hooks/usePushEvents";
 
 export default function MyCompleteList() {
     const { user, isLoaded } = useUser();
@@ -11,10 +12,10 @@ export default function MyCompleteList() {
     const [gameList, setGameList] = useState([] as IGameResponse[]);
 
     useEffect(() => {
-        window.addEventListener('GameOver', () => refreshContent());
-
         refreshContent();
     }, [isLoaded]);
+
+    usePushEvents(COMPLETED_GAME_EVENTS, () => refreshContent(), { refreshOnVisible: true });
 
     const refreshContent = async () => {
         if (isLoaded) {

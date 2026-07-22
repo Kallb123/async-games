@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import moment from 'moment';
 import { SkeletonList } from "@/components/ui/Skeleton";
+import { usePushEvents, INVITE_EVENTS } from "@/utils/hooks/usePushEvents";
 
 export default function OutgoingInviteList() {
     const { user, isLoaded } = useUser();
@@ -14,12 +15,10 @@ export default function OutgoingInviteList() {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        window.addEventListener('NewInvite', () => refreshContent());
-        window.addEventListener('InviteAccepted', () => refreshContent());
-        window.addEventListener('GameStart', () => refreshContent());
-
         refreshContent();
     }, [isLoaded]);
+
+    usePushEvents(INVITE_EVENTS, () => refreshContent(), { refreshOnVisible: true });
 
     const refreshContent = async () => {
         if (isLoaded) {

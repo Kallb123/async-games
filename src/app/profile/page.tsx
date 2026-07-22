@@ -6,6 +6,7 @@ import Avatar from "@/components/ui/Avatar";
 import { SkeletonRow } from "@/components/ui/Skeleton";
 import { IFriendRequestResponse, IFriendUser } from "@/utils/mongodb/FriendshipData";
 import useFcmToken from "@/utils/hooks/useFcmToken";
+import { usePushEvents, FRIEND_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useUser, useClerk } from "@clerk/nextjs";
 import moment from 'moment';
 import { usePathname, useRouter } from 'next/navigation';
@@ -35,9 +36,6 @@ export default function Profile() {
     const [isLoadingFriends, setIsLoadingFriends] = useState(true);
 
     useEffect(() => {
-        window.addEventListener('FriendInvite', () => refreshFriends());
-        window.addEventListener('FriendAccepted', () => refreshFriends());
-
         if (isLoaded) {
             if (!user) {
                 router.push('/login');
@@ -50,6 +48,8 @@ export default function Profile() {
             refreshFriends();
         }
     }, [isLoaded]);
+
+    usePushEvents(FRIEND_EVENTS, () => refreshFriends(), { refreshOnVisible: true });
 
     const refreshFriends = () => {
         fetch('/api/friends')

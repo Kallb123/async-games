@@ -32,8 +32,12 @@ export async function POST(request: NextRequest) {
   }
 
   const userIdList = inviteData.userIdList.map(uid => uid.userId);
+  // Notify every invitee *and* the original sender: the sender's outgoing-invite
+  // list / home dashboard needs to react live when their invite is accepted and
+  // when the game finally starts. `userIdList` (invitees only) is what CreateGame
+  // expects, so keep it separate from this notification list.
   const { data: userList } = await (await clerkClient()).users.getUserList({
-    userId: userIdList
+    userId: [...userIdList, inviteData.senderId]
   });
 
   // If not everyone has accepted
