@@ -25,7 +25,6 @@ export default function Profile() {
     const { signOut } = useClerk();
     const router = useRouter();
     const { showToast } = useToast();
-    const { notificationPermissionStatus } = useFcmToken();
 
     const [friends, setFriends] = useState([] as IFriendRequestResponse[]);
     const [incomingRequests, setIncomingRequests] = useState([] as IFriendRequestResponse[]);
