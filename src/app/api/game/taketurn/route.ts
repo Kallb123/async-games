@@ -49,6 +49,8 @@ export async function POST(request: NextRequest) {
   }, {
     title: "Your Turn",
     body: `It's your turn to play!`
+  }, {
+    channel: 'yourTurn'
   });
 
   return NextResponse.json({success: true});

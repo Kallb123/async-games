@@ -60,6 +60,8 @@ export async function POST(request: NextRequest) {
   }, {
     title: "Friend Request",
     body: `${thisUser.username} sent you a friend request!`
+  }, {
+    channel: 'friendInvite'
   });
 
   return NextResponse.json({success: true, username: recipient.username});
