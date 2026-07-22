@@ -4,10 +4,7 @@ import { IGameResponse } from "@/utils/apiModels/GameDataApi";
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { usePushEvents } from "@/utils/hooks/usePushEvents";
-
-// A game lands in the finished list when it ends (`GameOver`).
-const COMPLETED_GAME_EVENTS = ['GameOver'] as const;
+import { usePushEvents, COMPLETED_GAME_EVENTS } from "@/utils/hooks/usePushEvents";
 
 export default function MyCompleteList() {
     const { user, isLoaded } = useUser();

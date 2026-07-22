@@ -29,6 +29,12 @@ export const INVITE_EVENTS = ['NewInvite', 'InviteAccepted', 'InviteCancelled', 
  */
 export const FRIEND_EVENTS = ['FriendInvite', 'FriendAccepted', 'FriendRemoved'] as const;
 
+/**
+ * Push events that move a game into a player's finished list — currently just
+ * `GameOver`, sent to every player when a game ends.
+ */
+export const COMPLETED_GAME_EVENTS = ['GameOver'] as const;
+
 interface PushEventsOptions {
     /**
      * Also re-run `handler` whenever the tab returns to the foreground. FCM only
