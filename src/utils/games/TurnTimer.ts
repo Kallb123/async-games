@@ -44,15 +44,23 @@ export function isWarningThreshold(lastTurnTimestamp: string, turnTimer: string)
     return remaining <= warningThresholdMs(turnTimer) && remaining > 0;
 }
 
-export function formatRemainingTime(lastTurnTimestamp: string, turnTimer: string): string {
-    if (isUnlimitedTurnTimer(turnTimer)) return 'unlimited';
+function remainingParts(lastTurnTimestamp: string, turnTimer: string): { days: number, hours: number, minutes: number } | null {
+    if (isUnlimitedTurnTimer(turnTimer)) return null;
     const total = parseTurnTimerMs(turnTimer);
     const elapsed = Date.now() - new Date(lastTurnTimestamp).getTime();
     const remainingMs = Math.max(total - elapsed, 0);
 
-    const minutes = Math.floor(remainingMs / (60 * 1000));
-    const hours = Math.floor(remainingMs / (60 * 60 * 1000));
-    const days = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
+    return {
+        days: Math.floor(remainingMs / (24 * 60 * 60 * 1000)),
+        hours: Math.floor(remainingMs / (60 * 60 * 1000)),
+        minutes: Math.floor(remainingMs / (60 * 1000)),
+    };
+}
+
+export function formatRemainingTime(lastTurnTimestamp: string, turnTimer: string): string {
+    const parts = remainingParts(lastTurnTimestamp, turnTimer);
+    if (!parts) return 'unlimited';
+    const { days, hours, minutes } = parts;
 
     if (days >= 1) return `${days} day${days !== 1 ? 's' : ''}`;
     if (hours >= 1) return `${hours} hour${hours !== 1 ? 's' : ''}`;
@@ -61,14 +69,9 @@ export function formatRemainingTime(lastTurnTimestamp: string, turnTimer: string
 
 /** Short "1h left" style label for game lists. Null for unlimited timers. */
 export function formatRemainingTimeShort(lastTurnTimestamp: string, turnTimer: string): string | null {
-    if (isUnlimitedTurnTimer(turnTimer)) return null;
-    const total = parseTurnTimerMs(turnTimer);
-    const elapsed = Date.now() - new Date(lastTurnTimestamp).getTime();
-    const remainingMs = Math.max(total - elapsed, 0);
-
-    const minutes = Math.floor(remainingMs / (60 * 1000));
-    const hours = Math.floor(remainingMs / (60 * 60 * 1000));
-    const days = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
+    const parts = remainingParts(lastTurnTimestamp, turnTimer);
+    if (!parts) return null;
+    const { days, hours, minutes } = parts;
 
     if (days >= 1) return `${days}d left`;
     if (hours >= 1) return `${hours}h left`;
