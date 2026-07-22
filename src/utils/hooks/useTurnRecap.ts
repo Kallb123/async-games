@@ -77,12 +77,19 @@ export function useTurnRecap(gameId: string, enabled: boolean = true) {
         setDismissed(true);
     }, [recap]);
 
+    // Re-open the recap on demand (e.g. from the game-options menu) even after
+    // it's been dismissed this visit.
+    const reshow = useCallback(() => setDismissed(false), []);
+
     return {
         recap,
         loading,
         // Only surface once loaded, when there's something to show and the player
         // hasn't dismissed it this visit.
         show: !loading && !dismissed && !!recap?.hasRecap,
+        // Whether there's a recap available to replay, regardless of dismissal.
+        hasRecap: !loading && !!recap?.hasRecap,
         dismiss,
+        reshow,
     };
 }

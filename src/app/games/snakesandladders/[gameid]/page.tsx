@@ -9,6 +9,7 @@ import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { IGameCommand } from "@/utils/apiModels/GameLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import GameShell from "@/components/ui/GameShell";
+import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import SnakesAndLaddersBoard from "@/games/SnakesAndLadders/components/SnakesAndLaddersBoard";
 import SnakesAndLaddersPlayerActions from "@/games/SnakesAndLadders/components/SnakesAndLaddersPlayerActions";
@@ -17,6 +18,7 @@ import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecap from "@/components/games/TurnRecap";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
+import { useEndGame } from "@/utils/hooks/useEndGame";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { ISnakesAndLaddersGameStateResponse } from "@/games/SnakesAndLadders/apiModels";
 import { ISnakesAndLaddersDiceRollOutcome, SnakesAndLaddersRequestDiceRoll } from "@/utils/apiModels/GameLogic";
@@ -116,6 +118,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     // "Since you were last here": on open, if turns elapsed since our last move,
     // show the recap intro before the board. Dismissing (or the CTA) reveals it.
     const recap = useTurnRecap(gameId);
+    const { endGame } = useEndGame(gameId);
 
     // Planning submit: instead of persisting a move, add it as a hypothetical
     // planned turn and reuse the same action panel + dice animation.
@@ -212,13 +215,29 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
         });
     };
 
-    const logButton = boardState ? (
-        <button
-            className={`ag-game-topbar-btn${showLog ? ' ag-game-topbar-btn--on' : ''}`}
-            onClick={() => setShowLog(v => !v)}
-            aria-label="Game log"
-        >📜</button>
-    ) : undefined;
+    const menuOptions: GameOption[] = [
+        ...(recap.hasRecap ? [{
+            key: 'recap',
+            label: 'Show last recap',
+            icon: '🔁',
+            onClick: recap.reshow,
+        }] : []),
+        {
+            key: 'history',
+            label: 'Turn history',
+            icon: '📜',
+            active: showLog,
+            onClick: () => setShowLog(v => !v),
+        },
+        ...(!complete ? [{
+            key: 'end',
+            label: 'End game',
+            icon: '🏳️',
+            danger: true,
+            onClick: endGame,
+        }] : []),
+    ];
+    const optionsMenu = boardState ? <GameOptionsMenu options={menuOptions} /> : undefined;
 
     // Recap intro: a standalone welcome-back screen shown before the board when
     // it's our turn and moves happened while we were away.
@@ -244,7 +263,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     }
 
     return (
-        <GameShell title="Snakes & Ladders" subtitle={subtitle} right={logButton}>
+        <GameShell title="Snakes & Ladders" subtitle={subtitle} right={optionsMenu}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}

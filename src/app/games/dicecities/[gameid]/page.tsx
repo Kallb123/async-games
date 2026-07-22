@@ -9,6 +9,7 @@ import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { IGameCommand } from "@/utils/apiModels/GameLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import GameShell from "@/components/ui/GameShell";
+import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import DiceCitiesBoard from "@/games/DiceCities/components/DiceCitiesBoard";
 import DiceCitiesActions from "@/games/DiceCities/components/DiceCitiesActions";
@@ -16,6 +17,7 @@ import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecap from "@/components/games/TurnRecap";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
+import { useEndGame } from "@/utils/hooks/useEndGame";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { landmarkCount } from "@/games/DiceCities/ui";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
@@ -111,6 +113,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     // "Since you were last here": on open, if turns elapsed since our last move,
     // show the recap intro before the board. Dismissing (or the CTA) reveals it.
     const recap = useTurnRecap(gameId);
+    const { endGame } = useEndGame(gameId);
 
     const displayed = nav.displayedState;
     const complete = nav.displayedComplete;
@@ -176,13 +179,29 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
         })
         : [];
 
-    const logButton = displayed ? (
-        <button
-            className={`ag-game-topbar-btn${showLog ? ' ag-game-topbar-btn--on' : ''}`}
-            onClick={() => setShowLog(v => !v)}
-            aria-label="Game log"
-        >📜</button>
-    ) : undefined;
+    const menuOptions: GameOption[] = [
+        ...(recap.hasRecap ? [{
+            key: 'recap',
+            label: 'Show last recap',
+            icon: '🔁',
+            onClick: recap.reshow,
+        }] : []),
+        {
+            key: 'history',
+            label: 'Turn history',
+            icon: '📜',
+            active: showLog,
+            onClick: () => setShowLog(v => !v),
+        },
+        ...(!complete ? [{
+            key: 'end',
+            label: 'End game',
+            icon: '🏳️',
+            danger: true,
+            onClick: endGame,
+        }] : []),
+    ];
+    const optionsMenu = displayed ? <GameOptionsMenu options={menuOptions} /> : undefined;
 
     // Recap intro: a standalone welcome-back screen shown before the board when
     // it's our turn and moves happened while we were away.
@@ -208,7 +227,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     }
 
     return (
-        <GameShell title="Dice Cities" subtitle={subtitle} right={logButton}>
+        <GameShell title="Dice Cities" subtitle={subtitle} right={optionsMenu}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}

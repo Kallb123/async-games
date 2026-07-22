@@ -15,11 +15,13 @@ import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER } from "@/games/SettlementsAndCit
 import SettlementsAndCitiesBoard from "@/games/SettlementsAndCities/components/SettlementsAndCitiesBoard";
 import SettlementsAndCitiesActions, { SACBoardMode } from "@/games/SettlementsAndCities/components/SettlementsAndCitiesActions";
 import GameShell from "@/components/ui/GameShell";
+import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecap from "@/components/games/TurnRecap";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
+import { useEndGame } from "@/utils/hooks/useEndGame";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
 import {
@@ -122,6 +124,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     // "Since you were last here": on open, if opponents moved since our last turn,
     // show the recap intro before the board. Dismissing (or the CTA) reveals it.
     const recap = useTurnRecap(gameId);
+    const { endGame } = useEndGame(gameId);
 
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
@@ -318,13 +321,29 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     const myNewDevCount = myNewDevCards ? Object.values(myNewDevCards).reduce((s, n) => s + n, 0) : 0;
     const myHandTotal = myState ? Object.values(myState.resources ?? {}).reduce((s, n) => s + n, 0) : 0;
 
-    const logButton = gs ? (
-        <button
-            className={`ag-game-topbar-btn${showLog ? ' ag-game-topbar-btn--on' : ''}`}
-            onClick={() => setShowLog(v => !v)}
-            aria-label="Game log"
-        >📜</button>
-    ) : undefined;
+    const menuOptions: GameOption[] = [
+        ...(recap.hasRecap ? [{
+            key: 'recap',
+            label: 'Show last recap',
+            icon: '🔁',
+            onClick: recap.reshow,
+        }] : []),
+        {
+            key: 'history',
+            label: 'Turn history',
+            icon: '📜',
+            active: showLog,
+            onClick: () => setShowLog(v => !v),
+        },
+        ...(!complete ? [{
+            key: 'end',
+            label: 'End game',
+            icon: '🏳️',
+            danger: true,
+            onClick: endGame,
+        }] : []),
+    ];
+    const optionsMenu = gs ? <GameOptionsMenu options={menuOptions} /> : undefined;
 
     // Recap intro: a standalone welcome-back screen shown before the board when
     // it's our turn and moves happened while we were away.
@@ -350,7 +369,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     }
 
     return (
-        <GameShell title="Settlements & Cities" subtitle={subtitle} right={logButton}>
+        <GameShell title="Settlements & Cities" subtitle={subtitle} right={optionsMenu}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
