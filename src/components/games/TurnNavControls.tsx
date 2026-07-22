@@ -74,6 +74,7 @@ export default function TurnNavControls({ nav, planningActions, canPlan = true }
                     <Button variant="outline-secondary" onClick={nav.jumpToStart} disabled={!nav.canBack} title="Jump to start of game">⏮</Button>
                     <Button variant="outline-secondary" onClick={nav.stepBack} disabled={!nav.canBack} title="Previous turn">◀</Button>
                     <Button variant="outline-secondary" onClick={nav.stepForward} disabled={!nav.canForward} title="Next turn">▶</Button>
+                    <Button variant="outline-secondary" onClick={nav.jumpToCurrent} disabled={!nav.canForward} title="Jump to current turn">⏭</Button>
                 </ButtonGroup>
                 <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
                     <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>{relativeLabel}</span>
