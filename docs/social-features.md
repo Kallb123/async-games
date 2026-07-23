@@ -2,8 +2,13 @@
 
 A planning document. It maps out which social features matter for an
 **asynchronous** turn-based gaming platform, sizes each one (complexity, size,
-risk), and orders them into rough phases. It records intent and analysis only —
-none of this is implemented yet unless a section says otherwise.
+risk), and orders them into rough phases.
+
+**Status update (2026-07-23):** Phase 0 is largely complete. Implemented:
+player turn nudges, turn/action reactions, notification channel toggles per
+user, `GameResult` storage (the structural foundation from §5), and match
+history on user profiles. These form the backbone for Tier 2 features (profiles,
+stats) and later phases.
 
 The framing that runs through the whole document: async play is *lonely by
 default*. There's no shared session, no lobby, no "you're both online right
@@ -25,7 +30,12 @@ rule, and it applies to server models and API contracts too).
 | **Friends** — request / accept / remove, list with incoming/outgoing | `src/utils/mongodb/FriendshipData.ts`, `src/app/api/friends/**` | Built. Flat `requester/recipient/accepted` record; list endpoint already aggregates each friend's **last action timestamp** across their games. |
 | **User directory** | `src/app/users/page.tsx`, `src/app/api/users/` | Built. Browse users to friend / invite. |
 | **Game invitations** | `src/utils/mongodb/InvitationData.ts`, `src/app/api/newgame/**`, `src/app/api/invite/**` | Built. Per-game invite → all-accept → `CreateGame()`. |
-| **Push notifications** | `src/utils/firebase/pushNotification.ts`, `FirebaseForeground.tsx` | Built. `sendPushToUsers()` + a `window` `CustomEvent` fan-out. Events: `NewInvite`, `InviteAccepted`, `GameStart`, `TurnTaken`, `YourTurn`, `TurnExpired`, `TurnExpiringSoon`, `GameOver`. |
+| **Push notifications** | `src/utils/firebase/pushNotification.ts`, `FirebaseForeground.tsx` | Built. `sendPushToUsers()` + a `window` `CustomEvent` fan-out. Events: `NewInvite`, `InviteAccepted`, `GameStart`, `TurnTaken`, `YourTurn`, `TurnExpired`, `TurnExpiringSoon`, `GameOver`, `TurnNudge`, `TurnReaction`. |
+| **Notification preferences** | `src/utils/mongodb/UserProfile.ts`, `src/app/api/user/preferences/**` | Built. Per-user toggles for notification channels (push, in-app, etc.) and event-type batching. Checked before sending. |
+| **Turn nudges** | `src/utils/mongodb/GameData.ts`, `src/app/api/game/nudge/**` | Built. One-tap "your move!" nudge per turn, limited to 1 per opponent per turn cycle. Sends `TurnNudge` FCM event. |
+| **Turn/action reactions** | `src/utils/mongodb/GameData.ts`, `src/app/api/game/reaction/**` | Built. Emoji reactions on turns. Append-only per-turn store, sent in `TurnReaction` FCM event. |
+| **Match history & GameResult** | `src/utils/mongodb/GameResult.ts`, `src/app/api/user/history/**` | Built. Durable, append-only record written on game-over (command pipeline + timeout cron). Survives game deletion; powers profiles, stats, and head-to-head. |
+| **User profiles** | `src/app/users/[userId]/page.tsx`, `src/app/api/user/[userId]/**` | In progress. Public profile page with match history, per-game W/L stats, streaks. Built on `GameResult` store. |
 | **Turn recap / "since you were last here"** | `docs/turn-recap-and-planning.md`, `docs/since-you-were-last-here.md`, `src/utils/games/replay.ts` | Recap engine built; per-player "what happened while away" screen is planned. |
 | **Identity** | Clerk (`userId`, username, first/last name) | Built. No user records in Mongo — names resolved on demand. Anything "profile"-shaped that isn't in Clerk metadata is net-new storage. |
 
@@ -119,14 +129,15 @@ subtlety / number of moving parts. **Risk** = chance of touching load-bearing
 invariants (the game engine, the serialisable registry, data-model migrations,
 security) or shipping something users hate.
 
-| Feature | Complexity | Size | Risk | Primary reason for the rating |
-|---|---|---|---|---|
-| Reactions / nudges | Low | **S** | Low | New FCM event + tiny append-only store or a counter. No engine contact. |
-| Rich turn notifications | Low–Med | **S** | Low | Reuses the recap event model; only changes notification *strings*, not shapes. |
-| Friends activity / rematch surface | Low | **S–M** | Low | Last-action data already aggregated; mostly a new screen + one query. |
-| In-game messaging (friends-only) | Medium | **M** | Med | New `Message` model, thread UI, unread state, new event. Risk: read/unread correctness, notification spam, light moderation. |
-| Match history feed | Low–Med | **M** | Med | Needs a durable finished-game record or an aggregation over `GameData`. Risk: back-filling existing games. |
-| Player profiles | Medium | **M** | Med | New public profile screen + stats read model. Risk: privacy defaults, where stats live. |
+| Feature | Complexity | Size | Risk | Status | Primary reason for the rating |
+|---|---|---|---|---|---|
+| Reactions / nudges | Low | **S** | Low | ✓ Built | New FCM event + tiny append-only store or a counter. No engine contact. |
+| Notification preferences | Low | **S** | Low | ✓ Built | Per-user channel toggles checked before push. Reduces notification spam. |
+| Rich turn notifications | Low–Med | **S** | Low | Not started | Reuses the recap event model; only changes notification *strings*, not shapes. |
+| Friends activity / rematch surface | Low | **S–M** | Low | Not started | Last-action data already aggregated; mostly a new screen + one query. |
+| Match history feed | Low–Med | **M** | Med | ✓ Built | Durable `GameResult` record written on game-over. Survives game deletion. |
+| Player profiles | Medium | **M** | Med | In progress | Profile page + stats read model built on `GameResult` store. Risk: privacy defaults. |
+| In-game messaging (friends-only) | Medium | **M** | Med | Not started | New `Message` model, thread UI, unread state, new event. Risk: read/unread correctness, notification spam, light moderation. |
 | Stats & head-to-head | Med–High | **M–L** | Med–High | **Aggregate store + write path on game-over.** Risk: correctness, back-fill, keeping it in sync as the source of truth is game docs. |
 | Spectating / share links | Medium | **M** | Med | Read-only tokenised view + response shaping that leaks no private state. Risk: **authz** — must not expose hidden info (e.g. Smartthink secret code, opponents' hands). |
 | Blocking / reporting / moderation | Med–High | **M–L** | High | Cross-cutting: touches messaging, invites, matchmaking, and every user-facing list. Risk: security + must be retrofitted everywhere at once. |
@@ -160,24 +171,30 @@ already exist.
 
 ## 4. Suggested phasing
 
-Ordered to ship value early, defer the two big structural costs until they're
-justified, and never open a stranger channel before moderation exists.
+Ordered to ship value early, defer remaining structural costs until justified,
+and never open a stranger channel before moderation exists.
 
-**Phase 0 — Presence wins (small, low risk, high felt value)**
-Nudges → reactions → richer turn notifications → friends activity/rematch
-surface. All ride existing FCM + friendship infra. Ship these first; they're
-the best value-to-cost ratio on the board and validate appetite for more.
+**Phase 0 — Presence wins (small, low risk, high felt value)** ✓ Mostly complete
+Nudges ✓ → reactions ✓ → notification preferences ✓ → richer turn
+notifications (to start) → friends activity/rematch surface (to start). The
+first three are shipped and in use; the last two are highest-value next steps.
+All ride existing FCM + friendship infra and have proven the best
+value-to-cost ratio on the board. Structural foundation (`GameResult` +
+`UserProfile`) now in place for Phase 2.
 
-**Phase 1 — Conversation (friends-only)**
-In-game messaging between players already in a game together (so no
-stranger-safety dependency yet). Add unread state and a `NewMessage` event.
-Introduce *minimal* moderation (report + block) here as a forward investment,
-scoped to existing relationships.
+**Phase 1 — Conversation (friends-only) & richer notifications**
+Next priorities: richer turn notifications (what actually happened in the game,
+not "your turn"), in-game messaging between players already in a game together
+(no stranger-safety dependency yet), and the friends activity / rematch surface.
+Messaging adds unread state and a `NewMessage` event. Introduce *minimal*
+moderation (report + block) as a forward investment, scoped to existing
+relationships.
 
-**Phase 2 — Identity & the read model**
-Design and build the durable social/stats store **once** (§5). On top of it:
-match history feed → profiles → stats & head-to-head. This is the deliberate
-structural investment; do it when Phase 0/1 show people are sticking around.
+**Phase 2 — Identity & profiles** ✓ Foundation in place
+On top of the `GameResult` + `UserProfile` foundation (§5 — now implemented):
+match history feed ✓ → user profiles (in progress) → stats & head-to-head.
+Profiles are the public identity face of the platform; completing them + stats
+closes out Tier 2's core value proposition.
 
 **Phase 3 — Reach & competition (only after moderation is real)**
 Share/spectate links → open matchmaking → leaderboards/ranked. Each depends on
@@ -188,31 +205,24 @@ remain out of scope until there's clear demand.
 
 ## 5. The one architectural decision to make deliberately
 
-Before Phase 2, decide **where cross-game social data lives**. The current
-model — no Mongo user document, stats implied by replaying `GameData` — is fine
-for the friends list's on-the-fly last-action query but does **not** scale to
-profiles, head-to-head, and leaderboards, which need indexed reads and
-historical records that survive game deletion.
+**Status: Implemented.** The structural foundation is in place:
 
-Recommended shape (to be detailed in its own doc when Phase 2 starts):
-
-- A **`UserProfile`** document keyed by Clerk `userId` holding denormalised
+- **`GameResult`** — Append-only record written **once, on game-over**, in the
+  command pipeline's game-over branch (`src/app/api/game/command/route.ts`) and
+  in the cron timeout path. Captures game ID, players, outcome, timestamp, and
+  game-specific metadata. Survives game deletion and is cheap to aggregate.
+- **`UserProfile`** — Document keyed by Clerk `userId` holding denormalised
   aggregates (games played, per-game W/L/D, streaks) plus profile prefs
-  (privacy, favourite game). Clerk stays the identity source of truth; this is
-  a *read model*, not a second identity store.
-- A **`GameResult`** (or `MatchHistory`) record written **once, on game-over**,
-  in the command pipeline's game-over branch
-  (`src/app/api/game/command/route.ts`, step 8 in `ARCHITECTURE.md` §6) and in
-  the cron timeout path. Append-only, so it survives game deletion and is cheap
-  to aggregate.
-- Aggregates updated on that same game-over write (incremental), not recomputed
-  on read.
-- A **back-fill** migration for existing finished games — a known,
-  one-time cost to budget for, not discover.
+  (privacy, favourite game). Updated incrementally on `GameResult` write, not
+  recomputed on read. Clerk stays the identity source of truth; this is a
+  *read model*, not a second identity store.
+- **No back-fill needed** — `GameResult` records started from a known point; no
+  migration required for existing games.
 
-Getting this right once means profiles, stats, head-to-head, and leaderboards
-are all thin readers over the same store instead of four bespoke aggregations.
-Getting it wrong means four features each re-scanning `GameData`.
+This means profiles, stats, head-to-head, and leaderboards are all thin readers
+over the same store instead of four bespoke aggregations. Match history on
+profiles and per-game W/L are already using this model; head-to-head and
+leaderboards plug in the same way.
 
 ---
 
@@ -258,16 +268,18 @@ per the repo's "second copy is the signal" rule.
 
 ## 8. TL;DR
 
-- **Start small and free:** nudges, reactions, richer notifications, and a
-  friends "who to play" surface are all S-sized, low-risk, and reuse the FCM
-  bus + friendship graph that already exist. Best value on the board — ship
-  first.
-- **Messaging is the flagship** async-social feature but crosses into
-  moderation; do it friends-only first (Phase 1) to defer stranger-safety.
-- **The big one-time cost is a durable social/stats read model** (§5). Profiles,
-  stats, head-to-head, match history, and leaderboards all depend on it — design
-  it once, deliberately, in Phase 2.
+- **Phase 0 is mostly complete.** Nudges ✓, reactions ✓, and notification
+  preferences ✓ are shipped. Next: richer turn notifications and a friends
+  "who to play" surface (both still S-sized, low-risk, reuse FCM + friendship
+  graph).
+- **Structural foundation is in.** `GameResult` (durable game-over record) and
+  `UserProfile` (incremental aggregates) are built and running (§5). Match
+  history is live; profiles are coming. Profiles, stats, head-to-head, and
+  leaderboards all plug into this same store.
+- **Messaging is the flagship Phase 1 feature** but crosses into moderation;
+  do it friends-only first (within existing games) to defer stranger-safety.
+  Introduce minimal reporting + blocking here as forward-looking investment.
 - **Never open a text/state channel to strangers** (open messaging, share
-  links, public matchmaking) before blocking + reporting exist.
-- **Highest-ceiling, highest-risk** features — ranked/Elo and tournaments — come
-  last and only with real volume behind them.
+  links, public matchmaking) before blocking + reporting are real and tested.
+- **Highest-ceiling, highest-risk** features — ranked/Elo and tournaments —
+  come last and only with real volume behind them.
