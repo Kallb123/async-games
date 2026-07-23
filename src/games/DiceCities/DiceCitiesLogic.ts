@@ -967,7 +967,7 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean, recorded
         };
     }
 
-    if (roll1 === roll2 && rollerState.rerollDoubles) {
+    if (roll1 === roll2 && rollerState.oneReroll) {
         dcGameData.specificGameState.awaitingDoubleReroll = true;
     }
 
@@ -1043,13 +1043,13 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean, recorded
             if (card.bankGain > 0) {
                 cardAmount = card.type === "store" && playerState.bonusDiningAndStore ? card.bankGain+1 : card.bankGain;
             } else if (card.gainMultiplier) {
-                const numCards = playerState.cards.filter(cc => {
+                const numCards = playerState.cards.reduce((total, cc) => {
                     const cardObject = DiceCitiesCards[cc.card.toString()];
                     if (card.gainMultiplier?.type.includes(cardObject.type)) {
-                        return true;
+                        return total + cc.amount;
                     }
-                    return null;
-                }).length;
+                    return total;
+                }, 0);
                 cardAmount = card.gainMultiplier.amountPerType * numCards;
             } else {
                 // What card is this??
