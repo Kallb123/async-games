@@ -115,6 +115,8 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
         this.coinsEarnedChanges = outcome.coinsEarnedChanges;
         let totalRoll = this.doubleDice && outcome.roll2 ? outcome.roll1 + outcome.roll2 : outcome.roll1;
 
+        currentPlayerState!.lastDiceSelection = this.doubleDice ? 2 : 1;
+
         const senderUsername = this.senderUsername;
         dcGameData.gameState.history.unshift(`${senderUsername} rolled a ${totalRoll}${outcome.roll2 ? ` (${outcome.roll1} and ${outcome.roll2})` : ""}`);
 
