@@ -218,6 +218,49 @@ resolve usernames via Clerk and run the game's `gameStateToModel` to turn
 internal Maps/IDs into a client-friendly, username-keyed shape. DTO interfaces
 live in `src/utils/apiModels/GameDataApi.ts` and each game's `apiModels.ts`.
 
+### Match results (`GameResult`)
+
+`src/utils/mongodb/GameResultData.ts` defines a small, flat **`GameResult`**
+model — the durable read model behind future match statistics (win/lose/draw,
+head-to-head) on profile pages, per `docs/social-features.md` §5. It is *not*
+a discriminator: unlike `GameData`, it's cross-game, and the base engine never
+reads it back.
+
+```ts
+interface IGameResultData {
+    gameId: uuidString;
+    gameType: string;    // gameData.gameType.gameType, e.g. "DiceCities"
+    url: string;         // gameData.gameType.url, e.g. "dicecities"
+    playerIds: string[]; // gameData.userIdList
+    winner: string;      // gameData.winner; "" means draw / no winner
+    endedAt: string;     // ISO, when the record was written
+}
+```
+
+Key properties:
+
+- **Append-only.** One record is written per finished game, via
+  `recordGameResult(gameData)`, and never updated afterwards. Because it's a
+  separate collection from `GameData`, match history/stats survive deletion of
+  the underlying game.
+- **Written once, from every place a game currently becomes `complete`:**
+  the command pipeline's game-over branch (§6, step 8) and the manual
+  surrender endpoint (`POST /api/game/end`). It is *not* yet written from the
+  turn-timer cron job (§7) — that job only advances an expired turn today and
+  has no branch that marks a game complete, so there's nothing to hook into
+  until a forfeit-on-timeout feature exists.
+- **Idempotent on `gameId`.** The schema has a unique index on `gameId`;
+  `recordGameResult` swallows the resulting duplicate-key error, so calling it
+  twice for the same game (e.g. a retried request) is a no-op rather than a
+  second record.
+- **Indexed for the two read patterns stats need**, both keyed off the
+  multikey `playerIds` array:
+  - `{ playerIds: 1, endedAt: -1 }` — "my match history", most recent first,
+    and the basis for per-player win/lose/draw aggregation (derived from
+    `winner` — no separate per-player result field is stored).
+  - `{ playerIds: 1, gameType: 1 }` — per-game stats for a player, and
+    head-to-head lookups between two players via `playerIds: { $all: [A, B] }`.
+
 ## 6. The game engine: command pattern
 
 Game rules are expressed as classes implementing two interfaces. The two
@@ -308,7 +351,8 @@ regardless of game:
    └─ if !outcome.validMove → 401
 6. push command onto gameState.commandHistory (markModified)
 7. gameType = deserializeJSON(gameData.gameType)
-8. if gameType.CheckGameOver(gameData):  save, push win/lose notifications, return
+8. if gameType.CheckGameOver(gameData):  save, record GameResult, push win/lose
+   notifications, return
 9. gameType.CheckEndTurn(gameData, outcome)
 10. if turnOver: bump lastTurnTimestamp, reset warning flag
 11. save
