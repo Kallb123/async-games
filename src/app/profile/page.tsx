@@ -3,14 +3,20 @@ import CurrentUserInfo from "@/components/CurrentUserInfo";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useToast } from "@/components/ToastContext";
 import Avatar from "@/components/ui/Avatar";
-import { SkeletonRow } from "@/components/ui/Skeleton";
+import GameThumb from "@/components/ui/GameThumb";
+import Skeleton, { SkeletonRow } from "@/components/ui/Skeleton";
 import { IFriendRequestResponse, IFriendUser } from "@/utils/mongodb/FriendshipData";
 import { formatRelativeTime } from "@/utils/ui/time";
 import { usePushEvents, FRIEND_EVENTS } from "@/utils/hooks/usePushEvents";
+import { GAME_META } from "@/utils/ui/games";
+import type { IGameStats, IRecentMatch, MatchOutcome } from "@/app/api/stats/route";
 import { useUser, useClerk } from "@clerk/nextjs";
 import moment from 'moment';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from "react";
+
+const OUTCOME_LABEL: Record<MatchOutcome, string> = { win: "W", loss: "L", draw: "D" };
+const GAME_STAT_THUMB_SIZE = 36;
 
 function friendDisplayName(user: IFriendUser) {
     const fullName = [user.firstName, user.lastName].filter(name => name).join(" ");
@@ -34,6 +40,10 @@ export default function Profile() {
     const [showAdd, setShowAdd] = useState(false);
     const [isLoadingFriends, setIsLoadingFriends] = useState(true);
 
+    const [recentMatches, setRecentMatches] = useState([] as IRecentMatch[]);
+    const [gameStats, setGameStats] = useState([] as IGameStats[]);
+    const [isLoadingStats, setIsLoadingStats] = useState(true);
+
     useEffect(() => {
         if (isLoaded) {
             if (!user) {
@@ -45,6 +55,7 @@ export default function Profile() {
                 router.push('/unlockaccess');
             }
             refreshFriends();
+            refreshStats();
         }
     }, [isLoaded]);
 
@@ -62,6 +73,19 @@ export default function Profile() {
         })
         .catch(error => console.error('Failed to load friends', error))
         .finally(() => setIsLoadingFriends(false));
+    }
+
+    const refreshStats = () => {
+        fetch('/api/stats')
+        .then(response => response.json())
+        .then(data => {
+            if (data && data.success) {
+                setRecentMatches(data.recent);
+                setGameStats(data.byGame);
+            }
+        })
+        .catch(error => console.error('Failed to load stats', error))
+        .finally(() => setIsLoadingStats(false));
     }
 
     const handleInvite = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -160,6 +184,71 @@ export default function Profile() {
                     </div>
                 </div>
             </div>
+
+            {/* Recent match history */}
+            <div className="ag-section">
+                <div className="ag-section-head">
+                    <h2 className="ag-section-label">Recent form</h2>
+                </div>
+                {isLoadingStats
+                    ? <div className="ag-chips">
+                        {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} width={26} height={26} radius="50%" />)}
+                    </div>
+                    : recentMatches.length === 0
+                    ? <div className="ag-empty">No finished games yet.</div>
+                    : (
+                        <div className="ag-chips">
+                            {recentMatches.map(match => (
+                                <div
+                                    key={match.gameId}
+                                    className={`ag-result-dot ag-result-dot--${match.outcome}`}
+                                    title={`${GAME_META[match.url]?.name ?? match.url} · ${moment(match.endedAt).fromNow()}`}
+                                >
+                                    {OUTCOME_LABEL[match.outcome]}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+            </div>
+
+            {/* Per-game stats */}
+            {(isLoadingStats || gameStats.length > 0) && (
+                <div className="ag-section">
+                    <div className="ag-section-head">
+                        <h2 className="ag-section-label">Stats by game</h2>
+                    </div>
+                    {isLoadingStats
+                        ? <div className="ag-list" aria-busy="true">
+                            <SkeletonRow />
+                            <SkeletonRow />
+                        </div>
+                        : (
+                            <div className="ag-list">
+                                {gameStats.map(stats => {
+                                    const meta = GAME_META[stats.url];
+                                    return (
+                                        <div key={stats.url} className="ag-list-row">
+                                            {meta
+                                                ? <GameThumb meta={meta} size={GAME_STAT_THUMB_SIZE} radius={10} />
+                                                : <div style={{ width: GAME_STAT_THUMB_SIZE, height: GAME_STAT_THUMB_SIZE, flex: "none" }} />}
+                                            <div className="ag-list-row-main">
+                                                <div className="ag-list-row-title">{meta?.name ?? stats.url}</div>
+                                                <div className="ag-list-row-sub">{stats.total} match{stats.total === 1 ? "" : "es"}</div>
+                                            </div>
+                                            <div style={{ font: "800 12.5px var(--ag-font)", whiteSpace: "nowrap" }}>
+                                                <span className="ag-outcome-text--win">{stats.wins}W</span>
+                                                {" · "}
+                                                <span className="ag-outcome-text--loss">{stats.losses}L</span>
+                                                {" · "}
+                                                <span className="ag-outcome-text--draw">{stats.draws}D</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                </div>
+            )}
 
             {/* Friends */}
             <div className="ag-section">

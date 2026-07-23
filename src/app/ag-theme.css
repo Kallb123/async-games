@@ -622,6 +622,27 @@ body {
 .ag-stat-num { font: 800 22px var(--ag-font); color: var(--ag-ink); }
 .ag-stat-label { font: 600 11px var(--ag-font); color: var(--ag-ink-softer); margin-top: 2px; }
 
+/* Recent-match form guide (compact row of W/L/D dots) — row uses .ag-chips */
+.ag-result-dot {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font: 800 11px var(--ag-font);
+    color: var(--ag-on-dark);
+}
+.ag-result-dot--win { background: var(--ag-green); }
+.ag-result-dot--loss { background: var(--ag-terracotta); }
+.ag-result-dot--draw { background: var(--ag-gold); }
+
+/* Same win/loss/draw palette, as text colour for the per-game W/L/D counts */
+.ag-outcome-text--win { color: var(--ag-green); }
+.ag-outcome-text--loss { color: var(--ag-terracotta); }
+.ag-outcome-text--draw { color: var(--ag-gold); }
+
 /* Footer / meta text */
 .ag-footer {
     padding: 24px 20px 0;
