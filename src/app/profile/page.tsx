@@ -3,24 +3,22 @@ import CurrentUserInfo from "@/components/CurrentUserInfo";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useToast } from "@/components/ToastContext";
 import Avatar from "@/components/ui/Avatar";
-import GameThumb from "@/components/ui/GameThumb";
-import ListSection from "@/components/ui/ListSection";
+import GameStatsList from "@/components/ui/GameStatsList";
+import ProfileIdentity from "@/components/ui/ProfileIdentity";
+import RecentFormSection from "@/components/ui/RecentFormSection";
 import ReactionPicker from "@/components/ui/ReactionPicker";
-import Skeleton, { SkeletonRow } from "@/components/ui/Skeleton";
+import ListSection from "@/components/ui/ListSection";
+import { SkeletonRow } from "@/components/ui/Skeleton";
 import { IFriendRequestResponse } from "@/utils/mongodb/FriendshipData";
 import { formatRelativeTime } from "@/utils/ui/time";
 import { usePushEvents, FRIEND_EVENTS } from "@/utils/hooks/usePushEvents";
-import { GAME_META } from "@/utils/ui/games";
 import { displayName } from "@/utils/ui/players";
-import type { IGameStats, IRecentMatch, MatchOutcome } from "@/app/api/stats/route";
+import type { IGameStats, IRecentMatch } from "@/app/api/stats/route";
 import type { IReceivedReaction } from "@/app/api/reactions/route";
 import { useUser, useClerk } from "@clerk/nextjs";
 import moment from 'moment';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from "react";
-
-const OUTCOME_LABEL: Record<MatchOutcome, string> = { win: "W", loss: "L", draw: "D" };
-const GAME_STAT_THUMB_SIZE = 36;
 
 export default function Profile() {
     const pathName = usePathname();
@@ -171,15 +169,7 @@ export default function Profile() {
             </div>
 
             {/* Identity */}
-            <div className="ag-section" style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <Avatar name={ownDisplayName} size={64} ring="var(--ag-terracotta)" />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ font: "800 24px/1.1 var(--ag-font)", color: "var(--ag-ink)" }}>{ownDisplayName}</div>
-                    <div style={{ font: "500 12px var(--ag-font)", color: "var(--ag-ink-soft)" }}>
-                        {user?.username ? `@${user.username}` : "No username"}{fullName ? ` · ${fullName}` : ""}
-                    </div>
-                </div>
-            </div>
+            <ProfileIdentity name={ownDisplayName} username={user?.username} fullName={fullName} />
 
             {/* Honest stats */}
             <div className="ag-section">
@@ -200,57 +190,10 @@ export default function Profile() {
             </div>
 
             {/* Recent match history */}
-            <div className="ag-section">
-                <div className="ag-section-head">
-                    <h2 className="ag-section-label">Recent form</h2>
-                </div>
-                {isLoadingStats
-                    ? <div className="ag-chips">
-                        {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} width={26} height={26} radius="50%" />)}
-                    </div>
-                    : recentMatches.length === 0
-                    ? <div className="ag-empty">No finished games yet.</div>
-                    : (
-                        <div className="ag-chips">
-                            {recentMatches.map(match => (
-                                <div
-                                    key={match.gameId}
-                                    className={`ag-result-dot ag-result-dot--${match.outcome}`}
-                                    title={`${GAME_META[match.url]?.name ?? match.url} · ${moment(match.endedAt).fromNow()}`}
-                                >
-                                    {OUTCOME_LABEL[match.outcome]}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-            </div>
+            <RecentFormSection matches={recentMatches} isLoading={isLoadingStats} />
 
             {/* Per-game stats */}
-            <ListSection label="Stats by game" isLoading={isLoadingStats} hasItems={gameStats.length > 0}>
-                <div className="ag-list">
-                    {gameStats.map(stats => {
-                        const meta = GAME_META[stats.url];
-                        return (
-                            <div key={stats.url} className="ag-list-row">
-                                {meta
-                                    ? <GameThumb meta={meta} size={GAME_STAT_THUMB_SIZE} radius={10} />
-                                    : <div style={{ width: GAME_STAT_THUMB_SIZE, height: GAME_STAT_THUMB_SIZE, flex: "none" }} />}
-                                <div className="ag-list-row-main">
-                                    <div className="ag-list-row-title">{meta?.name ?? stats.url}</div>
-                                    <div className="ag-list-row-sub">{stats.total} match{stats.total === 1 ? "" : "es"}</div>
-                                </div>
-                                <div style={{ font: "800 12.5px var(--ag-font)", whiteSpace: "nowrap" }}>
-                                    <span className="ag-outcome-text--win">{stats.wins}W</span>
-                                    {" · "}
-                                    <span className="ag-outcome-text--loss">{stats.losses}L</span>
-                                    {" · "}
-                                    <span className="ag-outcome-text--draw">{stats.draws}D</span>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </ListSection>
+            <GameStatsList label="Stats by game" stats={gameStats} isLoading={isLoadingStats} />
 
             {/* Reactions received */}
             <ListSection label="Reactions" isLoading={isLoadingReactions} hasItems={reactions.length > 0}>
