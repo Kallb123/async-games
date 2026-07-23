@@ -55,6 +55,13 @@ export interface ISACPlayerState {
     remainingRoads: number;
     remainingSettlements: number;
     remainingCities: number;
+    // Cumulative match-stat counters, tallied live as the game is played (see
+    // SettlementsAndCitiesLogic.ts) because they can't be reconstructed from
+    // final board/hand state alone. Boiled down into the GameResult read model
+    // at game-end by computeSettlementsAndCitiesResultStats.
+    devCardsBought: number;
+    resourcesGathered: number;
+    robberUses: number;
 }
 
 // ─── Full specific game state ─────────────────────────────────────────────────
@@ -325,6 +332,9 @@ export function createInitialPlayerState(): ISACPlayerState {
         remainingRoads: 15,
         remainingSettlements: 5,
         remainingCities: 4,
+        devCardsBought: 0,
+        resourcesGathered: 0,
+        robberUses: 0,
     };
 }
 

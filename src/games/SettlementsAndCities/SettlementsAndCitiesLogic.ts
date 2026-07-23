@@ -312,7 +312,10 @@ export class SACPlaceSettlementSetup implements IGameCommand {
                     const hex = gs.hexes[hexId];
                     if (hex.numberToken !== null) {
                         const resource = TERRAIN_TO_RESOURCE[hex.terrain];
-                        if (resource) ps.resources[resource]++;
+                        if (resource) {
+                            ps.resources[resource]++;
+                            ps.resourcesGathered++;
+                        }
                     }
                 }
             }
@@ -397,6 +400,7 @@ export class SACPlayKnight implements IGameCommand {
 
         ps.devCards.knight--;
         ps.knightsPlayed++;
+        ps.robberUses++;
         gs.playedDevCard = true;
         gs.pendingRobber = true;
 
@@ -452,6 +456,8 @@ export class SACRollDice implements IGameCommand {
 
         if (roll === 7) {
             sacData.gameState.history.unshift(`${this.senderUsername} rolled a ${roll}`);
+            const rollerPs = gs.playerStates.get(this.senderId);
+            if (rollerPs) rollerPs.robberUses++;
             // Discard phase: auto-discard for all players with >7 cards. The
             // shuffle draws are recorded so replay discards the same cards. The
             // playerStates iteration order is stable (userIdList order), so the
@@ -478,6 +484,7 @@ export class SACRollDice implements IGameCommand {
                     if (!ps) continue;
                     const amount = vertex.building === 'city' ? 2 : 1;
                     ps.resources[resource] += amount;
+                    ps.resourcesGathered += amount;
 
                     const playerResources = resourceDistributions.get(vertex.owner) ?? {};
                     playerResources[resource] = (playerResources[resource] ?? 0) + amount;
@@ -558,7 +565,10 @@ export class SACMoveRobber implements IGameCommand {
                 const stolen = pool[stealIndex];
                 victim.resources[stolen]--;
                 const thief = gs.playerStates.get(this.senderId);
-                if (thief) thief.resources[stolen]++;
+                if (thief) {
+                    thief.resources[stolen]++;
+                    thief.resourcesGathered++;
+                }
                 sacData.gameState.history.unshift(
                     `${this.senderUsername} moved the robber and stole a resource`
                 );
@@ -768,6 +778,7 @@ export class SACBuyDevCard implements IGameCommand {
 
         const card = gs.devCardDeck.pop()!;
         ps.newDevCards[card]++;
+        ps.devCardsBought++;
 
         sacData.gameState.history.unshift(`${this.senderUsername} bought a development card`);
         return { validMove: true, turnOver: false };
@@ -841,6 +852,7 @@ export class SACPlayYearOfPlenty implements IGameCommand {
         gs.playedDevCard = true;
         ps.resources[this.resource1]++;
         ps.resources[this.resource2]++;
+        ps.resourcesGathered += 2;
 
         sacData.gameState.history.unshift(
             `${this.senderUsername} played Year of Plenty (+${this.resource1}, +${this.resource2})`
@@ -886,6 +898,7 @@ export class SACPlayMonopoly implements IGameCommand {
             other.resources[this.resource] = 0;
         }
         ps.resources[this.resource] += total;
+        ps.resourcesGathered += total;
 
         sacData.gameState.history.unshift(
             `${this.senderUsername} played Monopoly on ${this.resource} (+${total})`

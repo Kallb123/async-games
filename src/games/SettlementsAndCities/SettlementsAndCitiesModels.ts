@@ -2,7 +2,8 @@ import { GameDataModel, IGameData, IGameDataDocument } from "@/utils/mongodb/Gam
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { ISACGameDataResponse, ISACSpecificGameStateResponse } from "./apiModels";
-import { uuidString } from "@/utils/apiModels/GameDataApi";
+import { uuidString, GameResultStatGroup } from "@/utils/apiModels/GameDataApi";
+import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
 import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
 import { SettlementsAndCitiesGameType } from "@/utils/apiModels/GameLogic";
@@ -12,6 +13,7 @@ import {
     createInitialPlayerState,
     DEV_CARD_DECK,
     calculateVisibleVP,
+    calculateLongestRoad,
     BOARD_TOPOLOGY,
     ISACHex,
     ISACVertex,
@@ -112,6 +114,9 @@ function clonePlayerState(ps: ISACPlayerState): ISACPlayerState {
         remainingRoads: ps.remainingRoads,
         remainingSettlements: ps.remainingSettlements,
         remainingCities: ps.remainingCities,
+        devCardsBought: ps.devCardsBought,
+        resourcesGathered: ps.resourcesGathered,
+        robberUses: ps.robberUses,
     };
 }
 
@@ -341,6 +346,9 @@ function makeSACStateSchemaDef() {
                 remainingRoads: Number,
                 remainingSettlements: Number,
                 remainingCities: Number,
+                devCardsBought: Number,
+                resourcesGathered: Number,
+                robberUses: Number,
             },
         },
         robberHexIndex: Number,
@@ -491,3 +499,96 @@ export var SettlementsAndCitiesGameDataModel =
         ISettlementsAndCitiesGameDataDocument,
         ISettlementsAndCitiesGameDataModel
     >('SettlementsAndCitiesGameData', SettlementsAndCitiesGameDataSchema);
+
+// ─── GameResult stats ──────────────────────────────────────────────────────────
+// Boiled-down stats for the GameResult read model, computed once at game-end
+// (see recordGameResult in GameResultData.ts). Settlements/cities/roads/
+// longest-road-length/victory-points are read straight off the final board
+// (they're physical state, so there's nothing to lose by computing them once
+// at the end); knightsPlayed/devCardsBought/resourcesGathered/robberUses are
+// tallied live in SettlementsAndCitiesLogic.ts as the game is played, since
+// pieces get spent/consumed and can't be reconstructed from the final state
+// alone. `resourcesGathered` counts resources added to hand from any source
+// (production, setup, robber steals, Year of Plenty, Monopoly) but not
+// maritime trades, which convert existing resources rather than gather new
+// ones. `robberUses` counts times a player triggered a robber move, by
+// rolling a 7 or by playing a Knight.
+export interface ISACPlayerResultStats {
+    settlements: number;
+    cities: number;
+    roads: number;
+    longestRoad: number;
+    knightsPlayed: number;
+    devCardsBought: number;
+    resourcesGathered: number;
+    robberUses: number;
+    victoryPoints: number;
+}
+
+export interface ISACGameResultStats {
+    playerStats: Map<string, ISACPlayerResultStats>;
+}
+
+export const sacGameResultStatsSchemaDef = {
+    playerStats: {
+        type: Schema.Types.Map,
+        of: {
+            settlements: Number,
+            cities: Number,
+            roads: Number,
+            longestRoad: Number,
+            knightsPlayed: Number,
+            devCardsBought: Number,
+            resourcesGathered: Number,
+            robberUses: Number,
+            victoryPoints: Number,
+        },
+    },
+};
+
+export function computeSettlementsAndCitiesResultStats(gameData: ISettlementsAndCitiesGameData): ISACGameResultStats {
+    const gs = gameData.specificGameState;
+    const playerStats = new Map<string, ISACPlayerResultStats>();
+    for (const [userId, ps] of gs.playerStates) {
+        const settlements = gs.vertices.filter(v => v.owner === userId && v.building === 'settlement').length;
+        const cities = gs.vertices.filter(v => v.owner === userId && v.building === 'city').length;
+        const roads = gs.edges.filter(e => e.owner === userId && e.hasRoad).length;
+        // Hidden VP cards are revealed at game-end, so count both playable and
+        // freshly-bought-this-turn victory-point cards toward the final total.
+        const victoryPoints = calculateVisibleVP(userId, gs.vertices, gs.longestRoadOwner, gs.largestArmyOwner)
+            + ps.devCards.victoryPoint + ps.newDevCards.victoryPoint;
+        playerStats.set(userId, {
+            settlements,
+            cities,
+            roads,
+            longestRoad: calculateLongestRoad(userId, gs.vertices, gs.edges),
+            knightsPlayed: ps.knightsPlayed,
+            devCardsBought: ps.devCardsBought,
+            resourcesGathered: ps.resourcesGathered,
+            robberUses: ps.robberUses,
+            victoryPoints,
+        });
+    }
+    return { playerStats };
+}
+
+// Renders ISACGameResultStats as one stat group per player, for the shared
+// GameResultStats UI (recent-form popup + full result page).
+export function formatSettlementsAndCitiesResultStats(stats: ISACGameResultStats, usernameById: Map<string, string>): GameResultStatGroup[] {
+    const groups: GameResultStatGroup[] = [];
+    for (const [userId, s] of stats.playerStats) {
+        groups.push({
+            username: usernameById.get(userId) ?? userId,
+            lines: [
+                `${pluralize(s.victoryPoints, 'victory point')}`,
+                `${s.settlements} settlements, ${s.cities} cities, ${s.roads} roads`,
+                `Longest road: ${s.longestRoad}`,
+                `Played ${pluralize(s.knightsPlayed, 'knight')}`,
+                `Bought ${pluralize(s.devCardsBought, 'development card')}`,
+                `Gathered ${pluralize(s.resourcesGathered, 'resource')}`,
+                `Used the robber ${pluralize(s.robberUses, 'time')}`,
+            ],
+        });
+    }
+    return groups;
+}
