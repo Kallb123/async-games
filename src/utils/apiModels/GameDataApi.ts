@@ -16,6 +16,15 @@ export interface IGameResponse {
     winner: string
 }
 
+// One line (or a few) of formatted, human-readable GameResult stats. Groups
+// with a `username` are per-player (e.g. "coins earned"); groups without one
+// are game-wide (e.g. "solved in 5 guesses"). Shared shape so any game's
+// GameResult stats can be rendered by the same UI (popup + full result page).
+export interface GameResultStatGroup {
+    username?: string;
+    lines: string[];
+}
+
 export interface IGameDataResponse {
     gameType: IGameType,
     usernameList: string[],

@@ -1,23 +1,26 @@
 import { Document, Model, Schema, model, models } from "mongoose";
 import type { IGameData } from "./GameData";
-import type { uuidString } from "../apiModels/GameDataApi";
+import type { uuidString, GameResultStatGroup } from "../apiModels/GameDataApi";
 import {
     IDiceCitiesGameData,
     IDiceCitiesGameResultStats,
     computeDiceCitiesResultStats,
     diceCitiesGameResultStatsSchemaDef,
+    formatDiceCitiesResultStats,
 } from "@/games/DiceCities/DiceCitiesModels";
 import {
     ISmartthinkGameData,
     ISmartthinkGameResultStats,
     computeSmartthinkResultStats,
     smartthinkGameResultStatsSchemaDef,
+    formatSmartthinkResultStats,
 } from "@/games/Smartthink/SmartthinkModels";
 import {
     ISnakesAndLaddersGameData,
     ISnakesAndLaddersGameResultStats,
     computeSnakesAndLaddersResultStats,
     snakesAndLaddersGameResultStatsSchemaDef,
+    formatSnakesAndLaddersResultStats,
 } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
 
 export interface IGameResultData {
@@ -91,14 +94,40 @@ var SnakesAndLaddersGameResultSchema = new Schema<ISnakesAndLaddersGameResultDat
 export var SnakesAndLaddersGameResultModel = models.SnakesAndLaddersGameResult || GameResultModel.discriminator<ISnakesAndLaddersGameResultDataDocument, ISnakesAndLaddersGameResultDataModel>('SnakesAndLaddersGameResult', SnakesAndLaddersGameResultSchema);
 
 // Maps a GameData's gameType to the discriminator model + stats calculator
-// that boil its final specificGameState down to the interesting numbers.
-// Games with no entry here (e.g. SettlementsAndCities) still get the base
+// that boil its final specificGameState down to the interesting numbers, plus
+// a formatter that turns those numbers into display-ready stat groups. Games
+// with no entry here (e.g. SettlementsAndCities) still get the base
 // GameResult fields (including totalTurns) via recordGameResult below.
-const GAME_RESULT_STATS: Record<string, { model: Model<any>, compute: (gameData: IGameData) => unknown }> = {
-    DiceCities: { model: DiceCitiesGameResultModel, compute: (gameData) => computeDiceCitiesResultStats(gameData as IDiceCitiesGameData) },
-    Smartthink: { model: SmartthinkGameResultModel, compute: (gameData) => computeSmartthinkResultStats(gameData as ISmartthinkGameData) },
-    SnakesAndLadders: { model: SnakesAndLaddersGameResultModel, compute: (gameData) => computeSnakesAndLaddersResultStats(gameData as ISnakesAndLaddersGameData) },
+const GAME_RESULT_STATS: Record<string, {
+    model: Model<any>,
+    compute: (gameData: IGameData) => unknown,
+    format: (stats: any, usernameById: Map<string, string>) => GameResultStatGroup[],
+}> = {
+    DiceCities: {
+        model: DiceCitiesGameResultModel,
+        compute: (gameData) => computeDiceCitiesResultStats(gameData as IDiceCitiesGameData),
+        format: formatDiceCitiesResultStats,
+    },
+    Smartthink: {
+        model: SmartthinkGameResultModel,
+        compute: (gameData) => computeSmartthinkResultStats(gameData as ISmartthinkGameData),
+        format: formatSmartthinkResultStats,
+    },
+    SnakesAndLadders: {
+        model: SnakesAndLaddersGameResultModel,
+        compute: (gameData) => computeSnakesAndLaddersResultStats(gameData as ISnakesAndLaddersGameData),
+        format: formatSnakesAndLaddersResultStats,
+    },
 };
+
+// Renders a GameResult document's discriminated `stats` field into display-
+// ready stat groups, for the recent-form popup and the full result page.
+// Returns [] for games with no formatter registered (or no stats present).
+export function formatGameResultStats(gameType: string, stats: unknown, usernameById: Map<string, string>): GameResultStatGroup[] {
+    const specific = GAME_RESULT_STATS[gameType];
+    if (!specific || !stats) return [];
+    return specific.format(stats, usernameById);
+}
 
 export type MatchOutcome = "win" | "loss" | "draw";
 

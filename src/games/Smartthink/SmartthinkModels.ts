@@ -2,7 +2,8 @@ import { GameDataModel, IGameData, IGameDataDocument } from "@/utils/mongodb/Gam
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { ISmartthinkGameDataResponse, ISmartthinkGameStateResponse } from "./apiModels";
-import { IGameResponse, uuidString } from "@/utils/apiModels/GameDataApi";
+import { IGameResponse, uuidString, GameResultStatGroup } from "@/utils/apiModels/GameDataApi";
+import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
 import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
 import { SmartthinkGameType } from "@/utils/apiModels/GameLogic";
@@ -307,4 +308,10 @@ export const smartthinkGameResultStatsSchemaDef = {
 
 export function computeSmartthinkResultStats(gameData: ISmartthinkGameData): ISmartthinkGameResultStats {
     return { totalGuesses: gameData.specificGameState.guessRows.length };
+}
+
+// Renders ISmartthinkGameResultStats as a single game-wide stat group (the
+// guess count isn't per-player), for the shared GameResultStats UI.
+export function formatSmartthinkResultStats(stats: ISmartthinkGameResultStats, usernameById: Map<string, string>): GameResultStatGroup[] {
+    return [{ lines: [`Solved in ${pluralize(stats.totalGuesses, 'guess', 'guesses')}`] }];
 }

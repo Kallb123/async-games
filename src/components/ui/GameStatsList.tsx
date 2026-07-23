@@ -3,6 +3,7 @@
 import GameThumb from "@/components/ui/GameThumb";
 import ListSection from "@/components/ui/ListSection";
 import { GAME_META } from "@/utils/ui/games";
+import { pluralize } from "@/utils/ui/text";
 import type { IGameStats } from "@/app/api/stats/route";
 
 const THUMB_SIZE = 36;
@@ -29,7 +30,7 @@ export default function GameStatsList({ label, stats, isLoading }: GameStatsList
                                 : <div style={{ width: THUMB_SIZE, height: THUMB_SIZE, flex: "none" }} />}
                             <div className="ag-list-row-main">
                                 <div className="ag-list-row-title">{meta?.name ?? stat.url}</div>
-                                <div className="ag-list-row-sub">{stat.total} match{stat.total === 1 ? "" : "es"}</div>
+                                <div className="ag-list-row-sub">{pluralize(stat.total, 'match', 'matches')}</div>
                             </div>
                             <div style={{ font: "800 12.5px var(--ag-font)", whiteSpace: "nowrap" }}>
                                 <span className="ag-outcome-text--win">{stat.wins}W</span>

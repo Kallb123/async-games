@@ -3,7 +3,8 @@ import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationR
 import { Model, Schema, models } from "mongoose";
 import { DiceCitiesCardIds } from "./cards";
 import { IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "./apiModels";
-import { uuidString } from "@/utils/apiModels/GameDataApi";
+import { uuidString, GameResultStatGroup } from "@/utils/apiModels/GameDataApi";
+import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
 import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
 import { DiceCitiesGameType } from "@/utils/apiModels/GameLogic";
@@ -334,4 +335,21 @@ export function computeDiceCitiesResultStats(gameData: IDiceCitiesGameData): IDi
         landmarksUnlocked.set(userId, LANDMARKS.filter(l => playerState[l.flag]).map(l => l.cardId));
     }
     return { coins, coinsEarned, landmarksUnlocked };
+}
+
+// Renders IDiceCitiesGameResultStats as one stat group per player, for the
+// shared GameResultStats UI (recent-form popup + full result page).
+export function formatDiceCitiesResultStats(stats: IDiceCitiesGameResultStats, usernameById: Map<string, string>): GameResultStatGroup[] {
+    const groups: GameResultStatGroup[] = [];
+    for (const [userId, coinsEarned] of stats.coinsEarned) {
+        const landmarks = stats.landmarksUnlocked.get(userId) ?? [];
+        groups.push({
+            username: usernameById.get(userId) ?? userId,
+            lines: [
+                `Earned ${pluralize(coinsEarned, 'coin')}`,
+                `Unlocked ${pluralize(landmarks.length, 'landmark')}`,
+            ],
+        });
+    }
+    return groups;
 }

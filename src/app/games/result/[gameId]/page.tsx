@@ -1,0 +1,67 @@
+'use client'
+
+import { use } from "react";
+import CurrentUserInfo from "@/components/CurrentUserInfo";
+import GameThumb from "@/components/ui/GameThumb";
+import GameResultStats from "@/components/ui/GameResultStats";
+import { SkeletonList } from "@/components/ui/Skeleton";
+import { useGameResult } from "@/utils/hooks/useGameResult";
+import { GAME_META } from "@/utils/ui/games";
+import { pluralize } from "@/utils/ui/text";
+import moment from 'moment';
+
+export default function GameResultPage({ params }: { params: Promise<{ gameId: string }> }) {
+    const { gameId } = use(params);
+    const { result, isLoading, error } = useGameResult(gameId);
+    const meta = result ? GAME_META[result.url] : undefined;
+
+    return (
+        <main>
+            <div className="ag-topbar">
+                <div className="ag-topbar-title">
+                    <a href="/" className="ag-back" aria-label="Back home">←</a>
+                    <span className="ag-wordmark">Result</span>
+                </div>
+            </div>
+
+            {isLoading
+                ? <SkeletonList rows={3} avatar={false} />
+                : (error || !result)
+                ? (
+                    <div className="ag-section">
+                        <div className="ag-empty">{error ?? "Couldn't load this game's result."}</div>
+                    </div>
+                )
+                : (
+                    <>
+                        <div className="ag-section">
+                            <div className="ag-list">
+                                <div className="ag-list-row">
+                                    {meta
+                                        ? <GameThumb meta={meta} size={44} radius={12} />
+                                        : <div style={{ width: 44, height: 44, flex: "none" }} />}
+                                    <div className="ag-list-row-main">
+                                        <div className="ag-list-row-title">{meta?.name ?? result.url}</div>
+                                        <div className="ag-list-row-sub">
+                                            {result.winner ? `${result.winner} won` : "Draw"} · {moment(result.endedAt).fromNow()} · {pluralize(result.totalTurns, 'turn')}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="ag-section">
+                            <div className="ag-section-head">
+                                <h2 className="ag-section-label">Stats</h2>
+                            </div>
+                            {result.stats.length > 0
+                                ? <GameResultStats groups={result.stats} />
+                                : <div className="ag-empty">No extra stats recorded for this game.</div>}
+                        </div>
+                    </>
+                )}
+
+            <div className="ag-footer"><CurrentUserInfo /></div>
+        </main>
+    );
+}

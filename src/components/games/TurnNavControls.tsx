@@ -1,5 +1,6 @@
 import { Button, ButtonGroup } from "react-bootstrap";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
+import { pluralize } from "@/utils/ui/text";
 
 // The subset of the navigation hook this control needs, kept game-agnostic.
 type TurnNav = ReturnType<typeof useTurnNavigation>;
@@ -45,13 +46,12 @@ export default function TurnNavControls({ nav, planningActions, canPlan = true }
 
     // How far the viewed turn is from the live current state.
     const delta = nav.viewIndex - nav.currentIndex;
-    const plural = (n: number) => (n === 1 ? "" : "s");
     const relativeLabel =
         delta === 0
             ? "Current turn"
             : delta < 0
-              ? `${-delta} turn${plural(-delta)} ago`
-              : `Planning ${delta} turn${plural(delta)} ahead`;
+              ? `${pluralize(-delta, 'turn')} ago`
+              : `Planning ${pluralize(delta, 'turn')} ahead`;
 
     // Secondary absolute position, e.g. "Turn 2 of 5" or "Start of game".
     const positionLabel = nav.isPlannedView
