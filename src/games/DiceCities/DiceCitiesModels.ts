@@ -297,3 +297,22 @@ export function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap:
 }
 
 export var DiceCitiesGameDataModel = models.DiceCitiesGameData || GameDataModel.discriminator<IDiceCitiesGameDataDocument, IDiceCitiesGameDataModel>('DiceCitiesGameData', DiceCitiesGameDataSchema);
+
+// Boiled-down stats for the GameResult read model, computed once at game-end
+// (see recordGameResult in GameResultData.ts). Coins are each player's final
+// balance, not lifetime earnings - spending is part of the strategy.
+export interface IDiceCitiesGameResultStats {
+    coins: Map<string, number>;
+}
+
+export const diceCitiesGameResultStatsSchemaDef = {
+    coins: { type: Schema.Types.Map, of: Number }
+};
+
+export function computeDiceCitiesResultStats(gameData: IDiceCitiesGameData): IDiceCitiesGameResultStats {
+    const coins = new Map<string, number>();
+    for (const [userId, playerState] of gameData.specificGameState.playerStates) {
+        coins.set(userId, playerState.money);
+    }
+    return { coins };
+}
