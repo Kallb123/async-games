@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel } from '@/utils/mongodb/GameData';
+import { recordGameResult } from '@/utils/mongodb/GameResultData';
 
 export async function POST(request: NextRequest) {
   const { gameId } = await request.json();
@@ -31,6 +32,7 @@ export async function POST(request: NextRequest) {
   gameData.complete = true;
   gameData.winner = "";
   await gameData.save();
+  await recordGameResult(gameData);
 
   return NextResponse.json({ success: true });
 }
