@@ -1,6 +1,8 @@
 'use client'
 
+import { useState } from "react";
 import Skeleton from "@/components/ui/Skeleton";
+import MatchResultPopup from "@/components/ui/MatchResultPopup";
 import { GAME_META } from "@/utils/ui/games";
 import type { IRecentMatch, MatchOutcome } from "@/app/api/stats/route";
 import moment from 'moment';
@@ -13,8 +15,11 @@ interface RecentFormSectionProps {
 }
 
 // "Recent form" - chips of a player's most recent match outcomes. Shared by
-// a player's own profile and a friend's read-only profile.
+// a player's own profile and a friend's read-only profile. Tapping a chip
+// opens a popup with that match's game-specific stats.
 export default function RecentFormSection({ matches, isLoading }: RecentFormSectionProps) {
+    const [selected, setSelected] = useState<IRecentMatch | null>(null);
+
     return (
         <div className="ag-section">
             <div className="ag-section-head">
@@ -31,16 +36,26 @@ export default function RecentFormSection({ matches, isLoading }: RecentFormSect
                 : (
                     <div className="ag-chips">
                         {matches.map(match => (
-                            <div
+                            <button
                                 key={match.gameId}
+                                type="button"
                                 className={`ag-result-dot ag-result-dot--${match.outcome}`}
                                 title={`${GAME_META[match.url]?.name ?? match.url} · ${moment(match.endedAt).fromNow()}`}
+                                onClick={() => setSelected(match)}
                             >
                                 {OUTCOME_LABEL[match.outcome]}
-                            </div>
+                            </button>
                         ))}
                     </div>
                 )}
+
+            {selected && (
+                <MatchResultPopup
+                    gameId={selected.gameId}
+                    outcome={selected.outcome}
+                    onClose={() => setSelected(null)}
+                />
+            )}
         </div>
     );
 }

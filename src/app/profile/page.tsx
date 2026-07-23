@@ -339,13 +339,11 @@ export default function Profile() {
                     </a>
                     <button
                         type="button"
-                        className="ag-list-row"
+                        className="ag-list-row ag-list-row--button"
                         onClick={() => { signOut().then(() => router.push('/login')); }}
                         style={{
-                            width: "100%", background: "none", border: "none",
-                            borderTop: "1.5px dashed var(--ag-line-dashed)", padding: "13px 0",
+                            borderTop: "1.5px dashed var(--ag-line-dashed)",
                             font: "700 13px var(--ag-font)", color: "var(--ag-ink)",
-                            cursor: "pointer", textAlign: "left",
                         }}
                     >
                         <span style={{ flex: 1 }}>Sign out</span>

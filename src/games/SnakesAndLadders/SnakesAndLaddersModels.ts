@@ -2,7 +2,8 @@ import { GameDataModel, IGameData, IGameDataDocument } from "@/utils/mongodb/Gam
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { ISnakesAndLaddersGameDataResponse, ISnakesAndLaddersGameStateResponse } from "./apiModels";
-import { uuidString } from "@/utils/apiModels/GameDataApi";
+import { uuidString, GameResultStatGroup } from "@/utils/apiModels/GameDataApi";
+import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
 import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
 import { SnakesAndLaddersGameType } from "@/utils/apiModels/GameLogic";
@@ -205,4 +206,20 @@ export function computeSnakesAndLaddersResultStats(gameData: ISnakesAndLaddersGa
         playerStats.set(userId, { laddersClimbed: playerState.laddersClimbed, snakesHit: playerState.snakesHit });
     }
     return { playerStats };
+}
+
+// Renders ISnakesAndLaddersGameResultStats as one stat group per player, for
+// the shared GameResultStats UI.
+export function formatSnakesAndLaddersResultStats(stats: ISnakesAndLaddersGameResultStats, usernameById: Map<string, string>): GameResultStatGroup[] {
+    const groups: GameResultStatGroup[] = [];
+    for (const [userId, playerStats] of stats.playerStats) {
+        groups.push({
+            username: usernameById.get(userId) ?? userId,
+            lines: [
+                `Climbed ${pluralize(playerStats.laddersClimbed, 'ladder')}`,
+                `Hit ${pluralize(playerStats.snakesHit, 'snake')}`,
+            ],
+        });
+    }
+    return groups;
 }

@@ -187,6 +187,18 @@ body {
 
 .ag-list-row:last-child { border-bottom: none; }
 
+/* Lets a <button> stand in for a .ag-list-row (e.g. a clickable list entry)
+   without every call site re-deriving its own reset. */
+.ag-list-row--button {
+    width: 100%;
+    background: none;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+}
+
 .ag-list-row-main { flex: 1; min-width: 0; }
 
 .ag-list-row-title {
@@ -627,12 +639,15 @@ body {
     width: 26px;
     height: 26px;
     border-radius: 50%;
+    border: none;
+    padding: 0;
     flex: none;
     display: flex;
     align-items: center;
     justify-content: center;
     font: 800 11px var(--ag-font);
     color: var(--ag-on-dark);
+    cursor: pointer;
 }
 .ag-result-dot--win { background: var(--ag-green); }
 .ag-result-dot--loss { background: var(--ag-terracotta); }
