@@ -25,6 +25,20 @@ export var FriendshipSchema = new Schema<IFriendshipDataDocument> ({
 });
 export var FriendshipModel = models.Friendship || model<IFriendshipDataDocument, IFriendshipDataModel>('Friendship', FriendshipSchema);
 
+// True if the two users have an accepted friendship, in either direction.
+// Used to gate friends-only reads (e.g. a friend's profile) beyond the
+// current user's own data.
+export async function areFriends(userIdA: string, userIdB: string): Promise<boolean> {
+    const friendship = await FriendshipModel.findOne({
+        accepted: true,
+        $or: [
+            { requesterId: userIdA, recipientId: userIdB },
+            { requesterId: userIdB, recipientId: userIdA }
+        ]
+    });
+    return !!friendship;
+}
+
 export interface IFriendUser {
     userId: string,
     username: string | null,

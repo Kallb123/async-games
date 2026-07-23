@@ -37,6 +37,70 @@ GameResultSchema.index({ playerIds: 1, gameType: 1 });
 
 export var GameResultModel = models.GameResult || model<IGameResultDataDocument, IGameResultDataModel>('GameResult', GameResultSchema);
 
+export type MatchOutcome = "win" | "loss" | "draw";
+
+export interface IRecentMatch {
+    gameId: string;
+    url: string;
+    endedAt: string;
+    outcome: MatchOutcome;
+}
+
+export interface IGameStats {
+    url: string;
+    wins: number;
+    losses: number;
+    draws: number;
+    total: number;
+}
+
+export interface IPlayerStats {
+    recent: IRecentMatch[];
+    byGame: IGameStats[];
+}
+
+function outcomeFor(winner: string, userId: string): MatchOutcome {
+    if (winner === userId) return "win";
+    if (winner === "") return "draw";
+    return "loss";
+}
+
+// Recent match history + per-game W/L/D for one player, read from the
+// GameResult store. Shared by the current user's own stats endpoint and by
+// the friends-only profile endpoint - same data, different viewer.
+export async function getPlayerStats(userId: string): Promise<IPlayerStats> {
+    const recentResults = await GameResultModel
+        .find({ playerIds: userId })
+        .sort({ endedAt: -1 })
+        .limit(10)
+        .exec();
+
+    const recent: IRecentMatch[] = recentResults.map(result => ({
+        gameId: result.gameId,
+        url: result.url,
+        endedAt: result.endedAt,
+        outcome: outcomeFor(result.winner, userId),
+    }));
+
+    const byGameAgg: { _id: string, wins: number, losses: number, draws: number, total: number }[] = await GameResultModel.aggregate([
+        { $match: { playerIds: userId } },
+        { $group: {
+            _id: '$url',
+            total: { $sum: 1 },
+            wins: { $sum: { $cond: [{ $eq: ['$winner', userId] }, 1, 0] } },
+            draws: { $sum: { $cond: [{ $eq: ['$winner', ''] }, 1, 0] } },
+            losses: { $sum: { $cond: [{ $and: [{ $ne: ['$winner', userId] }, { $ne: ['$winner', ''] }] }, 1, 0] } },
+        } },
+        { $sort: { total: -1 } },
+    ]);
+
+    const byGame: IGameStats[] = byGameAgg.map(({ _id, wins, losses, draws, total }) => ({
+        url: _id, wins, losses, draws, total,
+    }));
+
+    return { recent, byGame };
+}
+
 // Writes the one, permanent result record for a finished game. Call this
 // once gameData.complete/winner are set (win via CheckGameOver, or a forced
 // end). Idempotent on gameId in case it's ever invoked twice for the same game.
