@@ -93,6 +93,27 @@ describe("game registry completeness", () => {
         ).toEqual([]);
     });
 
+    it("wires every game's result-stats calculator into the GameResult dispatch table", () => {
+        // Per-game GameResult stats (AGENTS.md: "GameResult storage should include
+        // some game specific statistics") are opt-in per game via a
+        // compute<Game>ResultStats export from that game's <Game>Models.ts - same
+        // opt-in shape as recap.ts above. A game that ships one must be wired into
+        // GAME_RESULT_STATS in src/utils/mongodb/GameResultData.ts, or its stats
+        // compile fine but are silently never recorded.
+        const gameResultData = read("src/utils/mongodb/GameResultData.ts");
+        const withResultStats = gameNames.filter((name) => {
+            const modelsPath = path.join(gamesRoot, name, `${name}Models.ts`);
+            return existsSync(modelsPath) && readFileSync(modelsPath, "utf8").includes(`compute${name}ResultStats`);
+        });
+        const missing = withResultStats.filter((name) => !gameResultData.includes(`compute${name}ResultStats`));
+        expect(
+            missing,
+            `These games export a compute<Game>ResultStats() but it isn't wired into ` +
+                `GAME_RESULT_STATS in src/utils/mongodb/GameResultData.ts:\n` +
+                missing.map((n) => `  - ${n}`).join("\n"),
+        ).toEqual([]);
+    });
+
     it("handles every game's game-start branch in the invite accept route", () => {
         const acceptRoute = read("src/app/api/invite/accept/route.ts");
         const missing = gameNames.filter((name) => !acceptRoute.includes(`${name}GameDataModel`));
