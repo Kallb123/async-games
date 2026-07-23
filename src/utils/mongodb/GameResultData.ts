@@ -22,6 +22,13 @@ import {
     snakesAndLaddersGameResultStatsSchemaDef,
     formatSnakesAndLaddersResultStats,
 } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
+import {
+    ISettlementsAndCitiesGameData,
+    ISACGameResultStats,
+    computeSettlementsAndCitiesResultStats,
+    sacGameResultStatsSchemaDef,
+    formatSettlementsAndCitiesResultStats,
+} from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 
 export interface IGameResultData {
     gameId: uuidString,
@@ -93,11 +100,21 @@ var SnakesAndLaddersGameResultSchema = new Schema<ISnakesAndLaddersGameResultDat
 }, { discriminatorKey: 'kind' });
 export var SnakesAndLaddersGameResultModel = models.SnakesAndLaddersGameResult || GameResultModel.discriminator<ISnakesAndLaddersGameResultDataDocument, ISnakesAndLaddersGameResultDataModel>('SnakesAndLaddersGameResult', SnakesAndLaddersGameResultSchema);
 
+export interface ISettlementsAndCitiesGameResultData extends IGameResultData {
+    stats: ISACGameResultStats;
+}
+export interface ISettlementsAndCitiesGameResultDataDocument extends ISettlementsAndCitiesGameResultData, Document {}
+export interface ISettlementsAndCitiesGameResultDataModel extends Model<ISettlementsAndCitiesGameResultDataDocument> {}
+var SettlementsAndCitiesGameResultSchema = new Schema<ISettlementsAndCitiesGameResultDataDocument>({
+    stats: sacGameResultStatsSchemaDef
+}, { discriminatorKey: 'kind' });
+export var SettlementsAndCitiesGameResultModel = models.SettlementsAndCitiesGameResult || GameResultModel.discriminator<ISettlementsAndCitiesGameResultDataDocument, ISettlementsAndCitiesGameResultDataModel>('SettlementsAndCitiesGameResult', SettlementsAndCitiesGameResultSchema);
+
 // Maps a GameData's gameType to the discriminator model + stats calculator
 // that boil its final specificGameState down to the interesting numbers, plus
 // a formatter that turns those numbers into display-ready stat groups. Games
-// with no entry here (e.g. SettlementsAndCities) still get the base
-// GameResult fields (including totalTurns) via recordGameResult below.
+// with no entry here still get the base GameResult fields (including
+// totalTurns) via recordGameResult below.
 const GAME_RESULT_STATS: Record<string, {
     model: Model<any>,
     compute: (gameData: IGameData) => unknown,
@@ -117,6 +134,11 @@ const GAME_RESULT_STATS: Record<string, {
         model: SnakesAndLaddersGameResultModel,
         compute: (gameData) => computeSnakesAndLaddersResultStats(gameData as ISnakesAndLaddersGameData),
         format: formatSnakesAndLaddersResultStats,
+    },
+    SettlementsAndCities: {
+        model: SettlementsAndCitiesGameResultModel,
+        compute: (gameData) => computeSettlementsAndCitiesResultStats(gameData as ISettlementsAndCitiesGameData),
+        format: formatSettlementsAndCitiesResultStats,
     },
 };
 
