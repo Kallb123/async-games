@@ -6,8 +6,14 @@ import { REACTION_TEXT_OPTIONS, REACTION_EMOJI_OPTIONS } from '@/utils/reactions
 interface ReactionPickerProps {
     /** Already-sent reaction for this action, if any — renders as a sent pill instead of the trigger. */
     reacted?: string | null;
-    /** Invoked with the chosen reaction; the popup closes immediately. */
-    onReact: (reaction: string) => void;
+    /**
+     * Invoked with the chosen reaction; the popup closes immediately. Omit for
+     * a read-only pill (e.g. showing a reaction someone else sent) — the picker
+     * trigger is never rendered in that case, only the `reacted` pill.
+     */
+    onReact?: (reaction: string) => void;
+    /** Overrides the `reacted` pill's aria-label (defaults to "You reacted …"). */
+    reactedLabel?: string;
 }
 
 /**
@@ -18,16 +24,20 @@ interface ReactionPickerProps {
  * sent, renders it as a fixed pill instead — only one reaction per action
  * is allowed.
  */
-export default function ReactionPicker({ reacted, onReact }: ReactionPickerProps) {
+export default function ReactionPicker({ reacted, onReact, reactedLabel }: ReactionPickerProps) {
     const { open, setOpen, rootRef } = useDismissablePopup<HTMLDivElement>();
 
     const choose = (reaction: string) => {
         setOpen(false);
-        onReact(reaction);
+        onReact?.(reaction);
     };
 
     if (reacted) {
-        return <span className="ag-pill-action ag-pill-action--solid" aria-label={`You reacted ${reacted}`}>{reacted}</span>;
+        return <span className="ag-pill-action ag-pill-action--solid" aria-label={reactedLabel ?? `You reacted ${reacted}`}>{reacted}</span>;
+    }
+
+    if (!onReact) {
+        return null;
     }
 
     return (

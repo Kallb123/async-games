@@ -1,6 +1,6 @@
 import { IGameData } from "../mongodb/GameData";
 import { IGameCommand, ICommandOutcome } from "../apiModels/GameLogic";
-import { buildTimeline, ITurnSnapshot, IReplayStep } from "./replay";
+import { buildTimeline, ITimeline, ITurnSnapshot, IReplayStep } from "./replay";
 import { snakesAndLaddersRecapAdapter } from "@/games/SnakesAndLadders/recap";
 import { diceCitiesRecapAdapter } from "@/games/DiceCities/recap";
 import { settlementsAndCitiesRecapAdapter } from "@/games/SettlementsAndCities/recap";
@@ -74,6 +74,30 @@ export interface IEventFeed {
     tip: IRecapTip | null;
 }
 
+// Replays a game's real command history through its recap adapter, turning
+// every turn into display events. Shared by buildEventFeed (which additionally
+// windows the result to the viewer's "since last here" recap) and
+// buildAllEvents (which returns everything, for looking up one past event
+// regardless of whose turn it currently is).
+async function replayEvents(
+    gameData: IGameData,
+    userIdNameMap: { [key: string]: string },
+    adapter: IRecapAdapter
+): Promise<{ events: IGameEvent[]; timeline: ITimeline }> {
+    const steps: IReplayStep[] = [];
+    const timeline = await buildTimeline(gameData, userIdNameMap, [], (step) => {
+        if (!step.planned) {
+            steps.push(step);
+        }
+    });
+
+    const events: IGameEvent[] = [];
+    for (const step of steps) {
+        events.push(...adapter.toEvents(step.prev, step.next, step.command, step.outcome));
+    }
+    return { events, timeline };
+}
+
 // Builds a viewer's "since you were last here" feed by replaying the game and
 // keeping only the events that happened after the viewer's own last turn. Returns
 // hasRecap === false (and empty payload) when the game has no recap adapter, when
@@ -96,14 +120,10 @@ export async function buildEventFeed(
         return empty;
     }
 
-    const steps: IReplayStep[] = [];
-    let timeline;
+    let allEvents: IGameEvent[];
+    let timeline: ITimeline;
     try {
-        timeline = await buildTimeline(gameData, userIdNameMap, [], (step) => {
-            if (!step.planned) {
-                steps.push(step);
-            }
-        });
+        ({ events: allEvents, timeline } = await replayEvents(gameData, userIdNameMap, adapter));
     } catch {
         // Some games can't be replayed for every historical game (e.g. Settlements
         // & Cities games created before recap support lack the stored initial-state
@@ -111,11 +131,6 @@ export async function buildEventFeed(
         // recap rather than surfacing an error — the same graceful no-op the
         // client already handles for adapter-less games.
         return empty;
-    }
-
-    const allEvents: IGameEvent[] = [];
-    for (const step of steps) {
-        allEvents.push(...adapter.toEvents(step.prev, step.next, step.command, step.outcome));
     }
 
     // The window is everything after the viewer's own last event. If they've
@@ -139,6 +154,29 @@ export async function buildEventFeed(
         summary: adapter.summarize(events, forUserId),
         tip: adapter.tip ? adapter.tip(liveState, forUserId) : null,
     };
+}
+
+// Replays a game's full history into every real-turn display event, with no
+// windowing to a particular viewer or turn. Unlike buildEventFeed this works
+// for completed games and for turns that are no longer the "current" one —
+// used to look up a specific past event's title (e.g. what a reaction landed
+// on), which can be well behind the game's live state by the time it's read
+// back. Returns an empty list rather than throwing when the game has no
+// adapter or can't be replayed (e.g. older Settlements & Cities games).
+export async function buildAllEvents(
+    gameData: IGameData,
+    userIdNameMap: { [key: string]: string }
+): Promise<IGameEvent[]> {
+    const adapter = getRecapAdapter(gameData.gameType.className);
+    if (!adapter) {
+        return [];
+    }
+    try {
+        const { events } = await replayEvents(gameData, userIdNameMap, adapter);
+        return events;
+    } catch {
+        return [];
+    }
 }
 
 // Registration of each game's recap adapter, mirroring how replay.ts registers

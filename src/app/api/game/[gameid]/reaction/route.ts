@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { ReactionModel, IReactionDataDocument } from '@/utils/mongodb/ReactionData';
-import { userIdListToUsernameMap } from '@/utils/users/clerk';
+import { userIdListToUserIdNameMap } from '@/utils/users/clerk';
 import { buildEventFeed } from '@/utils/games/recap';
 import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 import { isValidReaction } from '@/utils/reactions';
@@ -50,11 +50,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
         return NextResponse.json({}, { status: 403, statusText: "Not a player in this game" });
     }
 
-    const usernameMap = await userIdListToUsernameMap(gameData.userIdList);
-    const userIdNameMap: { [key: string]: string } = {};
-    usernameMap.forEach((username, id) => {
-        userIdNameMap[id] = username;
-    });
+    const userIdNameMap = await userIdListToUserIdNameMap(gameData.userIdList);
 
     const feed = await buildEventFeed(gameData, userIdNameMap, userId);
     const event = feed.events.find((e) => e.id === eventId);

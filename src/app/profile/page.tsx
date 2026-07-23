@@ -4,12 +4,15 @@ import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useToast } from "@/components/ToastContext";
 import Avatar from "@/components/ui/Avatar";
 import GameThumb from "@/components/ui/GameThumb";
+import ListSection from "@/components/ui/ListSection";
+import ReactionPicker from "@/components/ui/ReactionPicker";
 import Skeleton, { SkeletonRow } from "@/components/ui/Skeleton";
 import { IFriendRequestResponse, IFriendUser } from "@/utils/mongodb/FriendshipData";
 import { formatRelativeTime } from "@/utils/ui/time";
 import { usePushEvents, FRIEND_EVENTS } from "@/utils/hooks/usePushEvents";
 import { GAME_META } from "@/utils/ui/games";
 import type { IGameStats, IRecentMatch, MatchOutcome } from "@/app/api/stats/route";
+import type { IReceivedReaction } from "@/app/api/reactions/route";
 import { useUser, useClerk } from "@clerk/nextjs";
 import moment from 'moment';
 import { usePathname, useRouter } from 'next/navigation';
@@ -44,6 +47,9 @@ export default function Profile() {
     const [gameStats, setGameStats] = useState([] as IGameStats[]);
     const [isLoadingStats, setIsLoadingStats] = useState(true);
 
+    const [reactions, setReactions] = useState([] as IReceivedReaction[]);
+    const [isLoadingReactions, setIsLoadingReactions] = useState(true);
+
     useEffect(() => {
         if (isLoaded) {
             if (!user) {
@@ -56,6 +62,7 @@ export default function Profile() {
             }
             refreshFriends();
             refreshStats();
+            refreshReactions();
         }
     }, [isLoaded]);
 
@@ -86,6 +93,18 @@ export default function Profile() {
         })
         .catch(error => console.error('Failed to load stats', error))
         .finally(() => setIsLoadingStats(false));
+    }
+
+    const refreshReactions = () => {
+        fetch('/api/reactions')
+        .then(response => response.json())
+        .then(data => {
+            if (data && data.success) {
+                setReactions(data.reactions);
+            }
+        })
+        .catch(error => console.error('Failed to load reactions', error))
+        .finally(() => setIsLoadingReactions(false));
     }
 
     const handleInvite = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -212,43 +231,54 @@ export default function Profile() {
             </div>
 
             {/* Per-game stats */}
-            {(isLoadingStats || gameStats.length > 0) && (
-                <div className="ag-section">
-                    <div className="ag-section-head">
-                        <h2 className="ag-section-label">Stats by game</h2>
-                    </div>
-                    {isLoadingStats
-                        ? <div className="ag-list" aria-busy="true">
-                            <SkeletonRow />
-                            <SkeletonRow />
-                        </div>
-                        : (
-                            <div className="ag-list">
-                                {gameStats.map(stats => {
-                                    const meta = GAME_META[stats.url];
-                                    return (
-                                        <div key={stats.url} className="ag-list-row">
-                                            {meta
-                                                ? <GameThumb meta={meta} size={GAME_STAT_THUMB_SIZE} radius={10} />
-                                                : <div style={{ width: GAME_STAT_THUMB_SIZE, height: GAME_STAT_THUMB_SIZE, flex: "none" }} />}
-                                            <div className="ag-list-row-main">
-                                                <div className="ag-list-row-title">{meta?.name ?? stats.url}</div>
-                                                <div className="ag-list-row-sub">{stats.total} match{stats.total === 1 ? "" : "es"}</div>
-                                            </div>
-                                            <div style={{ font: "800 12.5px var(--ag-font)", whiteSpace: "nowrap" }}>
-                                                <span className="ag-outcome-text--win">{stats.wins}W</span>
-                                                {" · "}
-                                                <span className="ag-outcome-text--loss">{stats.losses}L</span>
-                                                {" · "}
-                                                <span className="ag-outcome-text--draw">{stats.draws}D</span>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+            <ListSection label="Stats by game" isLoading={isLoadingStats} hasItems={gameStats.length > 0}>
+                <div className="ag-list">
+                    {gameStats.map(stats => {
+                        const meta = GAME_META[stats.url];
+                        return (
+                            <div key={stats.url} className="ag-list-row">
+                                {meta
+                                    ? <GameThumb meta={meta} size={GAME_STAT_THUMB_SIZE} radius={10} />
+                                    : <div style={{ width: GAME_STAT_THUMB_SIZE, height: GAME_STAT_THUMB_SIZE, flex: "none" }} />}
+                                <div className="ag-list-row-main">
+                                    <div className="ag-list-row-title">{meta?.name ?? stats.url}</div>
+                                    <div className="ag-list-row-sub">{stats.total} match{stats.total === 1 ? "" : "es"}</div>
+                                </div>
+                                <div style={{ font: "800 12.5px var(--ag-font)", whiteSpace: "nowrap" }}>
+                                    <span className="ag-outcome-text--win">{stats.wins}W</span>
+                                    {" · "}
+                                    <span className="ag-outcome-text--loss">{stats.losses}L</span>
+                                    {" · "}
+                                    <span className="ag-outcome-text--draw">{stats.draws}D</span>
+                                </div>
                             </div>
-                        )}
+                        );
+                    })}
                 </div>
-            )}
+            </ListSection>
+
+            {/* Reactions received */}
+            <ListSection label="Reactions" isLoading={isLoadingReactions} hasItems={reactions.length > 0}>
+                <div className="ag-list">
+                    {reactions.map((reaction) => (
+                        <div key={reaction.reactionId} className="ag-list-row">
+                            <Avatar name={reaction.actorUsername} size={36} />
+                            <div className="ag-list-row-main">
+                                <div className="ag-list-row-title">
+                                    {reaction.actorUsername} · {reaction.gameName}
+                                </div>
+                                <div className="ag-list-row-sub">
+                                    {reaction.eventTitle ?? "your move"} · {formatRelativeTime(reaction.timestamp)}
+                                </div>
+                            </div>
+                            <ReactionPicker
+                                reacted={reaction.reaction}
+                                reactedLabel={`${reaction.actorUsername} reacted ${reaction.reaction}`}
+                            />
+                        </div>
+                    ))}
+                </div>
+            </ListSection>
 
             {/* Friends */}
             <div className="ag-section">
