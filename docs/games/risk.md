@@ -124,7 +124,10 @@ At the beginning of a player's turn, they receive and place new armies calculate
 
 #### 1. Base Territory Calculation
 Count the total number of territories currently controlled ($T$). The base army count is calculated as:
-$$	ext{Base Armies} = \max\left(3, \left\lfloor rac{T}{3} ightflooright)$$
+$$	ext{Base Armies} = \max\left(3, \left\lfloor rac{T}{3} 
+ight
+floor
+ight)$$
 
 #### 2. Continent Control Bonuses
 If a player controls all territories within a continent at the start of their turn, they receive the full bonus armies assigned to that continent (see Section 2.1).
@@ -168,12 +171,16 @@ Combat is optional. Active players may conduct as many attacks as desired from o
 #### Combat Resolution Procedure
 1. **Declare Intent:** Attacker specifies the attacking territory and target enemy territory.
 2. **Determine Attacker Dice Count:**
-    *   3 Armies in territory $ightarrow$ May roll up to 2 dice.
-    *   $\ge 4$ Armies in territory $ightarrow$ May roll up to 3 dice.
+    *   3 Armies in territory $
+ightarrow$ May roll up to 2 dice.
+    *   $\ge 4$ Armies in territory $
+ightarrow$ May roll up to 3 dice.
     *   *(Requires $N+1$ armies to roll $N$ dice; max 3 dice).*
 3. **Determine Defender Dice Count:**
-    *   1 Army in territory $ightarrow$ Rolls 1 die.
-    *   $\ge 2$ Armies in territory $ightarrow$ May roll 1 or 2 dice.
+    *   1 Army in territory $
+ightarrow$ Rolls 1 die.
+    *   $\ge 2$ Armies in territory $
+ightarrow$ May roll 1 or 2 dice.
 4. **Roll & Match:** Both players roll simultaneously. Both sets of dice are sorted in descending numerical order and compared pair-by-pair:
     *   **Highest Attack Die vs. Highest Defense Die:** Highest roll wins. The loser removes 1 army from their territory. **In the event of a tie, the defender wins.**
     *   **Second-Highest Attack Die vs. Second-Highest Defense Die:** (Evaluated only if both players rolled at least 2 dice). Highest roll wins; defender wins ties.
@@ -289,7 +296,8 @@ To support modern digital implementations, analytics tracking, or competitive po
 
 #### 1. Attacker Luck Deviation Score ($\Delta L_A$)
 Quantifies whether a player's combat rolls performed above or below statistical expectation:
-$$\Delta L_A = \sum_{k=1}^{M} \left( L_{	ext{actual}, k} - \mathbb{E}[L_k] ight)$$
+$$\Delta L_A = \sum_{k=1}^{M} \left( L_{	ext{actual}, k} - \mathbb{E}[L_k] 
+ight)$$
 *Where $M$ is total battles fought, $L_{	ext{actual}}$ is enemy casualties inflicted, and $\mathbb{E}[L_k]$ is theoretical expected casualties based on exact dice matchup probabilities.*
 
 #### 2. Continent Hold Stability Index ($CHS$)
