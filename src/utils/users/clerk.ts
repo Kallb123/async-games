@@ -26,6 +26,15 @@ export async function userIdListToUsernameMap(userIdList: string[]): Promise<Map
     return usernameMap;
 }
 
+// Same lookup as userIdListToUsernameMap, but as the plain { [userId]: username }
+// object the replay engine (buildTimeline/buildEventFeed/buildAllEvents) takes.
+export async function userIdListToUserIdNameMap(userIdList: string[]): Promise<{ [key: string]: string }> {
+    const usernameMap = await userIdListToUsernameMap(userIdList);
+    const userIdNameMap: { [key: string]: string } = {};
+    usernameMap.forEach((username, id) => { userIdNameMap[id] = username; });
+    return userIdNameMap;
+}
+
 export async function usernameListToUserIdList(usernameList: string[]): Promise<string[]> {
     const { data: users } = await (await clerkClient()).users.getUserList({username: usernameList});
     const userIdList: string[] = [];

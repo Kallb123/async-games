@@ -2,7 +2,7 @@ import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
-import { userIdListToUsernameMap } from '@/utils/users/clerk';
+import { userIdListToUserIdNameMap } from '@/utils/users/clerk';
 import { buildTimeline } from '@/utils/games/replay';
 import { IGameCommand } from '@/utils/apiModels/GameLogic';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
@@ -54,11 +54,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
         command.senderId = userId;
     });
 
-    const usernameMap = await userIdListToUsernameMap(gameData.userIdList);
-    const userIdNameMap: { [key: string]: string } = {};
-    usernameMap.forEach((username, id) => {
-        userIdNameMap[id] = username;
-    });
+    const userIdNameMap = await userIdListToUserIdNameMap(gameData.userIdList);
 
     try {
         const timeline = await buildTimeline(gameData, userIdNameMap, plannedCommands);

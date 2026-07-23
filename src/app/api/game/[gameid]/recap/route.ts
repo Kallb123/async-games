@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { ReactionModel } from '@/utils/mongodb/ReactionData';
-import { userIdListToUsernameMap } from '@/utils/users/clerk';
+import { userIdListToUserIdNameMap } from '@/utils/users/clerk';
 import { buildEventFeed, IGameEvent } from '@/utils/games/recap';
 import { metaForGame } from '@/utils/ui/games';
 import { playerColour } from '@/utils/ui/playerColours';
@@ -54,11 +54,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IG
         return NextResponse.json({}, { status: 403, statusText: "Not a player in this game" });
     }
 
-    const usernameMap = await userIdListToUsernameMap(gameData.userIdList);
-    const userIdNameMap: { [key: string]: string } = {};
-    usernameMap.forEach((username, id) => {
-        userIdNameMap[id] = username;
-    });
+    const userIdNameMap = await userIdListToUserIdNameMap(gameData.userIdList);
 
     try {
         const feed = await buildEventFeed(gameData, userIdNameMap, userId);
