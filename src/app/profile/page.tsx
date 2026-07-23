@@ -7,10 +7,11 @@ import GameThumb from "@/components/ui/GameThumb";
 import ListSection from "@/components/ui/ListSection";
 import ReactionPicker from "@/components/ui/ReactionPicker";
 import Skeleton, { SkeletonRow } from "@/components/ui/Skeleton";
-import { IFriendRequestResponse, IFriendUser } from "@/utils/mongodb/FriendshipData";
+import { IFriendRequestResponse } from "@/utils/mongodb/FriendshipData";
 import { formatRelativeTime } from "@/utils/ui/time";
 import { usePushEvents, FRIEND_EVENTS } from "@/utils/hooks/usePushEvents";
 import { GAME_META } from "@/utils/ui/games";
+import { displayName } from "@/utils/ui/players";
 import type { IGameStats, IRecentMatch, MatchOutcome } from "@/app/api/stats/route";
 import type { IReceivedReaction } from "@/app/api/reactions/route";
 import { useUser, useClerk } from "@clerk/nextjs";
@@ -20,12 +21,6 @@ import { useEffect, useState } from "react";
 
 const OUTCOME_LABEL: Record<MatchOutcome, string> = { win: "W", loss: "L", draw: "D" };
 const GAME_STAT_THUMB_SIZE = 36;
-
-function friendDisplayName(user: IFriendUser) {
-    const fullName = [user.firstName, user.lastName].filter(name => name).join(" ");
-    if (fullName) return `${fullName} (${user.username})`;
-    return `${user.username}`;
-}
 
 export default function Profile() {
     const pathName = usePathname();
@@ -164,7 +159,7 @@ export default function Profile() {
     }
 
     const fullName = [user?.firstName, user?.lastName].filter(name => name).join(" ");
-    const displayName = user?.firstName || user?.username || "You";
+    const ownDisplayName = user?.firstName || user?.username || "You";
 
     return (
         <main>
@@ -177,9 +172,9 @@ export default function Profile() {
 
             {/* Identity */}
             <div className="ag-section" style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <Avatar name={displayName} size={64} ring="var(--ag-terracotta)" />
+                <Avatar name={ownDisplayName} size={64} ring="var(--ag-terracotta)" />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ font: "800 24px/1.1 var(--ag-font)", color: "var(--ag-ink)" }}>{displayName}</div>
+                    <div style={{ font: "800 24px/1.1 var(--ag-font)", color: "var(--ag-ink)" }}>{ownDisplayName}</div>
                     <div style={{ font: "500 12px var(--ag-font)", color: "var(--ag-ink-soft)" }}>
                         {user?.username ? `@${user.username}` : "No username"}{fullName ? ` · ${fullName}` : ""}
                     </div>
@@ -316,15 +311,20 @@ export default function Profile() {
                         <div className="ag-list">
                             {friends.map((friend) => (
                                 <div key={friend.friendshipId} className="ag-list-row">
-                                    <Avatar name={friend.user.username} size={36} />
-                                    <div className="ag-list-row-main">
-                                        <div className="ag-list-row-title">{friendDisplayName(friend.user)}</div>
-                                        <div className="ag-list-row-sub">
-                                            {friend.user.lastActionTimestamp
-                                                ? `Last active ${formatRelativeTime(friend.user.lastActionTimestamp)}`
-                                                : "No activity yet"}
+                                    <a
+                                        href={`/profile/${friend.user.userId}`}
+                                        style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, textDecoration: "none", color: "inherit" }}
+                                    >
+                                        <Avatar name={friend.user.username} size={36} />
+                                        <div className="ag-list-row-main">
+                                            <div className="ag-list-row-title">{displayName(friend.user)}</div>
+                                            <div className="ag-list-row-sub">
+                                                {friend.user.lastActionTimestamp
+                                                    ? `Last active ${formatRelativeTime(friend.user.lastActionTimestamp)}`
+                                                    : "No activity yet"}
+                                            </div>
                                         </div>
-                                    </div>
+                                    </a>
                                     <a href="/newgame" className="ag-pill-action">Challenge</a>
                                     <button
                                         type="button"
