@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
 import { DiceCitiesGameType } from "@/utils/apiModels/GameLogic";
 import { DiceRoll } from "@/utils/games/DiceRoll";
+import { LANDMARKS } from "./ui";
 
 export interface DiceCitiesInvitationRequest extends IInvitationRequest {
     enabledDocks: boolean,
@@ -76,6 +77,7 @@ export function buildInitialDiceCitiesState(userIdList: string[]): IDiceCitiesGa
                 { card: DiceCitiesCardIds.BAKERY, amount: 1 },
             ],
             money: 3,
+            totalCoinsEarned: 0,
             doubleUnlocked: false,
             bonusDiningAndStore: false,
             rerollDoubles: false,
@@ -165,6 +167,10 @@ export interface IDiceCitiesCardCount {
 export interface IDiceCitiesPlayerState {
     cards: IDiceCitiesCardCount[],
     money: number,
+    // Cumulative coins gained over the match (dice-roll income, stolen
+    // coins received), never decremented by spending - a measure of how
+    // well a player's strategy earns, independent of what they spend it on.
+    totalCoinsEarned: number,
     doubleUnlocked: boolean,
     bonusDiningAndStore: boolean,
     rerollDoubles: boolean,
@@ -215,6 +221,7 @@ var DiceCitiesGameDataSchema = new Schema<IDiceCitiesGameDataDocument>({
                     amount: Number
                 }],
                 money: Number,
+                totalCoinsEarned: Number,
                 doubleUnlocked: Boolean,
                 bonusDiningAndStore: Boolean,
                 rerollDoubles: Boolean,
@@ -297,3 +304,34 @@ export function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap:
 }
 
 export var DiceCitiesGameDataModel = models.DiceCitiesGameData || GameDataModel.discriminator<IDiceCitiesGameDataDocument, IDiceCitiesGameDataModel>('DiceCitiesGameData', DiceCitiesGameDataSchema);
+
+// Boiled-down stats for the GameResult read model, computed once at game-end
+// (see recordGameResult in GameResultData.ts). `coins` is each player's final
+// balance (spending is part of the strategy, so this alone tends toward
+// zero); `coinsEarned` is their cumulative earnings regardless of spend, a
+// better read on how well a strategy performs. `landmarksUnlocked` lists
+// which of the four landmark cards (the game's win condition) each player
+// had bought by game-end.
+export interface IDiceCitiesGameResultStats {
+    coins: Map<string, number>;
+    coinsEarned: Map<string, number>;
+    landmarksUnlocked: Map<string, string[]>;
+}
+
+export const diceCitiesGameResultStatsSchemaDef = {
+    coins: { type: Schema.Types.Map, of: Number },
+    coinsEarned: { type: Schema.Types.Map, of: Number },
+    landmarksUnlocked: { type: Schema.Types.Map, of: [String] }
+};
+
+export function computeDiceCitiesResultStats(gameData: IDiceCitiesGameData): IDiceCitiesGameResultStats {
+    const coins = new Map<string, number>();
+    const coinsEarned = new Map<string, number>();
+    const landmarksUnlocked = new Map<string, string[]>();
+    for (const [userId, playerState] of gameData.specificGameState.playerStates) {
+        coins.set(userId, playerState.money);
+        coinsEarned.set(userId, playerState.totalCoinsEarned);
+        landmarksUnlocked.set(userId, LANDMARKS.filter(l => playerState[l.flag]).map(l => l.cardId));
+    }
+    return { coins, coinsEarned, landmarksUnlocked };
+}

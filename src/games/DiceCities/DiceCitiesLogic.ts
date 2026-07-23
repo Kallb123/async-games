@@ -11,7 +11,11 @@ import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 export interface IDiceCitiesDiceRollOutcome extends ICommandOutcome {
     roll1: number,
     roll2: number | null,
-    moneyChanges: Map<string, number>
+    moneyChanges: Map<string, number>,
+    // Per-player totalCoinsEarned deltas from this roll (bank payouts, steals
+    // received) - unlike moneyChanges this is never negative, so Undo can
+    // subtract it back out when a Radio Tower reroll discards this roll.
+    coinsEarnedChanges: Map<string, number>
 }
 
 @serializable
@@ -64,6 +68,7 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
     senderUsername: string = "Unknown";
     doubleDice: boolean = false;
     moneyChanges: Map<string, number> = new Map;
+    coinsEarnedChanges: Map<string, number> = new Map;
     // Recorded RNG outcomes, populated on first Execute so the roll can be
     // deterministically replayed (turn recap / planning).
     recordedRoll1?: number;
@@ -107,6 +112,7 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
         this.recordedRoll2 = outcome.roll2;
         dcGameData.specificGameState.hasReRolled = false;
         this.moneyChanges = outcome.moneyChanges;
+        this.coinsEarnedChanges = outcome.coinsEarnedChanges;
         let totalRoll = this.doubleDice && outcome.roll2 ? outcome.roll1 + outcome.roll2 : outcome.roll1;
 
         const senderUsername = this.senderUsername;
@@ -128,6 +134,17 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
             }
 
             playerState.money += moneyChange;
+        });
+
+        const coinsEarnedMap: Map<string, number> = new Map(Object.entries(this.coinsEarnedChanges));
+
+        coinsEarnedMap.forEach((coinsEarnedChange, userId) => {
+            const playerState = dcGameData.specificGameState.playerStates.get(userId);
+            if (!playerState) {
+                return;
+            }
+
+            playerState.totalCoinsEarned -= coinsEarnedChange;
         });
 
         dcGameData.gameState.commandHistory.pop();
@@ -581,6 +598,7 @@ export class DiceCitiesRequestTvStationSelection implements IGameCommand {
 
         selectedState.money -= amountToSteal;
         rollerState.money += amountToSteal;
+        rollerState.totalCoinsEarned += amountToSteal;
 
         const senderUsername = this.senderUsername;
         dcGameData.gameState.history.unshift(`${senderUsername} stole ${amountToSteal} coins from ${this.selectedUserName || this.selectedUser}`);
@@ -944,17 +962,20 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean, recorded
             validMove: false,
             roll1: 0,
             roll2: 0,
-            moneyChanges: new Map
+            moneyChanges: new Map,
+            coinsEarnedChanges: new Map
         };
     }
-    
+
     if (roll1 === roll2 && rollerState.rerollDoubles) {
         dcGameData.specificGameState.awaitingDoubleReroll = true;
     }
 
     const moneyChanges: Map<string, number> = new Map;
+    const coinsEarnedChanges: Map<string, number> = new Map;
     dcGameData.specificGameState.playerStates.forEach((ps, userId) => {
         moneyChanges.set(userId, 0);
+        coinsEarnedChanges.set(userId, 0);
     });
     // Award red cards
     dcGameData.specificGameState.playerStates.forEach((playerState, userId) => {
@@ -979,6 +1000,8 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean, recorded
             const cardAmount = card.type === "dining" && playerState.bonusDiningAndStore ? card.stealRollerGain+1 : card.stealRollerGain;
             const amountToSteal = Math.min(rollerState.money, cardAmount);
             playerState.money += amountToSteal;
+            playerState.totalCoinsEarned += amountToSteal;
+            coinsEarnedChanges.set(userId, (coinsEarnedChanges.get(userId) ?? 0) + amountToSteal);
             moneyChanges.set(userId, (moneyChanges.get(userId) ?? 0) + amountToSteal);
             rollerState.money -= amountToSteal;
             moneyChanges.set(dcGameData.currentTurn, (moneyChanges.get(dcGameData.currentTurn) ?? 0) - amountToSteal);
@@ -1034,6 +1057,8 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean, recorded
             }
             // TODO: Consider bank money? (42*1 + 24*5 + 12*10 = 42+120+120 = 282)
             playerState.money += cardAmount;
+            playerState.totalCoinsEarned += cardAmount;
+            coinsEarnedChanges.set(userId, (coinsEarnedChanges.get(userId) ?? 0) + cardAmount);
             moneyChanges.set(userId, (moneyChanges.get(userId) ?? 0) + cardAmount);
         });
     });
@@ -1052,6 +1077,8 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean, recorded
                 playerState.money -= amountToSteal;
                 moneyChanges.set(userId, (moneyChanges.get(userId) ?? 0) - amountToSteal);
                 rollerState.money += amountToSteal;
+                rollerState.totalCoinsEarned += amountToSteal;
+                coinsEarnedChanges.set(dcGameData.currentTurn, (coinsEarnedChanges.get(dcGameData.currentTurn) ?? 0) + amountToSteal);
                 moneyChanges.set(dcGameData.currentTurn, (moneyChanges.get(dcGameData.currentTurn) ?? 0) + amountToSteal);
             });
         }
@@ -1086,7 +1113,8 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean, recorded
         validMove: true,
         roll1,
         roll2,
-        moneyChanges
+        moneyChanges,
+        coinsEarnedChanges
     }
     return outcome;
 }

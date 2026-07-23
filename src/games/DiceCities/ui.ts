@@ -57,11 +57,17 @@ export function rollLabel(card: IDiceCitiesCard): string {
         .join(", ");
 }
 
+// Narrower than `keyof IDiceCitiesPlayerStateResponse` so LANDMARKS can also
+// index the engine-side IDiceCitiesPlayerState (GameResult stats compute
+// landmarksUnlocked from this same table) - both share these four boolean
+// field names.
+export type DiceCitiesLandmarkFlag = "doubleUnlocked" | "bonusDiningAndStore" | "oneReroll" | "rerollDoubles";
+
 /**
  * The four landmarks in cost order, each paired with the player-state flag that
  * records whether it's been built. Building all four wins the game.
  */
-export const LANDMARKS: { cardId: string; flag: keyof IDiceCitiesPlayerStateResponse }[] = [
+export const LANDMARKS: { cardId: string; flag: DiceCitiesLandmarkFlag }[] = [
     { cardId: DiceCitiesCardIds.TRAIN_STATION, flag: "doubleUnlocked" },
     { cardId: DiceCitiesCardIds.SHOPPING_MALL, flag: "bonusDiningAndStore" },
     { cardId: DiceCitiesCardIds.AMUSEMENT_PARK, flag: "oneReroll" },

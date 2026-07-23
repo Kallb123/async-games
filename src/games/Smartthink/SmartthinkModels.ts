@@ -294,3 +294,17 @@ SmartthinkGameDataSchema.methods.CreateDataResponse = async function(): Promise<
 };
 
 export var SmartthinkGameDataModel = models.SmartthinkGameData || GameDataModel.discriminator<ISmartthinkGameDataDocument, ISmartthinkGameDataModel>('SmartthinkGameData', SmartthinkGameDataSchema);
+
+// Boiled-down stats for the GameResult read model, computed once at game-end
+// (see recordGameResult in GameResultData.ts).
+export interface ISmartthinkGameResultStats {
+    totalGuesses: number;
+}
+
+export const smartthinkGameResultStatsSchemaDef = {
+    totalGuesses: Number
+};
+
+export function computeSmartthinkResultStats(gameData: ISmartthinkGameData): ISmartthinkGameResultStats {
+    return { totalGuesses: gameData.specificGameState.guessRows.length };
+}

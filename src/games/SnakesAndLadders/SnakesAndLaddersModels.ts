@@ -88,7 +88,9 @@ SnakesAndLaddersInvitationSchema.methods.CreateGame = async function(invite: ISn
 export var SnakesAndLaddersInvitationModel = models.SnakesAndLaddersInvitation || InvitationModel.discriminator<ISnakesAndLaddersInvitationDataDocument, ISnakesAndLaddersInvitationDataModel>('SnakesAndLaddersInvitation', SnakesAndLaddersInvitationSchema);
 
 export interface ISnakesAndLaddersPlayerState {
-    position: number
+    position: number,
+    laddersClimbed: number,
+    snakesHit: number
 }
 
 export interface ISnakesAndLaddersGameState {
@@ -111,7 +113,9 @@ var SnakesAndLaddersGameDataSchema = new Schema<ISnakesAndLaddersGameDataDocumen
         playerPositions: {
             type: Schema.Types.Map,
             of: {
-                position: Number
+                position: Number,
+                laddersClimbed: Number,
+                snakesHit: Number
             }
         },
         hasRolled: Boolean
@@ -147,7 +151,7 @@ SnakesAndLaddersGameDataSchema.methods.CreateDataResponse = async function(): Pr
 export function buildInitialSnakesAndLaddersState(userIdList: string[]): ISnakesAndLaddersGameState {
     const playerPositions = new Map<string, ISnakesAndLaddersPlayerState>();
     for (const userId of userIdList) {
-        playerPositions.set(userId, { position: 0 });
+        playerPositions.set(userId, { position: 0, laddersClimbed: 0, snakesHit: 0 });
     }
     return {
         playerPositions,
@@ -171,3 +175,34 @@ export function gameStateToModel(gameState: ISnakesAndLaddersGameState, userIdNa
 }
 
 export var SnakesAndLaddersGameDataModel = models.SnakesAndLaddersGameData || GameDataModel.discriminator<ISnakesAndLaddersGameDataDocument, ISnakesAndLaddersGameDataModel>('SnakesAndLaddersGameData', SnakesAndLaddersGameDataSchema);
+
+// Boiled-down stats for the GameResult read model, computed once at game-end
+// (see recordGameResult in GameResultData.ts). Ladders/snakes counts are
+// tallied live in SnakesAndLaddersRequestDiceRoll.Execute since they can't be
+// reconstructed from final position alone.
+export interface ISnakesAndLaddersPlayerResultStats {
+    laddersClimbed: number;
+    snakesHit: number;
+}
+
+export interface ISnakesAndLaddersGameResultStats {
+    playerStats: Map<string, ISnakesAndLaddersPlayerResultStats>;
+}
+
+export const snakesAndLaddersGameResultStatsSchemaDef = {
+    playerStats: {
+        type: Schema.Types.Map,
+        of: {
+            laddersClimbed: Number,
+            snakesHit: Number
+        }
+    }
+};
+
+export function computeSnakesAndLaddersResultStats(gameData: ISnakesAndLaddersGameData): ISnakesAndLaddersGameResultStats {
+    const playerStats = new Map<string, ISnakesAndLaddersPlayerResultStats>();
+    for (const [userId, playerState] of gameData.specificGameState.playerPositions) {
+        playerStats.set(userId, { laddersClimbed: playerState.laddersClimbed, snakesHit: playerState.snakesHit });
+    }
+    return { playerStats };
+}

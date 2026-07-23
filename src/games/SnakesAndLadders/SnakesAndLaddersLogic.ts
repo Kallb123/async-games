@@ -129,9 +129,11 @@ export class SnakesAndLaddersRequestDiceRoll implements IGameCommand {
             if (SNAKES_AND_LADDERS_SNAKES[newPosition] !== undefined) {
                 landedOnSnake = true;
                 newPosition = SNAKES_AND_LADDERS_SNAKES[newPosition];
+                playerState.snakesHit++;
             } else if (SNAKES_AND_LADDERS_LADDERS[newPosition] !== undefined) {
                 landedOnLadder = true;
                 newPosition = SNAKES_AND_LADDERS_LADDERS[newPosition];
+                playerState.laddersClimbed++;
             }
         }
 

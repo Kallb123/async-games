@@ -1,6 +1,24 @@
 import { Document, Model, Schema, model, models } from "mongoose";
 import type { IGameData } from "./GameData";
 import type { uuidString } from "../apiModels/GameDataApi";
+import {
+    IDiceCitiesGameData,
+    IDiceCitiesGameResultStats,
+    computeDiceCitiesResultStats,
+    diceCitiesGameResultStatsSchemaDef,
+} from "@/games/DiceCities/DiceCitiesModels";
+import {
+    ISmartthinkGameData,
+    ISmartthinkGameResultStats,
+    computeSmartthinkResultStats,
+    smartthinkGameResultStatsSchemaDef,
+} from "@/games/Smartthink/SmartthinkModels";
+import {
+    ISnakesAndLaddersGameData,
+    ISnakesAndLaddersGameResultStats,
+    computeSnakesAndLaddersResultStats,
+    snakesAndLaddersGameResultStatsSchemaDef,
+} from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
 
 export interface IGameResultData {
     gameId: uuidString,
@@ -8,7 +26,8 @@ export interface IGameResultData {
     url: string,
     playerIds: string[],
     winner: string,
-    endedAt: string
+    endedAt: string,
+    totalTurns: number
 }
 
 export interface IGameResultDataDocument extends IGameResultData, Document {
@@ -20,22 +39,66 @@ export interface IGameResultDataModel extends Model<IGameResultDataDocument> {
 }
 
 // Append-only record of a finished game, written once via recordGameResult()
-// below. Kept flat (no discriminator) since it's a read model for stats, not
-// part of the game engine - it survives deletion of the GameData it summarises.
+// below - it's a read model for stats, not part of the game engine, and
+// survives deletion of the GameData it summarises. Per-game discriminators
+// (below) add a `stats` field boiling that game's specificGameState/command
+// history down into a handful of interesting numbers, following the same
+// discriminatorKey pattern as GameData's specificGameState.
 export var GameResultSchema = new Schema<IGameResultDataDocument>({
     gameId: { type: String, unique: true },
     gameType: String,
     url: String,
     playerIds: [String],
     winner: String,
-    endedAt: String
-});
+    endedAt: String,
+    totalTurns: Number
+}, { discriminatorKey: 'kind' });
 // Per-player match history / stats, most recent first.
 GameResultSchema.index({ playerIds: 1, endedAt: -1 });
 // Per-player, per-game stats (and head-to-head via playerIds $all).
 GameResultSchema.index({ playerIds: 1, gameType: 1 });
 
 export var GameResultModel = models.GameResult || model<IGameResultDataDocument, IGameResultDataModel>('GameResult', GameResultSchema);
+
+export interface IDiceCitiesGameResultData extends IGameResultData {
+    stats: IDiceCitiesGameResultStats;
+}
+export interface IDiceCitiesGameResultDataDocument extends IDiceCitiesGameResultData, Document {}
+export interface IDiceCitiesGameResultDataModel extends Model<IDiceCitiesGameResultDataDocument> {}
+var DiceCitiesGameResultSchema = new Schema<IDiceCitiesGameResultDataDocument>({
+    stats: diceCitiesGameResultStatsSchemaDef
+}, { discriminatorKey: 'kind' });
+export var DiceCitiesGameResultModel = models.DiceCitiesGameResult || GameResultModel.discriminator<IDiceCitiesGameResultDataDocument, IDiceCitiesGameResultDataModel>('DiceCitiesGameResult', DiceCitiesGameResultSchema);
+
+export interface ISmartthinkGameResultData extends IGameResultData {
+    stats: ISmartthinkGameResultStats;
+}
+export interface ISmartthinkGameResultDataDocument extends ISmartthinkGameResultData, Document {}
+export interface ISmartthinkGameResultDataModel extends Model<ISmartthinkGameResultDataDocument> {}
+var SmartthinkGameResultSchema = new Schema<ISmartthinkGameResultDataDocument>({
+    stats: smartthinkGameResultStatsSchemaDef
+}, { discriminatorKey: 'kind' });
+export var SmartthinkGameResultModel = models.SmartthinkGameResult || GameResultModel.discriminator<ISmartthinkGameResultDataDocument, ISmartthinkGameResultDataModel>('SmartthinkGameResult', SmartthinkGameResultSchema);
+
+export interface ISnakesAndLaddersGameResultData extends IGameResultData {
+    stats: ISnakesAndLaddersGameResultStats;
+}
+export interface ISnakesAndLaddersGameResultDataDocument extends ISnakesAndLaddersGameResultData, Document {}
+export interface ISnakesAndLaddersGameResultDataModel extends Model<ISnakesAndLaddersGameResultDataDocument> {}
+var SnakesAndLaddersGameResultSchema = new Schema<ISnakesAndLaddersGameResultDataDocument>({
+    stats: snakesAndLaddersGameResultStatsSchemaDef
+}, { discriminatorKey: 'kind' });
+export var SnakesAndLaddersGameResultModel = models.SnakesAndLaddersGameResult || GameResultModel.discriminator<ISnakesAndLaddersGameResultDataDocument, ISnakesAndLaddersGameResultDataModel>('SnakesAndLaddersGameResult', SnakesAndLaddersGameResultSchema);
+
+// Maps a GameData's gameType to the discriminator model + stats calculator
+// that boil its final specificGameState down to the interesting numbers.
+// Games with no entry here (e.g. SettlementsAndCities) still get the base
+// GameResult fields (including totalTurns) via recordGameResult below.
+const GAME_RESULT_STATS: Record<string, { model: Model<any>, compute: (gameData: IGameData) => unknown }> = {
+    DiceCities: { model: DiceCitiesGameResultModel, compute: (gameData) => computeDiceCitiesResultStats(gameData as IDiceCitiesGameData) },
+    Smartthink: { model: SmartthinkGameResultModel, compute: (gameData) => computeSmartthinkResultStats(gameData as ISmartthinkGameData) },
+    SnakesAndLadders: { model: SnakesAndLaddersGameResultModel, compute: (gameData) => computeSnakesAndLaddersResultStats(gameData as ISnakesAndLaddersGameData) },
+};
 
 export type MatchOutcome = "win" | "loss" | "draw";
 
@@ -105,15 +168,22 @@ export async function getPlayerStats(userId: string): Promise<IPlayerStats> {
 // once gameData.complete/winner are set (win via CheckGameOver, or a forced
 // end). Idempotent on gameId in case it's ever invoked twice for the same game.
 export async function recordGameResult(gameData: IGameData): Promise<void> {
+    const base = {
+        gameId: gameData.gameId,
+        gameType: gameData.gameType.gameType,
+        url: gameData.gameType.url,
+        playerIds: gameData.userIdList,
+        winner: gameData.winner,
+        endedAt: new Date().toISOString(),
+        totalTurns: gameData.gameState.commandHistory.length
+    };
+    const specific = GAME_RESULT_STATS[gameData.gameType.gameType];
     try {
-        await GameResultModel.create({
-            gameId: gameData.gameId,
-            gameType: gameData.gameType.gameType,
-            url: gameData.gameType.url,
-            playerIds: gameData.userIdList,
-            winner: gameData.winner,
-            endedAt: new Date().toISOString()
-        });
+        if (specific) {
+            await specific.model.create({ ...base, stats: specific.compute(gameData) });
+        } else {
+            await GameResultModel.create(base);
+        }
     } catch (err: any) {
         if (err?.code !== 11000) {
             throw err;
