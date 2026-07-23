@@ -16,6 +16,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from "react";
 
 const OUTCOME_LABEL: Record<MatchOutcome, string> = { win: "W", loss: "L", draw: "D" };
+const GAME_STAT_THUMB_SIZE = 36;
 
 function friendDisplayName(user: IFriendUser) {
     const fullName = [user.firstName, user.lastName].filter(name => name).join(" ");
@@ -190,13 +191,13 @@ export default function Profile() {
                     <h2 className="ag-section-label">Recent form</h2>
                 </div>
                 {isLoadingStats
-                    ? <div className="ag-result-strip">
+                    ? <div className="ag-chips">
                         {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} width={26} height={26} radius="50%" />)}
                     </div>
                     : recentMatches.length === 0
                     ? <div className="ag-empty">No finished games yet.</div>
                     : (
-                        <div className="ag-result-strip">
+                        <div className="ag-chips">
                             {recentMatches.map(match => (
                                 <div
                                     key={match.gameId}
@@ -228,18 +229,18 @@ export default function Profile() {
                                     return (
                                         <div key={stats.url} className="ag-list-row">
                                             {meta
-                                                ? <GameThumb meta={meta} size={36} radius={10} />
-                                                : <div style={{ width: 36, height: 36, flex: "none" }} />}
+                                                ? <GameThumb meta={meta} size={GAME_STAT_THUMB_SIZE} radius={10} />
+                                                : <div style={{ width: GAME_STAT_THUMB_SIZE, height: GAME_STAT_THUMB_SIZE, flex: "none" }} />}
                                             <div className="ag-list-row-main">
                                                 <div className="ag-list-row-title">{meta?.name ?? stats.url}</div>
                                                 <div className="ag-list-row-sub">{stats.total} match{stats.total === 1 ? "" : "es"}</div>
                                             </div>
                                             <div style={{ font: "800 12.5px var(--ag-font)", whiteSpace: "nowrap" }}>
-                                                <span style={{ color: "var(--ag-green)" }}>{stats.wins}W</span>
+                                                <span className="ag-outcome-text--win">{stats.wins}W</span>
                                                 {" · "}
-                                                <span style={{ color: "var(--ag-terracotta)" }}>{stats.losses}L</span>
+                                                <span className="ag-outcome-text--loss">{stats.losses}L</span>
                                                 {" · "}
-                                                <span style={{ color: "var(--ag-gold)" }}>{stats.draws}D</span>
+                                                <span className="ag-outcome-text--draw">{stats.draws}D</span>
                                             </div>
                                         </div>
                                     );
