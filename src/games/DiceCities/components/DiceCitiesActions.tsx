@@ -38,7 +38,7 @@ const LANDMARK_UNLOCK: Record<string, new () => IGameCommand> = {
 
 export default function DiceCitiesActions({ gameState, myState, opponents, submitCommand }: DiceCitiesActionsProps) {
     // Which die count the player has selected for their next roll.
-    const [diceCount, setDiceCount] = useState<1 | 2>(1);
+    const [diceCount, setDiceCount] = useState<1 | 2>(myState.lastDiceSelection);
     // The most recent roll, kept locally so the dice + total stay on screen
     // through the build step (rolling does not advance the turn).
     const [roll, setRoll] = useState<{ roll1: number; roll2: number | null } | null>(null);

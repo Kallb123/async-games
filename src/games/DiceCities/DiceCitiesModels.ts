@@ -83,6 +83,7 @@ export function buildInitialDiceCitiesState(userIdList: string[]): IDiceCitiesGa
             bonusDiningAndStore: false,
             rerollDoubles: false,
             oneReroll: false,
+            lastDiceSelection: 1,
         });
     }
     return {
@@ -175,7 +176,8 @@ export interface IDiceCitiesPlayerState {
     doubleUnlocked: boolean,
     bonusDiningAndStore: boolean,
     rerollDoubles: boolean,
-    oneReroll: boolean
+    oneReroll: boolean,
+    lastDiceSelection: 1 | 2
 }
 
 export interface IDiceCitiesGameState {
@@ -226,7 +228,8 @@ var DiceCitiesGameDataSchema = new Schema<IDiceCitiesGameDataDocument>({
                 doubleUnlocked: Boolean,
                 bonusDiningAndStore: Boolean,
                 rerollDoubles: Boolean,
-                oneReroll: Boolean
+                oneReroll: Boolean,
+                lastDiceSelection: Number
             }
         },
         hasRolled: Boolean,
@@ -281,7 +284,8 @@ export function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap:
             doubleUnlocked: playerStateModel.doubleUnlocked,
             rerollDoubles: playerStateModel.rerollDoubles,
             bonusDiningAndStore: playerStateModel.bonusDiningAndStore,
-            oneReroll: playerStateModel.oneReroll
+            oneReroll: playerStateModel.oneReroll,
+            lastDiceSelection: playerStateModel.lastDiceSelection
         };
     }
     return {

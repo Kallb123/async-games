@@ -13,6 +13,7 @@ function player(overrides: Partial<IDiceCitiesPlayerStateResponse> & { userId: s
         bonusDiningAndStore: false,
         rerollDoubles: false,
         oneReroll: false,
+        lastDiceSelection: 1,
         ...overrides,
     };
 }

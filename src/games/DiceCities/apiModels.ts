@@ -33,7 +33,8 @@ export interface IDiceCitiesPlayerStateResponse {
     doubleUnlocked: boolean,
     bonusDiningAndStore: boolean,
     rerollDoubles: boolean,
-    oneReroll: boolean
+    oneReroll: boolean,
+    lastDiceSelection: 1 | 2
 }
 
 export interface IDiceCitiesGameStateResponse {
