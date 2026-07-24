@@ -245,7 +245,7 @@ function makeRiskStateSchemaDef() {
         playerStates: {
             type: Schema.Types.Map,
             of: {
-                cards: [{ id: String, type: String, territoryId: { type: Number, default: null } }],
+                cards: [{ id: String, type: { type: String }, territoryId: { type: Number, default: null } }],
                 eliminated: Boolean,
                 conqueredTerritoryThisTurn: Boolean,
             },
@@ -255,7 +255,7 @@ function makeRiskStateSchemaDef() {
         pendingOccupation: Schema.Types.Mixed,
         fortifyUsed: Boolean,
         cardSetsCashedIn: Number,
-        cardDeck: [{ id: String, type: String, territoryId: { type: Number, default: null } }],
+        cardDeck: [{ id: String, type: { type: String }, territoryId: { type: Number, default: null } }],
         lastBattle: Schema.Types.Mixed,
     };
 }
