@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
 import { SettlementsAndCitiesGameType } from "@/utils/apiModels/GameLogic";
 import { DiceRoll } from "@/utils/games/DiceRoll";
+import { shuffle } from "@/utils/games/shuffle";
 import {
     generateBoard,
     createInitialPlayerState,
@@ -73,16 +74,6 @@ function SortUsersByRoll(
             history.push(`Setup: ${usernameMap.get(users[0])} rolled a ${roll}${turnOrder.length === 1 ? ' and goes first' : ''}`);
         }
     });
-}
-
-// Shuffle array helper (copy)
-function shuffleDeck<T>(arr: T[]): T[] {
-    const a = [...arr];
-    for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
 }
 
 // ─── Initial-state snapshot (turn recap) ───────────────────────────────────────
@@ -255,7 +246,7 @@ SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
         pendingRobber: false,
         longestRoadOwner: null,
         largestArmyOwner: null,
-        devCardDeck: shuffleDeck(DEV_CARD_DECK),
+        devCardDeck: shuffle(DEV_CARD_DECK),
         pendingRoadBuilding: 0,
         playedDevCard: false,
         specialBuildActive: false,

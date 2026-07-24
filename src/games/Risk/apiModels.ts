@@ -1,7 +1,5 @@
 import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
-import type { RiskCardType } from "./board";
-
-export type RiskPhase = 'setup' | 'reinforce' | 'attack' | 'fortify';
+import type { RiskCardType, RiskPhase } from "./board";
 
 export interface IRiskTerritoryResponse {
     owner: string | null; // username

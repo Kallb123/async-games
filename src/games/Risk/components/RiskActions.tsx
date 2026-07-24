@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import type { IRiskSpecificGameStateResponse } from '@/games/Risk/apiModels';
 import type { RiskCardType } from '@/games/Risk/board';
 import { TERRITORIES, isValidCardSet } from '@/games/Risk/board';
+import DieFace from '@/components/ui/DieFace';
 import { IGameCommand } from '@/utils/apiModels/GameLogic';
 import type { ICommandResponse } from '@/app/api/game/command/route';
 import {
@@ -250,19 +251,15 @@ export default function RiskActions({
                     <div style={{ marginBottom: 10 }}>
                         <div style={{ display: 'flex', gap: 14, justifyContent: 'center', marginBottom: 8 }}>
                             <div style={{ textAlign: 'center' }}>
-                                <div style={{ font: '700 8px var(--ag-font)', color: '#cf3b32', marginBottom: 4 }}>YOUR ROLL</div>
-                                <div style={{ display: 'flex', gap: 5 }}>
-                                    {lastBattle.attackerDice.map((d, i) => (
-                                        <span key={i} style={{ width: 28, height: 28, borderRadius: 7, background: '#cf3b32', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', font: '800 14px var(--ag-font)' }}>{d}</span>
-                                    ))}
+                                <div className="ag-action-hint" style={{ marginTop: 0, marginBottom: 4 }}>YOUR ROLL</div>
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                    {lastBattle.attackerDice.map((d, i) => <DieFace key={i} value={d} size={30} />)}
                                 </div>
                             </div>
                             <div style={{ textAlign: 'center' }}>
-                                <div style={{ font: '700 8px var(--ag-font)', color: '#2f8f52', marginBottom: 4 }}>DEFENDER&apos;S ROLL</div>
-                                <div style={{ display: 'flex', gap: 5 }}>
-                                    {lastBattle.defenderDice.map((d, i) => (
-                                        <span key={i} style={{ width: 28, height: 28, borderRadius: 7, background: '#eee', border: '1.5px solid #2f8f52', color: '#2f8f52', display: 'flex', alignItems: 'center', justifyContent: 'center', font: '800 14px var(--ag-font)' }}>{d}</span>
-                                    ))}
+                                <div className="ag-action-hint" style={{ marginTop: 0, marginBottom: 4 }}>DEFENDER&apos;S ROLL</div>
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                    {lastBattle.defenderDice.map((d, i) => <DieFace key={i} value={d} size={30} />)}
                                 </div>
                             </div>
                         </div>

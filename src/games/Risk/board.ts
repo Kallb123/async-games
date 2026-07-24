@@ -2,6 +2,8 @@
 // world map, its adjacency graph, and the rules maths (reinforcement counts,
 // card-set values, connectivity) from docs/games/risk.md.
 
+export type RiskPhase = 'setup' | 'reinforce' | 'attack' | 'fortify';
+
 export type RiskContinentId =
     | 'northAmerica' | 'southAmerica' | 'europe' | 'africa' | 'asia' | 'australia';
 
@@ -249,15 +251,6 @@ export function buildRiskCardDeck(): IRiskCard[] {
     deck.push({ id: 'card-wild-1', type: 'wild', territoryId: null });
     deck.push({ id: 'card-wild-2', type: 'wild', territoryId: null });
     return deck;
-}
-
-export function shuffle<T>(arr: T[]): T[] {
-    const a = [...arr];
-    for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
 }
 
 // A set is 3 cards of the same type, one of each type, or any 2 unit cards (or

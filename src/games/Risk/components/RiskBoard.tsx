@@ -41,18 +41,9 @@ export default function RiskBoard({
     placementPrompt = null,
 }: RiskBoardProps) {
     return (
-        <div style={{ position: 'relative', background: 'oklch(0.86 0.035 82)', borderRadius: 16, padding: 6, boxShadow: 'inset 0 2px 12px #6b4f2422' }}>
-            {placementPrompt && (
-                <div style={{
-                    position: 'absolute', top: 11, left: 11, zIndex: 3,
-                    background: 'var(--ag-dark)', color: 'var(--ag-on-dark)', borderRadius: 99,
-                    padding: '5px 11px', font: '800 10.5px var(--ag-font)', boxShadow: '0 2px 6px #00000030',
-                    whiteSpace: 'nowrap',
-                }}>
-                    {placementPrompt}
-                </div>
-            )}
-            <svg viewBox={`0 0 ${BOARD_VIEWBOX.width} ${BOARD_VIEWBOX.height}`} width="100%" style={{ display: 'block' }}>
+        <div className="ag-board-frame ag-risk-frame">
+            {placementPrompt && <div className="ag-board-tag">{placementPrompt}</div>}
+            <svg viewBox={`0 0 ${BOARD_VIEWBOX.width} ${BOARD_VIEWBOX.height}`}>
                 {/* Continent regions */}
                 {CONTINENT_ORDER.map(cid => {
                     const c = CONTINENTS[cid];

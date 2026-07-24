@@ -8,14 +8,15 @@ import { v4 as uuidv4 } from 'uuid';
 import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
 import { RiskGameType } from "@/utils/apiModels/GameLogic";
 import { DiceRoll } from "@/utils/games/DiceRoll";
+import { shuffle } from "@/utils/games/shuffle";
 import {
     TERRITORIES,
     TERRITORY_COUNT,
     buildRiskCardDeck,
-    shuffle,
     startingArmiesForPlayerCount,
     IRiskTerritory,
     IRiskCard,
+    RiskPhase,
 } from "./board";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -60,8 +61,6 @@ function SortUsersByRoll(
 }
 
 // ─── Player / combat / specific state ──────────────────────────────────────
-
-export type RiskPhase = 'setup' | 'reinforce' | 'attack' | 'fortify';
 
 export interface IRiskPlayerState {
     cards: IRiskCard[];
