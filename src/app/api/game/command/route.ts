@@ -7,6 +7,7 @@ import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { recordGameResult } from '@/utils/mongodb/GameResultData';
 import { DiceCitiesGameType, DiceCitiesRequestBusinessCenterOpponentSelection, DiceCitiesRequestBusinessCenterOwnSelection, DiceCitiesRequestCardPurchase, DiceCitiesRequestDiceRoll, DiceCitiesRequestPassTurn, DiceCitiesRequestTvStationSelection, DiceCitiesRequestUnlockAmusementPark, DiceCitiesRequestUnlockRadioTower, DiceCitiesRequestUnlockShoppingMall, DiceCitiesRequestUnlockTrainStation } from '@/utils/apiModels/GameLogic';
 import { SettlementsAndCitiesGameType, SACPlaceSettlementSetup, SACPlaceRoadSetup, SACPlayKnight, SACRollDice, SACMoveRobber, SACBuildRoad, SACBuildSettlement, SACBuildCity, SACBuyDevCard, SACPlayRoadBuilding, SACPlayYearOfPlenty, SACPlayMonopoly, SACMaritimeTrade, SACEndTurn } from '@/utils/apiModels/GameLogic';
+import { RiskGameType, RiskDeployArmies, RiskCashInCards, RiskAttack, RiskOccupyTerritory, RiskEndAttackPhase, RiskFortify, RiskSkipFortify } from '@/utils/apiModels/GameLogic';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
 import { IGameDataResponse } from '@/utils/apiModels/GameDataApi';
 
@@ -51,6 +52,14 @@ export async function POST(request: NextRequest) {
     new SACMaritimeTrade(),
     new SACEndTurn(),
     new SettlementsAndCitiesGameType(),
+    new RiskDeployArmies(),
+    new RiskCashInCards(),
+    new RiskAttack(),
+    new RiskOccupyTerritory(),
+    new RiskEndAttackPhase(),
+    new RiskFortify(),
+    new RiskSkipFortify(),
+    new RiskGameType(),
   ];
   // console.log(commandRequest);
   console.log(commandRequest.myString());
