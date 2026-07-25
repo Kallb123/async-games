@@ -4,6 +4,7 @@ import { buildTimeline, ITimeline, ITurnSnapshot, IReplayStep } from "./replay";
 import { snakesAndLaddersRecapAdapter } from "@/games/SnakesAndLadders/recap";
 import { diceCitiesRecapAdapter } from "@/games/DiceCities/recap";
 import { settlementsAndCitiesRecapAdapter } from "@/games/SettlementsAndCities/recap";
+import { worldDominationRecapAdapter } from "@/games/WorldDomination/recap";
 
 // A single "here's what happened" entry in a since-you-were-last-here recap.
 // Games synthesise these from replayed turns via an IRecapAdapter; the generic
@@ -187,3 +188,4 @@ export async function buildAllEvents(
 registerRecapAdapter(snakesAndLaddersRecapAdapter);
 registerRecapAdapter(diceCitiesRecapAdapter);
 registerRecapAdapter(settlementsAndCitiesRecapAdapter);
+registerRecapAdapter(worldDominationRecapAdapter);

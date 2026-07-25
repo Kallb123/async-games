@@ -56,4 +56,8 @@ export interface IWorldDominationSpecificGameStateResponse {
 
 export interface IWorldDominationGameDataResponse extends IGameDataResponse {
     specificGameState: IWorldDominationSpecificGameStateResponse;
+    // True when the game carries the stored initial-state snapshot needed for
+    // turn recap (games created after recap support). Drives whether the recap
+    // controls are offered.
+    recapAvailable?: boolean;
 }

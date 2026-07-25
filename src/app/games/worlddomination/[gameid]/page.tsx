@@ -15,7 +15,9 @@ import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import TurnNavControls from "@/components/games/TurnNavControls";
+import TurnRecap from "@/components/games/TurnRecap";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
+import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
@@ -96,6 +98,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
         history: gameData?.gameState?.history ?? [],
     };
     const nav = useTurnNavigation<IWorldDominationSpecificGameStateResponse>(gameId, live);
+    const recap = useTurnRecap(gameId);
     const { endGame } = useEndGame(gameId);
 
     const gs = nav.displayedState;
@@ -249,6 +252,12 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
         : [];
 
     const menuOptions: GameOption[] = [
+        ...(recap.hasRecap ? [{
+            key: 'recap',
+            label: 'Show last recap',
+            icon: '🔁',
+            onClick: recap.reshow,
+        }] : []),
         {
             key: 'history',
             label: 'Turn history',
@@ -275,6 +284,31 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
         } else if (gs.phase === 'fortify' && !gs.fortifyUsed && selFrom === null) {
             placementPrompt = '🚩 tap a territory to fortify from';
         }
+    }
+
+    // Recap intro: a standalone welcome-back screen shown before the board when
+    // it's our turn and moves happened while we were away.
+    if (recap.show && recap.recap?.hasRecap && recap.recap.header && recap.recap.summary && recap.recap.events) {
+        const r = recap.recap;
+        return (
+            <TurnRecap
+                header={r.header!}
+                summary={r.summary!}
+                events={r.events!.map((e) => ({
+                    id: e.id,
+                    glyph: e.glyph,
+                    title: e.title,
+                    detail: e.detail,
+                    timestamp: e.timestamp,
+                    dotColour: e.dotColour,
+                    reaction: e.reaction,
+                }))}
+                tip={r.tip}
+                cta={{ label: "Take your turn →", onClick: recap.dismiss }}
+                backHref="/"
+                onReact={recap.react}
+            />
+        );
     }
 
     return (
