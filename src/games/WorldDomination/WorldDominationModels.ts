@@ -290,6 +290,7 @@ WorldDominationGameDataSchema.methods.CreateDataResponse = async function(): Pro
         complete: doc.complete,
         winner: doc.winner,
         specificGameState: gameStateToResponse(doc.specificGameState, userIdNameMap),
+        recapAvailable: !!doc.initialSpecificGameState,
     };
 };
 
