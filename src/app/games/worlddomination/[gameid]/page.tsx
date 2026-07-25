@@ -20,6 +20,7 @@ import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
+import { useGameData } from "@/utils/hooks/useGameData";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
 
 const PHASE_LABEL: Record<IWorldDominationSpecificGameStateResponse['phase'], string> = {
@@ -33,7 +34,6 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
     const { user, isLoaded } = useUser();
-    const [gameData, setGameData] = useState({} as IWorldDominationGameDataResponse);
     const [selFrom, setSelFrom] = useState<number | null>(null);
     const [selTo, setSelTo] = useState<number | null>(null);
     const [showLog, setShowLog] = useState(false);
@@ -41,6 +41,8 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
 
     const { gameid } = use(params);
     const gameId = gameid;
+
+    const { gameData, setGameData, getGameData } = useGameData<IWorldDominationGameDataResponse>(gameId);
 
     useEffect(() => {
         if (isLoaded) {
@@ -56,21 +58,6 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     }, [isLoaded]);
 
     usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
-
-    const getGameData = async () => {
-        fetch(`/api/game/${gameId}`)
-            .then(r => {
-                if (!r.ok) throw new Error('Game not found');
-                return r.json();
-            })
-            .then(data => {
-                if (data) setGameData(data.gameData);
-            })
-            .catch(err => {
-                console.error(err);
-                router.push('/');
-            });
-    };
 
     const submitCommand = async (command: IGameCommand, callback: (r: ICommandResponse) => void) => {
         command.gameId = gameId;

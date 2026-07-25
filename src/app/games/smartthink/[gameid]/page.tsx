@@ -17,6 +17,7 @@ import TurnNavControls from "@/components/games/TurnNavControls";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
+import { useGameData } from "@/utils/hooks/useGameData";
 import type { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
 import { SMARTTHINK_CODE_LENGTH } from "@/games/Smartthink/ui";
 
@@ -27,13 +28,14 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
     const { user, isLoaded } = useUser();
-    const [gameData, setGameData] = useState({} as ISmartthinkGameDataResponse);
     const [currentGuess, setCurrentGuess] = useState<(number | null)[]>(emptyGuess());
     const [showLog, setShowLog] = useState(false);
     const router = useRouter();
 
     const { gameid } = use(params);
     const gameId = gameid;
+
+    const { gameData, setGameData, getGameData } = useGameData<ISmartthinkGameDataResponse>(gameId);
 
     useEffect(() => {
         if (isLoaded) {
@@ -52,25 +54,6 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
     }, [isLoaded]);
 
     usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
-
-    const getGameData = async () => {
-        fetch(`/api/game/${gameId}`)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error("Game not found");
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data) {
-                    setGameData(data.gameData);
-                }
-            })
-            .catch(error => {
-                console.error(error);
-                router.push('/');
-            });
-    };
 
     const submitCommand = async (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => {
         command.gameId = gameId;
