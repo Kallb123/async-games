@@ -11,19 +11,17 @@ export interface RiskContinent {
     id: RiskContinentId;
     name: string;
     bonus: number;
-    /** Schematic label anchor for the board SVG. */
-    labelPos: { x: number; y: number };
-    /** Tint for the continent's board region + chip accents. */
+    /** Accent for the continent's label text on the board SVG. */
     color: string;
 }
 
 export const CONTINENTS: Record<RiskContinentId, RiskContinent> = {
-    northAmerica: { id: 'northAmerica', name: 'North America', bonus: 5, labelPos: { x: 40, y: 20 }, color: '#c9962c' },
-    southAmerica: { id: 'southAmerica', name: 'South America', bonus: 2, labelPos: { x: 150, y: 445 }, color: '#5e8a37' },
-    europe: { id: 'europe', name: 'Europe', bonus: 5, labelPos: { x: 335, y: 20 }, color: '#4d7ba5' },
-    africa: { id: 'africa', name: 'Africa', bonus: 3, labelPos: { x: 335, y: 445 }, color: '#94682f' },
-    asia: { id: 'asia', name: 'Asia', bonus: 7, labelPos: { x: 630, y: 20 }, color: '#6f4f92' },
-    australia: { id: 'australia', name: 'Australia', bonus: 2, labelPos: { x: 630, y: 445 }, color: '#a24d80' },
+    northAmerica: { id: 'northAmerica', name: 'North America', bonus: 5, color: '#fdcd0d' },
+    southAmerica: { id: 'southAmerica', name: 'South America', bonus: 2, color: '#fd7816' },
+    europe: { id: 'europe', name: 'Europe', bonus: 5, color: '#0c97e2' },
+    africa: { id: 'africa', name: 'Africa', bonus: 3, color: '#ed362d' },
+    asia: { id: 'asia', name: 'Asia', bonus: 7, color: '#4bbc4f' },
+    australia: { id: 'australia', name: 'Australia', bonus: 2, color: '#a961b7' },
 };
 
 export const CONTINENT_ORDER: RiskContinentId[] = [
@@ -41,55 +39,60 @@ export interface RiskTerritoryDef {
 
 // Territory list — order and numbering follow docs/games/risk.md §8 exactly
 // (0-indexed here vs. the doc's 1-indexed list).
+// x/y are calibrated to line up with the printed territory labels in
+// public/art/world-domination/world-domination-map.png once it's placed
+// behind the board at BOARD_VIEWBOX size (see RiskBoard's "slice" image fit).
+// Ukraine has no matching region in that art, so it's parked on the
+// Northern Europe / Ural border it connects to.
 const TERRITORY_DEFS: Omit<RiskTerritoryDef, 'id'>[] = [
     // North America (0-8)
-    { name: 'Alaska', continentId: 'northAmerica', x: 55, y: 55 },
-    { name: 'Northwest Territory', continentId: 'northAmerica', x: 130, y: 45 },
-    { name: 'Greenland', continentId: 'northAmerica', x: 230, y: 35 },
-    { name: 'Alberta', continentId: 'northAmerica', x: 90, y: 100 },
-    { name: 'Ontario', continentId: 'northAmerica', x: 160, y: 105 },
-    { name: 'Quebec', continentId: 'northAmerica', x: 225, y: 95 },
-    { name: 'Western United States', continentId: 'northAmerica', x: 100, y: 160 },
-    { name: 'Eastern United States', continentId: 'northAmerica', x: 175, y: 160 },
-    { name: 'Central America', continentId: 'northAmerica', x: 130, y: 215 },
+    { name: 'Alaska', continentId: 'northAmerica', x: 56, y: 38 },
+    { name: 'Northwest Territory', continentId: 'northAmerica', x: 136, y: 32 },
+    { name: 'Greenland', continentId: 'northAmerica', x: 280, y: 12 },
+    { name: 'Alberta', continentId: 'northAmerica', x: 128, y: 83 },
+    { name: 'Ontario', continentId: 'northAmerica', x: 179, y: 95 },
+    { name: 'Quebec', continentId: 'northAmerica', x: 235, y: 98 },
+    { name: 'Western United States', continentId: 'northAmerica', x: 128, y: 137 },
+    { name: 'Eastern United States', continentId: 'northAmerica', x: 187, y: 163 },
+    { name: 'Central America', continentId: 'northAmerica', x: 134, y: 201 },
     // South America (9-12)
-    { name: 'Venezuela', continentId: 'southAmerica', x: 185, y: 270 },
-    { name: 'Peru', continentId: 'southAmerica', x: 170, y: 335 },
-    { name: 'Brazil', continentId: 'southAmerica', x: 235, y: 345 },
-    { name: 'Argentina', continentId: 'southAmerica', x: 195, y: 415 },
+    { name: 'Venezuela', continentId: 'southAmerica', x: 190, y: 250 },
+    { name: 'Peru', continentId: 'southAmerica', x: 195, y: 326 },
+    { name: 'Brazil', continentId: 'southAmerica', x: 246, y: 298 },
+    { name: 'Argentina', continentId: 'southAmerica', x: 214, y: 381 },
     // Europe (13-19)
-    { name: 'Iceland', continentId: 'europe', x: 335, y: 40 },
-    { name: 'Great Britain', continentId: 'europe', x: 325, y: 90 },
-    { name: 'Scandinavia', continentId: 'europe', x: 405, y: 45 },
-    { name: 'Western Europe', continentId: 'europe', x: 340, y: 150 },
-    { name: 'Northern Europe', continentId: 'europe', x: 400, y: 105 },
-    { name: 'Southern Europe', continentId: 'europe', x: 395, y: 160 },
-    { name: 'Ukraine', continentId: 'europe', x: 460, y: 90 },
+    { name: 'Iceland', continentId: 'europe', x: 339, y: 59 },
+    { name: 'Great Britain', continentId: 'europe', x: 326, y: 121 },
+    { name: 'Scandinavia', continentId: 'europe', x: 398, y: 46 },
+    { name: 'Western Europe', continentId: 'europe', x: 352, y: 174 },
+    { name: 'Northern Europe', continentId: 'europe', x: 451, y: 94 },
+    { name: 'Southern Europe', continentId: 'europe', x: 401, y: 178 },
+    { name: 'Ukraine', continentId: 'europe', x: 491, y: 126 },
     // Africa (20-25)
-    { name: 'North Africa', continentId: 'africa', x: 345, y: 245 },
-    { name: 'Egypt', continentId: 'africa', x: 405, y: 255 },
-    { name: 'East Africa', continentId: 'africa', x: 415, y: 310 },
-    { name: 'Congo', continentId: 'africa', x: 360, y: 325 },
-    { name: 'South Africa', continentId: 'africa', x: 380, y: 390 },
-    { name: 'Madagascar', continentId: 'africa', x: 445, y: 380 },
+    { name: 'North Africa', continentId: 'africa', x: 374, y: 289 },
+    { name: 'Egypt', continentId: 'africa', x: 422, y: 262 },
+    { name: 'East Africa', continentId: 'africa', x: 459, y: 326 },
+    { name: 'Congo', continentId: 'africa', x: 422, y: 372 },
+    { name: 'South Africa', continentId: 'africa', x: 433, y: 430 },
+    { name: 'Madagascar', continentId: 'africa', x: 505, y: 436 },
     // Asia (26-37)
-    { name: 'Ural', continentId: 'asia', x: 495, y: 80 },
-    { name: 'Siberia', continentId: 'asia', x: 560, y: 55 },
-    { name: 'Yakutsk', continentId: 'asia', x: 635, y: 40 },
-    { name: 'Kamchatka', continentId: 'asia', x: 725, y: 55 },
-    { name: 'Irkutsk', continentId: 'asia', x: 615, y: 90 },
-    { name: 'Mongolia', continentId: 'asia', x: 635, y: 125 },
-    { name: 'Japan', continentId: 'asia', x: 725, y: 135 },
-    { name: 'Afghanistan', continentId: 'asia', x: 500, y: 145 },
-    { name: 'China', continentId: 'asia', x: 585, y: 160 },
-    { name: 'Middle East', continentId: 'asia', x: 465, y: 195 },
-    { name: 'India', continentId: 'asia', x: 555, y: 205 },
-    { name: 'Siam', continentId: 'asia', x: 605, y: 225 },
+    { name: 'Ural', continentId: 'asia', x: 526, y: 82 },
+    { name: 'Siberia', continentId: 'asia', x: 574, y: 36 },
+    { name: 'Yakutsk', continentId: 'asia', x: 638, y: 19 },
+    { name: 'Kamchatka', continentId: 'asia', x: 710, y: 16 },
+    { name: 'Irkutsk', continentId: 'asia', x: 630, y: 87 },
+    { name: 'Mongolia', continentId: 'asia', x: 630, y: 138 },
+    { name: 'Japan', continentId: 'asia', x: 710, y: 155 },
+    { name: 'Afghanistan', continentId: 'asia', x: 515, y: 151 },
+    { name: 'China', continentId: 'asia', x: 625, y: 196 },
+    { name: 'Middle East', continentId: 'asia', x: 475, y: 223 },
+    { name: 'India', continentId: 'asia', x: 561, y: 243 },
+    { name: 'Siam', continentId: 'asia', x: 636, y: 265 },
     // Australia (38-41)
-    { name: 'Indonesia', continentId: 'australia', x: 605, y: 275 },
-    { name: 'New Guinea', continentId: 'australia', x: 690, y: 285 },
-    { name: 'Western Australia', continentId: 'australia', x: 655, y: 355 },
-    { name: 'Eastern Australia', continentId: 'australia', x: 715, y: 365 },
+    { name: 'Indonesia', continentId: 'australia', x: 622, y: 356 },
+    { name: 'New Guinea', continentId: 'australia', x: 716, y: 326 },
+    { name: 'Western Australia', continentId: 'australia', x: 665, y: 441 },
+    { name: 'Eastern Australia', continentId: 'australia', x: 732, y: 430 },
 ];
 
 export const TERRITORIES: RiskTerritoryDef[] = TERRITORY_DEFS.map((t, id) => ({ ...t, id }));
@@ -170,19 +173,15 @@ export function territoryIdsForContinent(continentId: RiskContinentId): number[]
     return TERRITORIES.filter(t => t.continentId === continentId).map(t => t.id);
 }
 
-// Bounding box (with padding) around a continent's territories, for the board
-// SVG's tinted continent regions. Derived from the schematic x/y positions
-// above rather than hand-maintained separately.
+// Top-left anchor (with padding) for a continent's name+bonus label, derived
+// from the schematic x/y positions above rather than hand-maintained
+// separately.
 const CONTINENT_PADDING = 34;
-export function continentBoundingBox(continentId: RiskContinentId): { x: number; y: number; width: number; height: number } {
+export function continentLabelAnchor(continentId: RiskContinentId): { x: number; y: number } {
     const territories = TERRITORIES.filter(t => t.continentId === continentId);
     const xs = territories.map(t => t.x);
     const ys = territories.map(t => t.y);
-    const minX = Math.min(...xs) - CONTINENT_PADDING;
-    const maxX = Math.max(...xs) + CONTINENT_PADDING;
-    const minY = Math.min(...ys) - CONTINENT_PADDING;
-    const maxY = Math.max(...ys) + CONTINENT_PADDING;
-    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+    return { x: Math.min(...xs) - CONTINENT_PADDING, y: Math.min(...ys) - CONTINENT_PADDING };
 }
 
 export const BOARD_VIEWBOX = { width: 800, height: 460 };

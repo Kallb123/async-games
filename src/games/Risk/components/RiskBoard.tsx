@@ -1,7 +1,7 @@
 'use client'
 import React from 'react';
 import type { IRiskTerritoryResponse } from '@/games/Risk/apiModels';
-import { TERRITORIES, ADJACENCY, CONTINENT_ORDER, CONTINENTS, continentBoundingBox, BOARD_VIEWBOX } from '@/games/Risk/board';
+import { TERRITORIES, ADJACENCY, CONTINENT_ORDER, CONTINENTS, continentLabelAnchor, BOARD_VIEWBOX } from '@/games/Risk/board';
 
 interface RiskBoardProps {
     territories: IRiskTerritoryResponse[];
@@ -44,25 +44,29 @@ export default function RiskBoard({
         <div className="ag-board-frame ag-risk-frame">
             {placementPrompt && <div className="ag-board-tag">{placementPrompt}</div>}
             <svg viewBox={`0 0 ${BOARD_VIEWBOX.width} ${BOARD_VIEWBOX.height}`}>
-                {/* Continent regions */}
+                <image
+                    href="/art/world-domination/world-domination-map.png"
+                    x={0} y={0} width={BOARD_VIEWBOX.width} height={BOARD_VIEWBOX.height}
+                    preserveAspectRatio="xMidYMid slice"
+                />
+
+                {/* Continent name + bonus labels (outlined so they read over the map art) */}
                 {CONTINENT_ORDER.map(cid => {
                     const c = CONTINENTS[cid];
-                    const box = continentBoundingBox(cid);
+                    const anchor = continentLabelAnchor(cid);
                     return (
-                        <g key={cid}>
-                            <rect
-                                x={box.x} y={box.y} width={box.width} height={box.height} rx={22}
-                                fill={c.color} fillOpacity={0.16} stroke={c.color} strokeOpacity={0.45} strokeWidth={1.5}
-                            />
-                            <text x={box.x + 10} y={box.y + 16} fontSize={9} fontWeight={800} letterSpacing="0.04em" fill={c.color}>
-                                {c.name.toUpperCase()} +{c.bonus}
-                            </text>
-                        </g>
+                        <text
+                            key={cid}
+                            x={anchor.x + 10} y={anchor.y + 16} fontSize={9} fontWeight={800} letterSpacing="0.04em"
+                            fill={c.color} stroke="rgba(0,0,0,0.6)" strokeWidth={3} paintOrder="stroke"
+                        >
+                            {c.name.toUpperCase()} +{c.bonus}
+                        </text>
                     );
                 })}
 
                 {/* Adjacency lines */}
-                <g stroke="#7a5f2e" strokeWidth={1} strokeOpacity={0.35}>
+                <g stroke="#fff" strokeWidth={1} strokeOpacity={0.5}>
                     {EDGE_LIST.map(([a, b]) => (
                         <line key={`${a}-${b}`} x1={TERRITORIES[a].x} y1={TERRITORIES[a].y} x2={TERRITORIES[b].x} y2={TERRITORIES[b].y} />
                     ))}
