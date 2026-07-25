@@ -11,19 +11,17 @@ export interface RiskContinent {
     id: RiskContinentId;
     name: string;
     bonus: number;
-    /** Schematic label anchor for the board SVG. */
-    labelPos: { x: number; y: number };
-    /** Tint for the continent's board region + chip accents. */
+    /** Accent for the continent's label text on the board SVG. */
     color: string;
 }
 
 export const CONTINENTS: Record<RiskContinentId, RiskContinent> = {
-    northAmerica: { id: 'northAmerica', name: 'North America', bonus: 5, labelPos: { x: 40, y: 20 }, color: '#fdcd0d' },
-    southAmerica: { id: 'southAmerica', name: 'South America', bonus: 2, labelPos: { x: 150, y: 445 }, color: '#fd7816' },
-    europe: { id: 'europe', name: 'Europe', bonus: 5, labelPos: { x: 335, y: 20 }, color: '#0c97e2' },
-    africa: { id: 'africa', name: 'Africa', bonus: 3, labelPos: { x: 335, y: 445 }, color: '#ed362d' },
-    asia: { id: 'asia', name: 'Asia', bonus: 7, labelPos: { x: 630, y: 20 }, color: '#4bbc4f' },
-    australia: { id: 'australia', name: 'Australia', bonus: 2, labelPos: { x: 630, y: 445 }, color: '#a961b7' },
+    northAmerica: { id: 'northAmerica', name: 'North America', bonus: 5, color: '#fdcd0d' },
+    southAmerica: { id: 'southAmerica', name: 'South America', bonus: 2, color: '#fd7816' },
+    europe: { id: 'europe', name: 'Europe', bonus: 5, color: '#0c97e2' },
+    africa: { id: 'africa', name: 'Africa', bonus: 3, color: '#ed362d' },
+    asia: { id: 'asia', name: 'Asia', bonus: 7, color: '#4bbc4f' },
+    australia: { id: 'australia', name: 'Australia', bonus: 2, color: '#a961b7' },
 };
 
 export const CONTINENT_ORDER: RiskContinentId[] = [
@@ -175,19 +173,15 @@ export function territoryIdsForContinent(continentId: RiskContinentId): number[]
     return TERRITORIES.filter(t => t.continentId === continentId).map(t => t.id);
 }
 
-// Bounding box (with padding) around a continent's territories, for the board
-// SVG's tinted continent regions. Derived from the schematic x/y positions
-// above rather than hand-maintained separately.
+// Top-left anchor (with padding) for a continent's name+bonus label, derived
+// from the schematic x/y positions above rather than hand-maintained
+// separately.
 const CONTINENT_PADDING = 34;
-export function continentBoundingBox(continentId: RiskContinentId): { x: number; y: number; width: number; height: number } {
+export function continentLabelAnchor(continentId: RiskContinentId): { x: number; y: number } {
     const territories = TERRITORIES.filter(t => t.continentId === continentId);
     const xs = territories.map(t => t.x);
     const ys = territories.map(t => t.y);
-    const minX = Math.min(...xs) - CONTINENT_PADDING;
-    const maxX = Math.max(...xs) + CONTINENT_PADDING;
-    const minY = Math.min(...ys) - CONTINENT_PADDING;
-    const maxY = Math.max(...ys) + CONTINENT_PADDING;
-    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+    return { x: Math.min(...xs) - CONTINENT_PADDING, y: Math.min(...ys) - CONTINENT_PADDING };
 }
 
 export const BOARD_VIEWBOX = { width: 800, height: 460 };

@@ -1,7 +1,7 @@
 'use client'
 import React from 'react';
 import type { IRiskTerritoryResponse } from '@/games/Risk/apiModels';
-import { TERRITORIES, ADJACENCY, CONTINENT_ORDER, CONTINENTS, continentBoundingBox, BOARD_VIEWBOX } from '@/games/Risk/board';
+import { TERRITORIES, ADJACENCY, CONTINENT_ORDER, CONTINENTS, continentLabelAnchor, BOARD_VIEWBOX } from '@/games/Risk/board';
 
 interface RiskBoardProps {
     territories: IRiskTerritoryResponse[];
@@ -53,11 +53,11 @@ export default function RiskBoard({
                 {/* Continent name + bonus labels (outlined so they read over the map art) */}
                 {CONTINENT_ORDER.map(cid => {
                     const c = CONTINENTS[cid];
-                    const box = continentBoundingBox(cid);
+                    const anchor = continentLabelAnchor(cid);
                     return (
                         <text
                             key={cid}
-                            x={box.x + 10} y={box.y + 16} fontSize={9} fontWeight={800} letterSpacing="0.04em"
+                            x={anchor.x + 10} y={anchor.y + 16} fontSize={9} fontWeight={800} letterSpacing="0.04em"
                             fill={c.color} stroke="rgba(0,0,0,0.6)" strokeWidth={3} paintOrder="stroke"
                         >
                             {c.name.toUpperCase()} +{c.bonus}
