@@ -3,12 +3,12 @@ import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { RiskInvitationModel, RiskInvitationRequest } from '@/games/Risk/RiskModels';
+import { WorldDominationInvitationModel, WorldDominationInvitationRequest } from '@/games/WorldDomination/WorldDominationModels';
 import { IInvitationDataDocument } from '@/utils/mongodb/InvitationData';
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
-  const riskInvitation: RiskInvitationRequest = await request.json();
+  const worldDominationInvitation: WorldDominationInvitationRequest = await request.json();
 
   const { userId } = await auth();
   if (!userId) {
@@ -20,10 +20,10 @@ export async function POST(request: NextRequest) {
   }
 
   const { data: userList } = await (await clerkClient()).users.getUserList({
-    username: riskInvitation.userList
+    username: worldDominationInvitation.userList
   });
 
-  if (userList.length !== riskInvitation.userList.length) {
+  if (userList.length !== worldDominationInvitation.userList.length) {
     return NextResponse.json({}, { status: 404, statusText: "User not found" });
   }
 
@@ -31,25 +31,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, { status: 404, statusText: "User not found" });
   }
 
-  // Risk supports 2-6 players (docs/games/risk.md §1); the sender is always a
+  // World Domination supports 2-6 players (docs/games/worlddomination.md §1); the sender is always a
   // player, so the party size is invitees + 1.
   const playerCount = userList.length + 1;
   if (playerCount > 6) {
-    return NextResponse.json({}, { status: 400, statusText: "Risk supports at most 6 players" });
+    return NextResponse.json({}, { status: 400, statusText: "World Domination supports at most 6 players" });
   }
 
   await dbConnect();
 
-  const invite: IInvitationDataDocument = new RiskInvitationModel({
+  const invite: IInvitationDataDocument = new WorldDominationInvitationModel({
     inviteId: randomUUID(),
     senderId: userId,
     userIdList: userList.map(user => {
       return { userId: user.id, inviteAccepted: false };
     }),
-    turnTimer: riskInvitation.turnTimer,
+    turnTimer: worldDominationInvitation.turnTimer,
     timestamp: (new Date()).toISOString(),
-    gameType: 'Risk',
-    gameFriendlyName: 'Risk'
+    gameType: 'WorldDomination',
+    gameFriendlyName: 'World Domination'
   });
 
   await invite.save();
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     inviteId: invite.inviteId,
   }, {
     title: "Game Invite",
-    body: `${thisUser.username} has invited you to play Risk!`,
+    body: `${thisUser.username} has invited you to play World Domination!`,
   }, {
     channel: 'gameInvite'
   });

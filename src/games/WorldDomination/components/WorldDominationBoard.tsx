@@ -1,10 +1,10 @@
 'use client'
 import React from 'react';
-import type { IRiskTerritoryResponse } from '@/games/Risk/apiModels';
-import { TERRITORIES, ADJACENCY, CONTINENT_ORDER, CONTINENTS, continentLabelAnchor, BOARD_VIEWBOX } from '@/games/Risk/board';
+import type { IWorldDominationTerritoryResponse } from '@/games/WorldDomination/apiModels';
+import { TERRITORIES, ADJACENCY, CONTINENT_ORDER, CONTINENTS, continentLabelAnchor, BOARD_VIEWBOX } from '@/games/WorldDomination/board';
 
-interface RiskBoardProps {
-    territories: IRiskTerritoryResponse[];
+interface WorldDominationBoardProps {
+    territories: IWorldDominationTerritoryResponse[];
     usernameToColor: (username: string | null) => string;
     onTerritoryClick?: (territoryId: number) => void;
     /** Territories the current tap target can legally be (highlighted ring). */
@@ -31,7 +31,7 @@ const EDGE_LIST: [number, number][] = (() => {
     return edges;
 })();
 
-export default function RiskBoard({
+export default function WorldDominationBoard({
     territories,
     usernameToColor,
     onTerritoryClick,
@@ -39,9 +39,9 @@ export default function RiskBoard({
     selectedTerritoryId = null,
     frontLine = null,
     placementPrompt = null,
-}: RiskBoardProps) {
+}: WorldDominationBoardProps) {
     return (
-        <div className="ag-board-frame ag-risk-frame">
+        <div className="ag-board-frame ag-world-domination-frame">
             {placementPrompt && <div className="ag-board-tag">{placementPrompt}</div>}
             <svg viewBox={`0 0 ${BOARD_VIEWBOX.width} ${BOARD_VIEWBOX.height}`}>
                 <image

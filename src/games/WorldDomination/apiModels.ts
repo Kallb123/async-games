@@ -1,36 +1,36 @@
 import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
-import type { RiskCardType, RiskPhase } from "./board";
+import type { WorldDominationCardType, WorldDominationPhase } from "./board";
 
-export interface IRiskTerritoryResponse {
+export interface IWorldDominationTerritoryResponse {
     owner: string | null; // username
     armies: number;
 }
 
-export interface IRiskCardResponse {
+export interface IWorldDominationCardResponse {
     id: string;
-    type: RiskCardType;
+    type: WorldDominationCardType;
     territoryId: number | null;
 }
 
-export interface IRiskPlayerStateResponse {
+export interface IWorldDominationPlayerStateResponse {
     userId: string;
     username: string;
     territoryCount: number;
     // Full hand, keyed by username same as SAC's playerDevCards: only the
     // requesting user's hand is meaningful client-side, but every hand is sent
     // for simplicity (this app doesn't hide hidden info server-side elsewhere).
-    cards: IRiskCardResponse[];
+    cards: IWorldDominationCardResponse[];
     eliminated: boolean;
 }
 
-export interface IRiskPendingOccupationResponse {
+export interface IWorldDominationPendingOccupationResponse {
     fromTerritoryId: number;
     toTerritoryId: number;
     minArmies: number;
     maxArmies: number;
 }
 
-export interface IRiskLastBattleResponse {
+export interface IWorldDominationLastBattleResponse {
     attackerId: string;
     fromTerritoryId: number;
     toTerritoryId: number;
@@ -42,18 +42,18 @@ export interface IRiskLastBattleResponse {
     defenderEliminated: string | null; // username of an eliminated defender, if any
 }
 
-export interface IRiskSpecificGameStateResponse {
-    territories: IRiskTerritoryResponse[];
-    playerStates: { [username: string]: IRiskPlayerStateResponse };
-    phase: RiskPhase;
+export interface IWorldDominationSpecificGameStateResponse {
+    territories: IWorldDominationTerritoryResponse[];
+    playerStates: { [username: string]: IWorldDominationPlayerStateResponse };
+    phase: WorldDominationPhase;
     reinforcementsRemaining: number;
-    pendingOccupation: IRiskPendingOccupationResponse | null;
+    pendingOccupation: IWorldDominationPendingOccupationResponse | null;
     fortifyUsed: boolean;
     cardSetsCashedIn: number;
     cardDeckSize: number;
-    lastBattle: IRiskLastBattleResponse | null;
+    lastBattle: IWorldDominationLastBattleResponse | null;
 }
 
-export interface IRiskGameDataResponse extends IGameDataResponse {
-    specificGameState: IRiskSpecificGameStateResponse;
+export interface IWorldDominationGameDataResponse extends IGameDataResponse {
+    specificGameState: IWorldDominationSpecificGameStateResponse;
 }

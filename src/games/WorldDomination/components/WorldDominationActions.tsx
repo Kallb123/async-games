@@ -1,25 +1,25 @@
 'use client'
 import React, { useEffect, useState } from 'react';
-import type { IRiskSpecificGameStateResponse } from '@/games/Risk/apiModels';
-import type { RiskCardType } from '@/games/Risk/board';
-import { TERRITORIES, isValidCardSet } from '@/games/Risk/board';
+import type { IWorldDominationSpecificGameStateResponse } from '@/games/WorldDomination/apiModels';
+import type { WorldDominationCardType } from '@/games/WorldDomination/board';
+import { TERRITORIES, isValidCardSet } from '@/games/WorldDomination/board';
 import DieFace from '@/components/ui/DieFace';
 import { IGameCommand } from '@/utils/apiModels/GameLogic';
 import type { ICommandResponse } from '@/app/api/game/command/route';
 import {
-    RiskDeployArmies,
-    RiskCashInCards,
-    RiskAttack,
-    RiskOccupyTerritory,
-    RiskEndAttackPhase,
-    RiskFortify,
-    RiskSkipFortify,
+    WorldDominationDeployArmies,
+    WorldDominationCashInCards,
+    WorldDominationAttack,
+    WorldDominationOccupyTerritory,
+    WorldDominationEndAttackPhase,
+    WorldDominationFortify,
+    WorldDominationSkipFortify,
 } from '@/utils/apiModels/GameLogic';
 
-const CARD_EMOJI: Record<RiskCardType, string> = {
+const CARD_EMOJI: Record<WorldDominationCardType, string> = {
     infantry: '🪖', cavalry: '🐎', artillery: '💣', wild: '🃏',
 };
-const CARD_NAME: Record<RiskCardType, string> = {
+const CARD_NAME: Record<WorldDominationCardType, string> = {
     infantry: 'Infantry', cavalry: 'Cavalry', artillery: 'Artillery', wild: 'Wild',
 };
 
@@ -35,8 +35,8 @@ function Stepper({ value, min, max, onChange }: { value: number; min: number; ma
     );
 }
 
-interface RiskActionsProps {
-    gs: IRiskSpecificGameStateResponse;
+interface WorldDominationActionsProps {
+    gs: IWorldDominationSpecificGameStateResponse;
     myUsername: string;
     selFrom: number | null;
     selTo: number | null;
@@ -45,9 +45,9 @@ interface RiskActionsProps {
     submitCommand: (cmd: IGameCommand, cb: (r: ICommandResponse) => void) => void;
 }
 
-export default function RiskActions({
+export default function WorldDominationActions({
     gs, myUsername, selFrom, selTo, setSelFrom, setSelTo, submitCommand,
-}: RiskActionsProps) {
+}: WorldDominationActionsProps) {
     const me = gs.playerStates[myUsername];
     const [deployCount, setDeployCount] = useState(1);
     const [diceCount, setDiceCount] = useState(1);
@@ -92,7 +92,7 @@ export default function RiskActions({
     const selectedCards = me.cards.filter(c => selectedCardIds.includes(c.id));
     const canCashIn = selectedCards.length === 3 && isValidCardSet(selectedCards);
     function cashIn() {
-        const cmd = new RiskCashInCards();
+        const cmd = new WorldDominationCashInCards();
         cmd.cardIds = selectedCardIds;
         submitCommand(cmd, () => setSelectedCardIds([]));
     }
@@ -140,7 +140,7 @@ export default function RiskActions({
 
         function deploy() {
             if (selFrom === null) return;
-            const cmd = new RiskDeployArmies();
+            const cmd = new WorldDominationDeployArmies();
             cmd.territoryId = selFrom;
             cmd.count = deployCount;
             submitCommand(cmd, () => setSelFrom(null));
@@ -186,7 +186,7 @@ export default function RiskActions({
                         className="ag-btn ag-btn--primary ag-btn--block"
                         style={{ marginTop: 10 }}
                         onClick={() => {
-                            const cmd = new RiskOccupyTerritory();
+                            const cmd = new WorldDominationOccupyTerritory();
                             cmd.armies = occupyCount;
                             submitCommand(cmd, clearSelection);
                         }}
@@ -200,7 +200,7 @@ export default function RiskActions({
         if (mustCashIn) return cardHand;
 
         function endAttackPhase() {
-            submitCommand(new RiskEndAttackPhase(), clearSelection);
+            submitCommand(new WorldDominationEndAttackPhase(), clearSelection);
         }
 
         if (selFrom === null) {
@@ -233,7 +233,7 @@ export default function RiskActions({
             && lastBattle.toTerritoryId === selTo;
 
         function roll() {
-            const cmd = new RiskAttack();
+            const cmd = new WorldDominationAttack();
             cmd.fromTerritoryId = selFrom!;
             cmd.toTerritoryId = selTo!;
             cmd.attackerDiceCount = diceCount;
@@ -292,7 +292,7 @@ export default function RiskActions({
     // ── Fortify ──────────────────────────────────────────────────────────────
     if (gs.phase === 'fortify') {
         function skip() {
-            submitCommand(new RiskSkipFortify(), clearSelection);
+            submitCommand(new WorldDominationSkipFortify(), clearSelection);
         }
         if (selFrom === null) {
             return (
@@ -314,7 +314,7 @@ export default function RiskActions({
         }
         const fromArmies = fromTerritory?.armies ?? 0;
         function fortify() {
-            const cmd = new RiskFortify();
+            const cmd = new WorldDominationFortify();
             cmd.fromTerritoryId = selFrom!;
             cmd.toTerritoryId = selTo!;
             cmd.armies = fortifyCount;

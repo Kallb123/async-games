@@ -1,4 +1,4 @@
-import type { IRiskGameData } from "@/games/Risk/RiskModels";
+import type { IWorldDominationGameData } from "@/games/WorldDomination/WorldDominationModels";
 import {
     TERRITORIES,
     isAdjacent,
@@ -7,8 +7,8 @@ import {
     isValidCardSet,
     cardSetValue,
     startingArmiesForPlayerCount,
-    IRiskCard,
-} from "@/games/Risk/board";
+    IWorldDominationCard,
+} from "@/games/WorldDomination/board";
 import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
@@ -17,13 +17,13 @@ import { DiceRoll } from "@/utils/games/DiceRoll";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  RISK
+//  WORLD DOMINATION
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const INVALID: ICommandOutcome = { validMove: false, turnOver: false };
 
-// A player holding 5+ Risk cards must cash in a set before doing anything else
-// (docs/games/risk.md §4.1's "5 or 6 cards" start-of-turn rule and §4.2's
+// A player holding 5+ World Domination cards must cash in a set before doing anything else
+// (docs/games/worlddomination.md §4.1's "5 or 6 cards" start-of-turn rule and §4.2's
 // post-elimination "6 or more" overflow rule are unified to one >=5 threshold
 // here, applied both to blocking further reinforce-phase deploys and to
 // blocking the attack phase from closing out).
@@ -31,7 +31,7 @@ const MUST_CASH_IN_THRESHOLD = 5;
 
 // ─── Turn/phase helpers ─────────────────────────────────────────────────────
 
-function riskNextActivePlayer(riskData: IRiskGameData): string {
+function worldDominationNextActivePlayer(riskData: IWorldDominationGameData): string {
     const order = riskData.gameState.turnOrder;
     const gs = riskData.specificGameState;
     const idx = order.indexOf(riskData.currentTurn);
@@ -46,7 +46,7 @@ function riskNextActivePlayer(riskData: IRiskGameData): string {
 // Advances setup once the active player has placed their entire starting
 // allotment: hands off to the next player in turnOrder, or — once everyone has
 // placed — starts Turn 1's Reinforce phase (docs §3.2).
-function riskAdvanceSetup(riskData: IRiskGameData): void {
+function worldDominationAdvanceSetup(riskData: IWorldDominationGameData): void {
     const gs = riskData.specificGameState;
     const order = riskData.gameState.turnOrder;
     const idx = order.indexOf(riskData.currentTurn);
@@ -70,19 +70,19 @@ function riskAdvanceSetup(riskData: IRiskGameData): void {
 // Ends a Fortify-phase turn: draws the end-of-turn card if a territory was
 // conquered (docs §4.4), resets per-turn flags, and starts the next active
 // (non-eliminated) player's Reinforce phase.
-function riskEndTurn(riskData: IRiskGameData): void {
+function riskEndTurn(riskData: IWorldDominationGameData): void {
     const gs = riskData.specificGameState;
     const ps = gs.playerStates.get(riskData.currentTurn);
     if (ps?.conqueredTerritoryThisTurn && gs.cardDeck.length > 0) {
         const card = gs.cardDeck.pop()!;
         ps.cards.push(card);
-        riskData.gameState.history.unshift(`${riskData.currentTurn} drew a Risk card`);
+        riskData.gameState.history.unshift(`${riskData.currentTurn} drew a World Domination card`);
     }
     if (ps) ps.conqueredTerritoryThisTurn = false;
     gs.fortifyUsed = false;
     gs.pendingOccupation = null;
 
-    const next = riskNextActivePlayer(riskData);
+    const next = worldDominationNextActivePlayer(riskData);
     riskData.currentTurn = next;
     gs.phase = 'reinforce';
     gs.reinforcementsRemaining = computeReinforcement(next, gs.territories);
@@ -91,30 +91,30 @@ function riskEndTurn(riskData: IRiskGameData): void {
 // ─── Game type ────────────────────────────────────────────────────────────────
 
 @serializable
-export class RiskGameType implements IGameType {
+export class WorldDominationGameType implements IGameType {
     gameId: uuidString = uuidv4() as uuidString;
-    gameType: string = "Risk";
-    friendlyName: string = "Risk";
+    gameType: string = "World Domination";
+    friendlyName: string = "World Domination";
     icon: string = "";
-    url: string = "risk";
-    readonly className: string = "RiskGameType";
+    url: string = "worlddomination";
+    readonly className: string = "WorldDominationGameType";
 
     CheckEndTurn(gameData: IGameData, commandOutcome: ICommandOutcome): void {
-        const riskData = gameData as IRiskGameData;
+        const riskData = gameData as IWorldDominationGameData;
         const gs = riskData.specificGameState;
         if (!commandOutcome.turnOver) return;
 
         if (gs.phase === 'setup') {
-            riskAdvanceSetup(riskData);
+            worldDominationAdvanceSetup(riskData);
             return;
         }
-        // Only a Fortify-phase command (RiskFortify / RiskSkipFortify) reports
+        // Only a Fortify-phase command (WorldDominationFortify / WorldDominationSkipFortify) reports
         // turnOver outside setup — see those commands' Execute().
         riskEndTurn(riskData);
     }
 
     CheckGameOver(gameData: IGameData): boolean {
-        const riskData = gameData as IRiskGameData;
+        const riskData = gameData as IWorldDominationGameData;
         const gs = riskData.specificGameState;
         const owners = new Set(gs.territories.map(t => t.owner).filter((o): o is string => o !== null));
         if (owners.size === 1) {
@@ -131,7 +131,7 @@ export class RiskGameType implements IGameType {
 // ─── Deploy armies (setup allotment, reinforcement, or a cashed-in top-up) ────
 
 @serializable
-export class RiskDeployArmies implements IGameCommand {
+export class WorldDominationDeployArmies implements IGameCommand {
     id: uuidString = uuidv4() as uuidString;
     timestamp: string = new Date().toISOString();
     gameId: uuidString = NIL_UUID as uuidString;
@@ -139,12 +139,12 @@ export class RiskDeployArmies implements IGameCommand {
     senderUsername: string = 'Unknown';
     territoryId: number = 0;
     count: number = 1;
-    readonly className = 'RiskDeployArmies';
+    readonly className = 'WorldDominationDeployArmies';
 
-    myString() { return `Risk DeployArmies territory=${this.territoryId} count=${this.count}`; }
+    myString() { return `World Domination DeployArmies territory=${this.territoryId} count=${this.count}`; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
-        const riskData = gameData as IRiskGameData;
+        const riskData = gameData as IWorldDominationGameData;
         const gs = riskData.specificGameState;
 
         // Deploying mid-attack only happens when a card cash-in produced a
@@ -185,22 +185,22 @@ export class RiskDeployArmies implements IGameCommand {
     }
 }
 
-// ─── Cash in a set of Risk cards ────────────────────────────────────────────
+// ─── Cash in a set of World Domination cards ────────────────────────────────────────────
 
 @serializable
-export class RiskCashInCards implements IGameCommand {
+export class WorldDominationCashInCards implements IGameCommand {
     id: uuidString = uuidv4() as uuidString;
     timestamp: string = new Date().toISOString();
     gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = 'Unknown';
     senderUsername: string = 'Unknown';
     cardIds: string[] = [];
-    readonly className = 'RiskCashInCards';
+    readonly className = 'WorldDominationCashInCards';
 
-    myString() { return `Risk CashInCards cards=${this.cardIds.join(',')}`; }
+    myString() { return `World Domination CashInCards cards=${this.cardIds.join(',')}`; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
-        const riskData = gameData as IRiskGameData;
+        const riskData = gameData as IWorldDominationGameData;
         const gs = riskData.specificGameState;
 
         if (gs.phase !== 'reinforce' && gs.phase !== 'attack') return INVALID;
@@ -213,7 +213,7 @@ export class RiskCashInCards implements IGameCommand {
         if (this.cardIds.length !== 3 || new Set(this.cardIds).size !== 3) return INVALID;
         const cards = this.cardIds
             .map(id => ps.cards.find(c => c.id === id))
-            .filter((c): c is IRiskCard => !!c);
+            .filter((c): c is IWorldDominationCard => !!c);
         if (cards.length !== 3) return INVALID;
         if (!isValidCardSet(cards)) return INVALID;
 
@@ -242,7 +242,7 @@ export class RiskCashInCards implements IGameCommand {
 
 // ─── Attack (one dice roll) ─────────────────────────────────────────────────
 
-export interface IRiskAttackOutcome extends ICommandOutcome {
+export interface IWorldDominationAttackOutcome extends ICommandOutcome {
     attackerDice: number[];
     defenderDice: number[];
     attackerLosses: number;
@@ -252,7 +252,7 @@ export interface IRiskAttackOutcome extends ICommandOutcome {
 }
 
 @serializable
-export class RiskAttack implements IGameCommand {
+export class WorldDominationAttack implements IGameCommand {
     id: uuidString = uuidv4() as uuidString;
     timestamp: string = new Date().toISOString();
     gameId: uuidString = NIL_UUID as uuidString;
@@ -261,16 +261,16 @@ export class RiskAttack implements IGameCommand {
     fromTerritoryId: number = 0;
     toTerritoryId: number = 0;
     attackerDiceCount: number = 1;
-    readonly className = 'RiskAttack';
+    readonly className = 'WorldDominationAttack';
     // Recorded RNG outcomes, populated on first execution so the roll can be
     // deterministically replayed (turn recap / planning).
     recordedAttackerDice?: number[];
     recordedDefenderDice?: number[];
 
-    myString() { return `Risk Attack ${this.fromTerritoryId}->${this.toTerritoryId} dice=${this.attackerDiceCount}`; }
+    myString() { return `World Domination Attack ${this.fromTerritoryId}->${this.toTerritoryId} dice=${this.attackerDiceCount}`; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
-        const riskData = gameData as IRiskGameData;
+        const riskData = gameData as IWorldDominationGameData;
         const gs = riskData.specificGameState;
 
         if (gs.phase !== 'attack') return INVALID;
@@ -289,7 +289,7 @@ export class RiskAttack implements IGameCommand {
         if (this.attackerDiceCount < 1 || this.attackerDiceCount > maxAttackerDice) return INVALID;
 
         // Defender always rolls the maximum dice they can (2, or 1 if down to a
-        // single army) — a common async-Risk simplification, since there's no
+        // single army) — a common async-World Domination simplification, since there's no
         // synchronous defender to prompt for a choice (docs §4.2).
         const defenderDiceCount = Math.min(2, to.armies);
 
@@ -356,7 +356,7 @@ export class RiskAttack implements IGameCommand {
             (defenderEliminated ? ` — ${defenderEliminated} eliminated!` : '')
         );
 
-        const outcome: IRiskAttackOutcome = {
+        const outcome: IWorldDominationAttackOutcome = {
             validMove: true,
             turnOver: false,
             attackerDice, defenderDice, attackerLosses, defenderLosses, conquered, defenderEliminated,
@@ -372,19 +372,19 @@ export class RiskAttack implements IGameCommand {
 // ─── Occupy a just-conquered territory ──────────────────────────────────────
 
 @serializable
-export class RiskOccupyTerritory implements IGameCommand {
+export class WorldDominationOccupyTerritory implements IGameCommand {
     id: uuidString = uuidv4() as uuidString;
     timestamp: string = new Date().toISOString();
     gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = 'Unknown';
     senderUsername: string = 'Unknown';
     armies: number = 1;
-    readonly className = 'RiskOccupyTerritory';
+    readonly className = 'WorldDominationOccupyTerritory';
 
-    myString() { return `Risk OccupyTerritory armies=${this.armies}`; }
+    myString() { return `World Domination OccupyTerritory armies=${this.armies}`; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
-        const riskData = gameData as IRiskGameData;
+        const riskData = gameData as IWorldDominationGameData;
         const gs = riskData.specificGameState;
 
         if (gs.phase !== 'attack' || !gs.pendingOccupation) return INVALID;
@@ -411,18 +411,18 @@ export class RiskOccupyTerritory implements IGameCommand {
 // ─── End the attack phase (move to Fortify) ─────────────────────────────────
 
 @serializable
-export class RiskEndAttackPhase implements IGameCommand {
+export class WorldDominationEndAttackPhase implements IGameCommand {
     id: uuidString = uuidv4() as uuidString;
     timestamp: string = new Date().toISOString();
     gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = 'Unknown';
     senderUsername: string = 'Unknown';
-    readonly className = 'RiskEndAttackPhase';
+    readonly className = 'WorldDominationEndAttackPhase';
 
-    myString() { return `Risk EndAttackPhase`; }
+    myString() { return `World Domination EndAttackPhase`; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
-        const riskData = gameData as IRiskGameData;
+        const riskData = gameData as IWorldDominationGameData;
         const gs = riskData.specificGameState;
 
         if (gs.phase !== 'attack') return INVALID;
@@ -444,7 +444,7 @@ export class RiskEndAttackPhase implements IGameCommand {
 // ─── Fortify (single move, ends the turn) ───────────────────────────────────
 
 @serializable
-export class RiskFortify implements IGameCommand {
+export class WorldDominationFortify implements IGameCommand {
     id: uuidString = uuidv4() as uuidString;
     timestamp: string = new Date().toISOString();
     gameId: uuidString = NIL_UUID as uuidString;
@@ -453,12 +453,12 @@ export class RiskFortify implements IGameCommand {
     fromTerritoryId: number = 0;
     toTerritoryId: number = 0;
     armies: number = 1;
-    readonly className = 'RiskFortify';
+    readonly className = 'WorldDominationFortify';
 
-    myString() { return `Risk Fortify ${this.fromTerritoryId}->${this.toTerritoryId} armies=${this.armies}`; }
+    myString() { return `World Domination Fortify ${this.fromTerritoryId}->${this.toTerritoryId} armies=${this.armies}`; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
-        const riskData = gameData as IRiskGameData;
+        const riskData = gameData as IWorldDominationGameData;
         const gs = riskData.specificGameState;
 
         if (gs.phase !== 'fortify' || gs.fortifyUsed) return INVALID;
@@ -489,18 +489,18 @@ export class RiskFortify implements IGameCommand {
 // ─── Skip fortifying ─────────────────────────────────────────────────────────
 
 @serializable
-export class RiskSkipFortify implements IGameCommand {
+export class WorldDominationSkipFortify implements IGameCommand {
     id: uuidString = uuidv4() as uuidString;
     timestamp: string = new Date().toISOString();
     gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = 'Unknown';
     senderUsername: string = 'Unknown';
-    readonly className = 'RiskSkipFortify';
+    readonly className = 'WorldDominationSkipFortify';
 
-    myString() { return `Risk SkipFortify`; }
+    myString() { return `World Domination SkipFortify`; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
-        const riskData = gameData as IRiskGameData;
+        const riskData = gameData as IWorldDominationGameData;
         const gs = riskData.specificGameState;
 
         if (gs.phase !== 'fortify' || gs.fortifyUsed) return INVALID;

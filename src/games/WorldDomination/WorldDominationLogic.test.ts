@@ -135,7 +135,7 @@ describe("reinforcement maths", () => {
 });
 
 describe("RiskCashInCards", () => {
-    it("validates card sets per docs/games/risk.md §4.1", () => {
+    it("validates card sets per docs/games/worlddomination.md §4.1", () => {
         expect(isValidCardSet([card("1", "infantry"), card("2", "infantry"), card("3", "infantry")])).toBe(true);
         expect(isValidCardSet([card("1", "infantry"), card("2", "cavalry"), card("3", "artillery")])).toBe(true);
         expect(isValidCardSet([card("1", "infantry"), card("2", "infantry"), card("3", "cavalry")])).toBe(false);

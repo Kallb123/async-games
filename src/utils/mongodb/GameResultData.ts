@@ -30,12 +30,12 @@ import {
     formatSettlementsAndCitiesResultStats,
 } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import {
-    IRiskGameData,
-    IRiskGameResultStats,
-    computeRiskResultStats,
-    riskGameResultStatsSchemaDef,
-    formatRiskResultStats,
-} from "@/games/Risk/RiskModels";
+    IWorldDominationGameData,
+    IWorldDominationGameResultStats,
+    computeWorldDominationResultStats,
+    worldDominationGameResultStatsSchemaDef,
+    formatWorldDominationResultStats,
+} from "@/games/WorldDomination/WorldDominationModels";
 
 export interface IGameResultData {
     gameId: uuidString,
@@ -117,15 +117,15 @@ var SettlementsAndCitiesGameResultSchema = new Schema<ISettlementsAndCitiesGameR
 }, { discriminatorKey: 'kind' });
 export var SettlementsAndCitiesGameResultModel = models.SettlementsAndCitiesGameResult || GameResultModel.discriminator<ISettlementsAndCitiesGameResultDataDocument, ISettlementsAndCitiesGameResultDataModel>('SettlementsAndCitiesGameResult', SettlementsAndCitiesGameResultSchema);
 
-export interface IRiskGameResultData extends IGameResultData {
-    stats: IRiskGameResultStats;
+export interface IWorldDominationGameResultData extends IGameResultData {
+    stats: IWorldDominationGameResultStats;
 }
-export interface IRiskGameResultDataDocument extends IRiskGameResultData, Document {}
-export interface IRiskGameResultDataModel extends Model<IRiskGameResultDataDocument> {}
-var RiskGameResultSchema = new Schema<IRiskGameResultDataDocument>({
-    stats: riskGameResultStatsSchemaDef
+export interface IWorldDominationGameResultDataDocument extends IWorldDominationGameResultData, Document {}
+export interface IWorldDominationGameResultDataModel extends Model<IWorldDominationGameResultDataDocument> {}
+var WorldDominationGameResultSchema = new Schema<IWorldDominationGameResultDataDocument>({
+    stats: worldDominationGameResultStatsSchemaDef
 }, { discriminatorKey: 'kind' });
-export var RiskGameResultModel = models.RiskGameResult || GameResultModel.discriminator<IRiskGameResultDataDocument, IRiskGameResultDataModel>('RiskGameResult', RiskGameResultSchema);
+export var WorldDominationGameResultModel = models.WorldDominationGameResult || GameResultModel.discriminator<IWorldDominationGameResultDataDocument, IWorldDominationGameResultDataModel>('WorldDominationGameResult', WorldDominationGameResultSchema);
 
 // Maps a GameData's gameType to the discriminator model + stats calculator
 // that boil its final specificGameState down to the interesting numbers, plus
@@ -157,10 +157,10 @@ const GAME_RESULT_STATS: Record<string, {
         compute: (gameData) => computeSettlementsAndCitiesResultStats(gameData as ISettlementsAndCitiesGameData),
         format: formatSettlementsAndCitiesResultStats,
     },
-    Risk: {
-        model: RiskGameResultModel,
-        compute: (gameData) => computeRiskResultStats(gameData as IRiskGameData),
-        format: formatRiskResultStats,
+    WorldDomination: {
+        model: WorldDominationGameResultModel,
+        compute: (gameData) => computeWorldDominationResultStats(gameData as IWorldDominationGameData),
+        format: formatWorldDominationResultStats,
     },
 };
 

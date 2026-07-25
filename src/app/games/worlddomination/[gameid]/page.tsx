@@ -7,10 +7,10 @@ import { useEffect, useMemo, useState } from "react";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { IGameCommand } from "@/utils/apiModels/GameLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
-import type { IRiskGameDataResponse, IRiskSpecificGameStateResponse } from "@/games/Risk/apiModels";
-import { ADJACENCY, TERRITORIES, isAdjacent, connectedThroughOwnedTerritories } from "@/games/Risk/board";
-import RiskBoard from "@/games/Risk/components/RiskBoard";
-import RiskActions from "@/games/Risk/components/RiskActions";
+import type { IWorldDominationGameDataResponse, IWorldDominationSpecificGameStateResponse } from "@/games/WorldDomination/apiModels";
+import { ADJACENCY, TERRITORIES, isAdjacent, connectedThroughOwnedTerritories } from "@/games/WorldDomination/board";
+import WorldDominationBoard from "@/games/WorldDomination/components/WorldDominationBoard";
+import WorldDominationActions from "@/games/WorldDomination/components/WorldDominationActions";
 import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
@@ -20,18 +20,18 @@ import { useEndGame } from "@/utils/hooks/useEndGame";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
 
-const PHASE_LABEL: Record<IRiskSpecificGameStateResponse['phase'], string> = {
+const PHASE_LABEL: Record<IWorldDominationSpecificGameStateResponse['phase'], string> = {
     setup: 'Setup',
     reinforce: 'Reinforce',
     attack: 'Attack',
     fortify: 'Fortify',
 };
 
-export default function GameRisk({ params }: { params: Promise<{ gameid: uuidString }> }) {
+export default function GameWorldDomination({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
     const { user, isLoaded } = useUser();
-    const [gameData, setGameData] = useState({} as IRiskGameDataResponse);
+    const [gameData, setGameData] = useState({} as IWorldDominationGameDataResponse);
     const [selFrom, setSelFrom] = useState<number | null>(null);
     const [selTo, setSelTo] = useState<number | null>(null);
     const [showLog, setShowLog] = useState(false);
@@ -83,7 +83,7 @@ export default function GameRisk({ params }: { params: Promise<{ gameid: uuidStr
             .then(r => r.ok ? r.json() : null)
             .then(data => {
                 if (!data?.gameData) return;
-                setGameData(data.gameData as IRiskGameDataResponse);
+                setGameData(data.gameData as IWorldDominationGameDataResponse);
                 callback(data);
             });
     };
@@ -95,7 +95,7 @@ export default function GameRisk({ params }: { params: Promise<{ gameid: uuidStr
         winner: gameData?.winner ?? "",
         history: gameData?.gameState?.history ?? [],
     };
-    const nav = useTurnNavigation<IRiskSpecificGameStateResponse>(gameId, live);
+    const nav = useTurnNavigation<IWorldDominationSpecificGameStateResponse>(gameId, live);
     const { endGame } = useEndGame(gameId);
 
     const gs = nav.displayedState;
@@ -278,7 +278,7 @@ export default function GameRisk({ params }: { params: Promise<{ gameid: uuidStr
     }
 
     return (
-        <GameShell title="Risk · World Domination" subtitle={subtitle} right={optionsMenu}>
+        <GameShell title="World Domination" subtitle={subtitle} right={optionsMenu}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
@@ -292,7 +292,7 @@ export default function GameRisk({ params }: { params: Promise<{ gameid: uuidStr
             {gs && (
                 <>
                     <div className="ag-board-area">
-                        <RiskBoard
+                        <WorldDominationBoard
                             territories={gs.territories}
                             usernameToColor={usernameToColor}
                             onTerritoryClick={isMyTurn && !complete ? handleTerritoryClick : undefined}
@@ -304,7 +304,7 @@ export default function GameRisk({ params }: { params: Promise<{ gameid: uuidStr
                     </div>
 
                     {isMyTurn && !complete && (
-                        <RiskActions
+                        <WorldDominationActions
                             gs={gs}
                             myUsername={myUsername}
                             selFrom={selFrom}

@@ -1,7 +1,7 @@
-# GAME DESIGN DOCUMENT: RISK (BASE EDITION)
+# GAME DESIGN DOCUMENT: WORLD DOMINATION (BASE EDITION)
 
 **Document Version:** 1.0.0  
-**Game Title:** Risk: The Game of Global Domination  
+**Game Title:** World Domination: The Game of Global Conquest  
 **Target Audience:** Strategy Gamers, Casual Enthusiasts, Age 10+  
 **Player Count:** 2 – 6 Players (Optimal: 4–5 Players)  
 **Play Time:** 120 – 240 Minutes  
@@ -12,7 +12,7 @@
 ## 1. High-Level Concept & Core Loop
 
 ### 1.1 Overview
-*Risk* is a turn-based grand strategy board game of global conquest. Players command armies, form fragile tactical alliances, launch military invasions, and defend territories on a stylized political map of Earth divided into 42 territories across 6 continents. The overarching goal is simple yet absolute: conquer every territory on the board and eliminate all opposing forces.
+*World Domination* is a turn-based grand strategy board game of global conquest. Players command armies, form fragile tactical alliances, launch military invasions, and defend territories on a stylized political map of Earth divided into 42 territories across 6 continents. The overarching goal is simple yet absolute: conquer every territory on the board and eliminate all opposing forces.
 
 ### 1.2 Core Game Loop
 Each turn follows a strict three-phase structure, followed by an optional card draw:

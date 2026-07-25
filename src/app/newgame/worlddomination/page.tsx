@@ -9,12 +9,12 @@ import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
 import usePlayerList from "@/utils/hooks/usePlayerList";
 import { GAME_META } from "@/utils/ui/games";
-import { RiskInvitationRequest } from "@/games/Risk/RiskModels";
+import { WorldDominationInvitationRequest } from "@/games/WorldDomination/WorldDominationModels";
 import { useToast } from "@/components/ToastContext";
 
 const MAX_PLAYERS = 6;
 
-export default function NewGameRisk() {
+export default function NewGameWorldDomination() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
   const { user, isLoaded } = useUser();
@@ -42,16 +42,16 @@ export default function NewGameRisk() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (tooManyPlayers) {
-      showToast(`Risk supports at most ${MAX_PLAYERS} players.`, 'danger');
+      showToast(`World Domination supports at most ${MAX_PLAYERS} players.`, 'danger');
       return;
     }
 
     try {
-      const data: RiskInvitationRequest = {
+      const data: WorldDominationInvitationRequest = {
         userList: players,
         turnTimer
       };
-      const response = await fetch('/api/newgame/risk', {
+      const response = await fetch('/api/newgame/worlddomination', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -69,7 +69,7 @@ export default function NewGameRisk() {
 
   return (
     <GameSetupLayout
-      meta={GAME_META.risk}
+      meta={GAME_META.worlddomination}
       onSubmit={handleSubmit}
       actionLabel="Send invites & start"
       actionDisabled={players.length === 0 || tooManyPlayers}
@@ -79,7 +79,7 @@ export default function NewGameRisk() {
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
       <p className="ag-hint" style={tooManyPlayers ? { color: "var(--ag-terracotta)", fontWeight: 700 } : undefined}>
         {tooManyPlayers
-          ? `⚠ Party size ${totalPlayers} · Risk supports up to ${MAX_PLAYERS} players.`
+          ? `⚠ Party size ${totalPlayers} · World Domination supports up to ${MAX_PLAYERS} players.`
           : `Party size ${totalPlayers} · supports 2–${MAX_PLAYERS} players.`}
       </p>
       <div className="ag-footer"><CurrentUserInfo /></div>
