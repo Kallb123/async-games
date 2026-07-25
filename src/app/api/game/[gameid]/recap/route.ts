@@ -39,7 +39,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IG
 
     const { userId } = await auth();
     if (!userId) {
-        return NextResponse.json({}, { status: 400, statusText: "Not signed in" });
+        // 401 (not 400) so the client can tell "session cookie not ready yet"
+        // apart from a genuine failure and retry instead of silently dropping
+        // the recap — this fires whenever a backgrounded tab's Clerk session
+        // cookie is still refreshing when the tab regains focus.
+        console.warn(`GET ${request.nextUrl.pathname} 401: no authenticated user`);
+        return NextResponse.json({}, { status: 401, statusText: "Not signed in" });
     }
 
     await dbConnect();

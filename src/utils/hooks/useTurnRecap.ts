@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { IRecapResponse } from "@/app/api/game/[gameid]/recap/route";
+import { fetchWithSessionRetry } from "./fetchWithSessionRetry";
 
 // A stable signature of a recap's contents, so we can tell whether a refetch
 // surfaced something new. Two recaps with the same events are "the same" and a
@@ -32,21 +33,26 @@ export function useTurnRecap(gameId: string, enabled: boolean = true) {
         }
         let cancelled = false;
         setLoading(true);
-        fetch(`/api/game/${gameId}/recap`)
-            .then((res) => (res.ok ? res.json() : null))
-            .then((data: IRecapResponse | null) => {
-                if (cancelled) return;
+
+        (async () => {
+            const res = await fetchWithSessionRetry(`/api/game/${gameId}/recap`, () => cancelled);
+            if (cancelled) return;
+
+            // A null response means the fetch itself failed (network error) —
+            // leave whatever recap is already showing alone rather than wiping
+            // it, matching the original "swallow and stop loading" behaviour.
+            if (res) {
+                const data: IRecapResponse | null = res.ok ? await res.json() : null;
                 setRecap(data);
-                setLoading(false);
                 // Re-show only when the refetch surfaced turns the player hasn't
                 // already dismissed; unchanged content stays hidden.
                 if (data?.hasRecap && recapSignature(data) !== dismissedSignature.current) {
                     setDismissed(false);
                 }
-            })
-            .catch(() => {
-                if (!cancelled) setLoading(false);
-            });
+            }
+            setLoading(false);
+        })();
+
         return () => {
             cancelled = true;
         };
