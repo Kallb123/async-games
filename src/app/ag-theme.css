@@ -852,7 +852,7 @@ body {
 .ag-board-frame svg { display: block; width: 100%; height: auto; border-radius: 12px; }
 .ag-board-tag {
     position: absolute;
-    top: 12px;
+    bottom: 12px;
     left: 12px;
     z-index: 2;
     background: var(--ag-dark);
