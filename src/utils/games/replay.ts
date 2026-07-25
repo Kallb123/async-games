@@ -6,6 +6,7 @@ import { buildInitialDiceCitiesState, gameStateToModel as diceCitiesStateToModel
 import { buildInitialSmartthinkState, gameStateToModel as smartthinkStateToModel } from "@/games/Smartthink/SmartthinkModels";
 import { buildInitialSettlementsAndCitiesState, gameStateToResponse as settlementsAndCitiesStateToModel } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
+import { buildInitialRiskState, gameStateToResponse as riskStateToModel, IRiskGameData } from "@/games/Risk/RiskModels";
 // Side-effect import: evaluating GameLogic registers every @serializable command
 // class so deserializeJSON can rehydrate them during replay.
 import "../apiModels/GameLogic";
@@ -94,6 +95,13 @@ registerReplayAdapter({
         buildInitialSettlementsAndCitiesState(gameData as ISettlementsAndCitiesGameData),
     toResponseState: (specificGameState, userIdNameMap) =>
         settlementsAndCitiesStateToModel(specificGameState as never, userIdNameMap),
+});
+
+registerReplayAdapter({
+    className: "RiskGameType",
+    buildInitialSpecificGameState: (gameData) => buildInitialRiskState(gameData as IRiskGameData),
+    toResponseState: (specificGameState, userIdNameMap) =>
+        riskStateToModel(specificGameState as never, userIdNameMap),
 });
 
 registerReplayAdapter({

@@ -4,13 +4,14 @@ import { DiceCitiesGameDataModel, DiceCitiesInvitationModel } from '@/games/Dice
 import { SnakesAndLaddersGameDataModel, SnakesAndLaddersInvitationModel } from '@/games/SnakesAndLadders/SnakesAndLaddersModels';
 import { SettlementsAndCitiesGameDataModel, SettlementsAndCitiesInvitationModel } from '@/games/SettlementsAndCities/SettlementsAndCitiesModels';
 import { SmartthinkGameDataModel, SmartthinkInvitationModel } from '@/games/Smartthink/SmartthinkModels';
+import { RiskGameDataModel, RiskInvitationModel } from '@/games/Risk/RiskModels';
 import { InvitationModel } from './InvitationData';
 
 // Add new game discriminator keys here whenever a new game is introduced.
 // TypeScript will produce a compile error if a key is listed but its model is
 // not present in the records inside initialiseDiscriminators().
-type GameDataDiscriminatorKey = 'DiceCitiesGameData' | 'SnakesAndLaddersGameData' | 'SettlementsAndCitiesGameData' | 'SmartthinkGameData';
-type InvitationDiscriminatorKey = 'DiceCitiesInvitation' | 'SnakesAndLaddersInvitation' | 'SettlementsAndCitiesInvitation' | 'SmartthinkInvitation';
+type GameDataDiscriminatorKey = 'DiceCitiesGameData' | 'SnakesAndLaddersGameData' | 'SettlementsAndCitiesGameData' | 'SmartthinkGameData' | 'RiskGameData';
+type InvitationDiscriminatorKey = 'DiceCitiesInvitation' | 'SnakesAndLaddersInvitation' | 'SettlementsAndCitiesInvitation' | 'SmartthinkInvitation' | 'RiskInvitation';
 
 declare global {
   var mongoose: any; // This must be a `var` and not a `let / const`
@@ -64,12 +65,14 @@ function initialiseDiscriminators() {
     SnakesAndLaddersGameData: SnakesAndLaddersGameDataModel,
     SettlementsAndCitiesGameData: SettlementsAndCitiesGameDataModel,
     SmartthinkGameData: SmartthinkGameDataModel,
+    RiskGameData: RiskGameDataModel,
   };
   const _invitations: Record<InvitationDiscriminatorKey, unknown> = {
     DiceCitiesInvitation: DiceCitiesInvitationModel,
     SnakesAndLaddersInvitation: SnakesAndLaddersInvitationModel,
     SettlementsAndCitiesInvitation: SettlementsAndCitiesInvitationModel,
     SmartthinkInvitation: SmartthinkInvitationModel,
+    RiskInvitation: RiskInvitationModel,
   };
   void _gameData, _invitations;
 }

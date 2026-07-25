@@ -1,0 +1,336 @@
+'use client'
+import { use } from "react";
+import { useUser } from "@clerk/nextjs";
+import { FcmTokenComp } from "@/components/FirebaseForeground";
+import { useRouter, usePathname } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { uuidString } from "@/utils/apiModels/GameDataApi";
+import { IGameCommand } from "@/utils/apiModels/GameLogic";
+import type { ICommandResponse } from "@/app/api/game/command/route";
+import type { IRiskGameDataResponse, IRiskSpecificGameStateResponse } from "@/games/Risk/apiModels";
+import { ADJACENCY, TERRITORIES, isAdjacent, connectedThroughOwnedTerritories } from "@/games/Risk/board";
+import RiskBoard from "@/games/Risk/components/RiskBoard";
+import RiskActions from "@/games/Risk/components/RiskActions";
+import GameShell from "@/components/ui/GameShell";
+import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
+import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
+import TurnNavControls from "@/components/games/TurnNavControls";
+import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
+import { useEndGame } from "@/utils/hooks/useEndGame";
+import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
+import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
+
+const PHASE_LABEL: Record<IRiskSpecificGameStateResponse['phase'], string> = {
+    setup: 'Setup',
+    reinforce: 'Reinforce',
+    attack: 'Attack',
+    fortify: 'Fortify',
+};
+
+export default function GameRisk({ params }: { params: Promise<{ gameid: uuidString }> }) {
+    const pathName = usePathname();
+    console.log(`GET ${pathName}`);
+    const { user, isLoaded } = useUser();
+    const [gameData, setGameData] = useState({} as IRiskGameDataResponse);
+    const [selFrom, setSelFrom] = useState<number | null>(null);
+    const [selTo, setSelTo] = useState<number | null>(null);
+    const [showLog, setShowLog] = useState(false);
+    const router = useRouter();
+
+    const { gameid } = use(params);
+    const gameId = gameid;
+
+    useEffect(() => {
+        if (isLoaded) {
+            if (!user) {
+                router.push('/login');
+            }
+            const unlocked = user?.publicMetadata.unlocked;
+            if (unlocked !== true) {
+                router.push('/unlockaccess');
+            }
+            getGameData();
+        }
+    }, [isLoaded]);
+
+    usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
+
+    const getGameData = async () => {
+        fetch(`/api/game/${gameId}`)
+            .then(r => {
+                if (!r.ok) throw new Error('Game not found');
+                return r.json();
+            })
+            .then(data => {
+                if (data) setGameData(data.gameData);
+            })
+            .catch(err => {
+                console.error(err);
+                router.push('/');
+            });
+    };
+
+    const submitCommand = async (command: IGameCommand, callback: (r: ICommandResponse) => void) => {
+        command.gameId = gameId;
+        if (!user) { console.error('Not logged in'); return; }
+        command.senderId = user.id;
+        command.senderUsername = user.username || user.firstName || user.id;
+        fetch('/api/game/command', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(command),
+        })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data?.gameData) return;
+                setGameData(data.gameData as IRiskGameDataResponse);
+                callback(data);
+            });
+    };
+
+    const live = {
+        specificGameState: gameData?.specificGameState,
+        currentTurn: gameData?.currentTurn ?? "",
+        complete: gameData?.complete ?? false,
+        winner: gameData?.winner ?? "",
+        history: gameData?.gameState?.history ?? [],
+    };
+    const nav = useTurnNavigation<IRiskSpecificGameStateResponse>(gameId, live);
+    const { endGame } = useEndGame(gameId);
+
+    const gs = nav.displayedState;
+    const complete = nav.displayedComplete;
+    const isMyTurn = nav.isLive && user?.id === gameData?.currentTurn && !complete;
+    const myUsername = user?.username || user?.firstName || user?.id || '';
+
+    const usernameList = gameData?.usernameList ?? [];
+    function usernameToColor(username: string | null): string {
+        if (!username) return '#888';
+        const idx = usernameList.indexOf(username);
+        return PLAYER_COLOURS[idx >= 0 ? idx % PLAYER_COLOURS.length : 0];
+    }
+
+    // Selecting territories is a live-only interaction; drop any in-progress
+    // selection whenever the phase changes (including server-driven ones like
+    // Reinforce auto-advancing to Attack) or when we leave the live view.
+    useEffect(() => {
+        setSelFrom(null);
+        setSelTo(null);
+    }, [gs?.phase, nav.isLive]);
+
+    const validTerritories = useMemo(() => {
+        const s = new Set<number>();
+        if (!gs || !isMyTurn) return s;
+        const territories = gs.territories;
+
+        const deploying = gs.phase === 'setup' || gs.phase === 'reinforce'
+            || (gs.phase === 'attack' && gs.reinforcementsRemaining > 0);
+        if (deploying) {
+            territories.forEach((t, id) => { if (t.owner === myUsername) s.add(id); });
+            return s;
+        }
+
+        if (gs.phase === 'attack' && !gs.pendingOccupation) {
+            if (selFrom === null) {
+                territories.forEach((t, id) => { if (t.owner === myUsername && t.armies >= 2) s.add(id); });
+            } else if (selTo === null) {
+                ADJACENCY[selFrom].forEach(id => {
+                    const t = territories[id];
+                    if (t.owner && t.owner !== myUsername) s.add(id);
+                });
+            }
+            return s;
+        }
+
+        if (gs.phase === 'fortify' && !gs.fortifyUsed) {
+            if (selFrom === null) {
+                territories.forEach((t, id) => { if (t.owner === myUsername && t.armies >= 2) s.add(id); });
+            } else if (selTo === null) {
+                territories.forEach((t, id) => {
+                    if (id !== selFrom && t.owner === myUsername
+                        && connectedThroughOwnedTerritories(selFrom, id, myUsername, territories)) {
+                        s.add(id);
+                    }
+                });
+            }
+        }
+        return s;
+    }, [gs, isMyTurn, selFrom, selTo, myUsername]);
+
+    function handleTerritoryClick(id: number) {
+        if (!gs || !isMyTurn) return;
+        const t = gs.territories[id];
+
+        const deploying = gs.phase === 'setup' || gs.phase === 'reinforce'
+            || (gs.phase === 'attack' && gs.reinforcementsRemaining > 0);
+        if (deploying) {
+            if (t.owner === myUsername) setSelFrom(id);
+            return;
+        }
+
+        if (gs.phase === 'attack') {
+            if (gs.pendingOccupation) return;
+            if (selFrom === null) {
+                if (t.owner === myUsername && t.armies >= 2) setSelFrom(id);
+            } else if (selTo === null) {
+                if (t.owner !== myUsername && isAdjacent(selFrom, id)) setSelTo(id);
+            } else if (t.owner === myUsername && t.armies >= 2) {
+                setSelFrom(id);
+                setSelTo(null);
+            }
+            return;
+        }
+
+        if (gs.phase === 'fortify') {
+            if (gs.fortifyUsed) return;
+            if (selFrom === null) {
+                if (t.owner === myUsername && t.armies >= 2) setSelFrom(id);
+            } else if (selTo === null) {
+                if (t.owner === myUsername && id !== selFrom
+                    && connectedThroughOwnedTerritories(selFrom, id, myUsername, gs.territories)) {
+                    setSelTo(id);
+                }
+            } else if (t.owner === myUsername && t.armies >= 2) {
+                setSelFrom(id);
+                setSelTo(null);
+            }
+        }
+    }
+
+    const displayedWinner = nav.displayedWinner;
+    const displayedCurrentTurn = nav.displayedCurrentTurn;
+
+    const getWinnerDisplayName = (): string => {
+        const playerStates = gs?.playerStates;
+        if (!playerStates) return displayedWinner ?? '';
+        return Object.values(playerStates).find(p => p.userId === displayedWinner)?.username ?? displayedWinner ?? '';
+    };
+
+    const currentTurnUsername = gs
+        ? Object.values(gs.playerStates).find(p => p.userId === displayedCurrentTurn)?.username ?? displayedCurrentTurn ?? ''
+        : displayedCurrentTurn ?? '';
+
+    const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
+
+    // ── Top-bar status line ──────────────────────────────────────────────────
+    let subtitle: React.ReactNode = 'Loading…';
+    if (gs) {
+        if (complete) {
+            subtitle = currentUserWon ? '🏆 You won!' : `${getWinnerDisplayName()} won`;
+        } else {
+            const phaseLabel = PHASE_LABEL[gs.phase];
+            subtitle = isMyTurn
+                ? <><span className="ag-hi">Your move</span> · {phaseLabel} phase</>
+                : <>{currentTurnUsername}&apos;s move · {phaseLabel}</>;
+        }
+    }
+
+    // ── Scoreboard ────────────────────────────────────────────────────────────
+    const scoreEntries: ScoreEntry[] = gs
+        ? usernameList.flatMap((username, i): ScoreEntry[] => {
+            const ps = gs.playerStates?.[username];
+            if (!ps) return [];
+            const isMe = username === myUsername;
+            const isActive = username === currentTurnUsername && !complete;
+            let sub: React.ReactNode;
+            if (ps.eliminated) sub = '💀 out';
+            else if (isActive) sub = `▶ now · ${PHASE_LABEL[gs.phase]}`;
+            else sub = `🃏 ${ps.cards.length}`;
+            return [{
+                id: username,
+                name: isMe ? 'You' : username,
+                color: PLAYER_COLOURS[i % PLAYER_COLOURS.length],
+                sub,
+                score: ps.territoryCount,
+                isMe,
+                isActive,
+            }];
+        })
+        : [];
+
+    const menuOptions: GameOption[] = [
+        {
+            key: 'history',
+            label: 'Turn history',
+            icon: '📜',
+            active: showLog,
+            onClick: () => setShowLog(v => !v),
+        },
+        ...(!complete ? [{
+            key: 'end',
+            label: 'End game',
+            icon: '🏳️',
+            danger: true,
+            onClick: endGame,
+        }] : []),
+    ];
+    const optionsMenu = gs ? <GameOptionsMenu options={menuOptions} /> : undefined;
+
+    let placementPrompt: string | null = null;
+    if (gs && isMyTurn && !complete) {
+        if (gs.phase === 'setup' || gs.phase === 'reinforce' || (gs.phase === 'attack' && gs.reinforcementsRemaining > 0)) {
+            placementPrompt = `◆ ${gs.reinforcementsRemaining} to place`;
+        } else if (gs.phase === 'attack' && !gs.pendingOccupation && selFrom === null) {
+            placementPrompt = '⚔ tap a territory to attack from';
+        } else if (gs.phase === 'fortify' && !gs.fortifyUsed && selFrom === null) {
+            placementPrompt = '🚩 tap a territory to fortify from';
+        }
+    }
+
+    return (
+        <GameShell title="Risk · World Domination" subtitle={subtitle} right={optionsMenu}>
+            <FcmTokenComp />
+
+            {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
+
+            {complete && (
+                <div className="ag-game-result">
+                    <h2>{currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} achieved world domination.`}</h2>
+                </div>
+            )}
+
+            {gs && (
+                <>
+                    <div className="ag-board-area">
+                        <RiskBoard
+                            territories={gs.territories}
+                            usernameToColor={usernameToColor}
+                            onTerritoryClick={isMyTurn && !complete ? handleTerritoryClick : undefined}
+                            validTerritories={validTerritories}
+                            selectedTerritoryId={selFrom}
+                            frontLine={gs.lastBattle ? { fromTerritoryId: gs.lastBattle.fromTerritoryId, toTerritoryId: gs.lastBattle.toTerritoryId } : null}
+                            placementPrompt={placementPrompt}
+                        />
+                    </div>
+
+                    {isMyTurn && !complete && (
+                        <RiskActions
+                            gs={gs}
+                            myUsername={myUsername}
+                            selFrom={selFrom}
+                            selTo={selTo}
+                            setSelFrom={setSelFrom}
+                            setSelTo={setSelTo}
+                            submitCommand={submitCommand}
+                        />
+                    )}
+
+                    <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} />
+
+                    {showLog && (
+                        <div className="ag-log">
+                            <ul className="ag-log-list">
+                                {nav.displayedHistory.slice().reverse().map((h, i) => (
+                                    <li key={i} className="ag-log-item">{h}</li>
+                                ))}
+                                {nav.displayedHistory.length === 0 && (
+                                    <li className="ag-log-item">No moves yet.</li>
+                                )}
+                            </ul>
+                        </div>
+                    )}
+                </>
+            )}
+        </GameShell>
+    );
+}

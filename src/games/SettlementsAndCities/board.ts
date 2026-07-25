@@ -1,4 +1,5 @@
 import type { SACExpansions } from './expansions';
+import { shuffle as shuffleArray } from '@/utils/games/shuffle';
 
 // ─── Resource / Terrain / Card types ──────────────────────────────────────────
 
@@ -271,17 +272,6 @@ export const DEV_CARD_DECK: SAC_DevCard[] = [
     ...Array<SAC_DevCard>(2).fill('yearOfPlenty'),
     ...Array<SAC_DevCard>(2).fill('monopoly'),
 ];
-
-// ─── Helper utilities ─────────────────────────────────────────────────────────
-
-function shuffleArray<T>(arr: T[]): T[] {
-    const a = [...arr];
-    for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-}
 
 export const TERRAIN_TO_RESOURCE: Partial<Record<SAC_Terrain, SAC_Resource>> = {
     forest:    'lumber',
