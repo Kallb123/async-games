@@ -1,37 +1,37 @@
 import { GameDataModel, IGameData, IGameDataDocument } from "@/utils/mongodb/GameData";
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
-import { IRiskGameDataResponse, IRiskSpecificGameStateResponse } from "./apiModels";
+import { IWorldDominationGameDataResponse, IWorldDominationSpecificGameStateResponse } from "./apiModels";
 import { uuidString, GameResultStatGroup } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
 import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
-import { RiskGameType } from "@/utils/apiModels/GameLogic";
+import { WorldDominationGameType } from "@/utils/apiModels/GameLogic";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { shuffle } from "@/utils/games/shuffle";
 import {
     TERRITORIES,
     TERRITORY_COUNT,
-    buildRiskCardDeck,
+    buildWorldDominationCardDeck,
     startingArmiesForPlayerCount,
-    IRiskTerritory,
-    IRiskCard,
-    RiskPhase,
+    IWorldDominationTerritory,
+    IWorldDominationCard,
+    WorldDominationPhase,
 } from "./board";
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  RISK
+//  WORLD DOMINATION
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ─── Invitation ─────────────────────────────────────────────────────────────
 
-export interface RiskInvitationRequest extends IInvitationRequest {}
+export interface WorldDominationInvitationRequest extends IInvitationRequest {}
 
-export interface IRiskInvitationData extends IInvitationData {}
+export interface IWorldDominationInvitationData extends IInvitationData {}
 
-export interface IRiskInvitationDataDocument extends IRiskInvitationData, IInvitationDataDocument {}
+export interface IWorldDominationInvitationDataDocument extends IWorldDominationInvitationData, IInvitationDataDocument {}
 
-export interface IRiskInvitationDataModel extends Model<IRiskInvitationDataDocument> {}
+export interface IWorldDominationInvitationDataModel extends Model<IWorldDominationInvitationDataDocument> {}
 
 function SortUsersByRoll(
     userIdList: string[],
@@ -62,21 +62,21 @@ function SortUsersByRoll(
 
 // ─── Player / combat / specific state ──────────────────────────────────────
 
-export interface IRiskPlayerState {
-    cards: IRiskCard[];
+export interface IWorldDominationPlayerState {
+    cards: IWorldDominationCard[];
     eliminated: boolean;
     // Whether the active player has conquered >=1 enemy territory this turn —
-    // drives the end-of-turn card draw (docs/games/risk.md §4.4).
+    // drives the end-of-turn card draw (docs/games/worlddomination.md §4.4).
     conqueredTerritoryThisTurn: boolean;
 }
 
-export interface IRiskPendingOccupation {
+export interface IWorldDominationPendingOccupation {
     fromTerritoryId: number;
     toTerritoryId: number;
     minArmies: number;
 }
 
-export interface IRiskLastBattle {
+export interface IWorldDominationLastBattle {
     attackerId: string;
     fromTerritoryId: number;
     toTerritoryId: number;
@@ -88,27 +88,27 @@ export interface IRiskLastBattle {
     defenderEliminated: string | null; // userId of an eliminated defender, if any
 }
 
-export interface IRiskSpecificGameState {
-    territories: IRiskTerritory[]; // length TERRITORY_COUNT, indexed by territory id
-    playerStates: Map<string, IRiskPlayerState>;
-    phase: RiskPhase;
+export interface IWorldDominationSpecificGameState {
+    territories: IWorldDominationTerritory[]; // length TERRITORY_COUNT, indexed by territory id
+    playerStates: Map<string, IWorldDominationPlayerState>;
+    phase: WorldDominationPhase;
     // Armies the current player still has to place this turn (setup allotment
     // during 'setup', or the computed reinforcement during 'reinforce').
     reinforcementsRemaining: number;
-    // Set the moment a territory is conquered; must be resolved (RiskOccupyTerritory)
+    // Set the moment a territory is conquered; must be resolved (WorldDominationOccupyTerritory)
     // before any other attack/fortify command is accepted (docs §4.2 "Occupation").
-    pendingOccupation: IRiskPendingOccupation | null;
+    pendingOccupation: IWorldDominationPendingOccupation | null;
     fortifyUsed: boolean;
     cardSetsCashedIn: number;
-    cardDeck: IRiskCard[];
-    lastBattle: IRiskLastBattle | null;
+    cardDeck: IWorldDominationCard[];
+    lastBattle: IWorldDominationLastBattle | null;
 }
 
-function cloneCard(c: IRiskCard): IRiskCard {
+function cloneCard(c: IWorldDominationCard): IWorldDominationCard {
     return { id: c.id, type: c.type, territoryId: c.territoryId };
 }
 
-function clonePlayerState(ps: IRiskPlayerState): IRiskPlayerState {
+function clonePlayerState(ps: IWorldDominationPlayerState): IWorldDominationPlayerState {
     return {
         cards: ps.cards.map(cloneCard),
         eliminated: ps.eliminated,
@@ -116,28 +116,28 @@ function clonePlayerState(ps: IRiskPlayerState): IRiskPlayerState {
     };
 }
 
-// Deep-clones a Risk game state into independent plain objects, rebuilding
+// Deep-clones a World Domination game state into independent plain objects, rebuilding
 // playerStates as a fresh Map in `userIdList` order — mirrors SAC's
 // cloneSACState (see SettlementsAndCitiesModels.ts) for the same reason: the
 // board (here, the shuffled territory deal + card deck) is randomised at
 // creation and can't be reconstructed later, so turn recap replays from a
 // persisted snapshot instead.
-export function cloneRiskState(
-    gs: IRiskSpecificGameState,
+export function cloneWorldDominationState(
+    gs: IWorldDominationSpecificGameState,
     userIdList: string[],
-): IRiskSpecificGameState {
-    const source: Map<string, IRiskPlayerState> = gs.playerStates instanceof Map
+): IWorldDominationSpecificGameState {
+    const source: Map<string, IWorldDominationPlayerState> = gs.playerStates instanceof Map
         ? gs.playerStates
-        : new Map(Object.entries(gs.playerStates as unknown as Record<string, IRiskPlayerState>));
+        : new Map(Object.entries(gs.playerStates as unknown as Record<string, IWorldDominationPlayerState>));
 
-    const playerStates = new Map<string, IRiskPlayerState>();
+    const playerStates = new Map<string, IWorldDominationPlayerState>();
     for (const userId of userIdList) {
         const ps = source.get(userId);
         if (ps) playerStates.set(userId, clonePlayerState(ps));
     }
 
     return {
-        territories: gs.territories.map((t): IRiskTerritory => ({ owner: t.owner, armies: t.armies })),
+        territories: gs.territories.map((t): IWorldDominationTerritory => ({ owner: t.owner, armies: t.armies })),
         playerStates,
         phase: gs.phase,
         reinforcementsRemaining: gs.reinforcementsRemaining,
@@ -149,18 +149,18 @@ export function cloneRiskState(
     };
 }
 
-export function buildInitialRiskState(gameData: IRiskGameData): IRiskSpecificGameState {
-    return cloneRiskState(gameData.initialSpecificGameState, gameData.userIdList);
+export function buildInitialWorldDominationState(gameData: IWorldDominationGameData): IWorldDominationSpecificGameState {
+    return cloneWorldDominationState(gameData.initialSpecificGameState, gameData.userIdList);
 }
 
-var RiskInvitationSchema = new Schema<IRiskInvitationDataDocument>({}, { discriminatorKey: 'kind' });
-RiskInvitationSchema.methods.CreateGame = async function(
-    invite: IRiskInvitationData,
+var WorldDominationInvitationSchema = new Schema<IWorldDominationInvitationDataDocument>({}, { discriminatorKey: 'kind' });
+WorldDominationInvitationSchema.methods.CreateGame = async function(
+    invite: IWorldDominationInvitationData,
     userIdList: string[],
 ) {
-    console.log('CreateGame: Risk game');
+    console.log('CreateGame: World Domination game');
 
-    const gameType = new RiskGameType();
+    const gameType = new WorldDominationGameType();
 
     const turnOrder: string[] = [];
     const history: string[] = [];
@@ -171,14 +171,14 @@ RiskInvitationSchema.methods.CreateGame = async function(
     // draft-order placement of Option A doesn't translate well to async turns,
     // so the territory claim is automated the same way SAC's board layout is).
     const shuffledIds = shuffle(TERRITORIES.map(t => t.id));
-    const territories: IRiskTerritory[] = Array.from({ length: TERRITORY_COUNT }, () => ({ owner: null, armies: 0 }));
+    const territories: IWorldDominationTerritory[] = Array.from({ length: TERRITORY_COUNT }, () => ({ owner: null, armies: 0 }));
     shuffledIds.forEach((territoryId, i) => {
         const owner = turnOrder[i % turnOrder.length];
         territories[territoryId] = { owner, armies: 1 };
     });
 
     const startingPool = startingArmiesForPlayerCount(turnOrder.length);
-    const playerStates = new Map<string, IRiskPlayerState>();
+    const playerStates = new Map<string, IWorldDominationPlayerState>();
     for (const userId of turnOrder) {
         playerStates.set(userId, { cards: [], eliminated: false, conqueredTerritoryThisTurn: false });
     }
@@ -188,7 +188,7 @@ RiskInvitationSchema.methods.CreateGame = async function(
     const firstPlayer = turnOrder[0];
     const firstOwned = territories.filter(t => t.owner === firstPlayer).length;
 
-    const specificGameState: IRiskSpecificGameState = {
+    const specificGameState: IWorldDominationSpecificGameState = {
         territories,
         playerStates,
         phase: 'setup',
@@ -196,11 +196,11 @@ RiskInvitationSchema.methods.CreateGame = async function(
         pendingOccupation: null,
         fortifyUsed: false,
         cardSetsCashedIn: 0,
-        cardDeck: shuffle(buildRiskCardDeck()),
+        cardDeck: shuffle(buildWorldDominationCardDeck()),
         lastBattle: null,
     };
 
-    const gameData: IRiskGameData = {
+    const gameData: IWorldDominationGameData = {
         gameId: uuidv4() as uuidString,
         gameType,
         userIdList,
@@ -216,30 +216,30 @@ RiskInvitationSchema.methods.CreateGame = async function(
         complete: false,
         winner: '',
         specificGameState,
-        initialSpecificGameState: cloneRiskState(specificGameState, turnOrder),
+        initialSpecificGameState: cloneWorldDominationState(specificGameState, turnOrder),
     };
     return gameData;
 };
-export var RiskInvitationModel =
-    models.RiskInvitation ||
-    InvitationModel.discriminator<IRiskInvitationDataDocument, IRiskInvitationDataModel>('RiskInvitation', RiskInvitationSchema);
+export var WorldDominationInvitationModel =
+    models.WorldDominationInvitation ||
+    InvitationModel.discriminator<IWorldDominationInvitationDataDocument, IWorldDominationInvitationDataModel>('WorldDominationInvitation', WorldDominationInvitationSchema);
 
 // ─── Game data interfaces ───────────────────────────────────────────────────
 
-export interface IRiskGameData extends IGameData {
-    specificGameState: IRiskSpecificGameState;
+export interface IWorldDominationGameData extends IGameData {
+    specificGameState: IWorldDominationSpecificGameState;
     // Immutable copy of the starting (post-deal) state, persisted at creation so
-    // turn recap can replay from it — see cloneRiskState above.
-    initialSpecificGameState: IRiskSpecificGameState;
+    // turn recap can replay from it — see cloneWorldDominationState above.
+    initialSpecificGameState: IWorldDominationSpecificGameState;
 }
 
-export interface IRiskGameDataDocument extends IRiskGameData, IGameDataDocument {}
+export interface IWorldDominationGameDataDocument extends IWorldDominationGameData, IGameDataDocument {}
 
-export interface IRiskGameDataModel extends Model<IRiskGameDataDocument> {}
+export interface IWorldDominationGameDataModel extends Model<IWorldDominationGameDataDocument> {}
 
 // ─── Mongoose schema ─────────────────────────────────────────────────────────
 
-function makeRiskStateSchemaDef() {
+function makeWorldDominationStateSchemaDef() {
     return {
         territories: [{ owner: { type: String, default: null }, armies: Number }],
         playerStates: {
@@ -260,18 +260,18 @@ function makeRiskStateSchemaDef() {
     };
 }
 
-var RiskGameDataSchema = new Schema<IRiskGameDataDocument>(
+var WorldDominationGameDataSchema = new Schema<IWorldDominationGameDataDocument>(
     {
-        specificGameState: makeRiskStateSchemaDef(),
-        initialSpecificGameState: makeRiskStateSchemaDef(),
+        specificGameState: makeWorldDominationStateSchemaDef(),
+        initialSpecificGameState: makeWorldDominationStateSchemaDef(),
     },
     { discriminatorKey: 'kind' },
 );
 
-RiskGameDataSchema.methods.CreateDataResponse = async function(): Promise<IRiskGameDataResponse> {
-    console.log('CreateDataResponse: Risk game');
+WorldDominationGameDataSchema.methods.CreateDataResponse = async function(): Promise<IWorldDominationGameDataResponse> {
+    console.log('CreateDataResponse: World Domination game');
 
-    const doc: IRiskGameData = this as IRiskGameData;
+    const doc: IWorldDominationGameData = this as IWorldDominationGameData;
     const usernameList = await userIdListToUsernameList(doc.userIdList);
     const userIdNameMap: { [key: string]: string } = {};
     (doc.userIdList as string[]).forEach((userId, i) => {
@@ -305,13 +305,13 @@ function replaceHistoryUserIds(history: string[], userIdNameMap: { [key: string]
 }
 
 export function gameStateToResponse(
-    gs: IRiskSpecificGameState,
+    gs: IWorldDominationSpecificGameState,
     userIdNameMap: { [key: string]: string },
-): IRiskSpecificGameStateResponse {
-    const playerStates: IRiskSpecificGameStateResponse['playerStates'] = {};
+): IWorldDominationSpecificGameStateResponse {
+    const playerStates: IWorldDominationSpecificGameStateResponse['playerStates'] = {};
     const playerStatesSource = gs.playerStates instanceof Map
         ? gs.playerStates
-        : new Map(Object.entries(gs.playerStates as unknown as Record<string, IRiskPlayerState>));
+        : new Map(Object.entries(gs.playerStates as unknown as Record<string, IWorldDominationPlayerState>));
 
     for (const [userId, ps] of playerStatesSource) {
         const username = userIdNameMap[userId];
@@ -356,9 +356,9 @@ export function gameStateToResponse(
     };
 }
 
-export var RiskGameDataModel =
-    models.RiskGameData ||
-    GameDataModel.discriminator<IRiskGameDataDocument, IRiskGameDataModel>('RiskGameData', RiskGameDataSchema);
+export var WorldDominationGameDataModel =
+    models.WorldDominationGameData ||
+    GameDataModel.discriminator<IWorldDominationGameDataDocument, IWorldDominationGameDataModel>('WorldDominationGameData', WorldDominationGameDataSchema);
 
 // ─── GameResult stats ────────────────────────────────────────────────────────
 // Boiled-down per-player stats for the GameResult read model (see
@@ -366,17 +366,17 @@ export var RiskGameDataModel =
 // computeSettlementsAndCitiesResultStats: territories/cards are read straight
 // off the final state (physical, so nothing is lost by computing them once at
 // the end).
-export interface IRiskPlayerResultStats {
+export interface IWorldDominationPlayerResultStats {
     territories: number;
     cardsHeld: number;
     eliminated: boolean;
 }
 
-export interface IRiskGameResultStats {
-    playerStats: Map<string, IRiskPlayerResultStats>;
+export interface IWorldDominationGameResultStats {
+    playerStats: Map<string, IWorldDominationPlayerResultStats>;
 }
 
-export const riskGameResultStatsSchemaDef = {
+export const worldDominationGameResultStatsSchemaDef = {
     playerStats: {
         type: Schema.Types.Map,
         of: {
@@ -387,9 +387,9 @@ export const riskGameResultStatsSchemaDef = {
     },
 };
 
-export function computeRiskResultStats(gameData: IRiskGameData): IRiskGameResultStats {
+export function computeWorldDominationResultStats(gameData: IWorldDominationGameData): IWorldDominationGameResultStats {
     const gs = gameData.specificGameState;
-    const playerStats = new Map<string, IRiskPlayerResultStats>();
+    const playerStats = new Map<string, IWorldDominationPlayerResultStats>();
     for (const [userId, ps] of gs.playerStates) {
         playerStats.set(userId, {
             territories: gs.territories.filter(t => t.owner === userId).length,
@@ -400,14 +400,14 @@ export function computeRiskResultStats(gameData: IRiskGameData): IRiskGameResult
     return { playerStats };
 }
 
-export function formatRiskResultStats(stats: IRiskGameResultStats, usernameById: Map<string, string>): GameResultStatGroup[] {
+export function formatWorldDominationResultStats(stats: IWorldDominationGameResultStats, usernameById: Map<string, string>): GameResultStatGroup[] {
     const groups: GameResultStatGroup[] = [];
     for (const [userId, s] of stats.playerStats) {
         groups.push({
             username: usernameById.get(userId) ?? userId,
             lines: [
                 s.eliminated ? 'Eliminated' : `${pluralize(s.territories, 'territory', 'territories')}`,
-                `Holding ${pluralize(s.cardsHeld, 'Risk card')}`,
+                `Holding ${pluralize(s.cardsHeld, 'World Domination card')}`,
             ],
         });
     }

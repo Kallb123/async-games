@@ -1,6 +1,6 @@
 // Fisher-Yates shuffle. Shared by every game that randomises a deck or a
 // starting layout (Settlements & Cities' terrain/number/harbour pools and dev
-// card deck, Risk's territory deal and Risk card deck) — reuse this rather
+// card deck, World Domination's territory deal and World Domination card deck) — reuse this rather
 // than re-declaring the same loop per game.
 export function shuffle<T>(arr: T[]): T[] {
     const a = [...arr];

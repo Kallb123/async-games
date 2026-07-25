@@ -7,7 +7,7 @@ import { DiceCitiesGameDataModel } from '@/games/DiceCities/DiceCitiesModels';
 import { SnakesAndLaddersGameDataModel } from '@/games/SnakesAndLadders/SnakesAndLaddersModels';
 import { SettlementsAndCitiesGameDataModel } from '@/games/SettlementsAndCities/SettlementsAndCitiesModels';
 import { SmartthinkGameDataModel } from '@/games/Smartthink/SmartthinkModels';
-import { RiskGameDataModel } from '@/games/Risk/RiskModels';
+import { WorldDominationGameDataModel } from '@/games/WorldDomination/WorldDominationModels';
 import { uuidString } from '@/utils/apiModels/GameDataApi';
 import { IGameDataDocument } from '@/utils/mongodb/GameData';
 
@@ -67,8 +67,8 @@ export async function POST(request: NextRequest) {
     gameDataM = new DiceCitiesGameDataModel(gameData);
   } else if (inviteData.gameType === 'Smartthink') {
     gameDataM = new SmartthinkGameDataModel(gameData);
-  } else if (inviteData.gameType === 'Risk') {
-    gameDataM = new RiskGameDataModel(gameData);
+  } else if (inviteData.gameType === 'WorldDomination') {
+    gameDataM = new WorldDominationGameDataModel(gameData);
   } else {
     throw new Error(`Unsupported game type: ${inviteData.gameType}`);
   }

@@ -1,23 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { RiskGameDataModel } from "./RiskModels";
-import { TERRITORY_COUNT, buildRiskCardDeck } from "./board";
+import { WorldDominationGameDataModel } from "./WorldDominationModels";
+import { TERRITORY_COUNT, buildWorldDominationCardDeck } from "./board";
 
 // Regression test for a classic Mongoose footgun: a schema field literally
-// named `type` (Risk cards have a `type: RiskCardType` field) collides with
+// named `type` (World Domination cards have a `type: WorldDominationCardType` field) collides with
 // Mongoose's own `{ type: <SchemaType> }` convention. Without the
-// `type: { type: String }` nesting workaround (see RiskModels.ts's
-// makeRiskStateSchemaDef), Mongoose silently reinterprets `cardDeck`/`cards`'s
+// `type: { type: String }` nesting workaround (see WorldDominationModels.ts's
+// makeWorldDominationStateSchemaDef), Mongoose silently reinterprets `cardDeck`/`cards`'s
 // element definition as "this array holds plain Strings", discarding `id`
 // and `territoryId` and throwing a CastError the moment real card objects are
 // assigned — exactly the bug this guards against.
-describe("Risk Mongoose schema", () => {
+describe("World Domination Mongoose schema", () => {
     it("keeps card objects (id/type/territoryId) intact through schema casting", () => {
-        const cardDeck = buildRiskCardDeck();
+        const cardDeck = buildWorldDominationCardDeck();
         const territories = Array.from({ length: TERRITORY_COUNT }, () => ({ owner: "u1", armies: 1 }));
 
-        const doc = new RiskGameDataModel({
+        const doc = new WorldDominationGameDataModel({
             gameId: "11111111-1111-1111-1111-111111111111",
-            gameType: { gameId: "g", gameType: "Risk", friendlyName: "Risk", icon: "", url: "risk", className: "RiskGameType" },
+            gameType: { gameId: "g", gameType: "WorldDomination", friendlyName: "World Domination", icon: "", url: "worlddomination", className: "WorldDominationGameType" },
             userIdList: ["u1", "u2"],
             turnTimer: "1d",
             currentTurn: "u1",

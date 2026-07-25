@@ -1,21 +1,21 @@
-// Static board data + pure helpers for Risk: the 42-territory / 6-continent
+// Static board data + pure helpers for World Domination: the 42-territory / 6-continent
 // world map, its adjacency graph, and the rules maths (reinforcement counts,
-// card-set values, connectivity) from docs/games/risk.md.
+// card-set values, connectivity) from docs/games/worlddomination.md.
 
-export type RiskPhase = 'setup' | 'reinforce' | 'attack' | 'fortify';
+export type WorldDominationPhase = 'setup' | 'reinforce' | 'attack' | 'fortify';
 
-export type RiskContinentId =
+export type WorldDominationContinentId =
     | 'northAmerica' | 'southAmerica' | 'europe' | 'africa' | 'asia' | 'australia';
 
-export interface RiskContinent {
-    id: RiskContinentId;
+export interface WorldDominationContinent {
+    id: WorldDominationContinentId;
     name: string;
     bonus: number;
     /** Accent for the continent's label text on the board SVG. */
     color: string;
 }
 
-export const CONTINENTS: Record<RiskContinentId, RiskContinent> = {
+export const CONTINENTS: Record<WorldDominationContinentId, WorldDominationContinent> = {
     northAmerica: { id: 'northAmerica', name: 'North America', bonus: 5, color: '#fdcd0d' },
     southAmerica: { id: 'southAmerica', name: 'South America', bonus: 2, color: '#fd7816' },
     europe: { id: 'europe', name: 'Europe', bonus: 5, color: '#0c97e2' },
@@ -24,27 +24,27 @@ export const CONTINENTS: Record<RiskContinentId, RiskContinent> = {
     australia: { id: 'australia', name: 'Australia', bonus: 2, color: '#a961b7' },
 };
 
-export const CONTINENT_ORDER: RiskContinentId[] = [
+export const CONTINENT_ORDER: WorldDominationContinentId[] = [
     'northAmerica', 'southAmerica', 'europe', 'africa', 'asia', 'australia',
 ];
 
-export interface RiskTerritoryDef {
+export interface WorldDominationTerritoryDef {
     id: number;
     name: string;
-    continentId: RiskContinentId;
+    continentId: WorldDominationContinentId;
     /** Schematic (not geographic) board position for the SVG map, 0-800 x 0-480. */
     x: number;
     y: number;
 }
 
-// Territory list — order and numbering follow docs/games/risk.md §8 exactly
+// Territory list — order and numbering follow docs/games/worlddomination.md §8 exactly
 // (0-indexed here vs. the doc's 1-indexed list).
 // x/y are calibrated to line up with the printed territory labels in
 // public/art/world-domination/world-domination-map.png once it's placed
 // behind the board at BOARD_VIEWBOX size (see RiskBoard's "slice" image fit).
 // Ukraine has no matching region in that art, so it's parked on the
 // Northern Europe / Ural border it connects to.
-const TERRITORY_DEFS: Omit<RiskTerritoryDef, 'id'>[] = [
+const TERRITORY_DEFS: Omit<WorldDominationTerritoryDef, 'id'>[] = [
     // North America (0-8)
     { name: 'Alaska', continentId: 'northAmerica', x: 56, y: 38 },
     { name: 'Northwest Territory', continentId: 'northAmerica', x: 136, y: 32 },
@@ -95,14 +95,14 @@ const TERRITORY_DEFS: Omit<RiskTerritoryDef, 'id'>[] = [
     { name: 'Eastern Australia', continentId: 'australia', x: 732, y: 430 },
 ];
 
-export const TERRITORIES: RiskTerritoryDef[] = TERRITORY_DEFS.map((t, id) => ({ ...t, id }));
+export const TERRITORIES: WorldDominationTerritoryDef[] = TERRITORY_DEFS.map((t, id) => ({ ...t, id }));
 
 export const TERRITORY_COUNT = TERRITORIES.length; // 42
 
 const NAME_TO_ID: Record<string, number> = {};
 TERRITORIES.forEach(t => { NAME_TO_ID[t.name] = t.id; });
 
-// One-directional adjacency as transcribed from docs/games/risk.md §8. Built
+// One-directional adjacency as transcribed from docs/games/worlddomination.md §8. Built
 // into a symmetric graph below (a name pair only needs to appear once).
 const RAW_ADJACENCY: Record<string, string[]> = {
     'Alaska': ['Northwest Territory', 'Alberta', 'Kamchatka'],
@@ -169,7 +169,7 @@ export function isAdjacent(a: number, b: number): boolean {
     return ADJACENCY[a]?.includes(b) ?? false;
 }
 
-export function territoryIdsForContinent(continentId: RiskContinentId): number[] {
+export function territoryIdsForContinent(continentId: WorldDominationContinentId): number[] {
     return TERRITORIES.filter(t => t.continentId === continentId).map(t => t.id);
 }
 
@@ -177,7 +177,7 @@ export function territoryIdsForContinent(continentId: RiskContinentId): number[]
 // from the schematic x/y positions above rather than hand-maintained
 // separately.
 const CONTINENT_PADDING = 34;
-export function continentLabelAnchor(continentId: RiskContinentId): { x: number; y: number } {
+export function continentLabelAnchor(continentId: WorldDominationContinentId): { x: number; y: number } {
     const territories = TERRITORIES.filter(t => t.continentId === continentId);
     const xs = territories.map(t => t.x);
     const ys = territories.map(t => t.y);
@@ -188,12 +188,12 @@ export const BOARD_VIEWBOX = { width: 800, height: 460 };
 
 // ─── Territories & armies ──────────────────────────────────────────────────
 
-export interface IRiskTerritory {
+export interface IWorldDominationTerritory {
     owner: string | null; // Clerk userId, or null before setup deals it out
     armies: number;
 }
 
-// ─── Starting army pool (docs/games/risk.md §3.1). ─────────────────────────
+// ─── Starting army pool (docs/games/worlddomination.md §3.1). ─────────────────────────
 // The 2-player "neutral army" variant is out of scope — 2-player games use the
 // same 40-army pool without a neutral third hand.
 export const STARTING_ARMIES: Record<number, number> = {
@@ -204,13 +204,13 @@ export function startingArmiesForPlayerCount(n: number): number {
     return STARTING_ARMIES[n] ?? STARTING_ARMIES[6];
 }
 
-// ─── Reinforcement calculation (docs/games/risk.md §4.1). ──────────────────
+// ─── Reinforcement calculation (docs/games/worlddomination.md §4.1). ──────────────────
 
 export function baseReinforcement(territoryCount: number): number {
     return Math.max(3, Math.floor(territoryCount / 3));
 }
 
-export function continentBonusFor(userId: string, territories: IRiskTerritory[]): number {
+export function continentBonusFor(userId: string, territories: IWorldDominationTerritory[]): number {
     let bonus = 0;
     for (const continentId of CONTINENT_ORDER) {
         const ids = territoryIdsForContinent(continentId);
@@ -221,28 +221,28 @@ export function continentBonusFor(userId: string, territories: IRiskTerritory[])
     return bonus;
 }
 
-export function computeReinforcement(userId: string, territories: IRiskTerritory[]): number {
+export function computeReinforcement(userId: string, territories: IWorldDominationTerritory[]): number {
     const owned = territories.filter(t => t.owner === userId).length;
     return baseReinforcement(owned) + continentBonusFor(userId, territories);
 }
 
-// ─── Risk cards (docs/games/risk.md §2.4, §4.1). ───────────────────────────
+// ─── World Domination cards (docs/games/worlddomination.md §2.4, §4.1). ───────────────────────────
 
-export type RiskCardType = 'infantry' | 'cavalry' | 'artillery' | 'wild';
+export type WorldDominationCardType = 'infantry' | 'cavalry' | 'artillery' | 'wild';
 
-export interface IRiskCard {
+export interface IWorldDominationCard {
     id: string;
-    type: RiskCardType;
+    type: WorldDominationCardType;
     territoryId: number | null; // null for the 2 wild cards
 }
 
 // Each of the 42 territory cards carries one of the three unit insignia,
 // cycled evenly (14 of each) — real decks assign these arbitrarily; a fixed
 // cycle keeps this deterministic and testable.
-const UNIT_CYCLE: RiskCardType[] = ['infantry', 'cavalry', 'artillery'];
+const UNIT_CYCLE: WorldDominationCardType[] = ['infantry', 'cavalry', 'artillery'];
 
-export function buildRiskCardDeck(): IRiskCard[] {
-    const deck: IRiskCard[] = TERRITORIES.map((t, i) => ({
+export function buildWorldDominationCardDeck(): IWorldDominationCard[] {
+    const deck: IWorldDominationCard[] = TERRITORIES.map((t, i) => ({
         id: `card-${t.id}`,
         type: UNIT_CYCLE[i % 3],
         territoryId: t.id,
@@ -253,8 +253,8 @@ export function buildRiskCardDeck(): IRiskCard[] {
 }
 
 // A set is 3 cards of the same type, one of each type, or any 2 unit cards (or
-// 1) plus wild card(s) — docs/games/risk.md §4.1.
-export function isValidCardSet(cards: { type: RiskCardType }[]): boolean {
+// 1) plus wild card(s) — docs/games/worlddomination.md §4.1.
+export function isValidCardSet(cards: { type: WorldDominationCardType }[]): boolean {
     if (cards.length !== 3) return false;
     const wildCount = cards.filter(c => c.type === 'wild').length;
     if (wildCount >= 1) return true;
@@ -264,7 +264,7 @@ export function isValidCardSet(cards: { type: RiskCardType }[]): boolean {
     return allSame || allDifferent;
 }
 
-// Progressive value ruleset (docs/games/risk.md §4.1 "Standard Modern
+// Progressive value ruleset (docs/games/worlddomination.md §4.1 "Standard Modern
 // Variant"): 4, 6, 8, 10, 15, then +5 per further set.
 export function cardSetValue(setsAlreadyCashedIn: number): number {
     const table = [4, 6, 8, 10, 15];
@@ -272,14 +272,14 @@ export function cardSetValue(setsAlreadyCashedIn: number): number {
     return 15 + 5 * (setsAlreadyCashedIn - (table.length - 1));
 }
 
-// ─── Fortify connectivity (docs/games/risk.md §4.3). ───────────────────────
+// ─── Fortify connectivity (docs/games/worlddomination.md §4.3). ───────────────────────
 // True if there is an unbroken chain of `owner`-controlled territories linking
 // `from` to `to` (BFS over the adjacency graph, restricted to owned nodes).
 export function connectedThroughOwnedTerritories(
     from: number,
     to: number,
     owner: string,
-    territories: IRiskTerritory[],
+    territories: IWorldDominationTerritory[],
 ): boolean {
     if (from === to) return false;
     if (territories[from].owner !== owner || territories[to].owner !== owner) return false;

@@ -18,4 +18,4 @@ export * from "@/games/DiceCities/DiceCitiesLogic";
 export * from "@/games/Smartthink/SmartthinkLogic";
 export * from "@/games/SnakesAndLadders/SnakesAndLaddersLogic";
 export * from "@/games/SettlementsAndCities/SettlementsAndCitiesLogic";
-export * from "@/games/Risk/RiskLogic";
+export * from "@/games/WorldDomination/WorldDominationLogic";
