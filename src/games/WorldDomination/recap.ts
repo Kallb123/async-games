@@ -113,7 +113,11 @@ function toEvents(
 				toTerritoryId: number;
 				attackingDice: number;
 			};
-			const defender = nextState.territories?.[attackData.toTerritoryId]?.owner;
+			// The defender must be read from the *pre*-attack snapshot: on a
+			// conquest the command hands the territory's owner field to the
+			// attacker, so reading it from nextState would silently name the
+			// attacker as their own defender.
+			const defender = prevState.territories?.[attackData.toTerritoryId]?.owner;
 			const lastBattle = nextState.lastBattle;
 
 			if (lastBattle) {
@@ -126,7 +130,10 @@ function toEvents(
 				const fromName = territoryName(attackData.fromTerritoryId);
 				const toName = territoryName(attackData.toTerritoryId);
 
-				let detail = `${fromName} → ${toName} · losses: you ${attackerLosses}, ${defender} ${defenderLosses}`;
+				// Named explicitly rather than "you" — the recap is read by every
+				// player, not just the attacker, so "you" would misname whoever's
+				// actually viewing it.
+				let detail = `${fromName} → ${toName} · ${name} lost ${attackerLosses}, ${defender ?? "defender"} lost ${defenderLosses}`;
 
 				const defenderUserId = defender
 					? Object.values(nextState.playerStates).find(p => p.username === defender)?.userId
