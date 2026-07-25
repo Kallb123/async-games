@@ -1,29 +1,29 @@
 import { describe, expect, it } from "vitest";
 import {
-    RiskGameType,
-    RiskDeployArmies,
-    RiskCashInCards,
-    RiskAttack,
-    RiskOccupyTerritory,
-    RiskEndAttackPhase,
-    RiskFortify,
-    RiskSkipFortify,
-    type IRiskAttackOutcome,
-} from "./RiskLogic";
+    WorldDominationGameType,
+    WorldDominationDeployArmies,
+    WorldDominationCashInCards,
+    WorldDominationAttack,
+    WorldDominationOccupyTerritory,
+    WorldDominationEndAttackPhase,
+    WorldDominationFortify,
+    WorldDominationSkipFortify,
+    type IWorldDominationAttackOutcome,
+} from "./WorldDominationLogic";
 import {
     TERRITORY_COUNT,
     computeReinforcement,
     cardSetValue,
     isValidCardSet,
     territoryIdsForContinent,
-    type IRiskTerritory,
-    type IRiskCard,
+    type IWorldDominationTerritory,
+    type IWorldDominationCard,
 } from "./board";
-import type { IRiskSpecificGameState, IRiskPlayerState, IRiskGameData } from "./RiskModels";
+import type { IWorldDominationSpecificGameState, IWorldDominationPlayerState, IWorldDominationGameData } from "./WorldDominationModels";
 
 // ─── Minimal in-memory game harness ────────────────────────────────────────
 
-function makeTerritories(defaultOwner: string, overrides: Record<number, Partial<IRiskTerritory>> = {}): IRiskTerritory[] {
+function makeTerritories(defaultOwner: string, overrides: Record<number, Partial<IWorldDominationTerritory>> = {}): IWorldDominationTerritory[] {
     return Array.from({ length: TERRITORY_COUNT }, (_, id) => ({
         owner: defaultOwner,
         armies: 3,
@@ -31,11 +31,11 @@ function makeTerritories(defaultOwner: string, overrides: Record<number, Partial
     }));
 }
 
-function player(overrides: Partial<IRiskPlayerState> = {}): IRiskPlayerState {
+function player(overrides: Partial<IWorldDominationPlayerState> = {}): IWorldDominationPlayerState {
     return { cards: [], eliminated: false, conqueredTerritoryThisTurn: false, ...overrides };
 }
 
-function makeState(overrides: Partial<IRiskSpecificGameState> = {}): IRiskSpecificGameState {
+function makeState(overrides: Partial<IWorldDominationSpecificGameState> = {}): IWorldDominationSpecificGameState {
     return {
         territories: makeTerritories("u1"),
         playerStates: new Map([["u1", player()], ["u2", player()]]),
@@ -50,7 +50,7 @@ function makeState(overrides: Partial<IRiskSpecificGameState> = {}): IRiskSpecif
     };
 }
 
-function makeGame(gs: IRiskSpecificGameState, currentTurn = "u1"): IRiskGameData {
+function makeGame(gs: IWorldDominationSpecificGameState, currentTurn = "u1"): IWorldDominationGameData {
     return {
         currentTurn,
         userIdList: ["u1", "u2"],
@@ -59,7 +59,7 @@ function makeGame(gs: IRiskSpecificGameState, currentTurn = "u1"): IRiskGameData
         initialSpecificGameState: gs,
         complete: false,
         winner: "",
-    } as unknown as IRiskGameData;
+    } as unknown as IWorldDominationGameData;
 }
 
 function cmd<T extends { senderId: string; senderUsername: string }>(c: T, sender = "u1"): T {
@@ -68,15 +68,15 @@ function cmd<T extends { senderId: string; senderUsername: string }>(c: T, sende
     return c;
 }
 
-function card(id: string, type: IRiskCard["type"], territoryId: number | null = null): IRiskCard {
+function card(id: string, type: IWorldDominationCard["type"], territoryId: number | null = null): IWorldDominationCard {
     return { id, type, territoryId };
 }
 
-describe("RiskDeployArmies", () => {
+describe("WorldDominationDeployArmies", () => {
     it("rejects deploying more than the remaining pool", async () => {
         const gs = makeState({ phase: "setup", reinforcementsRemaining: 3 });
         const game = makeGame(gs);
-        const c = cmd(new RiskDeployArmies());
+        const c = cmd(new WorldDominationDeployArmies());
         c.territoryId = 0;
         c.count = 5;
         const outcome = await c.Execute(game);
@@ -86,7 +86,7 @@ describe("RiskDeployArmies", () => {
     it("places armies and ends the setup turn once the pool empties", async () => {
         const gs = makeState({ phase: "setup", reinforcementsRemaining: 2 });
         const game = makeGame(gs);
-        const c = cmd(new RiskDeployArmies());
+        const c = cmd(new WorldDominationDeployArmies());
         c.territoryId = 0;
         c.count = 2;
         const outcome = await c.Execute(game);
@@ -99,7 +99,7 @@ describe("RiskDeployArmies", () => {
     it("auto-advances Reinforce into Attack once the pool empties (no turnOver)", async () => {
         const gs = makeState({ phase: "reinforce", reinforcementsRemaining: 1 });
         const game = makeGame(gs);
-        const c = cmd(new RiskDeployArmies());
+        const c = cmd(new WorldDominationDeployArmies());
         c.territoryId = 0;
         c.count = 1;
         const outcome = await c.Execute(game);
@@ -112,7 +112,7 @@ describe("RiskDeployArmies", () => {
         const cards = [card("a", "infantry"), card("b", "infantry"), card("c", "infantry"), card("d", "cavalry"), card("e", "cavalry")];
         const gs = makeState({ phase: "reinforce", reinforcementsRemaining: 3, playerStates: new Map([["u1", player({ cards })], ["u2", player()]]) });
         const game = makeGame(gs);
-        const c = cmd(new RiskDeployArmies());
+        const c = cmd(new WorldDominationDeployArmies());
         c.territoryId = 0;
         c.count = 1;
         const outcome = await c.Execute(game);
@@ -134,7 +134,7 @@ describe("reinforcement maths", () => {
     });
 });
 
-describe("RiskCashInCards", () => {
+describe("WorldDominationCashInCards", () => {
     it("validates card sets per docs/games/worlddomination.md §4.1", () => {
         expect(isValidCardSet([card("1", "infantry"), card("2", "infantry"), card("3", "infantry")])).toBe(true);
         expect(isValidCardSet([card("1", "infantry"), card("2", "cavalry"), card("3", "artillery")])).toBe(true);
@@ -155,7 +155,7 @@ describe("RiskCashInCards", () => {
             playerStates: new Map([["u1", player({ cards })], ["u2", player()]]),
         });
         const game = makeGame(gs);
-        const c = cmd(new RiskCashInCards());
+        const c = cmd(new WorldDominationCashInCards());
         c.cardIds = ["a", "b", "c"];
         const outcome = await c.Execute(game);
         expect(outcome.validMove).toBe(true);
@@ -165,7 +165,7 @@ describe("RiskCashInCards", () => {
     });
 });
 
-describe("RiskAttack", () => {
+describe("WorldDominationAttack", () => {
     it("resolves a roll, conquers the territory, and requires occupation before further attacks", async () => {
         const territories = makeTerritories("u1", {
             0: { owner: "u1", armies: 5 }, // Alaska
@@ -173,7 +173,7 @@ describe("RiskAttack", () => {
         });
         const gs = makeState({ phase: "attack", territories });
         const game = makeGame(gs);
-        const c = cmd(new RiskAttack());
+        const c = cmd(new WorldDominationAttack());
         c.fromTerritoryId = 0;
         c.toTerritoryId = 29;
         c.attackerDiceCount = 1;
@@ -186,7 +186,7 @@ describe("RiskAttack", () => {
         expect(gs.pendingOccupation!.minArmies).toBe(1);
 
         // Further attacks are blocked until the conquered territory is occupied.
-        const blocked = cmd(new RiskAttack());
+        const blocked = cmd(new WorldDominationAttack());
         blocked.fromTerritoryId = 0;
         blocked.toTerritoryId = 29;
         blocked.attackerDiceCount = 1;
@@ -205,24 +205,24 @@ describe("RiskAttack", () => {
             playerStates: new Map([["u1", player()], ["u2", player({ cards: defenderCards })]]),
         });
         const game = makeGame(gs);
-        const c = cmd(new RiskAttack());
+        const c = cmd(new WorldDominationAttack());
         c.fromTerritoryId = 0;
         c.toTerritoryId = 29;
         c.attackerDiceCount = 1;
         c.recordedAttackerDice = [6];
         c.recordedDefenderDice = [1];
-        const outcome = await c.Execute(game) as IRiskAttackOutcome;
+        const outcome = await c.Execute(game) as IWorldDominationAttackOutcome;
         expect(outcome.defenderEliminated).toBe("u2");
         expect(gs.playerStates.get("u2")!.eliminated).toBe(true);
-        expect(gs.playerStates.get("u1")!.cards.map(cc => cc.id)).toEqual(["x"]);
+        expect(gs.playerStates.get("u1")!.cards.map((cc: IWorldDominationCard) => cc.id)).toEqual(["x"]);
         expect(gs.playerStates.get("u2")!.cards).toHaveLength(0);
 
-        expect(new RiskGameType().CheckGameOver(game)).toBe(true);
+        expect(new WorldDominationGameType().CheckGameOver(game)).toBe(true);
         expect(game.winner).toBe("u1");
     });
 });
 
-describe("RiskOccupyTerritory", () => {
+describe("WorldDominationOccupyTerritory", () => {
     it("moves the minimum-or-more armies in and clears the pending occupation", async () => {
         const territories = makeTerritories("u1", {
             0: { owner: "u1", armies: 4 },
@@ -234,7 +234,7 @@ describe("RiskOccupyTerritory", () => {
             pendingOccupation: { fromTerritoryId: 0, toTerritoryId: 29, minArmies: 2 },
         });
         const game = makeGame(gs);
-        const c = cmd(new RiskOccupyTerritory());
+        const c = cmd(new WorldDominationOccupyTerritory());
         c.armies = 3;
         const outcome = await c.Execute(game);
         expect(outcome.validMove).toBe(true);
@@ -244,13 +244,13 @@ describe("RiskOccupyTerritory", () => {
     });
 });
 
-describe("RiskEndAttackPhase / RiskFortify / RiskSkipFortify", () => {
+describe("WorldDominationEndAttackPhase / WorldDominationFortify / WorldDominationSkipFortify", () => {
     it("moves from Attack to Fortify only once reinforcements are placed and no cash-in is owed", async () => {
         const gs = makeState({ phase: "attack", reinforcementsRemaining: 1 });
         const game = makeGame(gs);
-        expect((await cmd(new RiskEndAttackPhase()).Execute(game)).validMove).toBe(false);
+        expect((await cmd(new WorldDominationEndAttackPhase()).Execute(game)).validMove).toBe(false);
         gs.reinforcementsRemaining = 0;
-        const outcome = await cmd(new RiskEndAttackPhase()).Execute(game);
+        const outcome = await cmd(new WorldDominationEndAttackPhase()).Execute(game);
         expect(outcome.validMove).toBe(true);
         expect(gs.phase).toBe("fortify");
     });
@@ -265,7 +265,7 @@ describe("RiskEndAttackPhase / RiskFortify / RiskSkipFortify", () => {
         });
         const gs = makeState({ phase: "fortify", territories });
         const game = makeGame(gs);
-        const c = cmd(new RiskFortify());
+        const c = cmd(new WorldDominationFortify());
         c.fromTerritoryId = 0;
         c.toTerritoryId = 4;
         c.armies = 2;
@@ -283,7 +283,7 @@ describe("RiskEndAttackPhase / RiskFortify / RiskSkipFortify", () => {
         });
         const gs = makeState({ phase: "fortify", territories });
         const game = makeGame(gs);
-        const c = cmd(new RiskFortify());
+        const c = cmd(new WorldDominationFortify());
         c.fromTerritoryId = 0;
         c.toTerritoryId = 4;
         c.armies = 1;
@@ -293,17 +293,17 @@ describe("RiskEndAttackPhase / RiskFortify / RiskSkipFortify", () => {
     it("skipping fortify ends the turn without moving armies", async () => {
         const gs = makeState({ phase: "fortify" });
         const game = makeGame(gs);
-        const outcome = await cmd(new RiskSkipFortify()).Execute(game);
+        const outcome = await cmd(new WorldDominationSkipFortify()).Execute(game);
         expect(outcome.validMove).toBe(true);
         expect(outcome.turnOver).toBe(true);
     });
 });
 
-describe("RiskGameType turn flow", () => {
+describe("WorldDominationGameType turn flow", () => {
     it("advances setup through every player before starting Turn 1's Reinforce phase", () => {
         const gs = makeState({ phase: "setup", reinforcementsRemaining: 0 });
         const game = makeGame(gs, "u1");
-        const gameType = new RiskGameType();
+        const gameType = new WorldDominationGameType();
         gameType.CheckEndTurn(game, { validMove: true, turnOver: true });
         expect(game.currentTurn).toBe("u2");
         expect(gs.phase).toBe("setup");
@@ -320,7 +320,7 @@ describe("RiskGameType turn flow", () => {
             playerStates: new Map([["u1", player({ conqueredTerritoryThisTurn: true })], ["u2", player()]]),
         });
         const game = makeGame(gs, "u1");
-        new RiskGameType().CheckEndTurn(game, { validMove: true, turnOver: true });
+        new WorldDominationGameType().CheckEndTurn(game, { validMove: true, turnOver: true });
         expect(gs.playerStates.get("u1")!.cards).toHaveLength(1);
         expect(gs.phase).toBe("reinforce");
         expect(game.currentTurn).toBe("u2");
