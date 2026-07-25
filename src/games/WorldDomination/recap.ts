@@ -20,6 +20,16 @@ function territoryName(id: number): string {
 	return TERRITORIES[id]?.name ?? `Territory ${id}`;
 }
 
+// A wd_battle/wd_occupy event carries a bit of extra bookkeeping — beyond the
+// generic IGameEvent shape — so postProcess can recognise a conquest and its
+// immediately-following occupation as one logical action and fold them
+// together. Stripped back out before the events are returned to callers.
+interface IWDConquestMeta {
+	conquestTerritoryId?: number;
+	conquestEliminated?: string | null;
+}
+type WDEvent = IGameEvent & IWDConquestMeta;
+
 // Get continent bonus for a territory
 function getContinentBonus(territoryId: number): number {
 	const territory = TERRITORIES[territoryId];
@@ -122,7 +132,7 @@ function toEvents(
 					? Object.values(nextState.playerStates).find(p => p.username === defender)?.userId
 					: undefined;
 
-				events.push({
+				const event: WDEvent = {
 					...base,
 					type: "wd_battle",
 					glyph: conquered ? "⚔️" : "🗡️",
@@ -131,24 +141,36 @@ function toEvents(
 						: `${name} attacked ${toName} from ${fromName}`,
 					detail,
 					affectedIds: defenderUserId ? [defenderUserId] : undefined,
-				});
+				};
+				// Tagged only on a conquest, so postProcess can recognise the occupy
+				// command that must immediately follow it (the game blocks every
+				// other command until that occupation resolves) and merge the two.
+				if (conquered) {
+					event.conquestTerritoryId = attackData.toTerritoryId;
+					event.conquestEliminated = lastBattle.defenderEliminated;
+				}
+				events.push(event);
 			}
 			break;
 		}
 
 		case "WorldDominationOccupyTerritory": {
-			// Territory occupation after conquest (moving armies into conquered territory)
-			const occupyData = command as unknown as { toTerritoryId: number; armies: number };
-			const territory = TERRITORIES[occupyData.toTerritoryId];
-			const newArmies = nextState.territories?.[occupyData.toTerritoryId]?.armies ?? 0;
+			// The command itself only carries the army count moved in — the
+			// territory being occupied lives in pendingOccupation, which the
+			// command clears on execution, so it has to be read from the
+			// *pre*-command snapshot, not from the command or the post-state.
+			const occupyData = command as unknown as { armies: number };
+			const territoryId = prevState.pendingOccupation?.toTerritoryId;
 
-			events.push({
+			const event: WDEvent = {
 				...base,
 				type: "wd_occupy",
 				glyph: "🚩",
-				title: `${name} occupied ${territory?.name ?? `Territory ${occupyData.toTerritoryId}`}`,
+				title: `${name} occupied ${territoryId !== undefined ? territoryName(territoryId) : "a territory"}`,
 				detail: `${occupyData.armies} armie${occupyData.armies === 1 ? "" : "s"} moved in`,
-			});
+			};
+			event.conquestTerritoryId = territoryId;
+			events.push(event);
 			break;
 		}
 
@@ -192,10 +214,46 @@ function toEvents(
 	return events;
 }
 
+// A conquest and its occupation are one logical action split across two
+// commands (attack conquers → pendingOccupation → occupy moves armies in),
+// and the game blocks every other command in between, so a wd_occupy always
+// immediately follows the wd_battle that set up its territory. Fold the pair
+// into one row rather than showing "occupied Territory <n>" as its own beat —
+// this also fixes that row's territory name, which the occupy command itself
+// has no way to carry (see the toEvents case above).
+function postProcess(events: IGameEvent[]): IGameEvent[] {
+	const merged: WDEvent[] = [];
+	for (const raw of events) {
+		const event = raw as WDEvent;
+		const prev = merged[merged.length - 1];
+
+		if (
+			event.type === "wd_occupy" &&
+			prev?.type === "wd_battle" &&
+			prev.actorId === event.actorId &&
+			prev.conquestTerritoryId !== undefined &&
+			prev.conquestTerritoryId === event.conquestTerritoryId
+		) {
+			const territoryLabel = territoryName(prev.conquestTerritoryId);
+			const eliminatedPart = prev.conquestEliminated ? `, eliminating ${prev.conquestEliminated},` : "";
+			const armiesPart = event.detail?.replace(/ moved in$/, "") ?? "some armies";
+			merged[merged.length - 1] = {
+				...prev,
+				title: `${prev.actorUsername} conquered ${territoryLabel}${eliminatedPart} and moved in ${armiesPart}`,
+			};
+			continue;
+		}
+
+		merged.push(event);
+	}
+
+	return merged.map(({ conquestTerritoryId, conquestEliminated, ...rest }) => rest);
+}
+
 function summarize(events: IGameEvent[], forUserId: string): IRecapSummary {
 	const battles = events.filter((e) => e.type === "wd_battle").length;
 	const deployments = events.filter((e) => e.type === "wd_deploy").length;
-	const conquered = events.filter((e) => e.type === "wd_occupy").length;
+	const conquered = events.filter((e) => e.type === "wd_battle" && e.title.includes(" conquered ")).length;
 	const fortifies = events.filter((e) => e.type === "wd_fortify").length;
 	const cardsCashed = events.filter((e) => e.type === "wd_cards").length;
 
@@ -267,6 +325,7 @@ function tip(liveState: unknown, forUserId: string): IRecapTip | null {
 export const worldDominationRecapAdapter: IRecapAdapter = {
 	className: "WorldDominationGameType",
 	toEvents,
+	postProcess,
 	summarize,
 	tip,
 };

@@ -55,6 +55,13 @@ export interface IRecapAdapter {
     // Optional strategic tip (the green box). Receives the live, response-shaped
     // specificGameState. Return null to omit the box.
     tip?(liveState: unknown, forUserId: string): IRecapTip | null;
+
+    // Optional pass over the full, unwindowed event list after every command has
+    // been replayed. Lets a game fold two adjacent events from a single logical
+    // action (e.g. a conquest immediately followed by its occupation) into one
+    // display row — toEvents only sees one command at a time, so cross-command
+    // merges belong here instead.
+    postProcess?(events: IGameEvent[]): IGameEvent[];
 }
 
 const adapters: Record<string, IRecapAdapter> = {};
@@ -96,7 +103,7 @@ async function replayEvents(
     for (const step of steps) {
         events.push(...adapter.toEvents(step.prev, step.next, step.command, step.outcome));
     }
-    return { events, timeline };
+    return { events: adapter.postProcess ? adapter.postProcess(events) : events, timeline };
 }
 
 // Builds a viewer's "since you were last here" feed by replaying the game and
