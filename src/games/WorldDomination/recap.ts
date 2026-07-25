@@ -134,7 +134,10 @@ function toEvents(
 
 				const event: WDEvent = {
 					...base,
-					type: "wd_battle",
+					// A conquering attack gets its own type (mirrors dc_roll/dc_reroll
+					// in DiceCities/recap.ts) so summarize and postProcess can key off
+					// it directly instead of sniffing the title text.
+					type: conquered ? "wd_conquest" : "wd_battle",
 					glyph: conquered ? "⚔️" : "🗡️",
 					title: conquered
 						? `${name} conquered ${toName}${lastBattle.defenderEliminated ? " and eliminated " + lastBattle.defenderEliminated : ""}`
@@ -229,7 +232,7 @@ function postProcess(events: IGameEvent[]): IGameEvent[] {
 
 		if (
 			event.type === "wd_occupy" &&
-			prev?.type === "wd_battle" &&
+			prev?.type === "wd_conquest" &&
 			prev.actorId === event.actorId &&
 			prev.conquestTerritoryId !== undefined &&
 			prev.conquestTerritoryId === event.conquestTerritoryId
@@ -251,9 +254,11 @@ function postProcess(events: IGameEvent[]): IGameEvent[] {
 }
 
 function summarize(events: IGameEvent[], forUserId: string): IRecapSummary {
+	// wd_battle is a non-conquering attack; a conquering one is its own
+	// wd_conquest type (see toEvents) so this doesn't need to inspect titles.
 	const battles = events.filter((e) => e.type === "wd_battle").length;
 	const deployments = events.filter((e) => e.type === "wd_deploy").length;
-	const conquered = events.filter((e) => e.type === "wd_battle" && e.title.includes(" conquered ")).length;
+	const conquered = events.filter((e) => e.type === "wd_conquest").length;
 	const fortifies = events.filter((e) => e.type === "wd_fortify").length;
 	const cardsCashed = events.filter((e) => e.type === "wd_cards").length;
 
@@ -270,7 +275,7 @@ function summarize(events: IGameEvent[], forUserId: string): IRecapSummary {
 		tail = " — armies were positioned.";
 	}
 
-	const totalTurns = deployments + battles + fortifies + cardsCashed;
+	const totalTurns = deployments + battles + conquered + fortifies + cardsCashed;
 
 	return {
 		headline: "Your move 👋",
