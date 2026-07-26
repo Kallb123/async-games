@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import type { IWorldDominationSpecificGameStateResponse } from '@/games/WorldDomination/apiModels';
 import type { WorldDominationCardType } from '@/games/WorldDomination/board';
 import { TERRITORIES, isValidCardSet } from '@/games/WorldDomination/board';
-import DieFace from '@/components/ui/DieFace';
+import Dice from '@/components/ui/Dice';
 import { IGameCommand } from '@/utils/apiModels/GameLogic';
 import type { ICommandResponse } from '@/app/api/game/command/route';
 import {
@@ -252,15 +252,11 @@ export default function WorldDominationActions({
                         <div style={{ display: 'flex', gap: 14, justifyContent: 'center', marginBottom: 8 }}>
                             <div style={{ textAlign: 'center' }}>
                                 <div className="ag-action-hint" style={{ marginTop: 0, marginBottom: 4 }}>YOUR ROLL</div>
-                                <div style={{ display: 'flex', gap: 6 }}>
-                                    {lastBattle.attackerDice.map((d, i) => <DieFace key={i} value={d} size={30} />)}
-                                </div>
+                                <Dice values={lastBattle.attackerDice} size={30} />
                             </div>
                             <div style={{ textAlign: 'center' }}>
                                 <div className="ag-action-hint" style={{ marginTop: 0, marginBottom: 4 }}>DEFENDER&apos;S ROLL</div>
-                                <div style={{ display: 'flex', gap: 6 }}>
-                                    {lastBattle.defenderDice.map((d, i) => <DieFace key={i} value={d} size={30} />)}
-                                </div>
+                                <Dice values={lastBattle.defenderDice} size={30} />
                             </div>
                         </div>
                         <div className="ag-callout" style={{ textAlign: 'center' }}>

@@ -18,6 +18,7 @@ import {
     IGameCommand,
 } from "@/utils/apiModels/GameLogic";
 import { ACTIVATION_META, LANDMARKS, activationFor, cardArt, rollLabel, yieldLabel } from "@/games/DiceCities/ui";
+import Dice from "@/components/ui/Dice";
 import { useEffect, useRef, useState } from "react";
 
 interface DiceCitiesActionsProps {
@@ -227,12 +228,13 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
         <div className="ag-dc-post">
             {roll && (
                 <div className="ag-dc-roll">
-                    <div className="ag-dc-dice">
-                        <span className={`ag-dc-die${rolling ? " ag-dc-die--rolling" : ""}`}>{rolling ? face.a : roll.roll1}</span>
-                        {roll.roll2 != null && (
-                            <span className={`ag-dc-die${rolling ? " ag-dc-die--rolling" : ""}`}>{rolling ? face.b : roll.roll2}</span>
-                        )}
-                    </div>
+                    <Dice
+                        values={roll.roll2 != null
+                            ? [rolling ? face.a : roll.roll1, rolling ? face.b : roll.roll2]
+                            : [rolling ? face.a : roll.roll1]}
+                        size={40}
+                        rolling={rolling}
+                    />
                     <div className="ag-dc-roll-main">
                         <div className="ag-dc-roll-total">{rolling ? "Rolling…" : `Total ${total}`}</div>
                         <div className="ag-dc-roll-sub">

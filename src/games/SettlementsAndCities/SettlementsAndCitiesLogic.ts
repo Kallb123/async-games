@@ -159,6 +159,8 @@ function sacAdvanceMainTurn(sacData: ISettlementsAndCitiesGameData): void {
     const gs = sacData.specificGameState;
     gs.hasRolled = false;
     gs.lastRoll = null;
+    gs.lastRollDie1 = null;
+    gs.lastRollDie2 = null;
     gs.pendingRobber = false;
     gs.pendingRoadBuilding = 0;
     gs.playedDevCard = false;
@@ -453,6 +455,8 @@ export class SACRollDice implements IGameCommand {
         this.recordedRoll2 = die2;
         const roll = die1 + die2;
         gs.lastRoll = roll;
+        gs.lastRollDie1 = die1;
+        gs.lastRollDie2 = die2;
 
         if (roll === 7) {
             sacData.gameState.history.unshift(`${this.senderUsername} rolled a ${roll}`);

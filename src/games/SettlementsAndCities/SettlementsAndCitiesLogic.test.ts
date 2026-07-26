@@ -30,6 +30,8 @@ function makeState(overrides: Partial<ISACSpecificGameState> = {}): ISACSpecific
         lastSetupSettlementVertex: null,
         hasRolled: true,
         lastRoll: 8,
+        lastRollDie1: 5,
+        lastRollDie2: 3,
         pendingRobber: false,
         longestRoadOwner: null,
         largestArmyOwner: null,

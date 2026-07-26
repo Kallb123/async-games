@@ -386,6 +386,8 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                             validEdges={validEdges}
                             validHexes={validHexes}
                             lastRoll={gs.lastRoll}
+                            lastRollDie1={gs.lastRollDie1}
+                            lastRollDie2={gs.lastRollDie2}
                             placementPrompt={boardMode !== 'idle' ? PLACEMENT_PROMPT[boardMode] ?? null : null}
                         />
                     </div>

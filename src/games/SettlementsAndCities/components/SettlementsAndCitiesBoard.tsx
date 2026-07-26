@@ -3,6 +3,7 @@ import React from 'react';
 import { BOARD_TOPOLOGY, HEX_POSITIONS } from '@/games/SettlementsAndCities/board';
 import type { SAC_Resource } from '@/games/SettlementsAndCities/board';
 import type { ISACHexResponse, ISACVertexResponse, ISACEdgeResponse, ISACHarborResponse } from '@/games/SettlementsAndCities/apiModels';
+import Dice from '@/components/ui/Dice';
 
 const HEX_SIZE = 52;
 const SVG_W = 620;
@@ -59,6 +60,8 @@ interface SettlementsAndCitiesBoardProps {
     validHexes?: Set<number>;
     // Chrome shown around the board within the shell
     lastRoll?: number | null;
+    lastRollDie1?: number | null;
+    lastRollDie2?: number | null;
     /** When set, a translucent prompt is shown over the board (e.g. "Tap to place"). */
     placementPrompt?: string | null;
 }
@@ -77,6 +80,8 @@ export default function SettlementsAndCitiesBoard({
     validEdges = new Set(),
     validHexes = new Set(),
     lastRoll = null,
+    lastRollDie1 = null,
+    lastRollDie2 = null,
     placementPrompt = null,
 }: SettlementsAndCitiesBoardProps) {
     if (!hexes || hexes.length === 0) return null;
@@ -92,7 +97,12 @@ export default function SettlementsAndCitiesBoard({
         <>
             <div className="ag-board-frame">
                 {lastRoll !== null && (
-                    <div className="ag-board-tag">🎲 Last roll: {lastRoll}</div>
+                    <div className="ag-board-tag ag-board-tag--dice">
+                        {lastRollDie1 !== null && lastRollDie2 !== null && (
+                            <Dice values={[lastRollDie1, lastRollDie2]} size={22} />
+                        )}
+                        <span>Last roll: {lastRoll}</span>
+                    </div>
                 )}
                 {placementPrompt && (
                     <div className="ag-board-overlay"><div>{placementPrompt}</div></div>
