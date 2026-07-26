@@ -11,15 +11,18 @@ const PIP_LAYOUT: Record<number, number[]> = {
 };
 
 /**
- * A static tactile die face showing a single value 1–6 as pips — the payoff
- * face on the Snakes & Ladders roll-result screen. Presentational only; the
- * animated tumble lives in AnimatedDice.
+ * A single tactile die face showing a value 1–6 as pips. Presentational only —
+ * used directly, or via the Dice component for rows of more than one die.
  */
 export default function DieFace({ value, size = 64 }: { value: number; size?: number }) {
     const pips = PIP_LAYOUT[value] ?? [];
     const lit = new Set(pips);
     return (
-        <div className="ag-die" style={{ width: size, height: size }} aria-label={`Rolled ${value}`}>
+        <div
+            className="ag-die"
+            style={{ '--ag-die-size': `${size}px` } as React.CSSProperties}
+            aria-label={`Rolled ${value}`}
+        >
             {Array.from({ length: 9 }).map((_, i) => (
                 <span key={i} className={`ag-die-pip${lit.has(i) ? ' ag-die-pip--on' : ''}`} />
             ))}

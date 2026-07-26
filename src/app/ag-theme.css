@@ -869,6 +869,7 @@ button {
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.19);
     white-space: nowrap;
 }
+.ag-board-tag--dice { display: flex; align-items: center; gap: 6px; padding: 4px 11px 4px 6px; }
 .ag-board-overlay {
     position: absolute;
     inset: 6px;
@@ -1232,28 +1233,42 @@ button {
 .ag-sl-legend-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
 
 /* ---- Die face (shared DieFace primitive) ---- */
+/* Sized entirely off --ag-die-size so pips stay proportional — and contained —
+   at any size, from the 30px battle dice to the 64px roll-result die. */
 .ag-die {
+    --ag-die-size: 64px;
+    width: var(--ag-die-size);
+    height: var(--ag-die-size);
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     grid-template-rows: repeat(3, 1fr);
-    padding: 11px;
+    padding: calc(var(--ag-die-size) * 0.17);
     background: var(--ag-surface);
-    border-radius: 16px;
+    border-radius: calc(var(--ag-die-size) * 0.25);
     box-shadow: 0 6px 0 oklch(0.75 0.05 60), 0 8px 14px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    flex-shrink: 0;
 }
-.ag-die-pip { width: 9px; height: 9px; border-radius: 50%; align-self: center; justify-self: center; }
+.ag-die-pip {
+    width: calc(var(--ag-die-size) * 0.14);
+    height: calc(var(--ag-die-size) * 0.14);
+    border-radius: 50%;
+    align-self: center;
+    justify-self: center;
+}
 .ag-die-pip--on { background: var(--ag-dark); }
 
-/* The die tumbles while the roll is resolving, then settles on its face. */
-.ag-sl-die-wrap { display: inline-flex; }
-.ag-sl-die-wrap--rolling { animation: ag-sl-tumble 0.32s ease-in-out infinite; }
-@keyframes ag-sl-tumble {
+/* ---- Dice row (shared Dice primitive: any number of pip dice together) ---- */
+.ag-dice-row { display: flex; gap: 8px; align-items: center; justify-content: center; }
+.ag-dice-row--rolling .ag-die { animation: ag-die-tumble 0.32s ease-in-out infinite; }
+@keyframes ag-die-tumble {
     0% { transform: rotate(-16deg) scale(0.92); }
     25% { transform: rotate(12deg) scale(1.06); }
     50% { transform: rotate(-9deg) scale(0.96); }
     75% { transform: rotate(14deg) scale(1.04); }
     100% { transform: rotate(0) scale(1); }
 }
+
 /* The move / verdict / new-square reveal fades in once the die settles. */
 .ag-sl-reveal { animation: ag-sl-fade-in 0.35s ease both; }
 @keyframes ag-sl-fade-in {
@@ -1600,21 +1615,6 @@ button {
     padding: 12px 14px;
     color: var(--ag-on-dark);
 }
-.ag-dc-dice { display: flex; gap: 6px; }
-.ag-dc-die {
-    width: 40px;
-    height: 40px;
-    background: var(--ag-surface);
-    color: var(--ag-ink);
-    border-radius: 9px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font: 800 21px var(--ag-font);
-    box-shadow: 0 3px 0 oklch(0.75 0.05 60);
-}
-.ag-dc-die--rolling { animation: ag-dc-wobble 0.18s infinite alternate ease-in-out; }
-@keyframes ag-dc-wobble { from { transform: rotate(-7deg); } to { transform: rotate(7deg); } }
 .ag-dc-roll-main { flex: 1; min-width: 0; }
 .ag-dc-roll-total { font: 800 15px var(--ag-font); }
 .ag-dc-roll-sub { font: 600 10px var(--ag-font); opacity: 0.8; margin-top: 2px; }

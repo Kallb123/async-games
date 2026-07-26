@@ -80,6 +80,8 @@ export interface ISACSpecificGameState {
     lastSetupSettlementVertex: number | null;
     hasRolled: boolean;
     lastRoll: number | null;
+    lastRollDie1: number | null;
+    lastRollDie2: number | null;
     pendingRobber: boolean;
     longestRoadOwner: string | null;
     largestArmyOwner: string | null;

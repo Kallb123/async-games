@@ -1,4 +1,4 @@
-import DieFace from "@/components/ui/DieFace";
+import Dice from "@/components/ui/Dice";
 import { ISnakesAndLaddersDiceRollOutcome } from "@/utils/apiModels/GameLogic";
 import { useEffect, useState } from "react";
 
@@ -87,9 +87,7 @@ export default function SnakesAndLaddersRollResult({ result, onEndTurn }: { resu
 
             <div className={stageClass}>
                 <div className="ag-sl-roll-die">
-                    <span className={`ag-sl-die-wrap${rolling ? ' ag-sl-die-wrap--rolling' : ''}`}>
-                        <DieFace value={face} />
-                    </span>
+                    <Dice values={[face]} rolling={rolling} />
                     <div className="ag-sl-roll-num">{face}</div>
                 </div>
 
