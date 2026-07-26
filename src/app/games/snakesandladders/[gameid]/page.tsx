@@ -20,6 +20,7 @@ import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
+import { useGameData } from "@/utils/hooks/useGameData";
 import { ISnakesAndLaddersGameStateResponse } from "@/games/SnakesAndLadders/apiModels";
 import { ISnakesAndLaddersDiceRollOutcome, SnakesAndLaddersRequestDiceRoll } from "@/utils/apiModels/GameLogic";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
@@ -28,7 +29,6 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
     const { user, isLoaded } = useUser();
-    const [gameData, setGameData] = useState({} as ISnakesAndLaddersGameDataResponse);
     const [showLog, setShowLog] = useState(false);
     // The post-roll payoff screen lives here (not in the actions component) so
     // it survives the roll advancing the turn to the next player.
@@ -37,6 +37,8 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
 
     const { gameid } = use(params);
     const gameId = gameid;
+
+    const { gameData, setGameData, getGameData } = useGameData<ISnakesAndLaddersGameDataResponse>(gameId);
 
     useEffect(() => {
         if (isLoaded) {
@@ -55,25 +57,6 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     }, [isLoaded]);
 
     usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
-
-    const getGameData = async () => {
-        fetch(`/api/game/${gameId}`)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error("Game not found");
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data) {
-                    setGameData(data.gameData);
-                }
-            })
-            .catch(error => {
-                console.error(error);
-                router.push('/');
-            });
-    };
 
     const submitCommand = async (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => {
         command.gameId = gameId;
