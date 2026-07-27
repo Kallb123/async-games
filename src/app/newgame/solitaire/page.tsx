@@ -3,7 +3,6 @@ import { useUser } from "@clerk/nextjs";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import CurrentUserInfo from "@/components/CurrentUserInfo";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import { GAME_META } from "@/utils/ui/games";
@@ -85,7 +84,6 @@ export default function NewGameSolitaire() {
           disabled={starting}
         />
       </div>
-      <div className="ag-footer"><CurrentUserInfo /></div>
       <FcmTokenComp />
     </GameSetupLayout>
   );

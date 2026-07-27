@@ -3,7 +3,6 @@ import { useUser } from "@clerk/nextjs";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import CurrentUserInfo from "@/components/CurrentUserInfo";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
@@ -159,8 +158,6 @@ export default function NewGameSettlementsAndCities() {
           </p>
         ))}
       </div>
-
-      <div className="ag-footer"><CurrentUserInfo /></div>
       <FcmTokenComp />
     </GameSetupLayout>
   );

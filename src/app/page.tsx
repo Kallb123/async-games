@@ -3,12 +3,10 @@ import { useUser } from "@clerk/nextjs";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import CurrentUserInfo from "@/components/CurrentUserInfo";
 import IncomingInviteList from "@/components/IncomingInvitesList";
 import OutgoingInviteList from "@/components/OutgoingInviteList";
 import MyTurnList from "@/components/MyTurnList";
 import TheirTurnList from "@/components/TheirTurnList";
-import DevTools from "@/components/DevTools";
 import MyCompleteList from "@/components/MyCompleteList";
 import Avatar from "@/components/ui/Avatar";
 
@@ -66,11 +64,6 @@ export default function Home() {
             <div className="ag-cta-sub">Challenge someone</div>
           </div>
         </a>
-      </div>
-
-      <div className="ag-footer">
-        <CurrentUserInfo />
-        <DevTools />
       </div>
     </main>
   );

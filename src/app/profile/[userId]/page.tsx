@@ -1,6 +1,5 @@
 'use client'
 import { use } from "react";
-import CurrentUserInfo from "@/components/CurrentUserInfo";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import GameStatsList from "@/components/ui/GameStatsList";
 import ProfileIdentity from "@/components/ui/ProfileIdentity";
@@ -88,8 +87,6 @@ export default function FriendProfile({ params }: { params: Promise<{ userId: st
 
                         {/* Match outcome history, by game */}
                         <GameStatsList label="Match history" stats={gameStats} isLoading={isLoading} />
-
-                        <div className="ag-footer"><CurrentUserInfo /></div>
                         <FcmTokenComp />
                     </>
                 )}
