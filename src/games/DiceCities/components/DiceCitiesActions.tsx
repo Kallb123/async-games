@@ -33,8 +33,8 @@ interface DiceCitiesActionsProps {
 const LANDMARK_UNLOCK: Record<string, new () => IGameCommand> = {
     doubleUnlocked: DiceCitiesRequestUnlockTrainStation,
     bonusDiningAndStore: DiceCitiesRequestUnlockShoppingMall,
-    oneReroll: DiceCitiesRequestUnlockAmusementPark,
-    rerollDoubles: DiceCitiesRequestUnlockRadioTower,
+    rerollDoubles: DiceCitiesRequestUnlockAmusementPark,
+    oneReroll: DiceCitiesRequestUnlockRadioTower,
 };
 
 export default function DiceCitiesActions({ gameState, myState, opponents, submitCommand }: DiceCitiesActionsProps) {

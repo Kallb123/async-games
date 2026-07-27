@@ -3,6 +3,7 @@
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useToast } from "@/components/ToastContext";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
+import DevTools from "@/components/DevTools";
 import { NotificationChannel, NOTIFICATION_CHANNELS } from "@/utils/firebase/notificationPreferences";
 import useFcmToken from "@/utils/hooks/useFcmToken";
 import { useUser } from "@clerk/nextjs";
@@ -161,6 +162,10 @@ export default function Settings() {
                         ))}
                     </div>
                 )}
+            </div>
+
+            <div className="ag-footer">
+                <DevTools />
             </div>
 
             <FcmTokenComp />

@@ -1,5 +1,4 @@
 'use client'
-import CurrentUserInfo from "@/components/CurrentUserInfo";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useToast } from "@/components/ToastContext";
 import Avatar from "@/components/ui/Avatar";
@@ -352,7 +351,6 @@ export default function Profile() {
                 </div>
             </div>
 
-            <div className="ag-footer"><CurrentUserInfo /></div>
             <FcmTokenComp />
         </main>
     );

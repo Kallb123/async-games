@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
 async function deleteAllData() {
   await dbConnect();
-  console.log("!!!---!!! Removing all data")
+  console.log("!!!---!!! Removing live games and invites")
   await InvitationModel.deleteMany({}).exec();
   await GameDataModel.deleteMany({}).exec();
 }

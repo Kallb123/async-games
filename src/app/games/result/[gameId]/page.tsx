@@ -1,7 +1,6 @@
 'use client'
 
 import { use } from "react";
-import CurrentUserInfo from "@/components/CurrentUserInfo";
 import GameThumb from "@/components/ui/GameThumb";
 import GameResultStats from "@/components/ui/GameResultStats";
 import LineChart from "@/components/ui/LineChart";
@@ -71,7 +70,6 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
                     </>
                 )}
 
-            <div className="ag-footer"><CurrentUserInfo /></div>
         </main>
     );
 }

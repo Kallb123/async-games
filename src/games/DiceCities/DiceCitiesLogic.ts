@@ -453,7 +453,7 @@ export class DiceCitiesRequestUnlockAmusementPark implements IGameCommand {
             };
         }
 
-        if (currentPlayerState.oneReroll) {
+        if (currentPlayerState.rerollDoubles) {
             return {
                 turnOver: false,
                 validMove: false
@@ -463,7 +463,7 @@ export class DiceCitiesRequestUnlockAmusementPark implements IGameCommand {
         // TODO: Add bank money
         currentPlayerState.money -= cardObject.cost;
 
-        currentPlayerState.oneReroll = true;
+        currentPlayerState.rerollDoubles = true;
 
         dcGameData.specificGameState.hasRolled = false;
         const senderUsername = this.senderUsername;
@@ -520,7 +520,7 @@ export class DiceCitiesRequestUnlockRadioTower implements IGameCommand {
             };
         }
 
-        if (currentPlayerState.rerollDoubles) {
+        if (currentPlayerState.oneReroll) {
             return {
                 turnOver: false,
                 validMove: false
@@ -530,7 +530,7 @@ export class DiceCitiesRequestUnlockRadioTower implements IGameCommand {
         // TODO: Add bank money
         currentPlayerState.money -= cardObject.cost;
 
-        currentPlayerState.rerollDoubles = true;
+        currentPlayerState.oneReroll = true;
 
         dcGameData.specificGameState.hasRolled = false;
         const senderUsername = this.senderUsername;
