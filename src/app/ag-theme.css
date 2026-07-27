@@ -52,7 +52,7 @@ button {
 .ag-app {
     max-width: 480px;
     margin: 0 auto;
-    min-height: 100vh;
+    min-height: 90vh;
     background: var(--ag-bg);
     padding: 0 0 40px;
     font-family: var(--ag-font);
