@@ -8,8 +8,10 @@ import {
     diceCitiesGameResultStatsSchemaDef,
     formatDiceCitiesResultStats,
     formatDiceCitiesChart,
+    playerByUserId as diceCitiesPlayerByUserId,
 } from "@/games/DiceCities/DiceCitiesModels";
-import { computeDiceCitiesCoinsPerTurn, computeSettlementsAndCitiesResourcesPerTurn } from "@/utils/games/replay";
+import type { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
+import { computePerTurnStat } from "@/utils/games/replay";
 import {
     ISmartthinkGameData,
     ISmartthinkGameResultStats,
@@ -31,7 +33,9 @@ import {
     sacGameResultStatsSchemaDef,
     formatSettlementsAndCitiesResultStats,
     formatSettlementsAndCitiesChart,
+    playerByUserId as sacPlayerByUserId,
 } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
+import type { ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
 import {
     IWorldDominationGameData,
     IWorldDominationGameResultStats,
@@ -162,7 +166,10 @@ const GAME_RESULT_STATS: Record<string, {
         model: DiceCitiesGameResultModel,
         compute: async (gameData) => {
             const dcGameData = gameData as IDiceCitiesGameData;
-            const coinsPerTurn = await computeDiceCitiesCoinsPerTurn(dcGameData);
+            const coinsPerTurn = await computePerTurnStat<IDiceCitiesGameStateResponse>(
+                dcGameData,
+                (state, userId) => diceCitiesPlayerByUserId(state, userId)?.totalCoinsEarned,
+            );
             return computeDiceCitiesResultStats(dcGameData, coinsPerTurn);
         },
         format: formatDiceCitiesResultStats,
@@ -182,7 +189,10 @@ const GAME_RESULT_STATS: Record<string, {
         model: SettlementsAndCitiesGameResultModel,
         compute: async (gameData) => {
             const sacGameData = gameData as ISettlementsAndCitiesGameData;
-            const resourcesPerTurn = await computeSettlementsAndCitiesResourcesPerTurn(sacGameData);
+            const resourcesPerTurn = await computePerTurnStat<ISACSpecificGameStateResponse>(
+                sacGameData,
+                (state, userId) => sacPlayerByUserId(state, userId)?.resourcesGathered,
+            );
             return computeSettlementsAndCitiesResultStats(sacGameData, resourcesPerTurn);
         },
         format: formatSettlementsAndCitiesResultStats,

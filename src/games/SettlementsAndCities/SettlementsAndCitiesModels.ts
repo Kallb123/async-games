@@ -537,8 +537,9 @@ export interface ISACGameResultStats {
     // Cumulative resourcesGathered per player at the end of each turn, in turn
     // order - not derivable from playerStats above (that's the game-end total
     // only). Powers a resources/turn chart. Computed by replaying
-    // commandHistory (see computeSettlementsAndCitiesResourcesPerTurn in
-    // replay.ts), since it isn't tracked as history on specificGameState.
+    // commandHistory via computePerTurnStat (see replay.ts), driven from this
+    // game's GAME_RESULT_STATS entry in GameResultData.ts, since it isn't
+    // tracked as history on specificGameState.
     resourcesPerTurn: Map<string, number>[];
 }
 

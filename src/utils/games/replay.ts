@@ -2,12 +2,10 @@ import { IGameData } from "../mongodb/GameData";
 import { IGameCommand, IGameType, ICommandOutcome } from "../apiModels/GameLogic";
 import { deserializeJSON } from "../apiModels/Serialisable";
 import { buildInitialSnakesAndLaddersState, gameStateToModel as snakesAndLaddersStateToModel } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
-import { buildInitialDiceCitiesState, gameStateToModel as diceCitiesStateToModel, IDiceCitiesGameData, playerByUserId } from "@/games/DiceCities/DiceCitiesModels";
-import { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
+import { buildInitialDiceCitiesState, gameStateToModel as diceCitiesStateToModel } from "@/games/DiceCities/DiceCitiesModels";
 import { buildInitialSmartthinkState, gameStateToModel as smartthinkStateToModel } from "@/games/Smartthink/SmartthinkModels";
-import { buildInitialSettlementsAndCitiesState, gameStateToResponse as settlementsAndCitiesStateToModel, playerByUserId as sacPlayerByUserId } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
+import { buildInitialSettlementsAndCitiesState, gameStateToResponse as settlementsAndCitiesStateToModel } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
-import { ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
 import { buildInitialWorldDominationState, gameStateToResponse as worldDominationStateToModel, IWorldDominationGameData } from "@/games/WorldDomination/WorldDominationModels";
 // Side-effect import: evaluating GameLogic registers every @serializable command
 // class so deserializeJSON can rehydrate them during replay.
@@ -248,13 +246,15 @@ export async function buildTimeline(
 }
 
 // Replays a game via buildTimeline, recording a cumulative per-player stat at
-// the end of each turn - the series a per-turn line chart plots. Usernames
-// aren't resolved yet at game-end (recordGameResult only has userIds),
-// matching the compute-by-userId / format-by-username split every other
-// game's result stats already use, so an arbitrary (identity) userIdNameMap
-// is enough - extractValue is expected to look players up by their `.userId`
-// field regardless of how the map keyed them.
-async function computePerTurnStat<TState>(
+// the end of each turn - the series a per-turn line chart plots (e.g. Dice
+// Cities' coins/turn, Settlements & Cities' resources/turn - see each game's
+// GAME_RESULT_STATS entry in GameResultData.ts for the actual field being
+// tracked). Usernames aren't resolved yet at game-end (recordGameResult only
+// has userIds), matching the compute-by-userId / format-by-username split
+// every other game's result stats already use, so an arbitrary (identity)
+// userIdNameMap is enough - extractValue is expected to look players up by
+// their `.userId` field regardless of how the map keyed them.
+export async function computePerTurnStat<TState>(
     gameData: IGameData,
     extractValue: (state: TState, userId: string) => number | undefined,
 ): Promise<Map<string, number>[]> {
@@ -272,18 +272,4 @@ async function computePerTurnStat<TState>(
         perTurn.push(entry);
     });
     return perTurn;
-}
-
-export async function computeDiceCitiesCoinsPerTurn(gameData: IDiceCitiesGameData): Promise<Map<string, number>[]> {
-    return computePerTurnStat<IDiceCitiesGameStateResponse>(
-        gameData,
-        (state, userId) => playerByUserId(state, userId)?.totalCoinsEarned,
-    );
-}
-
-export async function computeSettlementsAndCitiesResourcesPerTurn(gameData: ISettlementsAndCitiesGameData): Promise<Map<string, number>[]> {
-    return computePerTurnStat<ISACSpecificGameStateResponse>(
-        gameData,
-        (state, userId) => sacPlayerByUserId(state, userId)?.resourcesGathered,
-    );
 }

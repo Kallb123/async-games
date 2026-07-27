@@ -332,8 +332,9 @@ export interface IDiceCitiesGameResultStats {
     // Cumulative totalCoinsEarned per player at the end of each turn, in turn
     // order - not derivable from the other fields above (those are game-end
     // totals only). Powers a coins/turn chart. Computed by replaying
-    // commandHistory (see computeDiceCitiesCoinsPerTurn in replay.ts), since
-    // it isn't tracked incrementally on specificGameState.
+    // commandHistory via computePerTurnStat (see replay.ts), driven from this
+    // game's GAME_RESULT_STATS entry in GameResultData.ts, since it isn't
+    // tracked incrementally on specificGameState.
     coinsPerTurn: Map<string, number>[];
 }
 
