@@ -378,7 +378,12 @@ export class SolitaireAutoSolve implements IGameCommand {
         state.undoStack.length = undoStackDepth;
         state.undoStack.push(before);
 
-        gameData.gameState.history.unshift(`${this.senderUsername} auto-solved the rest of the game`);
+        // The stagnation/iteration caps above exist precisely so this can stop
+        // short of a win - don't claim victory when it didn't actually get there.
+        const summary = foundationCardCount(state.foundations) === 52
+            ? `${this.senderUsername} auto-solved the rest of the game`
+            : `${this.senderUsername} auto-played as far as it could`;
+        gameData.gameState.history.unshift(summary);
         markDirty(gameData);
         return { turnOver: false, validMove: true };
     }
