@@ -1276,6 +1276,43 @@ button {
     to { opacity: 1; transform: none; }
 }
 
+/* ---- Playing card (shared PlayingCard primitive: any card game) ---- */
+.ag-pcard {
+    --ag-pcard-size: 44px;
+    width: var(--ag-pcard-size);
+    height: calc(var(--ag-pcard-size) * 1.36);
+    border-radius: calc(var(--ag-pcard-size) * 0.16);
+    flex-shrink: 0;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: calc(var(--ag-pcard-size) * 0.09) calc(var(--ag-pcard-size) * 0.12);
+    user-select: none;
+}
+.ag-pcard--face {
+    background: var(--ag-surface);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.ag-pcard--black { color: var(--ag-ink); }
+.ag-pcard--red { color: #c0392b; }
+.ag-pcard-rank { font: 800 calc(var(--ag-pcard-size) * 0.32) / 1 var(--ag-font); }
+.ag-pcard-suit { font-size: calc(var(--ag-pcard-size) * 0.28); line-height: 1; align-self: flex-end; }
+.ag-pcard--back {
+    background: repeating-linear-gradient(45deg, #7d2b2b, #7d2b2b 4px, #8f3535 4px, #8f3535 8px);
+    border: 1.5px solid var(--ag-surface);
+}
+.ag-pcard--empty {
+    border: 1.5px dashed var(--ag-line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: calc(var(--ag-pcard-size) * 0.4);
+    color: var(--ag-ink-softer);
+}
+.ag-pcard--selected { outline: 2.5px solid var(--ag-gold); box-shadow: 0 0 12px oklch(0.75 0.13 85 / .6); }
+[role="button"].ag-pcard { cursor: pointer; }
+
 /* ---- Roll-result screen (the async payoff) ---- */
 .ag-sl-roll {
     position: fixed;
@@ -1853,3 +1890,33 @@ button {
     background: oklch(0.86 0.035 82);
     box-shadow: inset 0 2px 12px rgba(107, 79, 36, 0.13), 0 4px 0 oklch(0.72 0.04 70);
 }
+
+/* ==========================================================================
+   Solitaire — green-felt table for the board screen
+   ========================================================================== */
+.ag-solitaire-felt {
+    padding: 16px 13px 20px;
+    background: radial-gradient(circle at 50% 12%, oklch(0.5 0.09 155), oklch(0.36 0.07 156));
+    border-radius: 16px;
+    margin: 12px 16px;
+}
+.ag-solitaire-toprow { display: flex; justify-content: space-between; align-items: flex-start; }
+.ag-solitaire-stockwaste { display: flex; gap: 8px; }
+.ag-solitaire-stockcount {
+    position: absolute;
+    bottom: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--ag-dark);
+    color: var(--ag-on-dark);
+    border-radius: 99px;
+    padding: 1px 7px;
+    font: 800 10px var(--ag-font);
+    white-space: nowrap;
+}
+.ag-solitaire-wastefan { position: relative; width: 78px; height: calc(var(--ag-pcard-size, 44px) * 1.36); }
+.ag-solitaire-wastecard { position: absolute; top: 0; }
+.ag-solitaire-foundations { display: flex; gap: 6px; }
+.ag-solitaire-tableau { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 22px; align-items: start; }
+.ag-solitaire-column { display: flex; flex-direction: column; }
+.ag-solitaire-stackcard:not(:first-child) { margin-top: -40px; }

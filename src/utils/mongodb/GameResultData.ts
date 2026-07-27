@@ -36,6 +36,13 @@ import {
     worldDominationGameResultStatsSchemaDef,
     formatWorldDominationResultStats,
 } from "@/games/WorldDomination/WorldDominationModels";
+import {
+    ISolitaireGameData,
+    ISolitaireGameResultStats,
+    computeSolitaireResultStats,
+    solitaireGameResultStatsSchemaDef,
+    formatSolitaireResultStats,
+} from "@/games/Solitaire/SolitaireModels";
 
 export interface IGameResultData {
     gameId: uuidString,
@@ -127,6 +134,16 @@ var WorldDominationGameResultSchema = new Schema<IWorldDominationGameResultDataD
 }, { discriminatorKey: 'kind' });
 export var WorldDominationGameResultModel = models.WorldDominationGameResult || GameResultModel.discriminator<IWorldDominationGameResultDataDocument, IWorldDominationGameResultDataModel>('WorldDominationGameResult', WorldDominationGameResultSchema);
 
+export interface ISolitaireGameResultData extends IGameResultData {
+    stats: ISolitaireGameResultStats;
+}
+export interface ISolitaireGameResultDataDocument extends ISolitaireGameResultData, Document {}
+export interface ISolitaireGameResultDataModel extends Model<ISolitaireGameResultDataDocument> {}
+var SolitaireGameResultSchema = new Schema<ISolitaireGameResultDataDocument>({
+    stats: solitaireGameResultStatsSchemaDef
+}, { discriminatorKey: 'kind' });
+export var SolitaireGameResultModel = models.SolitaireGameResult || GameResultModel.discriminator<ISolitaireGameResultDataDocument, ISolitaireGameResultDataModel>('SolitaireGameResult', SolitaireGameResultSchema);
+
 // Maps a GameData's gameType to the discriminator model + stats calculator
 // that boil its final specificGameState down to the interesting numbers, plus
 // a formatter that turns those numbers into display-ready stat groups. Games
@@ -161,6 +178,11 @@ const GAME_RESULT_STATS: Record<string, {
         model: WorldDominationGameResultModel,
         compute: (gameData) => computeWorldDominationResultStats(gameData as IWorldDominationGameData),
         format: formatWorldDominationResultStats,
+    },
+    Solitaire: {
+        model: SolitaireGameResultModel,
+        compute: (gameData) => computeSolitaireResultStats(gameData as ISolitaireGameData),
+        format: formatSolitaireResultStats,
     },
 };
 

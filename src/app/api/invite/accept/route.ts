@@ -8,6 +8,7 @@ import { SnakesAndLaddersGameDataModel } from '@/games/SnakesAndLadders/SnakesAn
 import { SettlementsAndCitiesGameDataModel } from '@/games/SettlementsAndCities/SettlementsAndCitiesModels';
 import { SmartthinkGameDataModel } from '@/games/Smartthink/SmartthinkModels';
 import { WorldDominationGameDataModel } from '@/games/WorldDomination/WorldDominationModels';
+import { SolitaireGameDataModel } from '@/games/Solitaire/SolitaireModels';
 import { uuidString } from '@/utils/apiModels/GameDataApi';
 import { IGameDataDocument } from '@/utils/mongodb/GameData';
 
@@ -69,6 +70,8 @@ export async function POST(request: NextRequest) {
     gameDataM = new SmartthinkGameDataModel(gameData);
   } else if (inviteData.gameType === 'WorldDomination') {
     gameDataM = new WorldDominationGameDataModel(gameData);
+  } else if (inviteData.gameType === 'Solitaire') {
+    gameDataM = new SolitaireGameDataModel(gameData);
   } else {
     throw new Error(`Unsupported game type: ${inviteData.gameType}`);
   }
