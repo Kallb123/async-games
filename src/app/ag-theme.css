@@ -24,6 +24,7 @@
 
     --ag-dark: oklch(0.28 0.04 40);
     --ag-on-dark: oklch(0.96 0.01 60);
+    --ag-danger: #c0392b;
 
     --ag-font: "Bricolage Grotesque", system-ui, -apple-system, sans-serif;
     --ag-shadow: 0 1px 3px rgba(60, 40, 20, 0.08);
@@ -789,7 +790,7 @@ button {
 .ag-gom-item-label { flex: 1; min-width: 0; }
 .ag-gom-item-check { color: var(--ag-terracotta); font-weight: 800; }
 .ag-gom-item--active { color: var(--ag-terracotta); }
-.ag-gom-item--danger { color: #c0392b; }
+.ag-gom-item--danger { color: var(--ag-danger); }
 .ag-gom-item--danger:hover { background: rgba(192, 57, 43, 0.1); }
 .ag-game-topbar-main { flex: 1; min-width: 0; }
 .ag-game-topbar-title {
@@ -1295,7 +1296,7 @@ button {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 .ag-pcard--black { color: var(--ag-ink); }
-.ag-pcard--red { color: #c0392b; }
+.ag-pcard--red { color: var(--ag-danger); }
 .ag-pcard-rank { font: 800 calc(var(--ag-pcard-size) * 0.32) / 1 var(--ag-font); }
 .ag-pcard-suit { font-size: calc(var(--ag-pcard-size) * 0.28); line-height: 1; align-self: flex-end; }
 .ag-pcard--back {
@@ -1920,3 +1921,14 @@ button {
 .ag-solitaire-tableau { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 22px; align-items: start; }
 .ag-solitaire-column { display: flex; flex-direction: column; }
 .ag-solitaire-stackcard:not(:first-child) { margin-top: -40px; }
+
+/* ---- Victory / telemetry screen ---- */
+.ag-solitaire-victory-hero { text-align: center; padding: 24px 18px; }
+.ag-solitaire-victory-title { font: 800 24px/1.1 var(--ag-font); color: var(--ag-ink); }
+.ag-solitaire-victory-kings { display: flex; justify-content: center; gap: 7px; margin-top: 16px; }
+.ag-solitaire-score-card { text-align: center; margin-top: 14px; }
+.ag-solitaire-score-num { font: 800 40px/1 var(--ag-font); color: var(--ag-terracotta); margin-top: 4px; }
+.ag-solitaire-breakdown-value { font: 800 13px var(--ag-font); color: var(--ag-green); }
+.ag-solitaire-breakdown-value--negative { color: var(--ag-danger); }
+.ag-solitaire-victory-actions { display: flex; gap: 8px; margin-top: 20px; }
+.ag-solitaire-victory-actions > a { text-align: center; }

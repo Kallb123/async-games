@@ -8,13 +8,13 @@ import { IGameCommand, SolitaireDraw, SolitaireMoveCard, SolitaireUndo } from "@
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
+import Stat from "@/components/ui/Stat";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useToast } from "@/components/ToastContext";
 import { ISolitaireGameDataResponse } from "@/games/Solitaire/apiModels";
-import { SolitaireZoneRef, getLegalMoves, hasAnyLegalMove } from "@/games/Solitaire/rules";
-import { formatDuration } from "@/games/Solitaire/ui";
+import { SolitaireZoneRef, getLegalMoves, hasAnyLegalMove, formatDuration } from "@/games/Solitaire/rules";
 import SolitaireBoard from "@/games/Solitaire/components/SolitaireBoard";
 import SolitaireVictoryScreen from "@/games/Solitaire/components/SolitaireVictoryScreen";
 
@@ -139,10 +139,10 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
 
             {state && (
                 <div className="ag-stat-row" style={{ padding: '0 16px', marginTop: 12 }}>
-                    <div className="ag-stat"><div className="ag-stat-num">{state.score}</div><div className="ag-stat-label">score</div></div>
-                    <div className="ag-stat"><div className="ag-stat-num">{state.moves}</div><div className="ag-stat-label">moves</div></div>
-                    <div className="ag-stat"><div className="ag-stat-num">{formatDuration(elapsedSeconds)}</div><div className="ag-stat-label">time</div></div>
-                    <div className="ag-stat"><div className="ag-stat-num">{foundationCount}/52</div><div className="ag-stat-label">home</div></div>
+                    <Stat value={state.score} label="score" />
+                    <Stat value={state.moves} label="moves" />
+                    <Stat value={formatDuration(elapsedSeconds)} label="time" />
+                    <Stat value={`${foundationCount}/52`} label="home" />
                 </div>
             )}
 

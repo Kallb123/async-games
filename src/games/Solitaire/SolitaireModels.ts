@@ -9,7 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { SolitaireGameType } from "@/utils/apiModels/GameLogic";
 import { UNLIMITED_TURN_TIMER } from "@/utils/games/TurnTimer";
 import { ICard, Suit, SUITS, buildStandardDeck, shuffleDeck } from "@/utils/games/Cards";
-import { computeFinalScore } from "./rules";
+import { computeFinalScore, formatDuration } from "./rules";
 
 export type SolitaireDrawMode = 'DRAW_1' | 'DRAW_3';
 
@@ -254,9 +254,7 @@ export function computeSolitaireResultStats(gameData: ISolitaireGameData): ISoli
 // Renders ISolitaireGameResultStats as a single game-wide stat group (no
 // `username` - it's solo) for the shared GameResultStats UI.
 export function formatSolitaireResultStats(stats: ISolitaireGameResultStats): GameResultStatGroup[] {
-    const minutes = Math.floor(stats.timeElapsedSec / 60);
-    const seconds = stats.timeElapsedSec % 60;
-    const duration = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    const duration = formatDuration(stats.timeElapsedSec);
     const drawLabel = stats.drawMode === 'DRAW_3' ? 'Draw-3' : 'Draw-1';
 
     return [{

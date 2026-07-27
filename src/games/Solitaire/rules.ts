@@ -169,3 +169,11 @@ export function computeTimePenalty(elapsedSeconds: number): number {
 export function computeFinalScore(rawScore: number, elapsedSeconds: number): number {
     return Math.max(0, rawScore - computeTimePenalty(elapsedSeconds));
 }
+
+// "m:ss" duration, shared by the live stat strip, the victory screen and the
+// GameResult formatter — one formatter, not three copies of the same math.
+export function formatDuration(totalSeconds: number): string {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
