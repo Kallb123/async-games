@@ -17,7 +17,7 @@ interface GameSetupLayoutProps {
 // scrollable options, and one sticky primary action.
 export default function GameSetupLayout({ meta, children, actionLabel, actionDisabled, onSubmit, footnote }: GameSetupLayoutProps) {
     return (
-        <main style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+        <main style={{ display: "flex", flexDirection: "column" }}>
             <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", flex: 1 }}>
                 <div className="ag-topbar">
                     <div className="ag-topbar-title">
