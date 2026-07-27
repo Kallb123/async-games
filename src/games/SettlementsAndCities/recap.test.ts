@@ -10,6 +10,7 @@ function player(overrides: Partial<ISACPlayerStateResponse> & { userId: string; 
         resources: { lumber: 0, wool: 0, grain: 0, brick: 0, ore: 0 },
         devCardCount: 0,
         knightsPlayed: 0,
+        resourcesGathered: 0,
         remainingRoads: 15,
         remainingSettlements: 5,
         remainingCities: 4,

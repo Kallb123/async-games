@@ -36,6 +36,42 @@ export interface GameResultChart {
     turns: Record<string, number>[];
 }
 
+// Turns a per-turn Map<userId, number> series (as produced by a replay-based
+// computeXPerTurn helper) into a GameResultChart, keying each turn's entries
+// by username. Shared by every game that plots a cumulative per-player stat
+// (coins, resources, ...) so only the series/labels differ per game.
+export function formatPerTurnChart(
+    perTurn: Map<string, number>[],
+    usernameById: Map<string, string>,
+    title: string,
+    yLabel: string,
+): GameResultChart | undefined {
+    if (perTurn.length === 0) return undefined;
+    return {
+        title,
+        yLabel,
+        turns: perTurn.map(turn => {
+            const entry: Record<string, number> = {};
+            for (const [userId, value] of turn) {
+                entry[usernameById.get(userId) ?? userId] = value;
+            }
+            return entry;
+        }),
+    };
+}
+
+// Response-shaped game states key playerStates by username (for readable
+// JSON), so look a player up by their Clerk userId (what commands and replay
+// carry) by scanning the values. Shared by every game whose apiModels follow
+// this { [username: string]: PlayerStateResponse } shape.
+export function playerByUserId<P extends { userId: string }>(
+    state: { playerStates?: Record<string, P> } | undefined,
+    userId: string
+): P | undefined {
+    if (!state?.playerStates) return undefined;
+    return Object.values(state.playerStates).find(p => p.userId === userId);
+}
+
 export interface IGameDataResponse {
     gameType: IGameType,
     usernameList: string[],

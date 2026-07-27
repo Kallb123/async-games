@@ -9,7 +9,7 @@ import {
     formatDiceCitiesResultStats,
     formatDiceCitiesChart,
 } from "@/games/DiceCities/DiceCitiesModels";
-import { computeDiceCitiesCoinsPerTurn } from "@/utils/games/replay";
+import { computeDiceCitiesCoinsPerTurn, computeSettlementsAndCitiesResourcesPerTurn } from "@/utils/games/replay";
 import {
     ISmartthinkGameData,
     ISmartthinkGameResultStats,
@@ -30,6 +30,7 @@ import {
     computeSettlementsAndCitiesResultStats,
     sacGameResultStatsSchemaDef,
     formatSettlementsAndCitiesResultStats,
+    formatSettlementsAndCitiesChart,
 } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import {
     IWorldDominationGameData,
@@ -179,8 +180,13 @@ const GAME_RESULT_STATS: Record<string, {
     },
     SettlementsAndCities: {
         model: SettlementsAndCitiesGameResultModel,
-        compute: (gameData) => computeSettlementsAndCitiesResultStats(gameData as ISettlementsAndCitiesGameData),
+        compute: async (gameData) => {
+            const sacGameData = gameData as ISettlementsAndCitiesGameData;
+            const resourcesPerTurn = await computeSettlementsAndCitiesResourcesPerTurn(sacGameData);
+            return computeSettlementsAndCitiesResultStats(sacGameData, resourcesPerTurn);
+        },
         format: formatSettlementsAndCitiesResultStats,
+        chart: formatSettlementsAndCitiesChart,
     },
     WorldDomination: {
         model: WorldDominationGameResultModel,

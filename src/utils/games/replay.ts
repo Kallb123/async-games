@@ -5,8 +5,9 @@ import { buildInitialSnakesAndLaddersState, gameStateToModel as snakesAndLadders
 import { buildInitialDiceCitiesState, gameStateToModel as diceCitiesStateToModel, IDiceCitiesGameData, playerByUserId } from "@/games/DiceCities/DiceCitiesModels";
 import { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
 import { buildInitialSmartthinkState, gameStateToModel as smartthinkStateToModel } from "@/games/Smartthink/SmartthinkModels";
-import { buildInitialSettlementsAndCitiesState, gameStateToResponse as settlementsAndCitiesStateToModel } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
+import { buildInitialSettlementsAndCitiesState, gameStateToResponse as settlementsAndCitiesStateToModel, playerByUserId as sacPlayerByUserId } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
+import { ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
 import { buildInitialWorldDominationState, gameStateToResponse as worldDominationStateToModel, IWorldDominationGameData } from "@/games/WorldDomination/WorldDominationModels";
 // Side-effect import: evaluating GameLogic registers every @serializable command
 // class so deserializeJSON can rehydrate them during replay.
@@ -246,26 +247,43 @@ export async function buildTimeline(
     return { currentIndex, snapshots, resolvedPlannedCommands };
 }
 
-// Replays a Dice Cities game via buildTimeline, recording every player's
-// cumulative totalCoinsEarned at the end of each turn - the series a "coins
-// per turn" chart plots. Usernames aren't resolved yet at game-end
-// (recordGameResult only has userIds), matching the compute-by-userId /
-// format-by-username split every other game's result stats already use, so
-// an arbitrary (identity) userIdNameMap is enough - playerByUserId looks
-// players up by their `.userId` field regardless of how the map keyed them.
-export async function computeDiceCitiesCoinsPerTurn(gameData: IDiceCitiesGameData): Promise<Map<string, number>[]> {
+// Replays a game via buildTimeline, recording a cumulative per-player stat at
+// the end of each turn - the series a per-turn line chart plots. Usernames
+// aren't resolved yet at game-end (recordGameResult only has userIds),
+// matching the compute-by-userId / format-by-username split every other
+// game's result stats already use, so an arbitrary (identity) userIdNameMap
+// is enough - extractValue is expected to look players up by their `.userId`
+// field regardless of how the map keyed them.
+async function computePerTurnStat<TState>(
+    gameData: IGameData,
+    extractValue: (state: TState, userId: string) => number | undefined,
+): Promise<Map<string, number>[]> {
     const identityMap = Object.fromEntries(gameData.userIdList.map(userId => [userId, userId]));
     const perTurn: Map<string, number>[] = [];
     await buildTimeline(gameData, identityMap, [], (step) => {
         if (!step.outcome.turnOver) {
             return;
         }
-        const responseState = step.next.specificGameState as IDiceCitiesGameStateResponse;
+        const responseState = step.next.specificGameState as TState;
         const entry = new Map<string, number>();
         for (const userId of gameData.userIdList) {
-            entry.set(userId, playerByUserId(responseState, userId)?.totalCoinsEarned ?? 0);
+            entry.set(userId, extractValue(responseState, userId) ?? 0);
         }
         perTurn.push(entry);
     });
     return perTurn;
+}
+
+export async function computeDiceCitiesCoinsPerTurn(gameData: IDiceCitiesGameData): Promise<Map<string, number>[]> {
+    return computePerTurnStat<IDiceCitiesGameStateResponse>(
+        gameData,
+        (state, userId) => playerByUserId(state, userId)?.totalCoinsEarned,
+    );
+}
+
+export async function computeSettlementsAndCitiesResourcesPerTurn(gameData: ISettlementsAndCitiesGameData): Promise<Map<string, number>[]> {
+    return computePerTurnStat<ISACSpecificGameStateResponse>(
+        gameData,
+        (state, userId) => sacPlayerByUserId(state, userId)?.resourcesGathered,
+    );
 }

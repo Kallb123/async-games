@@ -28,6 +28,10 @@ export interface ISACPlayerStateResponse {
     resources: { [K in SAC_Resource]: number };
     devCardCount: number;
     knightsPlayed: number;
+    // Cumulative resources gathered from any source this match (production,
+    // setup, robber steals, Year of Plenty, Monopoly) - never decremented by
+    // spending. Powers the resources/turn chart on the result page.
+    resourcesGathered: number;
     remainingRoads: number;
     remainingSettlements: number;
     remainingCities: number;
