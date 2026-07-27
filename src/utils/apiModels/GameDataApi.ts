@@ -25,6 +25,17 @@ export interface GameResultStatGroup {
     lines: string[];
 }
 
+// A turn-by-turn line chart for the GameResult page: turn number on the
+// x-axis, one line per series (typically per player). What's plotted varies
+// by game (coins, score, territory...), so this shape only fixes the
+// structure - one entry per turn, keyed by username - letting any game's
+// GameResult stats power the same chart component.
+export interface GameResultChart {
+    title: string;
+    yLabel: string;
+    turns: Record<string, number>[];
+}
+
 export interface IGameDataResponse {
     gameType: IGameType,
     usernameList: string[],

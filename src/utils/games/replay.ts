@@ -2,7 +2,8 @@ import { IGameData } from "../mongodb/GameData";
 import { IGameCommand, IGameType, ICommandOutcome } from "../apiModels/GameLogic";
 import { deserializeJSON } from "../apiModels/Serialisable";
 import { buildInitialSnakesAndLaddersState, gameStateToModel as snakesAndLaddersStateToModel } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
-import { buildInitialDiceCitiesState, gameStateToModel as diceCitiesStateToModel } from "@/games/DiceCities/DiceCitiesModels";
+import { buildInitialDiceCitiesState, gameStateToModel as diceCitiesStateToModel, IDiceCitiesGameData, playerByUserId } from "@/games/DiceCities/DiceCitiesModels";
+import { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
 import { buildInitialSmartthinkState, gameStateToModel as smartthinkStateToModel } from "@/games/Smartthink/SmartthinkModels";
 import { buildInitialSettlementsAndCitiesState, gameStateToResponse as settlementsAndCitiesStateToModel } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
@@ -243,4 +244,28 @@ export async function buildTimeline(
     }
 
     return { currentIndex, snapshots, resolvedPlannedCommands };
+}
+
+// Replays a Dice Cities game via buildTimeline, recording every player's
+// cumulative totalCoinsEarned at the end of each turn - the series a "coins
+// per turn" chart plots. Usernames aren't resolved yet at game-end
+// (recordGameResult only has userIds), matching the compute-by-userId /
+// format-by-username split every other game's result stats already use, so
+// an arbitrary (identity) userIdNameMap is enough - playerByUserId looks
+// players up by their `.userId` field regardless of how the map keyed them.
+export async function computeDiceCitiesCoinsPerTurn(gameData: IDiceCitiesGameData): Promise<Map<string, number>[]> {
+    const identityMap = Object.fromEntries(gameData.userIdList.map(userId => [userId, userId]));
+    const perTurn: Map<string, number>[] = [];
+    await buildTimeline(gameData, identityMap, [], (step) => {
+        if (!step.outcome.turnOver) {
+            return;
+        }
+        const responseState = step.next.specificGameState as IDiceCitiesGameStateResponse;
+        const entry = new Map<string, number>();
+        for (const userId of gameData.userIdList) {
+            entry.set(userId, playerByUserId(responseState, userId)?.totalCoinsEarned ?? 0);
+        }
+        perTurn.push(entry);
+    });
+    return perTurn;
 }

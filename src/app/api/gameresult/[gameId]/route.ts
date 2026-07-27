@@ -1,10 +1,10 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { GameResultModel, formatGameResultStats } from '@/utils/mongodb/GameResultData';
+import { GameResultModel, formatGameResultStats, formatGameResultChart } from '@/utils/mongodb/GameResultData';
 import { areFriends } from '@/utils/mongodb/FriendshipData';
 import { userIdListToUsernameMap } from '@/utils/users/clerk';
-import type { GameResultStatGroup } from '@/utils/apiModels/GameDataApi';
+import type { GameResultStatGroup, GameResultChart } from '@/utils/apiModels/GameDataApi';
 
 export interface IGameResultResponse {
     gameId: string;
@@ -15,6 +15,7 @@ export interface IGameResultResponse {
     endedAt: string;
     totalTurns: number;
     stats: GameResultStatGroup[];
+    chart?: GameResultChart;
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ gameId: string }> }) {
@@ -53,6 +54,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         endedAt: result.endedAt,
         totalTurns: result.totalTurns,
         stats: formatGameResultStats(result.gameType, (result as any).stats, usernameById),
+        chart: formatGameResultChart(result.gameType, (result as any).stats, usernameById),
     };
 
     return NextResponse.json({ success: true, result: response });

@@ -1,13 +1,15 @@
 import { Document, Model, Schema, model, models } from "mongoose";
 import type { IGameData } from "./GameData";
-import type { uuidString, GameResultStatGroup } from "../apiModels/GameDataApi";
+import type { uuidString, GameResultStatGroup, GameResultChart } from "../apiModels/GameDataApi";
 import {
     IDiceCitiesGameData,
     IDiceCitiesGameResultStats,
     computeDiceCitiesResultStats,
     diceCitiesGameResultStatsSchemaDef,
     formatDiceCitiesResultStats,
+    formatDiceCitiesChart,
 } from "@/games/DiceCities/DiceCitiesModels";
+import { computeDiceCitiesCoinsPerTurn } from "@/utils/games/replay";
 import {
     ISmartthinkGameData,
     ISmartthinkGameResultStats,
@@ -151,13 +153,19 @@ export var SolitaireGameResultModel = models.SolitaireGameResult || GameResultMo
 // totalTurns) via recordGameResult below.
 const GAME_RESULT_STATS: Record<string, {
     model: Model<any>,
-    compute: (gameData: IGameData) => unknown,
+    compute: (gameData: IGameData) => unknown | Promise<unknown>,
     format: (stats: any, usernameById: Map<string, string>) => GameResultStatGroup[],
+    chart?: (stats: any, usernameById: Map<string, string>) => GameResultChart | undefined,
 }> = {
     DiceCities: {
         model: DiceCitiesGameResultModel,
-        compute: (gameData) => computeDiceCitiesResultStats(gameData as IDiceCitiesGameData),
+        compute: async (gameData) => {
+            const dcGameData = gameData as IDiceCitiesGameData;
+            const coinsPerTurn = await computeDiceCitiesCoinsPerTurn(dcGameData);
+            return computeDiceCitiesResultStats(dcGameData, coinsPerTurn);
+        },
         format: formatDiceCitiesResultStats,
+        chart: formatDiceCitiesChart,
     },
     Smartthink: {
         model: SmartthinkGameResultModel,
@@ -193,6 +201,15 @@ export function formatGameResultStats(gameType: string, stats: unknown, username
     const specific = GAME_RESULT_STATS[gameType];
     if (!specific || !stats) return [];
     return specific.format(stats, usernameById);
+}
+
+// Renders a GameResult document's discriminated `stats` field into a
+// turn-by-turn chart, for games that register one. Returns undefined for
+// games with no chart registered (or no stats present).
+export function formatGameResultChart(gameType: string, stats: unknown, usernameById: Map<string, string>): GameResultChart | undefined {
+    const specific = GAME_RESULT_STATS[gameType];
+    if (!specific?.chart || !stats) return undefined;
+    return specific.chart(stats, usernameById);
 }
 
 export type MatchOutcome = "win" | "loss" | "draw";
@@ -275,7 +292,7 @@ export async function recordGameResult(gameData: IGameData): Promise<void> {
     const specific = GAME_RESULT_STATS[gameData.gameType.gameType];
     try {
         if (specific) {
-            await specific.model.create({ ...base, stats: specific.compute(gameData) });
+            await specific.model.create({ ...base, stats: await specific.compute(gameData) });
         } else {
             await GameResultModel.create(base);
         }

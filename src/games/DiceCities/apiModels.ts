@@ -30,6 +30,7 @@ export interface IDiceCitiesPlayerStateResponse {
     userId: string,
     cards: IDiceCitiesCardCountResponse[],
     money: number,
+    totalCoinsEarned: number,
     doubleUnlocked: boolean,
     bonusDiningAndStore: boolean,
     rerollDoubles: boolean,
