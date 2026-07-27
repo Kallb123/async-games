@@ -8,6 +8,7 @@ import {
     diceCitiesGameResultStatsSchemaDef,
     formatDiceCitiesResultStats,
 } from "@/games/DiceCities/DiceCitiesModels";
+import { computeDiceCitiesCoinsPerTurn } from "@/utils/games/replay";
 import {
     ISmartthinkGameData,
     ISmartthinkGameResultStats,
@@ -151,12 +152,16 @@ export var SolitaireGameResultModel = models.SolitaireGameResult || GameResultMo
 // totalTurns) via recordGameResult below.
 const GAME_RESULT_STATS: Record<string, {
     model: Model<any>,
-    compute: (gameData: IGameData) => unknown,
+    compute: (gameData: IGameData) => unknown | Promise<unknown>,
     format: (stats: any, usernameById: Map<string, string>) => GameResultStatGroup[],
 }> = {
     DiceCities: {
         model: DiceCitiesGameResultModel,
-        compute: (gameData) => computeDiceCitiesResultStats(gameData as IDiceCitiesGameData),
+        compute: async (gameData) => {
+            const dcGameData = gameData as IDiceCitiesGameData;
+            const coinsPerTurn = await computeDiceCitiesCoinsPerTurn(dcGameData);
+            return computeDiceCitiesResultStats(dcGameData, coinsPerTurn);
+        },
         format: formatDiceCitiesResultStats,
     },
     Smartthink: {
@@ -275,7 +280,7 @@ export async function recordGameResult(gameData: IGameData): Promise<void> {
     const specific = GAME_RESULT_STATS[gameData.gameType.gameType];
     try {
         if (specific) {
-            await specific.model.create({ ...base, stats: specific.compute(gameData) });
+            await specific.model.create({ ...base, stats: await specific.compute(gameData) });
         } else {
             await GameResultModel.create(base);
         }

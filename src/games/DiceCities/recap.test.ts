@@ -9,6 +9,7 @@ function player(overrides: Partial<IDiceCitiesPlayerStateResponse> & { userId: s
     return {
         cards: [],
         money: 0,
+        totalCoinsEarned: 0,
         doubleUnlocked: false,
         bonusDiningAndStore: false,
         rerollDoubles: false,

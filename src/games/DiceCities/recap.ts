@@ -4,17 +4,8 @@ import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic"
 import { IDiceCitiesDiceRollOutcome } from "@/utils/apiModels/GameLogic";
 import { DiceCitiesCards, DiceCitiesCardIds } from "@/games/DiceCities/cards";
 import { LANDMARKS, landmarkCount } from "@/games/DiceCities/ui";
-import type { IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
-
-// Finds a player's response-shaped state by their Clerk userId (the response
-// keys playerStates by username, so we can't look them up by id directly).
-function playerByUserId(
-    state: IDiceCitiesGameStateResponse | undefined,
-    userId: string
-): IDiceCitiesPlayerStateResponse | undefined {
-    if (!state?.playerStates) return undefined;
-    return Object.values(state.playerStates).find((p) => p.userId === userId);
-}
+import type { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
+import { playerByUserId } from "@/games/DiceCities/DiceCitiesModels";
 
 // The four win-condition landmarks, keyed by the command that unlocks each, so a
 // replayed unlock command becomes a "built the <landmark>" recap event.
