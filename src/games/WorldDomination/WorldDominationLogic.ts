@@ -93,7 +93,7 @@ function riskEndTurn(riskData: IWorldDominationGameData): void {
 @serializable
 export class WorldDominationGameType implements IGameType {
     gameId: uuidString = uuidv4() as uuidString;
-    gameType: string = "World Domination";
+    gameType: string = "WorldDomination";
     friendlyName: string = "World Domination";
     icon: string = "";
     url: string = "worlddomination";
@@ -164,6 +164,7 @@ export class WorldDominationDeployArmies implements IGameCommand {
 
         territory.armies += this.count;
         gs.reinforcementsRemaining -= this.count;
+        ps.totalArmiesDeployed += this.count;
 
         riskData.gameState.history.unshift(
             `${this.senderUsername} placed ${this.count} arm${this.count === 1 ? 'y' : 'ies'} on ${TERRITORIES[this.territoryId].name}`

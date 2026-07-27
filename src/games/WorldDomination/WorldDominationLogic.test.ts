@@ -32,7 +32,7 @@ function makeTerritories(defaultOwner: string, overrides: Record<number, Partial
 }
 
 function player(overrides: Partial<IWorldDominationPlayerState> = {}): IWorldDominationPlayerState {
-    return { cards: [], eliminated: false, conqueredTerritoryThisTurn: false, ...overrides };
+    return { cards: [], eliminated: false, conqueredTerritoryThisTurn: false, totalArmiesDeployed: 0, ...overrides };
 }
 
 function makeState(overrides: Partial<IWorldDominationSpecificGameState> = {}): IWorldDominationSpecificGameState {

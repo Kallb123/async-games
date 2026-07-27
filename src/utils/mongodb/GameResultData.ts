@@ -7,7 +7,7 @@ import {
     computeDiceCitiesResultStats,
     diceCitiesGameResultStatsSchemaDef,
     formatDiceCitiesResultStats,
-    formatDiceCitiesChart,
+    formatDiceCitiesCharts,
     playerByUserId as diceCitiesPlayerByUserId,
 } from "@/games/DiceCities/DiceCitiesModels";
 import type { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
@@ -32,7 +32,7 @@ import {
     computeSettlementsAndCitiesResultStats,
     sacGameResultStatsSchemaDef,
     formatSettlementsAndCitiesResultStats,
-    formatSettlementsAndCitiesChart,
+    formatSettlementsAndCitiesCharts,
     playerByUserId as sacPlayerByUserId,
 } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import type { ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
@@ -42,7 +42,10 @@ import {
     computeWorldDominationResultStats,
     worldDominationGameResultStatsSchemaDef,
     formatWorldDominationResultStats,
+    formatWorldDominationCharts,
+    playerByUserId as worldDominationPlayerByUserId,
 } from "@/games/WorldDomination/WorldDominationModels";
+import type { IWorldDominationSpecificGameStateResponse } from "@/games/WorldDomination/apiModels";
 import {
     ISolitaireGameData,
     ISolitaireGameResultStats,
@@ -160,7 +163,7 @@ const GAME_RESULT_STATS: Record<string, {
     model: Model<any>,
     compute: (gameData: IGameData) => unknown | Promise<unknown>,
     format: (stats: any, usernameById: Map<string, string>) => GameResultStatGroup[],
-    chart?: (stats: any, usernameById: Map<string, string>) => GameResultChart | undefined,
+    charts?: (stats: any, usernameById: Map<string, string>) => GameResultChart[],
 }> = {
     DiceCities: {
         model: DiceCitiesGameResultModel,
@@ -173,7 +176,7 @@ const GAME_RESULT_STATS: Record<string, {
             return computeDiceCitiesResultStats(dcGameData, coinsPerTurn);
         },
         format: formatDiceCitiesResultStats,
-        chart: formatDiceCitiesChart,
+        charts: formatDiceCitiesCharts,
     },
     Smartthink: {
         model: SmartthinkGameResultModel,
@@ -196,12 +199,24 @@ const GAME_RESULT_STATS: Record<string, {
             return computeSettlementsAndCitiesResultStats(sacGameData, resourcesPerTurn);
         },
         format: formatSettlementsAndCitiesResultStats,
-        chart: formatSettlementsAndCitiesChart,
+        charts: formatSettlementsAndCitiesCharts,
     },
     WorldDomination: {
         model: WorldDominationGameResultModel,
-        compute: (gameData) => computeWorldDominationResultStats(gameData as IWorldDominationGameData),
+        compute: async (gameData) => {
+            const wdGameData = gameData as IWorldDominationGameData;
+            const armiesDeployedPerTurn = await computePerTurnStat<IWorldDominationSpecificGameStateResponse>(
+                wdGameData,
+                (state, userId) => worldDominationPlayerByUserId(state, userId)?.armies,
+            );
+            const totalArmiesDeployedPerTurn = await computePerTurnStat<IWorldDominationSpecificGameStateResponse>(
+                wdGameData,
+                (state, userId) => worldDominationPlayerByUserId(state, userId)?.totalArmiesDeployed,
+            );
+            return computeWorldDominationResultStats(wdGameData, armiesDeployedPerTurn, totalArmiesDeployedPerTurn);
+        },
         format: formatWorldDominationResultStats,
+        charts: formatWorldDominationCharts,
     },
     Solitaire: {
         model: SolitaireGameResultModel,
@@ -219,13 +234,13 @@ export function formatGameResultStats(gameType: string, stats: unknown, username
     return specific.format(stats, usernameById);
 }
 
-// Renders a GameResult document's discriminated `stats` field into a
-// turn-by-turn chart, for games that register one. Returns undefined for
-// games with no chart registered (or no stats present).
-export function formatGameResultChart(gameType: string, stats: unknown, usernameById: Map<string, string>): GameResultChart | undefined {
+// Renders a GameResult document's discriminated `stats` field into zero or
+// more turn-by-turn charts, for games that register any. Returns [] for
+// games with no charts registered (or no stats present).
+export function formatGameResultCharts(gameType: string, stats: unknown, usernameById: Map<string, string>): GameResultChart[] {
     const specific = GAME_RESULT_STATS[gameType];
-    if (!specific?.chart || !stats) return undefined;
-    return specific.chart(stats, usernameById);
+    if (!specific?.charts || !stats) return [];
+    return specific.charts(stats, usernameById);
 }
 
 export type MatchOutcome = "win" | "loss" | "draw";

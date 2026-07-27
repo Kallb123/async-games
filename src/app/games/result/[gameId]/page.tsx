@@ -59,14 +59,14 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
                                 : <div className="ag-empty">No extra stats recorded for this game.</div>}
                         </div>
 
-                        {result.chart && (
-                            <div className="ag-section">
+                        {result.charts.map(chart => (
+                            <div className="ag-section" key={chart.title}>
                                 <div className="ag-section-head">
-                                    <h2 className="ag-section-label">{result.chart.title}</h2>
+                                    <h2 className="ag-section-label">{chart.title}</h2>
                                 </div>
-                                <LineChart chart={result.chart} players={result.players} />
+                                <LineChart chart={chart} players={result.players} />
                             </div>
-                        )}
+                        ))}
                     </>
                 )}
 

@@ -16,6 +16,13 @@ export interface IWorldDominationPlayerStateResponse {
     userId: string;
     username: string;
     territoryCount: number;
+    // Total armies currently on the board across this player's owned
+    // territories (armies are lost in combat, so this can differ turn to turn
+    // from what was deployed).
+    armies: number;
+    // Cumulative armies deployed via WorldDominationDeployArmies over the
+    // whole match so far (never decreases, unlike `armies` above).
+    totalArmiesDeployed: number;
     // Full hand, keyed by username same as SAC's playerDevCards: only the
     // requesting user's hand is meaningful client-side, but every hand is sent
     // for simplicity (this app doesn't hide hidden info server-side elsewhere).
