@@ -481,6 +481,11 @@ layout) rendered inside a centred `.ag-app` column.
 The engine is designed so a new game is additive, and everything about it lives
 in one new folder, `src/games/<Game>/`. Roughly:
 
+> For a step-by-step checklist plus the practical gotchas (Mongoose `Mixed`
+> field tracking, wiring a solo game through the invite/accept engine,
+> isomorphic client/server rules modules, avoiding leaking hidden state over
+> the wire), see [`docs/new-game.md`](./docs/new-game.md).
+
 1. **Domain layer** — in `src/games/<Game>/`:
    - `<Game>Models.ts`: the `GameDataModel.discriminator` with a
      `specificGameState` sub-schema; the `InvitationModel.discriminator` with a
@@ -597,6 +602,7 @@ one-liner fails with a message naming the exact file and line to add.
 ## 15. Related docs
 
 - [`AGENTS.md`](./AGENTS.md) — contribution conventions and the component-reuse rules.
+- [`docs/new-game.md`](./docs/new-game.md) — step-by-step checklist for adding a new game, plus practical gotchas.
 - [`docs/turn-recap-and-planning.md`](./docs/turn-recap-and-planning.md) — the replay engine in depth.
 - [`docs/games/`](./docs/games/) — per-game rules notes (Smartthink, Settlements & Cities).
 - [`docs/deployment.png`](./docs/deployment.png) — deployment diagram.

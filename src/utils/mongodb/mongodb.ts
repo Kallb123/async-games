@@ -5,13 +5,14 @@ import { SnakesAndLaddersGameDataModel, SnakesAndLaddersInvitationModel } from '
 import { SettlementsAndCitiesGameDataModel, SettlementsAndCitiesInvitationModel } from '@/games/SettlementsAndCities/SettlementsAndCitiesModels';
 import { SmartthinkGameDataModel, SmartthinkInvitationModel } from '@/games/Smartthink/SmartthinkModels';
 import { WorldDominationGameDataModel, WorldDominationInvitationModel } from '@/games/WorldDomination/WorldDominationModels';
+import { SolitaireGameDataModel, SolitaireInvitationModel } from '@/games/Solitaire/SolitaireModels';
 import { InvitationModel } from './InvitationData';
 
 // Add new game discriminator keys here whenever a new game is introduced.
 // TypeScript will produce a compile error if a key is listed but its model is
 // not present in the records inside initialiseDiscriminators().
-type GameDataDiscriminatorKey = 'DiceCitiesGameData' | 'SnakesAndLaddersGameData' | 'SettlementsAndCitiesGameData' | 'SmartthinkGameData' | 'WorldDominationGameData';
-type InvitationDiscriminatorKey = 'DiceCitiesInvitation' | 'SnakesAndLaddersInvitation' | 'SettlementsAndCitiesInvitation' | 'SmartthinkInvitation' | 'WorldDominationInvitation';
+type GameDataDiscriminatorKey = 'DiceCitiesGameData' | 'SnakesAndLaddersGameData' | 'SettlementsAndCitiesGameData' | 'SmartthinkGameData' | 'WorldDominationGameData' | 'SolitaireGameData';
+type InvitationDiscriminatorKey = 'DiceCitiesInvitation' | 'SnakesAndLaddersInvitation' | 'SettlementsAndCitiesInvitation' | 'SmartthinkInvitation' | 'WorldDominationInvitation' | 'SolitaireInvitation';
 
 declare global {
   var mongoose: any; // This must be a `var` and not a `let / const`
@@ -66,6 +67,7 @@ function initialiseDiscriminators() {
     SettlementsAndCitiesGameData: SettlementsAndCitiesGameDataModel,
     SmartthinkGameData: SmartthinkGameDataModel,
     WorldDominationGameData: WorldDominationGameDataModel,
+    SolitaireGameData: SolitaireGameDataModel,
   };
   const _invitations: Record<InvitationDiscriminatorKey, unknown> = {
     DiceCitiesInvitation: DiceCitiesInvitationModel,
@@ -73,6 +75,7 @@ function initialiseDiscriminators() {
     SettlementsAndCitiesInvitation: SettlementsAndCitiesInvitationModel,
     SmartthinkInvitation: SmartthinkInvitationModel,
     WorldDominationInvitation: WorldDominationInvitationModel,
+    SolitaireInvitation: SolitaireInvitationModel,
   };
   void _gameData, _invitations;
 }

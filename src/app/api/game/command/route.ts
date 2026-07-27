@@ -8,6 +8,7 @@ import { recordGameResult } from '@/utils/mongodb/GameResultData';
 import { DiceCitiesGameType, DiceCitiesRequestBusinessCenterOpponentSelection, DiceCitiesRequestBusinessCenterOwnSelection, DiceCitiesRequestCardPurchase, DiceCitiesRequestDiceRoll, DiceCitiesRequestPassTurn, DiceCitiesRequestTvStationSelection, DiceCitiesRequestUnlockAmusementPark, DiceCitiesRequestUnlockRadioTower, DiceCitiesRequestUnlockShoppingMall, DiceCitiesRequestUnlockTrainStation } from '@/utils/apiModels/GameLogic';
 import { SettlementsAndCitiesGameType, SACPlaceSettlementSetup, SACPlaceRoadSetup, SACPlayKnight, SACRollDice, SACMoveRobber, SACBuildRoad, SACBuildSettlement, SACBuildCity, SACBuyDevCard, SACPlayRoadBuilding, SACPlayYearOfPlenty, SACPlayMonopoly, SACMaritimeTrade, SACEndTurn } from '@/utils/apiModels/GameLogic';
 import { WorldDominationGameType, WorldDominationDeployArmies, WorldDominationCashInCards, WorldDominationAttack, WorldDominationOccupyTerritory, WorldDominationEndAttackPhase, WorldDominationFortify, WorldDominationSkipFortify } from '@/utils/apiModels/GameLogic';
+import { SolitaireGameType, SolitaireDraw, SolitaireMoveCard, SolitaireUndo, SolitaireAutoSolve } from '@/utils/apiModels/GameLogic';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
 import { IGameDataResponse } from '@/utils/apiModels/GameDataApi';
 
@@ -60,6 +61,11 @@ export async function POST(request: NextRequest) {
     new WorldDominationFortify(),
     new WorldDominationSkipFortify(),
     new WorldDominationGameType(),
+    new SolitaireDraw(),
+    new SolitaireMoveCard(),
+    new SolitaireUndo(),
+    new SolitaireAutoSolve(),
+    new SolitaireGameType(),
   ];
   // console.log(commandRequest);
   console.log(commandRequest.myString());
