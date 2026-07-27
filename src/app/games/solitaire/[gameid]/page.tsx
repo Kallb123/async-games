@@ -4,7 +4,7 @@ import { useUser } from "@clerk/nextjs";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useRouter, usePathname } from "next/navigation";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
-import { IGameCommand, SolitaireDraw, SolitaireMoveCard, SolitaireUndo } from "@/utils/apiModels/GameLogic";
+import { IGameCommand, SolitaireDraw, SolitaireMoveCard, SolitaireUndo, SolitaireAutoSolve } from "@/utils/apiModels/GameLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
@@ -14,7 +14,7 @@ import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useToast } from "@/components/ToastContext";
 import { ISolitaireGameDataResponse } from "@/games/Solitaire/apiModels";
-import { SolitaireZoneRef, getLegalMoves, hasAnyLegalMove, formatDuration } from "@/games/Solitaire/rules";
+import { SolitaireZoneRef, getLegalMoves, hasAnyLegalMove, hasHiddenTableauCards, foundationCardCount, formatDuration } from "@/games/Solitaire/rules";
 import SolitaireBoard from "@/games/Solitaire/components/SolitaireBoard";
 import SolitaireVictoryScreen from "@/games/Solitaire/components/SolitaireVictoryScreen";
 
@@ -82,6 +82,7 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
 
     const handleDraw = () => submitCommand(new SolitaireDraw());
     const handleUndo = () => submitCommand(new SolitaireUndo());
+    const handleAutoSolve = () => submitCommand(new SolitaireAutoSolve());
     const handleMove = (source: SolitaireZoneRef, destination: SolitaireZoneRef, count: number) => {
         const command = new SolitaireMoveCard();
         command.source = source;
@@ -104,10 +105,9 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
     };
 
     const elapsedSeconds = state ? Math.max(0, Math.round((Date.now() - new Date(state.startedAt).getTime()) / 1000)) : 0;
-    const foundationCount = state
-        ? Object.values(state.foundations).reduce((total, pile) => total + pile.length, 0)
-        : 0;
+    const foundationCount = state ? foundationCardCount(state.foundations) : 0;
     const stalemated = !!state && !complete && !hasAnyLegalMove({ waste: state.waste, foundations: state.foundations, tableau: state.tableau, stockCount: state.stockCount });
+    const autoSolveAvailable = !!state && !complete && !hasHiddenTableauCards(state.tableau);
 
     let subtitle: React.ReactNode = 'Loading…';
     if (state) {
@@ -153,6 +153,15 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
             {stalemated && (
                 <div className="ag-section">
                     <p className="ag-hint">No legal moves left. Undo a move or end the game to start a new deal.</p>
+                </div>
+            )}
+
+            {autoSolveAvailable && (
+                <div className="ag-section">
+                    <button type="button" className="ag-btn ag-btn--primary ag-btn--block" onClick={handleAutoSolve}>
+                        🪄 Auto-solve
+                    </button>
+                    <p className="ag-hint" style={{ textAlign: 'center' }}>Every card is face-up — the rest can be played out automatically.</p>
                 </div>
             )}
 

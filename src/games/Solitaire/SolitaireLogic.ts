@@ -4,8 +4,17 @@ import type { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
 import { serializable } from "@/utils/apiModels/Serialisable";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
-import { ICard, Suit, SUITS, rankLabel, suitSymbol } from "@/utils/games/Cards";
-import { canPlaceOnFoundation, canPlaceOnTableau, isValidSequence, SolitaireZoneRef } from "@/games/Solitaire/rules";
+import { ICard, rankLabel, suitSymbol } from "@/utils/games/Cards";
+import {
+    canDraw,
+    canPlaceOnFoundation,
+    canPlaceOnTableau,
+    foundationCardCount,
+    getLegalMoves,
+    hasHiddenTableauCards,
+    isValidSequence,
+    SolitaireZoneRef,
+} from "@/games/Solitaire/rules";
 
 // Standard/Microsoft scoring rules (docs/games/solitaire.md §5.1).
 const WASTE_TO_TABLEAU = 5;
@@ -32,8 +41,7 @@ export class SolitaireGameType implements IGameType {
 
     CheckGameOver(gameData: IGameData) {
         const state = (gameData as ISolitaireGameData).specificGameState;
-        const total = SUITS.reduce((n, suit) => n + state.foundations[suit].length, 0);
-        if (total === 52) {
+        if (foundationCardCount(state.foundations) === 52) {
             gameData.complete = true;
             gameData.winner = gameData.currentTurn;
             gameData.currentTurn = "";
@@ -277,6 +285,100 @@ export class SolitaireUndo implements IGameCommand {
 
         gameData.gameState.history.unshift(`${this.senderUsername} undid their last move`);
 
+        markDirty(gameData);
+        return { turnOver: false, validMove: true };
+    }
+
+    Undo(gameData: IGameData) {
+        console.error("Command Undo not implemented yet");
+    }
+}
+
+// Safety valves for the auto-solve loop below: a hard cap on total steps, and
+// a cap on consecutive non-foundation tableau reshuffles so two columns can't
+// shuffle a card back and forth forever without ever banking one.
+const AUTO_SOLVE_MAX_ITERATIONS = 500;
+const AUTO_SOLVE_STAGNATION_LIMIT = 40;
+
+// Plays the rest of the game out mechanically once no hidden information is
+// left (every tableau card face-up): repeatedly send whatever can legally go
+// home to its foundation, fall back to a tableau reshuffle or a stock
+// draw/recycle when nothing can, until the foundations are full or truly
+// nothing is left to try. Reuses SolitaireMoveCard/SolitaireDraw's own
+// Execute for every step rather than re-implementing move validation/scoring.
+@serializable
+export class SolitaireAutoSolve implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = (new Date()).toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = "Unknown";
+    senderUsername: string = "Unknown";
+    readonly className = "SolitaireAutoSolve";
+
+    myString() {
+        return `Solitaire AutoSolve!`;
+    }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const state = (gameData as ISolitaireGameData).specificGameState;
+
+        if (hasHiddenTableauCards(state.tableau)) {
+            return INVALID_DRAW;
+        }
+
+        // Every sub-step below pushes its own undo snapshot; collapse them
+        // all into the single pre-auto-solve snapshot captured here, so one
+        // Undo reverts the whole run instead of dozens of individual steps.
+        const before = snapshotOf(state);
+        const undoStackDepth = state.undoStack.length;
+
+        let progressed = false;
+        let stagnantMoves = 0;
+        for (let i = 0; i < AUTO_SOLVE_MAX_ITERATIONS && foundationCardCount(state.foundations) < 52; i++) {
+            const legalState = { waste: state.waste, foundations: state.foundations, tableau: state.tableau, stockCount: state.stock.length };
+            const moves = getLegalMoves(legalState);
+            const foundationMove = moves.find((m) => m.destination.zone === 'foundation');
+            const chosen = foundationMove
+                ?? (stagnantMoves < AUTO_SOLVE_STAGNATION_LIMIT
+                    ? moves.find((m) => m.source.zone === 'tableau' && m.destination.zone === 'tableau')
+                    : undefined);
+
+            if (chosen) {
+                const move = new SolitaireMoveCard();
+                move.senderId = this.senderId;
+                move.senderUsername = this.senderUsername;
+                move.source = chosen.source;
+                move.destination = chosen.destination;
+                move.count = chosen.count;
+                const outcome = await move.Execute(gameData);
+                if (!outcome.validMove) break; // defensive - getLegalMoves already validated this
+                progressed = true;
+                stagnantMoves = foundationMove ? 0 : stagnantMoves + 1;
+                continue;
+            }
+
+            if (canDraw(state.stock.length, state.waste.length)) {
+                const draw = new SolitaireDraw();
+                draw.senderId = this.senderId;
+                draw.senderUsername = this.senderUsername;
+                const outcome = await draw.Execute(gameData);
+                if (!outcome.validMove) break;
+                progressed = true;
+                stagnantMoves = 0; // a new waste top may unlock tableau moves again
+                continue;
+            }
+
+            break; // nothing left to try
+        }
+
+        if (!progressed) {
+            return INVALID_DRAW;
+        }
+
+        state.undoStack.length = undoStackDepth;
+        state.undoStack.push(before);
+
+        gameData.gameState.history.unshift(`${this.senderUsername} auto-solved the rest of the game`);
         markDirty(gameData);
         return { turnOver: false, validMove: true };
     }

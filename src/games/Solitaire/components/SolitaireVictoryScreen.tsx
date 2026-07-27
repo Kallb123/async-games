@@ -3,7 +3,7 @@ import PlayingCard from '@/components/ui/PlayingCard';
 import Stat from '@/components/ui/Stat';
 import { ICard, SUITS } from '@/utils/games/Cards';
 import { ISolitaireGameStateResponse } from '@/games/Solitaire/apiModels';
-import { computeFinalScore, computeTimePenalty, formatDuration } from '@/games/Solitaire/rules';
+import { computeFinalScore, computeTimePenalty, foundationCardCount, formatDuration } from '@/games/Solitaire/rules';
 
 interface SolitaireVictoryScreenProps {
     state: ISolitaireGameStateResponse;
@@ -16,7 +16,7 @@ export default function SolitaireVictoryScreen({ state }: SolitaireVictoryScreen
     const elapsedSeconds = Math.max(0, Math.round((Date.now() - new Date(state.startedAt).getTime()) / 1000));
     const timePenalty = computeTimePenalty(elapsedSeconds);
     const finalScore = computeFinalScore(state.score, elapsedSeconds);
-    const foundationYield = SUITS.reduce((total, suit) => total + state.foundations[suit].length, 0);
+    const foundationYield = foundationCardCount(state.foundations);
     const penalizedRecycles = Math.max(0, state.stockRecycleCount - 2);
     const efficiency = Math.round(Math.min(1, state.tableauCardsTurned / 21) * 100);
 

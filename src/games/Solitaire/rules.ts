@@ -136,24 +136,33 @@ export function getLegalMoves(state: ISolitaireLegalMoveState): ISolitaireLegalM
         });
     }
 
-    // Recommend the single best move: freeing a hidden card beats banking a
-    // card onto a foundation beats any other reshuffle.
-    let bestIndex = -1;
-    let bestScore = -1;
-    moves.forEach((move, i) => {
-        const score = move.reason === "Frees a face-down card" ? 3 : move.destination.zone === "foundation" ? 2 : 1;
-        if (score > bestScore) {
-            bestScore = score;
-            bestIndex = i;
-        }
-    });
-    if (bestIndex >= 0) moves[bestIndex].recommended = true;
+    // Sending a card home is never a bad move, so it always sorts first
+    // (Array.prototype.sort is stable, so ties keep their original order).
+    moves.sort((a, b) => (a.destination.zone === "foundation" ? 0 : 1) - (b.destination.zone === "foundation" ? 0 : 1));
+
+    // Recommend: a foundation move beats freeing a hidden card beats any other reshuffle.
+    let recommendedIndex = moves.findIndex((m) => m.destination.zone === "foundation");
+    if (recommendedIndex === -1) recommendedIndex = moves.findIndex((m) => m.reason === "Frees a face-down card");
+    if (recommendedIndex === -1 && moves.length > 0) recommendedIndex = 0;
+    if (recommendedIndex >= 0) moves[recommendedIndex].recommended = true;
 
     return moves;
 }
 
 export function hasAnyLegalMove(state: ISolitaireLegalMoveState): boolean {
     return getLegalMoves(state).length > 0 || canDraw(state.stockCount, state.waste.length);
+}
+
+// Total cards currently home across all four foundations (0-52) — the win
+// condition and the "N/52" telemetry both derive from this.
+export function foundationCardCount(foundations: Record<Suit, ICard[]>): number {
+    return SUITS.reduce((total, suit) => total + foundations[suit].length, 0);
+}
+
+// Auto-solve becomes available once every tableau card is face-up: with no
+// hidden information left, the rest of the game can be played out mechanically.
+export function hasHiddenTableauCards(tableau: ICard[][]): boolean {
+    return tableau.some((column) => column.some((card) => !card.faceUp));
 }
 
 // Doc §5.1: "Time Penalty: -2 pts / 10s". Derived, not persisted — computed

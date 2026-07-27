@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { SolitaireDraw, SolitaireMoveCard, SolitaireUndo, SolitaireGameType } from "./SolitaireLogic";
+import { SolitaireDraw, SolitaireMoveCard, SolitaireUndo, SolitaireAutoSolve, SolitaireGameType } from "./SolitaireLogic";
 import { buildInitialSolitaireState, ISolitaireGameData, ISolitaireGameState } from "./SolitaireModels";
-import { canPlaceOnFoundation, canPlaceOnTableau, getLegalMoves, hasAnyLegalMove } from "./rules";
-import { ICard, SUITS } from "@/utils/games/Cards";
+import { canPlaceOnFoundation, canPlaceOnTableau, foundationCardCount, getLegalMoves, hasAnyLegalMove } from "./rules";
+import { ICard, Suit, SUITS } from "@/utils/games/Cards";
 
 // ─── Minimal in-memory game harness ───────────────────────────────────────────
 // markModified is a Mongoose Document method the real command route relies on
@@ -27,9 +27,24 @@ function cmd<T extends { senderId: string; senderUsername: string }>(c: T): T {
 }
 
 function countAllCards(state: ISolitaireGameState): number {
-    const foundationCount = SUITS.reduce((n, s) => n + state.foundations[s].length, 0);
     const tableauCount = state.tableau.reduce((n, col) => n + col.length, 0);
-    return state.stock.length + state.waste.length + foundationCount + tableauCount;
+    return state.stock.length + state.waste.length + foundationCardCount(state.foundations) + tableauCount;
+}
+
+// A base state (empty stock/waste/tableau/foundations) tests can build on top
+// of without needing a full deal.
+function baseState(): ISolitaireGameState {
+    const state = buildInitialSolitaireState('DRAW_1');
+    state.stock = [];
+    state.waste = [];
+    state.tableau = [[], [], [], [], [], [], []];
+    state.foundations = { S: [], H: [], D: [], C: [] };
+    return state;
+}
+
+// A run of `rank` face-up cards (Ace..rank) for one suit, in foundation order.
+function foundationRun(suit: Suit, uptoRank: number): ICard[] {
+    return Array.from({ length: uptoRank }, (_, i) => ({ rank: i + 1, suit, faceUp: true }));
 }
 
 describe("rules", () => {
@@ -127,15 +142,6 @@ describe("SolitaireDraw", () => {
 });
 
 describe("SolitaireMoveCard", () => {
-    function baseState(): ISolitaireGameState {
-        const state = buildInitialSolitaireState('DRAW_1');
-        state.stock = [];
-        state.waste = [];
-        state.tableau = [[], [], [], [], [], [], []];
-        state.foundations = { S: [], H: [], D: [], C: [] };
-        return state;
-    }
-
     it("moves the waste's top card to its foundation and scores +10", async () => {
         const state = baseState();
         state.waste = [{ rank: 1, suit: 'S', faceUp: true }];
@@ -315,5 +321,75 @@ describe("full-game simulation", () => {
         }
 
         expect(countAllCards(state)).toBe(52);
+    });
+});
+
+describe("getLegalMoves ordering", () => {
+    it("always sorts a foundation move first and recommends it, even when a tableau move was found earlier", () => {
+        const state = baseState();
+        // The waste's black Ace has two legal destinations: onto the red 2
+        // (tableau, found first by the natural scan order) or straight home
+        // to the empty spade foundation - the foundation move must win.
+        state.waste = [{ rank: 1, suit: 'S', faceUp: true }];
+        state.tableau[0] = [{ rank: 2, suit: 'H', faceUp: true }];
+
+        const moves = getLegalMoves({ waste: state.waste, foundations: state.foundations, tableau: state.tableau, stockCount: 0 });
+
+        expect(moves.length).toBeGreaterThanOrEqual(2);
+        expect(moves[0].destination.zone).toBe('foundation');
+        expect(moves[0].recommended).toBe(true);
+    });
+});
+
+describe("SolitaireAutoSolve", () => {
+    it("is invalid while any tableau card is still face-down", async () => {
+        const state = baseState();
+        state.tableau[0] = [{ rank: 5, suit: 'S', faceUp: false }];
+        const outcome = await cmd(new SolitaireAutoSolve()).Execute(makeGame(state));
+        expect(outcome.validMove).toBe(false);
+    });
+
+    it("plays out the rest of the game once every tableau card is face-up", async () => {
+        const state = baseState();
+        // Ace-through-Queen already home for every suit; the four Kings are
+        // the only cards left, one alone atop each of four tableau columns.
+        state.foundations = { S: foundationRun('S', 12), H: foundationRun('H', 12), D: foundationRun('D', 12), C: foundationRun('C', 12) };
+        state.tableau[0] = [{ rank: 13, suit: 'S', faceUp: true }];
+        state.tableau[1] = [{ rank: 13, suit: 'H', faceUp: true }];
+        state.tableau[2] = [{ rank: 13, suit: 'D', faceUp: true }];
+        state.tableau[3] = [{ rank: 13, suit: 'C', faceUp: true }];
+
+        const game = makeGame(state);
+        const outcome = await cmd(new SolitaireAutoSolve()).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(foundationCardCount(state.foundations)).toBe(52);
+        expect(new SolitaireGameType().CheckGameOver(game)).toBe(true);
+    });
+
+    it("collapses every sub-move into a single undo step", async () => {
+        const state = baseState();
+        state.foundations = { S: foundationRun('S', 12), H: foundationRun('H', 12), D: foundationRun('D', 12), C: foundationRun('C', 12) };
+        state.tableau[0] = [{ rank: 13, suit: 'S', faceUp: true }];
+        state.tableau[1] = [{ rank: 13, suit: 'H', faceUp: true }];
+        state.tableau[2] = [{ rank: 13, suit: 'D', faceUp: true }];
+        state.tableau[3] = [{ rank: 13, suit: 'C', faceUp: true }];
+        const undoDepthBefore = state.undoStack.length;
+
+        const game = makeGame(state);
+        await cmd(new SolitaireAutoSolve()).Execute(game);
+        expect(state.undoStack.length).toBe(undoDepthBefore + 1);
+
+        const outcome = await cmd(new SolitaireUndo()).Execute(game);
+        expect(outcome.validMove).toBe(true);
+        expect(foundationCardCount(state.foundations)).toBe(48);
+        expect(state.tableau[0]).toEqual([{ rank: 13, suit: 'S', faceUp: true }]);
+    });
+
+    it("makes no move at all when there's nothing to do (already won)", async () => {
+        const state = baseState();
+        state.foundations = { S: foundationRun('S', 13), H: foundationRun('H', 13), D: foundationRun('D', 13), C: foundationRun('C', 13) };
+        const outcome = await cmd(new SolitaireAutoSolve()).Execute(makeGame(state));
+        expect(outcome.validMove).toBe(false);
     });
 });

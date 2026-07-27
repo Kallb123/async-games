@@ -8,8 +8,8 @@ import { userIdListToUsernameList } from "@/utils/users/clerk";
 import { v4 as uuidv4 } from 'uuid';
 import { SolitaireGameType } from "@/utils/apiModels/GameLogic";
 import { UNLIMITED_TURN_TIMER } from "@/utils/games/TurnTimer";
-import { ICard, Suit, SUITS, buildStandardDeck, shuffleDeck } from "@/utils/games/Cards";
-import { computeFinalScore, formatDuration } from "./rules";
+import { ICard, Suit, buildStandardDeck, shuffleDeck } from "@/utils/games/Cards";
+import { computeFinalScore, foundationCardCount, formatDuration } from "./rules";
 
 export type SolitaireDrawMode = 'DRAW_1' | 'DRAW_3';
 
@@ -235,7 +235,7 @@ export const solitaireGameResultStatsSchemaDef = {
 
 export function computeSolitaireResultStats(gameData: ISolitaireGameData): ISolitaireGameResultStats {
     const state = gameData.specificGameState;
-    const foundationYield = SUITS.reduce((total, suit) => total + state.foundations[suit].length, 0);
+    const foundationYield = foundationCardCount(state.foundations);
     const timeElapsedSec = Math.max(0, Math.round((Date.now() - new Date(state.startedAt).getTime()) / 1000));
 
     return {
