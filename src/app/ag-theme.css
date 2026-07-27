@@ -1162,6 +1162,139 @@ button {
 }
 .ag-game-result h2 { font: 800 20px var(--ag-font); margin: 0; }
 
+/* ---- GameResult turn-by-turn line chart ---- */
+.ag-chart-ylabel {
+    font: 600 11px var(--ag-font);
+    color: var(--ag-ink-softer);
+    margin-bottom: 6px;
+}
+.ag-chart-plot {
+    position: relative;
+}
+.ag-chart-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 320 / 200;
+    touch-action: pan-y;
+}
+.ag-chart-grid {
+    stroke: var(--ag-line-dashed);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+}
+.ag-chart-tick {
+    font: 600 8px var(--ag-font);
+    fill: var(--ag-ink-softer);
+}
+.ag-chart-line {
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+}
+.ag-chart-enddot, .ag-chart-hoverdot {
+    stroke: var(--ag-surface);
+    stroke-width: 2;
+}
+.ag-chart-crosshair {
+    stroke: var(--ag-ink-softer);
+    stroke-width: 1;
+    stroke-dasharray: 2 2;
+    vector-effect: non-scaling-stroke;
+}
+.ag-chart-endlabel {
+    position: absolute;
+    transform: translate(4px, -50%);
+    font: 800 10px var(--ag-font);
+    white-space: nowrap;
+    pointer-events: none;
+}
+.ag-chart-tooltip {
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    background: var(--ag-dark);
+    color: var(--ag-on-dark);
+    border-radius: 10px;
+    padding: 6px 10px;
+    font: 600 11px var(--ag-font);
+    box-shadow: var(--ag-shadow-lift);
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 1;
+}
+.ag-chart-tooltip-turn {
+    font-weight: 800;
+    opacity: 0.75;
+    margin-bottom: 3px;
+}
+.ag-chart-tooltip-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 1px 0;
+}
+.ag-chart-tooltip-key {
+    width: 8px;
+    height: 2px;
+    border-radius: 1px;
+    flex: none;
+}
+.ag-chart-tooltip-name { flex: 1; opacity: 0.85; }
+.ag-chart-tooltip-value { font-weight: 800; }
+.ag-chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 12px;
+}
+.ag-chart-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font: 600 11px var(--ag-font);
+    color: var(--ag-ink-soft);
+}
+.ag-chart-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex: none;
+}
+.ag-chart-table-toggle {
+    display: block;
+    margin-top: 12px;
+    padding: 0;
+    background: none;
+    border: none;
+    font: 700 11px var(--ag-font);
+    color: var(--ag-terracotta);
+    cursor: pointer;
+}
+.ag-chart-table-wrap {
+    margin-top: 8px;
+    overflow-x: auto;
+}
+.ag-chart-table {
+    width: 100%;
+    border-collapse: collapse;
+    font: 500 11px var(--ag-font);
+    color: var(--ag-ink-soft);
+}
+.ag-chart-table th, .ag-chart-table td {
+    padding: 5px 8px;
+    text-align: right;
+    border-bottom: 1px dashed var(--ag-line-dashed);
+    white-space: nowrap;
+}
+.ag-chart-table th:first-child, .ag-chart-table td:first-child { text-align: left; }
+.ag-chart-table th {
+    font-weight: 800;
+    color: var(--ag-ink-softer);
+}
+
 /* ==========================================================================
    Snakes & Ladders — the walnut 100-square board, tokens and roll-result sheet
    ========================================================================== */

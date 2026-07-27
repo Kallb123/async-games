@@ -4,6 +4,7 @@ import { use } from "react";
 import CurrentUserInfo from "@/components/CurrentUserInfo";
 import GameThumb from "@/components/ui/GameThumb";
 import GameResultStats from "@/components/ui/GameResultStats";
+import LineChart from "@/components/ui/LineChart";
 import { SkeletonList } from "@/components/ui/Skeleton";
 import { useGameResult } from "@/utils/hooks/useGameResult";
 import { GAME_META } from "@/utils/ui/games";
@@ -58,6 +59,15 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
                                 ? <GameResultStats groups={result.stats} />
                                 : <div className="ag-empty">No extra stats recorded for this game.</div>}
                         </div>
+
+                        {result.chart && (
+                            <div className="ag-section">
+                                <div className="ag-section-head">
+                                    <h2 className="ag-section-label">{result.chart.title}</h2>
+                                </div>
+                                <LineChart chart={result.chart} players={result.players} />
+                            </div>
+                        )}
                     </>
                 )}
 
