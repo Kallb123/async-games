@@ -8,8 +8,10 @@ import {
     diceCitiesGameResultStatsSchemaDef,
     formatDiceCitiesResultStats,
     formatDiceCitiesChart,
+    playerByUserId as diceCitiesPlayerByUserId,
 } from "@/games/DiceCities/DiceCitiesModels";
-import { computeDiceCitiesCoinsPerTurn } from "@/utils/games/replay";
+import type { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
+import { computePerTurnStat } from "@/utils/games/replay";
 import {
     ISmartthinkGameData,
     ISmartthinkGameResultStats,
@@ -30,7 +32,10 @@ import {
     computeSettlementsAndCitiesResultStats,
     sacGameResultStatsSchemaDef,
     formatSettlementsAndCitiesResultStats,
+    formatSettlementsAndCitiesChart,
+    playerByUserId as sacPlayerByUserId,
 } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
+import type { ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
 import {
     IWorldDominationGameData,
     IWorldDominationGameResultStats,
@@ -161,7 +166,10 @@ const GAME_RESULT_STATS: Record<string, {
         model: DiceCitiesGameResultModel,
         compute: async (gameData) => {
             const dcGameData = gameData as IDiceCitiesGameData;
-            const coinsPerTurn = await computeDiceCitiesCoinsPerTurn(dcGameData);
+            const coinsPerTurn = await computePerTurnStat<IDiceCitiesGameStateResponse>(
+                dcGameData,
+                (state, userId) => diceCitiesPlayerByUserId(state, userId)?.totalCoinsEarned,
+            );
             return computeDiceCitiesResultStats(dcGameData, coinsPerTurn);
         },
         format: formatDiceCitiesResultStats,
@@ -179,8 +187,16 @@ const GAME_RESULT_STATS: Record<string, {
     },
     SettlementsAndCities: {
         model: SettlementsAndCitiesGameResultModel,
-        compute: (gameData) => computeSettlementsAndCitiesResultStats(gameData as ISettlementsAndCitiesGameData),
+        compute: async (gameData) => {
+            const sacGameData = gameData as ISettlementsAndCitiesGameData;
+            const resourcesPerTurn = await computePerTurnStat<ISACSpecificGameStateResponse>(
+                sacGameData,
+                (state, userId) => sacPlayerByUserId(state, userId)?.resourcesGathered,
+            );
+            return computeSettlementsAndCitiesResultStats(sacGameData, resourcesPerTurn);
+        },
         format: formatSettlementsAndCitiesResultStats,
+        chart: formatSettlementsAndCitiesChart,
     },
     WorldDomination: {
         model: WorldDominationGameResultModel,

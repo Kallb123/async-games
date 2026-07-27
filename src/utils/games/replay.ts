@@ -2,8 +2,7 @@ import { IGameData } from "../mongodb/GameData";
 import { IGameCommand, IGameType, ICommandOutcome } from "../apiModels/GameLogic";
 import { deserializeJSON } from "../apiModels/Serialisable";
 import { buildInitialSnakesAndLaddersState, gameStateToModel as snakesAndLaddersStateToModel } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
-import { buildInitialDiceCitiesState, gameStateToModel as diceCitiesStateToModel, IDiceCitiesGameData, playerByUserId } from "@/games/DiceCities/DiceCitiesModels";
-import { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
+import { buildInitialDiceCitiesState, gameStateToModel as diceCitiesStateToModel } from "@/games/DiceCities/DiceCitiesModels";
 import { buildInitialSmartthinkState, gameStateToModel as smartthinkStateToModel } from "@/games/Smartthink/SmartthinkModels";
 import { buildInitialSettlementsAndCitiesState, gameStateToResponse as settlementsAndCitiesStateToModel } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
@@ -246,24 +245,29 @@ export async function buildTimeline(
     return { currentIndex, snapshots, resolvedPlannedCommands };
 }
 
-// Replays a Dice Cities game via buildTimeline, recording every player's
-// cumulative totalCoinsEarned at the end of each turn - the series a "coins
-// per turn" chart plots. Usernames aren't resolved yet at game-end
-// (recordGameResult only has userIds), matching the compute-by-userId /
-// format-by-username split every other game's result stats already use, so
-// an arbitrary (identity) userIdNameMap is enough - playerByUserId looks
-// players up by their `.userId` field regardless of how the map keyed them.
-export async function computeDiceCitiesCoinsPerTurn(gameData: IDiceCitiesGameData): Promise<Map<string, number>[]> {
+// Replays a game via buildTimeline, recording a cumulative per-player stat at
+// the end of each turn - the series a per-turn line chart plots (e.g. Dice
+// Cities' coins/turn, Settlements & Cities' resources/turn - see each game's
+// GAME_RESULT_STATS entry in GameResultData.ts for the actual field being
+// tracked). Usernames aren't resolved yet at game-end (recordGameResult only
+// has userIds), matching the compute-by-userId / format-by-username split
+// every other game's result stats already use, so an arbitrary (identity)
+// userIdNameMap is enough - extractValue is expected to look players up by
+// their `.userId` field regardless of how the map keyed them.
+export async function computePerTurnStat<TState>(
+    gameData: IGameData,
+    extractValue: (state: TState, userId: string) => number | undefined,
+): Promise<Map<string, number>[]> {
     const identityMap = Object.fromEntries(gameData.userIdList.map(userId => [userId, userId]));
     const perTurn: Map<string, number>[] = [];
     await buildTimeline(gameData, identityMap, [], (step) => {
         if (!step.outcome.turnOver) {
             return;
         }
-        const responseState = step.next.specificGameState as IDiceCitiesGameStateResponse;
+        const responseState = step.next.specificGameState as TState;
         const entry = new Map<string, number>();
         for (const userId of gameData.userIdList) {
-            entry.set(userId, playerByUserId(responseState, userId)?.totalCoinsEarned ?? 0);
+            entry.set(userId, extractValue(responseState, userId) ?? 0);
         }
         perTurn.push(entry);
     });

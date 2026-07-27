@@ -3,15 +3,9 @@ import type { ITurnSnapshot } from "@/utils/games/replay";
 import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic";
 import type { ISACSpecificGameStateResponse, ISACPlayerStateResponse } from "@/games/SettlementsAndCities/apiModels";
 import type { SAC_Resource } from "@/games/SettlementsAndCities/board";
+import { playerByUserId } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 
 type SACState = ISACSpecificGameStateResponse;
-
-// The response keys playerStates by username, so look players up by their Clerk
-// userId (what commands carry) by scanning the values.
-function playerByUserId(state: SACState | undefined, userId: string): ISACPlayerStateResponse | undefined {
-    if (!state?.playerStates) return undefined;
-    return Object.values(state.playerStates).find((p) => p.userId === userId);
-}
 
 // The response labels road/army owners and player keys by username; map one back
 // to a userId (for affectedIds) via the playerStates lookup.

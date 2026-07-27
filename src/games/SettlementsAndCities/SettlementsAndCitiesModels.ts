@@ -1,8 +1,8 @@
 import { GameDataModel, IGameData, IGameDataDocument } from "@/utils/mongodb/GameData";
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
-import { ISACGameDataResponse, ISACSpecificGameStateResponse } from "./apiModels";
-import { uuidString, GameResultStatGroup } from "@/utils/apiModels/GameDataApi";
+import { ISACGameDataResponse, ISACSpecificGameStateResponse, ISACPlayerStateResponse } from "./apiModels";
+import { uuidString, GameResultStatGroup, GameResultChart, formatPerTurnChart, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
 import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
@@ -432,6 +432,7 @@ export function gameStateToResponse(
             resources: { ...ps.resources },
             devCardCount: Object.values(ps.devCards).reduce((s, n) => s + n, 0),
             knightsPlayed: ps.knightsPlayed,
+            resourcesGathered: ps.resourcesGathered,
             remainingRoads: ps.remainingRoads,
             remainingSettlements: ps.remainingSettlements,
             remainingCities: ps.remainingCities,
@@ -492,6 +493,13 @@ export function gameStateToResponse(
     };
 }
 
+export function playerByUserId(
+    state: ISACSpecificGameStateResponse | undefined,
+    userId: string
+): ISACPlayerStateResponse | undefined {
+    return findPlayerByUserId(state, userId);
+}
+
 export var SettlementsAndCitiesGameDataModel =
     models.SettlementsAndCitiesGameData ||
     GameDataModel.discriminator<
@@ -526,6 +534,13 @@ export interface ISACPlayerResultStats {
 
 export interface ISACGameResultStats {
     playerStats: Map<string, ISACPlayerResultStats>;
+    // Cumulative resourcesGathered per player at the end of each turn, in turn
+    // order - not derivable from playerStats above (that's the game-end total
+    // only). Powers a resources/turn chart. Computed by replaying
+    // commandHistory via computePerTurnStat (see replay.ts), driven from this
+    // game's GAME_RESULT_STATS entry in GameResultData.ts, since it isn't
+    // tracked as history on specificGameState.
+    resourcesPerTurn: Map<string, number>[];
 }
 
 export const sacGameResultStatsSchemaDef = {
@@ -543,9 +558,13 @@ export const sacGameResultStatsSchemaDef = {
             victoryPoints: Number,
         },
     },
+    resourcesPerTurn: [{ type: Schema.Types.Map, of: Number }],
 };
 
-export function computeSettlementsAndCitiesResultStats(gameData: ISettlementsAndCitiesGameData): ISACGameResultStats {
+export function computeSettlementsAndCitiesResultStats(
+    gameData: ISettlementsAndCitiesGameData,
+    resourcesPerTurn: Map<string, number>[],
+): ISACGameResultStats {
     const gs = gameData.specificGameState;
     const playerStats = new Map<string, ISACPlayerResultStats>();
     for (const [userId, ps] of gs.playerStates) {
@@ -568,7 +587,7 @@ export function computeSettlementsAndCitiesResultStats(gameData: ISettlementsAnd
             victoryPoints,
         });
     }
-    return { playerStats };
+    return { playerStats, resourcesPerTurn };
 }
 
 // Renders ISACGameResultStats as one stat group per player, for the shared
@@ -590,4 +609,10 @@ export function formatSettlementsAndCitiesResultStats(stats: ISACGameResultStats
         });
     }
     return groups;
+}
+
+// Renders resourcesPerTurn as a GameResult chart: one entry per turn, keyed by
+// username, for the result page's resources/turn chart.
+export function formatSettlementsAndCitiesChart(stats: ISACGameResultStats, usernameById: Map<string, string>): GameResultChart | undefined {
+    return formatPerTurnChart(stats.resourcesPerTurn, usernameById, "Resources gathered per turn", "Resources");
 }

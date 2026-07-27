@@ -3,7 +3,7 @@ import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationR
 import { Model, Schema, models } from "mongoose";
 import { DiceCitiesCardIds } from "./cards";
 import { IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "./apiModels";
-import { uuidString, GameResultStatGroup, GameResultChart } from "@/utils/apiModels/GameDataApi";
+import { uuidString, GameResultStatGroup, GameResultChart, formatPerTurnChart, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
 import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
@@ -309,14 +309,11 @@ export function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap:
     }
 }
 
-// Finds a player's response-shaped state by their Clerk userId (playerStates
-// is keyed by username, so callers that only have an id can't index it directly).
 export function playerByUserId(
     state: IDiceCitiesGameStateResponse | undefined,
     userId: string
 ): IDiceCitiesPlayerStateResponse | undefined {
-    if (!state?.playerStates) return undefined;
-    return Object.values(state.playerStates).find((p) => p.userId === userId);
+    return findPlayerByUserId(state, userId);
 }
 
 export var DiceCitiesGameDataModel = models.DiceCitiesGameData || GameDataModel.discriminator<IDiceCitiesGameDataDocument, IDiceCitiesGameDataModel>('DiceCitiesGameData', DiceCitiesGameDataSchema);
@@ -335,8 +332,9 @@ export interface IDiceCitiesGameResultStats {
     // Cumulative totalCoinsEarned per player at the end of each turn, in turn
     // order - not derivable from the other fields above (those are game-end
     // totals only). Powers a coins/turn chart. Computed by replaying
-    // commandHistory (see computeDiceCitiesCoinsPerTurn in replay.ts), since
-    // it isn't tracked incrementally on specificGameState.
+    // commandHistory via computePerTurnStat (see replay.ts), driven from this
+    // game's GAME_RESULT_STATS entry in GameResultData.ts, since it isn't
+    // tracked incrementally on specificGameState.
     coinsPerTurn: Map<string, number>[];
 }
 
@@ -379,16 +377,5 @@ export function formatDiceCitiesResultStats(stats: IDiceCitiesGameResultStats, u
 // Renders coinsPerTurn as a GameResult chart: one entry per turn, keyed by
 // username, for the result page's coins/turn chart.
 export function formatDiceCitiesChart(stats: IDiceCitiesGameResultStats, usernameById: Map<string, string>): GameResultChart | undefined {
-    if (stats.coinsPerTurn.length === 0) return undefined;
-    return {
-        title: "Coins per turn",
-        yLabel: "Coins",
-        turns: stats.coinsPerTurn.map(turn => {
-            const entry: Record<string, number> = {};
-            for (const [userId, coins] of turn) {
-                entry[usernameById.get(userId) ?? userId] = coins;
-            }
-            return entry;
-        }),
-    };
+    return formatPerTurnChart(stats.coinsPerTurn, usernameById, "Coins per turn", "Coins");
 }
