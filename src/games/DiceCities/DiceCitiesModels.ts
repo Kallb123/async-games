@@ -3,7 +3,7 @@ import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationR
 import { Model, Schema, models } from "mongoose";
 import { DiceCitiesCardIds } from "./cards";
 import { IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "./apiModels";
-import { uuidString, GameResultStatGroup } from "@/utils/apiModels/GameDataApi";
+import { uuidString, GameResultStatGroup, GameResultChart } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
 import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
@@ -376,18 +376,19 @@ export function formatDiceCitiesResultStats(stats: IDiceCitiesGameResultStats, u
     return groups;
 }
 
-// One entry per turn, keyed by username - e.g. [{player1: 20, player2: 30}, ...].
-// Not yet wired into an API response - add that once a chart consumer needs it.
-export type DiceCitiesCoinsPerTurnChart = Record<string, number>[];
-
-// Renders coinsPerTurn as one entry per turn, keyed by username, for a
-// coins/turn chart.
-export function formatDiceCitiesCoinsPerTurn(coinsPerTurn: Map<string, number>[], usernameById: Map<string, string>): DiceCitiesCoinsPerTurnChart {
-    return coinsPerTurn.map(turn => {
-        const entry: Record<string, number> = {};
-        for (const [userId, coins] of turn) {
-            entry[usernameById.get(userId) ?? userId] = coins;
-        }
-        return entry;
-    });
+// Renders coinsPerTurn as a GameResult chart: one entry per turn, keyed by
+// username, for the result page's coins/turn chart.
+export function formatDiceCitiesChart(stats: IDiceCitiesGameResultStats, usernameById: Map<string, string>): GameResultChart | undefined {
+    if (stats.coinsPerTurn.length === 0) return undefined;
+    return {
+        title: "Coins per turn",
+        yLabel: "Coins",
+        turns: stats.coinsPerTurn.map(turn => {
+            const entry: Record<string, number> = {};
+            for (const [userId, coins] of turn) {
+                entry[usernameById.get(userId) ?? userId] = coins;
+            }
+            return entry;
+        }),
+    };
 }
