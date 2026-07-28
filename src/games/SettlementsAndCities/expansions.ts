@@ -50,6 +50,7 @@ export interface SACExpansionMeta {
     tagline: string;
     /** False for the 5–6 player extension, which is a seating add-on. */
     major: boolean;
+    disabled: boolean;
 }
 
 export const SAC_EXPANSION_META: SACExpansionMeta[] = [
@@ -59,6 +60,7 @@ export const SAC_EXPANSION_META: SACExpansionMeta[] = [
         source: 'Catan: Seafarers',
         tagline: 'Explore open water, settle islands and race across the sea for bonus points.',
         major: true,
+        disabled: true, 
     },
     {
         id: 'knightsAndCommerce',
@@ -66,6 +68,7 @@ export const SAC_EXPANSION_META: SACExpansionMeta[] = [
         source: 'Catan: Cities & Knights',
         tagline: 'Refine commodities, climb a tech tree and defend your cities from barbarians.',
         major: true,
+        disabled: true,
     },
     {
         id: 'tradersAndRaiders',
@@ -73,6 +76,7 @@ export const SAC_EXPANSION_META: SACExpansionMeta[] = [
         source: 'Catan: Traders & Barbarians',
         tagline: 'A toolbox of standalone scenarios — rivers, caravans, fishing and more.',
         major: true,
+        disabled: true, 
     },
     {
         id: 'explorersAndPirates',
@@ -80,6 +84,7 @@ export const SAC_EXPANSION_META: SACExpansionMeta[] = [
         source: 'Catan: Explorers & Pirates',
         tagline: 'A standalone campaign of exploration, cargo ships and missions.',
         major: true,
+        disabled: true,
     },
     {
         id: 'fiveSixPlayerExtension',
@@ -87,6 +92,7 @@ export const SAC_EXPANSION_META: SACExpansionMeta[] = [
         source: 'Catan 5–6 Player Extension',
         tagline: 'Extra components and a Special Build Phase so 5 or 6 can play at once.',
         major: false,
+        disabled: false, 
     },
 ];
 
