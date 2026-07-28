@@ -14,6 +14,7 @@ import WorldDominationActions from "@/games/WorldDomination/components/WorldDomi
 import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
+import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecap from "@/components/games/TurnRecap";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
@@ -305,9 +306,13 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 
             {complete && (
-                <div className="ag-game-result">
-                    <h2>{currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} achieved world domination.`}</h2>
-                </div>
+                <GameFinishBanner
+                    message={currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} achieved world domination.`}
+                    gameId={gameId}
+                    gameUrl="worlddomination"
+                    invitees={usernameList.filter(u => u !== myUsername)}
+                    turnTimer={gameData?.turnTimer ?? '1d'}
+                />
             )}
 
             {gs && (

@@ -1,22 +1,24 @@
 'use client'
 import { useUser } from "@clerk/nextjs";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
-import { useRouter, usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
 import usePlayerList from "@/utils/hooks/usePlayerList";
 import { GAME_META } from "@/utils/ui/games";
+import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { SmartthinkInvitationRequest } from "@/games/Smartthink/SmartthinkModels";
 import { useToast } from "@/components/ToastContext";
 
-export default function NewGameSmartthink() {
+function NewGameSmartthinkForm() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
   const { user, isLoaded } = useUser();
-  const { userList, setItem, players } = usePlayerList();
-  const [turnTimer, setTurnTimer] = useState("1d");
+  const searchParams = useSearchParams();
+  const { userList, setItem, players } = usePlayerList(readRematchPlayers(searchParams));
+  const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
   const router = useRouter();
   const { showToast } = useToast();
 
@@ -91,5 +93,13 @@ export default function NewGameSmartthink() {
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
       <FcmTokenComp />
     </GameSetupLayout>
+  );
+}
+
+export default function NewGameSmartthink() {
+  return (
+    <Suspense fallback={null}>
+      <NewGameSmartthinkForm />
+    </Suspense>
   );
 }

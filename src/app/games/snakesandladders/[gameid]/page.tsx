@@ -11,6 +11,7 @@ import type { ICommandResponse } from "@/app/api/game/command/route";
 import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
+import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import SnakesAndLaddersBoard from "@/games/SnakesAndLadders/components/SnakesAndLaddersBoard";
 import SnakesAndLaddersPlayerActions from "@/games/SnakesAndLadders/components/SnakesAndLaddersPlayerActions";
 import SnakesAndLaddersRollResult, { buildRollResult, RollResult } from "@/games/SnakesAndLadders/components/SnakesAndLaddersRollResult";
@@ -147,6 +148,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
         players.find(p => p.userId === displayedWinner)?.username ?? displayedWinner ?? "";
     const currentTurnUsername = players.find(p => p.userId === displayedCurrentTurn)?.username ?? "";
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
+    const myUsername = user?.username || user?.firstName || user?.id || '';
 
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
@@ -254,9 +256,13 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 
             {complete && (
-                <div className="ag-game-result">
-                    <h2>{currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}</h2>
-                </div>
+                <GameFinishBanner
+                    message={currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}
+                    gameId={gameId}
+                    gameUrl="snakesandladders"
+                    invitees={usernameList.filter(u => u !== myUsername)}
+                    turnTimer={gameData?.turnTimer ?? '1d'}
+                />
             )}
 
             {boardState?.playerStates && (

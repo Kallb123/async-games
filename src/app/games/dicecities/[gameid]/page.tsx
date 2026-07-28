@@ -11,6 +11,7 @@ import type { ICommandResponse } from "@/app/api/game/command/route";
 import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
+import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import DiceCitiesBoard from "@/games/DiceCities/components/DiceCitiesBoard";
 import DiceCitiesActions from "@/games/DiceCities/components/DiceCitiesActions";
 import TurnNavControls from "@/components/games/TurnNavControls";
@@ -126,6 +127,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const currentTurnUsername = players.find(p => p.userId === displayedCurrentTurn)?.username ?? "";
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
     const hasRolled = displayed?.hasRolled ?? false;
+    const myUsername = user?.username || user?.firstName || user?.id || '';
 
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
@@ -218,9 +220,13 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 
             {complete && (
-                <div className="ag-game-result">
-                    <h2>{currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}</h2>
-                </div>
+                <GameFinishBanner
+                    message={currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}
+                    gameId={gameId}
+                    gameUrl="dicecities"
+                    invitees={usernameList.filter(u => u !== myUsername)}
+                    turnTimer={gameData?.turnTimer ?? '1d'}
+                />
             )}
 
             {boardPlayer && (
