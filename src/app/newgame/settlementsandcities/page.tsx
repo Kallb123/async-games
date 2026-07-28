@@ -1,22 +1,33 @@
 'use client'
 import { useUser } from "@clerk/nextjs";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
-import { useRouter, usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import usePlayerList from "@/utils/hooks/usePlayerList";
 import { GAME_META } from "@/utils/ui/games";
+import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { SettlementsAndCitiesInvitationRequest } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import {
   SACExpansionId,
+  SACExpansions,
   SAC_EXPANSION_META,
   defaultExpansions,
+  normaliseExpansions,
   validateExpansions,
 } from "@/games/SettlementsAndCities/expansions";
 import { useToast } from "@/components/ToastContext";
+
+// A rematch link carries enabled expansion ids as a comma-separated list
+// (see GameFinishBanner); decode it back into a full SACExpansions record.
+function expansionsFromParam(param: string | null): SACExpansions {
+  if (!param) return defaultExpansions();
+  const enabled = Object.fromEntries(param.split(',').filter(Boolean).map(id => [id, true]));
+  return normaliseExpansions(enabled as Partial<SACExpansions>);
+}
 
 // One expansion row — a title/description/source block plus the shared toggle.
 function ExpansionToggle({
@@ -51,13 +62,14 @@ function ExpansionToggle({
   );
 }
 
-export default function NewGameSettlementsAndCities() {
+function NewGameSettlementsAndCitiesForm() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
   const { user, isLoaded } = useUser();
-  const { userList, setItem, players } = usePlayerList();
-  const [turnTimer, setTurnTimer] = useState("1d");
-  const [expansions, setExpansions] = useState(defaultExpansions());
+  const searchParams = useSearchParams();
+  const { userList, setItem, players } = usePlayerList(readRematchPlayers(searchParams));
+  const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
+  const [expansions, setExpansions] = useState(() => expansionsFromParam(searchParams.get('expansions')));
   const router = useRouter();
   const { showToast } = useToast();
 
@@ -164,5 +176,13 @@ export default function NewGameSettlementsAndCities() {
       </div>
       <FcmTokenComp />
     </GameSetupLayout>
+  );
+}
+
+export default function NewGameSettlementsAndCities() {
+  return (
+    <Suspense fallback={null}>
+      <NewGameSettlementsAndCitiesForm />
+    </Suspense>
   );
 }

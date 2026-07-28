@@ -14,6 +14,7 @@ import WorldDominationActions from "@/games/WorldDomination/components/WorldDomi
 import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
+import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecap from "@/components/games/TurnRecap";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
@@ -22,6 +23,7 @@ import { useEndGame } from "@/utils/hooks/useEndGame";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
+import { currentUsername } from "@/utils/ui/players";
 
 const PHASE_LABEL: Record<IWorldDominationSpecificGameStateResponse['phase'], string> = {
     setup: 'Setup',
@@ -91,7 +93,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
     const isMyTurn = nav.isLive && user?.id === gameData?.currentTurn && !complete;
-    const myUsername = user?.username || user?.firstName || user?.id || '';
+    const myUsername = currentUsername(user);
 
     const usernameList = gameData?.usernameList ?? [];
     function usernameToColor(username: string | null): string {
@@ -305,9 +307,14 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 
             {complete && (
-                <div className="ag-game-result">
-                    <h2>{currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} achieved world domination.`}</h2>
-                </div>
+                <GameFinishBanner
+                    message={currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} achieved world domination.`}
+                    gameId={gameId}
+                    gameUrl="worlddomination"
+                    usernameList={usernameList}
+                    myUsername={myUsername}
+                    turnTimer={gameData?.turnTimer}
+                />
             )}
 
             {gs && (

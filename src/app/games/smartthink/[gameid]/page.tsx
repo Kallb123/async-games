@@ -11,6 +11,7 @@ import type { ISmartthinkGameDataResponse } from "@/games/Smartthink/apiModels";
 import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
+import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import SmartthinkBoard from "@/games/Smartthink/components/SmartthinkBoard";
 import SmartthinkPlayerActions from "@/games/Smartthink/components/SmartthinkPlayerActions";
 import TurnNavControls from "@/components/games/TurnNavControls";
@@ -20,6 +21,7 @@ import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents
 import { useGameData } from "@/utils/hooks/useGameData";
 import type { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
 import { SMARTTHINK_CODE_LENGTH } from "@/games/Smartthink/ui";
+import { currentUsername } from "@/utils/ui/players";
 
 const PLAYER_COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c"];
 const emptyGuess = (): (number | null)[] => Array(SMARTTHINK_CODE_LENGTH).fill(null);
@@ -111,6 +113,8 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
         return state.players?.find(p => p.userId === gameData.winner)?.username ?? gameData?.winner ?? "";
     };
     const currentUserWon = complete && user?.id !== undefined && user.id === nav.displayedWinner;
+    const myUsername = currentUsername(user);
+    const usernameList = gameData?.usernameList ?? [];
 
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
@@ -177,9 +181,14 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 
             {complete && (
-                <div className="ag-game-result">
-                    <h2>{currentUserWon ? 'You cracked it! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}</h2>
-                </div>
+                <GameFinishBanner
+                    message={currentUserWon ? 'You cracked it! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}
+                    gameId={gameId}
+                    gameUrl="smartthink"
+                    usernameList={usernameList}
+                    myUsername={myUsername}
+                    turnTimer={gameData?.turnTimer}
+                />
             )}
 
             {displayed && (

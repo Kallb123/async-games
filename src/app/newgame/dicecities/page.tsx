@@ -1,25 +1,27 @@
 'use client'
 import { useUser } from "@clerk/nextjs";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
-import { useRouter, usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import usePlayerList from "@/utils/hooks/usePlayerList";
 import { GAME_META } from "@/utils/ui/games";
+import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { DiceCitiesInvitationRequest } from "@/games/DiceCities/DiceCitiesModels";
 import { useToast } from "@/components/ToastContext";
 
-export default function NewGameDiceCities() {
+function NewGameDiceCitiesForm() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
   const { user, isLoaded } = useUser();
-  const { userList, setItem, players } = usePlayerList();
+  const searchParams = useSearchParams();
+  const { userList, setItem, players } = usePlayerList(readRematchPlayers(searchParams));
   const [enabledDocks, setEnabledDocks] = useState(false);
   const [enabledBillionaireRow, setEnabledBillionaireRow] = useState(false);
-  const [turnTimer, setTurnTimer] = useState("1d");
+  const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
   const router = useRouter();
   const { showToast } = useToast();
 
@@ -98,5 +100,13 @@ export default function NewGameDiceCities() {
       </div>
       <FcmTokenComp />
     </GameSetupLayout>
+  );
+}
+
+export default function NewGameDiceCities() {
+  return (
+    <Suspense fallback={null}>
+      <NewGameDiceCitiesForm />
+    </Suspense>
   );
 }

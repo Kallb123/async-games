@@ -10,13 +10,14 @@ import type { ICommandResponse } from "@/app/api/game/command/route";
 import type { ISACGameDataResponse, ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
 import type { SAC_Resource } from "@/games/SettlementsAndCities/board";
 import { BOARD_TOPOLOGY, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
-import { enabledExpansionNames, normaliseExpansions } from "@/games/SettlementsAndCities/expansions";
+import { SAC_EXPANSION_IDS, enabledExpansionNames, normaliseExpansions } from "@/games/SettlementsAndCities/expansions";
 import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER } from "@/games/SettlementsAndCities/ui";
 import SettlementsAndCitiesBoard from "@/games/SettlementsAndCities/components/SettlementsAndCitiesBoard";
 import SettlementsAndCitiesActions, { SACBoardMode } from "@/games/SettlementsAndCities/components/SettlementsAndCitiesActions";
 import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
+import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecap from "@/components/games/TurnRecap";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
@@ -25,6 +26,7 @@ import { useEndGame } from "@/utils/hooks/useEndGame";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
+import { currentUsername } from "@/utils/ui/players";
 import {
     SACPlaceSettlementSetup,
     SACPlaceRoadSetup,
@@ -117,7 +119,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     const complete = nav.displayedComplete;
     // Only the live active player can act; reviewing a past turn is read-only.
     const isMyTurn = nav.isLive && user?.id === gameData?.currentTurn;
-    const myUsername = user?.username || user?.firstName || user?.id || '';
+    const myUsername = currentUsername(user);
 
     // Map username → color
     const usernameList = gameData?.usernameList ?? [];
@@ -246,6 +248,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
         : displayedCurrentTurn ?? '';
 
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
+    const enabledExpansionIds = gs ? SAC_EXPANSION_IDS.filter(id => normaliseExpansions(gs.expansions)[id]) : [];
 
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
@@ -364,9 +367,15 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 
             {complete && (
-                <div className="ag-game-result">
-                    <h2>{currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}</h2>
-                </div>
+                <GameFinishBanner
+                    message={currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}
+                    gameId={gameId}
+                    gameUrl="settlementsandcities"
+                    usernameList={usernameList}
+                    myUsername={myUsername}
+                    turnTimer={gameData?.turnTimer}
+                    extraParams={{ expansions: enabledExpansionIds.join(',') }}
+                />
             )}
 
             {gs && (

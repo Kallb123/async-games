@@ -5,8 +5,11 @@ import { fetchWithSessionRetry } from "./fetchWithSessionRetry";
 /**
  * Fetches a game's current state from `/api/game/[gameid]`, shared by every
  * game screen. Retries once on a 401 (transient session-cookie refresh race,
- * see fetchWithSessionRetry) before redirecting home on genuine failures
- * (404 game not found, or a 401 that persists after the retry).
+ * see fetchWithSessionRetry) before bailing on genuine failures: a 404 (no
+ * such live game — it may still have a finished GameResult) sends the user
+ * to that game's result page instead, which enforces its own view
+ * permission; any other failure (a 401 that persists after the retry, or a
+ * network error) redirects home.
  */
 export function useGameData<T>(gameId: string) {
     const [gameData, setGameData] = useState({} as T);
@@ -20,7 +23,7 @@ export function useGameData<T>(gameId: string) {
 
         if (!res || !res.ok) {
             console.error(`Failed to load game ${gameId}: ${res?.status ?? "network error"}`);
-            router.push('/');
+            router.push(res?.status === 404 ? `/games/result/${gameId}` : '/');
             return;
         }
 
