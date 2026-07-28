@@ -7,15 +7,17 @@ interface GameFinishBannerProps {
     message: ReactNode;
     gameId: string;
     gameUrl: string;
-    invitees: string[];
-    turnTimer: string;
+    usernameList: string[];
+    myUsername: string;
+    turnTimer?: string;
     extraParams?: Record<string, string>;
 }
 
 // Shown in place of the board once a game is complete: the result headline,
 // a link to the full GameResults page, and a "Rematch" link that jumps to
 // the New Game setup screen pre-filled with the same players and options.
-export default function GameFinishBanner({ message, gameId, gameUrl, invitees, turnTimer, extraParams }: GameFinishBannerProps) {
+export default function GameFinishBanner({ message, gameId, gameUrl, usernameList, myUsername, turnTimer = "1d", extraParams }: GameFinishBannerProps) {
+    const invitees = usernameList.filter(u => u !== myUsername);
     const rematchHref = buildRematchHref(gameUrl, { invitees, turnTimer, extraParams });
 
     return (

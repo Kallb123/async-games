@@ -26,6 +26,7 @@ import { useEndGame } from "@/utils/hooks/useEndGame";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
+import { currentUsername } from "@/utils/ui/players";
 import {
     SACPlaceSettlementSetup,
     SACPlaceRoadSetup,
@@ -118,7 +119,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     const complete = nav.displayedComplete;
     // Only the live active player can act; reviewing a past turn is read-only.
     const isMyTurn = nav.isLive && user?.id === gameData?.currentTurn;
-    const myUsername = user?.username || user?.firstName || user?.id || '';
+    const myUsername = currentUsername(user);
 
     // Map username → color
     const usernameList = gameData?.usernameList ?? [];
@@ -370,8 +371,9 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                     message={currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}
                     gameId={gameId}
                     gameUrl="settlementsandcities"
-                    invitees={usernameList.filter(u => u !== myUsername)}
-                    turnTimer={gameData?.turnTimer ?? '1d'}
+                    usernameList={usernameList}
+                    myUsername={myUsername}
+                    turnTimer={gameData?.turnTimer}
                     extraParams={{ expansions: enabledExpansionIds.join(',') }}
                 />
             )}

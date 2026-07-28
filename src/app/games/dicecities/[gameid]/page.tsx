@@ -23,6 +23,7 @@ import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents
 import { useGameData } from "@/utils/hooks/useGameData";
 import { landmarkCount } from "@/games/DiceCities/ui";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
+import { currentUsername } from "@/utils/ui/players";
 
 // Sentinel used as "current turn" while reviewing a past turn, so no player's
 // interactive controls activate.
@@ -127,7 +128,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const currentTurnUsername = players.find(p => p.userId === displayedCurrentTurn)?.username ?? "";
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
     const hasRolled = displayed?.hasRolled ?? false;
-    const myUsername = user?.username || user?.firstName || user?.id || '';
+    const myUsername = currentUsername(user);
 
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
@@ -224,8 +225,9 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
                     message={currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}
                     gameId={gameId}
                     gameUrl="dicecities"
-                    invitees={usernameList.filter(u => u !== myUsername)}
-                    turnTimer={gameData?.turnTimer ?? '1d'}
+                    usernameList={usernameList}
+                    myUsername={myUsername}
+                    turnTimer={gameData?.turnTimer}
                 />
             )}
 

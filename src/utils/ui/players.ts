@@ -21,3 +21,15 @@ export function displayName(user: NamedUser): string {
     if (fullName) return `${fullName} (${user.username})`;
     return `${user.username}`;
 }
+
+interface SenderUser {
+    username?: string | null;
+    firstName?: string | null;
+    id?: string | null;
+}
+
+// The username a signed-in user acts under (as command sender or game
+// player): prefers their Clerk username, then first name, then their id.
+export function currentUsername(user: SenderUser | null | undefined): string {
+    return user?.username || user?.firstName || user?.id || "";
+}

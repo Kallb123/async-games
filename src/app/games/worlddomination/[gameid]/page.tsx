@@ -23,6 +23,7 @@ import { useEndGame } from "@/utils/hooks/useEndGame";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
+import { currentUsername } from "@/utils/ui/players";
 
 const PHASE_LABEL: Record<IWorldDominationSpecificGameStateResponse['phase'], string> = {
     setup: 'Setup',
@@ -92,7 +93,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
     const isMyTurn = nav.isLive && user?.id === gameData?.currentTurn && !complete;
-    const myUsername = user?.username || user?.firstName || user?.id || '';
+    const myUsername = currentUsername(user);
 
     const usernameList = gameData?.usernameList ?? [];
     function usernameToColor(username: string | null): string {
@@ -310,8 +311,9 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
                     message={currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} achieved world domination.`}
                     gameId={gameId}
                     gameUrl="worlddomination"
-                    invitees={usernameList.filter(u => u !== myUsername)}
-                    turnTimer={gameData?.turnTimer ?? '1d'}
+                    usernameList={usernameList}
+                    myUsername={myUsername}
+                    turnTimer={gameData?.turnTimer}
                 />
             )}
 

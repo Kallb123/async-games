@@ -21,6 +21,7 @@ import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents
 import { useGameData } from "@/utils/hooks/useGameData";
 import type { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
 import { SMARTTHINK_CODE_LENGTH } from "@/games/Smartthink/ui";
+import { currentUsername } from "@/utils/ui/players";
 
 const PLAYER_COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c"];
 const emptyGuess = (): (number | null)[] => Array(SMARTTHINK_CODE_LENGTH).fill(null);
@@ -112,7 +113,7 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
         return state.players?.find(p => p.userId === gameData.winner)?.username ?? gameData?.winner ?? "";
     };
     const currentUserWon = complete && user?.id !== undefined && user.id === nav.displayedWinner;
-    const myUsername = user?.username || user?.firstName || user?.id || '';
+    const myUsername = currentUsername(user);
     const usernameList = gameData?.usernameList ?? [];
 
     // ── Top-bar status line ──────────────────────────────────────────────────
@@ -184,8 +185,9 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
                     message={currentUserWon ? 'You cracked it! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}
                     gameId={gameId}
                     gameUrl="smartthink"
-                    invitees={usernameList.filter(u => u !== myUsername)}
-                    turnTimer={gameData?.turnTimer ?? '1d'}
+                    usernameList={usernameList}
+                    myUsername={myUsername}
+                    turnTimer={gameData?.turnTimer}
                 />
             )}
 

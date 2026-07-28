@@ -25,6 +25,7 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { ISnakesAndLaddersGameStateResponse } from "@/games/SnakesAndLadders/apiModels";
 import { ISnakesAndLaddersDiceRollOutcome, SnakesAndLaddersRequestDiceRoll } from "@/utils/apiModels/GameLogic";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
+import { currentUsername } from "@/utils/ui/players";
 
 export default function GameSnakesAndLadders({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
@@ -148,7 +149,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
         players.find(p => p.userId === displayedWinner)?.username ?? displayedWinner ?? "";
     const currentTurnUsername = players.find(p => p.userId === displayedCurrentTurn)?.username ?? "";
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
-    const myUsername = user?.username || user?.firstName || user?.id || '';
+    const myUsername = currentUsername(user);
 
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
@@ -260,8 +261,9 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
                     message={currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}
                     gameId={gameId}
                     gameUrl="snakesandladders"
-                    invitees={usernameList.filter(u => u !== myUsername)}
-                    turnTimer={gameData?.turnTimer ?? '1d'}
+                    usernameList={usernameList}
+                    myUsername={myUsername}
+                    turnTimer={gameData?.turnTimer}
                 />
             )}
 
