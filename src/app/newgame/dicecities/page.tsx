@@ -80,7 +80,7 @@ export default function NewGameDiceCities() {
         <div className="ag-card" style={{ padding: "4px 16px" }}>
           <OptionToggleRow
             title="Docks"
-            description="Adds ports and a wider die spread"
+            description="Coming soon. Adds ports and a wider die spread"
             on={enabledDocks}
             onToggle={() => setEnabledDocks(v => !v)}
             ariaLabel="Toggle docks expansion"
@@ -88,7 +88,7 @@ export default function NewGameDiceCities() {
           />
           <OptionToggleRow
             title="Billionaire&apos;s Row"
-            description="Higher-value landmark cards"
+            description="Coming soon. Higher-value landmark cards"
             on={enabledBillionaireRow}
             onToggle={() => setEnabledBillionaireRow(v => !v)}
             ariaLabel="Toggle Billionaire's Row expansion"
