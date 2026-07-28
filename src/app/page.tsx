@@ -43,7 +43,7 @@ export default function Home() {
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", justifyContent: "center" }}>
           <a href="/newgame" aria-label="New game" style={{ borderRadius: "50%", background: "var(--ag-green)", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center" }}>+</a>
           <a href="/profile" aria-label="Your profile">
-            <Avatar name="Kallum" size={40} ring="var(--ag-terracotta)" />
+            <Avatar name={displayName} size={40} ring="var(--ag-terracotta)" />
           </a>
         </div>
       </div>
