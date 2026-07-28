@@ -25,12 +25,14 @@ function ExpansionToggle({
   desc,
   on,
   onToggle,
+  disabled,
 }: {
   title: string;
   source: string;
   desc: string;
   on: boolean;
   onToggle: () => void;
+  disabled: boolean;
 }) {
   return (
     <OptionToggleRow
@@ -44,6 +46,7 @@ function ExpansionToggle({
       on={on}
       onToggle={onToggle}
       ariaLabel={`Toggle ${title}`}
+      disabled={disabled}
     />
   );
 }
@@ -134,6 +137,7 @@ export default function NewGameSettlementsAndCities() {
               desc={meta.tagline}
               on={expansions[meta.id]}
               onToggle={() => toggle(meta.id)}
+              disabled={meta.disabled}
             />
           ))}
         </div>
