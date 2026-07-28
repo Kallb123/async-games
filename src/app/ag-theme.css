@@ -1152,7 +1152,7 @@ button {
 
 /* In-game result banner */
 .ag-game-result {
-    margin: 12px 16px 0;
+    margin: 12px 16px 12px;
     background: var(--ag-terracotta);
     color: var(--ag-on-dark);
     border-radius: 16px;
