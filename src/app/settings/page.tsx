@@ -9,6 +9,7 @@ import useFcmToken from "@/utils/hooks/useFcmToken";
 import { useUser } from "@clerk/nextjs";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import packageJson from "@/../package.json";
 
 interface NotificationPreferencesState {
     enabled: boolean;
@@ -166,6 +167,9 @@ export default function Settings() {
 
             <div className="ag-footer">
                 <DevTools />
+                <div style={{ fontSize: '0.875rem', color: 'var(--ag-text-muted)', textAlign: 'center', marginTop: '1rem' }}>
+                    v{packageJson.version}
+                </div>
             </div>
 
             <FcmTokenComp />
