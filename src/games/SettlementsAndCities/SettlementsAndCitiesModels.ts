@@ -2,7 +2,7 @@ import { GameDataModel, IGameData, IGameDataDocument } from "@/utils/mongodb/Gam
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { ISACGameDataResponse, ISACSpecificGameStateResponse, ISACPlayerStateResponse } from "./apiModels";
-import { uuidString, GameResultStatGroup, GameResultChart, formatPerTurnChart, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
+import { uuidString, GameResultStatGroup, GameResultChart, formatPerTurnChart, compactCharts, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
 import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
@@ -611,8 +611,8 @@ export function formatSettlementsAndCitiesResultStats(stats: ISACGameResultStats
     return groups;
 }
 
-// Renders resourcesPerTurn as a GameResult chart: one entry per turn, keyed by
+// Renders resourcesPerTurn as GameResult charts: one entry per turn, keyed by
 // username, for the result page's resources/turn chart.
-export function formatSettlementsAndCitiesChart(stats: ISACGameResultStats, usernameById: Map<string, string>): GameResultChart | undefined {
-    return formatPerTurnChart(stats.resourcesPerTurn, usernameById, "Resources gathered per turn", "Resources");
+export function formatSettlementsAndCitiesCharts(stats: ISACGameResultStats, usernameById: Map<string, string>): GameResultChart[] {
+    return compactCharts(formatPerTurnChart(stats.resourcesPerTurn, usernameById, "Resources gathered per turn", "Resources"));
 }

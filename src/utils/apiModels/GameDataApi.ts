@@ -64,6 +64,14 @@ export function formatPerTurnChart(
 // JSON), so look a player up by their Clerk userId (what commands and replay
 // carry) by scanning the values. Shared by every game whose apiModels follow
 // this { [username: string]: PlayerStateResponse } shape.
+// Compacts one or more formatPerTurnChart() results (each undefined when its
+// underlying per-turn series was empty) into the GameResultChart[] a game's
+// GAME_RESULT_STATS.charts entry returns. Shared so every game's chart
+// formatter filters the same way instead of reinventing it per game.
+export function compactCharts(...charts: (GameResultChart | undefined)[]): GameResultChart[] {
+    return charts.filter((c): c is GameResultChart => !!c);
+}
+
 export function playerByUserId<P extends { userId: string }>(
     state: { playerStates?: Record<string, P> } | undefined,
     userId: string

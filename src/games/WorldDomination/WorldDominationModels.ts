@@ -1,8 +1,8 @@
 import { GameDataModel, IGameData, IGameDataDocument } from "@/utils/mongodb/GameData";
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
-import { IWorldDominationGameDataResponse, IWorldDominationSpecificGameStateResponse } from "./apiModels";
-import { uuidString, GameResultStatGroup } from "@/utils/apiModels/GameDataApi";
+import { IWorldDominationGameDataResponse, IWorldDominationSpecificGameStateResponse, IWorldDominationPlayerStateResponse } from "./apiModels";
+import { uuidString, GameResultStatGroup, GameResultChart, formatPerTurnChart, compactCharts, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
 import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
@@ -68,6 +68,12 @@ export interface IWorldDominationPlayerState {
     // Whether the active player has conquered >=1 enemy territory this turn —
     // drives the end-of-turn card draw (docs/games/worlddomination.md §4.4).
     conqueredTerritoryThisTurn: boolean;
+    // Cumulative armies placed via WorldDominationDeployArmies over the whole
+    // match (setup allotment, reinforcements, cashed-in card top-ups). Armies
+    // are later lost in combat, so — unlike territory counts — this can't be
+    // reconstructed from final state alone; tracked live like Dice Cities'
+    // totalCoinsEarned.
+    totalArmiesDeployed: number;
 }
 
 export interface IWorldDominationPendingOccupation {
@@ -113,6 +119,7 @@ function clonePlayerState(ps: IWorldDominationPlayerState): IWorldDominationPlay
         cards: ps.cards.map(cloneCard),
         eliminated: ps.eliminated,
         conqueredTerritoryThisTurn: ps.conqueredTerritoryThisTurn,
+        totalArmiesDeployed: ps.totalArmiesDeployed,
     };
 }
 
@@ -180,7 +187,7 @@ WorldDominationInvitationSchema.methods.CreateGame = async function(
     const startingPool = startingArmiesForPlayerCount(turnOrder.length);
     const playerStates = new Map<string, IWorldDominationPlayerState>();
     for (const userId of turnOrder) {
-        playerStates.set(userId, { cards: [], eliminated: false, conqueredTerritoryThisTurn: false });
+        playerStates.set(userId, { cards: [], eliminated: false, conqueredTerritoryThisTurn: false, totalArmiesDeployed: 0 });
     }
 
     history.push(`Setup: territories dealt — ${startingPool} armies each, place your remaining troops`);
@@ -248,6 +255,7 @@ function makeWorldDominationStateSchemaDef() {
                 cards: [{ id: String, type: { type: String }, territoryId: { type: Number, default: null } }],
                 eliminated: Boolean,
                 conqueredTerritoryThisTurn: Boolean,
+                totalArmiesDeployed: Number,
             },
         },
         phase: String,
@@ -316,10 +324,13 @@ export function gameStateToResponse(
 
     for (const [userId, ps] of playerStatesSource) {
         const username = userIdNameMap[userId];
+        const owned = gs.territories.filter(t => t.owner === userId);
         playerStates[username] = {
             userId,
             username,
-            territoryCount: gs.territories.filter(t => t.owner === userId).length,
+            territoryCount: owned.length,
+            armies: owned.reduce((sum, t) => sum + t.armies, 0),
+            totalArmiesDeployed: ps.totalArmiesDeployed,
             cards: ps.cards.map(c => ({ id: c.id, type: c.type, territoryId: c.territoryId })),
             eliminated: ps.eliminated,
         };
@@ -357,6 +368,13 @@ export function gameStateToResponse(
     };
 }
 
+export function playerByUserId(
+    state: IWorldDominationSpecificGameStateResponse | undefined,
+    userId: string
+): IWorldDominationPlayerStateResponse | undefined {
+    return findPlayerByUserId(state, userId);
+}
+
 export var WorldDominationGameDataModel =
     models.WorldDominationGameData ||
     GameDataModel.discriminator<IWorldDominationGameDataDocument, IWorldDominationGameDataModel>('WorldDominationGameData', WorldDominationGameDataSchema);
@@ -375,6 +393,16 @@ export interface IWorldDominationPlayerResultStats {
 
 export interface IWorldDominationGameResultStats {
     playerStats: Map<string, IWorldDominationPlayerResultStats>;
+    // Armies currently deployed (on the board) per player at the end of each
+    // turn, in turn order. Derived straight from response state (territories
+    // are physical, so nothing is lost recomputing this per turn).
+    armiesDeployedPerTurn: Map<string, number>[];
+    // Cumulative totalArmiesDeployed per player at the end of each turn, in
+    // turn order - not derivable from armiesDeployedPerTurn (armies are lost
+    // in combat). Computed by replaying commandHistory via computePerTurnStat
+    // (see replay.ts), driven from this game's GAME_RESULT_STATS entry in
+    // GameResultData.ts, since it isn't tracked as history on specificGameState.
+    totalArmiesDeployedPerTurn: Map<string, number>[];
 }
 
 export const worldDominationGameResultStatsSchemaDef = {
@@ -386,9 +414,15 @@ export const worldDominationGameResultStatsSchemaDef = {
             eliminated: Boolean,
         },
     },
+    armiesDeployedPerTurn: [{ type: Schema.Types.Map, of: Number }],
+    totalArmiesDeployedPerTurn: [{ type: Schema.Types.Map, of: Number }],
 };
 
-export function computeWorldDominationResultStats(gameData: IWorldDominationGameData): IWorldDominationGameResultStats {
+export function computeWorldDominationResultStats(
+    gameData: IWorldDominationGameData,
+    armiesDeployedPerTurn: Map<string, number>[],
+    totalArmiesDeployedPerTurn: Map<string, number>[],
+): IWorldDominationGameResultStats {
     const gs = gameData.specificGameState;
     const playerStats = new Map<string, IWorldDominationPlayerResultStats>();
     for (const [userId, ps] of gs.playerStates) {
@@ -398,7 +432,7 @@ export function computeWorldDominationResultStats(gameData: IWorldDominationGame
             eliminated: ps.eliminated,
         });
     }
-    return { playerStats };
+    return { playerStats, armiesDeployedPerTurn, totalArmiesDeployedPerTurn };
 }
 
 export function formatWorldDominationResultStats(stats: IWorldDominationGameResultStats, usernameById: Map<string, string>): GameResultStatGroup[] {
@@ -413,4 +447,14 @@ export function formatWorldDominationResultStats(stats: IWorldDominationGameResu
         });
     }
     return groups;
+}
+
+// Renders armiesDeployedPerTurn/totalArmiesDeployedPerTurn as GameResult
+// charts: one entry per turn, keyed by username, for the result page's
+// armies/turn charts.
+export function formatWorldDominationCharts(stats: IWorldDominationGameResultStats, usernameById: Map<string, string>): GameResultChart[] {
+    return compactCharts(
+        formatPerTurnChart(stats.armiesDeployedPerTurn, usernameById, "Armies deployed per turn", "Armies"),
+        formatPerTurnChart(stats.totalArmiesDeployedPerTurn, usernameById, "Cumulative armies deployed per turn", "Armies"),
+    );
 }
