@@ -84,6 +84,7 @@ export default function NewGameDiceCities() {
             on={enabledDocks}
             onToggle={() => setEnabledDocks(v => !v)}
             ariaLabel="Toggle docks expansion"
+            disabled={true} 
           />
           <OptionToggleRow
             title="Billionaire&apos;s Row"
@@ -91,6 +92,7 @@ export default function NewGameDiceCities() {
             on={enabledBillionaireRow}
             onToggle={() => setEnabledBillionaireRow(v => !v)}
             ariaLabel="Toggle Billionaire's Row expansion"
+            disabled={true}
           />
         </div>
       </div>
