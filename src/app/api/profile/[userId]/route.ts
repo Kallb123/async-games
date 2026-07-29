@@ -36,7 +36,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         lastName: clerkUser.lastName,
     };
 
-    const { recent, byGame } = await getPlayerStats(profileUserId);
+    const { recent, byGame } = await getPlayerStats(profileUserId, userId);
 
     return NextResponse.json({ success: true, user: profileUser, recent, byGame });
 }

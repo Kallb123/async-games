@@ -642,23 +642,53 @@ button {
 .ag-stat-label { font: 600 11px var(--ag-font); color: var(--ag-ink-softer); margin-top: 2px; }
 
 /* Recent-match form guide (compact row of W/L/D dots) — row uses .ag-chips */
+.ag-result-chip {
+    position: relative;
+    width: 26px;
+    height: 26px;
+    border: none;
+    padding: 0;
+    flex: none;
+    background: none;
+    cursor: pointer;
+}
+.ag-result-chip--shared {
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px var(--ag-bg), 0 0 0 4px var(--ag-purple);
+}
+.ag-result-chip-icon-legend {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    background: var(--ag-surface-2);
+    vertical-align: middle;
+}
 .ag-result-dot {
     width: 26px;
     height: 26px;
     border-radius: 50%;
-    border: none;
-    padding: 0;
-    flex: none;
     display: flex;
     align-items: center;
     justify-content: center;
     font: 800 11px var(--ag-font);
     color: var(--ag-on-dark);
-    cursor: pointer;
 }
 .ag-result-dot--win { background: var(--ag-green); }
 .ag-result-dot--loss { background: var(--ag-terracotta); }
 .ag-result-dot--draw { background: var(--ag-gold); }
+
+/* Game-icon sub-badge on a recent-form chip */
+.ag-result-chip-icon {
+    position: absolute;
+    right: -4px;
+    bottom: -4px;
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    border: 1.5px solid var(--ag-bg);
+    overflow: hidden;
+    display: block;
+}
 
 /* Same win/loss/draw palette, as text colour for the per-game W/L/D counts */
 .ag-outcome-text--win { color: var(--ag-green); }

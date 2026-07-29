@@ -250,6 +250,7 @@ export interface IRecentMatch {
     url: string;
     endedAt: string;
     outcome: MatchOutcome;
+    sharedWithViewer: boolean;
 }
 
 export interface IGameStats {
@@ -273,8 +274,10 @@ function outcomeFor(winner: string, userId: string): MatchOutcome {
 
 // Recent match history + per-game W/L/D for one player, read from the
 // GameResult store. Shared by the current user's own stats endpoint and by
-// the friends-only profile endpoint - same data, different viewer.
-export async function getPlayerStats(userId: string): Promise<IPlayerStats> {
+// the friends-only profile endpoint - same data, different viewer. `viewerId`
+// is whoever is looking at the profile (equal to `userId` on your own
+// profile); each match reports whether the viewer also played in it.
+export async function getPlayerStats(userId: string, viewerId: string): Promise<IPlayerStats> {
     const recentResults = await GameResultModel
         .find({ playerIds: userId })
         .sort({ endedAt: -1 })
@@ -286,6 +289,7 @@ export async function getPlayerStats(userId: string): Promise<IPlayerStats> {
         url: result.url,
         endedAt: result.endedAt,
         outcome: outcomeFor(result.winner, userId),
+        sharedWithViewer: result.playerIds.includes(viewerId),
     }));
 
     const byGameAgg: { _id: string, wins: number, losses: number, draws: number, total: number }[] = await GameResultModel.aggregate([
