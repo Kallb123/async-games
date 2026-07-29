@@ -406,6 +406,18 @@ vars.
 **Token registration.** On the client, `useFcmToken` (`src/utils/hooks/`) requests
 notification permission, gets an FCM token, and POSTs it to
 `/api/notificationtoken`, which stores it in the user's Clerk private metadata.
+Each stored token (`TimedToken`) keeps the time it was first registered
+(`timestamp`), the last time that device re-registered (`lastSeen`), and a
+`device` summary parsed from the request's user-agent header by
+`src/utils/firebase/deviceInfo.ts`.
+
+**Device management.** The same route also serves `GET` (list the user's
+devices — id, name, type and timestamps, never the raw token) and `DELETE`
+(unregister one device by id). Devices are identified to the client by
+`deviceIdForToken`, the token's last 12 characters, so tokens never leave the
+server. `NotificationDeviceList` renders the list on the settings page and lets
+a player remove a device; that device stops receiving pushes until it next
+opens the app and re-registers.
 
 **Device → UI.**
 - *Background:* `public/firebase-messaging-sw.js` (a service worker) shows OS

@@ -4,6 +4,7 @@ import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useToast } from "@/components/ToastContext";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import DevTools from "@/components/DevTools";
+import NotificationDeviceList from "@/components/NotificationDeviceList";
 import { NotificationChannel, NOTIFICATION_CHANNELS } from "@/utils/firebase/notificationPreferences";
 import useFcmToken from "@/utils/hooks/useFcmToken";
 import { useUser } from "@clerk/nextjs";
@@ -22,7 +23,7 @@ export default function Settings() {
     const { user, isLoaded } = useUser();
     const router = useRouter();
     const { showToast } = useToast();
-    const { notificationPermissionStatus } = useFcmToken();
+    const { fcmToken } = useFcmToken();
 
     const [prefs, setPrefs] = useState<NotificationPreferencesState | null>(null);
     const [isSavingPrefs, setIsSavingPrefs] = useState(false);
@@ -164,6 +165,8 @@ export default function Settings() {
                     </div>
                 )}
             </div>
+
+            <NotificationDeviceList currentToken={fcmToken} />
 
             <div className="ag-footer">
                 <DevTools />
