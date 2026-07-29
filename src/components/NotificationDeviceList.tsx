@@ -1,7 +1,7 @@
 'use client'
 
 import { useToast } from "@/components/ToastContext";
-import { SkeletonList } from "@/components/ui/Skeleton";
+import ListSection from "@/components/ui/ListSection";
 import { RegisteredDevice } from "@/utils/firebase/TimedToken";
 import { deviceGlyph, deviceIdForToken, STALE_DEVICE_DAYS } from "@/utils/firebase/deviceInfo";
 import { formatRelativeTime } from "@/utils/ui/time";
@@ -50,16 +50,10 @@ export default function NotificationDeviceList({ currentToken }: { currentToken?
         }
     };
 
-    if (devices === null) return <SkeletonList rows={2} label />;
-    if (devices.length === 0) return null;
-
     return (
-        <div className="ag-section">
-            <div className="ag-section-head">
-                <h2 className="ag-section-label">Your devices</h2>
-            </div>
+        <ListSection label="Your devices" isLoading={devices === null} hasItems={(devices?.length ?? 0) > 0}>
             <div className="ag-list">
-                {devices.map((device) => (
+                {devices?.map((device) => (
                     <div key={device.id} className="ag-list-row">
                         <span className="ag-icon-box" aria-hidden>{deviceGlyph(device.type)}</span>
                         <div className="ag-list-row-main">
@@ -86,6 +80,6 @@ export default function NotificationDeviceList({ currentToken }: { currentToken?
                 A removed device stops getting notifications until you next open Async Games on it.
                 Devices you haven&apos;t used for {STALE_DEVICE_DAYS} days are forgotten automatically.
             </p>
-        </div>
+        </ListSection>
     );
 }

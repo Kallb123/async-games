@@ -1,8 +1,8 @@
 import { User } from '@clerk/nextjs/server';
 import { BatchResponse, Message } from 'firebase-admin/messaging';
 import { getAdminMessaging } from './adminFirebase';
-import { deadTokensByUser, PushTarget } from './deviceInfo';
-import { getDeviceTokens, removeDeviceTokens } from './deviceTokens';
+import { getDeviceTokens, removeDevices } from './deviceTokens';
+import { deadTokensByUser, PushTarget } from './revokedTokens';
 import { getNotificationPreferences, isChannelEnabled, NotificationChannel } from './notificationPreferences';
 
 export interface PushNotification {
@@ -99,7 +99,8 @@ async function forgetDeadTokens(targets: PushTarget[], response: BatchResponse) 
 
     for (const [userId, tokens] of deadTokensByUser(targets, response.responses)) {
         try {
-            const removed = await removeDeviceTokens(userId, tokens);
+            const dead = new Set(tokens);
+            const { removed } = await removeDevices(userId, (stored) => dead.has(stored.token));
             if (removed) {
                 console.log(`Removed ${removed} revoked device token(s) for user ${userId}`);
             }

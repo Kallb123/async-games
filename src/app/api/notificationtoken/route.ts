@@ -1,6 +1,6 @@
 import TimedToken from '@/utils/firebase/TimedToken';
 import { deviceIdForToken, parseUserAgent, pruneStaleTokens, toRegisteredDevice } from '@/utils/firebase/deviceInfo';
-import { getDeviceTokens, saveDeviceTokens } from '@/utils/firebase/deviceTokens';
+import { getDeviceTokens, removeDevices, saveDeviceTokens } from '@/utils/firebase/deviceTokens';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
 
   await saveDeviceTokens(user, tokens);
 
-  return NextResponse.json({success: true, devices: deviceList(tokens)});
+  return NextResponse.json({success: true});
 }
 
 /** Unregisters one device so it stops receiving pushes. */
@@ -74,13 +74,10 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({}, { status: 400, statusText: "Not signed in" });
   }
 
-  const tokens = getDeviceTokens(user);
-  const remaining = tokens.filter((val) => deviceIdForToken(val.token) !== id);
-  if (remaining.length === tokens.length) {
+  const { removed, remaining } = await removeDevices(user.id, (stored) => deviceIdForToken(stored.token) === id);
+  if (!removed) {
     return NextResponse.json({}, { status: 404, statusText: "Device not found" });
   }
-
-  await saveDeviceTokens(user, remaining);
 
   return NextResponse.json({ success: true, devices: deviceList(remaining) });
 }

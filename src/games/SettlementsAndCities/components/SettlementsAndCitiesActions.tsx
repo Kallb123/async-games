@@ -137,7 +137,7 @@ export default function SettlementsAndCitiesActions({
                         disabled={disabled}
                         onClick={() => !disabled && toggleMode(b.mode)}
                     >
-                        <span className="ag-build-icon">{b.icon}</span>
+                        <span className="ag-icon-box">{b.icon}</span>
                         <span className="ag-build-main">
                             <span className="ag-build-name">{b.name}</span>
                             <span className="ag-build-cost">{costText(b.cost)} · {b.suffix}</span>
@@ -154,7 +154,7 @@ export default function SettlementsAndCitiesActions({
                 disabled={!canBuyDevCard}
                 onClick={() => canBuyDevCard && submit(new SACBuyDevCard())}
             >
-                <span className="ag-build-icon">🃏</span>
+                <span className="ag-icon-box">🃏</span>
                 <span className="ag-build-main">
                     <span className="ag-build-name">Dev card</span>
                     <span className="ag-build-cost">{costText(DEV_CARD_COST)} · draw a development card</span>
@@ -354,7 +354,7 @@ export default function SettlementsAndCitiesActions({
                         disabled={disabled}
                         onClick={() => !disabled && playDevCard(card)}
                     >
-                        <span className="ag-build-icon">{meta.emoji}</span>
+                        <span className="ag-icon-box">{meta.emoji}</span>
                         <span className="ag-build-main">
                             <span className="ag-build-name">{meta.name}{count > 1 ? ` ×${count}` : ''}</span>
                             <span className="ag-build-cost">{meta.blurb}</span>

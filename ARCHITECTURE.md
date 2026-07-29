@@ -423,7 +423,7 @@ the client can import it too.
 
 **Forgetting revoked devices.** Every send is a liveness check: `sendEach`
 returns a per-token result, and `sendPushToUsers` feeds it to
-`deadTokensByUser`, which picks out only the codes that mean the token is gone
+`deadTokensByUser` (`revokedTokens.ts`), which picks out only the codes that mean the token is gone
 for good (app uninstalled, permission revoked, token rotated) and drops those
 registrations. Transient failures and payload errors never cost a player a
 device. Cleanup errors are logged, never thrown — the push has already gone.
