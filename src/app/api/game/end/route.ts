@@ -1,5 +1,5 @@
 import { auth } from '@clerk/nextjs/server';
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, trySave } from '@/utils/mongodb/GameData';
 import { recordGameResult } from '@/utils/mongodb/GameResultData';
@@ -34,7 +34,17 @@ export async function POST(request: NextRequest) {
   if (!(await trySave(gameData))) {
     return NextResponse.json({ success: false, message: 'Game state changed, please try again' }, { status: 409 });
   }
-  await recordGameResult(gameData);
+
+  // Recording the match result is a stats read-model write nothing in this
+  // response depends on, so it runs after the response has flushed. It's
+  // idempotent on gameId, so a retried request is a no-op.
+  after(async () => {
+    try {
+      await recordGameResult(gameData);
+    } catch (error) {
+      console.error(`Post-response result recording failed for game ${gameData.gameId}`, error);
+    }
+  });
 
   return NextResponse.json({ success: true });
 }

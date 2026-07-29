@@ -2,7 +2,7 @@ import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNoti
 import { buildYourTurnNotification } from '@/utils/firebase/notificationContent';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { auth, clerkClient } from '@clerk/nextjs/server';
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { GameDataModel, IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
 import { userListToUserIdNameMap } from '@/utils/users/clerk';
 
@@ -29,30 +29,43 @@ export async function POST(request: NextRequest) {
   gameData.lastTurnTimestamp = new Date().toISOString();
   gameData.timerWarningNotificationSent = false;
 
-  const { data: userList } = await (await clerkClient()).users.getUserList({
-    userId: gameData.userIdList
-  });
-  const turnUser = userList.find(u => u.id === gameData.currentTurn);
-
-  if (!turnUser) {
-    return NextResponse.json({}, {status: 400, statusText: "Next user not found"});
-  }
-
   if (!(await trySave(gameData))) {
     return NextResponse.json({}, {status: 409, statusText: "Game state changed, please refresh and try again"});
   }
 
-  await sendPushToUsers(userList, {
-    event: 'TurnTaken',
-    gameId
-  });
+  // Notifying the other players — the Clerk lookup, the silent TurnTaken
+  // refresh, and building the next player's "your move" body (which replays the
+  // whole game through the recap engine) — is the slowest part of ending a turn
+  // and none of it is anything the player who just moved is waiting on. Run it
+  // after the response has flushed. A failure here can't cost a turn advance
+  // that's already saved, so it's logged and swallowed rather than an error.
+  after(async () => {
+    try {
+      const { data: userList } = await (await clerkClient()).users.getUserList({
+        userId: gameData.userIdList
+      });
+      const turnUser = userList.find(u => u.id === gameData.currentTurn);
 
-  await sendPushToUsers([turnUser], {
-    event: 'YourTurn',
-    gameId,
-    link: gameNotificationLink(gameData.gameType.url, gameId)
-  }, await buildYourTurnNotification(gameData, turnUser.id, userListToUserIdNameMap(userList)), {
-    channel: 'yourTurn'
+      if (!turnUser) {
+        console.error(`Next user not found for game ${gameData.gameId}`);
+        return;
+      }
+
+      await sendPushToUsers(userList, {
+        event: 'TurnTaken',
+        gameId
+      });
+
+      await sendPushToUsers([turnUser], {
+        event: 'YourTurn',
+        gameId,
+        link: gameNotificationLink(gameData.gameType.url, gameId)
+      }, await buildYourTurnNotification(gameData, turnUser.id, userListToUserIdNameMap(userList)), {
+        channel: 'yourTurn'
+      });
+    } catch (error) {
+      console.error(`Post-response turn-notification work failed for game ${gameData.gameId}`, error);
+    }
   });
 
   return NextResponse.json({success: true});
