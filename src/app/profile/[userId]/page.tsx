@@ -83,7 +83,7 @@ export default function FriendProfile({ params }: { params: Promise<{ userId: st
                         <ProfileIdentity name={friendDisplayName} username={profileUser?.username} fullName={fullName} />
 
                         {/* Recent form */}
-                        <RecentFormSection matches={recentMatches} isLoading={isLoading} />
+                        <RecentFormSection matches={recentMatches} isLoading={isLoading} highlightShared />
 
                         {/* Match outcome history, by game */}
                         <GameStatsList label="Match history" stats={gameStats} isLoading={isLoading} />
