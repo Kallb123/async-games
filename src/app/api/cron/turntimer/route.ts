@@ -4,12 +4,12 @@ import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { isExpired, isWarningThreshold, formatRemainingTime } from '@/utils/games/TurnTimer';
+import { isAuthorisedCron } from '@/utils/cronAuth';
 
 export async function GET(request: NextRequest) {
     console.log(`GET ${request.nextUrl.pathname}`);
 
-    const secret = request.headers.get('authorization');
-    if (secret !== `Bearer ${process.env.CRON_SECRET}`) {
+    if (!isAuthorisedCron(request)) {
         return NextResponse.json({}, { status: 401, statusText: 'Unauthorized' });
     }
 
