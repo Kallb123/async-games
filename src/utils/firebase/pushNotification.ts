@@ -24,6 +24,10 @@ export function homeNotificationLink(): string {
     return APP_BASE_URL;
 }
 
+export function profileNotificationLink(): string {
+    return `${APP_BASE_URL}/profile`;
+}
+
 export interface SendPushOptions {
     /** Optional notification channel this push belongs to. If provided, the push
      *  will be skipped for any user whose preferences disable it (or who has

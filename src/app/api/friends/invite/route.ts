@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { FriendshipModel, IFriendshipDataDocument } from '@/utils/mongodb/FriendshipData';
-import { sendPushToUsers } from '@/utils/firebase/pushNotification';
+import { sendPushToUsers, profileNotificationLink } from '@/utils/firebase/pushNotification';
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
@@ -56,7 +56,8 @@ export async function POST(request: NextRequest) {
 
   await sendPushToUsers([recipient], {
     event: "FriendInvite",
-    friendshipId: friendship.friendshipId
+    friendshipId: friendship.friendshipId,
+    link: profileNotificationLink()
   }, {
     title: "Friend Request",
     body: `${thisUser.username} sent you a friend request!`
