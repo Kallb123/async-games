@@ -10,6 +10,27 @@ export interface PushNotification {
     imageUrl?: string;
 }
 
+// Origin used to build links in push notifications. Override with the
+// APP_URL env var per deployment (e.g. a staging environment); falls back to
+// production so nothing breaks where it isn't set.
+const APP_BASE_URL = process.env.APP_URL ?? 'https://async-games.vercel.app';
+
+// Absolute URL the service worker opens (`firebase-messaging-sw.js`'s
+// `notificationclick` handler reads `data.link`) when a notification is
+// tapped. Include this in `data` alongside any `notification` payload, or
+// tapping the notification won't take the player anywhere.
+export function gameNotificationLink(gameTypeUrl: string, gameId: string): string {
+    return `${APP_BASE_URL}/games/${gameTypeUrl}/${gameId}`;
+}
+
+export function homeNotificationLink(): string {
+    return APP_BASE_URL;
+}
+
+export function profileNotificationLink(): string {
+    return `${APP_BASE_URL}/profile`;
+}
+
 export interface SendPushOptions {
     /** Optional notification channel this push belongs to. If provided, the push
      *  will be skipped for any user whose preferences disable it (or who has

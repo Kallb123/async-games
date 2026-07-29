@@ -1,4 +1,4 @@
-import { sendPushToUsers } from '@/utils/firebase/pushNotification';
+import { sendPushToUsers, homeNotificationLink } from '@/utils/firebase/pushNotification';
 import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
@@ -62,6 +62,7 @@ export async function POST(request: NextRequest) {
   await sendPushToUsers(userList, {
     event: 'NewInvite',
     inviteId: invite.inviteId,
+    link: homeNotificationLink()
   }, {
     title: 'Game Invite',
     body: `${thisUser.username} has invited you to play Settlements and Cities!`,

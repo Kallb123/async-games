@@ -2,7 +2,7 @@ import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { FriendshipModel, IFriendshipDataDocument } from '@/utils/mongodb/FriendshipData';
-import { sendPushToUsers } from '@/utils/firebase/pushNotification';
+import { sendPushToUsers, profileNotificationLink } from '@/utils/firebase/pushNotification';
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
@@ -38,7 +38,8 @@ export async function POST(request: NextRequest) {
   const requester = await (await clerkClient()).users.getUser(friendship.requesterId);
   await sendPushToUsers([requester], {
     event: "FriendAccepted",
-    friendshipId: friendship.friendshipId
+    friendshipId: friendship.friendshipId,
+    link: profileNotificationLink()
   }, {
     title: "Friend Request Accepted",
     body: `${thisUser.username} accepted your friend request!`
