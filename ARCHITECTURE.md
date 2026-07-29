@@ -403,6 +403,19 @@ sends a **silent data-only** message used to refresh client state. The admin SDK
 is initialised in `src/utils/firebase/adminFirebase.ts` from `FIREBASE_*` env
 vars.
 
+**What the pushes say.** Every piece of user-visible push copy is built by
+`src/utils/firebase/notificationContent.ts`, never written inline at the call
+site — three routes can hand a player their turn and five can invite them to a
+game, so copy written per-route drifts. The "your move" body describes *what
+actually happened* by reusing the recap engine (§9): it replays the game, takes
+the events the player missed, and leads with the most recent one ("🪜 Priya
+rolled 3, climbed a ladder"), falling back to the newest `gameState.history`
+line for games with no recap adapter and to a generic prompt for games with no
+history yet. Because these builders run *after* the turn has been saved, a
+recap failure is caught and downgraded — it can cost a nicer sentence, never
+the move. Notification artwork comes from `gameNotificationImage`, which reads
+the game's own `meta.ts`, so a push can never carry another game's icon.
+
 **Token registration.** On the client, `useFcmToken` (`src/utils/hooks/`) requests
 notification permission, gets an FCM token, and POSTs it to
 `/api/notificationtoken`, which stores it in the user's Clerk private metadata.
@@ -443,7 +456,9 @@ and rewrites only the metadata that actually changed.
   re-fetch game state — this is how a board updates without a socket.
 
 Common event names: `NewInvite`, `InviteAccepted`, `GameStart`, `TurnTaken`,
-`YourTurn`, `TurnExpired`, `TurnExpiringSoon`, `GameOver`.
+`YourTurn`, `TurnExpired`, `TurnExpiringSoon`, `GameOver`. `YourTurn` is also
+sent when a game starts, to whoever won the roll for turn order — everyone else
+just gets the silent `GameStart` refresh.
 
 ## 9. Turn recap & planning (replay engine)
 

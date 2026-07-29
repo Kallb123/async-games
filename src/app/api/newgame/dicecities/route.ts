@@ -1,4 +1,6 @@
 import { sendPushToUsers, homeNotificationLink } from '@/utils/firebase/pushNotification';
+import { buildGameInviteNotification } from '@/utils/firebase/notificationContent';
+import { readableName } from '@/utils/ui/players';
 import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
@@ -56,11 +58,7 @@ export async function POST(request: NextRequest) {
     event: "NewInvite",
     inviteId: invite.inviteId,
     link: homeNotificationLink()
-  }, {
-    title: "Game Invite",
-    body: `${thisUser.username} has invited you to play Dice Cities!`,
-    imageUrl: `https://async-games.vercel.app/art/dicecities/icon.png`
-  }, {
+  }, buildGameInviteNotification(readableName(thisUser), invite.gameFriendlyName), {
     channel: 'gameInvite'
   });
   await sendPushToUsers([thisUser], {

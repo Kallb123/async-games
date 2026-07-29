@@ -7,7 +7,9 @@ import { useEffect, useRef } from 'react';
  *
  * - `TurnTaken`   — an opponent completed their turn (`/api/game/command`).
  * - `TurnExpired` — the turn timer advanced the turn (`/api/cron/turntimer`).
- * - `YourTurn`    — it is now this player's turn (sent by both of the above).
+ * - `YourTurn`    — it is now this player's turn (sent by both of the above,
+ *                   and by `/api/invite/accept` to whoever moves first in a
+ *                   game that has just started).
  *
  * Historically only `TurnTaken` was listened for, so timer-driven turn
  * changes never refreshed the UI until a manual reload.

@@ -1,4 +1,5 @@
-import { clerkClient } from "@clerk/nextjs/server";
+import { clerkClient, User } from "@clerk/nextjs/server";
+import { readableName } from "@/utils/ui/players";
 
 export async function userIdListToUsernameList(userIdList: string[]): Promise<string[]> {
     const { data: users } = await (await clerkClient()).users.getUserList({userId: userIdList});
@@ -32,6 +33,15 @@ export async function userIdListToUserIdNameMap(userIdList: string[]): Promise<{
     const usernameMap = await userIdListToUsernameMap(userIdList);
     const userIdNameMap: { [key: string]: string } = {};
     usernameMap.forEach((username, id) => { userIdNameMap[id] = username; });
+    return userIdNameMap;
+}
+
+// Same { [userId]: username } shape as userIdListToUserIdNameMap, but built from
+// users a route has already fetched — routes that notify players hold the Clerk
+// user list already, so this saves a second round trip to Clerk.
+export function userListToUserIdNameMap(users: User[]): { [key: string]: string } {
+    const userIdNameMap: { [key: string]: string } = {};
+    users.forEach(user => { userIdNameMap[user.id] = readableName(user, "No username"); });
     return userIdNameMap;
 }
 
