@@ -1,4 +1,6 @@
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
+import { buildNudgeNotification } from '@/utils/firebase/notificationContent';
+import { readableName } from '@/utils/ui/players';
 import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
@@ -47,16 +49,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, {status: 400, statusText: "Current turn user not found"});
   }
 
-  const nudgerName = thisUser.username || thisUser.firstName || "Someone";
-
   await sendPushToUsers([turnUser], {
     event: 'TurnNudge',
     gameId,
     link: gameNotificationLink(gameData.gameType.url, gameId)
-  }, {
-    title: "👉 Nudge!",
-    body: `${nudgerName} is waiting for your move in ${gameData.gameType.friendlyName}`
-  }, {
+  }, buildNudgeNotification(readableName(thisUser), gameData), {
     channel: 'turnNudge'
   });
 

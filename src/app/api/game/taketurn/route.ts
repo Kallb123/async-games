@@ -1,8 +1,10 @@
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
+import { buildYourTurnNotification } from '@/utils/firebase/notificationContent';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { GameDataModel, IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
+import { userListToUserIdNameMap } from '@/utils/users/clerk';
 
 export async function POST(request: NextRequest) {
   console.log(`${request.method} ${request.nextUrl.pathname}`);
@@ -49,10 +51,7 @@ export async function POST(request: NextRequest) {
     event: 'YourTurn',
     gameId,
     link: gameNotificationLink(gameData.gameType.url, gameId)
-  }, {
-    title: "Your Turn",
-    body: `It's your turn to play!`
-  }, {
+  }, await buildYourTurnNotification(gameData, turnUser.id, userListToUserIdNameMap(userList)), {
     channel: 'yourTurn'
   });
 

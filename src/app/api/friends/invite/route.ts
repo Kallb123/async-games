@@ -4,6 +4,8 @@ import { randomUUID } from 'crypto';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { FriendshipModel, IFriendshipDataDocument } from '@/utils/mongodb/FriendshipData';
 import { sendPushToUsers, profileNotificationLink } from '@/utils/firebase/pushNotification';
+import { buildFriendInviteNotification } from '@/utils/firebase/notificationContent';
+import { readableName } from '@/utils/ui/players';
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
@@ -58,10 +60,7 @@ export async function POST(request: NextRequest) {
     event: "FriendInvite",
     friendshipId: friendship.friendshipId,
     link: profileNotificationLink()
-  }, {
-    title: "Friend Request",
-    body: `${thisUser.username} sent you a friend request!`
-  }, {
+  }, buildFriendInviteNotification(readableName(thisUser)), {
     channel: 'friendInvite'
   });
 

@@ -67,6 +67,23 @@ export function formatRemainingTime(lastTurnTimestamp: string, turnTimer: string
     return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
 }
 
+/**
+ * "3 hours" style label for how long ago `timestamp` was — the mirror of
+ * formatRemainingTime, used for "they've been waiting 3 hours" copy. Anything
+ * under a minute reads as "a moment" rather than "0 minutes".
+ */
+export function formatElapsedTime(timestamp: string): string {
+    const elapsedMs = Math.max(Date.now() - new Date(timestamp).getTime(), 0);
+
+    const days = Math.floor(elapsedMs / (24 * 60 * 60 * 1000));
+    if (days >= 1) return `${days} day${days !== 1 ? 's' : ''}`;
+    const hours = Math.floor(elapsedMs / (60 * 60 * 1000));
+    if (hours >= 1) return `${hours} hour${hours !== 1 ? 's' : ''}`;
+    const minutes = Math.floor(elapsedMs / (60 * 1000));
+    if (minutes >= 1) return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+    return 'a moment';
+}
+
 /** Short "1h left" style label for game lists. Null for unlimited timers. */
 export function formatRemainingTimeShort(lastTurnTimestamp: string, turnTimer: string): string | null {
     const parts = remainingParts(lastTurnTimestamp, turnTimer);

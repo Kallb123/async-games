@@ -1,4 +1,6 @@
-import { sendPushToUsers } from '@/utils/firebase/pushNotification';
+import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
+import { buildYourTurnNotification } from '@/utils/firebase/notificationContent';
+import { userListToUserIdNameMap } from '@/utils/users/clerk';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
@@ -85,6 +87,23 @@ export async function POST(request: NextRequest) {
     inviteId: inviteId,
     gameId: gameData.gameId.toString() as uuidString
   });
+
+  // Whoever won the roll for turn order is up immediately, and until now nothing
+  // told them so — the first "your move" push only went out once someone had
+  // played. Skip it for the player who triggered the game starting: they're
+  // looking at the app right now (and for solo games they're the only player).
+  const firstUser = userList.find(u => u.id === gameData.currentTurn);
+  if (firstUser && firstUser.id !== authResponse.userId) {
+    await sendPushToUsers([firstUser], {
+      event: 'YourTurn',
+      gameId: gameData.gameId.toString() as uuidString,
+      link: gameNotificationLink(gameData.gameType.url, gameData.gameId.toString())
+    }, await buildYourTurnNotification(gameData, firstUser.id, userListToUserIdNameMap(userList), {
+      gameJustStarted: true
+    }), {
+      channel: 'yourTurn'
+    });
+  }
 
   return NextResponse.json({success: true, gameStarted: true, gameId: gameData.gameId, gameUrl: gameData.gameType.url});
 }

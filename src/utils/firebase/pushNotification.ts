@@ -4,6 +4,7 @@ import { getAdminMessaging } from './adminFirebase';
 import { getDeviceTokens, removeDevices } from './deviceTokens';
 import { deadTokensByUser, PushTarget } from './revokedTokens';
 import { getNotificationPreferences, isChannelEnabled, NotificationChannel } from './notificationPreferences';
+import { metaForGame } from '@/utils/ui/games';
 
 export interface PushNotification {
     title: string;
@@ -30,6 +31,16 @@ export function homeNotificationLink(): string {
 
 export function profileNotificationLink(): string {
     return `${APP_BASE_URL}/profile`;
+}
+
+// Absolute URL of a game's artwork, for the `imageUrl` of a notification about
+// that game. Derived from the game's own metadata (the single source of truth
+// for its art) so a notification can never show another game's icon, and
+// undefined for games that only have a glyph — FCM rejects a broken image URL
+// on some platforms, so it's better to send none.
+export function gameNotificationImage(gameTypeUrl: string): string | undefined {
+    const art = metaForGame({ url: gameTypeUrl })?.art;
+    return art ? `${APP_BASE_URL}${art}` : undefined;
 }
 
 export interface SendPushOptions {

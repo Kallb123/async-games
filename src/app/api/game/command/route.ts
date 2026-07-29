@@ -1,4 +1,7 @@
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
+import { buildGameLostNotification, buildGameWonNotification, buildYourTurnNotification } from '@/utils/firebase/notificationContent';
+import { userListToUserIdNameMap } from '@/utils/users/clerk';
+import { readableName } from '@/utils/ui/players';
 import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
@@ -117,33 +120,23 @@ export async function POST(request: NextRequest) {
     });
 
     const winnerUser = userList.find(u => u.id === gameData.winner);
-    const winnerUsername = winnerUser?.username ?? winnerUser?.firstName ?? gameData.winner;
-    const gameIconUrl = `https://async-games.vercel.app/art/dicecities/icon.png`;
+    const losers = userList.filter(u => u.id !== gameData.winner);
 
     if (winnerUser) {
       await sendPushToUsers([winnerUser], {
         event: 'GameOver',
         gameId: commandRequest.gameId,
         link: gameNotificationLink(gameData.gameType.url, commandRequest.gameId)
-      }, {
-        title: "You won! 🎉",
-        body: `Congratulations, you won the game!`,
-        imageUrl: gameIconUrl
-      }, {
+      }, buildGameWonNotification(gameData, losers.map(u => readableName(u))), {
         channel: 'yourTurn'
       });
     }
 
-    const losers = userList.filter(u => u.id !== gameData.winner);
     await sendPushToUsers(losers, {
       event: 'GameOver',
       gameId: commandRequest.gameId,
       link: gameNotificationLink(gameData.gameType.url, commandRequest.gameId)
-    }, {
-      title: "Game Over",
-      body: `${winnerUsername} won the game. Better luck next time!`,
-      imageUrl: gameIconUrl
-    });
+    }, buildGameLostNotification(gameData, winnerUser ? readableName(winnerUser) : ''));
 
     return NextResponse.json(response, {status: 200});
   }
@@ -186,11 +179,7 @@ export async function POST(request: NextRequest) {
     event: 'YourTurn',
     gameId: commandRequest.gameId,
     link: gameNotificationLink(gameData.gameType.url, commandRequest.gameId)
-  }, {
-    title: "Your Turn",
-    body: `It's your turn to play!`,
-    imageUrl: `https://async-games.vercel.app/art/dicecities/icon.png`
-  }, {
+  }, await buildYourTurnNotification(gameData, turnUser.id, userListToUserIdNameMap(userList)), {
     channel: 'yourTurn'
   });
 

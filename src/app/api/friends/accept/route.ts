@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { FriendshipModel, IFriendshipDataDocument } from '@/utils/mongodb/FriendshipData';
 import { sendPushToUsers, profileNotificationLink } from '@/utils/firebase/pushNotification';
+import { buildFriendAcceptedNotification } from '@/utils/firebase/notificationContent';
+import { readableName } from '@/utils/ui/players';
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
@@ -40,10 +42,7 @@ export async function POST(request: NextRequest) {
     event: "FriendAccepted",
     friendshipId: friendship.friendshipId,
     link: profileNotificationLink()
-  }, {
-    title: "Friend Request Accepted",
-    body: `${thisUser.username} accepted your friend request!`
-  }, {
+  }, buildFriendAcceptedNotification(readableName(thisUser)), {
     channel: 'friendInvite'
   });
 
