@@ -10,6 +10,20 @@ export interface PushNotification {
     imageUrl?: string;
 }
 
+const APP_BASE_URL = 'https://async-games.vercel.app';
+
+// Absolute URL the service worker opens (`firebase-messaging-sw.js`'s
+// `notificationclick` handler reads `data.link`) when a notification is
+// tapped. Include this in `data` alongside any `notification` payload, or
+// tapping the notification won't take the player anywhere.
+export function gameNotificationLink(gameTypeUrl: string, gameId: string): string {
+    return `${APP_BASE_URL}/games/${gameTypeUrl}/${gameId}`;
+}
+
+export function homeNotificationLink(): string {
+    return APP_BASE_URL;
+}
+
 export interface SendPushOptions {
     /** Optional notification channel this push belongs to. If provided, the push
      *  will be skipped for any user whose preferences disable it (or who has

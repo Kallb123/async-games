@@ -1,4 +1,4 @@
-import { sendPushToUsers } from '@/utils/firebase/pushNotification';
+import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { clerkClient } from '@clerk/nextjs/server';
@@ -55,7 +55,8 @@ export async function GET(request: NextRequest) {
             if (turnUser) {
                 await sendPushToUsers([turnUser], {
                     event: 'YourTurn',
-                    gameId: gameData.gameId
+                    gameId: gameData.gameId,
+                    link: gameNotificationLink(gameData.gameType.url, gameData.gameId)
                 }, {
                     title: "Your Turn",
                     body: `It's your turn to play!`,
@@ -81,7 +82,8 @@ export async function GET(request: NextRequest) {
                 const timeLeft = formatRemainingTime(lastTurnTimestamp, turnTimer);
                 await sendPushToUsers([activeUser], {
                     event: 'TurnExpiringSoon',
-                    gameId: gameData.gameId
+                    gameId: gameData.gameId,
+                    link: gameNotificationLink(gameData.gameType.url, gameData.gameId)
                 }, {
                     title: "Time Running Out!",
                     body: `You have less than ${timeLeft} left to take your turn!`,

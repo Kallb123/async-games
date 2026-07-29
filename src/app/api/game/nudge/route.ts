@@ -1,4 +1,4 @@
-import { sendPushToUsers } from '@/utils/firebase/pushNotification';
+import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
@@ -51,7 +51,8 @@ export async function POST(request: NextRequest) {
 
   await sendPushToUsers([turnUser], {
     event: 'TurnNudge',
-    gameId
+    gameId,
+    link: gameNotificationLink(gameData.gameType.url, gameId)
   }, {
     title: "👉 Nudge!",
     body: `${nudgerName} is waiting for your move in ${gameData.gameType.friendlyName}`
