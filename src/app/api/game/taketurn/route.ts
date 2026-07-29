@@ -3,7 +3,7 @@ import { buildYourTurnNotification } from '@/utils/firebase/notificationContent'
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
-import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
+import { GameDataModel, IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
 import { userListToUserIdNameMap } from '@/utils/users/clerk';
 
 export async function POST(request: NextRequest) {
@@ -38,7 +38,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, {status: 400, statusText: "Next user not found"});
   }
 
-  await gameData.save();
+  if (!(await trySave(gameData))) {
+    return NextResponse.json({}, {status: 409, statusText: "Game state changed, please refresh and try again"});
+  }
 
   await sendPushToUsers(userList, {
     event: 'TurnTaken',

@@ -63,7 +63,7 @@ export var GameDataSchema = new Schema<IGameDataDocument> ({
     },
     complete: Boolean,
     winner: String
-}, {discriminatorKey: 'kind'});
+}, {discriminatorKey: 'kind', optimisticConcurrency: true});
 GameDataSchema.methods.CreateResponse = async function(): Promise<IGameResponse> {
     console.log("CreateResponse: Generic game");
 
@@ -102,3 +102,19 @@ GameDataSchema.methods.CreateDataResponse = async function(): Promise<IGameDataR
     }
 };
 export var GameDataModel = models.GameData || model<IGameDataDocument, IGameDataModel>('GameData', GameDataSchema);
+
+// Saves the document, reporting false (instead of throwing) on a VersionError.
+// Two requests against the same game can race past a currentTurn/state check
+// and execute concurrently against separately-fetched copies of the document —
+// optimistic concurrency (enabled above) makes the loser's save fail instead
+// of silently overwriting the winner's changes. Every route that calls
+// gameData.save() on a document from this model should go through this.
+export async function trySave(gameData: IGameDataDocument): Promise<boolean> {
+  try {
+    await gameData.save();
+    return true;
+  } catch (err) {
+    if ((err as { name?: string })?.name === 'VersionError') return false;
+    throw err;
+  }
+}

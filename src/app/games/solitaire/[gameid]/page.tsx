@@ -4,14 +4,14 @@ import { useUser } from "@clerk/nextjs";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useRouter, usePathname } from "next/navigation";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
-import { IGameCommand, SolitaireDraw, SolitaireMoveCard, SolitaireUndo, SolitaireAutoSolve } from "@/utils/apiModels/GameLogic";
-import type { ICommandResponse } from "@/app/api/game/command/route";
+import { SolitaireDraw, SolitaireMoveCard, SolitaireUndo, SolitaireAutoSolve } from "@/utils/apiModels/GameLogic";
 import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import Stat from "@/components/ui/Stat";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useEndGame } from "@/utils/hooks/useEndGame";
+import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useToast } from "@/components/ToastContext";
 import { ISolitaireGameDataResponse } from "@/games/Solitaire/apiModels";
 import { SolitaireZoneRef, getLegalMoves, hasAnyLegalMove, hasHiddenTableauCards, foundationCardCount, formatDuration } from "@/games/Solitaire/rules";
@@ -59,26 +59,7 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
         return () => clearInterval(id);
     }, [complete]);
 
-    const submitCommand = (command: IGameCommand) => {
-        if (!user) {
-            console.error("Unable to send command whilst not logged in");
-            return;
-        }
-        command.gameId = gameId;
-        command.senderId = user.id;
-        command.senderUsername = user.username || user.firstName || user.id;
-        fetch('/api/game/command', {
-            method: "POST",
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(command)
-        })
-            .then(response => response.ok ? response.json() : null)
-            .then((data: ICommandResponse | null) => {
-                if (data?.gameData) {
-                    setGameData(data.gameData as ISolitaireGameDataResponse);
-                }
-            });
-    };
+    const { submitCommand, submitting } = useSubmitCommand<ISolitaireGameDataResponse>(gameId, user, setGameData, getGameData);
 
     const handleDraw = () => submitCommand(new SolitaireDraw());
     const handleUndo = () => submitCommand(new SolitaireUndo());
@@ -147,7 +128,7 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
             )}
 
             {state && !complete && (
-                <SolitaireBoard state={state} onDraw={handleDraw} onMove={handleMove} />
+                <SolitaireBoard state={state} disabled={submitting} onDraw={handleDraw} onMove={handleMove} />
             )}
 
             {stalemated && (
@@ -158,7 +139,7 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
 
             {autoSolveAvailable && (
                 <div className="ag-section">
-                    <button type="button" className="ag-btn ag-btn--primary ag-btn--block" onClick={handleAutoSolve}>
+                    <button type="button" className="ag-btn ag-btn--primary ag-btn--block" onClick={handleAutoSolve} disabled={submitting}>
                         🪄 Auto-solve
                     </button>
                     <p className="ag-hint" style={{ textAlign: 'center' }}>Every card is face-up — the rest can be played out automatically.</p>
@@ -167,10 +148,10 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
 
             {state && !complete && (
                 <div className="ag-section" style={{ display: 'flex', gap: 8 }}>
-                    <button type="button" className="ag-btn ag-btn--primary" style={{ flex: 1 }} onClick={handleDraw} disabled={state.stockCount === 0 && state.waste.length === 0}>
+                    <button type="button" className="ag-btn ag-btn--primary" style={{ flex: 1 }} onClick={handleDraw} disabled={submitting || (state.stockCount === 0 && state.waste.length === 0)}>
                         Draw
                     </button>
-                    <button type="button" className="ag-btn ag-btn--light" onClick={handleUndo} disabled={!state.canUndo}>Undo</button>
+                    <button type="button" className="ag-btn ag-btn--light" onClick={handleUndo} disabled={submitting || !state.canUndo}>Undo</button>
                     <button type="button" className="ag-btn ag-btn--light" onClick={handleHint}>Hint</button>
                 </div>
             )}

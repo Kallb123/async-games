@@ -25,6 +25,7 @@ import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useGameData } from "@/utils/hooks/useGameData";
+import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
 import { currentUsername } from "@/utils/ui/players";
 import {
@@ -78,23 +79,12 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
 
     usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 
-    const submitCommand = async (command: IGameCommand, callback: (r: ICommandResponse) => void) => {
-        command.gameId = gameId;
-        if (!user) { console.error('Not logged in'); return; }
-        command.senderId = user.id;
-        command.senderUsername = user.username || user.firstName || user.id;
-        fetch('/api/game/command', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(command),
-        })
-            .then(r => r.ok ? r.json() : null)
-            .then(data => {
-                if (!data?.gameData) return;
-                setGameData(data.gameData as ISACGameDataResponse);
-                setBoardMode('idle');
-                callback(data);
-            });
+    const { submitCommand: sendCommand, submitting } = useSubmitCommand<ISACGameDataResponse>(gameId, user, setGameData, getGameData);
+    const submitCommand = (command: IGameCommand, callback: (r: ICommandResponse) => void) => {
+        sendCommand(command, (data) => {
+            setBoardMode('idle');
+            callback(data);
+        });
     };
 
     // Turn recap: replay past turns and render the reconstructed board read-only.
@@ -388,9 +378,9 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                             harbors={gs.harbors}
                             robberHexIndex={gs.robberHexIndex}
                             usernameToColor={usernameToColor}
-                            onVertexClick={isMyTurn && !complete ? handleVertexClick : undefined}
-                            onEdgeClick={isMyTurn && !complete ? handleEdgeClick : undefined}
-                            onHexClick={isMyTurn && !complete ? handleHexClick : undefined}
+                            onVertexClick={isMyTurn && !complete && !submitting ? handleVertexClick : undefined}
+                            onEdgeClick={isMyTurn && !complete && !submitting ? handleEdgeClick : undefined}
+                            onHexClick={isMyTurn && !complete && !submitting ? handleHexClick : undefined}
                             validVertices={validVertices}
                             validEdges={validEdges}
                             validHexes={validHexes}
