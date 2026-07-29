@@ -53,6 +53,19 @@ Vercel Hobby plan limits cron jobs to once per day. Since the shortest supported
 
 The endpoint returns `{ processed, expired, warned }` — cron-job.org will show this in the execution log.
 
+## Cron / Stale device cleanup
+
+`/api/cron/staledevices` forgets push registrations from devices that haven't
+opened the app in 90 days (`STALE_DEVICE_DAYS` in
+`src/utils/firebase/deviceInfo.ts`). Opening the app refreshes a device's
+`lastSeen`, so this only removes phones that are gone for good — it keeps the
+device list on the settings screen honest and stops us pushing to dead tokens.
+
+Daily is plenty, so the Vercel cron in `vercel.json` (`0 4 * * *`) is enough on
+its own; no external scheduler needed. It uses the same
+`Authorization: Bearer <CRON_SECRET>` header as the turn timer, and returns
+`{ scanned, usersUpdated, devicesRemoved, staleAfterDays }`.
+
 ## Deploy on Vercel
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.

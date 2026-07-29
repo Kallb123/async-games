@@ -3,7 +3,7 @@
 import { useToast } from "@/components/ToastContext";
 import { SkeletonList } from "@/components/ui/Skeleton";
 import { RegisteredDevice } from "@/utils/firebase/TimedToken";
-import { deviceGlyph, deviceIdForToken } from "@/utils/firebase/deviceInfo";
+import { deviceGlyph, deviceIdForToken, STALE_DEVICE_DAYS } from "@/utils/firebase/deviceInfo";
 import { formatRelativeTime } from "@/utils/ui/time";
 import { useEffect, useState } from "react";
 
@@ -82,7 +82,10 @@ export default function NotificationDeviceList({ currentToken }: { currentToken?
                     </div>
                 ))}
             </div>
-            <p className="ag-hint">A removed device stops getting notifications until you next open Async Games on it.</p>
+            <p className="ag-hint">
+                A removed device stops getting notifications until you next open Async Games on it.
+                Devices you haven&apos;t used for {STALE_DEVICE_DAYS} days are forgotten automatically.
+            </p>
         </div>
     );
 }

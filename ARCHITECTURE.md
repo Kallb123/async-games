@@ -417,7 +417,15 @@ devices — id, name, type and timestamps, never the raw token) and `DELETE`
 `deviceIdForToken`, the token's last 12 characters, so tokens never leave the
 server. `NotificationDeviceList` renders the list on the settings page and lets
 a player remove a device; that device stops receiving pushes until it next
-opens the app and re-registers.
+opens the app and re-registers. Reading/writing the stored list lives in
+`deviceTokens.ts` (server-only, touches Clerk); `deviceInfo.ts` stays pure so
+the client can import it too.
+
+**Forgetting old devices.** `pruneStaleTokens` drops registrations unused for
+`STALE_DEVICE_DAYS` (90). It runs on every registration, and nightly for
+everyone via the `/api/cron/staledevices` cron (`vercel.json`, same
+`CRON_SECRET` bearer auth as the turn timer), which pages through Clerk users
+and rewrites only the metadata that actually changed.
 
 **Device → UI.**
 - *Background:* `public/firebase-messaging-sw.js` (a service worker) shows OS

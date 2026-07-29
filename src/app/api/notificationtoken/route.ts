@@ -1,26 +1,14 @@
 import TimedToken from '@/utils/firebase/TimedToken';
-import { deviceIdForToken, parseUserAgent, toRegisteredDevice } from '@/utils/firebase/deviceInfo';
-import { auth, clerkClient, currentUser, User } from '@clerk/nextjs/server';
+import { deviceIdForToken, parseUserAgent, pruneStaleTokens, toRegisteredDevice } from '@/utils/firebase/deviceInfo';
+import { getDeviceTokens, saveDeviceTokens } from '@/utils/firebase/deviceTokens';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
-
-function storedTokens(user: User): TimedToken[] {
-  return (user.privateMetadata?.notificationTokens as TimedToken[] | undefined) ?? [];
-}
 
 // Newest activity first, so the device you're holding tends to sit at the top.
 function deviceList(tokens: TimedToken[]) {
   return tokens
     .map(toRegisteredDevice)
     .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt));
-}
-
-async function saveTokens(user: User, tokens: TimedToken[]) {
-  await (await clerkClient()).users.updateUserMetadata(user.id, {
-    privateMetadata: {
-      ...user.privateMetadata,
-      notificationTokens: tokens
-    }
-  });
 }
 
 async function requireUser() {
@@ -39,7 +27,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({}, { status: 400, statusText: "Not signed in" });
   }
 
-  return NextResponse.json({ devices: deviceList(storedTokens(user)) });
+  // Pruned for display only; the nightly cron does the actual forgetting.
+  return NextResponse.json({ devices: deviceList(pruneStaleTokens(getDeviceTokens(user))) });
 }
 
 export async function POST(request: NextRequest) {
@@ -56,7 +45,8 @@ export async function POST(request: NextRequest) {
 
   const now = (new Date()).toISOString();
   const device = parseUserAgent(request.headers.get('user-agent'));
-  const tokens = storedTokens(user);
+  // Registering is also the natural moment to forget this user's dead devices.
+  const tokens = pruneStaleTokens(getDeviceTokens(user));
   const existing = tokens.find((val) => val.token === token);
   if (existing) {
     // Keep the original registration time; refresh what we know about the device.
@@ -66,7 +56,7 @@ export async function POST(request: NextRequest) {
     tokens.push({ token, timestamp: now, lastSeen: now, device });
   }
 
-  await saveTokens(user, tokens);
+  await saveDeviceTokens(user, tokens);
 
   return NextResponse.json({success: true, devices: deviceList(tokens)});
 }
@@ -84,13 +74,13 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({}, { status: 400, statusText: "Not signed in" });
   }
 
-  const tokens = storedTokens(user);
+  const tokens = getDeviceTokens(user);
   const remaining = tokens.filter((val) => deviceIdForToken(val.token) !== id);
   if (remaining.length === tokens.length) {
     return NextResponse.json({}, { status: 404, statusText: "Device not found" });
   }
 
-  await saveTokens(user, remaining);
+  await saveDeviceTokens(user, remaining);
 
   return NextResponse.json({ success: true, devices: deviceList(remaining) });
 }

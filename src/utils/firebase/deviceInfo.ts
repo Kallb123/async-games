@@ -69,6 +69,25 @@ export function deviceGlyph(type: DeviceType): string {
     return GLYPHS[type] ?? GLYPHS.unknown;
 }
 
+/** A device that hasn't re-registered in this long is forgotten. Every visit
+ *  refreshes `lastSeen`, so this only catches devices genuinely out of use. */
+export const STALE_DEVICE_DAYS = 90;
+
+/**
+ * Returns the registrations still worth keeping. Pure so the registration
+ * route and the nightly cron share one rule; pass `now` to make it
+ * deterministic. Entries with an unreadable date are kept — dropping a
+ * working device is worse than keeping a scruffy record, and the next
+ * registration from that device repairs it.
+ */
+export function pruneStaleTokens(tokens: TimedToken[], now: number = Date.now()): TimedToken[] {
+    const cutoff = now - STALE_DEVICE_DAYS * 24 * 60 * 60 * 1000;
+    return tokens.filter((stored) => {
+        const lastSeen = new Date(stored.lastSeen ?? stored.timestamp).getTime();
+        return Number.isNaN(lastSeen) || lastSeen >= cutoff;
+    });
+}
+
 /** Strips the raw token off a stored registration for display. */
 export function toRegisteredDevice(stored: TimedToken): RegisteredDevice {
     return {
