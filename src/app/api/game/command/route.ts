@@ -1,4 +1,4 @@
-import { sendPushToUsers } from '@/utils/firebase/pushNotification';
+import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
@@ -123,7 +123,8 @@ export async function POST(request: NextRequest) {
     if (winnerUser) {
       await sendPushToUsers([winnerUser], {
         event: 'GameOver',
-        gameId: commandRequest.gameId
+        gameId: commandRequest.gameId,
+        link: gameNotificationLink(gameData.gameType.url, commandRequest.gameId)
       }, {
         title: "You won! 🎉",
         body: `Congratulations, you won the game!`,
@@ -136,7 +137,8 @@ export async function POST(request: NextRequest) {
     const losers = userList.filter(u => u.id !== gameData.winner);
     await sendPushToUsers(losers, {
       event: 'GameOver',
-      gameId: commandRequest.gameId
+      gameId: commandRequest.gameId,
+      link: gameNotificationLink(gameData.gameType.url, commandRequest.gameId)
     }, {
       title: "Game Over",
       body: `${winnerUsername} won the game. Better luck next time!`,
@@ -182,7 +184,8 @@ export async function POST(request: NextRequest) {
 
   await sendPushToUsers([turnUser], {
     event: 'YourTurn',
-    gameId: commandRequest.gameId
+    gameId: commandRequest.gameId,
+    link: gameNotificationLink(gameData.gameType.url, commandRequest.gameId)
   }, {
     title: "Your Turn",
     body: `It's your turn to play!`,

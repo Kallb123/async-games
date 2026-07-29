@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
   await dbConnect();
 
-  const { recent, byGame } = await getPlayerStats(userId);
+  const { recent, byGame } = await getPlayerStats(userId, userId);
 
   return NextResponse.json({ success: true, recent, byGame });
 }

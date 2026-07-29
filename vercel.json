@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/turntimer",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/staledevices",
+      "schedule": "0 4 * * *"
     }
   ]
 }

@@ -290,7 +290,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
                                     disabled={disabled}
                                     onClick={() => unlockLandmark(flag as string)}
                                 >
-                                    <img className="ag-build-icon ag-dc-landmark-buy-icon" src={cardArt(card)} alt="" />
+                                    <img className="ag-icon-box ag-dc-landmark-buy-icon" src={cardArt(card)} alt="" />
                                     <span className="ag-build-main">
                                         <span className="ag-build-name">Landmark · {card.title}</span>
                                         <span className="ag-build-cost">{card.text}</span>

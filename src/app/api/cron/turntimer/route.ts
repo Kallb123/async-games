@@ -1,15 +1,15 @@
-import { sendPushToUsers } from '@/utils/firebase/pushNotification';
+import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
 import { clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { isExpired, isWarningThreshold, formatRemainingTime } from '@/utils/games/TurnTimer';
+import { isAuthorisedCron } from '@/utils/cronAuth';
 
 export async function GET(request: NextRequest) {
     console.log(`GET ${request.nextUrl.pathname}`);
 
-    const secret = request.headers.get('authorization');
-    if (secret !== `Bearer ${process.env.CRON_SECRET}`) {
+    if (!isAuthorisedCron(request)) {
         return NextResponse.json({}, { status: 401, statusText: 'Unauthorized' });
     }
 
@@ -57,7 +57,8 @@ export async function GET(request: NextRequest) {
             if (turnUser) {
                 await sendPushToUsers([turnUser], {
                     event: 'YourTurn',
-                    gameId: gameData.gameId
+                    gameId: gameData.gameId,
+                    link: gameNotificationLink(gameData.gameType.url, gameData.gameId)
                 }, {
                     title: "Your Turn",
                     body: `It's your turn to play!`,
@@ -83,7 +84,8 @@ export async function GET(request: NextRequest) {
                 const timeLeft = formatRemainingTime(lastTurnTimestamp, turnTimer);
                 await sendPushToUsers([activeUser], {
                     event: 'TurnExpiringSoon',
-                    gameId: gameData.gameId
+                    gameId: gameData.gameId,
+                    link: gameNotificationLink(gameData.gameType.url, gameData.gameId)
                 }, {
                     title: "Time Running Out!",
                     body: `You have less than ${timeLeft} left to take your turn!`,

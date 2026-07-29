@@ -23,9 +23,6 @@ const useFcmToken = () => {
               vapidKey: 'BDp9df2UuofIOAnwGQkfG7hyRf73aZ3kk6_GltpZtTFcIaMtwmcz7whJ_7GHB1Zay3QtQ8FqQMnNKoyD6LLpaZo',
             });
             if (currentToken) {
-              setToken(currentToken);
-              console.log(currentToken);
-        
               try {
                   const response = await fetch('/api/notificationtoken', {
                   method: "POST",
@@ -34,13 +31,16 @@ const useFcmToken = () => {
                   },
                   body: JSON.stringify({token: currentToken})
                   });
-      
+
                   if (!response.ok) {
-                      throw new Error('Password incorrect');
+                      throw new Error('Failed to register notification token');
                   }
               } catch (error) {
                   console.error(error);
               }
+              // Published only once the server knows about it, so anything
+              // keying off `fcmToken` (e.g. the device list) sees it registered.
+              setToken(currentToken);
             } else {
               console.log('No registration token available. Request permission to generate one.');
             }

@@ -1,4 +1,4 @@
-import { sendPushToUsers } from '@/utils/firebase/pushNotification';
+import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
@@ -47,7 +47,8 @@ export async function POST(request: NextRequest) {
 
   await sendPushToUsers([turnUser], {
     event: 'YourTurn',
-    gameId
+    gameId,
+    link: gameNotificationLink(gameData.gameType.url, gameId)
   }, {
     title: "Your Turn",
     body: `It's your turn to play!`

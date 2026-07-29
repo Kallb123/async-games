@@ -28,6 +28,9 @@ export interface GameMeta {
     // Optional artwork; when absent a glyph block is shown instead.
     art?: string;
     glyph?: string;
+    // Thumb shape override. Defaults to a rounded square; "hexagon" clips
+    // the thumb to a hex badge for games where that fits the theme.
+    shape?: "hexagon";
     available: boolean;
 }
 

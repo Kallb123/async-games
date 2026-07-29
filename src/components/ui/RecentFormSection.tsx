@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Skeleton from "@/components/ui/Skeleton";
 import MatchResultPopup from "@/components/ui/MatchResultPopup";
+import GameThumb from "@/components/ui/GameThumb";
 import { GAME_META } from "@/utils/ui/games";
 import type { IRecentMatch, MatchOutcome } from "@/app/api/stats/route";
 import moment from 'moment';
@@ -12,12 +13,15 @@ const OUTCOME_LABEL: Record<MatchOutcome, string> = { win: "W", loss: "L", draw:
 interface RecentFormSectionProps {
     matches: IRecentMatch[];
     isLoading: boolean;
+    // Ring-highlight matches the viewer also played in. Only meaningful on a
+    // friend's profile - on your own profile every match already includes you.
+    highlightShared?: boolean;
 }
 
 // "Recent form" - chips of a player's most recent match outcomes. Shared by
 // a player's own profile and a friend's read-only profile. Tapping a chip
 // opens a popup with that match's game-specific stats.
-export default function RecentFormSection({ matches, isLoading }: RecentFormSectionProps) {
+export default function RecentFormSection({ matches, isLoading, highlightShared = false }: RecentFormSectionProps) {
     const [selected, setSelected] = useState<IRecentMatch | null>(null);
 
     return (
@@ -35,19 +39,36 @@ export default function RecentFormSection({ matches, isLoading }: RecentFormSect
                 ? <div className="ag-empty">No finished games yet.</div>
                 : (
                     <div className="ag-chips">
-                        {matches.map(match => (
-                            <button
-                                key={match.gameId}
-                                type="button"
-                                className={`ag-result-dot ag-result-dot--${match.outcome}`}
-                                title={`${GAME_META[match.url]?.name ?? match.url} · ${moment(match.endedAt).fromNow()}`}
-                                onClick={() => setSelected(match)}
-                            >
-                                {OUTCOME_LABEL[match.outcome]}
-                            </button>
-                        ))}
+                        {matches.map(match => {
+                            const meta = GAME_META[match.url];
+                            const shared = highlightShared && match.sharedWithViewer;
+                            return (
+                                <button
+                                    key={match.gameId}
+                                    type="button"
+                                    className={`ag-result-chip${shared ? " ag-result-chip--shared" : ""}`}
+                                    title={`${meta?.name ?? match.url} · ${moment(match.endedAt).fromNow()}${shared ? " · you played too" : ""}`}
+                                    onClick={() => setSelected(match)}
+                                >
+                                    <span className={`ag-result-dot ag-result-dot--${match.outcome}`}>
+                                        {OUTCOME_LABEL[match.outcome]}
+                                    </span>
+                                    {meta && (
+                                        <span className="ag-result-chip-icon">
+                                            <GameThumb meta={meta} size={14} radius={4} />
+                                        </span>
+                                    )}
+                                </button>
+                            );
+                        })}
                     </div>
                 )}
+
+            {highlightShared && matches.some(match => match.sharedWithViewer) && (
+                <p className="ag-hint">
+                    <span className="ag-result-chip-icon-legend ag-result-chip--shared" /> = a game you played together
+                </p>
+            )}
 
             {selected && (
                 <MatchResultPopup

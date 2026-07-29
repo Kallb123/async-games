@@ -406,6 +406,33 @@ vars.
 **Token registration.** On the client, `useFcmToken` (`src/utils/hooks/`) requests
 notification permission, gets an FCM token, and POSTs it to
 `/api/notificationtoken`, which stores it in the user's Clerk private metadata.
+Each stored token (`TimedToken`) keeps the time it was first registered
+(`timestamp`), the last time that device re-registered (`lastSeen`), and a
+`device` summary parsed from the request's user-agent header by
+`src/utils/firebase/deviceInfo.ts`.
+
+**Device management.** The same route also serves `GET` (list the user's
+devices — id, name, type and timestamps, never the raw token) and `DELETE`
+(unregister one device by id). Devices are identified to the client by
+`deviceIdForToken`, the token's last 12 characters, so tokens never leave the
+server. `NotificationDeviceList` renders the list on the settings page and lets
+a player remove a device; that device stops receiving pushes until it next
+opens the app and re-registers. Reading/writing the stored list lives in
+`deviceTokens.ts` (server-only, touches Clerk); `deviceInfo.ts` stays pure so
+the client can import it too.
+
+**Forgetting revoked devices.** Every send is a liveness check: `sendEach`
+returns a per-token result, and `sendPushToUsers` feeds it to
+`deadTokensByUser` (`revokedTokens.ts`), which picks out only the codes that mean the token is gone
+for good (app uninstalled, permission revoked, token rotated) and drops those
+registrations. Transient failures and payload errors never cost a player a
+device. Cleanup errors are logged, never thrown — the push has already gone.
+
+**Forgetting old devices.** `pruneStaleTokens` drops registrations unused for
+`STALE_DEVICE_DAYS` (90). It runs on every registration, and nightly for
+everyone via the `/api/cron/staledevices` cron (`vercel.json`, same
+`CRON_SECRET` bearer auth as the turn timer), which pages through Clerk users
+and rewrites only the metadata that actually changed.
 
 **Device → UI.**
 - *Background:* `public/firebase-messaging-sw.js` (a service worker) shows OS

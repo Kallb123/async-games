@@ -6,7 +6,7 @@ import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { ReactionModel, IReactionDataDocument } from '@/utils/mongodb/ReactionData';
 import { userIdListToUserIdNameMap } from '@/utils/users/clerk';
 import { buildEventFeed } from '@/utils/games/recap';
-import { sendPushToUsers } from '@/utils/firebase/pushNotification';
+import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { isValidReaction } from '@/utils/reactions';
 
 export interface IGetReactionParams {
@@ -82,7 +82,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
         await sendPushToUsers([recipient], {
             event: 'PlayerReaction',
             gameId: gameid,
-            eventId
+            eventId,
+            link: gameNotificationLink(gameData.gameType.url, gameid)
         }, {
             title: `${reactionDoc.actorUsername} reacted ${reaction}`,
             body: event.title
