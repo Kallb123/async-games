@@ -1,6 +1,6 @@
 import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
+import { GameDataModel, IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
 import { clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { isExpired, isWarningThreshold, formatRemainingTime } from '@/utils/games/TurnTimer';
@@ -36,7 +36,9 @@ export async function GET(request: NextRequest) {
             gameData.currentTurn = nextTurn;
             gameData.lastTurnTimestamp = new Date().toISOString();
             gameData.timerWarningNotificationSent = false;
-            await gameData.save();
+            // A player may have taken their turn concurrently with this cron run —
+            // skip this game rather than clobber their move with a stale expiry.
+            if (!(await trySave(gameData))) continue;
 
             const { data: userList } = await (await clerkClient()).users.getUserList({
                 userId: gameData.userIdList
@@ -68,7 +70,7 @@ export async function GET(request: NextRequest) {
             expired++;
         } else if (isWarningThreshold(lastTurnTimestamp, turnTimer) && !gameData.timerWarningNotificationSent) {
             gameData.timerWarningNotificationSent = true;
-            await gameData.save();
+            if (!(await trySave(gameData))) continue;
 
             const { data: userList } = await (await clerkClient()).users.getUserList({
                 userId: gameData.userIdList

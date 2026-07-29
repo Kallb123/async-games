@@ -3,7 +3,7 @@ import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { DiceCitiesRequestRadioTowerReroll, ICommandOutcome, IGameCommand, IGameType, SmartthinkGameType, SmartthinkSetSecretCode, SmartthinkSubmitGuess, SnakesAndLaddersGameType, SnakesAndLaddersRequestDiceRoll } from '@/utils/apiModels/GameLogic';
-import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
+import { GameDataModel, IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
 import { recordGameResult } from '@/utils/mongodb/GameResultData';
 import { DiceCitiesGameType, DiceCitiesRequestBusinessCenterOpponentSelection, DiceCitiesRequestBusinessCenterOwnSelection, DiceCitiesRequestCardPurchase, DiceCitiesRequestDiceRoll, DiceCitiesRequestPassTurn, DiceCitiesRequestTvStationSelection, DiceCitiesRequestUnlockAmusementPark, DiceCitiesRequestUnlockRadioTower, DiceCitiesRequestUnlockShoppingMall, DiceCitiesRequestUnlockTrainStation } from '@/utils/apiModels/GameLogic';
 import { SettlementsAndCitiesGameType, SACPlaceSettlementSetup, SACPlaceRoadSetup, SACPlayKnight, SACRollDice, SACMoveRobber, SACBuildRoad, SACBuildSettlement, SACBuildCity, SACBuyDevCard, SACPlayRoadBuilding, SACPlayYearOfPlenty, SACPlayMonopoly, SACMaritimeTrade, SACEndTurn } from '@/utils/apiModels/GameLogic';
@@ -102,7 +102,9 @@ export async function POST(request: NextRequest) {
   // Checks whether the turn should be progressed and actions it if so
   const gameType: IGameType = deserializeJSON(JSON.stringify(gameData.gameType));
   if (gameType.CheckGameOver(gameData)) {
-    await gameData.save();
+    if (!(await trySave(gameData))) {
+      return NextResponse.json({}, {status: 409, statusText: "Game state changed, please refresh and try again"});
+    }
     await recordGameResult(gameData);
 
     const response: ICommandResponse = {
@@ -151,7 +153,9 @@ export async function POST(request: NextRequest) {
     gameData.timerWarningNotificationSent = false;
   }
 
-  await gameData.save();
+  if (!(await trySave(gameData))) {
+    return NextResponse.json({}, {status: 409, statusText: "Game state changed, please refresh and try again"});
+  }
 
   const response: ICommandResponse = {
     outcome: commandOutcome,

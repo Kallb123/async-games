@@ -22,6 +22,7 @@ import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useGameData } from "@/utils/hooks/useGameData";
+import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { ISnakesAndLaddersGameStateResponse } from "@/games/SnakesAndLadders/apiModels";
 import { ISnakesAndLaddersDiceRollOutcome, SnakesAndLaddersRequestDiceRoll } from "@/utils/apiModels/GameLogic";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
@@ -60,36 +61,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
 
     usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 
-    const submitCommand = async (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => {
-        command.gameId = gameId;
-        if (!user) {
-            console.error("Unable to send command whilst not logged in");
-            return;
-        }
-        command.senderId = user.id;
-        command.senderUsername = user.username || user.firstName || user.id;
-        fetch('/api/game/command', {
-            method: "POST",
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(command)
-        })
-            .then(response => {
-                if (response.ok) {
-                    return response.json();
-                }
-            })
-            .then(data => {
-                console.log(data);
-                const response: ICommandResponse = data;
-                if (!response || !response.gameData) {
-                    return;
-                }
-                setGameData(response.gameData as ISnakesAndLaddersGameDataResponse);
-                callback(data);
-            });
-    };
+    const { submitCommand, submitting } = useSubmitCommand<ISnakesAndLaddersGameDataResponse>(gameId, user, setGameData, getGameData);
 
     const live = {
         specificGameState: gameData?.specificGameState,
@@ -277,7 +249,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
 
             {isMyTurn && !complete && (
                 <SnakesAndLaddersPlayerActions
-                    hasRolled={gameData?.specificGameState?.hasRolled ?? false}
+                    hasRolled={(gameData?.specificGameState?.hasRolled ?? false) || submitting}
                     mode="live"
                     onRoll={handleRoll}
                 />

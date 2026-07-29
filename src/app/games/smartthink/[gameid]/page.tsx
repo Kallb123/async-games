@@ -5,8 +5,6 @@ import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
-import { IGameCommand } from "@/utils/apiModels/GameLogic";
-import type { ICommandResponse } from "@/app/api/game/command/route";
 import type { ISmartthinkGameDataResponse } from "@/games/Smartthink/apiModels";
 import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
@@ -19,6 +17,7 @@ import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useGameData } from "@/utils/hooks/useGameData";
+import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import type { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
 import { SMARTTHINK_CODE_LENGTH } from "@/games/Smartthink/ui";
 import { currentUsername } from "@/utils/ui/players";
@@ -57,36 +56,7 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
 
     usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 
-    const submitCommand = async (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => {
-        command.gameId = gameId;
-        if (!user) {
-            console.error("Unable to send command whilst not logged in");
-            return;
-        }
-        command.senderId = user.id;
-        command.senderUsername = user.username || user.firstName || user.id;
-        fetch('/api/game/command', {
-            method: "POST",
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(command)
-        })
-            .then(response => {
-                if (response.ok) {
-                    return response.json();
-                }
-            })
-            .then(data => {
-                console.log(data);
-                const response: ICommandResponse = data;
-                if (!response || !response.gameData) {
-                    return;
-                }
-                setGameData(response.gameData as ISmartthinkGameDataResponse);
-                callback(data);
-            });
-    };
+    const { submitCommand, submitting } = useSubmitCommand<ISmartthinkGameDataResponse>(gameId, user, setGameData, getGameData);
 
     const isCodeSetter = user?.id === gameData?.specificGameState?.codeSetterId;
     const isCodeBreaker = user?.id === gameData?.specificGameState?.codeBreakerId;
@@ -208,6 +178,7 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
                     currentGuess={currentGuess}
                     setCurrentGuess={setCurrentGuess}
                     submitCommand={submitCommand}
+                    submitting={submitting}
                 />
             )}
 

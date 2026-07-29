@@ -26,6 +26,9 @@ interface DiceCitiesActionsProps {
     myState: IDiceCitiesPlayerStateResponse;
     opponents: IDiceCitiesPlayerStateResponse[];
     submitCommand: (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => Promise<void>;
+    /** True while a command is in flight — disables the sheet so a double-tap
+     *  can't fire two commands before the first response lands. */
+    busy: boolean;
 }
 
 // The unlock command for each of the four win-condition landmarks, keyed by the
@@ -37,7 +40,7 @@ const LANDMARK_UNLOCK: Record<string, new () => IGameCommand> = {
     oneReroll: DiceCitiesRequestUnlockRadioTower,
 };
 
-export default function DiceCitiesActions({ gameState, myState, opponents, submitCommand }: DiceCitiesActionsProps) {
+export default function DiceCitiesActions({ gameState, myState, opponents, submitCommand, busy }: DiceCitiesActionsProps) {
     // Which die count the player has selected for their next roll.
     const [diceCount, setDiceCount] = useState<1 | 2>(myState.lastDiceSelection);
     // The most recent roll, kept locally so the dice + total stay on screen
@@ -45,7 +48,6 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
     const [roll, setRoll] = useState<{ roll1: number; roll2: number | null } | null>(null);
     const [rolling, setRolling] = useState(false);
     const [face, setFace] = useState<{ a: number; b: number }>({ a: 1, b: 1 });
-    const [busy, setBusy] = useState(false);
     const tumble = useRef<ReturnType<typeof setInterval> | null>(null);
 
     // Tumble the dice for a beat, then settle on the real values.
@@ -65,12 +67,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
     useEffect(() => () => { if (tumble.current) clearInterval(tumble.current); }, []);
 
     const send = (command: IGameCommand, after?: (r: ICommandResponse) => void) => {
-        if (busy) return;
-        setBusy(true);
-        submitCommand(command, (response) => {
-            setBusy(false);
-            after?.(response);
-        });
+        submitCommand(command, (response) => after?.(response));
     };
 
     const doRoll = (double: boolean) => {

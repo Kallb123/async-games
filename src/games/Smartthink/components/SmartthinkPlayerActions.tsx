@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
 import { IGameCommand, SmartthinkSetSecretCode, SmartthinkSubmitGuess } from "@/utils/apiModels/GameLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
@@ -12,6 +11,9 @@ interface SmartthinkPlayerActionsProps {
     currentGuess: (number | null)[];
     setCurrentGuess: (next: (number | null)[]) => void;
     submitCommand: (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => Promise<void>;
+    /** True while a command is in flight — disables submit so a double-tap
+     *  can't fire two commands before the first response lands. */
+    submitting: boolean;
 }
 
 export default function SmartthinkPlayerActions({
@@ -21,9 +23,8 @@ export default function SmartthinkPlayerActions({
     currentGuess,
     setCurrentGuess,
     submitCommand,
+    submitting,
 }: SmartthinkPlayerActionsProps) {
-    const [submitDisabled, setSubmitDisabled] = useState(false);
-
     const settingSecret = !gameState.secretCodeSet && isCodeSetter;
     const guessing = gameState.secretCodeSet && isCodeBreaker;
     if (!settingSecret && !guessing) return null;
@@ -41,17 +42,13 @@ export default function SmartthinkPlayerActions({
     const filled = currentGuess.every(v => v !== null && v !== undefined);
 
     const handleSubmit = async () => {
-        if (submitDisabled || !filled) return;
+        if (submitting || !filled) return;
         const code = currentGuess.map(v => v as number);
         const command = settingSecret ? new SmartthinkSetSecretCode() : new SmartthinkSubmitGuess();
         if (settingSecret) (command as SmartthinkSetSecretCode).secretCode = code;
         else (command as SmartthinkSubmitGuess).guess = code;
 
-        setSubmitDisabled(true);
-        await submitCommand(command, () => {
-            setSubmitDisabled(false);
-            clear();
-        });
+        await submitCommand(command, clear);
     };
 
     return (
@@ -86,7 +83,7 @@ export default function SmartthinkPlayerActions({
                     <button
                         className={`ag-btn ag-btn--block ${settingSecret ? 'ag-btn--success' : 'ag-btn--primary ag-btn--roll'}`}
                         onClick={handleSubmit}
-                        disabled={submitDisabled || !filled}
+                        disabled={submitting || !filled}
                     >
                         {settingSecret ? '🔒 Set secret code' : '🔓 Submit guess'}
                     </button>
