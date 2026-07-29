@@ -8,5 +8,6 @@ export const meta: GameMeta = {
     tagline: "Trade, build and out-manoeuvre for the most victory points.",
     accent: "gold",
     art: "/art/dicecities/japanese/forest.png",
+    shape: "hexagon",
     available: true,
 };

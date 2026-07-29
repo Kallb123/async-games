@@ -21,14 +21,21 @@ interface GameThumbProps {
     radius?: number;
 }
 
+// Flat-top hexagon, used instead of the border-radius rounding for games
+// whose theme calls for a hex badge.
+const HEXAGON_CLIP_PATH = "polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)";
+
 // A small square game icon: real art when available, otherwise a tinted glyph.
 export default function GameThumb({ meta, size = 48, radius = 12 }: GameThumbProps) {
+    const isHexagon = meta.shape === "hexagon";
+    const shapeStyle = isHexagon ? { clipPath: HEXAGON_CLIP_PATH } : { borderRadius: radius };
+
     if (meta.art) {
         return (
             <img
                 src={meta.art}
                 alt=""
-                style={{ width: size, height: size, borderRadius: radius, objectFit: "cover", flex: "none" }}
+                style={{ width: size, height: size, ...shapeStyle, objectFit: "cover", flex: "none" }}
             />
         );
     }
@@ -37,7 +44,7 @@ export default function GameThumb({ meta, size = 48, radius = 12 }: GameThumbPro
             style={{
                 width: size,
                 height: size,
-                borderRadius: radius,
+                ...shapeStyle,
                 flex: "none",
                 background: accentVar(meta.accent),
                 color: "var(--ag-on-dark)",
