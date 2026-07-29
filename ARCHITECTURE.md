@@ -421,6 +421,13 @@ opens the app and re-registers. Reading/writing the stored list lives in
 `deviceTokens.ts` (server-only, touches Clerk); `deviceInfo.ts` stays pure so
 the client can import it too.
 
+**Forgetting revoked devices.** Every send is a liveness check: `sendEach`
+returns a per-token result, and `sendPushToUsers` feeds it to
+`deadTokensByUser`, which picks out only the codes that mean the token is gone
+for good (app uninstalled, permission revoked, token rotated) and drops those
+registrations. Transient failures and payload errors never cost a player a
+device. Cleanup errors are logged, never thrown — the push has already gone.
+
 **Forgetting old devices.** `pruneStaleTokens` drops registrations unused for
 `STALE_DEVICE_DAYS` (90). It runs on every registration, and nightly for
 everyone via the `/api/cron/staledevices` cron (`vercel.json`, same
