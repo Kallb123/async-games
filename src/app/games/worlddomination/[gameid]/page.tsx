@@ -5,8 +5,6 @@ import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
-import { IGameCommand } from "@/utils/apiModels/GameLogic";
-import type { ICommandResponse } from "@/app/api/game/command/route";
 import type { IWorldDominationGameDataResponse, IWorldDominationSpecificGameStateResponse } from "@/games/WorldDomination/apiModels";
 import { ADJACENCY, TERRITORIES, isAdjacent, connectedThroughOwnedTerritories } from "@/games/WorldDomination/board";
 import WorldDominationBoard from "@/games/WorldDomination/components/WorldDominationBoard";
@@ -22,6 +20,7 @@ import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useGameData } from "@/utils/hooks/useGameData";
+import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
 import { currentUsername } from "@/utils/ui/players";
 
@@ -61,23 +60,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
 
     usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 
-    const submitCommand = async (command: IGameCommand, callback: (r: ICommandResponse) => void) => {
-        command.gameId = gameId;
-        if (!user) { console.error('Not logged in'); return; }
-        command.senderId = user.id;
-        command.senderUsername = user.username || user.firstName || user.id;
-        fetch('/api/game/command', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(command),
-        })
-            .then(r => r.ok ? r.json() : null)
-            .then(data => {
-                if (!data?.gameData) return;
-                setGameData(data.gameData as IWorldDominationGameDataResponse);
-                callback(data);
-            });
-    };
+    const { submitCommand, submitting } = useSubmitCommand<IWorldDominationGameDataResponse>(gameId, user, setGameData, getGameData);
 
     const live = {
         specificGameState: gameData?.specificGameState,
@@ -323,7 +306,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
                         <WorldDominationBoard
                             territories={gs.territories}
                             usernameToColor={usernameToColor}
-                            onTerritoryClick={isMyTurn && !complete ? handleTerritoryClick : undefined}
+                            onTerritoryClick={isMyTurn && !complete && !submitting ? handleTerritoryClick : undefined}
                             validTerritories={validTerritories}
                             selectedTerritoryId={selFrom}
                             frontLine={gs.lastBattle ? { fromTerritoryId: gs.lastBattle.fromTerritoryId, toTerritoryId: gs.lastBattle.toTerritoryId } : null}

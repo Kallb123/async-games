@@ -6,8 +6,6 @@ import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
-import { IGameCommand } from "@/utils/apiModels/GameLogic";
-import type { ICommandResponse } from "@/app/api/game/command/route";
 import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
@@ -21,6 +19,7 @@ import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useGameData } from "@/utils/hooks/useGameData";
+import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { landmarkCount } from "@/games/DiceCities/ui";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
 import { currentUsername } from "@/utils/ui/players";
@@ -59,32 +58,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
 
     usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 
-    const submitCommand = async (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => {
-        command.gameId = gameId;
-        if (!user) {
-            console.error("Unable to send command whilst not logged in");
-            return;
-        }
-        command.senderId = user.id;
-        command.senderUsername = user.username || user.firstName || user.id;
-        fetch('/api/game/command', {
-            method: "POST",
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(command)
-        })
-            .then(response => (response.ok ? response.json() : undefined))
-            .then(data => {
-                console.log(data);
-                const response = data as ICommandResponse | undefined;
-                if (response?.gameData) {
-                    setGameData(response.gameData as IDiceCitiesGameDataResponse);
-                }
-                // Always resolve so the caller can clear any pending/busy state,
-                // even when the move was rejected (the route 401s with no body).
-                callback(response ?? ({} as ICommandResponse));
-            })
-            .catch(() => callback({} as ICommandResponse));
-    };
+    const { submitCommand, submitting } = useSubmitCommand<IDiceCitiesGameDataResponse>(gameId, user, setGameData, getGameData);
 
     const live = {
         specificGameState: gameData?.specificGameState,
@@ -108,6 +82,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     // While reviewing a past turn, disable all interactive controls.
     const controlsCurrentTurn = nav.isLive ? displayedCurrentTurn : NO_ACTIVE_TURN;
     const controlsSubmit = nav.isLive ? submitCommand : noopSubmit;
+    const controlsBusy = nav.isLive && submitting;
 
     const usernameList = gameData?.usernameList ?? [];
     const players: IDiceCitiesPlayerStateResponse[] = displayed?.playerStates ? Object.values(displayed.playerStates) : [];
@@ -244,6 +219,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
                     myState={boardPlayer}
                     opponents={opponents}
                     submitCommand={controlsSubmit}
+                    busy={controlsBusy}
                 />
             )}
 

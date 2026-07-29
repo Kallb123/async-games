@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { GameDataModel } from '@/utils/mongodb/GameData';
+import { GameDataModel, trySave } from '@/utils/mongodb/GameData';
 import { recordGameResult } from '@/utils/mongodb/GameResultData';
 
 export async function POST(request: NextRequest) {
@@ -31,7 +31,9 @@ export async function POST(request: NextRequest) {
 
   gameData.complete = true;
   gameData.winner = "";
-  await gameData.save();
+  if (!(await trySave(gameData))) {
+    return NextResponse.json({ success: false, message: 'Game state changed, please try again' }, { status: 409 });
+  }
   await recordGameResult(gameData);
 
   return NextResponse.json({ success: true });
