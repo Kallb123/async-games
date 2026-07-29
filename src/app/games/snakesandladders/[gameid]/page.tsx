@@ -22,7 +22,7 @@ import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useGameData } from "@/utils/hooks/useGameData";
-import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
+import { useSubmitCommand, type SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { ISnakesAndLaddersGameStateResponse } from "@/games/SnakesAndLadders/apiModels";
 import { ISnakesAndLaddersDiceRollOutcome, SnakesAndLaddersRequestDiceRoll } from "@/utils/apiModels/GameLogic";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
@@ -79,7 +79,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
 
     // Planning submit: instead of persisting a move, add it as a hypothetical
     // planned turn and reuse the same action panel + dice animation.
-    const planSubmit = async (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => {
+    const planSubmit: SubmitCommand = async (command, callback) => {
         if (!user) {
             return;
         }
@@ -96,7 +96,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
             landedOnSnake: false,
             landedOnLadder: false,
         };
-        callback({ outcome, gameData } as ICommandResponse);
+        callback?.({ outcome, gameData } as ICommandResponse);
     };
 
     const boardState = nav.displayedState;
@@ -223,7 +223,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     }
 
     return (
-        <GameShell title="Snakes & Ladders" subtitle={subtitle} right={optionsMenu}>
+        <GameShell title="Snakes & Ladders" subtitle={subtitle} right={optionsMenu} syncing={submitting}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
@@ -249,9 +249,10 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
 
             {isMyTurn && !complete && (
                 <SnakesAndLaddersPlayerActions
-                    hasRolled={(gameData?.specificGameState?.hasRolled ?? false) || submitting}
+                    hasRolled={gameData?.specificGameState?.hasRolled ?? false}
                     mode="live"
                     onRoll={handleRoll}
+                    pending={submitting}
                 />
             )}
 

@@ -3,6 +3,7 @@ import React from 'react';
 import { BOARD_TOPOLOGY, HEX_POSITIONS } from '@/games/SettlementsAndCities/board';
 import type { SAC_Resource } from '@/games/SettlementsAndCities/board';
 import type { ISACHexResponse, ISACVertexResponse, ISACEdgeResponse, ISACHarborResponse } from '@/games/SettlementsAndCities/apiModels';
+import type { SACSpotKind } from '@/games/SettlementsAndCities/ui';
 import Dice from '@/components/ui/Dice';
 
 const HEX_SIZE = 52;
@@ -64,6 +65,9 @@ interface SettlementsAndCitiesBoardProps {
     lastRollDie2?: number | null;
     /** When set, a translucent prompt is shown over the board (e.g. "Tap to place"). */
     placementPrompt?: string | null;
+    /** The spot whose command is in flight: the piece is painted in optimistically
+     *  and ringed with marching ants until the server confirms it. */
+    pendingSpot?: { kind: SACSpotKind; id: number; colour: string } | null;
 }
 
 export default function SettlementsAndCitiesBoard({
@@ -83,6 +87,7 @@ export default function SettlementsAndCitiesBoard({
     lastRollDie1 = null,
     lastRollDie2 = null,
     placementPrompt = null,
+    pendingSpot = null,
 }: SettlementsAndCitiesBoardProps) {
     if (!hexes || hexes.length === 0) return null;
 
@@ -92,6 +97,9 @@ export default function SettlementsAndCitiesBoard({
             .map(vid => vertexPx(vid).join(','))
             .join(' ');
     }
+
+    const pendingAt = (kind: SACSpotKind, id: number) =>
+        pendingSpot?.kind === kind && pendingSpot.id === id;
 
     return (
         <>
@@ -113,6 +121,7 @@ export default function SettlementsAndCitiesBoard({
                 const [cx, cy] = hexCenterPx(hexId);
                 const isRobber = hexId === robberHexIndex;
                 const isValid = validHexes.has(hexId);
+                const isPending = pendingAt('hex', hexId);
                 return (
                     <g key={hexId}>
                         <polygon
@@ -123,6 +132,12 @@ export default function SettlementsAndCitiesBoard({
                             style={{ cursor: isValid && onHexClick ? 'pointer' : 'default' }}
                             onClick={() => isValid && onHexClick && onHexClick(hexId)}
                         />
+                        {isPending && (
+                            <>
+                                <polygon className="ag-svg-ants" points={hexPoints(hexId)} style={{ pointerEvents: 'none' }} />
+                                <text className="ag-svg-ghost" x={cx} y={cy - 16} textAnchor="middle" fontSize={20} style={{ pointerEvents: 'none' }}>🏴‍☠️</text>
+                            </>
+                        )}
                         {hex.numberToken !== null && (
                             <>
                                 <circle
@@ -178,18 +193,31 @@ export default function SettlementsAndCitiesBoard({
                 const [x1, y1] = vertexPx(v1);
                 const [x2, y2] = vertexPx(v2);
                 const isValid = validEdges.has(edgeId);
-                if (!edge.hasRoad && !isValid) return null;
+                const isPending = pendingAt('edge', edgeId);
+                if (!edge.hasRoad && !isValid && !isPending) return null;
                 const clickable = isValid && !!onEdgeClick;
+                // A pending road is painted in already, in our own colour — the
+                // ants around it are what say "not confirmed yet".
+                const ghost = isPending && !edge.hasRoad;
                 return (
                     <g key={edgeId}>
                         <line
+                            className={ghost ? 'ag-svg-ghost' : undefined}
                             x1={x1} y1={y1} x2={x2} y2={y2}
-                            stroke={edge.hasRoad ? usernameToColor(edge.owner) : '#ffe000'}
-                            strokeWidth={edge.hasRoad ? 6 : 7}
+                            stroke={ghost ? pendingSpot!.colour : (edge.hasRoad ? usernameToColor(edge.owner) : '#ffe000')}
+                            strokeWidth={edge.hasRoad || ghost ? 6 : 7}
                             strokeLinecap="round"
-                            strokeOpacity={isValid && !edge.hasRoad ? 0.75 : 1}
+                            strokeOpacity={isValid && !edge.hasRoad && !ghost ? 0.75 : 1}
                             style={{ pointerEvents: 'none' }}
                         />
+                        {isPending && (
+                            <line
+                                className="ag-svg-ants"
+                                x1={x1} y1={y1} x2={x2} y2={y2}
+                                strokeWidth={9}
+                                style={{ pointerEvents: 'none' }}
+                            />
+                        )}
                         {clickable && (
                             // Fat transparent hit area so roads are easy to tap.
                             <line
@@ -209,11 +237,44 @@ export default function SettlementsAndCitiesBoard({
             {vertices.map((vertex, vertexId) => {
                 const [vx, vy] = vertexPx(vertexId);
                 const isValid = validVertices.has(vertexId);
+                const isPending = pendingAt('vertex', vertexId);
 
-                if (!vertex.building && !isValid) return null;
+                if (!vertex.building && !isValid && !isPending) return null;
 
                 const clickable = isValid && !!onVertexClick;
                 const parts: React.ReactNode[] = [];
+
+                // The piece the command will produce, painted in before the server
+                // confirms it: a settlement on an empty spot, a city on our own.
+                if (isPending && !vertex.building) {
+                    parts.push(
+                        <rect
+                            key="ghost"
+                            className="ag-svg-ghost"
+                            x={vx - 7} y={vy - 7}
+                            width={14} height={14}
+                            fill={pendingSpot!.colour}
+                            stroke="#fff"
+                            strokeWidth={1.5}
+                            rx={2}
+                            style={{ pointerEvents: 'none' }}
+                        />
+                    );
+                } else if (isPending && vertex.building === 'settlement') {
+                    parts.push(
+                        <rect
+                            key="ghost"
+                            className="ag-svg-ghost"
+                            x={vx - 5} y={vy - 14}
+                            width={10} height={8}
+                            fill={pendingSpot!.colour}
+                            stroke="#fff"
+                            strokeWidth={1}
+                            rx={1}
+                            style={{ pointerEvents: 'none' }}
+                        />
+                    );
+                }
 
                 // Building visual (never intercepts clicks — the hit circle handles it).
                 if (vertex.building === 'settlement') {
@@ -235,6 +296,18 @@ export default function SettlementsAndCitiesBoard({
                             <rect x={vx - 9} y={vy - 9} width={18} height={18} fill={usernameToColor(vertex.owner)} stroke="#fff" strokeWidth={1.5} rx={3} />
                             <rect x={vx - 5} y={vy - 14} width={10} height={8} fill={usernameToColor(vertex.owner)} stroke="#fff" strokeWidth={1} rx={1} />
                         </g>
+                    );
+                }
+
+                if (isPending) {
+                    parts.push(
+                        <circle
+                            key="ants"
+                            className="ag-svg-ants"
+                            cx={vx} cy={vy}
+                            r={13}
+                            style={{ pointerEvents: 'none' }}
+                        />
                     );
                 }
 

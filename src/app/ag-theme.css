@@ -2117,3 +2117,173 @@ button {
 .ag-solitaire-breakdown-value--negative { color: var(--ag-danger); }
 .ag-solitaire-victory-actions { display: flex; gap: 8px; margin-top: 20px; }
 .ag-solitaire-victory-actions > a { text-align: center; }
+
+/* ==========================================================================
+   Command feedback — "a command has been sent and it's processing"
+   --------------------------------------------------------------------------
+   Three layers, per the command-receipt design:
+     1. the pressed control changes in place — it sinks at 0 ms, then takes the
+        verb at 120 ms (a swap any sooner reads as a flicker on a fast reply);
+     2. the object the command acts on wears a marching-ant pending skin, so a
+        board tap is acknowledged where it landed, not only on a button;
+     3. one sync pill in the top bar owns "is anything in flight?" for the
+        whole screen.
+   Everything here is driven by the in-flight command from useSubmitCommand.
+   ========================================================================== */
+
+@keyframes ag-spin { to { transform: rotate(360deg); } }
+@keyframes ag-pending-reveal { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ag-pending-conceal { from { opacity: 1; } to { opacity: 0; } }
+/* Indeterminate on purpose — we can't honestly predict how long the table takes. */
+@keyframes ag-pending-sweep {
+    from { transform: translateX(-110%); }
+    to { transform: translateX(280%); }
+}
+@keyframes ag-pending-ants { to { background-position: 16px 0, 100% -16px, -16px 100%, 0 16px; } }
+@keyframes ag-pending-ants-svg { to { stroke-dashoffset: -18; } }
+
+/* ---- Shared spinner ---- */
+.ag-spinner {
+    width: 14px;
+    height: 14px;
+    flex: none;
+    border-radius: 50%;
+    border: 2.5px solid color-mix(in oklch, currentColor 28%, transparent);
+    border-top-color: currentColor;
+    animation: ag-spin 0.7s linear infinite;
+}
+.ag-spinner--sm { width: 10px; height: 10px; border-width: 2px; }
+.ag-spinner--accent { color: var(--ag-terracotta); }
+.ag-spinner--gold { border-top-color: var(--ag-gold); }
+
+/* ---- Layer 1: the pressed control (ActionButton) ---- */
+.ag-btn--pending {
+    position: relative;
+    overflow: hidden;
+    transform: translateY(3px);
+    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.28);
+    cursor: default;
+}
+/* The verb is the feedback here — don't also fade the button out. */
+.ag-btn--pending:disabled { opacity: 1; cursor: default; }
+.ag-btn--pending > .ag-btn-body { animation: ag-pending-conceal 1ms linear 120ms both; }
+.ag-btn-pending-verb {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 10px;
+    white-space: nowrap;
+    animation: ag-pending-reveal 130ms ease-out 120ms both;
+}
+.ag-btn-pending-bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3px;
+    overflow: hidden;
+    background: color-mix(in oklch, currentColor 16%, transparent);
+}
+.ag-btn-pending-bar::after {
+    content: '';
+    display: block;
+    width: 34%;
+    height: 100%;
+    background: currentColor;
+    animation: ag-pending-sweep 1.15s ease-in-out infinite;
+}
+
+/* ---- Layer 2: the object the command acts on ---- */
+/* Marching-ant outline, drawn over any row / card / tile without touching its
+   own box model. Reused by build rows, market cards, pick rows and playing
+   cards — anything that is both the control and the thing being changed. */
+.ag-pending-skin { position: relative; }
+.ag-pending-skin::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background-image:
+        linear-gradient(90deg, var(--ag-terracotta) 55%, transparent 0),
+        linear-gradient(0deg, var(--ag-terracotta) 55%, transparent 0),
+        linear-gradient(90deg, var(--ag-terracotta) 55%, transparent 0),
+        linear-gradient(0deg, var(--ag-terracotta) 55%, transparent 0);
+    background-size: 16px 2px, 2px 16px, 16px 2px, 2px 16px;
+    background-position: 0 0, 100% 0, 100% 100%, 0 100%;
+    background-repeat: repeat-x, repeat-y, repeat-x, repeat-y;
+    animation: ag-pending-ants 0.55s linear infinite;
+}
+/* A pending row is never the faded one, whatever its disabled state says. */
+.ag-pending-skin:disabled { opacity: 1; }
+
+/* The small "· BUILDING" style badge that names the verb on a pending object. */
+.ag-pending-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font: 800 8.5px var(--ag-font);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ag-terracotta);
+    white-space: nowrap;
+    animation: ag-pending-reveal 130ms ease-out 120ms both;
+}
+
+/* While one control in a group is pending, everything beside it recedes — the
+   pending control should be the only thing still asking for attention. Action
+   sheets and build lists get this for free; anything else opts in by adding
+   `ag-pending-group`, so a new game never has to edit this selector. */
+:where(.ag-actionsheet, .ag-build-list, .ag-pending-group):has(:is(.ag-btn--pending, .ag-pending-skin))
+> *:not(:has(:is(.ag-btn--pending, .ag-pending-skin))):not(:is(.ag-btn--pending, .ag-pending-skin)) {
+    opacity: 0.45;
+    pointer-events: none;
+    transition: opacity 140ms ease;
+}
+
+/* Board spots (SVG): the same marching ants, plus a ghost of the piece the
+   server is about to confirm. */
+.ag-svg-ants {
+    fill: none;
+    stroke: var(--ag-terracotta);
+    stroke-width: 2.5;
+    stroke-dasharray: 5 4;
+    stroke-linecap: round;
+    animation: ag-pending-ants-svg 0.6s linear infinite;
+}
+.ag-svg-ghost { opacity: 0.55; }
+
+/* ---- Layer 3: the top-bar sync pill ---- */
+.ag-sync-pill {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 99px;
+    padding: 5px 10px 5px 7px;
+    font: 800 9.5px var(--ag-font);
+    letter-spacing: 0.05em;
+    color: var(--ag-on-dark);
+    animation: ag-pending-reveal 140ms ease-out both;
+}
+.ag-sync-pill .ag-spinner { width: 13px; height: 13px; border-width: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+    .ag-spinner,
+    .ag-pending-skin::after,
+    .ag-pending-tag,
+    .ag-svg-ants,
+    .ag-sync-pill,
+    .ag-btn-pending-bar::after,
+    .ag-btn-pending-verb,
+    .ag-btn--pending > .ag-btn-body {
+        animation: none;
+    }
+    /* Without the reveal animation the verb needs the label hidden outright. */
+    .ag-btn--pending > .ag-btn-body { visibility: hidden; }
+    .ag-spinner { border-top-color: currentColor; opacity: 0.6; }
+}

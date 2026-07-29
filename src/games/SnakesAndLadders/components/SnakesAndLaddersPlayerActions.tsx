@@ -1,5 +1,6 @@
-import type { ICommandResponse } from "@/app/api/game/command/route";
-import { ISnakesAndLaddersDiceRollOutcome, IGameCommand, SnakesAndLaddersRequestDiceRoll } from "@/utils/apiModels/GameLogic";
+import ActionButton from "@/components/ui/ActionButton";
+import type { SubmitCommand } from "@/utils/hooks/useSubmitCommand";
+import { ISnakesAndLaddersDiceRollOutcome, SnakesAndLaddersRequestDiceRoll } from "@/utils/apiModels/GameLogic";
 import { useState } from "react";
 
 interface SnakesAndLaddersPlayerActionsProps {
@@ -9,11 +10,13 @@ interface SnakesAndLaddersPlayerActionsProps {
     /** Live roll handler — the page owns the roll-result screen so it survives
      *  the turn advancing to the next player. */
     onRoll?: () => void;
+    /** Live only: true while the roll is on its way to the server. */
+    pending?: boolean;
     /** Planning-only: submits a hypothetical roll and reports the number. */
-    submitCommand?: (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => Promise<void>;
+    submitCommand?: SubmitCommand;
 }
 
-export default function SnakesAndLaddersPlayerActions({ hasRolled, mode = 'live', onRoll, submitCommand }: SnakesAndLaddersPlayerActionsProps) {
+export default function SnakesAndLaddersPlayerActions({ hasRolled, mode = 'live', onRoll, pending = false, submitCommand }: SnakesAndLaddersPlayerActionsProps) {
     const [planRoll, setPlanRoll] = useState<number | null>(null);
     const [busy, setBusy] = useState(false);
 
@@ -30,9 +33,14 @@ export default function SnakesAndLaddersPlayerActions({ hasRolled, mode = 'live'
         };
         return (
             <div className="ag-actionsheet">
-                <button className="ag-btn ag-btn--primary ag-btn--block ag-btn--roll" onClick={rollPlan} disabled={busy}>
+                <ActionButton
+                    className="ag-btn ag-btn--primary ag-btn--block ag-btn--roll"
+                    onClick={rollPlan}
+                    pending={busy}
+                    pendingLabel="Rolling…"
+                >
                     🎲 Roll (planned)
-                </button>
+                </ActionButton>
                 {planRoll != null && (
                     <p className="ag-action-hint">Planned roll: <b>{planRoll}</b></p>
                 )}
@@ -42,13 +50,15 @@ export default function SnakesAndLaddersPlayerActions({ hasRolled, mode = 'live'
 
     return (
         <div className="ag-actionsheet">
-            <button
+            <ActionButton
                 className="ag-btn ag-btn--primary ag-btn--block ag-btn--roll"
                 onClick={() => { if (!hasRolled) onRoll?.(); }}
                 disabled={hasRolled}
+                pending={pending}
+                pendingLabel="Rolling the die…"
             >
                 🎲 Roll the die
-            </button>
+            </ActionButton>
             <p className="ag-action-hint">The die decides — no strategy here, just fate.</p>
         </div>
     );

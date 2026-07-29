@@ -6,6 +6,9 @@ interface PlayingCardProps {
     card?: ICard;
     size?: number;
     selected?: boolean;
+    /** True while the move this card is part of is on its way to the server —
+     *  the card wears the shared marching-ant pending skin. */
+    pending?: boolean;
     onClick?: () => void;
     /** Small label shown under an empty slot (e.g. a foundation's suit). */
     placeholder?: React.ReactNode;
@@ -16,8 +19,9 @@ interface PlayingCardProps {
  * patterned back) — reusable by any card game. Mirrors the Dice/DieFace
  * pattern: presentational only, sized via props, no game logic.
  */
-export default function PlayingCard({ card, size = 44, selected = false, onClick, placeholder }: PlayingCardProps) {
+export default function PlayingCard({ card, size = 44, selected = false, pending = false, onClick, placeholder }: PlayingCardProps) {
     const style = { '--ag-pcard-size': `${size}px` } as React.CSSProperties;
+    const stateClass = `${selected ? ' ag-pcard--selected' : ''}${pending ? ' ag-pending-skin' : ''}`;
 
     if (!card) {
         return (
@@ -30,7 +34,7 @@ export default function PlayingCard({ card, size = 44, selected = false, onClick
     if (!card.faceUp) {
         return (
             <div
-                className={`ag-pcard ag-pcard--back${selected ? ' ag-pcard--selected' : ''}`}
+                className={`ag-pcard ag-pcard--back${stateClass}`}
                 style={style}
                 onClick={onClick}
                 role={onClick ? 'button' : undefined}
@@ -42,7 +46,7 @@ export default function PlayingCard({ card, size = 44, selected = false, onClick
     const red = card.suit ? isRed(card.suit) : false;
     return (
         <div
-            className={`ag-pcard ag-pcard--face${red ? ' ag-pcard--red' : ' ag-pcard--black'}${selected ? ' ag-pcard--selected' : ''}`}
+            className={`ag-pcard ag-pcard--face${red ? ' ag-pcard--red' : ' ag-pcard--black'}${stateClass}`}
             style={style}
             onClick={onClick}
             role={onClick ? 'button' : undefined}

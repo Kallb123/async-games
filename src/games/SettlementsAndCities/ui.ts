@@ -25,3 +25,8 @@ export const SAC_DEV_CARD_META: Record<SAC_DevCard, SACDevCardMeta> = {
 export const SAC_DEV_CARD_ORDER: SAC_DevCard[] = [
     'knight', 'roadBuilding', 'yearOfPlenty', 'monopoly', 'victoryPoint',
 ];
+
+// Tapping the board sends a command, so the tapped spot needs to say "sent" the
+// way a button does — the board paints a ghost piece on the spot of this kind
+// that's in flight.
+export type SACSpotKind = 'vertex' | 'edge' | 'hex';
