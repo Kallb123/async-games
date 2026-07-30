@@ -2,9 +2,6 @@ import { SNAKES_AND_LADDERS_LADDERS, SNAKES_AND_LADDERS_SNAKES } from "@/utils/a
 import { ISnakesAndLaddersPlayerStateResponse } from "@/games/SnakesAndLadders/apiModels";
 import { SL_GRID, SL_LADDER_ART, SL_SNAKE_ART, squareAt } from "@/games/SnakesAndLadders/ui";
 
-const LADDER_TOPS = new Set(Object.values(SNAKES_AND_LADDERS_LADDERS));
-const SNAKE_TAILS = new Set(Object.values(SNAKES_AND_LADDERS_SNAKES));
-
 interface SnakesAndLaddersBoardProps {
     playerStates: { [key: string]: ISnakesAndLaddersPlayerStateResponse };
     /** Colour per player, keyed by userId — shared with the scoreboard. */
@@ -28,8 +25,6 @@ export default function SnakesAndLaddersBoard({ playerStates, colorFor, myUserId
         if (square === 100) return "ag-sl-cell ag-sl-cell--finish";
         if (SNAKES_AND_LADDERS_LADDERS[square] !== undefined) return "ag-sl-cell ag-sl-cell--ladder";
         if (SNAKES_AND_LADDERS_SNAKES[square] !== undefined) return "ag-sl-cell ag-sl-cell--snake";
-        if (LADDER_TOPS.has(square)) return "ag-sl-cell ag-sl-cell--ladder-top";
-        if (SNAKE_TAILS.has(square)) return "ag-sl-cell ag-sl-cell--snake-tail";
         return "ag-sl-cell";
     };
 

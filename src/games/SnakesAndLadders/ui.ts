@@ -6,6 +6,9 @@ import { SNAKES_AND_LADDERS_LADDERS, SNAKES_AND_LADDERS_SNAKES } from "@/utils/a
 // screen size. The board never moves, so the finished shapes are built once at
 // module load and exported as constants.
 
+/** Rematch-link key for the re-roll-on-6 house rule (see utils/ui/rematch.ts). */
+export const SL_REROLL_PARAM = "reroll";
+
 export const SL_GRID = 10;
 const CELL = 100 / SL_GRID;
 
@@ -17,13 +20,21 @@ export function squareAt(row: number, col: number): number {
     return row % 2 === 0 ? row * SL_GRID + col + 1 : row * SL_GRID + (SL_GRID - 1 - col) + 1;
 }
 
+// Built by walking the grid through squareAt, so the serpentine numbering is
+// written down once rather than once forwards and once inverted.
+const CENTRES: SLPoint[] = [];
+for (let row = 0; row < SL_GRID; row++) {
+    for (let col = 0; col < SL_GRID; col++) {
+        CENTRES[squareAt(row, col) - 1] = {
+            x: (col + 0.5) * CELL,
+            y: (SL_GRID - 1 - row + 0.5) * CELL,
+        };
+    }
+}
+
 /** Centre of a square in viewBox coordinates (y grows downwards). */
 export function squareCentre(square: number): SLPoint {
-    const idx = square - 1;
-    const row = Math.floor(idx / SL_GRID);
-    const posInRow = idx % SL_GRID;
-    const col = row % 2 === 0 ? posInRow : SL_GRID - 1 - posInRow;
-    return { x: (col + 0.5) * CELL, y: (SL_GRID - 1 - row + 0.5) * CELL };
+    return CENTRES[square - 1];
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
@@ -76,14 +87,12 @@ export function ladderGeometry(from: number, to: number): SLLadder {
 // narrows towards the tail. Using whole half-waves keeps both ends exactly on
 // their squares whatever the length.
 
-const SNAKE_HEAD_WIDTH = 2.9;
-const SNAKE_TAIL_WIDTH = 0.8;
-const SNAKE_SAMPLES = 44;
+const SNAKE_SAMPLES = 36;
 
 export interface SLSnake {
     from: number;
     to: number;
-    /** Closed path for the tapered body. */
+    /** Open path for the body — stroked, so its width lives in the CSS. */
     body: string;
     head: SLPoint;
     /** Degrees to rotate the head by so it faces away from the body. */
@@ -112,43 +121,12 @@ export function snakeGeometry(from: number, to: number): SLSnake {
         spine.push({ x: a.x + dx * t + nx * wobble, y: a.y + dy * t + ny * wobble });
     }
 
-    // Walk the spine offsetting each sample by half the local body width along
-    // the local normal, then come back down the other side to close the ribbon.
-    const left: SLPoint[] = [];
-    const right: SLPoint[] = [];
-    for (let i = 0; i <= SNAKE_SAMPLES; i++) {
-        const point = spine[i];
-        const prev = spine[Math.max(0, i - 1)];
-        const next = spine[Math.min(SNAKE_SAMPLES, i + 1)];
-        const tx = next.x - prev.x;
-        const ty = next.y - prev.y;
-        const tl = Math.hypot(tx, ty) || 1;
-        const half = (SNAKE_HEAD_WIDTH + (SNAKE_TAIL_WIDTH - SNAKE_HEAD_WIDTH) * Math.pow(i / SNAKE_SAMPLES, 1.3)) / 2;
-        left.push({ x: point.x + (-ty / tl) * half, y: point.y + (tx / tl) * half });
-        right.push({ x: point.x - (-ty / tl) * half, y: point.y - (tx / tl) * half });
-    }
-
-    const trace = (points: SLPoint[]) => points.map(p => `${round(p.x)} ${round(p.y)}`).join(" L");
-    const body = `M${trace(left)} L${trace([...right].reverse())} Z`;
+    const body = `M${spine.map(p => `${round(p.x)} ${round(p.y)}`).join(" L")}`;
 
     const facing = spine[2];
     const headAngle = Math.round((Math.atan2(a.y - facing.y, a.x - facing.x) * 180) / Math.PI);
 
     return { from, to, body, head: a, headAngle };
-}
-
-// ── Rematch link ────────────────────────────────────────────────────────────
-// The finish banner encodes the house rule into the rematch link and the setup
-// screen reads it back, so both sides share one param format.
-
-const REROLL_PARAM = "reroll";
-
-export function reRollRematchParams(reRollOnSix: boolean): Record<string, string> {
-    return { [REROLL_PARAM]: reRollOnSix ? "1" : "0" };
-}
-
-export function readReRollOnSixParam(searchParams: URLSearchParams): boolean {
-    return searchParams.get(REROLL_PARAM) === "1";
 }
 
 const entries = (map: Record<number, number>) =>

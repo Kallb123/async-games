@@ -24,7 +24,8 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand, type SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { ISnakesAndLaddersGameStateResponse } from "@/games/SnakesAndLadders/apiModels";
 import { ISnakesAndLaddersDiceRollOutcome, SnakesAndLaddersRequestDiceRoll } from "@/utils/apiModels/GameLogic";
-import { reRollRematchParams } from "@/games/SnakesAndLadders/ui";
+import { SL_REROLL_PARAM } from "@/games/SnakesAndLadders/ui";
+import { rematchFlag } from "@/utils/ui/rematch";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
 import { currentUsername } from "@/utils/ui/players";
 
@@ -226,7 +227,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
                     usernameList={usernameList}
                     myUsername={myUsername}
                     turnTimer={gameData?.turnTimer}
-                    extraParams={reRollRematchParams(reRollOnSix)}
+                    extraParams={rematchFlag(SL_REROLL_PARAM, reRollOnSix)}
                 />
             )}
 

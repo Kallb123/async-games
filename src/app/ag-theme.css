@@ -530,6 +530,7 @@ button {
 .ag-toggle--on::after { transform: translateX(18px); }
 
 /* Option rows (setup) */
+.ag-option-card { padding: 4px 16px; }
 .ag-option-row {
     display: flex;
     align-items: center;
@@ -1478,8 +1479,6 @@ button {
 }
 .ag-sl-cell--ladder { background: oklch(0.9 0.06 145); }
 .ag-sl-cell--snake { background: oklch(0.88 0.07 30); }
-.ag-sl-cell--ladder-top { background: oklch(0.95 0.03 145); }
-.ag-sl-cell--snake-tail { background: oklch(0.95 0.03 30); }
 .ag-sl-cell--finish { background: oklch(0.92 0.07 145); }
 .ag-sl-cell-num { font: 700 8px var(--ag-font); color: oklch(0.45 0.03 60); }
 .ag-sl-cell-icon { font-size: 11px; line-height: 1; }
@@ -1507,9 +1506,10 @@ button {
     stroke-linecap: round;
 }
 .ag-sl-snake-body {
-    fill: oklch(0.6 0.15 32);
-    stroke: oklch(0.44 0.12 30);
-    stroke-width: 0.35;
+    fill: none;
+    stroke: oklch(0.6 0.15 32);
+    stroke-width: 2.4;
+    stroke-linecap: round;
     stroke-linejoin: round;
 }
 .ag-sl-snake-head {
@@ -1517,7 +1517,7 @@ button {
     stroke: oklch(0.4 0.12 30);
     stroke-width: 0.35;
 }
-.ag-sl-snake-eye { fill: #fff8ec; }
+.ag-sl-snake-eye { fill: var(--ag-surface); }
 /* Player tokens clustered in the top-right of their square. */
 .ag-sl-tokens {
     position: absolute;

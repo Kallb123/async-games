@@ -6,6 +6,7 @@ import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
+import OptionSection from "@/components/ui/OptionSection";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
 import { GAME_META } from "@/utils/ui/games";
@@ -63,29 +64,24 @@ function NewGameDiceCitiesForm() {
 
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
 
-      <div className="ag-section">
-        <div className="ag-section-head">
-          <h2 className="ag-section-label">Dice Cities options</h2>
-        </div>
-        <div className="ag-card" style={{ padding: "4px 16px" }}>
-          <OptionToggleRow
-            title="Docks"
-            description="Coming soon. Adds ports and a wider die spread"
-            on={enabledDocks}
-            onToggle={() => setEnabledDocks(v => !v)}
-            ariaLabel="Toggle docks expansion"
-            disabled={true} 
-          />
-          <OptionToggleRow
-            title="Billionaire&apos;s Row"
-            description="Coming soon. Higher-value landmark cards"
-            on={enabledBillionaireRow}
-            onToggle={() => setEnabledBillionaireRow(v => !v)}
-            ariaLabel="Toggle Billionaire's Row expansion"
-            disabled={true}
-          />
-        </div>
-      </div>
+      <OptionSection label="Dice Cities options">
+        <OptionToggleRow
+          title="Docks"
+          description="Coming soon. Adds ports and a wider die spread"
+          on={enabledDocks}
+          onToggle={() => setEnabledDocks(v => !v)}
+          ariaLabel="Toggle docks expansion"
+          disabled={true}
+        />
+        <OptionToggleRow
+          title="Billionaire&apos;s Row"
+          description="Coming soon. Higher-value landmark cards"
+          on={enabledBillionaireRow}
+          onToggle={() => setEnabledBillionaireRow(v => !v)}
+          ariaLabel="Toggle Billionaire's Row expansion"
+          disabled={true}
+        />
+      </OptionSection>
       <FcmTokenComp />
     </GameSetupLayout>
   );

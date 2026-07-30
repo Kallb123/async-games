@@ -33,3 +33,12 @@ export function readRematchPlayers(searchParams: URLSearchParams): string[] {
 export function readRematchTurnTimer(searchParams: URLSearchParams, fallback: string): string {
     return searchParams.get(TURN_TIMER_PARAM) ?? fallback;
 }
+
+/** Encodes one on/off game option for `RematchOptions.extraParams`. */
+export function rematchFlag(key: string, on: boolean): Record<string, string> {
+    return { [key]: on ? "1" : "0" };
+}
+
+export function readRematchFlag(searchParams: URLSearchParams, key: string): boolean {
+    return searchParams.get(key) === "1";
+}
