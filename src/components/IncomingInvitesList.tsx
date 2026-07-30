@@ -44,7 +44,7 @@ export default function IncomingInviteList() {
     return (
         <ListSection
             label="Invites"
-            count={inviteList.length}
+            showCount
             isLoading={isLoading}
             isRefreshing={isRefreshing}
         >

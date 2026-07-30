@@ -17,6 +17,8 @@
     --ag-line-dashed: oklch(0.88 0.02 60);
     /* Divider between rows of an `.ag-list`. */
     --ag-row-divider: 1.5px dashed var(--ag-line-dashed);
+    /* Space between the cards of an `.ag-stack`. */
+    --ag-stack-gap: 12px;
 
     --ag-terracotta: oklch(0.55 0.15 40);
     --ag-terracotta-deep: oklch(0.45 0.14 40);
@@ -304,7 +306,7 @@ button {
     color: var(--ag-on-dark);
 }
 
-.ag-stack { display: flex; flex-direction: column; gap: 12px; }
+.ag-stack { display: flex; flex-direction: column; gap: var(--ag-stack-gap); }
 
 /* ---- Buttons & pills ---- */
 .ag-btn {
@@ -851,7 +853,7 @@ button {
 /* Stack spacing has to shrink along with the row, so it moves inside the
    animating box instead of staying a flex gap that would outlive it. */
 .ag-stack:has(> .ag-anim-item) { gap: 0; }
-.ag-stack > .ag-anim-item + .ag-anim-item > .ag-anim-item-inner { padding-top: 12px; }
+.ag-stack > .ag-anim-item + .ag-anim-item > .ag-anim-item-inner { padding-top: var(--ag-stack-gap); }
 
 @media (prefers-reduced-motion: reduce) {
     .ag-anim-item { transition: none; }

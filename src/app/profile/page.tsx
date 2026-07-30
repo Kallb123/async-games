@@ -178,7 +178,7 @@ export default function Profile() {
             {/* Friends */}
             <ListSection
                 label="Friends"
-                count={friends.length}
+                showCount
                 isLoading={friendsData.isLoading}
                 isRefreshing={friendsData.isRefreshing}
                 skeletonRows={3}
@@ -233,7 +233,7 @@ export default function Profile() {
             {/* Incoming requests */}
             <ListSection
                 label="Friend requests"
-                count={incomingRequests.length}
+                showCount
                 isLoading={false}
                 isRefreshing={friendsData.isRefreshing}
             >
@@ -253,7 +253,7 @@ export default function Profile() {
             {/* Outgoing requests */}
             <ListSection
                 label="Sent requests"
-                count={outgoingRequests.length}
+                showCount
                 isLoading={false}
                 isRefreshing={friendsData.isRefreshing}
             >

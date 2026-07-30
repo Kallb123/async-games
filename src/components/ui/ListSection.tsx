@@ -6,8 +6,8 @@ import useAnimatedList from "@/utils/hooks/useAnimatedList";
 
 interface ListSectionProps {
     label: string;
-    /** Appended to the label as `· N` once there is something to count. */
-    count?: number;
+    /** Appends the number of rows to the label as `· N` once there are any. */
+    showCount?: boolean;
     /** First load only — the one case that gets a skeleton. */
     isLoading: boolean;
     /** A later refetch — rows stay put and shimmer instead. */
@@ -35,7 +35,7 @@ interface ListSectionProps {
 // reactions, the settings device list.
 export default function ListSection({
     label,
-    count,
+    showCount = false,
     isLoading,
     isRefreshing = false,
     skeletonRows = 2,
@@ -56,7 +56,7 @@ export default function ListSection({
     return (
         <div className="ag-section">
             <div className="ag-section-head">
-                <h2 className="ag-section-label">{label}{count ? ` · ${count}` : ""}</h2>
+                <h2 className="ag-section-label">{label}{showCount && rows.length ? ` · ${rows.length}` : ""}</h2>
                 {action}
             </div>
             {beforeList}
