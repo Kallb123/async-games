@@ -36,7 +36,6 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     console.log(`GET ${pathName}`);
     const { user } = useAuthGuard();
     const [showLog, setShowLog] = useState(false);
-    // Territory selection is declared further down, next to the phase it resets with.
 
     const { gameid } = use(params);
     const gameId = gameid;

@@ -3,6 +3,10 @@
 import Image from "next/image";
 import { GameMeta, ThemeAccent } from "@/utils/ui/games";
 
+// Every game icon in /public/art is a square PNG of this size. next/image needs
+// the real intrinsic dimensions to pick a sensible optimised copy.
+export const GAME_ART_SIZE = 128;
+
 const ACCENT_VAR: Record<ThemeAccent, string> = {
     terracotta: "var(--ag-terracotta)",
     green: "var(--ag-green)",

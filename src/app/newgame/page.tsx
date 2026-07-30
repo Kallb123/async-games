@@ -4,7 +4,7 @@ import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { GAME_META, COMING_SOON, GAME_CATEGORIES, GameCategory } from "@/utils/ui/games";
-import GameThumb, { accentVar } from "@/components/ui/GameThumb";
+import GameThumb, { accentVar, GAME_ART_SIZE } from "@/components/ui/GameThumb";
 import Image from "next/image";
 import Link from "next/link";
 import BackLink from "@/components/ui/BackLink";
@@ -50,7 +50,7 @@ export default function NewGame() {
       {featuredVisible && (
         <div className="ag-section">
           <Link href={`/newgame/${featured.url}`} className="ag-featured" style={{ background: accentVar(featured.accent) }}>
-            {featured.art && <Image src={featured.art} alt="" width={170} height={170} className="ag-featured-art" />}
+            {featured.art && <Image src={featured.art} alt="" width={GAME_ART_SIZE} height={GAME_ART_SIZE} className="ag-featured-art" />}
             <div className="ag-featured-eyebrow">Featured this week</div>
             <div className="ag-featured-title">{featured.name}</div>
             <div className="ag-featured-desc">{featured.tagline}</div>

@@ -1,6 +1,7 @@
 'use client'
 
 import { Modal } from 'react-bootstrap';
+import Link from 'next/link';
 import moment from 'moment';
 import GameResultStats from "@/components/ui/GameResultStats";
 import { useGameResult } from "@/utils/hooks/useGameResult";
@@ -43,7 +44,7 @@ export default function MatchResultPopup({ gameId, outcome, onClose }: MatchResu
                     )}
             </Modal.Body>
             <Modal.Footer>
-                <a href={`/games/result/${gameId}`} className="ag-btn ag-btn--light">Full result</a>
+                <Link href={`/games/result/${gameId}`} className="ag-btn ag-btn--light">Full result</Link>
                 <button type="button" className="ag-btn ag-btn--primary" onClick={onClose}>Close</button>
             </Modal.Footer>
         </Modal>

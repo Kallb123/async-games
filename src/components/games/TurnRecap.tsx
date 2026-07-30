@@ -1,5 +1,6 @@
 'use client'
 import React from 'react';
+import Link from 'next/link';
 import { formatRelativeTime } from '@/utils/ui/time';
 import ReactionPicker from '@/components/ui/ReactionPicker';
 
@@ -41,14 +42,14 @@ export default function TurnRecap({ header, summary, events, tip, cta, backHref 
     return (
         <div className="ag-recap">
             <div className="ag-recap-head">
-                <a
+                <Link
                     className={`ag-recap-glyph ${accentClass ?? ''}`}
                     style={accentStyle}
                     href={backHref}
                     aria-label="Back"
                 >
                     {header.glyph ?? '←'}
-                </a>
+                </Link>
                 <div className="ag-recap-head-main">
                     <div className="ag-recap-game">{header.name}</div>
                     <div className="ag-recap-since">Since your last turn</div>

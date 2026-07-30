@@ -27,15 +27,22 @@ const getSnapshot = () => Math.floor(Date.now() / 1000);
 // client paints, so it renders zero and the real figure arrives on hydration.
 const getServerSnapshot = () => 0;
 
-// Seconds between `startedAt` and now, re-read once a second.
+// A finished game has nothing left to count, so it doesn't join the ticker.
+const subscribeNever = () => () => {};
+
+// Seconds between `startedAt` and now, re-read once a second while `running`.
 //
 // Reading `Date.now()` during render is impure (react-hooks/purity): the value
 // changes on every render for reasons React can't see, and disagrees across the
 // hydration boundary. The wall clock is an external source, so this reads it as
 // one — which also makes the readouts tick live rather than only when something
 // else happens to re-render them.
-export function useElapsedSeconds(startedAt: string | null | undefined): number {
-    const nowSeconds = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+//
+// Pass `running: false` once the count is over. Note that the games API has no
+// "finished at" timestamp, so a stopped count is still measured against the
+// current clock; it just stops advancing on its own.
+export function useElapsedSeconds(startedAt: string | null | undefined, running: boolean = true): number {
+    const nowSeconds = useSyncExternalStore(running ? subscribe : subscribeNever, getSnapshot, getServerSnapshot);
     if (!startedAt) return 0;
     const startedSeconds = new Date(startedAt).getTime() / 1000;
     if (!Number.isFinite(startedSeconds)) return 0;

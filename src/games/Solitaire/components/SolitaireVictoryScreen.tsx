@@ -5,17 +5,17 @@ import Stat from '@/components/ui/Stat';
 import { ICard, SUITS } from '@/utils/games/Cards';
 import { ISolitaireGameStateResponse } from '@/games/Solitaire/apiModels';
 import { computeFinalScore, computeTimePenalty, foundationCardCount, formatDuration } from '@/games/Solitaire/rules';
-import { useElapsedSeconds } from '@/utils/hooks/useElapsedSeconds';
 
 interface SolitaireVictoryScreenProps {
     state: ISolitaireGameStateResponse;
+    /** Seconds the game took, frozen by the page now that it's over. */
+    elapsedSeconds: number;
 }
 
 // The doc's "solve screen" (mock 7c): the solo stand-in for a turn recap —
 // victory hero, a Microsoft-rules scoring receipt, and a telemetry grid
 // reusing the existing Stat/.ag-stat-row primitive (see src/app/profile/page.tsx).
-export default function SolitaireVictoryScreen({ state }: SolitaireVictoryScreenProps) {
-    const elapsedSeconds = useElapsedSeconds(state.startedAt);
+export default function SolitaireVictoryScreen({ state, elapsedSeconds }: SolitaireVictoryScreenProps) {
     const timePenalty = computeTimePenalty(elapsedSeconds);
     const finalScore = computeFinalScore(state.score, elapsedSeconds);
     const foundationYield = foundationCardCount(state.foundations);

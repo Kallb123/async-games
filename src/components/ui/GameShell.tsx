@@ -1,5 +1,6 @@
 'use client'
 import React from 'react';
+import Link from 'next/link';
 
 interface GameShellProps {
     /** Game name shown in the top bar. */
@@ -28,7 +29,7 @@ export default function GameShell({ title, subtitle, backHref = '/', right, sync
     return (
         <div className="ag-game">
             <div className="ag-game-topbar">
-                <a className="ag-game-topbar-btn" href={backHref} aria-label="Back">←</a>
+                <Link className="ag-game-topbar-btn" href={backHref} aria-label="Back">←</Link>
                 <div className="ag-game-topbar-main">
                     <div className="ag-game-topbar-title">{title}</div>
                     {subtitle != null && <div className="ag-game-topbar-sub">{subtitle}</div>}

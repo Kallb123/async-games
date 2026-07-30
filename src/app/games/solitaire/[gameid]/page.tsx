@@ -72,7 +72,9 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
         }
     };
 
-    const elapsedSeconds = useElapsedSeconds(state?.startedAt);
+    // Stops once the game is solved, so the victory screen's scoring receipt
+    // doesn't re-derive a "final" score every second while it's being read.
+    const elapsedSeconds = useElapsedSeconds(state?.startedAt, !complete);
     const foundationCount = state ? foundationCardCount(state.foundations) : 0;
     const stalemated = !!state && !complete && !hasAnyLegalMove({ waste: state.waste, foundations: state.foundations, tableau: state.tableau, stockCount: state.stockCount });
     const autoSolveAvailable = !!state && !complete && !hasHiddenTableauCards(state.tableau);
@@ -164,7 +166,7 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
                 </div>
             )}
 
-            {state && complete && <SolitaireVictoryScreen state={state} />}
+            {state && complete && <SolitaireVictoryScreen state={state} elapsedSeconds={elapsedSeconds} />}
 
             {showLog && (
                 <div className="ag-log">
