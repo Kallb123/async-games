@@ -80,7 +80,9 @@ function toEvents(
             type,
             glyph,
             title,
-            detail,
+            // A 6 in a re-roll game keeps the die, so the same player's next
+            // event is a continuation of this turn rather than a new one.
+            detail: roll.extraRoll ? `${detail} · rolls again` : detail,
         },
     ];
 }

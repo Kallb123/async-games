@@ -12,11 +12,15 @@ interface SnakesAndLaddersPlayerActionsProps {
     onRoll?: () => void;
     /** Live only: true while the roll is on its way to the server. */
     pending?: boolean;
+    /** Live only: this game's "a 6 earns another roll" house rule is on. */
+    reRollOnSix?: boolean;
+    /** Live only: the roll about to be taken is one a 6 just earned. */
+    bonusRoll?: boolean;
     /** Planning-only: submits a hypothetical roll and reports the number. */
     submitCommand?: SubmitCommand;
 }
 
-export default function SnakesAndLaddersPlayerActions({ hasRolled, mode = 'live', onRoll, pending = false, submitCommand }: SnakesAndLaddersPlayerActionsProps) {
+export default function SnakesAndLaddersPlayerActions({ hasRolled, mode = 'live', onRoll, pending = false, reRollOnSix = false, bonusRoll = false, submitCommand }: SnakesAndLaddersPlayerActionsProps) {
     const [planRoll, setPlanRoll] = useState<number | null>(null);
     const [busy, setBusy] = useState(false);
 
@@ -57,9 +61,13 @@ export default function SnakesAndLaddersPlayerActions({ hasRolled, mode = 'live'
                 pending={pending}
                 pendingLabel="Rolling the die…"
             >
-                🎲 Roll the die
+                🎲 {bonusRoll ? 'Roll again' : 'Roll the die'}
             </ActionButton>
-            <p className="ag-action-hint">The die decides — no strategy here, just fate.</p>
+            <p className="ag-action-hint">
+                {reRollOnSix
+                    ? 'The die decides — and a 6 earns you another roll.'
+                    : 'The die decides — no strategy here, just fate.'}
+            </p>
         </div>
     );
 }

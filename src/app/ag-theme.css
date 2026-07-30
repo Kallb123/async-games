@@ -1461,6 +1461,7 @@ button {
     box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.13), 0 4px 0 oklch(0.34 0.05 45);
 }
 .ag-sl-grid {
+    position: relative;
     display: grid;
     grid-template-columns: repeat(10, 1fr);
     gap: 2px;
@@ -1477,20 +1478,52 @@ button {
 }
 .ag-sl-cell--ladder { background: oklch(0.9 0.06 145); }
 .ag-sl-cell--snake { background: oklch(0.88 0.07 30); }
+.ag-sl-cell--ladder-top { background: oklch(0.95 0.03 145); }
+.ag-sl-cell--snake-tail { background: oklch(0.95 0.03 30); }
 .ag-sl-cell--finish { background: oklch(0.92 0.07 145); }
-.ag-sl-cell-num { font: 700 8px var(--ag-font); color: oklch(0.5 0.03 60); }
+.ag-sl-cell-num { font: 700 8px var(--ag-font); color: oklch(0.45 0.03 60); }
 .ag-sl-cell-icon { font-size: 11px; line-height: 1; }
-/* Snake/ladder tiles stack the icon over the square it leads to. */
-.ag-sl-cell--marker { flex-direction: column; gap: 0; line-height: 1; }
-.ag-sl-cell--marker .ag-sl-cell-icon { font-size: 10px; }
-.ag-sl-cell-dest { font: 800 7px var(--ag-font); line-height: 1; margin-top: 1px; }
-.ag-sl-cell--ladder .ag-sl-cell-dest { color: oklch(0.4 0.1 150); }
-.ag-sl-cell--snake .ag-sl-cell-dest { color: oklch(0.45 0.14 30); }
+/* The drawn ladders and snakes, laid over the squares. The cells are
+   position:relative with no z-index, so they stay below this layer while the
+   player tokens inside them lift back above it. Just shy of opaque so the
+   square numbers underneath stay readable. */
+.ag-sl-art {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    opacity: 0.92;
+    pointer-events: none;
+}
+.ag-sl-ladder-rail {
+    stroke: oklch(0.66 0.08 70);
+    stroke-width: 1.1;
+    stroke-linecap: round;
+}
+.ag-sl-ladder-rung {
+    stroke: oklch(0.75 0.07 75);
+    stroke-width: 0.85;
+    stroke-linecap: round;
+}
+.ag-sl-snake-body {
+    fill: oklch(0.6 0.15 32);
+    stroke: oklch(0.44 0.12 30);
+    stroke-width: 0.35;
+    stroke-linejoin: round;
+}
+.ag-sl-snake-head {
+    fill: oklch(0.52 0.16 30);
+    stroke: oklch(0.4 0.12 30);
+    stroke-width: 0.35;
+}
+.ag-sl-snake-eye { fill: #fff8ec; }
 /* Player tokens clustered in the top-right of their square. */
 .ag-sl-tokens {
     position: absolute;
     top: 1.5px;
     right: 1.5px;
+    z-index: 2;
     display: flex;
     flex-wrap: wrap-reverse;
     justify-content: flex-end;

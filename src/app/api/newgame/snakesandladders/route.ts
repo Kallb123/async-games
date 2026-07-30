@@ -44,7 +44,8 @@ export async function POST(request: NextRequest) {
     turnTimer: snakesAndLaddersInvitation.turnTimer,
     timestamp: (new Date()).toISOString(),
     gameType: 'SnakesAndLadders',
-    gameFriendlyName: 'Snakes and Ladders'
+    gameFriendlyName: 'Snakes and Ladders',
+    reRollOnSix: snakesAndLaddersInvitation.reRollOnSix === true
   });
 
   await invite.save();

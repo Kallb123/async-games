@@ -5,11 +5,15 @@ import { useEffect, useState } from "react";
 export type Verdict = 'snake' | 'ladder' | 'plain' | 'nomove' | 'win';
 
 export interface RollResult {
+    /** The rolling command's id — two bonus rolls can otherwise look identical. */
+    id: string;
     roll: number;
     from: number;
     landing: number;
     newPosition: number;
     verdict: Verdict;
+    /** Re-roll-on-6 games: the die comes straight back to this player. */
+    extraRoll: boolean;
 }
 
 const VERDICT_ICON: Record<Verdict, string> = {
@@ -25,14 +29,22 @@ const VERDICT_TITLE: Record<Verdict, string> = {
 };
 
 /** Turn a raw dice-roll outcome + the pre-roll square into a display result. */
-export function buildRollResult(from: number, outcome: ISnakesAndLaddersDiceRollOutcome): RollResult {
+export function buildRollResult(id: string, from: number, outcome: ISnakesAndLaddersDiceRollOutcome): RollResult {
     const landing = from + outcome.roll;
     let verdict: Verdict = 'plain';
     if (outcome.newPosition === 100) verdict = 'win';
     else if (outcome.landedOnSnake) verdict = 'snake';
     else if (outcome.landedOnLadder) verdict = 'ladder';
     else if (outcome.newPosition === from) verdict = 'nomove';
-    return { roll: outcome.roll, from, landing, newPosition: outcome.newPosition, verdict };
+    return {
+        id,
+        roll: outcome.roll,
+        from,
+        landing,
+        newPosition: outcome.newPosition,
+        verdict,
+        extraRoll: outcome.extraRoll === true,
+    };
 }
 
 /**
@@ -40,8 +52,8 @@ export function buildRollResult(from: number, outcome: ISnakesAndLaddersDiceRoll
  * real roll and reveals the move, the snake/ladder verdict and the new square.
  * Rendered at page level so it survives the turn advancing to the next player.
  */
-export default function SnakesAndLaddersRollResult({ result, onEndTurn }: { result: RollResult; onEndTurn: () => void }) {
-    const { roll, from, landing, newPosition, verdict } = result;
+export default function SnakesAndLaddersRollResult({ result, onDismiss }: { result: RollResult; onDismiss: () => void }) {
+    const { roll, from, landing, newPosition, verdict, extraRoll } = result;
 
     // Tumble the die, cycling random faces, then settle on the real roll and
     // reveal the outcome — so the roll actually animates.
@@ -76,11 +88,12 @@ export default function SnakesAndLaddersRollResult({ result, onEndTurn }: { resu
     else if (verdict === 'win') sub = <>You raced home to <b>square 100</b> and won the game!</>;
     else if (verdict === 'nomove') sub = <>You need exactly {100 - from} to finish — you stay on <b>square {from}</b>.</>;
     else sub = <>You moved up to <b>square {newPosition}</b>.</>;
+    if (extraRoll) sub = <>{sub} <b>A 6 — roll again!</b></>;
 
     return (
         <div className="ag-sl-roll">
             <div className="ag-game-topbar">
-                <button className="ag-game-topbar-btn" onClick={onEndTurn} aria-label="Close">←</button>
+                <button className="ag-game-topbar-btn" onClick={onDismiss} aria-label="Close">←</button>
                 <div className="ag-game-topbar-main">
                     <div className="ag-game-topbar-title">Snakes &amp; Ladders</div>
                     <div className="ag-game-topbar-sub">{rolling ? 'Rolling the die…' : `You rolled a ${roll}`}</div>
@@ -119,10 +132,16 @@ export default function SnakesAndLaddersRollResult({ result, onEndTurn }: { resu
                 <div className="ag-sl-roll-grip" />
                 <div className="ag-sl-roll-note">
                     <span style={{ fontSize: 20 }}>🎲</span>
-                    <span>Nothing to decide here — the die did it. Tap below to hand the roll to the next player.</span>
+                    <span>{extraRoll
+                        ? 'A 6 — the die stays with you. Tap below to take another roll.'
+                        : 'Nothing to decide here — the die did it. Tap below to hand the roll to the next player.'}</span>
                 </div>
-                <button className="ag-btn ag-btn--success ag-btn--block" onClick={onEndTurn} disabled={rolling}>✓ End turn</button>
-                <div className="ag-sl-roll-foot">We&apos;ll let the next player know it&apos;s their roll</div>
+                <button className="ag-btn ag-btn--success ag-btn--block" onClick={onDismiss} disabled={rolling}>
+                    {extraRoll ? '🎲 Roll again' : '✓ End turn'}
+                </button>
+                <div className="ag-sl-roll-foot">
+                    {extraRoll ? 'Your turn carries on until you roll something else' : 'We’ll let the next player know it’s their roll'}
+                </div>
             </div>
         </div>
     );

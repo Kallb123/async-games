@@ -1,5 +1,9 @@
 import { SNAKES_AND_LADDERS_LADDERS, SNAKES_AND_LADDERS_SNAKES } from "@/utils/apiModels/GameLogic";
 import { ISnakesAndLaddersPlayerStateResponse } from "@/games/SnakesAndLadders/apiModels";
+import { SL_GRID, SL_LADDER_ART, SL_SNAKE_ART, squareAt } from "@/games/SnakesAndLadders/ui";
+
+const LADDER_TOPS = new Set(Object.values(SNAKES_AND_LADDERS_LADDERS));
+const SNAKE_TAILS = new Set(Object.values(SNAKES_AND_LADDERS_SNAKES));
 
 interface SnakesAndLaddersBoardProps {
     playerStates: { [key: string]: ISnakesAndLaddersPlayerStateResponse };
@@ -11,8 +15,9 @@ interface SnakesAndLaddersBoardProps {
 
 /**
  * The 100-square walnut board: a boustrophedon 10×10 grid (square 1 bottom-left,
- * 100 top-left) with ladder/snake markers and each player's token sitting on
- * their current square. Purely presentational — position data comes from state.
+ * 100 top-left) with the ladders and snakes drawn across it as an SVG layer, and
+ * each player's token sitting on their current square. Purely presentational —
+ * position data comes from state, the shapes come from `ui.ts`.
  */
 export default function SnakesAndLaddersBoard({ playerStates, colorFor, myUserId }: SnakesAndLaddersBoardProps) {
     const players = Object.values(playerStates);
@@ -21,23 +26,11 @@ export default function SnakesAndLaddersBoard({ playerStates, colorFor, myUserId
 
     const cellClass = (square: number): string => {
         if (square === 100) return "ag-sl-cell ag-sl-cell--finish";
-        if (SNAKES_AND_LADDERS_LADDERS[square] !== undefined) return "ag-sl-cell ag-sl-cell--ladder ag-sl-cell--marker";
-        if (SNAKES_AND_LADDERS_SNAKES[square] !== undefined) return "ag-sl-cell ag-sl-cell--snake ag-sl-cell--marker";
+        if (SNAKES_AND_LADDERS_LADDERS[square] !== undefined) return "ag-sl-cell ag-sl-cell--ladder";
+        if (SNAKES_AND_LADDERS_SNAKES[square] !== undefined) return "ag-sl-cell ag-sl-cell--snake";
+        if (LADDER_TOPS.has(square)) return "ag-sl-cell ag-sl-cell--ladder-top";
+        if (SNAKE_TAILS.has(square)) return "ag-sl-cell ag-sl-cell--snake-tail";
         return "ag-sl-cell";
-    };
-
-    const cellIcon = (square: number): string | null => {
-        if (square === 100) return "🏁";
-        if (SNAKES_AND_LADDERS_LADDERS[square] !== undefined) return "🪜";
-        if (SNAKES_AND_LADDERS_SNAKES[square] !== undefined) return "🐍";
-        return null;
-    };
-
-    // Where a ladder climbs to / a snake slides down to, shown on the tile.
-    const cellDest = (square: number): number | null => {
-        if (SNAKES_AND_LADDERS_LADDERS[square] !== undefined) return SNAKES_AND_LADDERS_LADDERS[square];
-        if (SNAKES_AND_LADDERS_SNAKES[square] !== undefined) return SNAKES_AND_LADDERS_SNAKES[square];
-        return null;
     };
 
     const me = myUserId ? players.find(p => p.userId === myUserId) : undefined;
@@ -45,16 +38,15 @@ export default function SnakesAndLaddersBoard({ playerStates, colorFor, myUserId
     const cells = [];
     // Render the top row (91–100) first down to the bottom row (1–10); numbering
     // snakes back and forth so consecutive squares stay adjacent.
-    for (let row = 9; row >= 0; row--) {
-        for (let col = 0; col < 10; col++) {
-            const square = row % 2 === 0 ? row * 10 + col + 1 : row * 10 + (9 - col) + 1;
-            const icon = cellIcon(square);
-            const dest = cellDest(square);
+    for (let row = SL_GRID - 1; row >= 0; row--) {
+        for (let col = 0; col < SL_GRID; col++) {
+            const square = squareAt(row, col);
             const here = tokensOnSquare(square);
             cells.push(
                 <div key={square} className={cellClass(square)}>
-                    {icon ? <span className="ag-sl-cell-icon">{icon}</span> : <span className="ag-sl-cell-num">{square}</span>}
-                    {dest !== null && <span className="ag-sl-cell-dest">→{dest}</span>}
+                    {square === 100
+                        ? <span className="ag-sl-cell-icon">🏁</span>
+                        : <span className="ag-sl-cell-num">{square}</span>}
                     {here.length > 0 && (
                         <span className="ag-sl-tokens">
                             {here.map(p => (
@@ -70,7 +62,34 @@ export default function SnakesAndLaddersBoard({ playerStates, colorFor, myUserId
     return (
         <div className="ag-sl-area">
             <div className="ag-sl-frame">
-                <div className="ag-sl-grid">{cells}</div>
+                <div className="ag-sl-grid">
+                    {cells}
+                    {/* Drawn over the squares (tokens sit above it again) so a
+                        ladder or snake reads as one continuous run between the
+                        two squares it joins. */}
+                    <svg className="ag-sl-art" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+                        {SL_LADDER_ART.map(ladder => (
+                            <g key={`ladder-${ladder.from}`}>
+                                {ladder.rungs.map((rung, i) => (
+                                    <line key={i} {...rung} className="ag-sl-ladder-rung" />
+                                ))}
+                                {ladder.rails.map((rail, i) => (
+                                    <line key={i} {...rail} className="ag-sl-ladder-rail" />
+                                ))}
+                            </g>
+                        ))}
+                        {SL_SNAKE_ART.map(snake => (
+                            <g key={`snake-${snake.from}`}>
+                                <path d={snake.body} className="ag-sl-snake-body" />
+                                <g transform={`rotate(${snake.headAngle} ${snake.head.x} ${snake.head.y})`}>
+                                    <ellipse cx={snake.head.x} cy={snake.head.y} rx="2.7" ry="2.1" className="ag-sl-snake-head" />
+                                    <circle cx={snake.head.x + 1.05} cy={snake.head.y - 0.85} r="0.42" className="ag-sl-snake-eye" />
+                                    <circle cx={snake.head.x + 1.05} cy={snake.head.y + 0.85} r="0.42" className="ag-sl-snake-eye" />
+                                </g>
+                            </g>
+                        ))}
+                    </svg>
+                </div>
             </div>
             <div className="ag-sl-legend">
                 <span>🪜 climb up</span>
