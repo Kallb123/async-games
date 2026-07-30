@@ -192,11 +192,8 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
         return (
             <div className="ag-dc-bank ag-pending-group">
                 <div className="ag-dc-bank-head">
-                    <span className="ag-dc-coins">
-                        <span className="ag-dc-coins-icon">🪙</span>
-                        <span className="ag-dc-coins-num">{myState.money}</span>
-                        <span className="ag-dc-coins-label">coins</span>
-                    </span>
+                    <CoinPill amount={myState.money} label="coins" />
+                    <CoinPill amount={gameState.bankMoney} label="in bank" pill />
                     <span className="ag-dc-bank-note">
                         {canDouble ? "Train Station lets you roll 2 dice" : "Build the Train Station to roll 2 dice"}
                     </span>
@@ -264,10 +261,8 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
             <div className="ag-actionsheet ag-dc-market">
                 <div className="ag-dc-market-head">
                     <span className="ag-dc-market-title">Market · build one</span>
-                    <span className="ag-dc-coins ag-dc-coins--pill">
-                        <span className="ag-dc-coins-icon">🪙</span>
-                        <span className="ag-dc-coins-num">{myState.money}</span>
-                    </span>
+                    <CoinPill amount={gameState.bankMoney} label="in bank" pill />
+                    <CoinPill amount={myState.money} pill />
                 </div>
 
                 <div className="ag-dc-market-grid ag-pending-group">
@@ -362,6 +357,18 @@ function purchaseDisabled(card: IDiceCitiesCard, stock: number, myState: IDiceCi
     const owned = myState.cards.find((cc) => cc.card === card.cardId)?.amount ?? 0;
     if (owned >= card.ownLimit) return true;
     return false;
+}
+
+// The gold coin count, used for both a player's purse and the bank's remaining
+// supply so the two always read as the same kind of number.
+function CoinPill({ amount, label, pill }: { amount: number; label?: string; pill?: boolean }) {
+    return (
+        <span className={`ag-dc-coins${pill ? " ag-dc-coins--pill" : ""}`}>
+            <span className="ag-dc-coins-icon">🪙</span>
+            <span className="ag-dc-coins-num">{amount}</span>
+            {label && <span className="ag-dc-coins-label">{label}</span>}
+        </span>
+    );
 }
 
 function SelectionHead({ icon, title, sub }: { icon: string; title: string; sub: string }) {
