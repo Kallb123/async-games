@@ -107,8 +107,7 @@ registerReplayAdapter({
 registerReplayAdapter({
     className: "SmartthinkGameType",
     buildInitialSpecificGameState: (gameData) =>
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        buildInitialSmartthinkState((gameData as any).specificGameState),
+        buildInitialSmartthinkState((gameData as unknown as { specificGameState: never }).specificGameState),
     toResponseState: (specificGameState, userIdNameMap) =>
         smartthinkStateToModel(specificGameState as never, userIdNameMap),
 });
