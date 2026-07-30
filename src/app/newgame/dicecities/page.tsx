@@ -1,12 +1,12 @@
 'use client'
-import { useUser } from "@clerk/nextjs";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
+import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
 import { GAME_META } from "@/utils/ui/games";
 import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
@@ -16,7 +16,7 @@ import { useToast } from "@/components/ToastContext";
 function NewGameDiceCitiesForm() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
-  const { user, isLoaded } = useUser();
+  useAuthGuard();
   const searchParams = useSearchParams();
   const { userList, setItem, players } = usePlayerList(readRematchPlayers(searchParams));
   const [enabledDocks, setEnabledDocks] = useState(false);
@@ -24,18 +24,6 @@ function NewGameDiceCitiesForm() {
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
   const router = useRouter();
   const { showToast } = useToast();
-
-  useEffect(() => {
-    if (isLoaded) {
-        if (!user) {
-            router.push('/login');
-        }
-        const unlocked = user?.publicMetadata.unlocked;
-        if (unlocked !== true) {
-          router.push('/unlockaccess');
-        }
-    }
-  }, [isLoaded]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

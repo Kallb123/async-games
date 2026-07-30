@@ -1,16 +1,15 @@
 'use client'
 import { use, useEffect, useState } from "react";
-import { useUser } from "@clerk/nextjs";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { SolitaireDraw, SolitaireMoveCard, SolitaireUndo, SolitaireAutoSolve } from "@/utils/apiModels/GameLogic";
 import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import Stat from "@/components/ui/Stat";
 import ActionButton from "@/components/ui/ActionButton";
+import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useGameData } from "@/utils/hooks/useGameData";
-import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useToast } from "@/components/ToastContext";
@@ -22,30 +21,14 @@ import SolitaireVictoryScreen from "@/games/Solitaire/components/SolitaireVictor
 export default function GameSolitaire({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
-    const { user, isLoaded } = useUser();
+    const { user } = useAuthGuard();
     const [showLog, setShowLog] = useState(false);
-    const router = useRouter();
     const { showToast } = useToast();
 
     const { gameid } = use(params);
     const gameId = gameid;
 
     const { gameData, setGameData, getGameData } = useGameData<ISolitaireGameDataResponse>(gameId);
-
-    useEffect(() => {
-        if (isLoaded) {
-            if (!user) {
-                router.push('/login');
-            }
-            const unlocked = user?.publicMetadata.unlocked;
-            if (unlocked !== true) {
-                router.push('/unlockaccess');
-            }
-            getGameData();
-        }
-    }, [isLoaded]);
-
-    usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 
     const { endGame } = useEndGame(gameId);
 

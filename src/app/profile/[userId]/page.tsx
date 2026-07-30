@@ -6,58 +6,38 @@ import ProfileIdentity from "@/components/ui/ProfileIdentity";
 import RecentFormSection from "@/components/ui/RecentFormSection";
 import type { IGameStats, IRecentMatch } from "@/app/api/stats/route";
 import type { IProfileUser } from "@/app/api/profile/[userId]/route";
-import { useUser } from "@clerk/nextjs";
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
+import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
+
+interface IProfileResponse {
+    success: boolean;
+    user: IProfileUser;
+    recent: IRecentMatch[];
+    byGame: IGameStats[];
+}
 
 export default function FriendProfile({ params }: { params: Promise<{ userId: string }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
     const { userId } = use(params);
-    const { user, isLoaded } = useUser();
+    const { user } = useAuthGuard();
     const router = useRouter();
 
-    const [profileUser, setProfileUser] = useState(null as IProfileUser | null);
-    const [recentMatches, setRecentMatches] = useState([] as IRecentMatch[]);
-    const [gameStats, setGameStats] = useState([] as IGameStats[]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [forbidden, setForbidden] = useState(false);
+    const { data, isLoading, isRefreshing, status } = useRefreshableData<IProfileResponse>(`/api/profile/${userId}`);
 
+    // Your own userId in the URL is just the profile screen — send them there.
     useEffect(() => {
-        if (isLoaded) {
-            if (!user) {
-                router.push('/login');
-                return;
-            }
-            const unlocked = user?.publicMetadata.unlocked;
-            if (unlocked !== true) {
-                router.push('/unlockaccess');
-                return;
-            }
-            if (userId === user.id) {
-                router.replace('/profile');
-                return;
-            }
-
-            fetch(`/api/profile/${userId}`)
-                .then(response => {
-                    if (response.status === 403) {
-                        setForbidden(true);
-                        return null;
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (data && data.success) {
-                        setProfileUser(data.user);
-                        setRecentMatches(data.recent);
-                        setGameStats(data.byGame);
-                    }
-                })
-                .catch(error => console.error('Failed to load profile', error))
-                .finally(() => setIsLoading(false));
+        if (user && userId === user.id) {
+            router.replace('/profile');
         }
-    }, [isLoaded, userId]);
+    }, [user, userId, router]);
+
+    const profileUser = data?.user ?? null;
+    const recentMatches = data?.recent ?? [];
+    const gameStats = data?.byGame ?? [];
+    const forbidden = status === 403;
 
     const fullName = profileUser ? [profileUser.firstName, profileUser.lastName].filter(name => name).join(" ") : "";
     const friendDisplayName = profileUser?.firstName || profileUser?.username || (isLoading ? "…" : "");
@@ -83,10 +63,10 @@ export default function FriendProfile({ params }: { params: Promise<{ userId: st
                         <ProfileIdentity name={friendDisplayName} username={profileUser?.username} fullName={fullName} />
 
                         {/* Recent form */}
-                        <RecentFormSection matches={recentMatches} isLoading={isLoading} highlightShared />
+                        <RecentFormSection matches={recentMatches} isLoading={isLoading} isRefreshing={isRefreshing} highlightShared />
 
                         {/* Match outcome history, by game */}
-                        <GameStatsList label="Match history" stats={gameStats} isLoading={isLoading} />
+                        <GameStatsList label="Match history" stats={gameStats} isLoading={isLoading} isRefreshing={isRefreshing} />
                         <FcmTokenComp />
                     </>
                 )}

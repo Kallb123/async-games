@@ -1,35 +1,75 @@
 'use client'
 
+import Refreshable from "@/components/ui/Refreshable";
 import { SkeletonRow } from "@/components/ui/Skeleton";
 
 interface ListSectionProps {
     label: string;
+    /** Appended to the label as `· N` once there is something to count. */
+    count?: number;
+    /** First load only — the one case that gets a skeleton. */
     isLoading: boolean;
+    /** A later refetch — rows stay put and shimmer instead. */
+    isRefreshing?: boolean;
     hasItems: boolean;
     skeletonRows?: number;
+    /** Skeleton rows lead with an avatar circle; false gives the small status dot. */
+    skeletonAvatar?: boolean;
+    /** Control rendered on the right of the section heading. */
+    action?: React.ReactNode;
+    /** Rendered between the heading and the list (e.g. an inline form). */
+    beforeList?: React.ReactNode;
+    /** Shown instead of hiding the section when there is nothing to list. */
+    empty?: React.ReactNode;
+    /** Optional note rendered under the list (an `ag-hint`). */
+    hint?: React.ReactNode;
+    /** The `ag-list-row`s themselves — the `ag-list` card is this component's. */
     children: React.ReactNode;
 }
 
-// An `ag-section` that hides itself once loaded with nothing to show, and
-// swaps in `SkeletonRow`s while loading. Shared by profile screens' list
-// sections (stats by game, reactions received, …) that all follow the same
-// "loading skeleton, then an ag-list of rows, or nothing" shape.
-export default function ListSection({ label, isLoading, hasItems, skeletonRows = 2, children }: ListSectionProps) {
-    if (!isLoading && !hasItems) {
+// An `ag-section` that hides itself once loaded with nothing to show (unless
+// given an `empty` message), shows `SkeletonRow`s on first load, and shimmers
+// its existing rows during a background refresh. Shared by every "heading +
+// ag-list of rows" section: the home dashboard's turn/invite lists, the
+// profile screens' friends, stats and reactions, the settings device list.
+export default function ListSection({
+    label,
+    count,
+    isLoading,
+    isRefreshing = false,
+    hasItems,
+    skeletonRows = 2,
+    skeletonAvatar = true,
+    action,
+    beforeList,
+    empty,
+    hint,
+    children,
+}: ListSectionProps) {
+    if (!isLoading && !hasItems && !empty) {
         return null;
     }
     return (
         <div className="ag-section">
             <div className="ag-section-head">
-                <h2 className="ag-section-label">{label}</h2>
+                <h2 className="ag-section-label">{label}{hasItems && count !== undefined ? ` · ${count}` : ""}</h2>
+                {action}
             </div>
+            {beforeList}
             {isLoading
                 ? (
                     <div className="ag-list" aria-busy="true">
-                        {Array.from({ length: skeletonRows }).map((_, i) => <SkeletonRow key={i} />)}
+                        {Array.from({ length: skeletonRows }).map((_, i) => <SkeletonRow key={i} avatar={skeletonAvatar} />)}
                     </div>
                 )
-                : children}
+                : !hasItems
+                ? empty
+                : (
+                    <>
+                        <Refreshable className="ag-list" isRefreshing={isRefreshing}>{children}</Refreshable>
+                        {hint && <p className="ag-hint">{hint}</p>}
+                    </>
+                )}
         </div>
     );
 }

@@ -1,42 +1,18 @@
 'use client'
 
 import { IInvitationResponse } from "@/utils/mongodb/InvitationData";
-import { useUser } from "@clerk/nextjs";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 import moment from 'moment';
-import { SkeletonList } from "@/components/ui/Skeleton";
-import { usePushEvents, INVITE_EVENTS } from "@/utils/hooks/usePushEvents";
+import ListSection from "@/components/ui/ListSection";
+import { INVITE_EVENTS } from "@/utils/hooks/usePushEvents";
+import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 
 export default function OutgoingInviteList() {
-    const { user, isLoaded } = useUser();
-    const router = useRouter();
-    const [inviteList, setInviteList] = useState([] as IInvitationResponse[]);
-    const [isLoading, setIsLoading] = useState(true);
+    const { data, isLoading, isRefreshing, refresh } = useRefreshableData<{ inviteList: IInvitationResponse[] }>(
+        '/api/user/outgoinginvites',
+        INVITE_EVENTS,
+    );
 
-    useEffect(() => {
-        refreshContent();
-    }, [isLoaded]);
-
-    usePushEvents(INVITE_EVENTS, () => refreshContent(), { refreshOnVisible: true });
-
-    const refreshContent = async () => {
-        if (isLoaded) {
-            if (!user) {
-                router.push('/login');
-            }
-            const unlocked = user?.publicMetadata.unlocked;
-            if (unlocked !== true) {
-                router.push('/unlockaccess');
-            }
-
-            fetch('/api/user/outgoinginvites')
-            .then(response => response.json())
-            .then(data => {if (data && data.inviteList) setInviteList(data.inviteList)})
-            .catch(error => console.error('Failed to load outgoing invites', error))
-            .finally(() => setIsLoading(false));
-        }
-    }
+    const inviteList = data?.inviteList ?? [];
 
     const handleCancel = async (inviteId: `${string}-${string}-${string}-${string}-${string}`) => {
         fetch('/api/invite/cancel', {
@@ -48,35 +24,34 @@ export default function OutgoingInviteList() {
             if (!response.ok) throw new Error('Failed to cancel invite');
             return response.json();
         })
-        .then(() => refreshContent())
+        .then(() => refresh())
         .catch(error => console.error('Failed to cancel invite', error));
     }
 
-    if (inviteList.length === 0) return isLoading ? <SkeletonList rows={2} avatar={false} label /> : null;
-
     return (
-        <div className="ag-section">
-            <div className="ag-section-head">
-                <h2 className="ag-section-label">Awaiting response</h2>
-            </div>
-            <div className="ag-list">
-                {inviteList.map((invite) => (
-                    <div key={invite.inviteId} className="ag-list-row">
-                        <div style={{
-                            width: 8, height: 8, borderRadius: "50%", flex: "none",
-                            background: "oklch(0.75 0.03 60)", outline: "1.5px dashed oklch(0.7 0.05 60)", outlineOffset: 2,
-                        }} />
-                        <div className="ag-list-row-main">
-                            <div style={{ font: "600 13px/1.35 var(--ag-font)" }}>
-                                Invite to <strong style={{ fontWeight: 800 }}>{invite.userList.join(", ")}</strong>
-                                <span style={{ color: "var(--ag-ink-soft)", fontWeight: 500 }}> · {invite.gameFriendlyName}</span>
-                            </div>
-                            <div className="ag-list-row-sub">Sent {moment(invite.timestamp).fromNow()}</div>
+        <ListSection
+            label="Awaiting response"
+            isLoading={isLoading}
+            isRefreshing={isRefreshing}
+            hasItems={inviteList.length > 0}
+            skeletonAvatar={false}
+        >
+            {inviteList.map((invite) => (
+                <div key={invite.inviteId} className="ag-list-row">
+                    <div style={{
+                        width: 8, height: 8, borderRadius: "50%", flex: "none",
+                        background: "oklch(0.75 0.03 60)", outline: "1.5px dashed oklch(0.7 0.05 60)", outlineOffset: 2,
+                    }} />
+                    <div className="ag-list-row-main">
+                        <div style={{ font: "600 13px/1.35 var(--ag-font)" }}>
+                            Invite to <strong style={{ fontWeight: 800 }}>{invite.userList.join(", ")}</strong>
+                            <span style={{ color: "var(--ag-ink-soft)", fontWeight: 500 }}> · {invite.gameFriendlyName}</span>
                         </div>
-                        <button type="button" className="ag-link-muted" onClick={() => handleCancel(invite.inviteId)}>Cancel</button>
+                        <div className="ag-list-row-sub">Sent {moment(invite.timestamp).fromNow()}</div>
                     </div>
-                ))}
-            </div>
-        </div>
+                    <button type="button" className="ag-link-muted" onClick={() => handleCancel(invite.inviteId)}>Cancel</button>
+                </div>
+            ))}
+        </ListSection>
     );
 }

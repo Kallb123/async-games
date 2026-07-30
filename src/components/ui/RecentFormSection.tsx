@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Skeleton from "@/components/ui/Skeleton";
+import Refreshable from "@/components/ui/Refreshable";
 import MatchResultPopup from "@/components/ui/MatchResultPopup";
 import GameThumb from "@/components/ui/GameThumb";
 import { GAME_META } from "@/utils/ui/games";
@@ -13,6 +14,7 @@ const OUTCOME_LABEL: Record<MatchOutcome, string> = { win: "W", loss: "L", draw:
 interface RecentFormSectionProps {
     matches: IRecentMatch[];
     isLoading: boolean;
+    isRefreshing?: boolean;
     // Ring-highlight matches the viewer also played in. Only meaningful on a
     // friend's profile - on your own profile every match already includes you.
     highlightShared?: boolean;
@@ -21,7 +23,7 @@ interface RecentFormSectionProps {
 // "Recent form" - chips of a player's most recent match outcomes. Shared by
 // a player's own profile and a friend's read-only profile. Tapping a chip
 // opens a popup with that match's game-specific stats.
-export default function RecentFormSection({ matches, isLoading, highlightShared = false }: RecentFormSectionProps) {
+export default function RecentFormSection({ matches, isLoading, isRefreshing = false, highlightShared = false }: RecentFormSectionProps) {
     const [selected, setSelected] = useState<IRecentMatch | null>(null);
 
     return (
@@ -38,7 +40,7 @@ export default function RecentFormSection({ matches, isLoading, highlightShared 
                 : matches.length === 0
                 ? <div className="ag-empty">No finished games yet.</div>
                 : (
-                    <div className="ag-chips">
+                    <Refreshable className="ag-chips" isRefreshing={isRefreshing}>
                         {matches.map(match => {
                             const meta = GAME_META[match.url];
                             const shared = highlightShared && match.sharedWithViewer;
@@ -61,7 +63,7 @@ export default function RecentFormSection({ matches, isLoading, highlightShared 
                                 </button>
                             );
                         })}
-                    </div>
+                    </Refreshable>
                 )}
 
             {highlightShared && matches.some(match => match.sharedWithViewer) && (
