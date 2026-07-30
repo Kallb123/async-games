@@ -2139,7 +2139,13 @@ button {
     from { transform: translateX(-110%); }
     to { transform: translateX(280%); }
 }
-@keyframes ag-pending-ants { to { background-position: 16px 0, 100% -16px, -16px 100%, 0 16px; } }
+/* One 16px dash period per cycle, clockwise: top→right, right→down, bottom→left,
+   left→up. Each edge animates only its own axis in px and pins the other axis to
+   the edge it hugs — animating a percentage to a length makes the browser
+   interpolate over the whole box, which sends that edge racing. */
+@keyframes ag-pending-ants {
+    to { background-position: 16px 0, 100% 16px, -16px 100%, 0 -16px; }
+}
 @keyframes ag-pending-ants-svg { to { stroke-dashoffset: -18; } }
 
 /* ---- Shared spinner ---- */
@@ -2213,7 +2219,9 @@ button {
         linear-gradient(90deg, var(--ag-terracotta) 55%, transparent 0),
         linear-gradient(0deg, var(--ag-terracotta) 55%, transparent 0);
     background-size: 16px 2px, 2px 16px, 16px 2px, 2px 16px;
-    background-position: 0 0, 100% 0, 100% 100%, 0 100%;
+    /* top, right, bottom, left. The axis each edge repeats along starts at 0 so
+       ag-pending-ants can travel it in px; see that keyframe. */
+    background-position: 0 0, 100% 0, 0 100%, 0 0;
     background-repeat: repeat-x, repeat-y, repeat-x, repeat-y;
     animation: ag-pending-ants 0.55s linear infinite;
 }
