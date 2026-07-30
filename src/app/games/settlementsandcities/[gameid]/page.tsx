@@ -1,8 +1,7 @@
 'use client'
 import { use } from "react";
-import { useUser } from "@clerk/nextjs";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ISACGameDataResponse, ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
@@ -18,6 +17,7 @@ import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecap from "@/components/games/TurnRecap";
+import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
@@ -52,12 +52,11 @@ const PLACEMENT_PROMPT: Partial<Record<SACBoardMode, string>> = {
 export default function GameSettlementsAndCities({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
-    const { user, isLoaded } = useUser();
+    const { user, isAuthorised } = useAuthGuard();
     const [boardMode, setBoardMode] = useState<SACBoardMode>('idle');
     // The board spot we last tapped; only meaningful while its command is in flight.
     const [tappedSpot, setTappedSpot] = useState<{ kind: SACSpotKind; id: number } | null>(null);
     const [showLog, setShowLog] = useState(false);
-    const router = useRouter();
 
     const { gameid } = use(params);
     const gameId = gameid;
@@ -65,17 +64,10 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     const { gameData, setGameData, getGameData } = useGameData<ISACGameDataResponse>(gameId);
 
     useEffect(() => {
-        if (isLoaded) {
-            if (!user) {
-                router.push('/login');
-            }
-            const unlocked = user?.publicMetadata.unlocked;
-            if (unlocked !== true) {
-                router.push('/unlockaccess');
-            }
+        if (isAuthorised) {
             getGameData();
         }
-    }, [isLoaded]);
+    }, [isAuthorised]);
 
     usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 

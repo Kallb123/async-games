@@ -1,8 +1,8 @@
 'use client'
-import { useUser } from "@clerk/nextjs";
+import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { GAME_META, COMING_SOON, GAME_CATEGORIES, GameCategory } from "@/utils/ui/games";
 import GameThumb, { accentVar } from "@/components/ui/GameThumb";
 
@@ -11,21 +11,9 @@ const FILTERS: ("All" | GameCategory)[] = ["All", ...GAME_CATEGORIES];
 export default function NewGame() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
-  const { user, isLoaded } = useUser();
+  useAuthGuard();
   const router = useRouter();
   const [filter, setFilter] = useState<"All" | GameCategory>("All");
-
-  useEffect(() => {
-    if (isLoaded) {
-        if (!user) {
-            router.push('/login');
-        }
-        const unlocked = user?.publicMetadata.unlocked;
-        if (unlocked !== true) {
-          router.push('/unlockaccess');
-        }
-    }
-  }, [isLoaded]);
 
   const featured = GAME_META.dicecities;
   const otherGames = Object.values(GAME_META)

@@ -1,8 +1,8 @@
 'use client'
-import { useUser } from "@clerk/nextjs";
+import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useRouter, usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import { GAME_META } from "@/utils/ui/games";
@@ -12,23 +12,11 @@ import { useToast } from "@/components/ToastContext";
 export default function NewGameSolitaire() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
-  const { user, isLoaded } = useUser();
+  useAuthGuard();
   const [drawMode, setDrawMode] = useState<SolitaireDrawMode>('DRAW_1');
   const [starting, setStarting] = useState(false);
   const router = useRouter();
   const { showToast } = useToast();
-
-  useEffect(() => {
-    if (isLoaded) {
-      if (!user) {
-        router.push('/login');
-      }
-      const unlocked = user?.publicMetadata.unlocked;
-      if (unlocked !== true) {
-        router.push('/unlockaccess');
-      }
-    }
-  }, [isLoaded]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

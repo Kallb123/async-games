@@ -9,13 +9,13 @@ import Refreshable from "@/components/ui/Refreshable";
 import { SkeletonTurnCards } from "@/components/ui/Skeleton";
 import { TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
-import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
+import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
 import { formatRemainingTimeShort } from "@/utils/games/TurnTimer";
 
 const MY_TURN_EVENTS = ['NewInvite', 'GameStart', ...TURN_ADVANCED_EVENTS];
 
 export default function MyTurnList() {
-    const { user } = useAuthGuard();
+    const { user } = useIsAuthorised();
     const router = useRouter();
     const { data, isLoading, isRefreshing } = useRefreshableData<{ gameList: IGameResponse[] }>(
         '/api/game/myturnlist',

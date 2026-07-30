@@ -1,8 +1,7 @@
 'use client'
 import { use } from "react";
-import { useUser } from "@clerk/nextjs";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
@@ -14,6 +13,7 @@ import DiceCitiesBoard from "@/games/DiceCities/components/DiceCitiesBoard";
 import DiceCitiesActions from "@/games/DiceCities/components/DiceCitiesActions";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecap from "@/components/games/TurnRecap";
+import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
@@ -32,9 +32,8 @@ const noopSubmit = async () => {};
 export default function GameDiceCities({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
-    const { user, isLoaded } = useUser();
+    const { user, isAuthorised } = useAuthGuard();
     const [showLog, setShowLog] = useState(false);
-    const router = useRouter();
 
     const { gameid } = use(params);
     const gameId = gameid;
@@ -42,19 +41,10 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const { gameData, setGameData, getGameData } = useGameData<IDiceCitiesGameDataResponse>(gameId);
 
     useEffect(() => {
-        if (isLoaded) {
-            if (!user) {
-                router.push('/login');
-            }
-
-            const unlocked = user?.publicMetadata.unlocked;
-            if (unlocked !== true) {
-                router.push('/unlockaccess');
-            }
-
+        if (isAuthorised) {
             getGameData();
         }
-    }, [isLoaded]);
+    }, [isAuthorised]);
 
     usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 

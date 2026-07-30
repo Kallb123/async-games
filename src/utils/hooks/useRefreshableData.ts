@@ -32,7 +32,7 @@ export interface RefreshableData<T> {
 const NO_EVENTS: readonly string[] = [];
 
 /**
- * Fetches `url` once the viewer is signed in and unlocked (see `useAuthGuard`),
+ * Fetches `url` once the viewer is signed in and unlocked (see `useIsAuthorised`),
  * then re-fetches whenever one of `events` fires or the tab returns to the
  * foreground (see `usePushEvents`). Overlapping refreshes are dropped — a burst
  * of pushes results in one request, not one per push.

@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import ListSection from "@/components/ui/ListSection";
 import { COMPLETED_GAME_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
-import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
+import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
 
 export default function MyCompleteList() {
-    const { user } = useAuthGuard();
+    const { user } = useIsAuthorised();
     const router = useRouter();
     const { data, isLoading, isRefreshing } = useRefreshableData<{ gameList: ICompletedGame[] }>(
         '/api/game/mycompletelist',

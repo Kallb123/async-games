@@ -21,8 +21,9 @@ export function useIsAuthorised() {
  * `useIsAuthorised` plus the redirect: wait for Clerk to load, then send
  * anonymous visitors to `/login` and locked-out accounts to `/unlockaccess`.
  *
- * One per screen. Several screens still inline this same three-check block —
- * they should move over to this hook rather than keeping their own copy.
+ * One per screen — every authenticated page mounts exactly one of these, and
+ * the components on it use `useIsAuthorised` so a screen fires one redirect
+ * effect rather than one per list.
  */
 export function useAuthGuard() {
     const state = useIsAuthorised();

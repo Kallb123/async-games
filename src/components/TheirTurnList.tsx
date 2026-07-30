@@ -6,14 +6,14 @@ import { opponents } from "@/utils/ui/players";
 import ListSection from "@/components/ui/ListSection";
 import { TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
-import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
+import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
 import { formatRemainingTimeShort } from "@/utils/games/TurnTimer";
 import { useToast } from "@/components/ToastContext";
 
 const THEIR_TURN_EVENTS = ['NewInvite', 'GameStart', ...TURN_ADVANCED_EVENTS];
 
 export default function TheirTurnList() {
-    const { user } = useAuthGuard();
+    const { user } = useIsAuthorised();
     const { showToast } = useToast();
     const [nudgedGameIds, setNudgedGameIds] = useState(new Set<string>());
     const { data, isLoading, isRefreshing } = useRefreshableData<{ gameList: IGameResponse[] }>(
