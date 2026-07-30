@@ -55,7 +55,6 @@ export default function NotificationDeviceList({ currentToken }: { currentToken?
             label="Your devices"
             isLoading={isLoading}
             isRefreshing={isRefreshing}
-            hasItems={devices.length > 0}
             hint={<>
                 A removed device stops getting notifications until you next open Async Games on it.
                 Devices you haven&apos;t used for {STALE_DEVICE_DAYS} days are forgotten automatically.

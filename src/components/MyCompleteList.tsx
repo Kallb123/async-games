@@ -22,7 +22,6 @@ export default function MyCompleteList() {
             label="Finished"
             isLoading={isLoading}
             isRefreshing={isRefreshing}
-            hasItems={gameList.length > 0}
             skeletonAvatar={false}
         >
             {gameList.map((game) => {

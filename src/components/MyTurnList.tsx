@@ -9,6 +9,7 @@ import Refreshable from "@/components/ui/Refreshable";
 import { SkeletonTurnCards } from "@/components/ui/Skeleton";
 import { TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
+import useAnimatedList from "@/utils/hooks/useAnimatedList";
 import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
 import { formatRemainingTimeShort } from "@/utils/games/TurnTimer";
 import { useNowToTheMinute } from "@/utils/hooks/useNow";
@@ -27,6 +28,39 @@ export default function MyTurnList() {
     const gameList = data?.gameList ?? [];
     const count = gameList.length;
 
+    // Cards still on screen — a game you have just played stays until it has
+    // finished shrinking away.
+    const cards = useAnimatedList(gameList.map((game) => {
+        const meta = metaForGame({ url: game.url, friendlyName: game.friendlyName });
+        const accent = meta ? accentVar(meta.accent) : "var(--ag-terracotta)";
+        const timeLeft = formatRemainingTimeShort(game.lastTurnTimestamp, game.turnTimer, now);
+        return (
+            <div
+                key={game.gameId}
+                className="ag-turn-card"
+                style={{ background: accent, cursor: "pointer" }}
+                onClick={() => router.push(`/games/${game.url}/${game.gameId}`)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => { if (e.key === "Enter") router.push(`/games/${game.url}/${game.gameId}`); }}
+            >
+                <div className="ag-turn-card-head">
+                    {meta
+                        ? <GameThumb meta={meta} size={52} radius={12} />
+                        : <div style={{ width: 52 }} />}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="ag-turn-card-title">{game.friendlyName}</div>
+                        <div className="ag-turn-card-sub">vs {opponents(game, user?.username)}</div>
+                    </div>
+                </div>
+                <div className="ag-turn-card-cta" style={{ color: accent }}>
+                    Take your turn
+                </div>
+                {timeLeft && <div className="ag-turn-card-badge">{timeLeft}</div>}
+            </div>
+        );
+    }), isLoading);
+
     return (
         <>
             <div className="ag-hero">
@@ -42,40 +76,9 @@ export default function MyTurnList() {
 
             {isLoading && <SkeletonTurnCards count={2} />}
 
-            {!isLoading && count > 0 && (
+            {!isLoading && cards.length > 0 && (
                 <div className="ag-section">
-                    <Refreshable className="ag-stack" isRefreshing={isRefreshing}>
-                        {gameList.map((game) => {
-                            const meta = metaForGame({ url: game.url, friendlyName: game.friendlyName });
-                            const accent = meta ? accentVar(meta.accent) : "var(--ag-terracotta)";
-                            const timeLeft = formatRemainingTimeShort(game.lastTurnTimestamp, game.turnTimer, now);
-                            return (
-                                <div
-                                    key={game.gameId}
-                                    className="ag-turn-card"
-                                    style={{ background: accent, cursor: "pointer" }}
-                                    onClick={() => router.push(`/games/${game.url}/${game.gameId}`)}
-                                    role="button"
-                                    tabIndex={0}
-                                    onKeyDown={(e) => { if (e.key === "Enter") router.push(`/games/${game.url}/${game.gameId}`); }}
-                                >
-                                    <div className="ag-turn-card-head">
-                                        {meta
-                                            ? <GameThumb meta={meta} size={52} radius={12} />
-                                            : <div style={{ width: 52 }} />}
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div className="ag-turn-card-title">{game.friendlyName}</div>
-                                            <div className="ag-turn-card-sub">vs {opponents(game, user?.username)}</div>
-                                        </div>
-                                    </div>
-                                    <div className="ag-turn-card-cta" style={{ color: accent }}>
-                                        Take your turn
-                                    </div>
-                                    {timeLeft && <div className="ag-turn-card-badge">{timeLeft}</div>}
-                                </div>
-                            );
-                        })}
-                    </Refreshable>
+                    <Refreshable className="ag-stack" isRefreshing={isRefreshing}>{cards}</Refreshable>
                 </div>
             )}
         </>

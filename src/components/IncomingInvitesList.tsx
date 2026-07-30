@@ -44,10 +44,9 @@ export default function IncomingInviteList() {
     return (
         <ListSection
             label="Invites"
-            count={inviteList.length}
+            showCount
             isLoading={isLoading}
             isRefreshing={isRefreshing}
-            hasItems={inviteList.length > 0}
         >
             {inviteList.map((invite) => (
                 <div key={invite.inviteId} className="ag-list-row">

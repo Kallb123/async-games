@@ -15,6 +15,10 @@
 
     --ag-line: oklch(0.85 0.03 60);
     --ag-line-dashed: oklch(0.88 0.02 60);
+    /* Divider between rows of an `.ag-list`. */
+    --ag-row-divider: 1.5px dashed var(--ag-line-dashed);
+    /* Space between the cards of an `.ag-stack`. */
+    --ag-stack-gap: 12px;
 
     --ag-terracotta: oklch(0.55 0.15 40);
     --ag-terracotta-deep: oklch(0.45 0.14 40);
@@ -192,7 +196,7 @@ button {
     align-items: center;
     gap: 11px;
     padding: 13px 0;
-    border-bottom: 1.5px dashed var(--ag-line-dashed);
+    border-bottom: var(--ag-row-divider);
 }
 
 .ag-list-row:last-child { border-bottom: none; }
@@ -302,7 +306,7 @@ button {
     color: var(--ag-on-dark);
 }
 
-.ag-stack { display: flex; flex-direction: column; gap: 12px; }
+.ag-stack { display: flex; flex-direction: column; gap: var(--ag-stack-gap); }
 
 /* ---- Buttons & pills ---- */
 .ag-btn {
@@ -810,6 +814,49 @@ button {
 @media (prefers-reduced-motion: reduce) {
     .ag-refreshing { animation: none; opacity: 0.7; }
     .ag-refreshing::after { display: none; }
+}
+
+/* ---- Rows growing in and shrinking out ----
+   `useAnimatedList` wraps every row in one of these so it can animate its own
+   height: the wrapper is a single-row grid whose track runs 0fr → 1fr, the one
+   way to transition to a height the content decides. Clipping and the collapsed
+   start only apply while a row is arriving or leaving, so a settled row sits in
+   a plain grid box that can't cut off a shadow or a focus ring. */
+.ag-anim-item {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 450ms ease, opacity 320ms ease;
+}
+
+.ag-anim-item-inner { min-height: 0; }
+
+.ag-anim-item--enter > .ag-anim-item-inner,
+.ag-anim-item--exit > .ag-anim-item-inner { overflow: hidden; }
+
+/* Arrivals start collapsed and are transitioned open from there. Browsers
+   without @starting-style just show the row straight away. */
+@starting-style {
+    .ag-anim-item--enter { grid-template-rows: 0fr; opacity: 0; }
+}
+
+.ag-anim-item--exit {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* A wrapped row is an only child, so `.ag-list-row:last-child` matches every
+   one of them — the wrapper has to decide which divider to drop instead. */
+.ag-anim-item .ag-list-row { border-bottom: var(--ag-row-divider); }
+.ag-anim-item:last-child .ag-list-row { border-bottom: none; }
+
+/* Stack spacing has to shrink along with the row, so it moves inside the
+   animating box instead of staying a flex gap that would outlive it. */
+.ag-stack:has(> .ag-anim-item) { gap: 0; }
+.ag-stack > .ag-anim-item + .ag-anim-item > .ag-anim-item-inner { padding-top: var(--ag-stack-gap); }
+
+@media (prefers-reduced-motion: reduce) {
+    .ag-anim-item { transition: none; }
 }
 
 /* ============================================================= *

@@ -33,7 +33,6 @@ export default function OutgoingInviteList() {
             label="Awaiting response"
             isLoading={isLoading}
             isRefreshing={isRefreshing}
-            hasItems={inviteList.length > 0}
             skeletonAvatar={false}
         >
             {inviteList.map((invite) => (
