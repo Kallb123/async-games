@@ -60,7 +60,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
 
     usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 
-    const { submitCommand, submitting } = useSubmitCommand<IWorldDominationGameDataResponse>(gameId, user, setGameData, getGameData);
+    const { submitCommand, submitting, pendingTarget } = useSubmitCommand<IWorldDominationGameDataResponse>(gameId, user, setGameData, getGameData);
 
     const live = {
         specificGameState: gameData?.specificGameState,
@@ -284,7 +284,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     }
 
     return (
-        <GameShell title="World Domination" subtitle={subtitle} right={optionsMenu}>
+        <GameShell title="World Domination" subtitle={subtitle} right={optionsMenu} syncing={submitting}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
@@ -323,6 +323,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
                             setSelFrom={setSelFrom}
                             setSelTo={setSelTo}
                             submitCommand={submitCommand}
+                            pendingTarget={pendingTarget}
                         />
                     )}
 

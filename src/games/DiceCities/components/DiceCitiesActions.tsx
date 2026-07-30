@@ -18,17 +18,21 @@ import {
     IGameCommand,
 } from "@/utils/apiModels/GameLogic";
 import { ACTIVATION_META, LANDMARKS, activationFor, cardArt, rollLabel, yieldLabel } from "@/games/DiceCities/ui";
+import type { SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import Dice from "@/components/ui/Dice";
+import ActionButton from "@/components/ui/ActionButton";
+import PendingTag from "@/components/ui/PendingTag";
 import { useEffect, useRef, useState } from "react";
 
 interface DiceCitiesActionsProps {
     gameState: IDiceCitiesGameStateResponse;
     myState: IDiceCitiesPlayerStateResponse;
     opponents: IDiceCitiesPlayerStateResponse[];
-    submitCommand: (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => Promise<void>;
-    /** True while a command is in flight — disables the sheet so a double-tap
-     *  can't fire two commands before the first response lands. */
-    busy: boolean;
+    submitCommand: SubmitCommand;
+    /** The `target` of the in-flight command, so only the tapped control or card
+     *  shows as processing. Null when nothing is in flight — which also means it
+     *  doubles as "is the sheet busy?", since every command here carries one. */
+    pendingTarget: string | null;
 }
 
 // The unlock command for each of the four win-condition landmarks, keyed by the
@@ -40,7 +44,10 @@ const LANDMARK_UNLOCK: Record<string, new () => IGameCommand> = {
     oneReroll: DiceCitiesRequestUnlockRadioTower,
 };
 
-export default function DiceCitiesActions({ gameState, myState, opponents, submitCommand, busy }: DiceCitiesActionsProps) {
+export default function DiceCitiesActions({ gameState, myState, opponents, submitCommand, pendingTarget }: DiceCitiesActionsProps) {
+    // A command is in flight — disable the sheet so a double-tap can't fire two
+    // commands before the first response lands.
+    const busy = pendingTarget !== null;
     // Which die count the player has selected for their next roll.
     const [diceCount, setDiceCount] = useState<1 | 2>(myState.lastDiceSelection);
     // The most recent roll, kept locally so the dice + total stay on screen
@@ -66,21 +73,21 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
     };
     useEffect(() => () => { if (tumble.current) clearInterval(tumble.current); }, []);
 
-    const send = (command: IGameCommand, after?: (r: ICommandResponse) => void) => {
-        submitCommand(command, (response) => after?.(response));
+    const send = (command: IGameCommand, target: string, after?: (r: ICommandResponse) => void) => {
+        submitCommand(command, after, target);
     };
 
     const doRoll = (double: boolean) => {
         const command = new DiceCitiesRequestDiceRoll();
         command.doubleDice = double;
-        send(command, (response) => {
+        send(command, "roll", (response) => {
             const outcome = response.outcome as IDiceCitiesDiceRollOutcome | undefined;
             if (typeof outcome?.roll1 === "number") animateRoll({ roll1: outcome.roll1, roll2: outcome.roll2 ?? null });
         });
     };
 
     const doReroll = () => {
-        send(new DiceCitiesRequestRadioTowerReroll(), (response) => {
+        send(new DiceCitiesRequestRadioTowerReroll(), "reroll", (response) => {
             const outcome = response.outcome as IDiceCitiesDiceRollOutcome | undefined;
             if (typeof outcome?.roll1 === "number") animateRoll({ roll1: outcome.roll1, roll2: outcome.roll2 ?? null });
         });
@@ -89,38 +96,43 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
     const buyCard = (cardId: uuidString) => {
         const command = new DiceCitiesRequestCardPurchase();
         command.cardId = cardId;
-        send(command);
+        send(command, `build:${cardId}`);
     };
 
     const unlockLandmark = (flag: string) => {
         const Command = LANDMARK_UNLOCK[flag];
-        if (Command) send(new Command());
+        if (Command) send(new Command(), `landmark:${flag}`);
     };
 
-    const pass = () => send(new DiceCitiesRequestPassTurn());
+    const pass = () => send(new DiceCitiesRequestPassTurn(), "endTurn");
 
     // ── Pending selections take over the sheet until resolved ────────────────
     if (gameState.awaitingTSSelection) {
         return (
             <div className="ag-actionsheet">
                 <SelectionHead icon="📺" title="TV Station" sub="Take 5 coins from any one player." />
-                <div className="ag-dc-pick-list">
-                    {opponents.map((op) => (
-                        <button
-                            key={op.userId}
-                            className="ag-dc-pick-row"
-                            disabled={busy}
-                            onClick={() => {
-                                const command = new DiceCitiesRequestTvStationSelection();
-                                command.selectedUser = op.userId;
-                                command.selectedUserName = op.username;
-                                send(command);
-                            }}
-                        >
-                            <span className="ag-dc-pick-name">{op.username}</span>
-                            <span className="ag-dc-pick-meta">{op.money}🪙</span>
-                        </button>
-                    ))}
+                <div className="ag-dc-pick-list ag-pending-group">
+                    {opponents.map((op) => {
+                        const pending = pendingTarget === `steal:${op.userId}`;
+                        return (
+                            <button
+                                key={op.userId}
+                                className={`ag-dc-pick-row${pending ? ' ag-pending-skin' : ''}`}
+                                disabled={busy}
+                                onClick={() => {
+                                    const command = new DiceCitiesRequestTvStationSelection();
+                                    command.selectedUser = op.userId;
+                                    command.selectedUserName = op.username;
+                                    send(command, `steal:${op.userId}`);
+                                }}
+                            >
+                                <span className="ag-dc-pick-name">{op.username}</span>
+                                {pending
+                                    ? <PendingTag label="Taking" />
+                                    : <span className="ag-dc-pick-meta">{op.money}🪙</span>}
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
         );
@@ -134,10 +146,11 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
                 <CardPickGrid
                     cards={mine.map((cc) => cc.card as uuidString)}
                     disabled={busy}
+                    isPending={(cardId) => pendingTarget === `give:${cardId}`}
                     onPick={(cardId) => {
                         const command = new DiceCitiesRequestBusinessCenterOwnSelection();
                         command.selectedCard = cardId;
-                        send(command);
+                        send(command, `give:${cardId}`);
                     }}
                 />
             </div>
@@ -157,11 +170,12 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
                             <CardPickGrid
                                 cards={theirs.map((cc) => cc.card as uuidString)}
                                 disabled={busy}
+                                isPending={(cardId) => pendingTarget === `take:${op.userId}:${cardId}`}
                                 onPick={(cardId) => {
                                     const command = new DiceCitiesRequestBusinessCenterOpponentSelection();
                                     command.selectedUser = op.userId;
                                     command.selectedCard = cardId;
-                                    send(command);
+                                    send(command, `take:${op.userId}:${cardId}`);
                                 }}
                             />
                         </div>
@@ -176,7 +190,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
         const canDouble = myState.doubleUnlocked;
         const effectiveDice = canDouble ? diceCount : 1;
         return (
-            <div className="ag-dc-bank">
+            <div className="ag-dc-bank ag-pending-group">
                 <div className="ag-dc-bank-head">
                     <span className="ag-dc-coins">
                         <span className="ag-dc-coins-icon">🪙</span>
@@ -202,13 +216,15 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
                         <span className="ag-dc-dice-mini">⚁</span> 2 dice{canDouble ? "" : " 🔒"}
                     </button>
                 </div>
-                <button
+                <ActionButton
                     className="ag-btn ag-btn--primary ag-btn--block ag-btn--roll"
                     onClick={() => doRoll(effectiveDice === 2)}
                     disabled={busy}
+                    pending={pendingTarget === "roll"}
+                    pendingLabel={`Rolling ${effectiveDice === 2 ? "2 dice" : "1 die"}…`}
                 >
                     🎲 Roll {effectiveDice === 2 ? "2 dice" : "1 die"}
-                </button>
+                </ActionButton>
             </div>
         );
     }
@@ -254,15 +270,22 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
                     </span>
                 </div>
 
-                <div className="ag-dc-market-grid">
+                <div className="ag-dc-market-grid ag-pending-group">
                     {buyable.map((cc) => {
                         const card = DiceCitiesCards[cc.card];
                         const disabled = purchaseDisabled(card, cc.amount, myState) || busy;
+                        const pending = pendingTarget === `build:${cc.card}`;
                         return (
-                            <div key={cc.card} className="ag-dc-market-card" style={{ borderTopColor: ACTIVATION_META[activationFor(card)].color }}>
+                            <div
+                                key={cc.card}
+                                className={`ag-dc-market-card${pending ? ' ag-pending-skin' : ''}`}
+                                style={{ borderTopColor: ACTIVATION_META[activationFor(card)].color }}
+                            >
                                 <div className="ag-dc-market-card-top">
                                     <img className="ag-dc-market-icon" src={cardArt(card)} alt="" />
-                                    <span className="ag-dc-market-roll">🎲 {rollLabel(card)}</span>
+                                    {pending
+                                        ? <PendingTag label="Building" />
+                                        : <span className="ag-dc-market-roll">🎲 {rollLabel(card)}</span>}
                                 </div>
                                 <div className="ag-dc-market-name">{card.title}</div>
                                 <div className="ag-dc-market-yield">{yieldLabel(card)} · ×{cc.amount} left</div>
@@ -279,14 +302,15 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
                 </div>
 
                 {unbuiltLandmarks.length > 0 && (
-                    <div className="ag-dc-landmark-buys">
+                    <div className="ag-dc-landmark-buys ag-pending-group">
                         {unbuiltLandmarks.map(({ cardId, flag }) => {
                             const card = DiceCitiesCards[cardId];
                             const disabled = card.cost > myState.money || busy;
+                            const pending = pendingTarget === `landmark:${flag}`;
                             return (
                                 <button
                                     key={cardId}
-                                    className="ag-build-row ag-dc-landmark-buy"
+                                    className={`ag-build-row ag-dc-landmark-buy${pending ? ' ag-pending-skin' : ''}`}
                                     disabled={disabled}
                                     onClick={() => unlockLandmark(flag as string)}
                                 >
@@ -295,7 +319,9 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
                                         <span className="ag-build-name">Landmark · {card.title}</span>
                                         <span className="ag-build-cost">{card.text}</span>
                                     </span>
-                                    <span className="ag-build-tag">{card.cost}🪙</span>
+                                    {pending
+                                        ? <PendingTag label="Building" />
+                                        : <span className="ag-build-tag">{card.cost}🪙</span>}
                                 </button>
                             );
                         })}
@@ -303,14 +329,26 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
                 )}
 
                 {canReroll && (
-                    <button className="ag-btn ag-btn--light ag-btn--block ag-dc-reroll" onClick={doReroll} disabled={busy}>
+                    <ActionButton
+                        className="ag-btn ag-btn--light ag-btn--block ag-dc-reroll"
+                        onClick={doReroll}
+                        disabled={busy}
+                        pending={pendingTarget === "reroll"}
+                        pendingLabel="Re-rolling…"
+                    >
                         🎲 Re-roll the dice
-                    </button>
+                    </ActionButton>
                 )}
 
-                <button className="ag-btn ag-btn--success ag-btn--block" onClick={pass} disabled={busy}>
+                <ActionButton
+                    className="ag-btn ag-btn--success ag-btn--block"
+                    onClick={pass}
+                    disabled={busy}
+                    pending={pendingTarget === "endTurn"}
+                    pendingLabel="Ending your turn…"
+                >
                     ✓ End turn
-                </button>
+                </ActionButton>
                 <p className="ag-action-hint">Building or ending passes the dice to the next player.</p>
             </div>
         </div>
@@ -338,15 +376,29 @@ function SelectionHead({ icon, title, sub }: { icon: string; title: string; sub:
     );
 }
 
-function CardPickGrid({ cards, disabled, onPick }: { cards: uuidString[]; disabled: boolean; onPick: (cardId: uuidString) => void }) {
+function CardPickGrid({ cards, disabled, isPending, onPick }: {
+    cards: uuidString[];
+    disabled: boolean;
+    /** True for the card whose command is in flight — it wears the pending skin. */
+    isPending: (cardId: uuidString) => boolean;
+    onPick: (cardId: uuidString) => void;
+}) {
     return (
-        <div className="ag-dc-pick-grid">
+        <div className="ag-dc-pick-grid ag-pending-group">
             {cards.map((cardId, i) => {
                 const card = DiceCitiesCards[cardId];
+                const pending = isPending(cardId);
                 return (
-                    <button key={`${cardId}-${i}`} className="ag-dc-pick-card" disabled={disabled} onClick={() => onPick(cardId)}>
+                    <button
+                        key={`${cardId}-${i}`}
+                        className={`ag-dc-pick-card${pending ? ' ag-pending-skin' : ''}`}
+                        disabled={disabled}
+                        onClick={() => onPick(cardId)}
+                    >
                         <img className="ag-dc-pick-card-icon" src={cardArt(card)} alt="" />
-                        <span className="ag-dc-pick-card-name">{card.title}</span>
+                        {pending
+                            ? <PendingTag label="Sending" />
+                            : <span className="ag-dc-pick-card-name">{card.title}</span>}
                     </button>
                 );
             })}

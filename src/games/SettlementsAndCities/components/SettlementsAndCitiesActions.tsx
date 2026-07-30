@@ -5,7 +5,9 @@ import type { ISACSpecificGameStateResponse } from '@/games/SettlementsAndCities
 import type { SAC_Resource, SAC_DevCard } from '@/games/SettlementsAndCities/board';
 import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER } from '@/games/SettlementsAndCities/ui';
 import { IGameCommand } from '@/utils/apiModels/GameLogic';
-import type { ICommandResponse } from '@/app/api/game/command/route';
+import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
+import ActionButton from '@/components/ui/ActionButton';
+import PendingTag from '@/components/ui/PendingTag';
 import { useToast } from '@/components/ToastContext';
 import {
     SACRollDice,
@@ -54,7 +56,10 @@ interface SettlementsAndCitiesActionsProps {
     myUserId: string;
     boardMode: SACBoardMode;
     setBoardMode: (mode: SACBoardMode) => void;
-    submitCommand: (cmd: IGameCommand, cb: (r: ICommandResponse) => void) => void;
+    submitCommand: SubmitCommand;
+    /** The `target` of the in-flight command, so the tapped control alone shows
+     *  as processing. Null when nothing is in flight. */
+    pendingTarget: string | null;
 }
 
 export default function SettlementsAndCitiesActions({
@@ -63,6 +68,7 @@ export default function SettlementsAndCitiesActions({
     boardMode,
     setBoardMode,
     submitCommand,
+    pendingTarget,
 }: SettlementsAndCitiesActionsProps) {
     const [showYopModal, setShowYopModal] = useState(false);
     const [yopR1, setYopR1] = useState<SAC_Resource>('lumber');
@@ -88,8 +94,8 @@ export default function SettlementsAndCitiesActions({
     const playedDevCard = gs.playedDevCard;
     const specialBuild = gs.specialBuildActive;
 
-    function submit<T extends IGameCommand>(cmd: T) {
-        submitCommand(cmd, () => { setBoardMode('idle'); });
+    function submit<T extends IGameCommand>(cmd: T, target: string) {
+        submitCommand(cmd, () => { setBoardMode('idle'); }, target);
     }
     function toggleMode(mode: SACBoardMode) {
         setBoardMode(boardMode === mode ? 'idle' : mode);
@@ -120,6 +126,7 @@ export default function SettlementsAndCitiesActions({
     const devShort = shortfall(DEV_CARD_COST, res);
     const devDeckEmpty = gs.devCardDeckSize <= 0;
     const canBuyDevCard = !devShort && !devDeckEmpty;
+    const buyingDevCard = pendingTarget === 'buyDevCard';
 
     const buildList = (
         <div className="ag-build-list">
@@ -150,18 +157,20 @@ export default function SettlementsAndCitiesActions({
             })}
 
             <button
-                className={`ag-build-row${!canBuyDevCard ? ' ag-build-row--disabled' : ''}`}
+                className={`ag-build-row${!canBuyDevCard ? ' ag-build-row--disabled' : ''}${buyingDevCard ? ' ag-pending-skin' : ''}`}
                 disabled={!canBuyDevCard}
-                onClick={() => canBuyDevCard && submit(new SACBuyDevCard())}
+                onClick={() => canBuyDevCard && submit(new SACBuyDevCard(), 'buyDevCard')}
             >
                 <span className="ag-icon-box">🃏</span>
                 <span className="ag-build-main">
                     <span className="ag-build-name">Dev card</span>
                     <span className="ag-build-cost">{costText(DEV_CARD_COST)} · draw a development card</span>
                 </span>
-                {canBuyDevCard
-                    ? <span className="ag-build-tag">Buy</span>
-                    : <span className="ag-build-tag ag-build-tag--muted">{devDeckEmpty ? 'Deck empty' : devShort}</span>}
+                {buyingDevCard
+                    ? <PendingTag label="Drawing" />
+                    : canBuyDevCard
+                        ? <span className="ag-build-tag">Buy</span>
+                        : <span className="ag-build-tag ag-build-tag--muted">{devDeckEmpty ? 'Deck empty' : devShort}</span>}
             </button>
 
             <div className="ag-action-grid">
@@ -229,7 +238,7 @@ export default function SettlementsAndCitiesActions({
                 'success',
                 'Trade complete',
             );
-        });
+        }, 'trade');
     }
 
     const tradeModal = (
@@ -307,13 +316,15 @@ export default function SettlementsAndCitiesActions({
             </Modal.Body>
             <Modal.Footer>
                 <button className="ag-btn ag-btn--light" onClick={() => setShowTradeModal(false)}>Cancel</button>
-                <button
+                <ActionButton
                     className="ag-btn ag-btn--primary"
                     disabled={!canTrade}
+                    pending={pendingTarget === 'trade'}
+                    pendingLabel="Trading…"
                     onClick={confirmTrade}
                 >
                     {canTrade ? `Trade ${offerRatio}:1` : `Need ${offerRatio} ${RESOURCE_EMOJI[tradeOffer]}`}
-                </button>
+                </ActionButton>
             </Modal.Footer>
         </Modal>
     );
@@ -334,8 +345,8 @@ export default function SettlementsAndCitiesActions({
         : 0;
 
     function playDevCard(card: SAC_DevCard) {
-        if (card === 'knight') submit(new SACPlayKnight());
-        else if (card === 'roadBuilding') submit(new SACPlayRoadBuilding());
+        if (card === 'knight') submit(new SACPlayKnight(), `dev:${card}`);
+        else if (card === 'roadBuilding') submit(new SACPlayRoadBuilding(), `dev:${card}`);
         else if (card === 'yearOfPlenty') setShowYopModal(true);
         else if (card === 'monopoly') setShowMonopolyModal(true);
     }
@@ -347,10 +358,11 @@ export default function SettlementsAndCitiesActions({
                 const meta = SAC_DEV_CARD_META[card];
                 const count = myDevCards?.[card] ?? 0;
                 const disabled = !canPlayDevCards;
+                const pending = pendingTarget === `dev:${card}`;
                 return (
                     <button
                         key={card}
-                        className={`ag-build-row${disabled ? ' ag-build-row--disabled' : ''}`}
+                        className={`ag-build-row${disabled ? ' ag-build-row--disabled' : ''}${pending ? ' ag-pending-skin' : ''}`}
                         disabled={disabled}
                         onClick={() => !disabled && playDevCard(card)}
                     >
@@ -359,9 +371,11 @@ export default function SettlementsAndCitiesActions({
                             <span className="ag-build-name">{meta.name}{count > 1 ? ` ×${count}` : ''}</span>
                             <span className="ag-build-cost">{meta.blurb}</span>
                         </span>
-                        <span className={`ag-build-tag${disabled ? ' ag-build-tag--muted' : ''}`}>
-                            {playedDevCard ? 'Played' : 'Play'}
-                        </span>
+                        {pending
+                            ? <PendingTag label="Playing" />
+                            : <span className={`ag-build-tag${disabled ? ' ag-build-tag--muted' : ''}`}>
+                                {playedDevCard ? 'Played' : 'Play'}
+                            </span>}
                     </button>
                 );
             })}
@@ -405,7 +419,7 @@ export default function SettlementsAndCitiesActions({
                     const cmd = new SACPlayYearOfPlenty();
                     cmd.resource1 = yopR1;
                     cmd.resource2 = yopR2;
-                    submit(cmd);
+                    submit(cmd, 'dev:yearOfPlenty');
                     setShowYopModal(false);
                 }}>Confirm</Button>
             </Modal.Footer>
@@ -429,7 +443,7 @@ export default function SettlementsAndCitiesActions({
                 <Button variant="primary" onClick={() => {
                     const cmd = new SACPlayMonopoly();
                     cmd.resource = monopolyR;
-                    submit(cmd);
+                    submit(cmd, 'dev:monopoly');
                     setShowMonopolyModal(false);
                 }}>Confirm</Button>
             </Modal.Footer>
@@ -472,10 +486,15 @@ export default function SettlementsAndCitiesActions({
                     <b>⚡ Special Build</b> · spend resources to build or trade with the bank, then pass.
                 </div>
                 {buildList}
-                <button className="ag-btn ag-btn--success ag-btn--block" style={{ marginTop: 12, padding: '14px 0', fontSize: 15 }}
-                    onClick={() => submit(new SACEndTurn())}>
+                <ActionButton
+                    className="ag-btn ag-btn--success ag-btn--block"
+                    style={{ marginTop: 12, padding: '14px 0', fontSize: 15 }}
+                    pending={pendingTarget === 'endTurn'}
+                    pendingLabel="Passing…"
+                    onClick={() => submit(new SACEndTurn(), 'endTurn')}
+                >
                     ✓ Done building
-                </button>
+                </ActionButton>
                 <p className="ag-action-hint">Nothing to build? Just pass — the dice move on once everyone&apos;s had a chance.</p>
                 {tradeModal}
             </div>
@@ -520,13 +539,15 @@ export default function SettlementsAndCitiesActions({
     if (!hasRolled) {
         return (
             <div className="ag-actionsheet">
-                <button
+                <ActionButton
                     className="ag-btn ag-btn--primary ag-btn--roll ag-btn--block"
                     style={{ padding: '16px 0', fontSize: 16 }}
-                    onClick={() => submit(new SACRollDice())}
+                    pending={pendingTarget === 'roll'}
+                    pendingLabel="Rolling…"
+                    onClick={() => submit(new SACRollDice(), 'roll')}
                 >
                     🎲 Roll the dice
-                </button>
+                </ActionButton>
                 {devCardSection && <div style={{ marginTop: 12 }}>{devCardSection}</div>}
                 {yopModal}
                 {monopolyModal}
@@ -541,10 +562,15 @@ export default function SettlementsAndCitiesActions({
 
             {devCardSection && <div style={{ marginTop: 12 }}>{devCardSection}</div>}
 
-            <button className="ag-btn ag-btn--success ag-btn--block" style={{ marginTop: 12, padding: '14px 0', fontSize: 15 }}
-                onClick={() => submit(new SACEndTurn())}>
+            <ActionButton
+                className="ag-btn ag-btn--success ag-btn--block"
+                style={{ marginTop: 12, padding: '14px 0', fontSize: 15 }}
+                pending={pendingTarget === 'endTurn'}
+                pendingLabel="Ending your turn…"
+                onClick={() => submit(new SACEndTurn(), 'endTurn')}
+            >
                 ✓ End turn
-            </button>
+            </ActionButton>
             <p className="ag-action-hint">We&apos;ll let the next player know it&apos;s their move.</p>
 
             {yopModal}

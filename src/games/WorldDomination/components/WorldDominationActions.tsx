@@ -4,8 +4,8 @@ import type { IWorldDominationSpecificGameStateResponse } from '@/games/WorldDom
 import type { WorldDominationCardType } from '@/games/WorldDomination/board';
 import { TERRITORIES, isValidCardSet } from '@/games/WorldDomination/board';
 import Dice from '@/components/ui/Dice';
-import { IGameCommand } from '@/utils/apiModels/GameLogic';
-import type { ICommandResponse } from '@/app/api/game/command/route';
+import ActionButton from '@/components/ui/ActionButton';
+import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
 import {
     WorldDominationDeployArmies,
     WorldDominationCashInCards,
@@ -42,11 +42,14 @@ interface WorldDominationActionsProps {
     selTo: number | null;
     setSelFrom: (id: number | null) => void;
     setSelTo: (id: number | null) => void;
-    submitCommand: (cmd: IGameCommand, cb: (r: ICommandResponse) => void) => void;
+    submitCommand: SubmitCommand;
+    /** The `target` of the in-flight command, so the tapped button alone shows as
+     *  processing. Null when nothing is in flight. */
+    pendingTarget: string | null;
 }
 
 export default function WorldDominationActions({
-    gs, myUsername, selFrom, selTo, setSelFrom, setSelTo, submitCommand,
+    gs, myUsername, selFrom, selTo, setSelFrom, setSelTo, submitCommand, pendingTarget,
 }: WorldDominationActionsProps) {
     const me = gs.playerStates[myUsername];
     const [deployCount, setDeployCount] = useState(1);
@@ -94,7 +97,7 @@ export default function WorldDominationActions({
     function cashIn() {
         const cmd = new WorldDominationCashInCards();
         cmd.cardIds = selectedCardIds;
-        submitCommand(cmd, () => setSelectedCardIds([]));
+        submitCommand(cmd, () => setSelectedCardIds([]), 'cashIn');
     }
     const mustCashIn = me.cards.length >= 5;
 
@@ -119,15 +122,16 @@ export default function WorldDominationActions({
                 ))}
             </div>
             {selectedCardIds.length > 0 && (
-                <button
-                    type="button"
+                <ActionButton
                     className={`ag-btn ${canCashIn ? 'ag-btn--primary' : 'ag-btn--light'} ag-btn--block`}
                     style={{ marginTop: 10 }}
                     disabled={!canCashIn}
+                    pending={pendingTarget === 'cashIn'}
+                    pendingLabel="Cashing in…"
                     onClick={cashIn}
                 >
                     {canCashIn ? 'Cash in for armies' : 'Select a valid 3-card set'}
-                </button>
+                </ActionButton>
             )}
         </div>
     ) : null;
@@ -143,7 +147,7 @@ export default function WorldDominationActions({
             const cmd = new WorldDominationDeployArmies();
             cmd.territoryId = selFrom;
             cmd.count = deployCount;
-            submitCommand(cmd, () => setSelFrom(null));
+            submitCommand(cmd, () => setSelFrom(null), 'deploy');
         }
 
         return (
@@ -162,7 +166,14 @@ export default function WorldDominationActions({
                         <Stepper value={deployCount} min={1} max={gs.reinforcementsRemaining} onChange={setDeployCount} />
                         <div className="ag-action-grid" style={{ marginTop: 10 }}>
                             <button type="button" className="ag-btn ag-btn--light" onClick={() => setSelFrom(null)}>Change spot</button>
-                            <button type="button" className="ag-btn ag-btn--primary" onClick={deploy}>Place {deployCount}</button>
+                            <ActionButton
+                                className="ag-btn ag-btn--primary"
+                                pending={pendingTarget === 'deploy'}
+                                pendingLabel="Placing…"
+                                onClick={deploy}
+                            >
+                                Place {deployCount}
+                            </ActionButton>
                         </div>
                     </>
                 )}
@@ -181,18 +192,19 @@ export default function WorldDominationActions({
                         <b>Conquered {TERRITORIES[p.toTerritoryId].name}!</b> Move armies in.
                     </div>
                     <Stepper value={occupyCount} min={p.minArmies} max={Math.max(p.minArmies, p.maxArmies)} onChange={setOccupyCount} />
-                    <button
-                        type="button"
+                    <ActionButton
                         className="ag-btn ag-btn--primary ag-btn--block"
                         style={{ marginTop: 10 }}
+                        pending={pendingTarget === 'occupy'}
+                        pendingLabel="Moving in…"
                         onClick={() => {
                             const cmd = new WorldDominationOccupyTerritory();
                             cmd.armies = occupyCount;
-                            submitCommand(cmd, clearSelection);
+                            submitCommand(cmd, clearSelection, 'occupy');
                         }}
                     >
                         Move {occupyCount} in
-                    </button>
+                    </ActionButton>
                 </div>
             );
         }
@@ -200,7 +212,7 @@ export default function WorldDominationActions({
         if (mustCashIn) return cardHand;
 
         function endAttackPhase() {
-            submitCommand(new WorldDominationEndAttackPhase(), clearSelection);
+            submitCommand(new WorldDominationEndAttackPhase(), clearSelection, 'endAttack');
         }
 
         if (selFrom === null) {
@@ -208,9 +220,15 @@ export default function WorldDominationActions({
                 <div className="ag-actionsheet">
                     <p className="ag-action-hint" style={{ marginTop: 0 }}>Tap one of your territories (2+ armies) to attack from, or move on.</p>
                     {cardHand}
-                    <button type="button" className="ag-btn ag-btn--success ag-btn--block" style={{ marginTop: 10 }} onClick={endAttackPhase}>
+                    <ActionButton
+                        className="ag-btn ag-btn--success ag-btn--block"
+                        style={{ marginTop: 10 }}
+                        pending={pendingTarget === 'endAttack'}
+                        pendingLabel="Moving to Fortify…"
+                        onClick={endAttackPhase}
+                    >
                         ✓ Done attacking → Fortify
-                    </button>
+                    </ActionButton>
                 </div>
             );
         }
@@ -237,7 +255,7 @@ export default function WorldDominationActions({
             cmd.fromTerritoryId = selFrom!;
             cmd.toTerritoryId = selTo!;
             cmd.attackerDiceCount = diceCount;
-            submitCommand(cmd, () => { });
+            submitCommand(cmd, undefined, 'attack');
         }
 
         return (
@@ -275,7 +293,14 @@ export default function WorldDominationActions({
                         <Stepper value={diceCount} min={1} max={Math.max(1, maxDice)} onChange={setDiceCount} />
                         <div className="ag-action-grid" style={{ marginTop: 10 }}>
                             <button type="button" className="ag-btn ag-btn--light" onClick={clearSelection}>Stop attack</button>
-                            <button type="button" className="ag-btn ag-btn--primary ag-btn--roll" onClick={roll}>🎲 Roll</button>
+                            <ActionButton
+                                className="ag-btn ag-btn--primary ag-btn--roll"
+                                pending={pendingTarget === 'attack'}
+                                pendingLabel="Rolling…"
+                                onClick={roll}
+                            >
+                                🎲 Roll
+                            </ActionButton>
                         </div>
                     </>
                 ) : (
@@ -288,13 +313,20 @@ export default function WorldDominationActions({
     // ── Fortify ──────────────────────────────────────────────────────────────
     if (gs.phase === 'fortify') {
         function skip() {
-            submitCommand(new WorldDominationSkipFortify(), clearSelection);
+            submitCommand(new WorldDominationSkipFortify(), clearSelection, 'skipFortify');
         }
         if (selFrom === null) {
             return (
                 <div className="ag-actionsheet">
                     <p className="ag-action-hint" style={{ marginTop: 0 }}>Tap a territory to move armies from, or skip.</p>
-                    <button type="button" className="ag-btn ag-btn--success ag-btn--block" onClick={skip}>Skip fortifying</button>
+                    <ActionButton
+                        className="ag-btn ag-btn--success ag-btn--block"
+                        pending={pendingTarget === 'skipFortify'}
+                        pendingLabel="Ending your turn…"
+                        onClick={skip}
+                    >
+                        Skip fortifying
+                    </ActionButton>
                 </div>
             );
         }
@@ -314,7 +346,7 @@ export default function WorldDominationActions({
             cmd.fromTerritoryId = selFrom!;
             cmd.toTerritoryId = selTo!;
             cmd.armies = fortifyCount;
-            submitCommand(cmd, clearSelection);
+            submitCommand(cmd, clearSelection, 'fortify');
         }
         return (
             <div className="ag-actionsheet">
@@ -324,7 +356,14 @@ export default function WorldDominationActions({
                 <Stepper value={fortifyCount} min={1} max={Math.max(1, fromArmies - 1)} onChange={setFortifyCount} />
                 <div className="ag-action-grid" style={{ marginTop: 10 }}>
                     <button type="button" className="ag-btn ag-btn--light" onClick={clearSelection}>Cancel</button>
-                    <button type="button" className="ag-btn ag-btn--primary" onClick={fortify}>Move {fortifyCount}</button>
+                    <ActionButton
+                        className="ag-btn ag-btn--primary"
+                        pending={pendingTarget === 'fortify'}
+                        pendingLabel="Moving…"
+                        onClick={fortify}
+                    >
+                        Move {fortifyCount}
+                    </ActionButton>
                 </div>
             </div>
         );

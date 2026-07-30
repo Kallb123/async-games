@@ -8,6 +8,7 @@ import { SolitaireDraw, SolitaireMoveCard, SolitaireUndo, SolitaireAutoSolve } f
 import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import Stat from "@/components/ui/Stat";
+import ActionButton from "@/components/ui/ActionButton";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useEndGame } from "@/utils/hooks/useEndGame";
@@ -59,16 +60,18 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
         return () => clearInterval(id);
     }, [complete]);
 
-    const { submitCommand, submitting } = useSubmitCommand<ISolitaireGameDataResponse>(gameId, user, setGameData, getGameData);
+    const { submitCommand, submitting, pendingTarget } = useSubmitCommand<ISolitaireGameDataResponse>(gameId, user, setGameData, getGameData);
 
-    const handleDraw = () => submitCommand(new SolitaireDraw());
-    const handleUndo = () => submitCommand(new SolitaireUndo());
-    const handleAutoSolve = () => submitCommand(new SolitaireAutoSolve());
+    const handleDraw = () => submitCommand(new SolitaireDraw(), undefined, 'draw');
+    const handleUndo = () => submitCommand(new SolitaireUndo(), undefined, 'undo');
+    const handleAutoSolve = () => submitCommand(new SolitaireAutoSolve(), undefined, 'autoSolve');
     const handleMove = (source: SolitaireZoneRef, destination: SolitaireZoneRef, count: number) => {
         const command = new SolitaireMoveCard();
         command.source = source;
         command.destination = destination;
         command.count = count;
+        // No target: the board tracks the tapped card itself and skins it from
+        // `submitting`, so there's nothing here for a target key to match.
         submitCommand(command);
     };
 
@@ -115,7 +118,7 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
     const optionsMenu = state ? <GameOptionsMenu options={menuOptions} /> : undefined;
 
     return (
-        <GameShell title="Solitaire" subtitle={subtitle} right={optionsMenu}>
+        <GameShell title="Solitaire" subtitle={subtitle} right={optionsMenu} syncing={submitting}>
             <FcmTokenComp />
 
             {state && (
@@ -139,19 +142,40 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
 
             {autoSolveAvailable && (
                 <div className="ag-section">
-                    <button type="button" className="ag-btn ag-btn--primary ag-btn--block" onClick={handleAutoSolve} disabled={submitting}>
+                    <ActionButton
+                        className="ag-btn ag-btn--primary ag-btn--block"
+                        onClick={handleAutoSolve}
+                        disabled={submitting}
+                        pending={pendingTarget === 'autoSolve'}
+                        pendingLabel="Playing it out…"
+                    >
                         🪄 Auto-solve
-                    </button>
+                    </ActionButton>
                     <p className="ag-hint" style={{ textAlign: 'center' }}>Every card is face-up — the rest can be played out automatically.</p>
                 </div>
             )}
 
             {state && !complete && (
                 <div className="ag-section" style={{ display: 'flex', gap: 8 }}>
-                    <button type="button" className="ag-btn ag-btn--primary" style={{ flex: 1 }} onClick={handleDraw} disabled={submitting || (state.stockCount === 0 && state.waste.length === 0)}>
+                    <ActionButton
+                        className="ag-btn ag-btn--primary"
+                        style={{ flex: 1 }}
+                        onClick={handleDraw}
+                        disabled={submitting || (state.stockCount === 0 && state.waste.length === 0)}
+                        pending={pendingTarget === 'draw'}
+                        pendingLabel="Drawing…"
+                    >
                         Draw
-                    </button>
-                    <button type="button" className="ag-btn ag-btn--light" onClick={handleUndo} disabled={submitting || !state.canUndo}>Undo</button>
+                    </ActionButton>
+                    <ActionButton
+                        className="ag-btn ag-btn--light"
+                        onClick={handleUndo}
+                        disabled={submitting || !state.canUndo}
+                        pending={pendingTarget === 'undo'}
+                        pendingLabel="Undoing…"
+                    >
+                        Undo
+                    </ActionButton>
                     <button type="button" className="ag-btn ag-btn--light" onClick={handleHint}>Hint</button>
                 </div>
             )}

@@ -1,6 +1,7 @@
 import { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
-import { IGameCommand, SmartthinkSetSecretCode, SmartthinkSubmitGuess } from "@/utils/apiModels/GameLogic";
-import type { ICommandResponse } from "@/app/api/game/command/route";
+import { SmartthinkSetSecretCode, SmartthinkSubmitGuess } from "@/utils/apiModels/GameLogic";
+import type { SubmitCommand } from "@/utils/hooks/useSubmitCommand";
+import ActionButton from "@/components/ui/ActionButton";
 import { SMARTTHINK_CODE_LENGTH, SMARTTHINK_PEGS } from "@/games/Smartthink/ui";
 
 interface SmartthinkPlayerActionsProps {
@@ -10,7 +11,7 @@ interface SmartthinkPlayerActionsProps {
     /** The in-progress code/guess, one peg value per slot (or null). */
     currentGuess: (number | null)[];
     setCurrentGuess: (next: (number | null)[]) => void;
-    submitCommand: (command: IGameCommand, callback: (commandResponse: ICommandResponse) => void) => Promise<void>;
+    submitCommand: SubmitCommand;
     /** True while a command is in flight — disables submit so a double-tap
      *  can't fire two commands before the first response lands. */
     submitting: boolean;
@@ -80,13 +81,15 @@ export default function SmartthinkPlayerActions({
                     </p>
                 )}
                 <div className="ag-action-grid">
-                    <button
+                    <ActionButton
                         className={`ag-btn ag-btn--block ${settingSecret ? 'ag-btn--success' : 'ag-btn--primary ag-btn--roll'}`}
                         onClick={handleSubmit}
-                        disabled={submitting || !filled}
+                        disabled={!filled}
+                        pending={submitting}
+                        pendingLabel={settingSecret ? 'Locking it in…' : 'Checking your guess…'}
                     >
                         {settingSecret ? '🔒 Set secret code' : '🔓 Submit guess'}
-                    </button>
+                    </ActionButton>
                     <button className="ag-btn ag-btn--light" onClick={clear} style={{ flex: '0 0 auto' }}>↺ Clear</button>
                 </div>
             </div>

@@ -145,7 +145,7 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
     const optionsMenu = displayed ? <GameOptionsMenu options={menuOptions} /> : undefined;
 
     return (
-        <GameShell title="Smartthink" subtitle={subtitle} right={optionsMenu}>
+        <GameShell title="Smartthink" subtitle={subtitle} right={optionsMenu} syncing={submitting}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}

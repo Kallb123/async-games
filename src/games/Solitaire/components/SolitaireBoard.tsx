@@ -29,6 +29,7 @@ interface Selection {
  */
 export default function SolitaireBoard({ state, disabled = false, onDraw, onMove }: SolitaireBoardProps) {
     const [selection, setSelection] = useState<Selection | null>(null);
+    const [sentMove, setSentMove] = useState<{ source: SolitaireZoneRef; count: number } | null>(null);
 
     const legalMoveState = { waste: state.waste, foundations: state.foundations, tableau: state.tableau, stockCount: state.stockCount };
 
@@ -41,7 +42,13 @@ export default function SolitaireBoard({ state, disabled = false, onDraw, onMove
     const handleChoose = (move: ISolitaireLegalMove) => {
         onMove(move.source, move.destination, move.count);
         setSelection(null);
+        setSentMove({ source: move.source, count: move.count });
     };
+
+    // The cards we just sent keep a pending skin until the move lands — `disabled`
+    // is the in-flight flag, so this clears itself when the command resolves.
+    const pending = disabled ? sentMove : null;
+    const isPending = (source: SolitaireZoneRef) => !!pending && matchesSource(pending.source, source);
 
     const wasteFan = state.waste.slice(-3);
 
@@ -67,6 +74,7 @@ export default function SolitaireBoard({ state, disabled = false, onDraw, onMove
                                         card={card}
                                         onClick={isTop ? () => select({ zone: 'waste' }, 1, card) : undefined}
                                         selected={isTop && selection?.source.zone === 'waste'}
+                                        pending={isTop && isPending({ zone: 'waste' })}
                                     />
                                 </div>
                             );
@@ -85,6 +93,7 @@ export default function SolitaireBoard({ state, disabled = false, onDraw, onMove
                                 placeholder={top ? undefined : { S: '♠', H: '♥', C: '♣', D: '♦' }[suit]}
                                 onClick={top ? () => select({ zone: 'foundation', suit }, 1, top) : undefined}
                                 selected={selection?.source.zone === 'foundation' && selection.source.suit === suit}
+                                pending={isPending({ zone: 'foundation', suit })}
                             />
                         );
                     })}
@@ -104,6 +113,7 @@ export default function SolitaireBoard({ state, disabled = false, onDraw, onMove
                                         card={card}
                                         onClick={card.faceUp ? () => select({ zone: 'tableau', column: colIndex }, count, card) : undefined}
                                         selected={isSelected}
+                                        pending={isPending({ zone: 'tableau', column: colIndex }) && count <= (pending?.count ?? 0)}
                                     />
                                 </div>
                             );

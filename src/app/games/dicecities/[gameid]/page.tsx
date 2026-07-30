@@ -58,7 +58,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
 
     usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 
-    const { submitCommand, submitting } = useSubmitCommand<IDiceCitiesGameDataResponse>(gameId, user, setGameData, getGameData);
+    const { submitCommand, submitting, pendingTarget } = useSubmitCommand<IDiceCitiesGameDataResponse>(gameId, user, setGameData, getGameData);
 
     const live = {
         specificGameState: gameData?.specificGameState,
@@ -82,7 +82,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     // While reviewing a past turn, disable all interactive controls.
     const controlsCurrentTurn = nav.isLive ? displayedCurrentTurn : NO_ACTIVE_TURN;
     const controlsSubmit = nav.isLive ? submitCommand : noopSubmit;
-    const controlsBusy = nav.isLive && submitting;
+    const controlsPendingTarget = nav.isLive ? pendingTarget : null;
 
     const usernameList = gameData?.usernameList ?? [];
     const players: IDiceCitiesPlayerStateResponse[] = displayed?.playerStates ? Object.values(displayed.playerStates) : [];
@@ -190,7 +190,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     }
 
     return (
-        <GameShell title="Dice Cities" subtitle={subtitle} right={optionsMenu}>
+        <GameShell title="Dice Cities" subtitle={subtitle} right={optionsMenu} syncing={submitting}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
@@ -219,7 +219,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
                     myState={boardPlayer}
                     opponents={opponents}
                     submitCommand={controlsSubmit}
-                    busy={controlsBusy}
+                    pendingTarget={controlsPendingTarget}
                 />
             )}
 

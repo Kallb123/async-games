@@ -5,13 +5,11 @@ import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
-import { IGameCommand } from "@/utils/apiModels/GameLogic";
-import type { ICommandResponse } from "@/app/api/game/command/route";
 import type { ISACGameDataResponse, ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
 import type { SAC_Resource } from "@/games/SettlementsAndCities/board";
 import { BOARD_TOPOLOGY, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
 import { SAC_EXPANSION_IDS, enabledExpansionNames, normaliseExpansions } from "@/games/SettlementsAndCities/expansions";
-import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER } from "@/games/SettlementsAndCities/ui";
+import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER, type SACSpotKind } from "@/games/SettlementsAndCities/ui";
 import SettlementsAndCitiesBoard from "@/games/SettlementsAndCities/components/SettlementsAndCitiesBoard";
 import SettlementsAndCitiesActions, { SACBoardMode } from "@/games/SettlementsAndCities/components/SettlementsAndCitiesActions";
 import GameShell from "@/components/ui/GameShell";
@@ -25,7 +23,7 @@ import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useGameData } from "@/utils/hooks/useGameData";
-import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
+import { useSubmitCommand, type SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
 import { currentUsername } from "@/utils/ui/players";
 import {
@@ -56,6 +54,8 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     console.log(`GET ${pathName}`);
     const { user, isLoaded } = useUser();
     const [boardMode, setBoardMode] = useState<SACBoardMode>('idle');
+    // The board spot we last tapped; only meaningful while its command is in flight.
+    const [tappedSpot, setTappedSpot] = useState<{ kind: SACSpotKind; id: number } | null>(null);
     const [showLog, setShowLog] = useState(false);
     const router = useRouter();
 
@@ -79,13 +79,12 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
 
     usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 
-    const { submitCommand: sendCommand, submitting } = useSubmitCommand<ISACGameDataResponse>(gameId, user, setGameData, getGameData);
-    const submitCommand = (command: IGameCommand, callback: (r: ICommandResponse) => void) => {
+    const { submitCommand: sendCommand, submitting, pendingTarget } = useSubmitCommand<ISACGameDataResponse>(gameId, user, setGameData, getGameData);
+    const submitCommand: SubmitCommand = (command, callback, target) =>
         sendCommand(command, (data) => {
             setBoardMode('idle');
-            callback(data);
-        });
-    };
+            callback?.(data);
+        }, target);
 
     // Turn recap: replay past turns and render the reconstructed board read-only.
     // While reviewing (nav not live) `gs` is the historical snapshot rather than
@@ -132,7 +131,9 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     const validEdges = new Set<number>();
     const validHexes = new Set<number>();
 
-    if (gs && isMyTurn && !gameData.complete) {
+    // While a placement is in flight the board goes quiet — the only thing left
+    // lit is the pending spot, wearing the piece it's about to become.
+    if (gs && isMyTurn && !gameData.complete && !submitting) {
         const vertices = gs.vertices;
         const edges = gs.edges;
 
@@ -172,31 +173,33 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     // Board click handlers
     const handleVertexClick = (vertexId: number) => {
         if (!isMyTurn || !gs) return;
+        setTappedSpot({ kind: 'vertex', id: vertexId });
         if (boardMode === 'placeSettlementSetup') {
             const cmd = new SACPlaceSettlementSetup();
             cmd.vertexId = vertexId;
-            submitCommand(cmd, () => { });
+            submitCommand(cmd);
         } else if (boardMode === 'placeSettlement') {
             const cmd = new SACBuildSettlement();
             cmd.vertexId = vertexId;
-            submitCommand(cmd, () => { });
+            submitCommand(cmd);
         } else if (boardMode === 'placeCity') {
             const cmd = new SACBuildCity();
             cmd.vertexId = vertexId;
-            submitCommand(cmd, () => { });
+            submitCommand(cmd);
         }
     };
 
     const handleEdgeClick = (edgeId: number) => {
         if (!isMyTurn || !gs) return;
+        setTappedSpot({ kind: 'edge', id: edgeId });
         if (boardMode === 'placeRoadSetup') {
             const cmd = new SACPlaceRoadSetup();
             cmd.edgeId = edgeId;
-            submitCommand(cmd, () => { });
+            submitCommand(cmd);
         } else if (boardMode === 'placeRoad') {
             const cmd = new SACBuildRoad();
             cmd.edgeId = edgeId;
-            submitCommand(cmd, () => { });
+            submitCommand(cmd);
         }
     };
 
@@ -218,11 +221,18 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             ? usernameToUserId[Array.from(adjacentUsernames)[0]] ?? null
             : null;
 
+        setTappedSpot({ kind: 'hex', id: hexId });
         const cmd = new SACMoveRobber();
         cmd.hexId = hexId;
         cmd.stealFromUserId = stealFrom;
-        submitCommand(cmd, () => { });
+        submitCommand(cmd);
     };
+
+    // The tapped spot only wears its ghost piece while the command is in flight,
+    // so this clears itself as soon as the command resolves.
+    const pendingSpot = submitting && tappedSpot
+        ? { ...tappedSpot, colour: usernameToColor(myUsername) }
+        : null;
 
     const displayedWinner = nav.displayedWinner;
     const displayedCurrentTurn = nav.displayedCurrentTurn;
@@ -351,7 +361,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     }
 
     return (
-        <GameShell title="Settlements & Cities" subtitle={subtitle} right={optionsMenu}>
+        <GameShell title="Settlements & Cities" subtitle={subtitle} right={optionsMenu} syncing={submitting}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
@@ -387,7 +397,8 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                             lastRoll={gs.lastRoll}
                             lastRollDie1={gs.lastRollDie1}
                             lastRollDie2={gs.lastRollDie2}
-                            placementPrompt={boardMode !== 'idle' ? PLACEMENT_PROMPT[boardMode] ?? null : null}
+                            placementPrompt={boardMode !== 'idle' && !submitting ? PLACEMENT_PROMPT[boardMode] ?? null : null}
+                            pendingSpot={pendingSpot}
                         />
                     </div>
 
@@ -441,6 +452,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                             boardMode={boardMode}
                             setBoardMode={setBoardMode}
                             submitCommand={submitCommand}
+                            pendingTarget={pendingTarget}
                         />
                     )}
 
