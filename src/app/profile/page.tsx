@@ -165,7 +165,7 @@ export default function Profile() {
                                 {reaction.actorUsername} · {reaction.gameName}
                             </div>
                             <div className="ag-list-row-sub">
-                                {reaction.eventTitle ?? "your move"} · {formatRelativeTime(reaction.timestamp, now)}
+                                {reaction.eventTitle ?? "your move"}{now !== null && ` · ${formatRelativeTime(reaction.timestamp, now)}`}
                             </div>
                         </div>
                         <ReactionPicker
@@ -203,40 +203,33 @@ export default function Profile() {
                 )}
                 empty={<div className="ag-empty">No friends yet. Add someone to start a game together.</div>}
             >
-                {friends.map((friend) => {
-                    // Empty until the clock arrives on hydration, so the row reads as the
-                    // name alone rather than a dangling "Last active".
-                    const lastActive = friend.user.lastActionTimestamp
-                        ? formatRelativeTime(friend.user.lastActionTimestamp, now)
-                        : "";
-                    return (
-                        <div key={friend.friendshipId} className="ag-list-row">
-                            <Link
-                                href={`/profile/${friend.user.userId}`}
-                                style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, textDecoration: "none", color: "inherit" }}
-                            >
-                                <Avatar name={friend.user.username} size={36} />
-                                <div className="ag-list-row-main">
-                                    <div className="ag-list-row-title">{displayName(friend.user)}</div>
-                                    <div className="ag-list-row-sub">
-                                        {friend.user.lastActionTimestamp
-                                            ? lastActive && `Last active ${lastActive}`
-                                            : "No activity yet"}
-                                    </div>
+                {friends.map((friend) => (
+                    <div key={friend.friendshipId} className="ag-list-row">
+                        <Link
+                            href={`/profile/${friend.user.userId}`}
+                            style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, textDecoration: "none", color: "inherit" }}
+                        >
+                            <Avatar name={friend.user.username} size={36} />
+                            <div className="ag-list-row-main">
+                                <div className="ag-list-row-title">{displayName(friend.user)}</div>
+                                <div className="ag-list-row-sub">
+                                    {friend.user.lastActionTimestamp
+                                        ? now !== null && `Last active ${formatRelativeTime(friend.user.lastActionTimestamp, now)}`
+                                        : "No activity yet"}
                                 </div>
-                            </Link>
-                            <Link href="/newgame" className="ag-pill-action">Challenge</Link>
-                            <button
-                                type="button"
-                                className="ag-link-muted"
-                                style={{ marginLeft: 8 }}
-                                onClick={() => handleRemove(friend.friendshipId, 'Friend removed.')}
-                            >
-                                Remove
-                            </button>
-                        </div>
-                    );
-                })}
+                            </div>
+                        </Link>
+                        <Link href="/newgame" className="ag-pill-action">Challenge</Link>
+                        <button
+                            type="button"
+                            className="ag-link-muted"
+                            style={{ marginLeft: 8 }}
+                            onClick={() => handleRemove(friend.friendshipId, 'Friend removed.')}
+                        >
+                            Remove
+                        </button>
+                    </div>
+                ))}
             </ListSection>
 
             {/* Incoming requests */}

@@ -70,7 +70,7 @@ export default function NotificationDeviceList({ currentToken }: { currentToken?
                             {device.id === currentId && <span className="ag-tag">This device</span>}
                         </div>
                         <div className="ag-list-row-sub">
-                            Added {formatRelativeTime(device.registeredAt, now)} · last active {formatRelativeTime(device.lastSeenAt, now)}
+                            {now !== null && `Added ${formatRelativeTime(device.registeredAt, now)} · last active ${formatRelativeTime(device.lastSeenAt, now)}`}
                         </div>
                     </div>
                     <button

@@ -54,6 +54,6 @@ export function useNow(running: boolean = true): number | null {
  * minutes or coarser ("14h ago", "1h left"): they share the same ticker, but an
  * unchanged snapshot means a list of them doesn't re-render every second.
  */
-export function useNowToTheMinute(running: boolean = true): number | null {
-    return useSyncExternalStore<number | null>(running ? subscribe : subscribeNever, minuteSnapshot, noSnapshot);
+export function useNowToTheMinute(): number | null {
+    return useSyncExternalStore<number | null>(subscribe, minuteSnapshot, noSnapshot);
 }
