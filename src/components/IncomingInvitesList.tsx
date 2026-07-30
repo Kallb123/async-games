@@ -1,45 +1,23 @@
 'use client'
 
 import { IInvitationResponse } from "@/utils/mongodb/InvitationData";
-import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 import moment from 'moment';
 import { useToast } from "@/components/ToastContext";
 import Avatar from "@/components/ui/Avatar";
-import { SkeletonList } from "@/components/ui/Skeleton";
-import { usePushEvents, INVITE_EVENTS } from "@/utils/hooks/usePushEvents";
+import ListSection from "@/components/ui/ListSection";
+import { INVITE_EVENTS } from "@/utils/hooks/usePushEvents";
+import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 
 export default function IncomingInviteList() {
-    const { user, isLoaded } = useUser();
     const router = useRouter();
     const { showToast } = useToast();
-    const [inviteList, setInviteList] = useState([] as IInvitationResponse[]);
-    const [isLoading, setIsLoading] = useState(true);
+    const { data, isLoading, isRefreshing, refresh } = useRefreshableData<{ inviteList: IInvitationResponse[] }>(
+        '/api/user/incominginvites',
+        INVITE_EVENTS,
+    );
 
-    useEffect(() => {
-        refreshContent();
-    }, [isLoaded]);
-
-    usePushEvents(INVITE_EVENTS, () => refreshContent(), { refreshOnVisible: true });
-
-    const refreshContent = async () => {
-        if (isLoaded) {
-            if (!user) {
-                router.push('/login');
-            }
-            const unlocked = user?.publicMetadata.unlocked;
-            if (unlocked !== true) {
-                router.push('/unlockaccess');
-            }
-
-            fetch('/api/user/incominginvites')
-            .then(response => response.json())
-            .then(data => {if (data && data.inviteList) setInviteList(data.inviteList);})
-            .catch(error => console.error('Failed to load incoming invites', error))
-            .finally(() => setIsLoading(false));
-        }
-    }
+    const inviteList = data?.inviteList ?? [];
 
     const handleAccept = (inviteId: `${string}-${string}-${string}-${string}-${string}`) => {
         fetch('/api/invite/accept', {
@@ -57,40 +35,39 @@ export default function IncomingInviteList() {
                 router.push(`/games/${data.gameUrl}/${data.gameId}`);
             } else {
                 showToast('Invite accepted! Waiting for other players to accept.', 'success', 'Invite Accepted');
-                refreshContent();
+                refresh();
             }
         })
         .catch(() => showToast('Failed to accept the invite. Please try again.', 'danger'));
     }
 
-    if (inviteList.length === 0) return isLoading ? <SkeletonList rows={2} label /> : null;
-
     return (
-        <div className="ag-section">
-            <div className="ag-section-head">
-                <h2 className="ag-section-label">Invites · {inviteList.length}</h2>
-            </div>
-            <div className="ag-list">
-                {inviteList.map((invite) => (
-                    <div key={invite.inviteId} className="ag-list-row">
-                        <Avatar name={invite.sender} size={34} />
-                        <div className="ag-list-row-main">
-                            <div style={{ font: "500 13px/1.4 var(--ag-font)", color: "var(--ag-ink)" }}>
-                                <strong style={{ fontWeight: 800 }}>{invite.sender}</strong> invited you to<br />
-                                <strong style={{ fontWeight: 800 }}>{invite.gameFriendlyName}</strong>
-                                <span style={{ color: "var(--ag-ink-softer)", fontWeight: 500 }}> · {moment(invite.timestamp).fromNow()}</span>
-                            </div>
+        <ListSection
+            label="Invites"
+            count={inviteList.length}
+            isLoading={isLoading}
+            isRefreshing={isRefreshing}
+            hasItems={inviteList.length > 0}
+        >
+            {inviteList.map((invite) => (
+                <div key={invite.inviteId} className="ag-list-row">
+                    <Avatar name={invite.sender} size={34} />
+                    <div className="ag-list-row-main">
+                        <div style={{ font: "500 13px/1.4 var(--ag-font)", color: "var(--ag-ink)" }}>
+                            <strong style={{ fontWeight: 800 }}>{invite.sender}</strong> invited you to<br />
+                            <strong style={{ fontWeight: 800 }}>{invite.gameFriendlyName}</strong>
+                            <span style={{ color: "var(--ag-ink-softer)", fontWeight: 500 }}> · {moment(invite.timestamp).fromNow()}</span>
                         </div>
-                        <button
-                            type="button"
-                            className="ag-pill-action ag-pill-action--accept"
-                            onClick={() => handleAccept(invite.inviteId)}
-                        >
-                            Accept
-                        </button>
                     </div>
-                ))}
-            </div>
-        </div>
+                    <button
+                        type="button"
+                        className="ag-pill-action ag-pill-action--accept"
+                        onClick={() => handleAccept(invite.inviteId)}
+                    >
+                        Accept
+                    </button>
+                </div>
+            ))}
+        </ListSection>
     );
 }

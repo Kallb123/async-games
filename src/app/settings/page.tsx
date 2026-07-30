@@ -7,8 +7,8 @@ import DevTools from "@/components/DevTools";
 import NotificationDeviceList from "@/components/NotificationDeviceList";
 import { NotificationChannel, NOTIFICATION_CHANNELS } from "@/utils/firebase/notificationPreferences";
 import useFcmToken from "@/utils/hooks/useFcmToken";
-import { useUser } from "@clerk/nextjs";
-import { usePathname, useRouter } from "next/navigation";
+import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import packageJson from "@/../package.json";
 
@@ -20,8 +20,7 @@ interface NotificationPreferencesState {
 export default function Settings() {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
-    const { user, isLoaded } = useUser();
-    const router = useRouter();
+    const { isAuthorised } = useAuthGuard();
     const { showToast } = useToast();
     const { fcmToken } = useFcmToken();
 
@@ -30,18 +29,10 @@ export default function Settings() {
     const [hasPrefPermission, setHasPrefPermission] = useState(false);
 
     useEffect(() => {
-        if (isLoaded) {
-            if (!user) {
-                router.push('/login');
-                return;
-            }
-            const unlocked = user?.publicMetadata.unlocked;
-            if (unlocked !== true) {
-                router.push('/unlockaccess');
-            }
+        if (isAuthorised) {
             refreshPreferences();
         }
-    }, [isLoaded]);
+    }, [isAuthorised]);
 
     useEffect(() => {
         if (typeof window !== 'undefined' && 'Notification' in window) {

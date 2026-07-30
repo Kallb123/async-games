@@ -1,9 +1,9 @@
 'use client'
 import CurrentUserInfo from "@/components/CurrentUserInfo";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
-import { useUser } from "@clerk/nextjs";
-import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from "react";
+import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
+import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
+import { usePathname } from 'next/navigation';
 
 interface PublicUser {
   id: string;
@@ -15,29 +15,9 @@ interface PublicUser {
 export default function Users() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
-  const { user, isLoaded } = useUser();
-  const router = useRouter();
-
-  const [users, setUsers] = useState([] as PublicUser[]);
-
-  useEffect(() => {
-    if (isLoaded) {
-        if (!user) {
-            router.push('/login');
-        }
-
-        // Use `user` to render user details or create UI elements
-        const unlocked = user?.publicMetadata.unlocked;
-      
-        if (unlocked !== true) {
-          router.push('/unlockaccess');
-        }
-
-        fetch('/api/users')
-        .then(response => response.json())
-        .then(data => setUsers(data.users));
-    }
-  }, [isLoaded]);
+  useAuthGuard();
+  const { data } = useRefreshableData<{ users: PublicUser[] }>('/api/users');
+  const users = data?.users ?? [];
     
   const handleNotify = async (userId: string, e: React.MouseEvent<HTMLLIElement>) => {
     e.preventDefault();

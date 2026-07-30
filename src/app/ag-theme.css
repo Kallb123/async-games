@@ -29,6 +29,9 @@
     --ag-font: "Bricolage Grotesque", system-ui, -apple-system, sans-serif;
     --ag-shadow: 0 1px 3px rgba(60, 40, 20, 0.08);
     --ag-shadow-lift: 0 8px 24px rgba(60, 40, 20, 0.12);
+    /* Highlight band swept across content that is being refreshed in the
+       background — translucent so the rows underneath stay readable. */
+    --ag-shimmer: rgba(255, 255, 255, 0.55);
 
     color-scheme: light;
 }
@@ -760,6 +763,53 @@ button {
 
 @media (prefers-reduced-motion: reduce) {
     .ag-skeleton { animation: none; opacity: 0.7; }
+}
+
+/* ---- Background refresh shimmer ----
+   Applied to a container whose content is already on screen while a refetch is
+   in flight (a push notification told us to re-fetch). The content stays put —
+   no skeleton swap, so nothing below it moves — and a light band sweeps across
+   to show something is happening. Both animations start after a short delay so
+   a fast refresh finishes invisibly rather than flashing. */
+@keyframes ag-refresh-sweep {
+    from { background-position: 100% 0; }
+    to { background-position: 0% 0; }
+}
+
+@keyframes ag-refresh-dim {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.78; }
+}
+
+@keyframes ag-refresh-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.ag-refreshing {
+    position: relative;
+    animation: ag-refresh-dim 1.3s ease-in-out 0.2s infinite;
+}
+
+.ag-refreshing::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    /* Sized at 250% so the 20%-wide highlight band is half the container width
+       and starts/ends fully off the visible box. */
+    background-image: linear-gradient(100deg, transparent 40%, var(--ag-shimmer) 50%, transparent 60%);
+    background-size: 250% 100%;
+    background-repeat: no-repeat;
+    animation:
+        ag-refresh-sweep 1.3s linear 0.2s infinite,
+        ag-refresh-in 0.25s ease-out 0.2s both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ag-refreshing { animation: none; opacity: 0.7; }
+    .ag-refreshing::after { display: none; }
 }
 
 /* ============================================================= *

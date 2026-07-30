@@ -1,8 +1,7 @@
 'use client'
-import { useUser } from "@clerk/nextjs";
+import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { usePathname } from "next/navigation";
 import IncomingInviteList from "@/components/IncomingInvitesList";
 import OutgoingInviteList from "@/components/OutgoingInviteList";
 import MyTurnList from "@/components/MyTurnList";
@@ -13,22 +12,7 @@ import Avatar from "@/components/ui/Avatar";
 export default function Home() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
-  const { user, isLoaded } = useUser();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (isLoaded) {
-        if (!user) {
-            router.push('/login');
-            return;
-        }
-
-        const unlocked = user?.publicMetadata.unlocked;
-        if (unlocked !== true) {
-          router.push('/unlockaccess');
-        }
-    }
-  }, [isLoaded, user]);
+  const { user } = useAuthGuard();
 
   const displayName = user?.firstName || user?.username || "there";
 

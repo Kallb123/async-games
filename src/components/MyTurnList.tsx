@@ -1,49 +1,28 @@
 'use client'
 
 import { IGameResponse } from "@/utils/apiModels/GameDataApi";
-import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 import { metaForGame } from "@/utils/ui/games";
 import { opponents } from "@/utils/ui/players";
 import GameThumb, { accentVar } from "@/components/ui/GameThumb";
+import Refreshable from "@/components/ui/Refreshable";
 import { SkeletonTurnCards } from "@/components/ui/Skeleton";
-import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
+import { TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
+import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
+import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { formatRemainingTimeShort } from "@/utils/games/TurnTimer";
 
 const MY_TURN_EVENTS = ['NewInvite', 'GameStart', ...TURN_ADVANCED_EVENTS];
 
 export default function MyTurnList() {
-    const { user, isLoaded } = useUser();
+    const { user } = useAuthGuard();
     const router = useRouter();
-    const [gameList, setGameList] = useState([] as IGameResponse[]);
-    const [isLoading, setIsLoading] = useState(true);
+    const { data, isLoading, isRefreshing } = useRefreshableData<{ gameList: IGameResponse[] }>(
+        '/api/game/myturnlist',
+        MY_TURN_EVENTS,
+    );
 
-    useEffect(() => {
-        refreshContent();
-    }, [isLoaded]);
-
-    usePushEvents(MY_TURN_EVENTS, () => refreshContent(), { refreshOnVisible: true });
-
-    const refreshContent = async () => {
-        if (isLoaded) {
-            if (!user) {
-                router.push('/login');
-            }
-            const unlocked = user?.publicMetadata.unlocked;
-            if (unlocked !== true) {
-                router.push('/unlockaccess');
-            }
-
-            setIsLoading(true);
-            fetch('/api/game/myturnlist')
-            .then(response => response.json())
-            .then(data => {if (data && data.gameList) setGameList(data.gameList)})
-            .catch(error => console.error('Failed to load my turn list', error))
-            .finally(() => setIsLoading(false));
-        }
-    }
-
+    const gameList = data?.gameList ?? [];
     const count = gameList.length;
 
     return (
@@ -59,11 +38,11 @@ export default function MyTurnList() {
                 </p>
             </div>
 
-            {isLoading && count === 0 && <SkeletonTurnCards count={2} />}
+            {isLoading && <SkeletonTurnCards count={2} />}
 
-            {count > 0 && (
+            {!isLoading && count > 0 && (
                 <div className="ag-section">
-                    <div className="ag-stack">
+                    <Refreshable className="ag-stack" isRefreshing={isRefreshing}>
                         {gameList.map((game) => {
                             const meta = metaForGame({ url: game.url, friendlyName: game.friendlyName });
                             const accent = meta ? accentVar(meta.accent) : "var(--ag-terracotta)";
@@ -94,7 +73,7 @@ export default function MyTurnList() {
                                 </div>
                             );
                         })}
-                    </div>
+                    </Refreshable>
                 </div>
             )}
         </>
