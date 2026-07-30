@@ -1,7 +1,7 @@
 import { GameDataModel, IGameData, IGameDataDocument } from "@/utils/mongodb/GameData";
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
-import { DiceCitiesCardIds } from "./cards";
+import { BANK_TOTAL_COINS, DiceCitiesCardIds, STARTING_PLAYER_COINS } from "./cards";
 import { IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "./apiModels";
 import { uuidString, GameResultStatGroup, GameResultChart, formatPerTurnChart, compactCharts, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
@@ -77,7 +77,7 @@ export function buildInitialDiceCitiesState(userIdList: string[]): IDiceCitiesGa
                 { card: DiceCitiesCardIds.WHEAT_FIELD, amount: 1 },
                 { card: DiceCitiesCardIds.BAKERY, amount: 1 },
             ],
-            money: 3,
+            money: STARTING_PLAYER_COINS,
             totalCoinsEarned: 0,
             doubleUnlocked: false,
             bonusDiningAndStore: false,
@@ -104,6 +104,8 @@ export function buildInitialDiceCitiesState(userIdList: string[]): IDiceCitiesGa
             { card: DiceCitiesCardIds.TV_STATION, amount: userIdList.length },
             { card: DiceCitiesCardIds.BUSINESS_CENTER, amount: userIdList.length },
         ],
+        // The players' starting coins are dealt out of the bank's fixed supply.
+        bankMoney: BANK_TOTAL_COINS - (STARTING_PLAYER_COINS * userIdList.length),
         playerStates,
         hasRolled: false,
         awaitingTSSelection: false,
@@ -182,6 +184,11 @@ export interface IDiceCitiesPlayerState {
 
 export interface IDiceCitiesGameState {
     bankCards: IDiceCitiesCardCount[],
+    // Coins left in the bank. The game's coin supply is capped at
+    // BANK_TOTAL_COINS, so this is what's available to pay dice-roll income
+    // with - bank payouts are paid short once it hits zero, and coins spent on
+    // cards flow back in here.
+    bankMoney: number,
     playerStates: Map<string, IDiceCitiesPlayerState>,
     hasRolled: boolean,
     awaitingTSSelection: boolean,
@@ -216,6 +223,9 @@ var DiceCitiesGameDataSchema = new Schema<IDiceCitiesGameDataDocument>({
             card: String,
             amount: Number
         }],
+        // Games already in progress when bank tracking was added have no stored
+        // balance; they hydrate with a full bank rather than an undefined one.
+        bankMoney: { type: Number, default: BANK_TOTAL_COINS },
         playerStates: {
             type: Schema.Types.Map,
             of: {
@@ -296,6 +306,7 @@ export function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap:
                 amount: cardCount.amount
             };
         }),
+        bankMoney: gameState.bankMoney,
         playerStates,
         hasRolled: gameState.hasRolled,
         awaitingTSSelection: gameState.awaitingTSSelection,

@@ -1,4 +1,4 @@
-import type { IDiceCitiesGameData, IDiceCitiesPlayerState } from "@/games/DiceCities/DiceCitiesModels";
+import type { IDiceCitiesGameData, IDiceCitiesGameState, IDiceCitiesPlayerState } from "@/games/DiceCities/DiceCitiesModels";
 import type { IDiceCitiesCard } from "@/games/DiceCities/apiModels";
 import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
@@ -15,7 +15,11 @@ export interface IDiceCitiesDiceRollOutcome extends ICommandOutcome {
     // Per-player totalCoinsEarned deltas from this roll (bank payouts, steals
     // received) - unlike moneyChanges this is never negative, so Undo can
     // subtract it back out when a Radio Tower reroll discards this roll.
-    coinsEarnedChanges: Map<string, number>
+    coinsEarnedChanges: Map<string, number>,
+    // Net change to the bank's balance from this roll: negative by whatever it
+    // paid out (steals only move coins between players). Recorded so Undo can
+    // put those coins back when a Radio Tower reroll discards the roll.
+    bankChange: number
 }
 
 @serializable
@@ -69,6 +73,7 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
     doubleDice: boolean = false;
     moneyChanges: Map<string, number> = new Map;
     coinsEarnedChanges: Map<string, number> = new Map;
+    bankChange: number = 0;
     // Recorded RNG outcomes, populated on first Execute so the roll can be
     // deterministically replayed (turn recap / planning).
     recordedRoll1?: number;
@@ -113,6 +118,7 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
         dcGameData.specificGameState.hasReRolled = false;
         this.moneyChanges = outcome.moneyChanges;
         this.coinsEarnedChanges = outcome.coinsEarnedChanges;
+        this.bankChange = outcome.bankChange;
         let totalRoll = this.doubleDice && outcome.roll2 ? outcome.roll1 + outcome.roll2 : outcome.roll1;
 
         currentPlayerState!.lastDiceSelection = this.doubleDice ? 2 : 1;
@@ -127,20 +133,20 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
     Undo (gameData: IGameData) {
         const dcGameData: IDiceCitiesGameData = gameData as IDiceCitiesGameData;
 
-        const moneyMap: Map<string, number> = new Map(Object.entries(this.moneyChanges));
-
-        moneyMap.forEach((moneyChange, userId) => {
+        toChangeMap(this.moneyChanges).forEach((moneyChange, userId) => {
             const playerState = dcGameData.specificGameState.playerStates.get(userId);
             if (!playerState) {
                 return;
             }
 
-            playerState.money += moneyChange;
+            playerState.money -= moneyChange;
         });
 
-        const coinsEarnedMap: Map<string, number> = new Map(Object.entries(this.coinsEarnedChanges));
+        // Hand the bank back whatever this roll drew out of it, so the coin
+        // supply still adds up once the roll is discarded.
+        dcGameData.specificGameState.bankMoney -= this.bankChange;
 
-        coinsEarnedMap.forEach((coinsEarnedChange, userId) => {
+        toChangeMap(this.coinsEarnedChanges).forEach((coinsEarnedChange, userId) => {
             const playerState = dcGameData.specificGameState.playerStates.get(userId);
             if (!playerState) {
                 return;
@@ -215,8 +221,7 @@ export class DiceCitiesRequestCardPurchase implements IGameCommand {
             };
         }
 
-        // TODO: Add bank money
-        currentPlayerState.money -= cardObject.cost;
+        payCostToBank(dcGameData.specificGameState, currentPlayerState, cardObject.cost);
 
         bankCard.amount--;
         if (currentOwned) {
@@ -326,8 +331,7 @@ export class DiceCitiesRequestUnlockTrainStation implements IGameCommand {
             };
         }
 
-        // TODO: Add bank money
-        currentPlayerState.money -= cardObject.cost;
+        payCostToBank(dcGameData.specificGameState, currentPlayerState, cardObject.cost);
 
         currentPlayerState.doubleUnlocked = true;
 
@@ -393,8 +397,7 @@ export class DiceCitiesRequestUnlockShoppingMall implements IGameCommand {
             };
         }
 
-        // TODO: Add bank money
-        currentPlayerState.money -= cardObject.cost;
+        payCostToBank(dcGameData.specificGameState, currentPlayerState, cardObject.cost);
 
         currentPlayerState.bonusDiningAndStore = true;
 
@@ -460,8 +463,7 @@ export class DiceCitiesRequestUnlockAmusementPark implements IGameCommand {
             };
         }
 
-        // TODO: Add bank money
-        currentPlayerState.money -= cardObject.cost;
+        payCostToBank(dcGameData.specificGameState, currentPlayerState, cardObject.cost);
 
         currentPlayerState.rerollDoubles = true;
 
@@ -527,8 +529,7 @@ export class DiceCitiesRequestUnlockRadioTower implements IGameCommand {
             };
         }
 
-        // TODO: Add bank money
-        currentPlayerState.money -= cardObject.cost;
+        payCostToBank(dcGameData.specificGameState, currentPlayerState, cardObject.cost);
 
         currentPlayerState.oneReroll = true;
 
@@ -884,18 +885,25 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
             }
         }
         const lastCommand = dcGameData.gameState.commandHistory.findLast(() => true);
-        const lastCommandDeserialised = deserializeJSON(JSON.stringify(lastCommand));
-        if (!(lastCommandDeserialised instanceof DiceCitiesRequestDiceRoll)) {
+        // Persisted history hands back plain objects that need rehydrating, but
+        // during replay the entry is already the live command instance - and
+        // stringifying that would flatten its recorded moneyChanges Map to {},
+        // leaving Undo nothing to reverse.
+        const lastRoll = lastCommand instanceof DiceCitiesRequestDiceRoll
+            ? lastCommand
+            : deserializeJSON(JSON.stringify(lastCommand));
+        if (!(lastRoll instanceof DiceCitiesRequestDiceRoll)) {
             console.log("last command:", lastCommand);
             return {
                 turnOver: false,
                 validMove: false
             }
         }
-        const doubleDice = lastCommandDeserialised.doubleDice;
+        const doubleDice = lastRoll.doubleDice;
 
-        // TODO: Implement undo!
-        lastCommandDeserialised.Undo(dcGameData);
+        // Reverses the discarded roll: every coin it moved goes back where it
+        // came from, including to the bank.
+        lastRoll.Undo(dcGameData);
 
         dcGameData.specificGameState.awaitingBCSelectionOpponent = false;
         dcGameData.specificGameState.awaitingBCSelectionOwn = false;
@@ -943,6 +951,28 @@ function removeCardFromPlayerState(cardId: uuidString, playerState: IDiceCitiesP
     }
 }
 
+// Money/coins-earned deltas recorded on a command come back from Mongo as plain
+// objects rather than Maps, so normalise either shape before reading them.
+function toChangeMap(changes: Map<string, number>): Map<string, number> {
+    return changes instanceof Map ? changes : new Map(Object.entries(changes));
+}
+
+// Coins a player spends on a card go back into the bank - the coin supply is
+// fixed, so spending is what refills it.
+function payCostToBank(gameState: IDiceCitiesGameState, playerState: IDiceCitiesPlayerState, cost: number) {
+    playerState.money -= cost;
+    gameState.bankMoney += cost;
+}
+
+// Draws up to `amount` out of the bank, returning what it could actually pay.
+// The bank never pays out coins it doesn't hold, so a player can't be handed
+// coins that don't exist.
+function takeFromBank(gameState: IDiceCitiesGameState, amount: number): number {
+    const paid = Math.min(amount, gameState.bankMoney);
+    gameState.bankMoney -= paid;
+    return paid;
+}
+
 // Bundles recorded dice values for replay, or returns undefined for a fresh roll.
 function recordedRolls(roll1?: number, roll2?: number | null): { roll1: number, roll2: number | null } | undefined {
     return roll1 === undefined ? undefined : { roll1, roll2: roll2 ?? null };
@@ -965,7 +995,8 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean, recorded
             roll1: 0,
             roll2: 0,
             moneyChanges: new Map,
-            coinsEarnedChanges: new Map
+            coinsEarnedChanges: new Map,
+            bankChange: 0
         };
     }
 
@@ -975,6 +1006,9 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean, recorded
 
     const moneyChanges: Map<string, number> = new Map;
     const coinsEarnedChanges: Map<string, number> = new Map;
+    // What the bank paid out this roll, and what it couldn't cover.
+    let bankPaid = 0;
+    let bankShortfall = 0;
     dcGameData.specificGameState.playerStates.forEach((ps, userId) => {
         moneyChanges.set(userId, 0);
         coinsEarnedChanges.set(userId, 0);
@@ -1057,13 +1091,21 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean, recorded
                 // What card is this??
                 console.error("Ended up with no money for card:", card);
             }
-            // TODO: Consider bank money? (42*1 + 24*5 + 12*10 = 42+120+120 = 282)
-            playerState.money += cardAmount;
-            playerState.totalCoinsEarned += cardAmount;
-            coinsEarnedChanges.set(userId, (coinsEarnedChanges.get(userId) ?? 0) + cardAmount);
-            moneyChanges.set(userId, (moneyChanges.get(userId) ?? 0) + cardAmount);
+            // Card income comes out of the bank's fixed supply: if it can't cover
+            // the full amount the player is paid what's left, not coins that
+            // don't exist.
+            const paid = takeFromBank(dcGameData.specificGameState, cardAmount);
+            bankPaid += paid;
+            bankShortfall += cardAmount - paid;
+            playerState.money += paid;
+            playerState.totalCoinsEarned += paid;
+            coinsEarnedChanges.set(userId, (coinsEarnedChanges.get(userId) ?? 0) + paid);
+            moneyChanges.set(userId, (moneyChanges.get(userId) ?? 0) + paid);
         });
     });
+    if (bankShortfall > 0) {
+        dcGameData.gameState.history.unshift(`The bank ran out of coins - ${bankShortfall} coin${bankShortfall === 1 ? "" : "s"} of income went unpaid`);
+    }
     // Award purple cards
     const stadiumCard = DiceCitiesCards[DiceCitiesCardIds.STADIUM];
     if (stadiumCard.rollNumber.includes(totalRoll)) {
@@ -1116,7 +1158,8 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean, recorded
         roll1,
         roll2,
         moneyChanges,
-        coinsEarnedChanges
+        coinsEarnedChanges,
+        bankChange: -bankPaid
     }
     return outcome;
 }

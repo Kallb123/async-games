@@ -1,5 +1,15 @@
 import { IDiceCitiesCard } from "./apiModels";
 
+// The whole coin supply of a Dice Cities game. Every coin a player holds came
+// out of the bank (starting coins, dice payouts) and every coin they spend on a
+// card goes straight back in, so the bank plus all the players' purses always
+// add up to exactly this. A payout the bank can't cover is paid short rather
+// than minting coins that don't exist.
+export const BANK_TOTAL_COINS = 60;
+
+// Coins each player is dealt out of the bank when the game is created.
+export const STARTING_PLAYER_COINS = 3;
+
 export enum DiceCitiesCardIds {
     WHEAT_FIELD = "2d5aaaa4-e939-43a4-84ab-7ebb89e16ee5",
     RANCH = "ff935104-9d5e-403f-82c7-a01bdaed330d",

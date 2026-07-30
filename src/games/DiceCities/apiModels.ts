@@ -40,6 +40,8 @@ export interface IDiceCitiesPlayerStateResponse {
 
 export interface IDiceCitiesGameStateResponse {
     bankCards: IDiceCitiesCardCountResponse[],
+    /** Coins the bank has left to pay out, of its BANK_TOTAL_COINS supply. */
+    bankMoney: number,
     playerStates: { [key: string]: IDiceCitiesPlayerStateResponse },
     hasRolled: boolean,
     awaitingTSSelection: boolean,
