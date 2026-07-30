@@ -1,7 +1,7 @@
 'use client'
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { GAME_META, COMING_SOON, GAME_CATEGORIES, GameCategory } from "@/utils/ui/games";
 import GameThumb, { accentVar } from "@/components/ui/GameThumb";
@@ -12,7 +12,6 @@ export default function NewGame() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
   useAuthGuard();
-  const router = useRouter();
   const [filter, setFilter] = useState<"All" | GameCategory>("All");
 
   const featured = GAME_META.dicecities;

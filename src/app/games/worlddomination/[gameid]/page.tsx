@@ -18,7 +18,6 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
-import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
@@ -34,7 +33,7 @@ const PHASE_LABEL: Record<IWorldDominationSpecificGameStateResponse['phase'], st
 export default function GameWorldDomination({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
-    const { user, isAuthorised } = useAuthGuard();
+    const { user } = useAuthGuard();
     const [selFrom, setSelFrom] = useState<number | null>(null);
     const [selTo, setSelTo] = useState<number | null>(null);
     const [showLog, setShowLog] = useState(false);
@@ -43,14 +42,6 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     const gameId = gameid;
 
     const { gameData, setGameData, getGameData } = useGameData<IWorldDominationGameDataResponse>(gameId);
-
-    useEffect(() => {
-        if (isAuthorised) {
-            getGameData();
-        }
-    }, [isAuthorised]);
-
-    usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 
     const { submitCommand, submitting, pendingTarget } = useSubmitCommand<IWorldDominationGameDataResponse>(gameId, user, setGameData, getGameData);
 

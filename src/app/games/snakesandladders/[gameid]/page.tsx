@@ -2,7 +2,7 @@
 import { use } from "react";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ISnakesAndLaddersGameDataResponse } from "@/games/SnakesAndLadders/apiModels";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { IGameCommand } from "@/utils/apiModels/GameLogic";
@@ -20,7 +20,6 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
-import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand, type SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { ISnakesAndLaddersGameStateResponse } from "@/games/SnakesAndLadders/apiModels";
@@ -31,7 +30,7 @@ import { currentUsername } from "@/utils/ui/players";
 export default function GameSnakesAndLadders({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
-    const { user, isAuthorised } = useAuthGuard();
+    const { user } = useAuthGuard();
     const [showLog, setShowLog] = useState(false);
     // The post-roll payoff screen lives here (not in the actions component) so
     // it survives the roll advancing the turn to the next player.
@@ -41,14 +40,6 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     const gameId = gameid;
 
     const { gameData, setGameData, getGameData } = useGameData<ISnakesAndLaddersGameDataResponse>(gameId);
-
-    useEffect(() => {
-        if (isAuthorised) {
-            getGameData();
-        }
-    }, [isAuthorised]);
-
-    usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 
     const { submitCommand, submitting } = useSubmitCommand<ISnakesAndLaddersGameDataResponse>(gameId, user, setGameData, getGameData);
 

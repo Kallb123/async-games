@@ -2,7 +2,7 @@
 import { use } from "react";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import GameShell from "@/components/ui/GameShell";
@@ -17,7 +17,6 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
-import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { landmarkCount } from "@/games/DiceCities/ui";
@@ -32,21 +31,13 @@ const noopSubmit = async () => {};
 export default function GameDiceCities({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
-    const { user, isAuthorised } = useAuthGuard();
+    const { user } = useAuthGuard();
     const [showLog, setShowLog] = useState(false);
 
     const { gameid } = use(params);
     const gameId = gameid;
 
     const { gameData, setGameData, getGameData } = useGameData<IDiceCitiesGameDataResponse>(gameId);
-
-    useEffect(() => {
-        if (isAuthorised) {
-            getGameData();
-        }
-    }, [isAuthorised]);
-
-    usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 
     const { submitCommand, submitting, pendingTarget } = useSubmitCommand<IDiceCitiesGameDataResponse>(gameId, user, setGameData, getGameData);
 

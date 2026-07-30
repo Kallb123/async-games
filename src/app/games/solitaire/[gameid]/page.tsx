@@ -10,7 +10,6 @@ import Stat from "@/components/ui/Stat";
 import ActionButton from "@/components/ui/ActionButton";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useGameData } from "@/utils/hooks/useGameData";
-import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useToast } from "@/components/ToastContext";
@@ -22,7 +21,7 @@ import SolitaireVictoryScreen from "@/games/Solitaire/components/SolitaireVictor
 export default function GameSolitaire({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
-    const { user, isAuthorised } = useAuthGuard();
+    const { user } = useAuthGuard();
     const [showLog, setShowLog] = useState(false);
     const { showToast } = useToast();
 
@@ -30,14 +29,6 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
     const gameId = gameid;
 
     const { gameData, setGameData, getGameData } = useGameData<ISolitaireGameDataResponse>(gameId);
-
-    useEffect(() => {
-        if (isAuthorised) {
-            getGameData();
-        }
-    }, [isAuthorised]);
-
-    usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 
     const { endGame } = useEndGame(gameId);
 

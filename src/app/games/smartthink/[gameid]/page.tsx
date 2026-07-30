@@ -2,7 +2,7 @@
 import { use } from "react";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ISmartthinkGameDataResponse } from "@/games/Smartthink/apiModels";
 import GameShell from "@/components/ui/GameShell";
@@ -15,7 +15,6 @@ import TurnNavControls from "@/components/games/TurnNavControls";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useEndGame } from "@/utils/hooks/useEndGame";
-import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import type { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
@@ -28,7 +27,7 @@ const emptyGuess = (): (number | null)[] => Array(SMARTTHINK_CODE_LENGTH).fill(n
 export default function GameSmartthink({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
-    const { user, isAuthorised } = useAuthGuard();
+    const { user } = useAuthGuard();
     const [currentGuess, setCurrentGuess] = useState<(number | null)[]>(emptyGuess());
     const [showLog, setShowLog] = useState(false);
 
@@ -36,14 +35,6 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
     const gameId = gameid;
 
     const { gameData, setGameData, getGameData } = useGameData<ISmartthinkGameDataResponse>(gameId);
-
-    useEffect(() => {
-        if (isAuthorised) {
-            getGameData();
-        }
-    }, [isAuthorised]);
-
-    usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 
     const { submitCommand, submitting } = useSubmitCommand<ISmartthinkGameDataResponse>(gameId, user, setGameData, getGameData);
 

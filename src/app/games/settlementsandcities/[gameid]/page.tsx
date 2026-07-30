@@ -2,7 +2,7 @@
 import { use } from "react";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ISACGameDataResponse, ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
 import type { SAC_Resource } from "@/games/SettlementsAndCities/board";
@@ -21,7 +21,6 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
-import { usePushEvents, TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand, type SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
@@ -52,7 +51,7 @@ const PLACEMENT_PROMPT: Partial<Record<SACBoardMode, string>> = {
 export default function GameSettlementsAndCities({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
-    const { user, isAuthorised } = useAuthGuard();
+    const { user } = useAuthGuard();
     const [boardMode, setBoardMode] = useState<SACBoardMode>('idle');
     // The board spot we last tapped; only meaningful while its command is in flight.
     const [tappedSpot, setTappedSpot] = useState<{ kind: SACSpotKind; id: number } | null>(null);
@@ -62,14 +61,6 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     const gameId = gameid;
 
     const { gameData, setGameData, getGameData } = useGameData<ISACGameDataResponse>(gameId);
-
-    useEffect(() => {
-        if (isAuthorised) {
-            getGameData();
-        }
-    }, [isAuthorised]);
-
-    usePushEvents(TURN_ADVANCED_EVENTS, () => getGameData(), { refreshOnVisible: true });
 
     const { submitCommand: sendCommand, submitting, pendingTarget } = useSubmitCommand<ISACGameDataResponse>(gameId, user, setGameData, getGameData);
     const submitCommand: SubmitCommand = (command, callback, target) =>
