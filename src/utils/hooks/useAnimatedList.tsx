@@ -3,7 +3,7 @@
 import { Children, isValidElement, ReactElement, ReactNode, useEffect, useRef, useState } from "react";
 
 /** Must match the `.ag-anim-item` transition in `ag-theme.css`. */
-const ANIM_MS = 280;
+const ANIM_MS = 450;
 
 /** A row on screen: the one that is still in `children`, or one on its way out. */
 type Slot = { key: string; node: ReactElement };

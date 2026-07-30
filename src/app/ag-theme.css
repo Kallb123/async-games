@@ -825,7 +825,7 @@ button {
 .ag-anim-item {
     display: grid;
     grid-template-rows: 1fr;
-    transition: grid-template-rows 280ms ease, opacity 220ms ease;
+    transition: grid-template-rows 450ms ease, opacity 320ms ease;
 }
 
 .ag-anim-item-inner { min-height: 0; }
