@@ -3,6 +3,7 @@
 import { ReactNode } from "react";
 import { GameMeta } from "@/utils/ui/games";
 import GameThumb from "@/components/ui/GameThumb";
+import BackLink from "@/components/ui/BackLink";
 
 interface GameSetupLayoutProps {
     meta: GameMeta;
@@ -21,7 +22,7 @@ export default function GameSetupLayout({ meta, children, actionLabel, actionDis
             <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", flex: 1 }}>
                 <div className="ag-topbar">
                     <div className="ag-topbar-title">
-                        <a href="/newgame" className="ag-back" aria-label="Back to library">←</a>
+                        <BackLink href="/newgame" label="Back to library" />
                         <GameThumb meta={meta} size={38} radius={10} />
                         <div style={{ minWidth: 0 }}>
                             <div style={{ font: "800 20px/1.1 var(--ag-font)", color: "var(--ag-ink)" }}>New {meta.name}</div>

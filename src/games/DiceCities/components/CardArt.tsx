@@ -1,0 +1,29 @@
+import Image from 'next/image';
+import type { IDiceCitiesCard } from '@/games/DiceCities/apiModels';
+import { cardArt } from '@/games/DiceCities/ui';
+
+// The card illustrations are portrait PNGs of this size in /public. Passing the
+// real dimensions lets next/image serve a small optimised copy — the board draws
+// these at around 30px tall, and the source files are ~75KB each.
+const ART_WIDTH = 162;
+const ART_HEIGHT = 248;
+
+interface CardArtProps {
+    card: IDiceCitiesCard;
+    /** The ag-* class that sizes the slot this art sits in. */
+    className: string;
+}
+
+// One card's illustration. Every board and action surface that shows card art
+// goes through here so the sizing and loading behaviour stays in one place.
+export default function CardArt({ card, className }: CardArtProps) {
+    return (
+        <Image
+            className={className}
+            src={cardArt(card)}
+            alt=""
+            width={ART_WIDTH}
+            height={ART_HEIGHT}
+        />
+    );
+}

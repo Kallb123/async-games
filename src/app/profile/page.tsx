@@ -2,6 +2,8 @@
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useToast } from "@/components/ToastContext";
 import Avatar from "@/components/ui/Avatar";
+import Link from "next/link";
+import BackLink from "@/components/ui/BackLink";
 import GameStatsList from "@/components/ui/GameStatsList";
 import ProfileIdentity from "@/components/ui/ProfileIdentity";
 import RecentFormSection from "@/components/ui/RecentFormSection";
@@ -114,7 +116,7 @@ export default function Profile() {
         <main>
             <div className="ag-topbar">
                 <div className="ag-topbar-title">
-                    <a href="/" className="ag-back" aria-label="Back home">←</a>
+                    <BackLink href="/" label="Back home" />
                     <span className="ag-wordmark">Profile</span>
                 </div>
             </div>
@@ -201,7 +203,7 @@ export default function Profile() {
             >
                 {friends.map((friend) => (
                     <div key={friend.friendshipId} className="ag-list-row">
-                        <a
+                        <Link
                             href={`/profile/${friend.user.userId}`}
                             style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, textDecoration: "none", color: "inherit" }}
                         >
@@ -214,8 +216,8 @@ export default function Profile() {
                                         : "No activity yet"}
                                 </div>
                             </div>
-                        </a>
-                        <a href="/newgame" className="ag-pill-action">Challenge</a>
+                        </Link>
+                        <Link href="/newgame" className="ag-pill-action">Challenge</Link>
                         <button
                             type="button"
                             className="ag-link-muted"
@@ -272,14 +274,14 @@ export default function Profile() {
             {/* Account */}
             <div className="ag-section" style={{ marginTop: 6 }}>
                 <div className="ag-list">
-                    <a
+                    <Link
                         href="/settings"
                         className="ag-list-row"
                         style={{ textDecoration: "none", color: "inherit" }}
                     >
                         <span style={{ flex: 1, font: "700 13px var(--ag-font)" }}>Settings</span>
                         <span style={{ color: "var(--ag-ink-soft)" }}>›</span>
-                    </a>
+                    </Link>
                     <button
                         type="button"
                         className="ag-list-row ag-list-row--button"

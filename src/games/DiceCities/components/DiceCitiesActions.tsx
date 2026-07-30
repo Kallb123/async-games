@@ -17,7 +17,8 @@ import {
     IDiceCitiesDiceRollOutcome,
     IGameCommand,
 } from "@/utils/apiModels/GameLogic";
-import { ACTIVATION_META, LANDMARKS, activationFor, cardArt, rollLabel, yieldLabel } from "@/games/DiceCities/ui";
+import { ACTIVATION_META, LANDMARKS, activationFor, rollLabel, yieldLabel } from "@/games/DiceCities/ui";
+import CardArt from "@/games/DiceCities/components/CardArt";
 import type { SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import Dice from "@/components/ui/Dice";
 import ActionButton from "@/components/ui/ActionButton";
@@ -277,7 +278,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
                                 style={{ borderTopColor: ACTIVATION_META[activationFor(card)].color }}
                             >
                                 <div className="ag-dc-market-card-top">
-                                    <img className="ag-dc-market-icon" src={cardArt(card)} alt="" />
+                                    <CardArt card={card} className="ag-dc-market-icon" />
                                     {pending
                                         ? <PendingTag label="Building" />
                                         : <span className="ag-dc-market-roll">🎲 {rollLabel(card)}</span>}
@@ -309,7 +310,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
                                     disabled={disabled}
                                     onClick={() => unlockLandmark(flag as string)}
                                 >
-                                    <img className="ag-icon-box ag-dc-landmark-buy-icon" src={cardArt(card)} alt="" />
+                                    <CardArt card={card} className="ag-icon-box ag-dc-landmark-buy-icon" />
                                     <span className="ag-build-main">
                                         <span className="ag-build-name">Landmark · {card.title}</span>
                                         <span className="ag-build-cost">{card.text}</span>
@@ -402,7 +403,7 @@ function CardPickGrid({ cards, disabled, isPending, onPick }: {
                         disabled={disabled}
                         onClick={() => onPick(cardId)}
                     >
-                        <img className="ag-dc-pick-card-icon" src={cardArt(card)} alt="" />
+                        <CardArt card={card} className="ag-dc-pick-card-icon" />
                         {pending
                             ? <PendingTag label="Sending" />
                             : <span className="ag-dc-pick-card-name">{card.title}</span>}

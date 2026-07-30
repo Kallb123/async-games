@@ -1,6 +1,7 @@
 'use client'
 
 import { IGameResponse } from "@/utils/apiModels/GameDataApi";
+import Link from "next/link";
 import { useState } from "react";
 import { opponents } from "@/utils/ui/players";
 import ListSection from "@/components/ui/ListSection";
@@ -60,7 +61,7 @@ export default function TheirTurnList() {
                 return (
                     <div key={game.gameId} className="ag-list-row">
                         <div style={{ width: 8, height: 8, borderRadius: "50%", background: "oklch(0.7 0.05 60)", flex: "none" }} />
-                        <a
+                        <Link
                             href={`/games/${game.url}/${game.gameId}`}
                             className="ag-list-row-main"
                             style={{ textDecoration: "none", color: "var(--ag-ink)" }}
@@ -68,7 +69,7 @@ export default function TheirTurnList() {
                             <div style={{ font: "600 13px/1.35 var(--ag-font)" }}>
                                 {game.friendlyName} · <span style={{ color: "var(--ag-ink-soft)" }}>{opponentName}&apos;s turn</span>
                             </div>
-                        </a>
+                        </Link>
                         {timeLeft && <span className="ag-list-row-time">{timeLeft}</span>}
                         <button
                             type="button"

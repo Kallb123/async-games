@@ -2,6 +2,7 @@
 
 import { use } from "react";
 import GameThumb from "@/components/ui/GameThumb";
+import BackLink from "@/components/ui/BackLink";
 import GameResultStats from "@/components/ui/GameResultStats";
 import LineChart from "@/components/ui/LineChart";
 import { SkeletonList } from "@/components/ui/Skeleton";
@@ -19,7 +20,7 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
         <main>
             <div className="ag-topbar">
                 <div className="ag-topbar-title">
-                    <a href="/" className="ag-back" aria-label="Back home">←</a>
+                    <BackLink href="/" label="Back home" />
                     <span className="ag-wordmark">Result</span>
                 </div>
             </div>

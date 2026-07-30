@@ -1,6 +1,7 @@
 'use client'
 
 import { ReactNode } from "react";
+import Link from "next/link";
 import { buildRematchHref } from "@/utils/ui/rematch";
 
 interface GameFinishBannerProps {
@@ -24,8 +25,8 @@ export default function GameFinishBanner({ message, gameId, gameUrl, usernameLis
         <div className="ag-game-result">
             <h2>{message}</h2>
             <div className="ag-game-result-actions">
-                <a href={`/games/result/${gameId}`} className="ag-btn ag-btn--light">View result</a>
-                <a href={rematchHref} className="ag-btn ag-btn--primary">Rematch</a>
+                <Link href={`/games/result/${gameId}`} className="ag-btn ag-btn--light">View result</Link>
+                <Link href={rematchHref} className="ag-btn ag-btn--primary">Rematch</Link>
             </div>
         </div>
     );

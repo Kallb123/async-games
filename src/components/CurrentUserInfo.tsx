@@ -1,27 +1,19 @@
 'use client'
 
 import { useUser } from "@clerk/nextjs";
-import { useEffect, useState } from "react";
+
+// Clerk's user is the only input here, so the label is derived on render rather
+// than copied into state by an effect (react-hooks/set-state-in-effect).
+function nameFor(user: ReturnType<typeof useUser>['user']): string {
+    if (user?.firstName) {
+        return user.lastName ? `${user.firstName} ${user.lastName}` : user.firstName;
+    }
+    return user?.username ?? `${user?.id}`;
+}
 
 export default function CurrentUserInfo() {
     const { user, isLoaded } = useUser();
-    const [visibleName, setVisibleName] = useState('Loading');
-
-    useEffect(() => {
-        if (isLoaded) {
-            if (user?.firstName) {
-                if (user?.lastName) {
-                    setVisibleName(`${user?.firstName} ${user?.lastName}`);
-                } else {
-                    setVisibleName(`${user?.firstName}`);
-                }
-            } else if (user?.username) {
-                setVisibleName(`${user?.username}`);
-            } else {
-                setVisibleName(`${user?.id}`);
-            }
-        }
-    }, [isLoaded, user]);
+    const visibleName = isLoaded ? nameFor(user) : 'Loading';
 
     return (
         <div>

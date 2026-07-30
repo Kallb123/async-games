@@ -3,14 +3,27 @@
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useToast } from "@/components/ToastContext";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
+import BackLink from "@/components/ui/BackLink";
 import DevTools from "@/components/DevTools";
 import NotificationDeviceList from "@/components/NotificationDeviceList";
 import { NotificationChannel, NOTIFICATION_CHANNELS } from "@/utils/firebase/notificationPreferences";
 import useFcmToken from "@/utils/hooks/useFcmToken";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import packageJson from "@/../package.json";
+
+const notificationsSupported = () => typeof window !== 'undefined' && 'Notification' in window;
+
+// Whether this browser granted notification permission. Reading it during
+// render would break hydration and copying it into state from an effect is a
+// synchronous setState in an effect body (react-hooks/set-state-in-effect), so
+// it's read as the browser-owned value it is. Nothing to subscribe to: the
+// browser fires no event for a permission change, and `enableNotifications`
+// below reloads the page after asking.
+const subscribePermission = () => () => {};
+const getPermission = () => notificationsSupported() && Notification.permission === 'granted';
+const getServerPermission = () => false;
 
 interface NotificationPreferencesState {
     enabled: boolean;
@@ -26,21 +39,9 @@ export default function Settings() {
 
     const [prefs, setPrefs] = useState<NotificationPreferencesState | null>(null);
     const [isSavingPrefs, setIsSavingPrefs] = useState(false);
-    const [hasPrefPermission, setHasPrefPermission] = useState(false);
+    const hasPrefPermission = useSyncExternalStore(subscribePermission, getPermission, getServerPermission);
 
-    useEffect(() => {
-        if (isAuthorised) {
-            refreshPreferences();
-        }
-    }, [isAuthorised]);
-
-    useEffect(() => {
-        if (typeof window !== 'undefined' && 'Notification' in window) {
-            setHasPrefPermission(Notification.permission === 'granted');
-        }
-    }, []);
-
-    const refreshPreferences = () => {
+    const refreshPreferences = useCallback(() => {
         fetch('/api/notificationpreferences')
             .then(response => response.json())
             .then(data => {
@@ -49,10 +50,16 @@ export default function Settings() {
                 }
             })
             .catch(error => console.error('Failed to load notification preferences', error));
-    }
+    }, []);
+
+    useEffect(() => {
+        if (isAuthorised) {
+            refreshPreferences();
+        }
+    }, [isAuthorised, refreshPreferences]);
 
     const enableNotifications = () => {
-        if (typeof window !== 'undefined' && 'Notification' in window) {
+        if (notificationsSupported()) {
             Notification.requestPermission().then(() => window.location.reload());
         }
     };
@@ -102,7 +109,7 @@ export default function Settings() {
         <main>
             <div className="ag-topbar">
                 <div className="ag-topbar-title">
-                    <a href="/profile" className="ag-back" aria-label="Back to profile">←</a>
+                    <BackLink href="/profile" label="Back to profile" />
                     <span className="ag-wordmark">Settings</span>
                 </div>
             </div>

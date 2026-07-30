@@ -26,7 +26,7 @@
     --ag-on-dark: oklch(0.96 0.01 60);
     --ag-danger: #c0392b;
 
-    --ag-font: "Bricolage Grotesque", system-ui, -apple-system, sans-serif;
+    --ag-font: var(--ag-font-bricolage), system-ui, -apple-system, sans-serif;
     --ag-shadow: 0 1px 3px rgba(60, 40, 20, 0.08);
     --ag-shadow-lift: 0 8px 24px rgba(60, 40, 20, 0.12);
     /* Highlight band swept across content that is being refreshed in the

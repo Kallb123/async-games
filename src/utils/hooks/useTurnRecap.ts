@@ -20,19 +20,19 @@ function recapSignature(recap: IRecapResponse | null): string {
 // turns the player hasn't seen — surface it again.
 export function useTurnRecap(gameId: string, enabled: boolean = true) {
     const [recap, setRecap] = useState<IRecapResponse | null>(null);
-    const [loading, setLoading] = useState(true);
+    // The game whose recap we've finished fetching. Comparing it against the
+    // current gameId gives us `loading` without storing it, which keeps the
+    // fetch from having to setState synchronously inside an effect
+    // (react-hooks/set-state-in-effect).
+    const [loadedFor, setLoadedFor] = useState<string | null>(null);
     const [dismissed, setDismissed] = useState(false);
     // Signature of the recap the player last dismissed, so a refetch that
     // returns the same content stays hidden instead of reappearing.
     const dismissedSignature = useRef<string>("");
 
     const fetchRecap = useCallback(() => {
-        if (!enabled || !gameId) {
-            setLoading(false);
-            return () => {};
-        }
+        if (!enabled || !gameId) return () => {};
         let cancelled = false;
-        setLoading(true);
 
         (async () => {
             const res = await fetchWithSessionRetry(`/api/game/${gameId}/recap`, () => cancelled);
@@ -50,13 +50,17 @@ export function useTurnRecap(gameId: string, enabled: boolean = true) {
                     setDismissed(false);
                 }
             }
-            setLoading(false);
+            setLoadedFor(gameId);
         })();
 
         return () => {
             cancelled = true;
         };
     }, [gameId, enabled]);
+
+    // A background refetch (see below) leaves `loading` false, so a recap
+    // already on screen stays put instead of flickering out and back.
+    const loading = enabled && !!gameId && loadedFor !== gameId;
 
     useEffect(() => fetchRecap(), [fetchRecap]);
 

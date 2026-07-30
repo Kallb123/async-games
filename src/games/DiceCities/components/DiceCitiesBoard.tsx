@@ -5,10 +5,10 @@ import {
     Activation,
     LANDMARKS,
     activationFor,
-    cardArt,
     rollLabel,
     yieldLabel,
 } from "@/games/DiceCities/ui";
+import CardArt from "@/games/DiceCities/components/CardArt";
 
 interface DiceCitiesBoardProps {
     /** The city being shown — usually the viewer's own. */
@@ -47,7 +47,7 @@ export default function DiceCitiesBoard({ playerState, ownerLabel }: DiceCitiesB
                                 className={`ag-dc-landmark${built ? " ag-dc-landmark--built" : ""}`}
                                 title={card.text}
                             >
-                                <img className="ag-dc-landmark-icon" src={cardArt(card)} alt="" />
+                                <CardArt card={card} className="ag-dc-landmark-icon" />
                                 <div className="ag-dc-landmark-name">{card.title}</div>
                                 <div className="ag-dc-landmark-cost">{built ? "✓ built" : `${card.cost}🪙`}</div>
                             </div>
@@ -84,7 +84,7 @@ export default function DiceCitiesBoard({ playerState, ownerLabel }: DiceCitiesB
                             >
                                 <span className="ag-dc-est-roll">{rollLabel(card)}</span>
                                 {cc.amount > 1 && <span className="ag-dc-est-count">×{cc.amount}</span>}
-                                <img className="ag-dc-est-icon" src={cardArt(card)} alt="" />
+                                <CardArt card={card} className="ag-dc-est-icon" />
                                 <div className="ag-dc-est-name">{card.title}</div>
                                 <div className="ag-dc-est-yield">{yieldLabel(card)}</div>
                             </div>

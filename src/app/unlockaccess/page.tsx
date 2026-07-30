@@ -17,7 +17,7 @@ export default function UnlockAccess() {
     if (isLoaded && !user) {
         router.push('/login');
     }
-  }, [isLoaded, user]);
+  }, [isLoaded, user, router]);
 
   if (!isLoaded || !user) {
     return null;

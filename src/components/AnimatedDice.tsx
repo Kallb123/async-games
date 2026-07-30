@@ -1,4 +1,3 @@
-import { useUser } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import styles from './AnimatedDice.module.css'
 
@@ -8,15 +7,13 @@ interface AnimatedDiceProps {
 }
 
 export default function AnimatedDice({number, color}: AnimatedDiceProps) {
-    const { user, isLoaded } = useUser();
+    // Alternating this on every new number restarts the CSS roll animation.
     const [isEven, setIsEven] = useState(true);
 
     useEffect(() => {
-      if (isLoaded) {
-
-      }
-      setTimeout(() => {setIsEven(!isEven)}, 200);
-    }, [isLoaded, number]);
+      const flip = setTimeout(() => setIsEven(even => !even), 200);
+      return () => clearTimeout(flip);
+    }, [number]);
 
     return (
         <>
