@@ -59,7 +59,7 @@ export default function MyTurnList() {
                 {timeLeft && <div className="ag-turn-card-badge">{timeLeft}</div>}
             </div>
         );
-    }));
+    }), isLoading);
 
     return (
         <>

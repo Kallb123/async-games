@@ -29,18 +29,21 @@ function mergeKeys(prev: string[], next: string[]): string[] {
  * its length counts rows still animating out, so a caller can keep its section
  * on screen until the last one has gone.
  *
- * The first batch of rows appears without animating — that is the skeleton
- * handing over to real content, not a change to the list. Everything after it
- * animates.
+ * Pass `isLoading` so the skeleton's handover to real content is not mistaken
+ * for a change to the list: whatever is there when loading finishes appears
+ * without animating, and everything after that animates — including the first
+ * row to land in a list that loaded empty.
  */
-export default function useAnimatedList(children: ReactNode): ReactNode[] {
+export default function useAnimatedList(children: ReactNode, isLoading = false): ReactNode[] {
     const live = Children.toArray(children).filter(isValidElement) as ReactElement[];
     const liveNodes = new Map(live.map(child => [String(child.key), child]));
     const liveKeys = [...liveNodes.keys()];
 
     const [slots, setSlots] = useState<Slot[]>(() => live.map(child => ({ key: String(child.key), node: child })));
     const [entering, setEntering] = useState<string[]>([]);
-    const [hasHadRows, setHasHadRows] = useState(liveKeys.length > 0);
+    // False until the list has finished loading once — an empty list that has
+    // settled is still settled, so its first row counts as an arrival.
+    const [hasSettled, setHasSettled] = useState(false);
     const exitTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
     const order = mergeKeys(slots.map(slot => slot.key), liveKeys);
@@ -51,11 +54,11 @@ export default function useAnimatedList(children: ReactNode): ReactNode[] {
         setSlots(order.map(key => ({ key, node: liveNodes.get(key) ?? departed.get(key)! })));
         // Arrivals have to be marked in the same render they first mount in —
         // the `--enter` class is what gives them a collapsed starting style.
-        const arrived = hasHadRows ? liveKeys.filter(key => !departed.has(key)) : [];
+        const arrived = hasSettled ? liveKeys.filter(key => !departed.has(key)) : [];
         if (arrived.length > 0) setEntering(previous => [...previous, ...arrived]);
     }
-    if (!hasHadRows && liveKeys.length > 0) {
-        setHasHadRows(true);
+    if (!hasSettled && !isLoading) {
+        setHasSettled(true);
     }
 
     // Drop each departed key once it has finished collapsing, and cancel that if

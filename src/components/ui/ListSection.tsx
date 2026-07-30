@@ -48,7 +48,7 @@ export default function ListSection({
 }: ListSectionProps) {
     // Rows the list still has on screen — which includes any that have been
     // removed and are shrinking away, so the section outlives its last row.
-    const rows = useAnimatedList(children);
+    const rows = useAnimatedList(children, isLoading);
 
     if (!isLoading && rows.length === 0 && !empty) {
         return null;
