@@ -1,5 +1,6 @@
 'use client'
 
+import Image from "next/image";
 import { GameMeta, ThemeAccent } from "@/utils/ui/games";
 
 const ACCENT_VAR: Record<ThemeAccent, string> = {
@@ -32,9 +33,11 @@ export default function GameThumb({ meta, size = 48, radius = 12 }: GameThumbPro
 
     if (meta.art) {
         return (
-            <img
+            <Image
                 src={meta.art}
                 alt=""
+                width={size}
+                height={size}
                 style={{ width: size, height: size, ...shapeStyle, objectFit: "cover", flex: "none" }}
             />
         );

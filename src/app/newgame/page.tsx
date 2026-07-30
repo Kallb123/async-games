@@ -5,6 +5,9 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { GAME_META, COMING_SOON, GAME_CATEGORIES, GameCategory } from "@/utils/ui/games";
 import GameThumb, { accentVar } from "@/components/ui/GameThumb";
+import Image from "next/image";
+import Link from "next/link";
+import BackLink from "@/components/ui/BackLink";
 
 const FILTERS: ("All" | GameCategory)[] = ["All", ...GAME_CATEGORIES];
 
@@ -24,7 +27,7 @@ export default function NewGame() {
     <main>
       <div className="ag-topbar">
         <div className="ag-topbar-title">
-          <a href="/" className="ag-back" aria-label="Back home">←</a>
+          <BackLink href="/" label="Back home" />
           <span className="ag-wordmark">The library</span>
         </div>
       </div>
@@ -46,8 +49,8 @@ export default function NewGame() {
 
       {featuredVisible && (
         <div className="ag-section">
-          <a href={`/newgame/${featured.url}`} className="ag-featured" style={{ background: accentVar(featured.accent) }}>
-            {featured.art && <img src={featured.art} alt="" className="ag-featured-art" />}
+          <Link href={`/newgame/${featured.url}`} className="ag-featured" style={{ background: accentVar(featured.accent) }}>
+            {featured.art && <Image src={featured.art} alt="" width={170} height={170} className="ag-featured-art" />}
             <div className="ag-featured-eyebrow">Featured this week</div>
             <div className="ag-featured-title">{featured.name}</div>
             <div className="ag-featured-desc">{featured.tagline}</div>
@@ -55,14 +58,14 @@ export default function NewGame() {
               <span className="ag-featured-btn">Start a game</span>
               <span className="ag-featured-meta">{featured.players}</span>
             </div>
-          </a>
+          </Link>
         </div>
       )}
 
       <div className="ag-section">
         <div className="ag-game-grid">
           {otherGames.map(game => (
-            <a key={game.url} href={`/newgame/${game.url}`} className="ag-game-card">
+            <Link key={game.url} href={`/newgame/${game.url}`} className="ag-game-card">
               <div className="ag-game-thumb" style={{ background: accentVar(game.accent) }}>
                 {game.art
                   ? <GameThumb meta={game} size={74} radius={0} />
@@ -72,7 +75,7 @@ export default function NewGame() {
                 <div className="ag-game-name">{game.name}</div>
                 <div className="ag-game-meta">{game.categories.join(", ")} · {game.players.replace(" players", "")}</div>
               </div>
-            </a>
+            </Link>
           ))}
 
           {filter === "All" && (

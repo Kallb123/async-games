@@ -47,8 +47,10 @@ export default function SnakesAndLaddersRollResult({ result, onEndTurn }: { resu
     // reveal the outcome — so the roll actually animates.
     const [rolling, setRolling] = useState(true);
     const [face, setFace] = useState(roll);
+    // The page gives this component a key per roll, so a new roll arrives as a
+    // fresh mount with `rolling` already true — no need to reset it here (which
+    // would be a synchronous setState inside an effect).
     useEffect(() => {
-        setRolling(true);
         const cycle = setInterval(() => setFace(1 + Math.floor(Math.random() * 6)), 90);
         const settle = setTimeout(() => {
             clearInterval(cycle);
@@ -56,7 +58,7 @@ export default function SnakesAndLaddersRollResult({ result, onEndTurn }: { resu
             setRolling(false);
         }, 950);
         return () => { clearInterval(cycle); clearTimeout(settle); };
-    }, [result, roll]);
+    }, [roll]);
 
     const stageClass = rolling
         ? 'ag-sl-roll-stage ag-sl-roll-stage--plain'

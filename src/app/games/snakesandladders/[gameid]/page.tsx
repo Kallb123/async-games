@@ -238,6 +238,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
 
             {rollResult && (
                 <SnakesAndLaddersRollResult
+                    key={`${rollResult.from}-${rollResult.roll}-${rollResult.newPosition}`}
                     result={rollResult}
                     onEndTurn={() => { setRollResult(null); getGameData(); }}
                 />

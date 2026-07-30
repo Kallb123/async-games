@@ -11,6 +11,7 @@ import ActionButton from "@/components/ui/ActionButton";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useEndGame } from "@/utils/hooks/useEndGame";
+import { useElapsedSeconds } from "@/utils/hooks/useElapsedSeconds";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useToast } from "@/components/ToastContext";
 import { ISolitaireGameDataResponse } from "@/games/Solitaire/apiModels";
@@ -71,7 +72,7 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
         }
     };
 
-    const elapsedSeconds = state ? Math.max(0, Math.round((Date.now() - new Date(state.startedAt).getTime()) / 1000)) : 0;
+    const elapsedSeconds = useElapsedSeconds(state?.startedAt);
     const foundationCount = state ? foundationCardCount(state.foundations) : 0;
     const stalemated = !!state && !complete && !hasAnyLegalMove({ waste: state.waste, foundations: state.foundations, tableau: state.tableau, stockCount: state.stockCount });
     const autoSolveAvailable = !!state && !complete && !hasHiddenTableauCards(state.tableau);

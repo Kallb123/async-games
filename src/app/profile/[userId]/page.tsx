@@ -2,6 +2,7 @@
 import { use } from "react";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import GameStatsList from "@/components/ui/GameStatsList";
+import BackLink from "@/components/ui/BackLink";
 import ProfileIdentity from "@/components/ui/ProfileIdentity";
 import RecentFormSection from "@/components/ui/RecentFormSection";
 import type { IGameStats, IRecentMatch } from "@/app/api/stats/route";
@@ -46,7 +47,7 @@ export default function FriendProfile({ params }: { params: Promise<{ userId: st
         <main>
             <div className="ag-topbar">
                 <div className="ag-topbar-title">
-                    <a href="/profile" className="ag-back" aria-label="Back to your profile">←</a>
+                    <BackLink href="/profile" label="Back to your profile" />
                     <span className="ag-wordmark">Profile</span>
                 </div>
             </div>

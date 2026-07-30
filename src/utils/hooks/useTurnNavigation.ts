@@ -126,9 +126,9 @@ export function useTurnNavigation<TState>(gameId: string, live: LiveGameView<TSt
     }, [fetchTimeline]);
 
     const maxIndex = snapshots.length > 0 ? snapshots.length - 1 : 0;
-    const clamp = (i: number) => Math.max(0, Math.min(maxIndex, i));
-    const stepBack = useCallback(() => setViewIndex((i) => clamp(i - 1)), [maxIndex]);
-    const stepForward = useCallback(() => setViewIndex((i) => clamp(i + 1)), [maxIndex]);
+    const clamp = useCallback((i: number) => Math.max(0, Math.min(maxIndex, i)), [maxIndex]);
+    const stepBack = useCallback(() => setViewIndex((i) => clamp(i - 1)), [clamp]);
+    const stepForward = useCallback(() => setViewIndex((i) => clamp(i + 1)), [clamp]);
     const jumpToStart = useCallback(() => setViewIndex(0), []);
     const jumpToCurrent = useCallback(() => setViewIndex(currentIndex), [currentIndex]);
 

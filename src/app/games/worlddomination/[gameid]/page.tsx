@@ -20,6 +20,7 @@ import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
+import { useResettingState } from "@/utils/hooks/useResettingState";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
 import { currentUsername } from "@/utils/ui/players";
 
@@ -34,9 +35,8 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
     const { user } = useAuthGuard();
-    const [selFrom, setSelFrom] = useState<number | null>(null);
-    const [selTo, setSelTo] = useState<number | null>(null);
     const [showLog, setShowLog] = useState(false);
+    // Territory selection is declared further down, next to the phase it resets with.
 
     const { gameid } = use(params);
     const gameId = gameid;
@@ -71,10 +71,9 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     // Selecting territories is a live-only interaction; drop any in-progress
     // selection whenever the phase changes (including server-driven ones like
     // Reinforce auto-advancing to Attack) or when we leave the live view.
-    useEffect(() => {
-        setSelFrom(null);
-        setSelTo(null);
-    }, [gs?.phase, nav.isLive]);
+    const selectionPhase = `${gs?.phase}:${nav.isLive}`;
+    const [selFrom, setSelFrom] = useResettingState<number | null>(null, selectionPhase);
+    const [selTo, setSelTo] = useResettingState<number | null>(null, selectionPhase);
 
     const validTerritories = useMemo(() => {
         const s = new Set<number>();

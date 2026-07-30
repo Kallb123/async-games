@@ -1,9 +1,19 @@
 import type { Metadata } from "next";
+import { Bricolage_Grotesque } from "next/font/google";
 import 'bootstrap/dist/css/bootstrap.css';
 import "./globals.css";
 import "./ag-theme.css";
 import { ClerkProvider } from '@clerk/nextjs'
 import Providers from "@/components/Providers";
+
+// Self-hosted at build time by next/font, so there's no render-blocking request
+// to Google's CDN and no flash of fallback type. `--ag-font` in ag-theme.css
+// points at the family this exposes.
+const bricolageGrotesque = Bricolage_Grotesque({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--ag-font-bricolage",
+});
 
 export const metadata: Metadata = {
   title: "Async Games",
@@ -17,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <ClerkProvider>
-      <html lang="en">
+      <html lang="en" className={bricolageGrotesque.variable}>
         <head>
           <meta name="application-name" content="Async Games" />
           <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -41,9 +51,6 @@ export default function RootLayout({
           <link rel="manifest" href="/manifest.json" />
           {/* <link rel="mask-icon" href="/icons/safari-pinned-tab.svg" color="#5bbad5" />
           <link rel="shortcut icon" href="/favicon.ico" /> */}
-          <link rel="preconnect" href="https://fonts.googleapis.com" />
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-          <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&display=swap" />
 
           <meta name="twitter:card" content="summary" />
           <meta name="twitter:url" content="https://async-games.vercel.app" />

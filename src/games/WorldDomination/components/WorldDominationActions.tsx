@@ -1,11 +1,12 @@
 'use client'
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import type { IWorldDominationSpecificGameStateResponse } from '@/games/WorldDomination/apiModels';
 import type { WorldDominationCardType } from '@/games/WorldDomination/board';
 import { TERRITORIES, isValidCardSet } from '@/games/WorldDomination/board';
 import Dice from '@/components/ui/Dice';
 import ActionButton from '@/components/ui/ActionButton';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
+import { useResettingState } from '@/utils/hooks/useResettingState';
 import {
     WorldDominationDeployArmies,
     WorldDominationCashInCards,
@@ -52,30 +53,23 @@ export default function WorldDominationActions({
     gs, myUsername, selFrom, selTo, setSelFrom, setSelTo, submitCommand, pendingTarget,
 }: WorldDominationActionsProps) {
     const me = gs.playerStates[myUsername];
-    const [deployCount, setDeployCount] = useState(1);
-    const [diceCount, setDiceCount] = useState(1);
-    const [occupyCount, setOccupyCount] = useState(1);
-    const [fortifyCount, setFortifyCount] = useState(1);
     const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
+
+    // Every stepper starts over when the thing it counts against changes: a new
+    // territory selection, a fresh pool of reinforcements, a new occupation to
+    // garrison.
+    const selectionKey = `${selFrom}:${selTo}`;
+    const occupation = gs.pendingOccupation;
+    const [deployCount, setDeployCount] = useResettingState(1, `${selFrom}:${gs.reinforcementsRemaining}`);
+    const [diceCount, setDiceCount] = useResettingState(1, selectionKey);
+    const [fortifyCount, setFortifyCount] = useResettingState(1, selectionKey);
+    const [occupyCount, setOccupyCount] = useResettingState(
+        occupation?.minArmies ?? 1,
+        `${occupation?.toTerritoryId}:${occupation?.minArmies}`,
+    );
 
     const fromTerritory = selFrom !== null ? gs.territories[selFrom] : null;
     const toTerritory = selTo !== null ? gs.territories[selTo] : null;
-
-    useEffect(() => {
-        setDeployCount(1);
-    }, [selFrom, gs.reinforcementsRemaining]);
-
-    useEffect(() => {
-        setDiceCount(1);
-    }, [selFrom, selTo]);
-
-    useEffect(() => {
-        if (gs.pendingOccupation) setOccupyCount(gs.pendingOccupation.minArmies);
-    }, [gs.pendingOccupation?.toTerritoryId, gs.pendingOccupation?.minArmies]);
-
-    useEffect(() => {
-        setFortifyCount(1);
-    }, [selFrom, selTo]);
 
     if (!me) return null;
 

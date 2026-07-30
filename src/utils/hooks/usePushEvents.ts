@@ -79,7 +79,12 @@ export function usePushEvents(
 ) {
     const { refreshOnVisible = false } = options;
     const handlerRef = useRef(handler);
-    handlerRef.current = handler;
+    // Kept current after each render rather than during it — writing a ref while
+    // rendering is a side effect (react-hooks/refs). The handler is only ever
+    // read from a timer callback, long after the commit.
+    useEffect(() => {
+        handlerRef.current = handler;
+    });
 
     useEffect(() => {
         let timer: ReturnType<typeof setTimeout> | null = null;
