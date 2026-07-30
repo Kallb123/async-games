@@ -1,7 +1,12 @@
 // Compact, human relative time for recap/log timestamps: "just now", "14h ago",
-// "yesterday", "3d ago", or a short date for anything older than a week. Pure so
-// it can be reused and unit-tested; pass `now` to make it deterministic.
-export function formatRelativeTime(iso: string, now: number = Date.now()): string {
+// "yesterday", "3d ago", or a short date for anything older than a week.
+//
+// Pure by design: `now` is always supplied by the caller so this never reads the
+// wall clock during render. In components that means `useNowToTheMinute()`, which
+// has no reading before hydration — hence `null`, formatted as no label at all.
+export function formatRelativeTime(iso: string, now: number | null): string {
+    if (now === null) return "";
+
     const then = new Date(iso).getTime();
     if (Number.isNaN(then)) return "";
 

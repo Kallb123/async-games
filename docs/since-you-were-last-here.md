@@ -181,7 +181,8 @@ player's resolved colour so the component doesn't re-derive it.
 
 ### Supporting helper
 
-`formatRelativeTime(iso)` in `src/utils/ui/` → `"14h ago"`, `"yesterday"`.
+`formatRelativeTime(iso, now)` in `src/utils/ui/` → `"14h ago"`, `"yesterday"`.
+`now` comes from `useNowToTheMinute()` so render never reads the clock itself.
 Small, pure, unit-testable, reusable anywhere timestamps are shown.
 
 ### Surfacing it

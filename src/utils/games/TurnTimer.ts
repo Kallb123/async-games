@@ -44,10 +44,12 @@ export function isWarningThreshold(lastTurnTimestamp: string, turnTimer: string)
     return remaining <= warningThresholdMs(turnTimer) && remaining > 0;
 }
 
-function remainingParts(lastTurnTimestamp: string, turnTimer: string): { days: number, hours: number, minutes: number } | null {
+// `now` is always supplied so this never reads the wall clock on behalf of a
+// render — see `useNow`. Server-side callers pass their own `Date.now()`.
+function remainingParts(lastTurnTimestamp: string, turnTimer: string, now: number): { days: number, hours: number, minutes: number } | null {
     if (isUnlimitedTurnTimer(turnTimer)) return null;
     const total = parseTurnTimerMs(turnTimer);
-    const elapsed = Date.now() - new Date(lastTurnTimestamp).getTime();
+    const elapsed = now - new Date(lastTurnTimestamp).getTime();
     const remainingMs = Math.max(total - elapsed, 0);
 
     return {
@@ -58,7 +60,7 @@ function remainingParts(lastTurnTimestamp: string, turnTimer: string): { days: n
 }
 
 export function formatRemainingTime(lastTurnTimestamp: string, turnTimer: string): string {
-    const parts = remainingParts(lastTurnTimestamp, turnTimer);
+    const parts = remainingParts(lastTurnTimestamp, turnTimer, Date.now());
     if (!parts) return 'unlimited';
     const { days, hours, minutes } = parts;
 
@@ -84,9 +86,14 @@ export function formatElapsedTime(timestamp: string): string {
     return 'a moment';
 }
 
-/** Short "1h left" style label for game lists. Null for unlimited timers. */
-export function formatRemainingTimeShort(lastTurnTimestamp: string, turnTimer: string): string | null {
-    const parts = remainingParts(lastTurnTimestamp, turnTimer);
+/**
+ * Short "1h left" style label for game lists. Null for unlimited timers, and for
+ * a null `now` — pass `useNowToTheMinute()`, which has no clock reading until
+ * hydration, so the badge simply appears with the first client render.
+ */
+export function formatRemainingTimeShort(lastTurnTimestamp: string, turnTimer: string, now: number | null): string | null {
+    if (now === null) return null;
+    const parts = remainingParts(lastTurnTimestamp, turnTimer, now);
     if (!parts) return null;
     const { days, hours, minutes } = parts;
 

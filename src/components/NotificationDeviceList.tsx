@@ -5,6 +5,7 @@ import ListSection from "@/components/ui/ListSection";
 import { RegisteredDevice } from "@/utils/firebase/TimedToken";
 import { deviceGlyph, deviceIdForToken, STALE_DEVICE_DAYS } from "@/utils/firebase/deviceInfo";
 import { formatRelativeTime } from "@/utils/ui/time";
+import { useNowToTheMinute } from "@/utils/hooks/useNow";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { useEffect, useState } from "react";
 
@@ -17,6 +18,7 @@ export default function NotificationDeviceList({ currentToken }: { currentToken?
     const { showToast } = useToast();
     const { data, isLoading, isRefreshing, refresh } = useRefreshableData<{ devices: RegisteredDevice[] }>('/api/notificationtoken');
     const [removingId, setRemovingId] = useState<string | null>(null);
+    const now = useNowToTheMinute();
     const currentId = currentToken ? deviceIdForToken(currentToken) : undefined;
     const devices = data?.devices ?? [];
 
@@ -68,7 +70,7 @@ export default function NotificationDeviceList({ currentToken }: { currentToken?
                             {device.id === currentId && <span className="ag-tag">This device</span>}
                         </div>
                         <div className="ag-list-row-sub">
-                            Added {formatRelativeTime(device.registeredAt)} · last active {formatRelativeTime(device.lastSeenAt)}
+                            Added {formatRelativeTime(device.registeredAt, now)} · last active {formatRelativeTime(device.lastSeenAt, now)}
                         </div>
                     </div>
                     <button

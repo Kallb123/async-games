@@ -9,6 +9,7 @@ import { TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
 import { formatRemainingTimeShort } from "@/utils/games/TurnTimer";
+import { useNowToTheMinute } from "@/utils/hooks/useNow";
 import { useToast } from "@/components/ToastContext";
 
 const THEIR_TURN_EVENTS = ['NewInvite', 'GameStart', ...TURN_ADVANCED_EVENTS];
@@ -16,6 +17,7 @@ const THEIR_TURN_EVENTS = ['NewInvite', 'GameStart', ...TURN_ADVANCED_EVENTS];
 export default function TheirTurnList() {
     const { user } = useIsAuthorised();
     const { showToast } = useToast();
+    const now = useNowToTheMinute();
     const [nudgedGameIds, setNudgedGameIds] = useState(new Set<string>());
     const { data, isLoading, isRefreshing } = useRefreshableData<{ gameList: IGameResponse[] }>(
         '/api/game/theirturnlist',
@@ -55,7 +57,7 @@ export default function TheirTurnList() {
             hint="Use 👉 to send a nudge to move things along"
         >
             {gameList.map((game) => {
-                const timeLeft = formatRemainingTimeShort(game.lastTurnTimestamp, game.turnTimer);
+                const timeLeft = formatRemainingTimeShort(game.lastTurnTimestamp, game.turnTimer, now);
                 const opponentName = game.currentTurnUsername || opponents(game, user?.username, "them");
                 const alreadyNudged = nudgedGameIds.has(game.gameId);
                 return (
