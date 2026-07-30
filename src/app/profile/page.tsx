@@ -13,6 +13,7 @@ import { IFriendRequestResponse } from "@/utils/mongodb/FriendshipData";
 import { formatRelativeTime } from "@/utils/ui/time";
 import { FRIEND_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
+import { useNowToTheMinute } from "@/utils/hooks/useNow";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { displayName } from "@/utils/ui/players";
 import type { IGameStats, IRecentMatch } from "@/app/api/stats/route";
@@ -35,6 +36,7 @@ export default function Profile() {
     const { signOut } = useClerk();
     const router = useRouter();
     const { showToast } = useToast();
+    const now = useNowToTheMinute();
 
     const [inviteUsername, setInviteUsername] = useState("");
     const [isSending, setIsSending] = useState(false);
@@ -163,7 +165,7 @@ export default function Profile() {
                                 {reaction.actorUsername} · {reaction.gameName}
                             </div>
                             <div className="ag-list-row-sub">
-                                {reaction.eventTitle ?? "your move"} · {formatRelativeTime(reaction.timestamp)}
+                                {reaction.eventTitle ?? "your move"}{now !== null && ` · ${formatRelativeTime(reaction.timestamp, now)}`}
                             </div>
                         </div>
                         <ReactionPicker
@@ -212,7 +214,7 @@ export default function Profile() {
                                 <div className="ag-list-row-title">{displayName(friend.user)}</div>
                                 <div className="ag-list-row-sub">
                                     {friend.user.lastActionTimestamp
-                                        ? `Last active ${formatRelativeTime(friend.user.lastActionTimestamp)}`
+                                        ? now !== null && `Last active ${formatRelativeTime(friend.user.lastActionTimestamp, now)}`
                                         : "No activity yet"}
                                 </div>
                             </div>

@@ -1,5 +1,5 @@
 'use client'
-import { use, useEffect, useState } from "react";
+import { use, useState } from "react";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { usePathname } from "next/navigation";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
@@ -35,14 +35,6 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
 
     const state = gameData?.specificGameState;
     const complete = gameData?.complete ?? false;
-
-    // Live-tick the on-board clock once a second while the game is in progress.
-    const [, forceTick] = useState(0);
-    useEffect(() => {
-        if (complete) return;
-        const id = setInterval(() => forceTick(t => t + 1), 1000);
-        return () => clearInterval(id);
-    }, [complete]);
 
     const { submitCommand, submitting, pendingTarget } = useSubmitCommand<ISolitaireGameDataResponse>(gameId, user, setGameData, getGameData);
 

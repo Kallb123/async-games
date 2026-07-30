@@ -2,6 +2,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { formatRelativeTime } from '@/utils/ui/time';
+import { useNowToTheMinute } from '@/utils/hooks/useNow';
 import ReactionPicker from '@/components/ui/ReactionPicker';
 
 export interface TurnRecapEvent {
@@ -36,6 +37,7 @@ const ACCENT_CLASSES = new Set(['terracotta', 'green', 'gold', 'purple']);
 // were away, an optional strategic tip, and a call-to-action into the board.
 // One component, every game — driven entirely by props.
 export default function TurnRecap({ header, summary, events, tip, cta, backHref = '/', onReact }: TurnRecapProps) {
+    const now = useNowToTheMinute();
     const accentClass = ACCENT_CLASSES.has(header.accent) ? `ag-accent-${header.accent}` : undefined;
     const accentStyle = accentClass ? undefined : { background: header.accent };
 
@@ -62,7 +64,7 @@ export default function TurnRecap({ header, summary, events, tip, cta, backHref 
 
                 <ol className="ag-recap-timeline">
                     {events.map((event) => {
-                        const when = formatRelativeTime(event.timestamp);
+                        const when = formatRelativeTime(event.timestamp, now);
                         const detail = [event.detail, when].filter(Boolean).join(' · ');
                         return (
                             <li key={event.id} className="ag-recap-event">

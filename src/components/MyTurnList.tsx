@@ -11,12 +11,14 @@ import { TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
 import { formatRemainingTimeShort } from "@/utils/games/TurnTimer";
+import { useNowToTheMinute } from "@/utils/hooks/useNow";
 
 const MY_TURN_EVENTS = ['NewInvite', 'GameStart', ...TURN_ADVANCED_EVENTS];
 
 export default function MyTurnList() {
     const { user } = useIsAuthorised();
     const router = useRouter();
+    const now = useNowToTheMinute();
     const { data, isLoading, isRefreshing } = useRefreshableData<{ gameList: IGameResponse[] }>(
         '/api/game/myturnlist',
         MY_TURN_EVENTS,
@@ -46,7 +48,7 @@ export default function MyTurnList() {
                         {gameList.map((game) => {
                             const meta = metaForGame({ url: game.url, friendlyName: game.friendlyName });
                             const accent = meta ? accentVar(meta.accent) : "var(--ag-terracotta)";
-                            const timeLeft = formatRemainingTimeShort(game.lastTurnTimestamp, game.turnTimer);
+                            const timeLeft = formatRemainingTimeShort(game.lastTurnTimestamp, game.turnTimer, now);
                             return (
                                 <div
                                     key={game.gameId}

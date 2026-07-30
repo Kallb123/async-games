@@ -373,7 +373,8 @@ before deserialising the incoming body.
 
 `src/utils/games/TurnTimer.ts` defines the timer buckets (`10m` … `7d`) and pure
 helpers: `isExpired`, `isWarningThreshold` (fires at 20% remaining, min 5 min),
-and `formatRemainingTime`.
+and `formatRemainingTime`. The client-facing `formatRemainingTimeShort` takes the
+current time as an argument instead of reading the clock — see §11 on `useNow`.
 
 `GET /api/cron/turntimer` (`src/app/api/cron/turntimer/route.ts`) is the
 enforcement job. It:
@@ -513,7 +514,16 @@ layout) rendered inside a centred `.ag-app` column.
   - `src/utils/ui/` — pure helpers: `games.ts` (per-game metadata: name, art,
     accent, players), `avatar.ts`, `players.ts`.
   - `src/utils/hooks/` — shared stateful logic (`usePlayerList`, the invite
-    picker; `useTurnNavigation`).
+    picker; `useTurnNavigation`; `useNow`/`useNowToTheMinute`, the shared clock).
+- **Reading the clock.** Components never call `Date.now()` while rendering — not
+  even inside a helper, where `react-hooks/purity` can't see it. `useNow`
+  (`src/utils/hooks/useNow.ts`) reads the wall clock as the external source it is
+  via `useSyncExternalStore`, off one shared ticker, and returns `null` until
+  hydration (the server's reading is already stale by the time the client paints).
+  Pass that value into the pure formatters — `formatRelativeTime`,
+  `formatRemainingTimeShort` — which render no label for a `null` now.
+  `useNowToTheMinute` is the same clock at minute resolution, so lists of
+  "14h ago"/"1h left" labels don't re-render every second.
 - **Game metadata** (`src/utils/ui/games.ts`) is the single source of truth for a
   game's name, slug, art, accent colour, and player count across the library,
   home cards, and setup headers.
