@@ -155,7 +155,6 @@ export default function Profile() {
                 label="Reactions"
                 isLoading={reactionsData.isLoading}
                 isRefreshing={reactionsData.isRefreshing}
-                hasItems={reactions.length > 0}
             >
                 {reactions.map((reaction) => (
                     <div key={reaction.reactionId} className="ag-list-row">
@@ -182,7 +181,6 @@ export default function Profile() {
                 count={friends.length}
                 isLoading={friendsData.isLoading}
                 isRefreshing={friendsData.isRefreshing}
-                hasItems={friends.length > 0}
                 skeletonRows={3}
                 action={
                     <button type="button" className="ag-section-action" onClick={() => setShowAdd(v => !v)}>
@@ -238,7 +236,6 @@ export default function Profile() {
                 count={incomingRequests.length}
                 isLoading={false}
                 isRefreshing={friendsData.isRefreshing}
-                hasItems={incomingRequests.length > 0}
             >
                 {incomingRequests.map((request) => (
                     <div key={request.friendshipId} className="ag-list-row">
@@ -259,7 +256,6 @@ export default function Profile() {
                 count={outgoingRequests.length}
                 isLoading={false}
                 isRefreshing={friendsData.isRefreshing}
-                hasItems={outgoingRequests.length > 0}
             >
                 {outgoingRequests.map((request) => (
                     <div key={request.friendshipId} className="ag-list-row">

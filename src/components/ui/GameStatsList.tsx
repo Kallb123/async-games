@@ -20,7 +20,7 @@ interface GameStatsListProps {
 // shape, different section label.
 export default function GameStatsList({ label, stats, isLoading, isRefreshing }: GameStatsListProps) {
     return (
-        <ListSection label={label} isLoading={isLoading} isRefreshing={isRefreshing} hasItems={stats.length > 0}>
+        <ListSection label={label} isLoading={isLoading} isRefreshing={isRefreshing}>
             {stats.map(stat => {
                 const meta = GAME_META[stat.url];
                 return (

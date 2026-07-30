@@ -52,7 +52,6 @@ export default function TheirTurnList() {
             label="Waiting on others"
             isLoading={isLoading}
             isRefreshing={isRefreshing}
-            hasItems={gameList.length > 0}
             skeletonAvatar={false}
             hint="Use 👉 to send a nudge to move things along"
         >

@@ -2,6 +2,7 @@
 
 import Refreshable from "@/components/ui/Refreshable";
 import { SkeletonRow } from "@/components/ui/Skeleton";
+import useAnimatedList from "@/utils/hooks/useAnimatedList";
 
 interface ListSectionProps {
     label: string;
@@ -11,7 +12,6 @@ interface ListSectionProps {
     isLoading: boolean;
     /** A later refetch — rows stay put and shimmer instead. */
     isRefreshing?: boolean;
-    hasItems: boolean;
     skeletonRows?: number;
     /** Skeleton rows lead with an avatar circle; false gives the small status dot. */
     skeletonAvatar?: boolean;
@@ -28,16 +28,16 @@ interface ListSectionProps {
 }
 
 // An `ag-section` that hides itself once loaded with nothing to show (unless
-// given an `empty` message), shows `SkeletonRow`s on first load, and shimmers
-// its existing rows during a background refresh. Shared by every "heading +
-// ag-list of rows" section: the home dashboard's turn/invite lists, the
-// profile screens' friends, stats and reactions, the settings device list.
+// given an `empty` message), shows `SkeletonRow`s on first load, shimmers its
+// existing rows during a background refresh, and grows rows in and out as they
+// come and go. Shared by every "heading + ag-list of rows" section: the home
+// dashboard's turn/invite lists, the profile screens' friends, stats and
+// reactions, the settings device list.
 export default function ListSection({
     label,
     count,
     isLoading,
     isRefreshing = false,
-    hasItems,
     skeletonRows = 2,
     skeletonAvatar = true,
     action,
@@ -46,13 +46,17 @@ export default function ListSection({
     hint,
     children,
 }: ListSectionProps) {
-    if (!isLoading && !hasItems && !empty) {
+    // Rows the list still has on screen — which includes any that have been
+    // removed and are shrinking away, so the section outlives its last row.
+    const rows = useAnimatedList(children);
+
+    if (!isLoading && rows.length === 0 && !empty) {
         return null;
     }
     return (
         <div className="ag-section">
             <div className="ag-section-head">
-                <h2 className="ag-section-label">{label}{hasItems && count !== undefined ? ` · ${count}` : ""}</h2>
+                <h2 className="ag-section-label">{label}{count ? ` · ${count}` : ""}</h2>
                 {action}
             </div>
             {beforeList}
@@ -62,11 +66,11 @@ export default function ListSection({
                         {Array.from({ length: skeletonRows }).map((_, i) => <SkeletonRow key={i} avatar={skeletonAvatar} />)}
                     </div>
                 )
-                : !hasItems
+                : rows.length === 0
                 ? empty
                 : (
                     <>
-                        <Refreshable className="ag-list" isRefreshing={isRefreshing}>{children}</Refreshable>
+                        <Refreshable className="ag-list" isRefreshing={isRefreshing}>{rows}</Refreshable>
                         {hint && <p className="ag-hint">{hint}</p>}
                     </>
                 )}

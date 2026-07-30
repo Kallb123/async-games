@@ -47,7 +47,6 @@ export default function IncomingInviteList() {
             count={inviteList.length}
             isLoading={isLoading}
             isRefreshing={isRefreshing}
-            hasItems={inviteList.length > 0}
         >
             {inviteList.map((invite) => (
                 <div key={invite.inviteId} className="ag-list-row">
