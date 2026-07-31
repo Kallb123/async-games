@@ -36,6 +36,8 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
         "DiceCitiesRequestUnlockShoppingMall",
         "DiceCitiesRequestUnlockAmusementPark",
         "DiceCitiesRequestUnlockRadioTower",
+        "DiceCitiesRequestUnlockHarbour",
+        "DiceCitiesRequestHarbourBonus",
         "DiceCitiesRequestTvStationSelection",
         "DiceCitiesRequestBusinessCenterOwnSelection",
         "DiceCitiesRequestBusinessCenterOpponentSelection",

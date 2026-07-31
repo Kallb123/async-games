@@ -14,6 +14,7 @@ function player(overrides: Partial<IDiceCitiesPlayerStateResponse> & { userId: s
         bonusDiningAndStore: false,
         rerollDoubles: false,
         oneReroll: false,
+        harbourUnlocked: false,
         lastDiceSelection: 1,
         ...overrides,
     };
@@ -35,6 +36,9 @@ function state(players: IDiceCitiesPlayerStateResponse[]): IDiceCitiesGameStateR
         bcSelectedOpponentCard: null,
         awaitingDoubleReroll: false,
         hasReRolled: false,
+        awaitingHarbourChoice: false,
+        harbourRoll1: null,
+        harbourRoll2: null,
     };
 }
 

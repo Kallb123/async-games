@@ -7,17 +7,20 @@ import {
     DiceCitiesRequestBusinessCenterOwnSelection,
     DiceCitiesRequestCardPurchase,
     DiceCitiesRequestDiceRoll,
+    DiceCitiesRequestHarbourBonus,
     DiceCitiesRequestPassTurn,
     DiceCitiesRequestRadioTowerReroll,
     DiceCitiesRequestTvStationSelection,
     DiceCitiesRequestUnlockAmusementPark,
+    DiceCitiesRequestUnlockHarbour,
     DiceCitiesRequestUnlockRadioTower,
     DiceCitiesRequestUnlockShoppingMall,
     DiceCitiesRequestUnlockTrainStation,
     IDiceCitiesDiceRollOutcome,
     IGameCommand,
 } from "@/utils/apiModels/GameLogic";
-import { ACTIVATION_META, LANDMARKS, activationFor, rollLabel, yieldLabel } from "@/games/DiceCities/ui";
+import { HARBOUR_BONUS } from "@/games/DiceCities/cards";
+import { ACTIVATION_META, activationFor, buildableLandmarks, rollLabel, yieldLabel } from "@/games/DiceCities/ui";
 import CardArt from "@/games/DiceCities/components/CardArt";
 import type { SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import Dice from "@/components/ui/Dice";
@@ -40,6 +43,8 @@ interface DiceCitiesActionsProps {
      * is left inert.
      */
     readOnly?: boolean;
+    /** Docks games can also build the Harbour, and answer its +2 offer. */
+    enabledDocks: boolean;
 }
 
 // The unlock command for each of the four win-condition landmarks, keyed by the
@@ -49,24 +54,26 @@ const LANDMARK_UNLOCK: Record<string, new () => IGameCommand> = {
     bonusDiningAndStore: DiceCitiesRequestUnlockShoppingMall,
     rerollDoubles: DiceCitiesRequestUnlockAmusementPark,
     oneReroll: DiceCitiesRequestUnlockRadioTower,
+    harbourUnlocked: DiceCitiesRequestUnlockHarbour,
 };
 
-export default function DiceCitiesActions({ gameState, myState, opponents, submitCommand, pendingTarget, readOnly = false }: DiceCitiesActionsProps) {
+export default function DiceCitiesActions({ gameState, myState, opponents, submitCommand, pendingTarget, readOnly = false, enabledDocks }: DiceCitiesActionsProps) {
     // A command is in flight — disable the sheet so a double-tap can't fire two
     // commands before the first response lands.
     const busy = pendingTarget !== null;
     // Which die count the player has selected for their next roll.
     const [diceCount, setDiceCount] = useState<1 | 2>(myState.lastDiceSelection);
     // The most recent roll, kept locally so the dice + total stay on screen
-    // through the build step (rolling does not advance the turn).
-    const [roll, setRoll] = useState<{ roll1: number; roll2: number | null } | null>(null);
+    // through the build step (rolling does not advance the turn). `bonus` is the
+    // Harbour's +2 once taken, so the total on screen is the one that paid out.
+    const [roll, setRoll] = useState<{ roll1: number; roll2: number | null; bonus: number } | null>(null);
     const [rolling, setRolling] = useState(false);
     const [face, setFace] = useState<{ a: number; b: number }>({ a: 1, b: 1 });
     const tumble = useRef<ReturnType<typeof setInterval> | null>(null);
 
     // Tumble the dice for a beat, then settle on the real values.
     const animateRoll = (r: { roll1: number; roll2: number | null }) => {
-        setRoll(r);
+        setRoll({ ...r, bonus: 0 });
         setRolling(true);
         if (tumble.current) clearInterval(tumble.current);
         tumble.current = setInterval(() => {
@@ -100,6 +107,16 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
         });
     };
 
+    // Answers the Harbour's offer on a parked 10-or-better roll. Taking it pays
+    // the table out at the higher total, so the dice on screen gain the +2.
+    const answerHarbour = (addBonus: boolean) => {
+        const command = new DiceCitiesRequestHarbourBonus();
+        command.addBonus = addBonus;
+        send(command, `harbour:${addBonus ? "add" : "keep"}`, () => {
+            if (addBonus) setRoll((r) => (r ? { ...r, bonus: HARBOUR_BONUS } : r));
+        });
+    };
+
     const buyCard = (cardId: uuidString) => {
         const command = new DiceCitiesRequestCardPurchase();
         command.cardId = cardId;
@@ -120,7 +137,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
     const buyable = [...gameState.bankCards].sort(
         (a, b) => DiceCitiesCards[a.card].rollNumber[0] - DiceCitiesCards[b.card].rollNumber[0],
     );
-    const unbuiltLandmarks = LANDMARKS.filter((l) => !myState[l.flag]);
+    const unbuiltLandmarks = buildableLandmarks(enabledDocks).filter((l) => !myState[l.flag]);
     const marketSheet = (
         <>
             <div className="ag-dc-market-head">
@@ -193,6 +210,42 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
     if (readOnly) return <div className="ag-actionsheet ag-dc-market">{marketSheet}</div>;
 
     // ── Pending selections take over the sheet until resolved ────────────────
+    if (gameState.awaitingHarbourChoice) {
+        // Read the parked dice off the game state rather than the local roll, so
+        // the choice survives a refresh or a hand-off between devices.
+        const dice = [gameState.harbourRoll1 ?? 0, ...(gameState.harbourRoll2 != null ? [gameState.harbourRoll2] : [])];
+        const rolled = dice.reduce((a, b) => a + b, 0);
+        const choices = [
+            { add: true, label: `Add +${HARBOUR_BONUS} · make it ${rolled + HARBOUR_BONUS}`, target: "harbour:add" },
+            { add: false, label: `Keep ${rolled}`, target: "harbour:keep" },
+        ];
+        return (
+            <div className="ag-actionsheet">
+                <SelectionHead icon="⚓" title="Harbour" sub={`You rolled ${rolled}. The Harbour can add ${HARBOUR_BONUS} to it.`} />
+                <div className="ag-dc-roll">
+                    <Dice values={dice} size={40} />
+                    <div className="ag-dc-roll-main">
+                        <div className="ag-dc-roll-total">Total {rolled}</div>
+                        <div className="ag-dc-roll-sub">nobody is paid until you decide</div>
+                    </div>
+                </div>
+                <div className="ag-dc-pick-list ag-pending-group">
+                    {choices.map((choice) => (
+                        <button
+                            key={choice.target}
+                            className={`ag-dc-pick-row${pendingTarget === choice.target ? ' ag-pending-skin' : ''}`}
+                            disabled={busy}
+                            onClick={() => answerHarbour(choice.add)}
+                        >
+                            <span className="ag-dc-pick-name">{choice.label}</span>
+                            {pendingTarget === choice.target && <PendingTag label="Sending" />}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
     if (gameState.awaitingTSSelection) {
         return (
             <div className="ag-actionsheet">
@@ -313,7 +366,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
     }
 
     // ── Post-roll: dice result + market ──────────────────────────────────────
-    const total = roll ? roll.roll1 + (roll.roll2 ?? 0) : null;
+    const total = roll ? roll.roll1 + (roll.roll2 ?? 0) + roll.bonus : null;
     const canReroll = myState.oneReroll && !gameState.hasReRolled;
 
     return (
@@ -328,7 +381,9 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
                         rolling={rolling}
                     />
                     <div className="ag-dc-roll-main">
-                        <div className="ag-dc-roll-total">{rolling ? "Rolling…" : `Total ${total}`}</div>
+                        <div className="ag-dc-roll-total">
+                            {rolling ? "Rolling…" : `Total ${total}${roll.bonus > 0 ? ` (Harbour +${roll.bonus})` : ""}`}
+                        </div>
                         <div className="ag-dc-roll-sub">
                             {rolling ? "the dice are tumbling" : "payouts are in — build one, or end your turn"}
                         </div>
