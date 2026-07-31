@@ -8,7 +8,8 @@ export interface ISnakesAndLaddersPlayerStateResponse {
 
 export interface ISnakesAndLaddersGameStateResponse {
     playerStates: { [key: string]: ISnakesAndLaddersPlayerStateResponse },
-    hasRolled: boolean
+    hasRolled: boolean,
+    reRollOnSix: boolean
 }
 
 export interface ISnakesAndLaddersGameDataResponse extends IGameDataResponse {

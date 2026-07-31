@@ -6,6 +6,7 @@ import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
+import OptionSection from "@/components/ui/OptionSection";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
 import { GAME_META } from "@/utils/ui/games";
@@ -124,44 +125,42 @@ function NewGameSettlementsAndCitiesForm() {
       <UserInviteList userList={userList} setItem={setItem} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
 
-      <div className="ag-section">
-        <div className="ag-section-head">
-          <h2 className="ag-section-label">Expansions</h2>
-        </div>
-        <div className="ag-card" style={{ padding: "4px 16px" }}>
-          {SAC_EXPANSION_META.map(meta => (
-            <ExpansionToggle
-              key={meta.id}
-              title={meta.name}
-              source={meta.source}
-              desc={meta.tagline}
-              on={expansions[meta.id]}
-              onToggle={() => toggle(meta.id)}
-              disabled={meta.disabled}
-            />
+      <OptionSection
+        label="Expansions"
+        footer={<>
+          {/* Live compatibility + player-count feedback (design doc §8). */}
+          <p className="ag-hint">
+            Party size {totalPlayers} · supports {validation.min}–{validation.max} players · first to{' '}
+            <span className="ag-hi">{validation.victoryTarget} VP</span> wins.
+          </p>
+          {validation.errors.map((msg, i) => (
+            <p
+              key={`e${i}`}
+              className="ag-hint"
+              style={{ color: "var(--ag-terracotta)", fontWeight: 700 }}
+            >
+              ⚠ {msg}
+            </p>
           ))}
-        </div>
-
-        {/* Live compatibility + player-count feedback (design doc §8). */}
-        <p className="ag-hint">
-          Party size {totalPlayers} · supports {validation.min}–{validation.max} players · first to{' '}
-          <span className="ag-hi">{validation.victoryTarget} VP</span> wins.
-        </p>
-        {validation.errors.map((msg, i) => (
-          <p
-            key={`e${i}`}
-            className="ag-hint"
-            style={{ color: "var(--ag-terracotta)", fontWeight: 700 }}
-          >
-            ⚠ {msg}
-          </p>
+          {validation.warnings.map((msg, i) => (
+            <p key={`w${i}`} className="ag-hint" style={{ color: "var(--ag-gold)" }}>
+              ℹ {msg}
+            </p>
+          ))}
+        </>}
+      >
+        {SAC_EXPANSION_META.map(meta => (
+          <ExpansionToggle
+            key={meta.id}
+            title={meta.name}
+            source={meta.source}
+            desc={meta.tagline}
+            on={expansions[meta.id]}
+            onToggle={() => toggle(meta.id)}
+            disabled={meta.disabled}
+          />
         ))}
-        {validation.warnings.map((msg, i) => (
-          <p key={`w${i}`} className="ag-hint" style={{ color: "var(--ag-gold)" }}>
-            ℹ {msg}
-          </p>
-        ))}
-      </div>
+      </OptionSection>
       <FcmTokenComp />
     </GameSetupLayout>
   );

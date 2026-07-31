@@ -1,7 +1,7 @@
 import { IGameData } from "../mongodb/GameData";
 import { IGameCommand, IGameType, ICommandOutcome } from "../apiModels/GameLogic";
 import { deserializeJSON } from "../apiModels/Serialisable";
-import { buildInitialSnakesAndLaddersState, gameStateToModel as snakesAndLaddersStateToModel } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
+import { buildInitialSnakesAndLaddersState, gameStateToModel as snakesAndLaddersStateToModel, ISnakesAndLaddersGameData } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
 import { buildInitialDiceCitiesState, gameStateToModel as diceCitiesStateToModel } from "@/games/DiceCities/DiceCitiesModels";
 import { buildInitialSmartthinkState, gameStateToModel as smartthinkStateToModel } from "@/games/Smartthink/SmartthinkModels";
 import { buildInitialSettlementsAndCitiesState, gameStateToResponse as settlementsAndCitiesStateToModel } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
@@ -77,7 +77,12 @@ export function getReplayAdapter(className: string): IReplayAdapter | undefined 
 
 registerReplayAdapter({
     className: "SnakesAndLaddersGameType",
-    buildInitialSpecificGameState: (gameData) => buildInitialSnakesAndLaddersState(gameData.userIdList),
+    // The re-roll house rule is fixed at creation, so reading it off the live
+    // state reproduces the rule the recorded rolls were actually played under.
+    buildInitialSpecificGameState: (gameData) => buildInitialSnakesAndLaddersState(
+        gameData.userIdList,
+        (gameData as ISnakesAndLaddersGameData).specificGameState?.reRollOnSix === true,
+    ),
     toResponseState: (specificGameState, userIdNameMap) =>
         snakesAndLaddersStateToModel(specificGameState as never, userIdNameMap),
 });

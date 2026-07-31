@@ -24,6 +24,8 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand, type SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { ISnakesAndLaddersGameStateResponse } from "@/games/SnakesAndLadders/apiModels";
 import { ISnakesAndLaddersDiceRollOutcome, SnakesAndLaddersRequestDiceRoll } from "@/utils/apiModels/GameLogic";
+import { SL_REROLL_PARAM } from "@/games/SnakesAndLadders/ui";
+import { rematchFlag } from "@/utils/ui/rematch";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
 import { currentUsername } from "@/utils/ui/players";
 
@@ -35,6 +37,10 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     // The post-roll payoff screen lives here (not in the actions component) so
     // it survives the roll advancing the turn to the next player.
     const [rollResult, setRollResult] = useState<RollResult | null>(null);
+    // Re-roll-on-6 games keep the turn with the roller, and nothing in the
+    // persisted state distinguishes that bonus roll from a first roll — so the
+    // last outcome is remembered here purely to label the roll as "again".
+    const [bonusRoll, setBonusRoll] = useState(false);
 
     const { gameid } = use(params);
     const gameId = gameid;
@@ -75,6 +81,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
             newPosition: 0,
             landedOnSnake: false,
             landedOnLadder: false,
+            extraRoll: false,
         };
         callback?.({ outcome, gameData } as ICommandResponse);
     };
@@ -109,7 +116,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
         if (complete) {
             subtitle = currentUserWon ? '🏆 You won!' : `${getWinnerDisplayName()} won`;
         } else if (isMyTurn) {
-            subtitle = <><span className="ag-hi">Your move</span> · roll the die</>;
+            subtitle = <><span className="ag-hi">Your move</span> · {bonusRoll ? 'roll again' : 'roll the die'}</>;
         } else {
             subtitle = <>{currentTurnUsername}&apos;s move</>;
         }
@@ -142,14 +149,18 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
         ? Object.values(gameData.specificGameState.playerStates).find(p => p.userId === user?.id)?.position ?? 0
         : 0;
 
+    const reRollOnSix = gameData?.specificGameState?.reRollOnSix === true;
+
     // Roll live: capture the pre-roll square, submit, then show the payoff
-    // screen. Rolling ends the turn server-side, so the actions unmount — the
-    // result screen is rendered from the page and stays put.
+    // screen. A roll normally ends the turn server-side, so the actions unmount
+    // — the result screen is rendered from the page and stays put.
     const handleRoll = () => {
         const from = myPosition;
-        submitCommand(new SnakesAndLaddersRequestDiceRoll(), (commandResponse) => {
+        const command = new SnakesAndLaddersRequestDiceRoll();
+        submitCommand(command, (commandResponse) => {
             const outcome = commandResponse.outcome as ISnakesAndLaddersDiceRollOutcome;
-            setRollResult(buildRollResult(from, outcome));
+            setRollResult(buildRollResult(command.id, from, outcome));
+            setBonusRoll(outcome.extraRoll === true);
         });
     };
 
@@ -216,6 +227,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
                     usernameList={usernameList}
                     myUsername={myUsername}
                     turnTimer={gameData?.turnTimer}
+                    extraParams={rematchFlag(SL_REROLL_PARAM, reRollOnSix)}
                 />
             )}
 
@@ -233,14 +245,16 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
                     mode="live"
                     onRoll={handleRoll}
                     pending={submitting}
+                    reRollOnSix={reRollOnSix}
+                    bonusRoll={bonusRoll}
                 />
             )}
 
             {rollResult && (
                 <SnakesAndLaddersRollResult
-                    key={`${rollResult.from}-${rollResult.roll}-${rollResult.newPosition}`}
+                    key={rollResult.id}
                     result={rollResult}
-                    onEndTurn={() => { setRollResult(null); getGameData(); }}
+                    onDismiss={() => { setRollResult(null); getGameData(); }}
                 />
             )}
 

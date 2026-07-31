@@ -32,7 +32,9 @@ export interface ISnakesAndLaddersDiceRollOutcome extends ICommandOutcome {
     roll: number,
     newPosition: number,
     landedOnSnake: boolean,
-    landedOnLadder: boolean
+    landedOnLadder: boolean,
+    /** Re-roll-on-6 games: this roll kept the die with the same player. */
+    extraRoll: boolean
 }
 
 @serializable
@@ -97,7 +99,8 @@ export class SnakesAndLaddersRequestDiceRoll implements IGameCommand {
                 roll: 0,
                 newPosition: 0,
                 landedOnSnake: false,
-                landedOnLadder: false
+                landedOnLadder: false,
+                extraRoll: false
             };
         }
 
@@ -109,7 +112,8 @@ export class SnakesAndLaddersRequestDiceRoll implements IGameCommand {
                 roll: 0,
                 newPosition: 0,
                 landedOnSnake: false,
-                landedOnLadder: false
+                landedOnLadder: false,
+                extraRoll: false
             };
         }
 
@@ -138,26 +142,33 @@ export class SnakesAndLaddersRequestDiceRoll implements IGameCommand {
         }
 
         playerState.position = newPosition;
-        slGameData.specificGameState.hasRolled = true;
+
+        // House rule: a 6 hands the die straight back to the same player, so the
+        // turn isn't over and they're free to roll again. Reaching 100 ends the
+        // game outright, so there's nothing left to re-roll for.
+        const extraRoll = slGameData.specificGameState.reRollOnSix === true && roll === 6 && newPosition < 100;
+        slGameData.specificGameState.hasRolled = !extraRoll;
 
         const senderUsername = this.senderUsername;
+        const again = extraRoll ? " and rolls again" : "";
         if (landedOnSnake) {
-            slGameData.gameState.history.unshift(`${senderUsername} rolled a ${roll} and slid down a snake to square ${newPosition}`);
+            slGameData.gameState.history.unshift(`${senderUsername} rolled a ${roll} and slid down a snake to square ${newPosition}${again}`);
         } else if (landedOnLadder) {
-            slGameData.gameState.history.unshift(`${senderUsername} rolled a ${roll} and climbed a ladder to square ${newPosition}`);
+            slGameData.gameState.history.unshift(`${senderUsername} rolled a ${roll} and climbed a ladder to square ${newPosition}${again}`);
         } else if (rawPosition > 100) {
-            slGameData.gameState.history.unshift(`${senderUsername} rolled a ${roll} but needs exactly ${100 - playerState.position} to win – no move`);
+            slGameData.gameState.history.unshift(`${senderUsername} rolled a ${roll} but needs exactly ${100 - playerState.position} to win – no move${again}`);
         } else {
-            slGameData.gameState.history.unshift(`${senderUsername} rolled a ${roll} and moved to square ${newPosition}`);
+            slGameData.gameState.history.unshift(`${senderUsername} rolled a ${roll} and moved to square ${newPosition}${again}`);
         }
 
         const outcome: ISnakesAndLaddersDiceRollOutcome = {
-            turnOver: true,
+            turnOver: !extraRoll,
             validMove: true,
             roll,
             newPosition,
             landedOnSnake,
-            landedOnLadder
+            landedOnLadder,
+            extraRoll
         };
         return outcome;
     }

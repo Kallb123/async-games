@@ -10,9 +10,12 @@ import { SnakesAndLaddersGameType } from "@/utils/apiModels/GameLogic";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 
 export interface SnakesAndLaddersInvitationRequest extends IInvitationRequest {
+    /** House rule: rolling a 6 earns another roll instead of ending the turn. */
+    reRollOnSix: boolean;
 }
 
 export interface ISnakesAndLaddersInvitationData extends IInvitationData {
+    reRollOnSix: boolean;
 }
 
 export interface ISnakesAndLaddersInvitationDataDocument extends ISnakesAndLaddersInvitationData, IInvitationDataDocument {
@@ -52,7 +55,9 @@ function SortUsersByRoll(userIdList: string[], usernameMap: Map<string, string>,
     });
 }
 
-var SnakesAndLaddersInvitationSchema = new Schema<ISnakesAndLaddersInvitationDataDocument>({}, { discriminatorKey: 'kind' });
+var SnakesAndLaddersInvitationSchema = new Schema<ISnakesAndLaddersInvitationDataDocument>({
+    reRollOnSix: Boolean
+}, { discriminatorKey: 'kind' });
 SnakesAndLaddersInvitationSchema.methods.CreateGame = async function(invite: ISnakesAndLaddersInvitationData, userIdList: string[]) {
     console.log("CreateGame: Snakes and Ladders game");
 
@@ -65,7 +70,12 @@ SnakesAndLaddersInvitationSchema.methods.CreateGame = async function(invite: ISn
 
     SortUsersByRoll(userIdList, usernameMap, turnOrder, history, 6);
 
-    const initialSpecificGameState = buildInitialSnakesAndLaddersState(userIdList);
+    const reRollOnSix = this.reRollOnSix === true;
+    if (reRollOnSix) {
+        history.push("Setup: re-roll on a 6 is enabled");
+    }
+
+    const initialSpecificGameState = buildInitialSnakesAndLaddersState(userIdList, reRollOnSix);
 
     const gameData: ISnakesAndLaddersGameData = {
         gameId: uuidv4() as uuidString,
@@ -96,7 +106,9 @@ export interface ISnakesAndLaddersPlayerState {
 
 export interface ISnakesAndLaddersGameState {
     playerPositions: Map<string, ISnakesAndLaddersPlayerState>,
-    hasRolled: boolean
+    hasRolled: boolean,
+    /** House rule chosen at setup: a 6 earns another roll. Never changes. */
+    reRollOnSix: boolean
 }
 
 export interface ISnakesAndLaddersGameData extends IGameData {
@@ -119,7 +131,8 @@ var SnakesAndLaddersGameDataSchema = new Schema<ISnakesAndLaddersGameDataDocumen
                 snakesHit: Number
             }
         },
-        hasRolled: Boolean
+        hasRolled: Boolean,
+        reRollOnSix: Boolean
     }
 }, { discriminatorKey: 'kind' });
 
@@ -149,14 +162,15 @@ SnakesAndLaddersGameDataSchema.methods.CreateDataResponse = async function(): Pr
 // Builds the deterministic starting specificGameState for a Snakes & Ladders
 // game. Used both at game creation and by the replay engine to reconstruct
 // historical / planned states from commandHistory.
-export function buildInitialSnakesAndLaddersState(userIdList: string[]): ISnakesAndLaddersGameState {
+export function buildInitialSnakesAndLaddersState(userIdList: string[], reRollOnSix: boolean): ISnakesAndLaddersGameState {
     const playerPositions = new Map<string, ISnakesAndLaddersPlayerState>();
     for (const userId of userIdList) {
         playerPositions.set(userId, { position: 0, laddersClimbed: 0, snakesHit: 0 });
     }
     return {
         playerPositions,
-        hasRolled: false
+        hasRolled: false,
+        reRollOnSix
     };
 }
 
@@ -171,7 +185,8 @@ export function gameStateToModel(gameState: ISnakesAndLaddersGameState, userIdNa
     }
     return {
         playerStates,
-        hasRolled: gameState.hasRolled
+        hasRolled: gameState.hasRolled,
+        reRollOnSix: gameState.reRollOnSix === true
     };
 }
 
