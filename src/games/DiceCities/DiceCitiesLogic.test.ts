@@ -288,6 +288,40 @@ describe("Dice Cities bank supply", () => {
     });
 });
 
+// A card's rollNumber is the list of totals it activates on. Writing a range as
+// one number ("11.12") reads fine but matches nothing, so the card silently
+// never pays - which is exactly what the Fruit and Vegetable Market did.
+describe("Dice Cities activation numbers", () => {
+    it("pays the Fruit and Vegetable Market on both of its numbers", async () => {
+        for (const [die1, die2] of [[5, 6], [6, 6]]) {
+            const gs = makeState({
+                playerStates: new Map([
+                    ["u1", player({
+                        doubleUnlocked: true,
+                        cards: [
+                            { card: DiceCitiesCardIds.FRUIT_MARKET, amount: 1 },
+                            { card: DiceCitiesCardIds.WHEAT_FIELD, amount: 1 },
+                            { card: DiceCitiesCardIds.APPLE_ORCHARD, amount: 1 },
+                        ],
+                    })],
+                    ["u2", player()],
+                ]),
+            });
+
+            await rollCommand(die1, "u1", die2).Execute(makeGame(gs));
+
+            // 2 coins for each of the two Farm establishments owned.
+            expect(gs.playerStates.get("u1")!.money).toBe(4);
+        }
+    });
+
+    it("gives every card a whole number to activate on", () => {
+        for (const card of Object.values(DiceCitiesCards)) {
+            expect(card.rollNumber.every(Number.isInteger)).toBe(true);
+        }
+    });
+});
+
 describe("Dice Cities: the Docks", () => {
     it("stocks the expansion's establishments only when it is switched on", () => {
         const withDocks = buildInitialDiceCitiesState(["u1", "u2"], true).bankCards.map(cc => cc.card);

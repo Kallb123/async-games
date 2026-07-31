@@ -279,7 +279,7 @@ const fruitAndVegetableMarket: IDiceCitiesCard = {
     cardId: "f8dd441e-5bed-444f-9659-b025d769af92",
     title: "Fruit and Vegetable Market",
     cost: 2,
-    rollNumber: [11.12],
+    rollNumber: [11, 12],
     text: "If this is your turn, get 2 coins from the bank for each Farm establishment that you own",
     art: "fruit-market.png",
     type: "market",
