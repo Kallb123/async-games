@@ -422,10 +422,18 @@ export class DiceCitiesRequestHarbourBonus implements IGameCommand {
             };
         }
 
+        const rollerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
+        if (!rollerState) {
+            return {
+                turnOver: false,
+                validMove: false
+            };
+        }
+
         const rolled = gameState.harbourRoll1 + (gameState.harbourRoll2 ?? 0);
         const totalRoll = this.addBonus ? rolled + HARBOUR_BONUS : rolled;
 
-        const outcome = resolveRoll(dcGameData, totalRoll, gameState.harbourRoll1, gameState.harbourRoll2, this.recordedTunaRoll ?? undefined);
+        const outcome = resolveRoll(dcGameData, rollerState, totalRoll, gameState.harbourRoll1, gameState.harbourRoll2, this.recordedTunaRoll ?? undefined);
         this.moneyChanges = outcome.moneyChanges;
         this.coinsEarnedChanges = outcome.coinsEarnedChanges;
         this.bankChange = outcome.bankChange;
@@ -1042,27 +1050,13 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean, recorded
         };
     }
 
-    return resolveRoll(dcGameData, totalRoll, roll1, roll2, recorded?.tunaRoll ?? undefined);
+    return resolveRoll(dcGameData, rollerState, totalRoll, roll1, roll2, recorded?.tunaRoll ?? undefined);
 }
 
 // Pays a settled total out across every city: restaurants first, then the bank's
 // blue/green income, then the roller's purple majors. Split out from the roll
 // itself because the Docks' Harbour can change the total after the dice land.
-function resolveRoll(dcGameData: IDiceCitiesGameData, totalRoll: number, roll1: number, roll2: number | null, recordedTunaRoll?: number): IDiceCitiesDiceRollOutcome {
-    const rollerState = dcGameData.specificGameState.playerStates.get(dcGameData.currentTurn);
-    if (!rollerState) {
-        console.error("Unable to find rolling player's state");
-        return {
-            turnOver: false,
-            validMove: false,
-            roll1: 0,
-            roll2: 0,
-            moneyChanges: new Map,
-            coinsEarnedChanges: new Map,
-            bankChange: 0
-        };
-    }
-
+function resolveRoll(dcGameData: IDiceCitiesGameData, rollerState: IDiceCitiesPlayerState, totalRoll: number, roll1: number, roll2: number | null, recordedTunaRoll?: number): IDiceCitiesDiceRollOutcome {
     const moneyChanges: Map<string, number> = zeroedChanges(dcGameData);
     const coinsEarnedChanges: Map<string, number> = zeroedChanges(dcGameData);
     // What the bank paid out this roll, and what it couldn't cover.
