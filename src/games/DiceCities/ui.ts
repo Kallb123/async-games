@@ -50,12 +50,9 @@ export function yieldLabel(card: IDiceCitiesCard): string {
     return "";
 }
 
-// The rollNumber data uses floats like 11.12 to mean "11 or 12"; render those
-// as a clean "11-12" range and plain integers as-is.
+/** The numbers a card activates on, e.g. "5" or "9, 10". */
 export function rollLabel(card: IDiceCitiesCard): string {
-    return card.rollNumber
-        .map((n) => (Number.isInteger(n) ? String(n) : String(n).replace(".", "-")))
-        .join(", ");
+    return card.rollNumber.join(", ");
 }
 
 // Narrower than `keyof IDiceCitiesPlayerStateResponse` so LANDMARKS can also
