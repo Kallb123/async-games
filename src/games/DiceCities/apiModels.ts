@@ -18,7 +18,11 @@ export interface IDiceCitiesCard {
     stealAllGain: number,
     stealChosenGain: number,
     tradeCards: boolean,
-    gainMultiplier: {type: cardType[], amountPerType: number} | null
+    gainMultiplier: {type: cardType[], amountPerType: number} | null,
+    /** Docks card that lies idle until its owner has built the Harbour. */
+    requiresHarbour?: boolean,
+    /** Docks card paid by the shared tuna die rather than a fixed amount. */
+    sharedDieGain?: boolean
 }
 export interface IDiceCitiesCardCountResponse {
     card: uuidString,
@@ -35,6 +39,8 @@ export interface IDiceCitiesPlayerStateResponse {
     bonusDiningAndStore: boolean,
     rerollDoubles: boolean,
     oneReroll: boolean,
+    /** Docks: the fifth landmark. Never part of the win condition. */
+    harbourUnlocked: boolean,
     lastDiceSelection: 1 | 2
 }
 
@@ -51,7 +57,11 @@ export interface IDiceCitiesGameStateResponse {
     bcSelectedOpponent: string | null,
     bcSelectedOpponentCard: uuidString | null,
     awaitingDoubleReroll: boolean,
-    hasReRolled: boolean
+    hasReRolled: boolean,
+    /** Docks: a 10+ roll is parked here until the Harbour owner takes or declines its +2. */
+    awaitingHarbourChoice: boolean,
+    harbourRoll1: number | null,
+    harbourRoll2: number | null
 }
 
 export interface IDiceCitiesGameDataResponse extends IGameDataResponse {

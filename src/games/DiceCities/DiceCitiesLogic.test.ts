@@ -1,14 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
+    DiceCitiesGameType,
     DiceCitiesRequestCardPurchase,
     DiceCitiesRequestDiceRoll,
+    DiceCitiesRequestHarbourBonus,
+    DiceCitiesRequestPassTurn,
     DiceCitiesRequestRadioTowerReroll,
     DiceCitiesRequestTvStationSelection,
+    DiceCitiesRequestUnlockHarbour,
     DiceCitiesRequestUnlockTrainStation,
 } from "./DiceCitiesLogic";
-import { BANK_TOTAL_COINS, DiceCitiesCardIds, DiceCitiesCards, STARTING_PLAYER_COINS } from "./cards";
+import { BANK_TOTAL_COINS, DiceCitiesCardIds, DiceCitiesCards, DOCKS_ESTABLISHMENT_IDS, STARTING_PLAYER_COINS } from "./cards";
 import { buildInitialDiceCitiesState } from "./DiceCitiesModels";
 import type { IDiceCitiesGameData, IDiceCitiesGameState, IDiceCitiesPlayerState } from "./DiceCitiesModels";
+import type { IDiceCitiesGameStateResponse } from "./apiModels";
+import type { IGameData } from "@/utils/mongodb/GameData";
+import { buildTimeline } from "@/utils/games/replay";
 
 // ─── Minimal in-memory game harness ────────────────────────────────────────
 // The bank only cares about coins moving, so these states carry just the cards
@@ -23,6 +30,7 @@ function player(overrides: Partial<IDiceCitiesPlayerState> = {}): IDiceCitiesPla
         bonusDiningAndStore: false,
         rerollDoubles: false,
         oneReroll: false,
+        harbourUnlocked: false,
         lastDiceSelection: 1,
         ...overrides,
     };
@@ -42,11 +50,14 @@ function makeState(overrides: Partial<IDiceCitiesGameState> = {}): IDiceCitiesGa
         bcSelectedOpponentCard: null,
         awaitingDoubleReroll: false,
         hasReRolled: false,
+        awaitingHarbourChoice: false,
+        harbourRoll1: null,
+        harbourRoll2: null,
         ...overrides,
     };
 }
 
-function makeGame(gs: IDiceCitiesGameState, currentTurn = "u1"): IDiceCitiesGameData {
+function makeGame(gs: IDiceCitiesGameState, currentTurn = "u1", enabledDocks = false): IDiceCitiesGameData {
     return {
         currentTurn,
         userIdList: ["u1", "u2"],
@@ -54,6 +65,7 @@ function makeGame(gs: IDiceCitiesGameState, currentTurn = "u1"): IDiceCitiesGame
         specificGameState: gs,
         complete: false,
         winner: "",
+        enabledDocks,
     } as unknown as IDiceCitiesGameData;
 }
 
@@ -65,12 +77,28 @@ function coinsInPlay(gs: IDiceCitiesGameState): number {
     return total;
 }
 
-// A roll with its dice pre-recorded, so payouts are deterministic.
-function rollCommand(roll1: number, sender = "u1"): DiceCitiesRequestDiceRoll {
+// A roll with its dice pre-recorded, so payouts are deterministic. Passing a
+// second die rolls two, which the Docks' higher numbers need.
+function rollCommand(roll1: number, sender = "u1", roll2?: number): DiceCitiesRequestDiceRoll {
     const command = new DiceCitiesRequestDiceRoll();
     command.senderId = sender;
     command.senderUsername = sender;
     command.recordedRoll1 = roll1;
+    if (roll2 !== undefined) {
+        command.doubleDice = true;
+        command.recordedRoll2 = roll2;
+    }
+    return command;
+}
+
+// Answers the Harbour's offer on a parked roll, with the shared tuna die
+// pre-recorded so a Tuna Boat payout is deterministic too.
+function harbourCommand(addBonus: boolean, tunaRoll?: number): DiceCitiesRequestHarbourBonus {
+    const command = new DiceCitiesRequestHarbourBonus();
+    command.senderId = "u1";
+    command.senderUsername = "u1";
+    command.addBonus = addBonus;
+    command.recordedTunaRoll = tunaRoll ?? null;
     return command;
 }
 
@@ -257,5 +285,257 @@ describe("Dice Cities bank supply", () => {
 
         expect(gs.playerStates.get("u1")!.money).toBe(0);
         expect(gs.bankMoney).toBe(10);
+    });
+});
+
+describe("Dice Cities: the Docks", () => {
+    it("stocks the expansion's establishments only when it is switched on", () => {
+        const withDocks = buildInitialDiceCitiesState(["u1", "u2"], true).bankCards.map(cc => cc.card);
+        const withoutDocks = buildInitialDiceCitiesState(["u1", "u2"], false).bankCards.map(cc => cc.card);
+
+        for (const cardId of DOCKS_ESTABLISHMENT_IDS) {
+            expect(withDocks).toContain(cardId);
+            expect(withoutDocks).not.toContain(cardId);
+        }
+        // The Harbour is built like a landmark, never bought off the market.
+        expect(withDocks).not.toContain(DiceCitiesCardIds.HARBOUR);
+    });
+
+    it("leaves the sea cards idle until their owner has built the Harbour", async () => {
+        // The Sushi Bar takes 3 coins from whoever rolls a 1 - but only for an
+        // owner with a Harbour to land the catch at.
+        const dry = makeState({
+            playerStates: new Map([
+                ["u1", player({ money: 5 })],
+                ["u2", player({ cards: cards(DiceCitiesCardIds.SUSHI_BAR) })],
+            ]),
+        });
+        await rollCommand(1).Execute(makeGame(dry, "u1", true));
+        expect(dry.playerStates.get("u2")!.money).toBe(0);
+
+        const withHarbour = makeState({
+            playerStates: new Map([
+                ["u1", player({ money: 5 })],
+                ["u2", player({ cards: cards(DiceCitiesCardIds.SUSHI_BAR), harbourUnlocked: true })],
+            ]),
+        });
+        await rollCommand(1).Execute(makeGame(withHarbour, "u1", true));
+        expect(withHarbour.playerStates.get("u2")!.money).toBe(3);
+        expect(withHarbour.playerStates.get("u1")!.money).toBe(2);
+    });
+
+    it("parks a 10-or-better roll until the Harbour's owner answers, paying nobody yet", async () => {
+        const gs = makeState({
+            playerStates: new Map([
+                ["u1", player({ harbourUnlocked: true, doubleUnlocked: true, cards: cards(DiceCitiesCardIds.APPLE_ORCHARD) })],
+                ["u2", player()],
+            ]),
+        });
+        const game = makeGame(gs, "u1", true);
+
+        await rollCommand(4, "u1", 6).Execute(game);
+
+        expect(gs.awaitingHarbourChoice).toBe(true);
+        expect(gs.hasRolled).toBe(false);
+        expect(gs.harbourRoll1).toBe(4);
+        expect(gs.harbourRoll2).toBe(6);
+        // The Apple Orchard's 10 hasn't paid yet - the total isn't settled.
+        expect(gs.playerStates.get("u1")!.money).toBe(0);
+
+        await harbourCommand(false).Execute(game);
+
+        expect(gs.awaitingHarbourChoice).toBe(false);
+        expect(gs.harbourRoll1).toBeNull();
+        expect(gs.hasRolled).toBe(true);
+        expect(gs.playerStates.get("u1")!.money).toBe(3);
+    });
+
+    it("adds the Harbour's bonus to reach the numbers two dice can't", async () => {
+        // A Food Warehouse pays 2 per Dining establishment on a 12 or 13, and 13
+        // is only reachable by nudging an 11 up.
+        const gs = makeState({
+            playerStates: new Map([
+                ["u1", player({
+                    harbourUnlocked: true,
+                    doubleUnlocked: true,
+                    cards: [
+                        { card: DiceCitiesCardIds.FOOD_WAREHOUSE, amount: 1 },
+                        { card: DiceCitiesCardIds.CAFE, amount: 2 },
+                    ],
+                })],
+                ["u2", player()],
+            ]),
+        });
+        const game = makeGame(gs, "u1", true);
+
+        await rollCommand(5, "u1", 6).Execute(game);
+        await harbourCommand(true).Execute(game);
+
+        expect(gs.playerStates.get("u1")!.money).toBe(4);
+        expect(game.gameState.history.some(h => h.includes("turn a 11 into a 13"))).toBe(true);
+    });
+
+    it("pays every Tuna Boat owner the same shared haul", async () => {
+        const gs = makeState({
+            bankMoney: 20,
+            playerStates: new Map([
+                ["u1", player({ harbourUnlocked: true, doubleUnlocked: true, cards: cards(DiceCitiesCardIds.TUNA_BOAT) })],
+                ["u2", player({ harbourUnlocked: true, cards: cards(DiceCitiesCardIds.TUNA_BOAT) })],
+            ]),
+        });
+        const game = makeGame(gs, "u1", true);
+
+        await rollCommand(6, "u1", 6).Execute(game);
+        // The haul is a single shared die: 4 for the roller and 4 for the
+        // opponent, out of one throw.
+        await harbourCommand(false, 4).Execute(game);
+
+        expect(gs.playerStates.get("u1")!.money).toBe(4);
+        expect(gs.playerStates.get("u2")!.money).toBe(4);
+        expect(gs.bankMoney).toBe(12);
+        expect(game.gameState.history.some(h => h.includes("The tuna haul was 4"))).toBe(true);
+    });
+
+    it("only offers the Harbour's bonus to a Harbour owner", async () => {
+        const gs = makeState({
+            playerStates: new Map([
+                ["u1", player({ doubleUnlocked: true, cards: cards(DiceCitiesCardIds.APPLE_ORCHARD) })],
+                ["u2", player()],
+            ]),
+        });
+        const game = makeGame(gs, "u1", true);
+
+        await rollCommand(4, "u1", 6).Execute(game);
+
+        expect(gs.awaitingHarbourChoice).toBe(false);
+        expect(gs.hasRolled).toBe(true);
+        expect(gs.playerStates.get("u1")!.money).toBe(3);
+    });
+
+    it("sells the Harbour only in a game that has the Docks", async () => {
+        const build = async (enabledDocks: boolean) => {
+            const gs = makeState({
+                bankMoney: 0,
+                hasRolled: true,
+                playerStates: new Map([["u1", player({ money: 5 })], ["u2", player()]]),
+            });
+            const command = new DiceCitiesRequestUnlockHarbour();
+            command.senderId = "u1";
+            command.senderUsername = "u1";
+            const outcome = await command.Execute(makeGame(gs, "u1", enabledDocks));
+            return { gs, outcome };
+        };
+
+        const off = await build(false);
+        expect(off.outcome.validMove).toBe(false);
+        expect(off.gs.playerStates.get("u1")!.harbourUnlocked).toBe(false);
+
+        const on = await build(true);
+        const cost = DiceCitiesCards[DiceCitiesCardIds.HARBOUR].cost;
+        expect(on.outcome.validMove).toBe(true);
+        expect(on.gs.playerStates.get("u1")!.harbourUnlocked).toBe(true);
+        expect(on.gs.playerStates.get("u1")!.money).toBe(5 - cost);
+        expect(on.gs.bankMoney).toBe(cost);
+    });
+
+    it("hands a Harbour-settled roll's coins back on a Radio Tower re-roll", async () => {
+        const gs = makeState({
+            bankMoney: 10,
+            playerStates: new Map([
+                ["u1", player({ harbourUnlocked: true, doubleUnlocked: true, cards: cards(DiceCitiesCardIds.APPLE_ORCHARD) })],
+                ["u2", player()],
+            ]),
+        });
+        const game = makeGame(gs, "u1", true);
+
+        const roll = rollCommand(4, "u1", 6);
+        await roll.Execute(game);
+        game.gameState.commandHistory.push(roll);
+        const harbour = harbourCommand(false);
+        await harbour.Execute(game);
+        game.gameState.commandHistory.push(harbour);
+        expect(gs.playerStates.get("u1")!.money).toBe(3);
+
+        // The re-roll reverses the Harbour bonus command, since that's what paid.
+        const reroll = new DiceCitiesRequestRadioTowerReroll();
+        reroll.senderId = "u1";
+        reroll.senderUsername = "u1";
+        reroll.recordedRoll1 = 1;
+        reroll.recordedRoll2 = 2;
+        await reroll.Execute(game);
+
+        expect(gs.playerStates.get("u1")!.money).toBe(0);
+        expect(gs.playerStates.get("u1")!.totalCoinsEarned).toBe(0);
+        expect(gs.bankMoney).toBe(10);
+        expect(coinsInPlay(gs)).toBe(10);
+    });
+
+    it("still wins on the original four landmarks, with no Harbour needed", () => {
+        const gs = makeState({
+            playerStates: new Map([
+                ["u1", player({ doubleUnlocked: true, bonusDiningAndStore: true, oneReroll: true, rerollDoubles: true })],
+                ["u2", player({ harbourUnlocked: true })],
+            ]),
+        });
+        const game = makeGame(gs, "u1", true);
+
+        expect(new DiceCitiesGameType().CheckGameOver(game)).toBe(true);
+        expect(game.winner).toBe("u1");
+    });
+});
+
+// The replay engine rebuilds a game from its recorded commands alone, so the
+// Docks has to survive that trip: an expansion flag it can't see would leave the
+// Harbour's parked roll paying out at the wrong total.
+describe("Dice Cities: replaying a Docks game", () => {
+    it("replays the Harbour's bonus from the command history", async () => {
+        const pass = () => {
+            const command = new DiceCitiesRequestPassTurn();
+            command.senderId = "u1";
+            command.senderUsername = "u1";
+            return command;
+        };
+        const unlock = <T extends { senderId: string; senderUsername: string }>(command: T): T => {
+            command.senderId = "u1";
+            command.senderUsername = "u1";
+            return command;
+        };
+
+        // Every roll of 1 pays the starting Wheat Field, which is how u1 saves up
+        // for the Train Station (two dice) and then the Harbour.
+        const commandHistory = [
+            rollCommand(1),
+            unlock(new DiceCitiesRequestUnlockTrainStation()),
+            rollCommand(1),
+            pass(),
+            rollCommand(1),
+            unlock(new DiceCitiesRequestUnlockHarbour()),
+            rollCommand(5, "u1", 6),
+            harbourCommand(true),
+        ];
+
+        const gameData = {
+            gameId: "g1",
+            gameType: new DiceCitiesGameType(),
+            userIdList: ["u1", "u2"],
+            turnTimer: "1d",
+            currentTurn: "u1",
+            lastTurnTimestamp: "2026-07-21T09:00:00.000Z",
+            timerWarningNotificationSent: false,
+            gameState: { turnOrder: ["u1", "u2"], history: [], commandHistory },
+            complete: false,
+            winner: "",
+            enabledDocks: true,
+            enabledBillionaireRow: false,
+            specificGameState: buildInitialDiceCitiesState(["u1", "u2"], true),
+        } as unknown as IGameData;
+
+        const timeline = await buildTimeline(gameData, { u1: "u1", u2: "u2" });
+        const final = timeline.snapshots[timeline.snapshots.length - 1];
+        const finalState = final.specificGameState as IDiceCitiesGameStateResponse;
+
+        expect(finalState.playerStates["u1"].harbourUnlocked).toBe(true);
+        expect(final.history.some(h => h.includes("turn a 11 into a 13"))).toBe(true);
+        expect(finalState.awaitingHarbourChoice).toBe(false);
     });
 });

@@ -2,7 +2,7 @@ import type { IRecapAdapter, IGameEvent, IRecapSummary, IRecapTip } from "@/util
 import type { ITurnSnapshot } from "@/utils/games/replay";
 import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic";
 import { IDiceCitiesDiceRollOutcome } from "@/utils/apiModels/GameLogic";
-import { DiceCitiesCards, DiceCitiesCardIds } from "@/games/DiceCities/cards";
+import { DiceCitiesCards, DiceCitiesCardIds, HARBOUR_BONUS, HARBOUR_MIN_ROLL } from "@/games/DiceCities/cards";
 import { LANDMARKS, landmarkCount } from "@/games/DiceCities/ui";
 import type { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
 import { playerByUserId } from "@/games/DiceCities/DiceCitiesModels";
@@ -36,14 +36,24 @@ function toEvents(
     };
 
     // ── Dice roll (and Radio Tower re-roll): the turn's headline beat. ──────────
+    // A Harbour owner's 10+ roll pays out one step later, when they take or
+    // decline the +2, so that command carries the beat instead.
+    if (
+        (command.className === "DiceCitiesRequestDiceRoll" || command.className === "DiceCitiesRequestRadioTowerReroll") &&
+        (next.specificGameState as IDiceCitiesGameStateResponse | undefined)?.awaitingHarbourChoice
+    ) {
+        return [];
+    }
     if (
         command.className === "DiceCitiesRequestDiceRoll" ||
-        command.className === "DiceCitiesRequestRadioTowerReroll"
+        command.className === "DiceCitiesRequestRadioTowerReroll" ||
+        command.className === "DiceCitiesRequestHarbourBonus"
     ) {
         const roll = outcome as IDiceCitiesDiceRollOutcome;
         const total = roll.roll2 ? roll.roll1 + roll.roll2 : roll.roll1;
         const dicePart = roll.roll2 ? ` (${roll.roll1}+${roll.roll2})` : "";
         const reroll = command.className === "DiceCitiesRequestRadioTowerReroll";
+        const harbour = command.className === "DiceCitiesRequestHarbourBonus";
 
         // moneyChanges is a live Map keyed by userId: the roller's own net plus
         // every coin a café/restaurant/stadium moved between players this roll.
@@ -56,14 +66,34 @@ function toEvents(
         else if (rollerNet < 0) detail = `${rollerNet}🪙`;
         else detail = "no coins";
 
+        // The Harbour's +2 lands on the dice that were already thrown, so its
+        // event tells the whole story: what came up, and what it became.
+        const tookHarbourBonus = harbour && (command as unknown as { addBonus?: boolean }).addBonus === true;
+        const title = tookHarbourBonus
+            ? `${name} rolled ${total}${dicePart}, Harbour +${HARBOUR_BONUS} → ${total + HARBOUR_BONUS}`
+            : `${name} ${reroll ? "re-rolled" : "rolled"} ${total}${dicePart}`;
+
         return [
             {
                 ...base,
                 type: reroll ? "dc_reroll" : "dc_roll",
-                glyph: "🎲",
-                title: `${name} ${reroll ? "re-rolled" : "rolled"} ${total}${dicePart}`,
+                glyph: tookHarbourBonus ? "⚓" : "🎲",
+                title,
                 detail,
                 affectedIds,
+            },
+        ];
+    }
+
+    // ── Harbour built: a Docks landmark, but never part of the win race. ───────
+    if (command.className === "DiceCitiesRequestUnlockHarbour") {
+        return [
+            {
+                ...base,
+                type: "dc_harbour",
+                glyph: "⚓",
+                title: `${name} built the Harbour`,
+                detail: `+${HARBOUR_BONUS} on a ${HARBOUR_MIN_ROLL} or better`,
             },
         ];
     }

@@ -1,7 +1,7 @@
 import { GameDataModel, IGameData, IGameDataDocument } from "@/utils/mongodb/GameData";
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
-import { BANK_TOTAL_COINS, DiceCitiesCardIds, STARTING_PLAYER_COINS } from "./cards";
+import { BANK_TOTAL_COINS, DiceCitiesCardIds, DOCKS_ESTABLISHMENT_IDS, STARTING_PLAYER_COINS } from "./cards";
 import { IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "./apiModels";
 import { uuidString, GameResultStatGroup, GameResultChart, formatPerTurnChart, compactCharts, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
@@ -68,8 +68,9 @@ function SortUsersByRoll(userIdList: string[], usernameMap: Map<string, string>,
 
 // Builds the deterministic starting specificGameState for a Dice Cities game.
 // Used both at game creation and by the replay engine to reconstruct historical
-// / planned states from commandHistory.
-export function buildInitialDiceCitiesState(userIdList: string[]): IDiceCitiesGameState {
+// / planned states from commandHistory. `enabledDocks` is fixed at creation, so
+// replaying it reproduces the market the recorded commands were played against.
+export function buildInitialDiceCitiesState(userIdList: string[], enabledDocks: boolean = false): IDiceCitiesGameState {
     const playerStates = new Map<string, IDiceCitiesPlayerState>();
     for (const userId of userIdList) {
         playerStates.set(userId, {
@@ -83,6 +84,7 @@ export function buildInitialDiceCitiesState(userIdList: string[]): IDiceCitiesGa
             bonusDiningAndStore: false,
             rerollDoubles: false,
             oneReroll: false,
+            harbourUnlocked: false,
             lastDiceSelection: 1,
         });
     }
@@ -103,6 +105,7 @@ export function buildInitialDiceCitiesState(userIdList: string[]): IDiceCitiesGa
             { card: DiceCitiesCardIds.STADIUM, amount: userIdList.length },
             { card: DiceCitiesCardIds.TV_STATION, amount: userIdList.length },
             { card: DiceCitiesCardIds.BUSINESS_CENTER, amount: userIdList.length },
+            ...(enabledDocks ? DOCKS_ESTABLISHMENT_IDS.map(card => ({ card, amount: 6 })) : []),
         ],
         // The players' starting coins are dealt out of the bank's fixed supply.
         bankMoney: BANK_TOTAL_COINS - (STARTING_PLAYER_COINS * userIdList.length),
@@ -116,6 +119,9 @@ export function buildInitialDiceCitiesState(userIdList: string[]): IDiceCitiesGa
         bcSelectedOpponentCard: null,
         awaitingDoubleReroll: false,
         hasReRolled: false,
+        awaitingHarbourChoice: false,
+        harbourRoll1: null,
+        harbourRoll2: null,
     };
 }
 
@@ -152,7 +158,7 @@ DiceCitiesInvitationSchema.methods.CreateGame = async function(invite: IDiceCiti
         },
         complete: false,
         winner: "",
-        specificGameState: buildInitialDiceCitiesState(userIdList),
+        specificGameState: buildInitialDiceCitiesState(userIdList, this.enabledDocks === true),
         enabledDocks: this.enabledDocks,
         enabledBillionaireRow: this.enabledBillionaireRow
     }
@@ -161,7 +167,10 @@ DiceCitiesInvitationSchema.methods.CreateGame = async function(invite: IDiceCiti
 export var DiceCitiesInvitationModel = models.DiceCitiesInvitation || InvitationModel.discriminator<IDiceCitiesInvitationDataDocument, IDiceCitiesInvitationDataModel>('DiceCitiesInvitation', DiceCitiesInvitationSchema);
 
 
-export type cardType = "farm" | "pasture" | "store" | "dining" | "production" | "landmark" | "factory" | "market";
+// "flower" and "boat" arrive with the Docks: they stay out of the base game's
+// icon combos (a Flower Orchard is not a Fruit & Vegetable Market farm, a boat
+// is not a Furniture Factory production site) and feed their own.
+export type cardType = "farm" | "pasture" | "store" | "dining" | "production" | "landmark" | "factory" | "market" | "flower" | "boat";
 
 export interface IDiceCitiesCardCount {
     card: string,
@@ -179,6 +188,10 @@ export interface IDiceCitiesPlayerState {
     bonusDiningAndStore: boolean,
     rerollDoubles: boolean,
     oneReroll: boolean,
+    // The Docks' fifth landmark: adds +2 to a 10-or-better roll and wakes up
+    // the expansion's sea cards. Deliberately absent from CheckGameOver - the
+    // game is still won by building the original four.
+    harbourUnlocked: boolean,
     lastDiceSelection: 1 | 2
 }
 
@@ -198,7 +211,12 @@ export interface IDiceCitiesGameState {
     bcSelectedOpponent: string | null,
     bcSelectedOpponentCard: uuidString | null,
     awaitingDoubleReroll: boolean,
-    hasReRolled: boolean
+    hasReRolled: boolean,
+    // A Harbour owner's 10-or-better roll waits here, dice and all, while they
+    // decide whether to take its +2 - payouts only land once they've chosen.
+    awaitingHarbourChoice: boolean,
+    harbourRoll1: number | null,
+    harbourRoll2: number | null
 }
 
 export interface IDiceCitiesGameData extends IGameData {
@@ -239,6 +257,7 @@ var DiceCitiesGameDataSchema = new Schema<IDiceCitiesGameDataDocument>({
                 bonusDiningAndStore: Boolean,
                 rerollDoubles: Boolean,
                 oneReroll: Boolean,
+                harbourUnlocked: Boolean,
                 lastDiceSelection: Number
             }
         },
@@ -250,7 +269,10 @@ var DiceCitiesGameDataSchema = new Schema<IDiceCitiesGameDataDocument>({
         bcSelectedOpponent: String,
         bcSelectedOpponentCard: String,
         awaitingDoubleReroll: Boolean,
-        hasReRolled: Boolean
+        hasReRolled: Boolean,
+        awaitingHarbourChoice: Boolean,
+        harbourRoll1: Number,
+        harbourRoll2: Number
     }
 }, {discriminatorKey: 'kind'});
 DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(): Promise<IDiceCitiesGameDataResponse> {
@@ -296,6 +318,8 @@ export function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap:
             rerollDoubles: playerStateModel.rerollDoubles,
             bonusDiningAndStore: playerStateModel.bonusDiningAndStore,
             oneReroll: playerStateModel.oneReroll,
+            // Games that started before the Docks shipped have no stored flag.
+            harbourUnlocked: playerStateModel.harbourUnlocked === true,
             lastDiceSelection: playerStateModel.lastDiceSelection
         };
     }
@@ -316,7 +340,10 @@ export function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap:
         bcSelectedOpponent: gameState.bcSelectedOpponent,
         bcSelectedOpponentCard: gameState.bcSelectedOpponentCard,
         awaitingDoubleReroll: gameState.awaitingDoubleReroll,
-        hasReRolled: gameState.hasReRolled
+        hasReRolled: gameState.hasReRolled,
+        awaitingHarbourChoice: gameState.awaitingHarbourChoice === true,
+        harbourRoll1: gameState.harbourRoll1 ?? null,
+        harbourRoll2: gameState.harbourRoll2 ?? null
     }
 }
 

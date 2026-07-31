@@ -67,11 +67,10 @@ function NewGameDiceCitiesForm() {
       <OptionSection label="Dice Cities options">
         <OptionToggleRow
           title="Docks"
-          description="Coming soon. Adds ports and a wider die spread"
+          description="Harbour landmark, sea establishments and rolls up to 14"
           on={enabledDocks}
           onToggle={() => setEnabledDocks(v => !v)}
           ariaLabel="Toggle docks expansion"
-          disabled={true}
         />
         <OptionToggleRow
           title="Billionaire&apos;s Row"

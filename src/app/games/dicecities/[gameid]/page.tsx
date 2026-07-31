@@ -84,6 +84,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const currentTurnUsername = players.find(p => p.userId === displayedCurrentTurn)?.username ?? "";
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
     const hasRolled = displayed?.hasRolled ?? false;
+    const enabledDocks = gameData?.enabledDocks === true;
     const myUsername = currentUsername(user);
 
     // ── Top-bar status line ──────────────────────────────────────────────────
@@ -191,6 +192,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
                 <DiceCitiesBoard
                     playerState={boardPlayer}
                     ownerLabel={boardPlayer.userId === user?.id ? 'Your city' : `${boardPlayer.username}'s city`}
+                    enabledDocks={enabledDocks}
                 />
             )}
 
@@ -201,6 +203,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
                     opponents={opponents}
                     submitCommand={controlsSubmit}
                     pendingTarget={controlsPendingTarget}
+                    enabledDocks={enabledDocks}
                 />
             )}
 

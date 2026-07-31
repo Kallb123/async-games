@@ -2,7 +2,7 @@ import { IGameData } from "../mongodb/GameData";
 import { IGameCommand, IGameType, ICommandOutcome } from "../apiModels/GameLogic";
 import { deserializeJSON } from "../apiModels/Serialisable";
 import { buildInitialSnakesAndLaddersState, gameStateToModel as snakesAndLaddersStateToModel, ISnakesAndLaddersGameData } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
-import { buildInitialDiceCitiesState, gameStateToModel as diceCitiesStateToModel } from "@/games/DiceCities/DiceCitiesModels";
+import { buildInitialDiceCitiesState, gameStateToModel as diceCitiesStateToModel, IDiceCitiesGameData } from "@/games/DiceCities/DiceCitiesModels";
 import { buildInitialSmartthinkState, gameStateToModel as smartthinkStateToModel } from "@/games/Smartthink/SmartthinkModels";
 import { buildInitialSettlementsAndCitiesState, gameStateToResponse as settlementsAndCitiesStateToModel } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
@@ -65,6 +65,11 @@ export interface IReplayAdapter {
     // Smartthink's solo secret code) that never change during play.
     buildInitialSpecificGameState(gameData: IGameData): unknown;
     toResponseState(specificGameState: unknown, userIdNameMap: { [key: string]: string }): unknown;
+    // Optional: creation-time fields a game's rules read off the game document
+    // itself rather than specificGameState — which expansions are switched on,
+    // say. The replayed copy is built from scratch, so anything the commands
+    // will look for has to be carried over here or they'd rule differently.
+    extraGameFields?(gameData: IGameData): Record<string, unknown>;
 }
 
 const adapters: Record<string, IReplayAdapter> = {};
@@ -89,9 +94,16 @@ registerReplayAdapter({
 
 registerReplayAdapter({
     className: "DiceCitiesGameType",
-    buildInitialSpecificGameState: (gameData) => buildInitialDiceCitiesState(gameData.userIdList),
+    // The Docks is fixed at creation, so replaying it restocks the same market
+    // the recorded commands were actually played against.
+    buildInitialSpecificGameState: (gameData) => buildInitialDiceCitiesState(
+        gameData.userIdList,
+        (gameData as IDiceCitiesGameData).enabledDocks === true,
+    ),
     toResponseState: (specificGameState, userIdNameMap) =>
         diceCitiesStateToModel(specificGameState as never, userIdNameMap),
+    // The Harbour's rules read the expansion flag off the game document.
+    extraGameFields: (gameData) => ({ enabledDocks: (gameData as IDiceCitiesGameData).enabledDocks === true }),
 });
 
 registerReplayAdapter({
@@ -141,6 +153,7 @@ export async function buildTimeline(
     // is game-specific (added by each discriminator), so we widen the base type.
     type ReplayState = IGameData & { specificGameState: unknown };
     const state: ReplayState = {
+        ...(adapter.extraGameFields?.(gameData) ?? {}),
         gameId: gameData.gameId,
         gameType,
         userIdList: [...gameData.userIdList],

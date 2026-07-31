@@ -8,7 +8,7 @@ import { dbConnect } from '@/utils/mongodb/mongodb';
 import { DiceCitiesRequestRadioTowerReroll, ICommandOutcome, IGameCommand, IGameType, SmartthinkGameType, SmartthinkSetSecretCode, SmartthinkSubmitGuess, SnakesAndLaddersGameType, SnakesAndLaddersRequestDiceRoll } from '@/utils/apiModels/GameLogic';
 import { GameDataModel, IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
 import { recordGameResult } from '@/utils/mongodb/GameResultData';
-import { DiceCitiesGameType, DiceCitiesRequestBusinessCenterOpponentSelection, DiceCitiesRequestBusinessCenterOwnSelection, DiceCitiesRequestCardPurchase, DiceCitiesRequestDiceRoll, DiceCitiesRequestPassTurn, DiceCitiesRequestTvStationSelection, DiceCitiesRequestUnlockAmusementPark, DiceCitiesRequestUnlockRadioTower, DiceCitiesRequestUnlockShoppingMall, DiceCitiesRequestUnlockTrainStation } from '@/utils/apiModels/GameLogic';
+import { DiceCitiesGameType, DiceCitiesRequestBusinessCenterOpponentSelection, DiceCitiesRequestBusinessCenterOwnSelection, DiceCitiesRequestCardPurchase, DiceCitiesRequestDiceRoll, DiceCitiesRequestPassTurn, DiceCitiesRequestTvStationSelection, DiceCitiesRequestUnlockAmusementPark, DiceCitiesRequestUnlockRadioTower, DiceCitiesRequestUnlockHarbour, DiceCitiesRequestHarbourBonus, DiceCitiesRequestUnlockShoppingMall, DiceCitiesRequestUnlockTrainStation } from '@/utils/apiModels/GameLogic';
 import { SettlementsAndCitiesGameType, SACPlaceSettlementSetup, SACPlaceRoadSetup, SACPlayKnight, SACRollDice, SACMoveRobber, SACBuildRoad, SACBuildSettlement, SACBuildCity, SACBuyDevCard, SACPlayRoadBuilding, SACPlayYearOfPlenty, SACPlayMonopoly, SACMaritimeTrade, SACEndTurn } from '@/utils/apiModels/GameLogic';
 import { WorldDominationGameType, WorldDominationDeployArmies, WorldDominationCashInCards, WorldDominationAttack, WorldDominationOccupyTerritory, WorldDominationEndAttackPhase, WorldDominationFortify, WorldDominationSkipFortify } from '@/utils/apiModels/GameLogic';
 import { SolitaireGameType, SolitaireDraw, SolitaireMoveCard, SolitaireUndo, SolitaireAutoSolve } from '@/utils/apiModels/GameLogic';
@@ -31,6 +31,8 @@ export async function POST(request: NextRequest) {
     new DiceCitiesRequestUnlockShoppingMall(),
     new DiceCitiesRequestUnlockAmusementPark(),
     new DiceCitiesRequestUnlockRadioTower(),
+    new DiceCitiesRequestUnlockHarbour(),
+    new DiceCitiesRequestHarbourBonus(),
     new DiceCitiesRequestTvStationSelection(),
     new DiceCitiesRequestBusinessCenterOwnSelection(),
     new DiceCitiesRequestBusinessCenterOpponentSelection(),
