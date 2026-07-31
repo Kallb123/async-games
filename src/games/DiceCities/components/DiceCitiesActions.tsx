@@ -1,6 +1,6 @@
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import { IDiceCitiesCard, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
-import { DiceCitiesCards } from "@/games/DiceCities/cards";
+import { DiceCitiesCards, HARBOUR_BONUS } from "@/games/DiceCities/cards";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import {
     DiceCitiesRequestBusinessCenterOpponentSelection,
@@ -19,7 +19,6 @@ import {
     IDiceCitiesDiceRollOutcome,
     IGameCommand,
 } from "@/utils/apiModels/GameLogic";
-import { HARBOUR_BONUS } from "@/games/DiceCities/cards";
 import { ACTIVATION_META, activationFor, buildableLandmarks, rollLabel, yieldLabel } from "@/games/DiceCities/ui";
 import CardArt from "@/games/DiceCities/components/CardArt";
 import type { SubmitCommand } from "@/utils/hooks/useSubmitCommand";
@@ -130,32 +129,25 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
         // the choice survives a refresh or a hand-off between devices.
         const dice = [gameState.harbourRoll1 ?? 0, ...(gameState.harbourRoll2 != null ? [gameState.harbourRoll2] : [])];
         const rolled = dice.reduce((a, b) => a + b, 0);
-        const choices = [
-            { add: true, label: `Add +${HARBOUR_BONUS} · make it ${rolled + HARBOUR_BONUS}`, target: "harbour:add" },
-            { add: false, label: `Keep ${rolled}`, target: "harbour:keep" },
-        ];
         return (
             <div className="ag-actionsheet">
                 <SelectionHead icon="⚓" title="Harbour" sub={`You rolled ${rolled}. The Harbour can add ${HARBOUR_BONUS} to it.`} />
-                <div className="ag-dc-roll">
-                    <Dice values={dice} size={40} />
-                    <div className="ag-dc-roll-main">
-                        <div className="ag-dc-roll-total">Total {rolled}</div>
-                        <div className="ag-dc-roll-sub">nobody is paid until you decide</div>
-                    </div>
-                </div>
+                <RollReadout values={dice} headline={`Total ${rolled}`} sub="nobody is paid until you decide" />
                 <div className="ag-dc-pick-list ag-pending-group">
-                    {choices.map((choice) => (
-                        <button
-                            key={choice.target}
-                            className={`ag-dc-pick-row${pendingTarget === choice.target ? ' ag-pending-skin' : ''}`}
-                            disabled={busy}
-                            onClick={() => answerHarbour(choice.add)}
-                        >
-                            <span className="ag-dc-pick-name">{choice.label}</span>
-                            {pendingTarget === choice.target && <PendingTag label="Sending" />}
-                        </button>
-                    ))}
+                    <PickRow
+                        label={`Add +${HARBOUR_BONUS} · make it ${rolled + HARBOUR_BONUS}`}
+                        pending={pendingTarget === "harbour:add"}
+                        pendingLabel="Sending"
+                        disabled={busy}
+                        onClick={() => answerHarbour(true)}
+                    />
+                    <PickRow
+                        label={`Keep ${rolled}`}
+                        pending={pendingTarget === "harbour:keep"}
+                        pendingLabel="Sending"
+                        disabled={busy}
+                        onClick={() => answerHarbour(false)}
+                    />
                 </div>
             </div>
         );
@@ -166,27 +158,22 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
             <div className="ag-actionsheet">
                 <SelectionHead icon="📺" title="TV Station" sub="Take 5 coins from any one player." />
                 <div className="ag-dc-pick-list ag-pending-group">
-                    {opponents.map((op) => {
-                        const pending = pendingTarget === `steal:${op.userId}`;
-                        return (
-                            <button
-                                key={op.userId}
-                                className={`ag-dc-pick-row${pending ? ' ag-pending-skin' : ''}`}
-                                disabled={busy}
-                                onClick={() => {
-                                    const command = new DiceCitiesRequestTvStationSelection();
-                                    command.selectedUser = op.userId;
-                                    command.selectedUserName = op.username;
-                                    send(command, `steal:${op.userId}`);
-                                }}
-                            >
-                                <span className="ag-dc-pick-name">{op.username}</span>
-                                {pending
-                                    ? <PendingTag label="Taking" />
-                                    : <span className="ag-dc-pick-meta">{op.money}🪙</span>}
-                            </button>
-                        );
-                    })}
+                    {opponents.map((op) => (
+                        <PickRow
+                            key={op.userId}
+                            label={op.username}
+                            meta={`${op.money}🪙`}
+                            pending={pendingTarget === `steal:${op.userId}`}
+                            pendingLabel="Taking"
+                            disabled={busy}
+                            onClick={() => {
+                                const command = new DiceCitiesRequestTvStationSelection();
+                                command.selectedUser = op.userId;
+                                command.selectedUserName = op.username;
+                                send(command, `steal:${op.userId}`);
+                            }}
+                        />
+                    ))}
                 </div>
             </div>
         );
@@ -291,23 +278,14 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
     return (
         <div className="ag-dc-post">
             {roll && (
-                <div className="ag-dc-roll">
-                    <Dice
-                        values={roll.roll2 != null
-                            ? [rolling ? face.a : roll.roll1, rolling ? face.b : roll.roll2]
-                            : [rolling ? face.a : roll.roll1]}
-                        size={40}
-                        rolling={rolling}
-                    />
-                    <div className="ag-dc-roll-main">
-                        <div className="ag-dc-roll-total">
-                            {rolling ? "Rolling…" : `Total ${total}${roll.bonus > 0 ? ` (Harbour +${roll.bonus})` : ""}`}
-                        </div>
-                        <div className="ag-dc-roll-sub">
-                            {rolling ? "the dice are tumbling" : "payouts are in — build one, or end your turn"}
-                        </div>
-                    </div>
-                </div>
+                <RollReadout
+                    values={roll.roll2 != null
+                        ? [rolling ? face.a : roll.roll1, rolling ? face.b : roll.roll2]
+                        : [rolling ? face.a : roll.roll1]}
+                    rolling={rolling}
+                    headline={rolling ? "Rolling…" : `Total ${total}${roll.bonus > 0 ? ` (Harbour +${roll.bonus})` : ""}`}
+                    sub={rolling ? "the dice are tumbling" : "payouts are in — build one, or end your turn"}
+                />
             )}
 
             {gameState.awaitingDoubleReroll && (
@@ -424,6 +402,50 @@ function CoinPill({ amount, label, pill }: { amount: number; label?: string; pil
             <span className="ag-dc-coins-num">{amount}</span>
             {label && <span className="ag-dc-coins-label">{label}</span>}
         </span>
+    );
+}
+
+// The dice a roll landed on with its headline underneath — shown once while the
+// Harbour decision is pending, and again over the market after payouts land.
+function RollReadout({ values, headline, sub, rolling }: {
+    values: number[];
+    headline: string;
+    sub: string;
+    rolling?: boolean;
+}) {
+    return (
+        <div className="ag-dc-roll">
+            <Dice values={values} size={40} rolling={rolling} />
+            <div className="ag-dc-roll-main">
+                <div className="ag-dc-roll-total">{headline}</div>
+                <div className="ag-dc-roll-sub">{sub}</div>
+            </div>
+        </div>
+    );
+}
+
+// One tappable row in a pick list: an opponent to rob, or an answer to the
+// Harbour's offer. The card-shaped variant of the same idea is CardPickGrid.
+function PickRow({ label, meta, pending, pendingLabel, disabled, onClick }: {
+    label: string;
+    /** Trailing detail, e.g. how many coins the opponent is holding. */
+    meta?: string;
+    pending: boolean;
+    pendingLabel: string;
+    disabled: boolean;
+    onClick: () => void;
+}) {
+    return (
+        <button
+            className={`ag-dc-pick-row${pending ? ' ag-pending-skin' : ''}`}
+            disabled={disabled}
+            onClick={onClick}
+        >
+            <span className="ag-dc-pick-name">{label}</span>
+            {pending
+                ? <PendingTag label={pendingLabel} />
+                : meta && <span className="ag-dc-pick-meta">{meta}</span>}
+        </button>
     );
 }
 

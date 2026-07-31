@@ -83,19 +83,15 @@ export const LANDMARKS: { cardId: string; flag: DiceCitiesLandmarkFlag }[] = [
     { cardId: DiceCitiesCardIds.RADIO_TOWER, flag: "rerollDoubles" },
 ];
 
-/** The Docks' fifth landmark — buildable at any time, never required to win. */
-export const HARBOUR_LANDMARK: DiceCitiesLandmarkEntry = {
-    cardId: DiceCitiesCardIds.HARBOUR,
-    flag: "harbourUnlocked",
-};
-
 /**
  * Every landmark a city can build in this game: the win-condition four, plus
- * the Harbour when the Docks is switched on. The cheapest thing on the board
- * goes first, so it leads the track.
+ * the Docks' Harbour, which is buildable at any time and never required to win.
+ * The Harbour is the cheapest thing on the board, so it leads the track.
  */
 export function buildableLandmarks(enabledDocks: boolean): DiceCitiesLandmarkEntry[] {
-    return enabledDocks ? [HARBOUR_LANDMARK, ...LANDMARKS] : LANDMARKS;
+    return enabledDocks
+        ? [{ cardId: DiceCitiesCardIds.HARBOUR, flag: "harbourUnlocked" }, ...LANDMARKS]
+        : LANDMARKS;
 }
 
 /** How many of the four landmarks a player has built (0–4). */
