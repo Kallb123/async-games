@@ -26,8 +26,11 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // `signInUrl`/`signUpUrl` keep Clerk's own cross-links ("Don't have an
+  // account? Sign up") pointed at the pages we mount and theme, rather than at
+  // Clerk's hosted Account Portal on its own domain.
   return (
-    <ClerkProvider appearance={clerkAppearance}>
+    <ClerkProvider appearance={clerkAppearance} signInUrl="/login" signUpUrl="/signup">
       <html lang="en" className={bricolageGrotesque.variable}>
         <head>
           <meta name="application-name" content="Async Games" />
