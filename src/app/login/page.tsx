@@ -4,9 +4,17 @@ import { SignIn } from "@clerk/nextjs";
 
 export default function Login() {
   return (
-    <main style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "48px 20px" }}>
-      <div className="ag-wordmark" style={{ marginBottom: 24, fontSize: 26 }}>Async Games</div>
-      <SignIn />
+    <main>
+      <div className="ag-topbar">
+        <span className="ag-wordmark">Async Games</span>
+      </div>
+      <div className="ag-hero">
+        <h1 className="ag-hero-title">Your turn awaits</h1>
+        <p className="ag-hero-sub">Sign in to pick up your games.</p>
+      </div>
+      <div className="ag-section" style={{ display: "flex", justifyContent: "center" }}>
+        <SignIn />
+      </div>
     </main>
   );
 }

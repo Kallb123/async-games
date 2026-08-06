@@ -5,6 +5,7 @@ import "./globals.css";
 import "./ag-theme.css";
 import { ClerkProvider } from '@clerk/nextjs'
 import Providers from "@/components/Providers";
+import { clerkAppearance } from "@/utils/ui/clerkAppearance";
 
 // Self-hosted at build time by next/font, so there's no render-blocking request
 // to Google's CDN and no flash of fallback type. `--ag-font` in ag-theme.css
@@ -26,7 +27,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider>
+    <ClerkProvider appearance={clerkAppearance}>
       <html lang="en" className={bricolageGrotesque.variable}>
         <head>
           <meta name="application-name" content="Async Games" />
