@@ -5,6 +5,7 @@ import "./globals.css";
 import "./ag-theme.css";
 import { ClerkProvider } from '@clerk/nextjs'
 import Providers from "@/components/Providers";
+import { clerkAppearance } from "@/utils/ui/clerkAppearance";
 
 // Self-hosted at build time by next/font, so there's no render-blocking request
 // to Google's CDN and no flash of fallback type. `--ag-font` in ag-theme.css
@@ -25,8 +26,11 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // `signInUrl`/`signUpUrl` keep Clerk's own cross-links ("Don't have an
+  // account? Sign up") pointed at the pages we mount and theme, rather than at
+  // Clerk's hosted Account Portal on its own domain.
   return (
-    <ClerkProvider>
+    <ClerkProvider appearance={clerkAppearance} signInUrl="/login" signUpUrl="/signup">
       <html lang="en" className={bricolageGrotesque.variable}>
         <head>
           <meta name="application-name" content="Async Games" />

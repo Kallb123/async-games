@@ -31,8 +31,12 @@
     --ag-danger: #c0392b;
 
     --ag-font: var(--ag-font-bricolage), system-ui, -apple-system, sans-serif;
-    --ag-shadow: 0 1px 3px rgba(60, 40, 20, 0.08);
-    --ag-shadow-lift: 0 8px 24px rgba(60, 40, 20, 0.12);
+    /* The warm tint the shadows below are mixed from. Kept as a colour of its
+       own so code that needs the tint rather than a ready-made shadow can have
+       it — Clerk's theme builds its own shadow set from it. */
+    --ag-shadow-color: rgb(60 40 20);
+    --ag-shadow: 0 1px 3px color-mix(in srgb, transparent, var(--ag-shadow-color) 8%);
+    --ag-shadow-lift: 0 8px 24px color-mix(in srgb, transparent, var(--ag-shadow-color) 12%);
     /* Highlight band swept across content that is being refreshed in the
        background — translucent so the rows underneath stay readable. */
     --ag-shimmer: rgba(255, 255, 255, 0.55);
