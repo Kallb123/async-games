@@ -7,13 +7,12 @@ import BackLink from "@/components/ui/BackLink";
 import DevTools from "@/components/DevTools";
 import NotificationDeviceList from "@/components/NotificationDeviceList";
 import { NotificationChannel, NOTIFICATION_CHANNELS } from "@/utils/firebase/notificationPreferences";
+import { pushSupported } from "@/utils/firebase/pushSupport";
 import useFcmToken from "@/utils/hooks/useFcmToken";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import packageJson from "@/../package.json";
-
-const notificationsSupported = () => typeof window !== 'undefined' && 'Notification' in window;
 
 // Whether this browser granted notification permission. Reading it during
 // render would break hydration and copying it into state from an effect is a
@@ -22,7 +21,7 @@ const notificationsSupported = () => typeof window !== 'undefined' && 'Notificat
 // browser fires no event for a permission change, and `enableNotifications`
 // below reloads the page after asking.
 const subscribePermission = () => () => {};
-const getPermission = () => notificationsSupported() && Notification.permission === 'granted';
+const getPermission = () => pushSupported() && Notification.permission === 'granted';
 const getServerPermission = () => false;
 
 interface NotificationPreferencesState {
@@ -59,7 +58,7 @@ export default function Settings() {
     }, [isAuthorised, refreshPreferences]);
 
     const enableNotifications = () => {
-        if (notificationsSupported()) {
+        if (pushSupported()) {
             Notification.requestPermission().then(() => window.location.reload());
         }
     };
