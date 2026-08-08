@@ -353,6 +353,10 @@ button {
 
 .ag-btn--block { width: 100%; }
 
+/* A row of equal-width actions — two buttons or two CTA cards side by side. */
+.ag-btn-row { display: flex; gap: 10px; }
+.ag-btn-row > * { flex: 1; }
+
 /* Small pill actions inside list rows */
 .ag-pill-action {
     flex: none;
@@ -559,6 +563,8 @@ button {
 .ag-cta-main { flex: 1; min-width: 0; }
 .ag-cta-title { font: 800 16px/1.2 var(--ag-font); }
 .ag-cta-sub { font: 500 12px/1.3 var(--ag-font); opacity: 0.72; margin-top: 3px; }
+/* Trailing chevron for a CTA that leads somewhere rather than doing something. */
+.ag-cta-arrow { font: 800 18px var(--ag-font); flex: none; }
 
 /* ---- Sticky action footer (setup) ---- */
 .ag-sticky-action {
@@ -659,6 +665,8 @@ button {
     min-height: 150px;
 }
 .ag-game-card--soon:hover { transform: none; box-shadow: none; }
+.ag-game-soon-title { font: 800 13px/1.3 var(--ag-font); color: var(--ag-ink-soft); text-align: center; }
+.ag-game-soon-cta { font: 600 11px var(--ag-font); color: var(--ag-terracotta); }
 
 /* Accent helpers */
 .ag-accent-terracotta { background: var(--ag-terracotta); }

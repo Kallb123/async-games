@@ -43,7 +43,9 @@ out. A second copy is the signal to extract the first one.
   reusable `ag-*` component classes. Extend this rather than inventing new
   inline-styled variants.
 - `src/components/ui/` — presentational primitives:
-  `Avatar`, `GameThumb`, `TurnTimerSelect`, `GameSetupLayout`.
+  `Avatar`, `GameThumb`, `TurnTimerSelect`, `GameSetupLayout`, `GameLibrary`
+  (the filter-chips + featured + grid game browser, shared by `/newgame` and
+  the public landing page).
 - `src/utils/ui/` — pure presentation helpers: `games.ts` (per-game metadata:
   name, art, accent, players), `avatar.ts` (deterministic avatar colours),
   `players.ts` (opponent summaries).

@@ -52,7 +52,8 @@ client.
 src/
 ├── app/                        # Next.js App Router: pages + API routes
 │   ├── layout.tsx              # Root layout: ClerkProvider, global CSS, PWA meta
-│   ├── page.tsx                # Home dashboard (my turn / their turn / invites)
+│   ├── page.tsx                # Home: the dashboard when signed in (my turn /
+│   │                           #   their turn / invites), the public landing page when not
 │   ├── ag-theme.css            # "Game Night" design system — tokens + ag-* classes
 │   ├── globals.css
 │   ├── login/  unlockaccess/  users/  profile/   # top-level screens
@@ -489,6 +490,11 @@ game — is documented fully in
   Pages redirect users to `/login` if signed out and `/unlockaccess` if not
   unlocked. `/unlockaccess` posts an `ACCESS_PASSWORD` to `/api/unlock` to flip
   the flag — an optional invite-only gate.
+- **The public landing page** is the one exception to the first redirect: `/`
+  mounts `useAuthGuard({ allowSignedOut: true })`, so a visitor with no account
+  gets `components/Landing.tsx` — the pitch, plus the same `GameLibrary` browser
+  the signed-in library uses, pointed at sign-up — instead of a bounce to
+  `/login`. Locked-out accounts still go to `/unlockaccess`.
 - User records themselves live in **Clerk**, not MongoDB. The app only stores
   Clerk `userId`s and resolves display names on demand.
 
@@ -510,7 +516,7 @@ layout) rendered inside a centred `.ag-app` column.
 - **Reusable pieces** (this is the most important contribution rule — see
   `AGENTS.md`):
   - `src/components/ui/` — presentational primitives (`Avatar`, `GameThumb`,
-    `TurnTimerSelect`, `GameSetupLayout`).
+    `TurnTimerSelect`, `GameSetupLayout`, `GameLibrary`).
   - `src/utils/ui/` — pure helpers: `games.ts` (per-game metadata: name, art,
     accent, players), `avatar.ts`, `players.ts`.
   - `src/utils/hooks/` — shared stateful logic (`usePlayerList`, the invite

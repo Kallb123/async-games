@@ -2,13 +2,14 @@
 import useFcmToken from "@/utils/hooks/useFcmToken";
 import { getMessaging, onMessage } from 'firebase/messaging';
 import firebaseApp from '../utils/firebase/firebase';
+import { pushSupported } from '@/utils/firebase/pushSupport';
 import { useEffect } from 'react';
 
 export function FcmTokenComp() {
   const { fcmToken, notificationPermissionStatus } = useFcmToken();
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+    if (pushSupported()) {
       if (notificationPermissionStatus === 'granted') {
         const messaging = getMessaging(firebaseApp);
         const unsubscribe = onMessage(messaging, (payload) => {

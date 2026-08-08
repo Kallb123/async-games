@@ -2,26 +2,13 @@
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
-import { GAME_META, COMING_SOON, GAME_CATEGORIES, GameCategory } from "@/utils/ui/games";
-import GameThumb, { accentVar, GAME_ART_SIZE } from "@/components/ui/GameThumb";
-import Image from "next/image";
-import Link from "next/link";
+import GameLibrary from "@/components/ui/GameLibrary";
 import BackLink from "@/components/ui/BackLink";
-
-const FILTERS: ("All" | GameCategory)[] = ["All", ...GAME_CATEGORIES];
 
 export default function NewGame() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
   useAuthGuard();
-  const [filter, setFilter] = useState<"All" | GameCategory>("All");
-
-  const featured = GAME_META.dicecities;
-  const otherGames = Object.values(GAME_META)
-    .filter(g => g.url !== featured.url)
-    .filter(g => filter === "All" || g.categories.includes(filter));
-  const featuredVisible = filter === "All" || featured.categories.includes(filter);
 
   return (
     <main>
@@ -32,66 +19,7 @@ export default function NewGame() {
         </div>
       </div>
 
-      <div className="ag-section">
-        <div className="ag-chips">
-          {FILTERS.map(f => (
-            <button
-              key={f}
-              type="button"
-              className={`ag-chip ${filter === f ? "ag-chip--active" : ""}`}
-              onClick={() => setFilter(f)}
-            >
-              {f}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {featuredVisible && (
-        <div className="ag-section">
-          <Link href={`/newgame/${featured.url}`} className="ag-featured" style={{ background: accentVar(featured.accent) }}>
-            {featured.art && <Image src={featured.art} alt="" width={GAME_ART_SIZE} height={GAME_ART_SIZE} className="ag-featured-art" />}
-            <div className="ag-featured-eyebrow">Featured this week</div>
-            <div className="ag-featured-title">{featured.name}</div>
-            <div className="ag-featured-desc">{featured.tagline}</div>
-            <div className="ag-featured-row">
-              <span className="ag-featured-btn">Start a game</span>
-              <span className="ag-featured-meta">{featured.players}</span>
-            </div>
-          </Link>
-        </div>
-      )}
-
-      <div className="ag-section">
-        <div className="ag-game-grid">
-          {otherGames.map(game => (
-            <Link key={game.url} href={`/newgame/${game.url}`} className="ag-game-card">
-              <div className="ag-game-thumb" style={{ background: accentVar(game.accent) }}>
-                {game.art
-                  ? <GameThumb meta={game} size={74} radius={0} />
-                  : game.glyph}
-              </div>
-              <div className="ag-game-body">
-                <div className="ag-game-name">{game.name}</div>
-                <div className="ag-game-meta">{game.categories.join(", ")} · {game.players.replace(" players", "")}</div>
-              </div>
-            </Link>
-          ))}
-
-          {filter === "All" && (
-            <div className="ag-game-card ag-game-card--soon">
-              <div style={{ font: "800 13px/1.3 var(--ag-font)", color: "var(--ag-ink-soft)", textAlign: "center" }}>
-                {COMING_SOON.slice(0, 2).join(", ")} &amp;<br />more coming
-              </div>
-              <div style={{ font: "600 11px var(--ag-font)", color: "var(--ag-terracotta)" }}>Suggest a game →</div>
-            </div>
-          )}
-        </div>
-
-        {otherGames.length === 0 && !featuredVisible && (
-          <div className="ag-empty">No games in this category yet.</div>
-        )}
-      </div>
+      <GameLibrary hrefFor={game => `/newgame/${game.url}`} />
 
       <FcmTokenComp />
     </main>
