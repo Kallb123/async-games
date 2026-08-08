@@ -513,10 +513,16 @@ layout) rendered inside a centred `.ag-app` column.
   system — the `ag-*` classes and CSS custom-property tokens in
   `src/app/ag-theme.css` (warm cream + terracotta, Bricolage Grotesque). Bootstrap
   remains a dependency and is still used for the in-game board screens only.
+- **Brand mark.** The "clock die" — four pips at 12, 3, 6 and 9, the brass one
+  marking the seat in play. `scripts/generate-icons.mjs` (`npm run icons`) is
+  the only place it is drawn: it emits the favicon, the iOS icon, the PWA and
+  tile icons, the share card, and `public/icons/icon.svg`, which is the copy
+  `Brand` puts on screen. Edit the mark there and re-run the script rather
+  than hand-editing any of the assets.
 - **Reusable pieces** (this is the most important contribution rule — see
   `AGENTS.md`):
-  - `src/components/ui/` — presentational primitives (`Avatar`, `GameThumb`,
-    `TurnTimerSelect`, `GameSetupLayout`, `GameLibrary`).
+  - `src/components/ui/` — presentational primitives (`Brand`, `Avatar`,
+    `GameThumb`, `TurnTimerSelect`, `GameSetupLayout`, `GameLibrary`).
   - `src/utils/ui/` — pure helpers: `games.ts` (per-game metadata: name, art,
     accent, players), `avatar.ts`, `players.ts`.
   - `src/utils/hooks/` — shared stateful logic (`usePlayerList`, the invite
