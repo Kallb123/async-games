@@ -4,6 +4,7 @@ import PasswordForm from "@/components/PasswordForm";
 import { useUser } from "@clerk/nextjs";
 import { usePathname, useRouter } from "next/navigation";
 import CurrentUserInfo from "@/components/CurrentUserInfo";
+import Brand from "@/components/ui/Brand";
 import { useEffect } from "react";
 
 export default function UnlockAccess() {
@@ -26,7 +27,7 @@ export default function UnlockAccess() {
   return (
     <main>
       <div className="ag-topbar">
-        <span className="ag-wordmark">Async Games</span>
+        <Brand />
       </div>
       <div className="ag-hero">
         <h1 className="ag-hero-title">One more step</h1>

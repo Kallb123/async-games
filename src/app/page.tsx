@@ -9,6 +9,7 @@ import TheirTurnList from "@/components/TheirTurnList";
 import MyCompleteList from "@/components/MyCompleteList";
 import Avatar from "@/components/ui/Avatar";
 import Landing from "@/components/Landing";
+import Brand from "@/components/ui/Brand";
 import Link from "next/link";
 
 export default function Home() {
@@ -29,9 +30,7 @@ export default function Home() {
       <FcmTokenComp />
 
       <div className="ag-topbar">
-        <div className="ag-topbar-title">
-          <span className="ag-wordmark">Async Games</span>
-        </div>
+        <Brand />
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", justifyContent: "center" }}>
           <Link href="/newgame" aria-label="New game" style={{ borderRadius: "50%", background: "var(--ag-green)", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center" }}>+</Link>
           <Link href="/profile" aria-label="Your profile">

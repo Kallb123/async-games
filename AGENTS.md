@@ -43,6 +43,7 @@ out. A second copy is the signal to extract the first one.
   reusable `ag-*` component classes. Extend this rather than inventing new
   inline-styled variants.
 - `src/components/ui/` — presentational primitives:
+  `Brand` (the mark + wordmark lockup every top bar that names the app uses),
   `Avatar`, `GameThumb`, `TurnTimerSelect`, `GameSetupLayout`, `GameLibrary`
   (the filter-chips + featured + grid game browser, shared by `/newgame` and
   the public landing page).

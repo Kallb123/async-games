@@ -70,7 +70,7 @@ messaging.onBackgroundMessage((payload) => {
     }
     const notificationOptions = {
         body,
-        icon: image || '/icons/firebase-logo.png', // path to your "fallback" firebase notification logo
+        icon: image || '/icons/icon-192.png', // the app's own mark, for pushes that carry no game art
         data: restPayload,
     };
     return self.registration.showNotification(title, notificationOptions);

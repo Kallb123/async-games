@@ -16,9 +16,32 @@ const bricolageGrotesque = Bricolage_Grotesque({
   variable: "--ag-font-bricolage",
 });
 
+const SITE_URL = "https://async-games.vercel.app";
+
+// The share card drawn by `scripts/generate-icons.mjs`. The tab, home-screen
+// and installed-app icons come from the same script, via the App Router's file
+// conventions (`favicon.ico`, `apple-icon.png`) and `public/manifest.json`.
+const OG_IMAGE = "/icons/og-image.png";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "Async Games",
   description: "Portal for all sorts of asynchronous games",
+  openGraph: {
+    type: "website",
+    siteName: "Async Games",
+    title: "Async Games",
+    description: "Best Async Gaming Platform",
+    url: SITE_URL,
+    images: [{ url: OG_IMAGE, width: 1200, height: 630, alt: "Async Games — board games, one turn at a time." }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Async Games",
+    description: "Best Async Gaming Platform",
+    creator: "@Kallb123",
+    images: [OG_IMAGE],
+  },
 };
 
 export default function RootLayout({
@@ -41,33 +64,13 @@ export default function RootLayout({
           <meta name="format-detection" content="telephone=no" />
           <meta name="mobile-web-app-capable" content="yes" />
           <meta name="msapplication-config" content="/icons/browserconfig.xml" />
-          <meta name="msapplication-TileColor" content="#2B5797" />
           <meta name="msapplication-tap-highlight" content="no" />
           <meta name="theme-color" content="#F0EEE9" />
 
-          {/* <link rel="apple-touch-icon" href="/icons/touch-icon-iphone.png" />
-          <link rel="apple-touch-icon" sizes="152x152" href="/icons/touch-icon-ipad.png" />
-          <link rel="apple-touch-icon" sizes="180x180" href="/icons/touch-icon-iphone-retina.png" />
-          <link rel="apple-touch-icon" sizes="167x167" href="/icons/touch-icon-ipad-retina.png" /> */}
-
-          {/* <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png" />
-          <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png" /> */}
+          {/* The tab icon (`favicon.ico`) and the iOS home-screen icon
+              (`apple-icon.png`) sit next to this file, so Next links them
+              itself; the rest of the set is listed in the manifest. */}
           <link rel="manifest" href="/manifest.json" />
-          {/* <link rel="mask-icon" href="/icons/safari-pinned-tab.svg" color="#5bbad5" />
-          <link rel="shortcut icon" href="/favicon.ico" /> */}
-
-          <meta name="twitter:card" content="summary" />
-          <meta name="twitter:url" content="https://async-games.vercel.app" />
-          <meta name="twitter:title" content="Async Games" />
-          <meta name="twitter:description" content="Best Async Gaming Platform" />
-          {/* <meta name="twitter:image" content="https://async-games.vercel.app/icons/android-chrome-192x192.png" /> */}
-          <meta name="twitter:creator" content="@Kallb123" />
-          <meta property="og:type" content="website" />
-          <meta property="og:title" content="Async Games" />
-          <meta property="og:description" content="Best Async Gaming Platform" />
-          <meta property="og:site_name" content="Async Games" />
-          <meta property="og:url" content="https://async-games.vercel.app" />
-          {/* <meta property="og:image" content="https://async-games.vercel.app/icons/apple-touch-icon.png" /> */}
         </head>
         <body>
           <Providers>

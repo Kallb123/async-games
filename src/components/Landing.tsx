@@ -1,6 +1,7 @@
 'use client'
 
 import Link from "next/link";
+import Brand from "@/components/ui/Brand";
 import GameLibrary from "@/components/ui/GameLibrary";
 import { GAME_META } from "@/utils/ui/games";
 
@@ -37,9 +38,7 @@ export default function Landing() {
     return (
         <main>
             <div className="ag-topbar">
-                <div className="ag-topbar-title">
-                    <span className="ag-wordmark">Async Games</span>
-                </div>
+                <Brand />
                 <Link href="/login" className="ag-pill-action">Sign in</Link>
             </div>
 

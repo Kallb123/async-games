@@ -33,6 +33,56 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 
 Copy `.env.example` to `.env.local` and fill in the values. All variables listed there are required for a full deployment except `ACCESS_PASSWORD`.
 
+## Brand and icons
+
+<img src="public/icons/icon.svg" alt="The Async Games clock die" width="72" height="72">
+
+The mark is the **clock die**: four pips at 12, 3, 6 and 9 — a die face and a
+clock face at once — with the brass pip marking the seat in play.
+
+| Token | Hex | Used for |
+|---|---|---|
+| `--ag-terracotta` | `#b74b21` | the die body |
+| `--ag-on-dark` | `#f7f0eb` | the three cream pips |
+| — (brass) | `#f7c28f` | the live-seat pip at 9 |
+| `--ag-dark` | `#3a221a` | the hub |
+
+Every measurement is a fraction of the box, so the mark redraws cleanly at any
+size. As the box shrinks the pips grow and their inset tightens so they don't
+dissolve, and below 24px the hub drops entirely — four dots in a rounded square
+still read as both die and clock at 16px.
+
+### Regenerating the assets
+
+`scripts/generate-icons.mjs` is the only place the mark is drawn. Edit the
+geometry or colours there and re-run:
+
+```bash
+npm run icons
+```
+
+That rewrites every shipped image of the mark:
+
+| File | Where it's used |
+|---|---|
+| `src/app/favicon.ico` | browser tab (16/32/48, each drawn at its own size tier) |
+| `src/app/apple-icon.png` | iOS home screen |
+| `public/icons/icon.svg` | the manifest's scalable icon, and the copy `Brand` renders on screen |
+| `public/icons/icon-192.png`, `icon-512.png` | PWA install |
+| `public/icons/maskable-512.png` | Android adaptive icon |
+| `public/icons/mstile-150.png` | Windows tile (`public/icons/browserconfig.xml`) |
+| `public/icons/og-image.png` | `og:image` / `twitter:image` share card |
+
+The share card is the only asset that needs anything extra: it sets the
+wordmark in Bricolage Grotesque, so that font must be installed as a system
+font or the script skips it with a warning and leaves the existing card in
+place.
+
+On screen, use the `Brand` component (`src/components/ui/Brand.tsx`) — the mark
+and wordmark locked up together — anywhere a top bar names the app. Screens
+showing a *page* title instead (e.g. Profile, Settings, The library, Result)
+keep their own `ag-wordmark` span.
+
 ## Cron / Turn Timer
 
 The turn-timer cron job runs at `/api/cron/turntimer`. It checks all active games, advances any expired turns, and sends push notifications.
