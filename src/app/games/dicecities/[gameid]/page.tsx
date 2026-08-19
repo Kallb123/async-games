@@ -21,7 +21,7 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { landmarkCount } from "@/games/DiceCities/ui";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
-import { abandonedGameCopy, currentUsername } from "@/utils/ui/players";
+import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
 
 // Sentinel used as "current turn" while reviewing a past turn, so no player's
 // interactive controls activate.
@@ -85,7 +85,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const getForfeitedByDisplayName = (): string => playerName(gameData?.forfeitedBy);
     const currentTurnUsername = players.find(p => p.userId === displayedCurrentTurn)?.username ?? "";
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
-    const abandoned = complete && gameData?.endReason === 'abandoned';
+    const abandoned = abandonedGameStatus(complete, gameData?.endReason, getForfeitedByDisplayName());
     const hasRolled = displayed?.hasRolled ?? false;
     const myUsername = currentUsername(user);
 
@@ -93,7 +93,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     let subtitle: React.ReactNode = 'Loading…';
     if (displayed) {
         if (abandoned) {
-            subtitle = abandonedGameCopy(getForfeitedByDisplayName()).subtitle;
+            subtitle = abandoned.subtitle;
         } else if (complete) {
             subtitle = currentUserWon ? '🏆 You won!' : `${getWinnerDisplayName()} won`;
         } else if (isMyTurn) {
@@ -184,7 +184,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
             {complete && (
                 <GameFinishBanner
                     message={abandoned
-                        ? abandonedGameCopy(getForfeitedByDisplayName()).message
+                        ? abandoned.message
                         : currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}
                     gameId={gameId}
                     gameUrl="dicecities"

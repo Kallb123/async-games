@@ -22,7 +22,7 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
-import { abandonedGameCopy, currentUsername } from "@/utils/ui/players";
+import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
 
 const PHASE_LABEL: Record<IWorldDominationSpecificGameStateResponse['phase'], string> = {
     setup: 'Setup',
@@ -169,13 +169,13 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
         : displayedCurrentTurn ?? '';
 
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
-    const abandoned = complete && gameData?.endReason === 'abandoned';
+    const abandoned = abandonedGameStatus(complete, gameData?.endReason, getForfeitedByDisplayName());
 
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
     if (gs) {
         if (abandoned) {
-            subtitle = abandonedGameCopy(getForfeitedByDisplayName()).subtitle;
+            subtitle = abandoned.subtitle;
         } else if (complete) {
             subtitle = currentUserWon ? '🏆 You won!' : `${getWinnerDisplayName()} won`;
         } else {
@@ -278,7 +278,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
             {complete && (
                 <GameFinishBanner
                     message={abandoned
-                        ? abandonedGameCopy(getForfeitedByDisplayName()).message
+                        ? abandoned.message
                         : currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} achieved world domination.`}
                     gameId={gameId}
                     gameUrl="worlddomination"

@@ -62,3 +62,16 @@ export function abandonedGameCopy(forfeitedName?: string): { subtitle: string; s
         message: `${who} missed too many turns in a row, so the game has ended with no winner.`,
     };
 }
+
+// Every game board page needs the same check before rendering its own
+// "you won" copy: is this finished game actually a no-winner abandonment?
+// Centralising the check (not just the copy above) means each board page
+// computes it once instead of re-deriving the `abandoned` predicate and
+// calling abandonedGameCopy twice apiece.
+export function abandonedGameStatus(
+    complete: boolean,
+    endReason: string | undefined,
+    forfeitedName?: string
+): ReturnType<typeof abandonedGameCopy> | null {
+    return complete && endReason === 'abandoned' ? abandonedGameCopy(forfeitedName) : null;
+}

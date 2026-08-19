@@ -27,7 +27,7 @@ import { ISnakesAndLaddersDiceRollOutcome, SnakesAndLaddersRequestDiceRoll } fro
 import { SL_REROLL_PARAM } from "@/games/SnakesAndLadders/ui";
 import { rematchFlag } from "@/utils/ui/rematch";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
-import { abandonedGameCopy, currentUsername } from "@/utils/ui/players";
+import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
 
 export default function GameSnakesAndLadders({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
@@ -110,14 +110,14 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     const getForfeitedByDisplayName = (): string => playerName(gameData?.forfeitedBy);
     const currentTurnUsername = players.find(p => p.userId === displayedCurrentTurn)?.username ?? "";
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
-    const abandoned = complete && gameData?.endReason === 'abandoned';
+    const abandoned = abandonedGameStatus(complete, gameData?.endReason, getForfeitedByDisplayName());
     const myUsername = currentUsername(user);
 
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
     if (boardState) {
         if (abandoned) {
-            subtitle = abandonedGameCopy(getForfeitedByDisplayName()).subtitle;
+            subtitle = abandoned.subtitle;
         } else if (complete) {
             subtitle = currentUserWon ? '🏆 You won!' : `${getWinnerDisplayName()} won`;
         } else if (isMyTurn) {
@@ -227,7 +227,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
             {complete && (
                 <GameFinishBanner
                     message={abandoned
-                        ? abandonedGameCopy(getForfeitedByDisplayName()).message
+                        ? abandoned.message
                         : currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}
                     gameId={gameId}
                     gameUrl="snakesandladders"
