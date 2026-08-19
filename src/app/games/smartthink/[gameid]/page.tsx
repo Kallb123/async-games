@@ -19,7 +19,7 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import type { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
 import { SMARTTHINK_CODE_LENGTH } from "@/games/Smartthink/ui";
-import { currentUsername } from "@/utils/ui/players";
+import { abandonedGameCopy, currentUsername } from "@/utils/ui/players";
 
 const PLAYER_COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c"];
 const emptyGuess = (): (number | null)[] => Array(SMARTTHINK_CODE_LENGTH).fill(null);
@@ -56,20 +56,26 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
 
     const state = gameData?.specificGameState;
 
-    const getWinnerDisplayName = (): string => {
-        if (!state) return gameData?.winner ?? "";
-        if (gameData.winner === state.codeSetterId) return state.codeSetterUsername || gameData.winner;
-        if (gameData.winner === state.codeBreakerId) return state.codeBreakerUsername || gameData.winner;
-        return state.players?.find(p => p.userId === gameData.winner)?.username ?? gameData?.winner ?? "";
+    const playerName = (userId?: string): string => {
+        if (!userId) return "";
+        if (!state) return userId;
+        if (userId === state.codeSetterId) return state.codeSetterUsername || userId;
+        if (userId === state.codeBreakerId) return state.codeBreakerUsername || userId;
+        return state.players?.find(p => p.userId === userId)?.username ?? userId;
     };
+    const getWinnerDisplayName = (): string => playerName(gameData?.winner);
+    const getForfeitedByDisplayName = (): string => playerName(gameData?.forfeitedBy);
     const currentUserWon = complete && user?.id !== undefined && user.id === nav.displayedWinner;
+    const abandoned = complete && gameData?.endReason === 'abandoned';
     const myUsername = currentUsername(user);
     const usernameList = gameData?.usernameList ?? [];
 
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
     if (displayed) {
-        if (complete) {
+        if (abandoned) {
+            subtitle = abandonedGameCopy(getForfeitedByDisplayName()).subtitle;
+        } else if (complete) {
             subtitle = currentUserWon ? '🏆 You cracked it!' : `${getWinnerDisplayName()} won`;
         } else if (!displayed.secretCodeSet) {
             subtitle = isCodeSetter
@@ -132,7 +138,9 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
 
             {complete && (
                 <GameFinishBanner
-                    message={currentUserWon ? 'You cracked it! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}
+                    message={abandoned
+                        ? abandonedGameCopy(getForfeitedByDisplayName()).message
+                        : currentUserWon ? 'You cracked it! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}
                     gameId={gameId}
                     gameUrl="smartthink"
                     usernameList={usernameList}

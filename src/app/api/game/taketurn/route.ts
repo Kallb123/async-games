@@ -23,6 +23,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, {status: 401, statusText: "Not your turn"});
   }
 
+  // They acted within their turn window, so they haven't missed this one —
+  // clear any run of expiries the turntimer cron had counted against them.
+  if (gameData.missedTurnCounts?.get(gameData.currentTurn)) {
+    gameData.missedTurnCounts.set(gameData.currentTurn, 0);
+  }
+
   const currentIndex = gameData.gameState.turnOrder.findIndex(to => to === gameData.currentTurn);
   const nextTurn = gameData.gameState.turnOrder[(currentIndex+1)%gameData.gameState.turnOrder.length];
   gameData.currentTurn = nextTurn;

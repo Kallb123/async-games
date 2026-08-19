@@ -15,6 +15,16 @@ const TIMER_MS: Record<string, number> = {
 const WARNING_RATIO = 0.2;
 const WARNING_MIN_MS = 5 * 60 * 1000; // 5 minutes (matches external cron granularity)
 
+// A player whose turn expires this many times in a row (never taking a turn
+// of their own in between) is treated as having dropped out. Reaching this
+// abandons the whole game rather than rotating past them again — see the
+// turntimer cron.
+export const MAX_CONSECUTIVE_MISSED_TURNS = 3;
+
+export function hasAbandonedGame(missedTurnCount: number): boolean {
+    return missedTurnCount >= MAX_CONSECUTIVE_MISSED_TURNS;
+}
+
 export function isUnlimitedTurnTimer(turnTimer: string): boolean {
     return turnTimer === UNLIMITED_TURN_TIMER;
 }

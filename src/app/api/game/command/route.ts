@@ -95,12 +95,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, {status: 401, statusText: "Not a valid move"});
   }
 
+  // They acted within their turn window, so they haven't missed this one —
+  // clear any run of expiries the turntimer cron had counted against them.
+  if (gameData.missedTurnCounts?.get(commandRequest.senderId)) {
+    gameData.missedTurnCounts.set(commandRequest.senderId, 0);
+  }
+
   gameData.gameState.commandHistory.push(commandRequest);
   gameData.markModified('gameState.commandHistory');
 
   // Checks whether the turn should be progressed and actions it if so
   const gameType: IGameType = deserializeJSON(JSON.stringify(gameData.gameType));
   if (gameType.CheckGameOver(gameData)) {
+    gameData.endReason = "win";
     if (!(await trySave(gameData))) {
       return NextResponse.json({}, {status: 409, statusText: "Game state changed, please refresh and try again"});
     }

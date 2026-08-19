@@ -148,6 +148,7 @@ export async function buildTimeline(
         currentTurn: gameData.gameState.turnOrder[0] ?? "",
         lastTurnTimestamp: gameData.lastTurnTimestamp,
         timerWarningNotificationSent: false,
+        missedTurnCounts: new Map(),
         gameState: {
             turnOrder: [...gameData.gameState.turnOrder],
             history: [],

@@ -8,6 +8,7 @@ import LineChart from "@/components/ui/LineChart";
 import { SkeletonList } from "@/components/ui/Skeleton";
 import { useGameResult } from "@/utils/hooks/useGameResult";
 import { GAME_META } from "@/utils/ui/games";
+import { abandonedGameCopy } from "@/utils/ui/players";
 import { pluralize } from "@/utils/ui/text";
 import moment from 'moment';
 
@@ -44,7 +45,11 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
                                     <div className="ag-list-row-main">
                                         <div className="ag-list-row-title">{meta?.name ?? result.url}</div>
                                         <div className="ag-list-row-sub">
-                                            {result.winner ? `${result.winner} won` : "Draw"} · {moment(result.endedAt).fromNow()} · {pluralize(result.totalTurns, 'turn')}
+                                            {result.winner
+                                                ? `${result.winner} won`
+                                                : result.endReason === 'abandoned'
+                                                    ? abandonedGameCopy(result.forfeitedBy).short
+                                                    : "Draw"} · {moment(result.endedAt).fromNow()} · {pluralize(result.totalTurns, 'turn')}
                                         </div>
                                     </div>
                                 </div>

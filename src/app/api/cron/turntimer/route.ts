@@ -1,10 +1,11 @@
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
-import { buildTurnExpiringNotification, buildYourTurnNotification } from '@/utils/firebase/notificationContent';
+import { buildGameLostNotification, buildTurnExpiringNotification, buildYourTurnNotification } from '@/utils/firebase/notificationContent';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
+import { recordGameResult } from '@/utils/mongodb/GameResultData';
 import { clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
-import { isExpired, isWarningThreshold, formatRemainingTime } from '@/utils/games/TurnTimer';
+import { hasAbandonedGame, isExpired, isWarningThreshold, formatRemainingTime } from '@/utils/games/TurnTimer';
 import { isAuthorisedCron } from '@/utils/cronAuth';
 import { userListToUserIdNameMap } from '@/utils/users/clerk';
 import { readableName } from '@/utils/ui/players';
@@ -26,11 +27,47 @@ export async function GET(request: NextRequest) {
 
     let expired = 0;
     let warned = 0;
+    let abandoned = 0;
 
     for (const gameData of activeGames) {
         const { lastTurnTimestamp, turnTimer, currentTurn } = gameData;
 
         if (isExpired(lastTurnTimestamp, turnTimer)) {
+            if (!gameData.missedTurnCounts) gameData.missedTurnCounts = new Map();
+            const missedCount = (gameData.missedTurnCounts.get(currentTurn) ?? 0) + 1;
+            gameData.missedTurnCounts.set(currentTurn, missedCount);
+
+            if (hasAbandonedGame(missedCount)) {
+                // currentTurn has now missed MAX_CONSECUTIVE_MISSED_TURNS turns in a
+                // row without acting — treat them as having dropped out. We can't
+                // assume the remaining players still make a fair game (turnOrder,
+                // scoring, etc. all assume the original roster), so the game ends
+                // for everyone rather than continuing without them.
+                gameData.complete = true;
+                gameData.winner = "";
+                gameData.endReason = "abandoned";
+                gameData.forfeitedBy = currentTurn;
+                gameData.currentTurn = "";
+                // A player may have taken their turn concurrently with this cron run —
+                // skip this game rather than clobber their move with a stale expiry.
+                if (!(await trySave(gameData))) continue;
+
+                await recordGameResult(gameData);
+
+                const { data: userList } = await (await clerkClient()).users.getUserList({
+                    userId: gameData.userIdList
+                });
+
+                await sendPushToUsers(userList, {
+                    event: 'GameOver',
+                    gameId: gameData.gameId,
+                    link: gameNotificationLink(gameData.gameType.url, gameData.gameId)
+                }, buildGameLostNotification(gameData, ''));
+
+                abandoned++;
+                continue;
+            }
+
             // Advance the turn
             const currentIndex = gameData.gameState.turnOrder.findIndex(to => to === currentTurn);
             const nextTurn = gameData.gameState.turnOrder[(currentIndex + 1) % gameData.gameState.turnOrder.length];
@@ -93,5 +130,5 @@ export async function GET(request: NextRequest) {
         }
     }
 
-    return NextResponse.json({ processed: activeGames.length, expired, warned });
+    return NextResponse.json({ processed: activeGames.length, expired, warned, abandoned });
 }

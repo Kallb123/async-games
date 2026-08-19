@@ -27,7 +27,7 @@ import { ISnakesAndLaddersDiceRollOutcome, SnakesAndLaddersRequestDiceRoll } fro
 import { SL_REROLL_PARAM } from "@/games/SnakesAndLadders/ui";
 import { rematchFlag } from "@/utils/ui/rematch";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
-import { currentUsername } from "@/utils/ui/players";
+import { abandonedGameCopy, currentUsername } from "@/utils/ui/players";
 
 export default function GameSnakesAndLadders({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
@@ -104,16 +104,21 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     const displayedWinner = nav.displayedWinner;
     const leaderPosition = players.reduce((m, p) => Math.max(m, p.position), 0);
 
-    const getWinnerDisplayName = (): string =>
-        players.find(p => p.userId === displayedWinner)?.username ?? displayedWinner ?? "";
+    const playerName = (userId?: string): string =>
+        players.find(p => p.userId === userId)?.username ?? userId ?? "";
+    const getWinnerDisplayName = (): string => playerName(displayedWinner);
+    const getForfeitedByDisplayName = (): string => playerName(gameData?.forfeitedBy);
     const currentTurnUsername = players.find(p => p.userId === displayedCurrentTurn)?.username ?? "";
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
+    const abandoned = complete && gameData?.endReason === 'abandoned';
     const myUsername = currentUsername(user);
 
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
     if (boardState) {
-        if (complete) {
+        if (abandoned) {
+            subtitle = abandonedGameCopy(getForfeitedByDisplayName()).subtitle;
+        } else if (complete) {
             subtitle = currentUserWon ? '🏆 You won!' : `${getWinnerDisplayName()} won`;
         } else if (isMyTurn) {
             subtitle = <><span className="ag-hi">Your move</span> · {bonusRoll ? 'roll again' : 'roll the die'}</>;
@@ -221,7 +226,9 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
 
             {complete && (
                 <GameFinishBanner
-                    message={currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}
+                    message={abandoned
+                        ? abandonedGameCopy(getForfeitedByDisplayName()).message
+                        : currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}
                     gameId={gameId}
                     gameUrl="snakesandladders"
                     usernameList={usernameList}

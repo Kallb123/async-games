@@ -215,6 +215,7 @@ WorldDominationInvitationSchema.methods.CreateGame = async function(
         currentTurn: firstPlayer,
         lastTurnTimestamp: new Date().toISOString(),
         timerWarningNotificationSent: false,
+        missedTurnCounts: new Map(),
         gameState: {
             turnOrder,
             history,
@@ -297,6 +298,8 @@ WorldDominationGameDataSchema.methods.CreateDataResponse = async function(): Pro
         },
         complete: doc.complete,
         winner: doc.winner,
+        endReason: doc.endReason,
+        forfeitedBy: doc.forfeitedBy,
         specificGameState: gameStateToResponse(doc.specificGameState, userIdNameMap),
         recapAvailable: !!doc.initialSpecificGameState,
     };

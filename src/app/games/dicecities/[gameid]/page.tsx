@@ -21,7 +21,7 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { landmarkCount } from "@/games/DiceCities/ui";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
-import { currentUsername } from "@/utils/ui/players";
+import { abandonedGameCopy, currentUsername } from "@/utils/ui/players";
 
 // Sentinel used as "current turn" while reviewing a past turn, so no player's
 // interactive controls activate.
@@ -79,17 +79,22 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const isMyTurn = nav.isLive && !!user?.id && user.id === displayedCurrentTurn && !complete;
 
     const leaderLandmarks = players.reduce((m, p) => Math.max(m, landmarkCount(p)), 0);
-    const getWinnerDisplayName = (): string =>
-        players.find(p => p.userId === displayedWinner)?.username ?? displayedWinner ?? "";
+    const playerName = (userId?: string): string =>
+        players.find(p => p.userId === userId)?.username ?? userId ?? "";
+    const getWinnerDisplayName = (): string => playerName(displayedWinner);
+    const getForfeitedByDisplayName = (): string => playerName(gameData?.forfeitedBy);
     const currentTurnUsername = players.find(p => p.userId === displayedCurrentTurn)?.username ?? "";
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
+    const abandoned = complete && gameData?.endReason === 'abandoned';
     const hasRolled = displayed?.hasRolled ?? false;
     const myUsername = currentUsername(user);
 
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
     if (displayed) {
-        if (complete) {
+        if (abandoned) {
+            subtitle = abandonedGameCopy(getForfeitedByDisplayName()).subtitle;
+        } else if (complete) {
             subtitle = currentUserWon ? '🏆 You won!' : `${getWinnerDisplayName()} won`;
         } else if (isMyTurn) {
             subtitle = hasRolled
@@ -178,7 +183,9 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
 
             {complete && (
                 <GameFinishBanner
-                    message={currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}
+                    message={abandoned
+                        ? abandonedGameCopy(getForfeitedByDisplayName()).message
+                        : currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}
                     gameId={gameId}
                     gameUrl="dicecities"
                     usernameList={usernameList}

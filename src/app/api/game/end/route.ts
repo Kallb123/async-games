@@ -31,6 +31,7 @@ export async function POST(request: NextRequest) {
 
   gameData.complete = true;
   gameData.winner = "";
+  gameData.endReason = "ended";
   if (!(await trySave(gameData))) {
     return NextResponse.json({ success: false, message: 'Game state changed, please try again' }, { status: 409 });
   }

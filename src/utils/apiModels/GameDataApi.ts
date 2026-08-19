@@ -2,6 +2,13 @@ import type { IGameType } from "./gameCommand";
 
 export type uuidString = `${string}-${string}-${string}-${string}-${string}`;
 
+// Why a complete game has no winner (or does), beyond the bare `winner`
+// string: a win is unambiguous, but "" is shared by a manual surrender
+// (`POST /api/game/end`) and a game the turntimer cron abandoned because a
+// player stopped taking their turns. Optional so older records (written
+// before this field existed) fall back to inferring from `winner`.
+export type GameEndReason = 'win' | 'ended' | 'abandoned';
+
 export interface IGameResponse {
     gameId: uuidString,
     gameType: string,
@@ -13,7 +20,9 @@ export interface IGameResponse {
     lastTurnTimestamp: string,
     url: string,
     complete: boolean,
-    winner: string
+    winner: string,
+    endReason?: GameEndReason,
+    forfeitedBy?: string
 }
 
 // One line (or a few) of formatted, human-readable GameResult stats. Groups
@@ -90,5 +99,7 @@ export interface IGameDataResponse {
         history: string[]
     },
     complete: boolean,
-    winner: string
+    winner: string,
+    endReason?: GameEndReason,
+    forfeitedBy?: string
 }

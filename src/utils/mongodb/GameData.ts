@@ -1,5 +1,5 @@
 import { Document, Model, Schema, model, models } from "mongoose";
-import { IGameDataResponse, IGameResponse, uuidString } from "../apiModels/GameDataApi";
+import { GameEndReason, IGameDataResponse, IGameResponse, uuidString } from "../apiModels/GameDataApi";
 import { userIdListToUsernameList } from "../users/clerk";
 import { IGameCommand, IGameType } from "../apiModels/GameLogic";
 
@@ -17,9 +17,16 @@ export interface IGameData {
     currentTurn: string,
     lastTurnTimestamp: string,
     timerWarningNotificationSent: boolean,
+    // Consecutive turntimer expiries for each player since they last acted,
+    // keyed by userId. Reset to 0 whenever that player takes a turn; once a
+    // player's count reaches MAX_CONSECUTIVE_MISSED_TURNS the cron abandons
+    // the game instead of rotating past them again — see turntimer/route.ts.
+    missedTurnCounts: Map<string, number>,
     gameState: IGameState,
     complete: boolean,
-    winner: string
+    winner: string,
+    endReason?: GameEndReason,
+    forfeitedBy?: string
 }
 
 export interface IGameDataDocument extends IGameData, Document {
@@ -47,6 +54,7 @@ export var GameDataSchema = new Schema<IGameDataDocument> ({
     currentTurn: String,
     lastTurnTimestamp: String,
     timerWarningNotificationSent: { type: Boolean, default: false },
+    missedTurnCounts: { type: Schema.Types.Map, of: Number, default: () => new Map() },
     gameState: {
         turnOrder: [String],
         history: [String],
@@ -62,7 +70,9 @@ export var GameDataSchema = new Schema<IGameDataDocument> ({
         ]
     },
     complete: Boolean,
-    winner: String
+    winner: String,
+    endReason: String,
+    forfeitedBy: String
 }, {discriminatorKey: 'kind', optimisticConcurrency: true});
 GameDataSchema.methods.CreateResponse = async function(): Promise<IGameResponse> {
     console.log("CreateResponse: Generic game");
@@ -83,7 +93,11 @@ GameDataSchema.methods.CreateResponse = async function(): Promise<IGameResponse>
         lastTurnTimestamp: gameDataDocument.lastTurnTimestamp,
         url: gameDataDocument.gameType.url,
         complete: gameDataDocument.complete,
-        winner: (await userIdListToUsernameList([gameDataDocument.winner]))[0]
+        winner: (await userIdListToUsernameList([gameDataDocument.winner]))[0],
+        endReason: gameDataDocument.endReason,
+        forfeitedBy: gameDataDocument.forfeitedBy
+            ? (await userIdListToUsernameList([gameDataDocument.forfeitedBy]))[0]
+            : undefined
     }
 };
 GameDataSchema.methods.CreateDataResponse = async function(): Promise<IGameDataResponse> {
@@ -98,7 +112,9 @@ GameDataSchema.methods.CreateDataResponse = async function(): Promise<IGameDataR
         currentTurn: gameDataDocument.currentTurn,
         gameState: gameDataDocument.gameState,
         complete: gameDataDocument.complete,
-        winner: gameDataDocument.winner
+        winner: gameDataDocument.winner,
+        endReason: gameDataDocument.endReason,
+        forfeitedBy: gameDataDocument.forfeitedBy
     }
 };
 export var GameDataModel = models.GameData || model<IGameDataDocument, IGameDataModel>('GameData', GameDataSchema);

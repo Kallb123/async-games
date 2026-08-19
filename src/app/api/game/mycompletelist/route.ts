@@ -4,12 +4,15 @@ import { dbConnect } from "../../../../utils/mongodb/mongodb";
 import { GameResultModel } from '@/utils/mongodb/GameResultData';
 import { userIdListToUsernameMap } from '@/utils/users/clerk';
 import { GAME_META } from '@/utils/ui/games';
+import type { GameEndReason } from '@/utils/apiModels/GameDataApi';
 
 export interface ICompletedGame {
   gameId: string;
   url: string;
   friendlyName: string;
   winner: string;
+  endReason?: GameEndReason;
+  forfeitedBy?: string;
   endedAt: string;
 }
 
@@ -25,14 +28,16 @@ export async function GET(request: NextRequest) {
 
   const results = await GameResultModel.find({ playerIds: userId }).sort({ endedAt: -1 }).exec();
 
-  const winnerIds = [...new Set(results.map(result => result.winner).filter(Boolean))];
-  const usernameById = await userIdListToUsernameMap(winnerIds);
+  const idsToResolve = [...new Set(results.flatMap(result => [result.winner, result.forfeitedBy]).filter(Boolean))] as string[];
+  const usernameById = await userIdListToUsernameMap(idsToResolve);
 
   const gameList: ICompletedGame[] = results.map(result => ({
     gameId: result.gameId,
     url: result.url,
     friendlyName: GAME_META[result.url]?.name ?? result.url,
     winner: result.winner ? (usernameById.get(result.winner) ?? result.winner) : "",
+    endReason: result.endReason,
+    forfeitedBy: result.forfeitedBy ? (usernameById.get(result.forfeitedBy) ?? result.forfeitedBy) : undefined,
     endedAt: result.endedAt,
   }));
 

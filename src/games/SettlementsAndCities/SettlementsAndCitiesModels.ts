@@ -268,6 +268,7 @@ SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
         currentTurn: setupCurrentTurn,
         lastTurnTimestamp: new Date().toISOString(),
         timerWarningNotificationSent: false,
+        missedTurnCounts: new Map(),
         gameState: {
             turnOrder,
             history,
@@ -398,6 +399,8 @@ SettlementsAndCitiesGameDataSchema.methods.CreateDataResponse = async function()
         },
         complete: doc.complete,
         winner: doc.winner,
+        endReason: doc.endReason,
+        forfeitedBy: doc.forfeitedBy,
         specificGameState: gameStateToResponse(doc.specificGameState, userIdNameMap),
         // Turn recap replays from the stored initial snapshot; only games created
         // after recap support carry it, so the UI gates its controls on this.
