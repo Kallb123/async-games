@@ -6,6 +6,7 @@ import ListSection from "@/components/ui/ListSection";
 import { COMPLETED_GAME_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
+import { abandonedGameCopy } from "@/utils/ui/players";
 
 export default function MyCompleteList() {
     const { user } = useIsAuthorised();
@@ -35,7 +36,9 @@ export default function MyCompleteList() {
                     >
                         <div style={{ font: "600 13px/1.35 var(--ag-font)", flex: 1, minWidth: 0 }}>
                             {game.friendlyName} — <strong style={{ fontWeight: 800, color: iWon ? "var(--ag-green)" : "var(--ag-ink)" }}>
-                                {game.winner ? `${game.winner} won` : "complete"}
+                                {game.winner
+                                    ? `${game.winner} won`
+                                    : game.endReason === 'abandoned' ? abandonedGameCopy(game.forfeitedBy).short : "complete"}
                             </strong>
                         </div>
                         {iWon ? <span style={{ fontSize: 15 }}>🏆</span> : null}

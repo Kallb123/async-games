@@ -144,6 +144,7 @@ DiceCitiesInvitationSchema.methods.CreateGame = async function(invite: IDiceCiti
         currentTurn: turnOrder[0],
         lastTurnTimestamp: (new Date()).toISOString(),
         timerWarningNotificationSent: false,
+        missedTurnCounts: new Map(),
         // url: "dicecities",
         gameState: {
             turnOrder,
@@ -272,6 +273,8 @@ DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(): Promise<
         gameState: gameDataDocument.gameState,
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
+        endReason: gameDataDocument.endReason,
+        forfeitedBy: gameDataDocument.forfeitedBy,
         enabledDocks: gameDataDocument.enabledDocks,
         enabledBillionaireRow: gameDataDocument.enabledBillionaireRow,
         specificGameState: gameStateToModel(gameDataDocument.specificGameState, userIdNameMap)

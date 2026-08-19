@@ -46,3 +46,19 @@ export function currentUsername(user: SenderUser | null | undefined): string {
 export function readableName(user: SenderUser | null | undefined, fallback = "Someone"): string {
     return user?.username || user?.firstName || fallback;
 }
+
+// The one piece of finish-line copy shared by every game: a player missed
+// too many turns in a row, so the turntimer cron abandoned the game rather
+// than continue without them (see GameEndReason 'abandoned'). Everything else
+// about a finished game (the "you won!" text) is per-game flavour and stays
+// at each game's own page; this case has none, so it's the one part worth
+// sharing — the board page's subtitle/banner and the result list/page rows
+// all pull from here rather than each inventing their own wording.
+export function abandonedGameCopy(forfeitedName?: string): { subtitle: string; short: string; message: string } {
+    const who = forfeitedName || "A player";
+    return {
+        subtitle: "Game ended",
+        short: forfeitedName ? `Ended — ${forfeitedName} went quiet` : "Ended — no winner",
+        message: `${who} missed too many turns in a row, so the game has ended with no winner.`,
+    };
+}

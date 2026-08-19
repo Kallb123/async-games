@@ -1,6 +1,6 @@
 import { Document, Model, Schema, model, models } from "mongoose";
 import type { IGameData } from "./GameData";
-import type { uuidString, GameResultStatGroup, GameResultChart } from "../apiModels/GameDataApi";
+import type { uuidString, GameEndReason, GameResultStatGroup, GameResultChart } from "../apiModels/GameDataApi";
 import {
     IDiceCitiesGameData,
     IDiceCitiesGameResultStats,
@@ -60,6 +60,8 @@ export interface IGameResultData {
     url: string,
     playerIds: string[],
     winner: string,
+    endReason?: GameEndReason,
+    forfeitedBy?: string,
     endedAt: string,
     totalTurns: number
 }
@@ -84,6 +86,8 @@ export var GameResultSchema = new Schema<IGameResultDataDocument>({
     url: String,
     playerIds: [String],
     winner: String,
+    endReason: String,
+    forfeitedBy: String,
     endedAt: String,
     totalTurns: Number
 }, { discriminatorKey: 'kind' });
@@ -266,8 +270,13 @@ export interface IPlayerStats {
     byGame: IGameStats[];
 }
 
-function outcomeFor(winner: string, userId: string): MatchOutcome {
+// `forfeitedBy` singles out the player whose inactivity abandoned the game
+// (see GameEndReason 'abandoned') — they take a loss rather than the draw
+// everyone else in that game gets, since we don't know who'd have won among
+// the players who were still there.
+function outcomeFor(winner: string, forfeitedBy: string | undefined, userId: string): MatchOutcome {
     if (winner === userId) return "win";
+    if (forfeitedBy === userId) return "loss";
     if (winner === "") return "draw";
     return "loss";
 }
@@ -288,7 +297,7 @@ export async function getPlayerStats(userId: string, viewerId: string): Promise<
         gameId: result.gameId,
         url: result.url,
         endedAt: result.endedAt,
-        outcome: outcomeFor(result.winner, userId),
+        outcome: outcomeFor(result.winner, result.forfeitedBy, userId),
         sharedWithViewer: result.playerIds.includes(viewerId),
     }));
 
@@ -298,8 +307,11 @@ export async function getPlayerStats(userId: string, viewerId: string): Promise<
             _id: '$url',
             total: { $sum: 1 },
             wins: { $sum: { $cond: [{ $eq: ['$winner', userId] }, 1, 0] } },
-            draws: { $sum: { $cond: [{ $eq: ['$winner', ''] }, 1, 0] } },
-            losses: { $sum: { $cond: [{ $and: [{ $ne: ['$winner', userId] }, { $ne: ['$winner', ''] }] }, 1, 0] } },
+            draws: { $sum: { $cond: [{ $and: [{ $eq: ['$winner', ''] }, { $ne: ['$forfeitedBy', userId] }] }, 1, 0] } },
+            losses: { $sum: { $cond: [{ $or: [
+                { $and: [{ $ne: ['$winner', userId] }, { $ne: ['$winner', ''] }] },
+                { $eq: ['$forfeitedBy', userId] },
+            ] }, 1, 0] } },
         } },
         { $sort: { total: -1 } },
     ]);
@@ -321,6 +333,8 @@ export async function recordGameResult(gameData: IGameData): Promise<void> {
         url: gameData.gameType.url,
         playerIds: gameData.userIdList,
         winner: gameData.winner,
+        endReason: gameData.endReason,
+        forfeitedBy: gameData.forfeitedBy,
         endedAt: new Date().toISOString(),
         totalTurns: gameData.gameState.commandHistory.length
     };

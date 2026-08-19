@@ -46,6 +46,7 @@ SolitaireInvitationSchema.methods.CreateGame = async function(invite: ISolitaire
         currentTurn: userIdList[0],
         lastTurnTimestamp: (new Date()).toISOString(),
         timerWarningNotificationSent: false,
+        missedTurnCounts: new Map(),
         gameState: {
             turnOrder: userIdList,
             history: [`Dealt a new ${drawMode === 'DRAW_3' ? 'Draw-3' : 'Draw-1'} game`],

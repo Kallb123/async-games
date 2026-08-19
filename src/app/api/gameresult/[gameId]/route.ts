@@ -4,13 +4,15 @@ import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameResultModel, formatGameResultStats, formatGameResultCharts } from '@/utils/mongodb/GameResultData';
 import { areFriends } from '@/utils/mongodb/FriendshipData';
 import { userIdListToUsernameMap } from '@/utils/users/clerk';
-import type { GameResultStatGroup, GameResultChart } from '@/utils/apiModels/GameDataApi';
+import type { GameEndReason, GameResultStatGroup, GameResultChart } from '@/utils/apiModels/GameDataApi';
 
 export interface IGameResultResponse {
     gameId: string;
     gameType: string;
     url: string;
     winner: string;
+    endReason?: GameEndReason;
+    forfeitedBy?: string;
     players: string[];
     endedAt: string;
     totalTurns: number;
@@ -50,6 +52,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         gameType: result.gameType,
         url: result.url,
         winner: result.winner ? (usernameById.get(result.winner) ?? result.winner) : "",
+        endReason: result.endReason,
+        forfeitedBy: result.forfeitedBy ? (usernameById.get(result.forfeitedBy) ?? result.forfeitedBy) : undefined,
         players: playerIds.map(playerId => usernameById.get(playerId) ?? playerId),
         endedAt: result.endedAt,
         totalTurns: result.totalTurns,

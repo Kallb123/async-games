@@ -85,6 +85,7 @@ SnakesAndLaddersInvitationSchema.methods.CreateGame = async function(invite: ISn
         currentTurn: turnOrder[0],
         lastTurnTimestamp: (new Date()).toISOString(),
         timerWarningNotificationSent: false,
+        missedTurnCounts: new Map(),
         gameState: {
             turnOrder,
             history,
@@ -155,6 +156,8 @@ SnakesAndLaddersGameDataSchema.methods.CreateDataResponse = async function(): Pr
         gameState: gameDataDocument.gameState,
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
+        endReason: gameDataDocument.endReason,
+        forfeitedBy: gameDataDocument.forfeitedBy,
         specificGameState: gameStateToModel(gameDataDocument.specificGameState, userIdNameMap)
     };
 };

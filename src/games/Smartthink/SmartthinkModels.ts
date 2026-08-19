@@ -95,6 +95,7 @@ export function CreateSmartthinkSoloGameData(userId: string, username: string, t
         currentTurn: userId,
         lastTurnTimestamp: (new Date()).toISOString(),
         timerWarningNotificationSent: false,
+        missedTurnCounts: new Map(),
         gameState: {
             turnOrder: [userId],
             history: [`Setup: ${SMARTTHINK_COMPUTER_USERNAME} set the secret code`],
@@ -140,6 +141,7 @@ SmartthinkInvitationSchema.methods.CreateGame = async function(invite: ISmartthi
         currentTurn: turnOrder[0],
         lastTurnTimestamp: (new Date()).toISOString(),
         timerWarningNotificationSent: false,
+        missedTurnCounts: new Map(),
         gameState: {
             turnOrder,
             history,
@@ -290,6 +292,8 @@ SmartthinkGameDataSchema.methods.CreateDataResponse = async function(): Promise<
         gameState: gameDataDocument.gameState,
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
+        endReason: gameDataDocument.endReason,
+        forfeitedBy: gameDataDocument.forfeitedBy,
         specificGameState: gameStateToModel(gameDataDocument.specificGameState, userIdNameMap)
     };
 };
