@@ -18,7 +18,7 @@ const HOW_IT_WORKS = [
     {
         icon: "🔔",
         title: "Take your turn whenever you like",
-        sub: "Play a move, and everyone else gets a push notification when it's their go. No one has to be online at the same time.",
+        sub: "Play a move, and the next player gets a notification that it's their go. No one has to be online at the same time.",
     },
     {
         icon: "🏆",
@@ -57,7 +57,7 @@ export default function Landing() {
                     <Link href="/login" className="ag-btn ag-btn--light">Sign in</Link>
                 </div>
                 <p className="ag-hint">
-                    {gameCount} games to play and free to join — new accounts need an access code to unlock them.
+                    {gameCount} games to play and free to join.
                 </p>
             </div>
 
