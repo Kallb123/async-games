@@ -24,7 +24,7 @@ import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand, type SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
-import { abandonedGameCopy, currentUsername } from "@/utils/ui/players";
+import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
 import {
     SACPlaceSettlementSetup,
     SACPlaceRoadSetup,
@@ -233,14 +233,14 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
         : displayedCurrentTurn ?? '';
 
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
-    const abandoned = complete && gameData?.endReason === 'abandoned';
+    const abandoned = abandonedGameStatus(complete, gameData?.endReason, getForfeitedByDisplayName());
     const enabledExpansionIds = gs ? SAC_EXPANSION_IDS.filter(id => normaliseExpansions(gs.expansions)[id]) : [];
 
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
     if (gs) {
         if (abandoned) {
-            subtitle = abandonedGameCopy(getForfeitedByDisplayName()).subtitle;
+            subtitle = abandoned.subtitle;
         } else if (complete) {
             subtitle = currentUserWon ? '🏆 You won!' : `${getWinnerDisplayName()} won`;
         } else {
@@ -357,7 +357,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             {complete && (
                 <GameFinishBanner
                     message={abandoned
-                        ? abandonedGameCopy(getForfeitedByDisplayName()).message
+                        ? abandoned.message
                         : currentUserWon ? 'You won! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}
                     gameId={gameId}
                     gameUrl="settlementsandcities"

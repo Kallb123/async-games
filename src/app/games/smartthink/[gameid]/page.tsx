@@ -19,7 +19,7 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import type { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
 import { SMARTTHINK_CODE_LENGTH } from "@/games/Smartthink/ui";
-import { abandonedGameCopy, currentUsername } from "@/utils/ui/players";
+import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
 
 const PLAYER_COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c"];
 const emptyGuess = (): (number | null)[] => Array(SMARTTHINK_CODE_LENGTH).fill(null);
@@ -66,7 +66,7 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
     const getWinnerDisplayName = (): string => playerName(gameData?.winner);
     const getForfeitedByDisplayName = (): string => playerName(gameData?.forfeitedBy);
     const currentUserWon = complete && user?.id !== undefined && user.id === nav.displayedWinner;
-    const abandoned = complete && gameData?.endReason === 'abandoned';
+    const abandoned = abandonedGameStatus(complete, gameData?.endReason, getForfeitedByDisplayName());
     const myUsername = currentUsername(user);
     const usernameList = gameData?.usernameList ?? [];
 
@@ -74,7 +74,7 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
     let subtitle: React.ReactNode = 'Loading…';
     if (displayed) {
         if (abandoned) {
-            subtitle = abandonedGameCopy(getForfeitedByDisplayName()).subtitle;
+            subtitle = abandoned.subtitle;
         } else if (complete) {
             subtitle = currentUserWon ? '🏆 You cracked it!' : `${getWinnerDisplayName()} won`;
         } else if (!displayed.secretCodeSet) {
@@ -139,7 +139,7 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
             {complete && (
                 <GameFinishBanner
                     message={abandoned
-                        ? abandonedGameCopy(getForfeitedByDisplayName()).message
+                        ? abandoned.message
                         : currentUserWon ? 'You cracked it! 🎉' : `${getWinnerDisplayName()} won! Better luck next time.`}
                     gameId={gameId}
                     gameUrl="smartthink"
