@@ -178,9 +178,9 @@ export async function POST(request: NextRequest) {
   // Notifying the next player — the Clerk lookup and building their "your move"
   // body (which replays the whole game through the recap engine) — is the
   // slowest part of a turn and none of it is anything the player who just moved
-  // is waiting on. Run it after
-  // the response has flushed. A failure here can't cost a move that's already
-  // saved, so it's logged and swallowed rather than turned into an error.
+  // is waiting on. Run it after the response has flushed. A failure here can't
+  // cost a move that's already saved, so it's logged and swallowed rather than
+  // turned into an error.
   after(async () => {
     try {
       const { data: userList } = await (await clerkClient()).users.getUserList({

@@ -51,9 +51,10 @@ interface PushEventsOptions {
      */
     refreshOnVisible?: boolean;
     /**
-     * Re-run `handler` every `POLL_MS` for as long as the tab is in the
-     * foreground, stopping while it is hidden so a backgrounded tab costs
-     * nothing.
+     * Re-run `handler` every `POLL_MS` while the tab is in the foreground.
+     * Ticks in a hidden tab are skipped, so a backgrounded tab makes no
+     * requests. Unlike the other options this one is read live, so it can be
+     * flipped as often as the caller likes without disturbing the listeners.
      *
      * This is what covers the one case push no longer does: a player sitting on
      * a screen watching someone else's turn go by. `visibilitychange` never
@@ -101,11 +102,17 @@ export function usePushEvents(
 ) {
     const { refreshOnVisible = false, pollWhileVisible = false } = options;
     const handlerRef = useRef(handler);
+    // Whether polling is wanted flips as often as the turn does, so it is read
+    // through a ref for the same reason the handler is: as a dependency it
+    // would tear down and rebuild every listener on every turn change, and the
+    // teardown would discard a refetch already coalesced and waiting.
+    const pollRef = useRef(pollWhileVisible);
     // Kept current after each render rather than during it — writing a ref while
-    // rendering is a side effect (react-hooks/refs). The handler is only ever
-    // read from a timer callback, long after the commit.
+    // rendering is a side effect (react-hooks/refs). Both are only ever read
+    // from a timer callback, long after the commit.
     useEffect(() => {
         handlerRef.current = handler;
+        pollRef.current = pollWhileVisible;
     });
 
     useEffect(() => {
@@ -124,46 +131,37 @@ export function usePushEvents(
 
         events.forEach((event) => window.addEventListener(event, schedule));
 
-        // Polling runs only while the tab is in the foreground, so it is
-        // started and stopped by the same visibility changes `refreshOnVisible`
-        // listens to. Ticks go through `schedule`, which means a poll landing
-        // next to a push still only refetches once.
-        let poll: ReturnType<typeof setInterval> | null = null;
-        const syncPolling = () => {
-            const wanted = pollWhileVisible && document.visibilityState === 'visible';
-            if (wanted && poll === null) {
-                poll = setInterval(schedule, POLL_MS);
-            } else if (!wanted && poll !== null) {
-                clearInterval(poll);
-                poll = null;
-            }
-        };
-
         const onVisibility = () => {
-            if (refreshOnVisible && document.visibilityState === 'visible') {
+            if (document.visibilityState === 'visible') {
                 schedule();
             }
-            syncPolling();
         };
-        const watchesVisibility = refreshOnVisible || pollWhileVisible;
-        if (watchesVisibility) {
+        if (refreshOnVisible) {
             document.addEventListener('visibilitychange', onVisibility);
         }
-        syncPolling();
+
+        // The tick checks visibility rather than being subscribed to it: a timer
+        // that wakes to do nothing in a hidden tab is free (browsers throttle
+        // background timers anyway), and the request it would have made is what
+        // actually costs something. Ticks go through `schedule`, so a poll
+        // landing next to a push still refetches once.
+        const poll = setInterval(() => {
+            if (pollRef.current && document.visibilityState === 'visible') {
+                schedule();
+            }
+        }, POLL_MS);
 
         return () => {
             if (timer !== null) {
                 clearTimeout(timer);
             }
-            if (poll !== null) {
-                clearInterval(poll);
-            }
+            clearInterval(poll);
             events.forEach((event) => window.removeEventListener(event, schedule));
-            if (watchesVisibility) {
+            if (refreshOnVisible) {
                 document.removeEventListener('visibilitychange', onVisibility);
             }
         };
         // The event list is a stable module-level constant at every call site.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [events.join(','), refreshOnVisible, pollWhileVisible]);
+    }, [events.join(','), refreshOnVisible]);
 }
