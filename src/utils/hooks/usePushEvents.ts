@@ -3,18 +3,21 @@ import { useEffect, useRef } from 'react';
 
 /**
  * Push events (re-dispatched onto `window` by `FcmTokenComp`) that mean the
- * active turn has moved on and any turn-aware screen should re-fetch:
+ * active turn has moved on and any turn-aware screen should re-fetch.
  *
- * - `TurnTaken`   — an opponent completed their turn (`/api/game/command`).
- * - `TurnExpired` — the turn timer advanced the turn (`/api/cron/turntimer`).
- * - `YourTurn`    — it is now this player's turn (sent by both of the above,
- *                   and by `/api/invite/accept` to whoever moves first in a
- *                   game that has just started).
+ * Just `YourTurn` — it is now this player's turn, sent by `/api/game/command`,
+ * `/api/game/taketurn`, `/api/cron/turntimer` when the timer advances the turn,
+ * and `/api/invite/accept` to whoever moves first in a game that has just
+ * started.
  *
- * Historically only `TurnTaken` was listened for, so timer-driven turn
- * changes never refreshed the UI until a manual reload.
+ * There were once two more, `TurnTaken` and `TurnExpired`, sent to every player
+ * with no notification attached purely to drive this refetch. WebKit revokes a
+ * push subscription after three pushes that display nothing, so on iOS they
+ * cost players their notifications entirely within a few turns. They are gone;
+ * what they covered is now covered without push — `refreshOnVisible` for a tab
+ * coming back, and `pollWhileWatching` for a board being watched live.
  */
-export const TURN_ADVANCED_EVENTS = ['TurnTaken', 'TurnExpired', 'YourTurn'] as const;
+export const TURN_ADVANCED_EVENTS = ['YourTurn'] as const;
 
 /**
  * Push events that change which game invitations a player can see — a new invite
@@ -47,14 +50,77 @@ interface PushEventsOptions {
      * when switching between tabs. Defaults to `false`.
      */
     refreshOnVisible?: boolean;
+    /**
+     * Re-run `handler` every `POLL_MS` for as long as the viewer is watching
+     * (see `isWatching`). Unlike the other options this one is read live, so it
+     * can be flipped as often as the caller likes without disturbing the
+     * listeners.
+     *
+     * This is what covers the cases push does not: a player sitting on a screen
+     * watching someone else's turn go by (`visibilitychange` never fires there,
+     * because the tab never left), a turn that changes the board without ending
+     * — a re-roll, several builds — which sends no push at all, and any viewer
+     * who has no working push to begin with. Callers should pass a condition
+     * narrow enough that the polling stops as soon as there is nothing to wait
+     * for — see `useGameData`. Defaults to `false`.
+     */
+    pollWhileWatching?: boolean;
+}
+
+/**
+ * How often `pollWhileWatching` re-runs the handler. Async games move at
+ * human speed, so this only has to be faster than a player notices, not
+ * real-time — and every tick is a request per watching player.
+ */
+const POLL_MS = 10000;
+
+/**
+ * How long the viewer can go without interacting before polling stops. A board
+ * left open in a foreground tab would otherwise poll for as long as the browser
+ * runs; ten minutes is far longer than anyone spends actually watching a turn.
+ * Any interaction resumes it, so wandering off and coming back costs at most
+ * one `POLL_MS`.
+ */
+const IDLE_LIMIT_MS = 10 * 60 * 1000;
+
+// When the viewer last did anything. Tracked once for the whole app rather than
+// per hook instance: every screen mounts at least one `usePushEvents`, and the
+// dashboard mounts five, which would otherwise each register their own copy of
+// these listeners for one shared answer.
+let lastActivityAt = Date.now();
+
+if (typeof window !== 'undefined') {
+    // `focus` covers returning to the window without touching anything yet.
+    // `visibilitychange` is what catches a return in an installed PWA, where
+    // window `focus` is unreliable coming back through the app switcher.
+    // Captured because `scroll`, `focus` and `visibilitychange` don't bubble to
+    // window on their own: without it, scrolling inside a board's own scroll
+    // container would read as idle. Passive because these only read the clock
+    // and must never delay a scroll.
+    (['pointerdown', 'keydown', 'scroll', 'focus', 'visibilitychange'] as const).forEach((event) => {
+        window.addEventListener(event, () => { lastActivityAt = Date.now(); }, { capture: true, passive: true });
+    });
+}
+
+function isVisible(): boolean {
+    return document.visibilityState === 'visible';
+}
+
+/**
+ * Whether the viewer is actually watching the app, as opposed to having it open
+ * behind something else or having walked away from it. App-global: it answers
+ * for the tab, not for any one screen.
+ */
+function isWatching(): boolean {
+    return isVisible() && Date.now() - lastActivityAt < IDLE_LIMIT_MS;
 }
 
 /**
  * How long (ms) to collapse a burst of triggers into a single `handler` call.
- * A turn change delivers two pushes back-to-back (`TurnTaken` + `YourTurn`),
- * and a foreground return can coincide with an arriving push — all of which map
- * to the same "refetch latest state" action, so we fire it once per burst
- * rather than once per trigger. Small enough to stay imperceptible.
+ * A foreground return can coincide with an arriving push, and a poll tick can
+ * land next to either — all of which map to the same "refetch latest state"
+ * action, so we fire it once per burst rather than once per trigger. Small
+ * enough to stay imperceptible.
  */
 const COALESCE_MS = 200;
 
@@ -77,13 +143,19 @@ export function usePushEvents(
     handler: () => void,
     options: PushEventsOptions = {},
 ) {
-    const { refreshOnVisible = false } = options;
+    const { refreshOnVisible = false, pollWhileWatching = false } = options;
     const handlerRef = useRef(handler);
+    // Whether polling is wanted flips as often as the turn does, so it is read
+    // through a ref for the same reason the handler is: as a dependency it
+    // would tear down and rebuild every listener on every turn change, and the
+    // teardown would discard a refetch already coalesced and waiting.
+    const pollRef = useRef(pollWhileWatching);
     // Kept current after each render rather than during it — writing a ref while
-    // rendering is a side effect (react-hooks/refs). The handler is only ever
-    // read from a timer callback, long after the commit.
+    // rendering is a side effect (react-hooks/refs). Both are only ever read
+    // from a timer callback, long after the commit.
     useEffect(() => {
         handlerRef.current = handler;
+        pollRef.current = pollWhileWatching;
     });
 
     useEffect(() => {
@@ -103,7 +175,7 @@ export function usePushEvents(
         events.forEach((event) => window.addEventListener(event, schedule));
 
         const onVisibility = () => {
-            if (document.visibilityState === 'visible') {
+            if (isVisible()) {
                 schedule();
             }
         };
@@ -111,10 +183,21 @@ export function usePushEvents(
             document.addEventListener('visibilitychange', onVisibility);
         }
 
+        // The tick tests the conditions itself rather than being subscribed to
+        // them: waking to compare two booleans costs nothing next to the request
+        // it skips, which is the part worth gating. Ticks go through `schedule`,
+        // so a poll landing next to a push still refetches once.
+        const poll = setInterval(() => {
+            if (pollRef.current && isWatching()) {
+                schedule();
+            }
+        }, POLL_MS);
+
         return () => {
             if (timer !== null) {
                 clearTimeout(timer);
             }
+            clearInterval(poll);
             events.forEach((event) => window.removeEventListener(event, schedule));
             if (refreshOnVisible) {
                 document.removeEventListener('visibilitychange', onVisibility);

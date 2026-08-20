@@ -175,12 +175,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(response, {status: 200});
   }
 
-  // Notifying the other players — the Clerk lookup, the silent TurnTaken
-  // refresh, and building the next player's "your move" body (which replays the
-  // whole game through the recap engine) — is the slowest part of a turn and
-  // none of it is anything the player who just moved is waiting on. Run it after
-  // the response has flushed. A failure here can't cost a move that's already
-  // saved, so it's logged and swallowed rather than turned into an error.
+  // Notifying the next player — the Clerk lookup and building their "your move"
+  // body (which replays the whole game through the recap engine) — is the
+  // slowest part of a turn and none of it is anything the player who just moved
+  // is waiting on. Run it after the response has flushed. A failure here can't
+  // cost a move that's already saved, so it's logged and swallowed rather than
+  // turned into an error.
   after(async () => {
     try {
       const { data: userList } = await (await clerkClient()).users.getUserList({
@@ -192,11 +192,6 @@ export async function POST(request: NextRequest) {
         console.error(`Next user not found for game ${gameData.gameId}`);
         return;
       }
-
-      await sendPushToUsers(userList, {
-        event: 'TurnTaken',
-        gameId: commandRequest.gameId
-      });
 
       await sendPushToUsers([turnUser], {
         event: 'YourTurn',
