@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Offline — Async Games</title>
+<!-- Standalone by necessity: this page is served by the service worker when the
+     network is gone, so it can't pull the stylesheet, the font, or anything
+     else. The colours are the `--ag-*` tokens from ag-theme.css, inlined; the
+     font falls back to the system stack because Bricolage can't be fetched. -->
+<style>
+    /* Mirrors the `--ag-*` tokens in src/app/ag-theme.css. Kept as named
+       variables rather than scattered literals so re-tokenising the theme is a
+       five-line diff anyone can eyeball against the real file. */
+    :root {
+        --ag-bg: oklch(0.94 0.02 60);
+        --ag-ink: oklch(0.28 0.04 40);
+        --ag-ink-soft: oklch(0.5 0.03 40);
+        --ag-terracotta: oklch(0.55 0.15 40);
+        --ag-on-dark: oklch(0.96 0.01 60);
+        color-scheme: light;
+    }
+    body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        box-sizing: border-box;
+        background: var(--ag-bg);
+        color: var(--ag-ink);
+        font-family: system-ui, -apple-system, sans-serif;
+        text-align: center;
+    }
+    .wrap { max-width: 320px; }
+    img { width: 64px; height: 64px; }
+    h1 { font: 800 22px/1.2 system-ui, sans-serif; margin: 18px 0 0; }
+    p { font: 500 14px/1.45 system-ui, sans-serif; color: var(--ag-ink-soft); margin: 8px 0 22px; }
+    button {
+        font: 800 14px system-ui, sans-serif;
+        border: 0;
+        border-radius: 14px;
+        padding: 12px 22px;
+        background: var(--ag-terracotta);
+        color: var(--ag-on-dark);
+        cursor: pointer;
+    }
+</style>
+</head>
+<body>
+    <div class="wrap">
+        <img src="/icons/icon.svg" alt="">
+        <h1>You&rsquo;re offline</h1>
+        <p>Async Games needs a connection to load your games. Your turns are safe &mdash; nothing was lost.</p>
+        <button type="button" onclick="location.reload()">Try again</button>
+    </div>
+</body>
+</html>

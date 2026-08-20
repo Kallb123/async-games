@@ -30,6 +30,11 @@
     --ag-on-dark: oklch(0.96 0.01 60);
     --ag-danger: #c0392b;
 
+    /* Width of the centred app column. Anything that has to line up with
+       it — the fixed install banner, which renders outside `.ag-app` —
+       reads it from here rather than repeating the number. */
+    --ag-app-width: 480px;
+
     --ag-font: var(--ag-font-bricolage), system-ui, -apple-system, sans-serif;
     /* The warm tint the shadows below are mixed from. Kept as a colour of its
        own so code that needs the tint rather than a ready-made shadow can have
@@ -61,7 +66,7 @@ button {
 }
 
 .ag-app {
-    max-width: 480px;
+    max-width: var(--ag-app-width);
     margin: 0 auto;
     min-height: 90vh;
     background: var(--ag-bg);
@@ -565,6 +570,48 @@ button {
 .ag-cta-sub { font: 500 12px/1.3 var(--ag-font); opacity: 0.72; margin-top: 3px; }
 /* Trailing chevron for a CTA that leads somewhere rather than doing something. */
 .ag-cta-arrow { font: 800 18px var(--ag-font); flex: none; }
+
+/* ---- Install banner ---- */
+/* Fixed to the viewport rather than to the `.ag-app` column so it stays put
+   through the game screens' own scrolling. Above page content, below
+   Bootstrap's modals (1050) and the toasts (1100). The outer strip is
+   click-through so it never blocks a tap on whatever it happens to cover. */
+.ag-install-banner {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1030;
+    padding: 0 12px calc(12px + env(safe-area-inset-bottom));
+    pointer-events: none;
+}
+
+/* Layered on top of `.ag-cta ag-cta--dark`, which already supplies the flex
+   row, the radius and the dark surface — this adds only what being a floating
+   banner needs. Width matches `.ag-app` so it lines up with the column above
+   it, and box-sizing is set here rather than inherited because the banner
+   renders outside `.ag-app`, and so outside that rule. */
+.ag-install-banner-inner {
+    box-sizing: border-box;
+    max-width: var(--ag-app-width);
+    margin: 0 auto;
+    pointer-events: auto;
+    padding: 12px 14px;
+    box-shadow: var(--ag-shadow-lift);
+}
+
+.ag-install-dismiss {
+    flex: none;
+    background: transparent;
+    border: 0;
+    padding: 4px 2px;
+    line-height: 1;
+    font: 700 20px var(--ag-font);
+    color: var(--ag-on-dark);
+    opacity: 0.6;
+    cursor: pointer;
+}
+.ag-install-dismiss:hover { opacity: 1; }
 
 /* ---- Sticky action footer (setup) ---- */
 .ag-sticky-action {
