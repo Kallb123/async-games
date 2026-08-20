@@ -82,12 +82,6 @@ export async function GET(request: NextRequest) {
                 userId: gameData.userIdList
             });
 
-            // Silent data notification to all players (refresh game state)
-            await sendPushToUsers(userList, {
-                event: 'TurnExpired',
-                gameId: gameData.gameId
-            });
-
             // Push notification to the newly active player. The turn arrived
             // because the previous player ran out of time, not because they
             // moved — say so, it's the more useful headline.

@@ -3,18 +3,21 @@ import { useEffect, useRef } from 'react';
 
 /**
  * Push events (re-dispatched onto `window` by `FcmTokenComp`) that mean the
- * active turn has moved on and any turn-aware screen should re-fetch:
+ * active turn has moved on and any turn-aware screen should re-fetch.
  *
- * - `TurnTaken`   — an opponent completed their turn (`/api/game/command`).
- * - `TurnExpired` — the turn timer advanced the turn (`/api/cron/turntimer`).
- * - `YourTurn`    — it is now this player's turn (sent by both of the above,
- *                   and by `/api/invite/accept` to whoever moves first in a
- *                   game that has just started).
+ * Just `YourTurn` — it is now this player's turn, sent by `/api/game/command`,
+ * `/api/game/taketurn`, `/api/cron/turntimer` when the timer advances the turn,
+ * and `/api/invite/accept` to whoever moves first in a game that has just
+ * started.
  *
- * Historically only `TurnTaken` was listened for, so timer-driven turn
- * changes never refreshed the UI until a manual reload.
+ * There were once two more, `TurnTaken` and `TurnExpired`, sent to every player
+ * with no notification attached purely to drive this refetch. WebKit revokes a
+ * push subscription after three pushes that display nothing, so on iOS they
+ * cost players their notifications entirely within a few turns. They are gone;
+ * what they covered is now covered without push — `refreshOnVisible` for a tab
+ * coming back, and `pollWhileVisible` for a board being watched live.
  */
-export const TURN_ADVANCED_EVENTS = ['TurnTaken', 'TurnExpired', 'YourTurn'] as const;
+export const TURN_ADVANCED_EVENTS = ['YourTurn'] as const;
 
 /**
  * Push events that change which game invitations a player can see — a new invite
@@ -47,14 +50,33 @@ interface PushEventsOptions {
      * when switching between tabs. Defaults to `false`.
      */
     refreshOnVisible?: boolean;
+    /**
+     * Re-run `handler` every `POLL_MS` for as long as the tab is in the
+     * foreground, stopping while it is hidden so a backgrounded tab costs
+     * nothing.
+     *
+     * This is what covers the one case push no longer does: a player sitting on
+     * a screen watching someone else's turn go by. `visibilitychange` never
+     * fires there because the tab never left. Callers should pass a condition
+     * narrow enough that the polling stops as soon as there is nothing to wait
+     * for — see `useGameData`. Defaults to `false`.
+     */
+    pollWhileVisible?: boolean;
 }
 
 /**
+ * How often `pollWhileVisible` re-runs the handler. Async games move at
+ * human speed, so this only has to be faster than a player notices, not
+ * real-time — and every tick is a request per watching player.
+ */
+const POLL_MS = 15000;
+
+/**
  * How long (ms) to collapse a burst of triggers into a single `handler` call.
- * A turn change delivers two pushes back-to-back (`TurnTaken` + `YourTurn`),
- * and a foreground return can coincide with an arriving push — all of which map
- * to the same "refetch latest state" action, so we fire it once per burst
- * rather than once per trigger. Small enough to stay imperceptible.
+ * A foreground return can coincide with an arriving push, and a poll tick can
+ * land next to either — all of which map to the same "refetch latest state"
+ * action, so we fire it once per burst rather than once per trigger. Small
+ * enough to stay imperceptible.
  */
 const COALESCE_MS = 200;
 
@@ -77,7 +99,7 @@ export function usePushEvents(
     handler: () => void,
     options: PushEventsOptions = {},
 ) {
-    const { refreshOnVisible = false } = options;
+    const { refreshOnVisible = false, pollWhileVisible = false } = options;
     const handlerRef = useRef(handler);
     // Kept current after each render rather than during it — writing a ref while
     // rendering is a side effect (react-hooks/refs). The handler is only ever
@@ -102,25 +124,46 @@ export function usePushEvents(
 
         events.forEach((event) => window.addEventListener(event, schedule));
 
-        const onVisibility = () => {
-            if (document.visibilityState === 'visible') {
-                schedule();
+        // Polling runs only while the tab is in the foreground, so it is
+        // started and stopped by the same visibility changes `refreshOnVisible`
+        // listens to. Ticks go through `schedule`, which means a poll landing
+        // next to a push still only refetches once.
+        let poll: ReturnType<typeof setInterval> | null = null;
+        const syncPolling = () => {
+            const wanted = pollWhileVisible && document.visibilityState === 'visible';
+            if (wanted && poll === null) {
+                poll = setInterval(schedule, POLL_MS);
+            } else if (!wanted && poll !== null) {
+                clearInterval(poll);
+                poll = null;
             }
         };
-        if (refreshOnVisible) {
+
+        const onVisibility = () => {
+            if (refreshOnVisible && document.visibilityState === 'visible') {
+                schedule();
+            }
+            syncPolling();
+        };
+        const watchesVisibility = refreshOnVisible || pollWhileVisible;
+        if (watchesVisibility) {
             document.addEventListener('visibilitychange', onVisibility);
         }
+        syncPolling();
 
         return () => {
             if (timer !== null) {
                 clearTimeout(timer);
             }
+            if (poll !== null) {
+                clearInterval(poll);
+            }
             events.forEach((event) => window.removeEventListener(event, schedule));
-            if (refreshOnVisible) {
+            if (watchesVisibility) {
                 document.removeEventListener('visibilitychange', onVisibility);
             }
         };
         // The event list is a stable module-level constant at every call site.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [events.join(','), refreshOnVisible]);
+    }, [events.join(','), refreshOnVisible, pollWhileVisible]);
 }

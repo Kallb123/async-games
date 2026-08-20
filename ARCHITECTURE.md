@@ -357,7 +357,7 @@ regardless of game:
 9. gameType.CheckEndTurn(gameData, outcome)
 10. if turnOver: bump lastTurnTimestamp, reset warning flag
 11. save
-12. if turnOver: push 'TurnTaken' to all + 'YourTurn' to the next player
+12. if turnOver: push 'YourTurn' to the next player
 13. return { outcome, gameData: CreateDataResponse() }
 ```
 
@@ -382,8 +382,8 @@ enforcement job. It:
 
 - authenticates via `Authorization: Bearer $CRON_SECRET`,
 - loads all `complete: false` games, and for each:
-  - if the turn is **expired**, advances `currentTurn`, resets the timer, sends a
-    silent `TurnExpired` refresh to all + a `YourTurn` push to the new player;
+  - if the turn is **expired**, advances `currentTurn`, resets the timer and
+    sends a `YourTurn` push to the new player;
   - else if within the **warning window** and not yet warned, sends a
     `TurnExpiringSoon` push and sets `timerWarningNotificationSent`.
 - returns `{ processed, expired, warned }`.
@@ -454,13 +454,22 @@ and rewrites only the metadata that actually changed.
   notifications and handles clicks.
 - *Foreground:* `FcmTokenComp` (`src/components/FirebaseForeground.tsx`) listens
   with `onMessage` and re-dispatches each push as a `window` `CustomEvent` named
-  after its `event` field. Game pages listen for events like `TurnTaken` and
+  after its `event` field. Game pages listen for events like `YourTurn` and
   re-fetch game state — this is how a board updates without a socket.
 
-Common event names: `NewInvite`, `InviteAccepted`, `GameStart`, `TurnTaken`,
-`YourTurn`, `TurnExpired`, `TurnExpiringSoon`, `GameOver`. `YourTurn` is also
-sent when a game starts, to whoever won the roll for turn order — everyone else
-just gets the silent `GameStart` refresh.
+Common event names: `NewInvite`, `InviteAccepted`, `GameStart`, `YourTurn`,
+`TurnExpiringSoon`, `GameOver`. `YourTurn` is also sent when a game starts, to
+whoever won the roll for turn order — everyone else just gets the silent
+`GameStart` refresh.
+
+**No silent pushes on the turn path.** `TurnTaken` and `TurnExpired` were once
+sent to every player carrying no notification, purely to drive a refetch. WebKit
+revokes a push subscription after three pushes that display nothing, so on iOS
+they cost players their notifications within a few turns of installing. They
+were removed: a tab coming back to the foreground refetches via
+`usePushEvents`' `refreshOnVisible`, and a board being watched live polls via
+its `pollWhileVisible` (see `useGameData`). Prefer either over adding a new
+silent push.
 
 ## 9. Turn recap & planning (replay engine)
 
@@ -507,7 +516,7 @@ layout) rendered inside a centred `.ag-app` column.
   (`'use client'`) that fetch from the API and render. A typical game page (e.g.
   `src/app/games/snakesandladders/[gameid]/page.tsx`) fetches game data, renders
   the board + an action panel, submits commands via `/api/game/command`, and
-  re-fetches on `TurnTaken` events. It also wires in `useTurnNavigation` +
+  re-fetches on `YourTurn` events. It also wires in `useTurnNavigation` +
   `TurnNavControls` for recap/planning.
 - **Design system.** UI was moved off stock Bootstrap onto a small custom
   system — the `ag-*` classes and CSS custom-property tokens in
@@ -652,7 +661,7 @@ one-liner fails with a message naming the exact file and line to add.
   │  render board  │                            │ CheckGameOver/CheckEndTurn│
   │  submit command│ ◄───────────────────────── │  save + notify next player│
   └──────┬─────────┘   { outcome, gameData }    └────────────┬─────────────┘
-         │  onMessage(TurnTaken) → re-fetch                  │  Mongoose
+         │  onMessage(YourTurn) → re-fetch                   │  Mongoose
          │                                                   ▼
          │                                          ┌──────────────────┐
          └──────── GET /api/game/[gameid] ────────► │ MongoDB          │
