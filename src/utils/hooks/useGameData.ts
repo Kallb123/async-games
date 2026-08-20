@@ -12,7 +12,7 @@ import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
  * turn advances or the tab returns to the foreground — the game-screen twin
  * of `useRefreshableData`, which does the same for the dashboard lists.
  *
- * While an opponent could be moving, it also polls (see `pollWhileVisible`):
+ * While an opponent could be moving, it also polls (see `pollWhileWatching`):
  * a player watching the board is the one case no push covers, since the tab
  * never goes away to come back.
  *
@@ -65,7 +65,7 @@ export function useGameData<T extends IGameDataResponse>(gameId: string) {
 
     usePushEvents(TURN_ADVANCED_EVENTS, getGameData, {
         refreshOnVisible: true,
-        pollWhileVisible: waitingOnOpponent,
+        pollWhileWatching: waitingOnOpponent,
     });
 
     return { gameData, setGameData, getGameData };
