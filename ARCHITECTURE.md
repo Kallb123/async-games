@@ -468,8 +468,9 @@ revokes a push subscription after three pushes that display nothing, so on iOS
 they cost players their notifications within a few turns of installing. They
 were removed: a tab coming back to the foreground refetches via
 `usePushEvents`' `refreshOnVisible`, and a board being watched live polls via
-its `pollWhileVisible` (see `useGameData`). Prefer either over adding a new
-silent push.
+its `pollWhileVisible` (see `useGameData`) — every 10s, only while the tab is in
+the foreground and only within 10 minutes of the viewer last interacting, so a
+forgotten tab stops on its own. Prefer either over adding a new silent push.
 
 ## 9. Turn recap & planning (replay engine)
 

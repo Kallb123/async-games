@@ -51,14 +51,18 @@ interface PushEventsOptions {
      */
     refreshOnVisible?: boolean;
     /**
-     * Re-run `handler` every `POLL_MS` while the tab is in the foreground.
-     * Ticks in a hidden tab are skipped, so a backgrounded tab makes no
-     * requests. Unlike the other options this one is read live, so it can be
-     * flipped as often as the caller likes without disturbing the listeners.
+     * Re-run `handler` every `POLL_MS` while the viewer is actually watching —
+     * the tab in the foreground and some interaction within `IDLE_LIMIT_MS`.
+     * Ticks are skipped otherwise, so neither a backgrounded tab nor one left
+     * open and forgotten makes requests. Unlike the other options this one is
+     * read live, so it can be flipped as often as the caller likes without
+     * disturbing the listeners.
      *
-     * This is what covers the one case push no longer does: a player sitting on
-     * a screen watching someone else's turn go by. `visibilitychange` never
-     * fires there because the tab never left. Callers should pass a condition
+     * This is what covers the cases push does not: a player sitting on a screen
+     * watching someone else's turn go by (`visibilitychange` never fires there,
+     * because the tab never left), a turn that changes the board without ending
+     * — a re-roll, several builds — which sends no push at all, and any viewer
+     * who has no working push to begin with. Callers should pass a condition
      * narrow enough that the polling stops as soon as there is nothing to wait
      * for — see `useGameData`. Defaults to `false`.
      */
@@ -70,7 +74,41 @@ interface PushEventsOptions {
  * human speed, so this only has to be faster than a player notices, not
  * real-time — and every tick is a request per watching player.
  */
-const POLL_MS = 15000;
+const POLL_MS = 10000;
+
+/**
+ * How long the viewer can go without interacting before polling stops. A board
+ * left open in a foreground tab would otherwise poll for as long as the browser
+ * runs; ten minutes is far longer than anyone spends actually watching a turn.
+ * Any interaction resumes it, so wandering off and coming back costs at most
+ * one `POLL_MS`.
+ */
+const IDLE_LIMIT_MS = 10 * 60 * 1000;
+
+// When the viewer last did anything. Tracked once for the whole app rather than
+// per hook instance: every screen mounts at least one `usePushEvents`, and the
+// dashboard mounts five, which would otherwise each register their own copy of
+// these listeners for one shared answer.
+let lastActivityAt = Date.now();
+
+if (typeof window !== 'undefined') {
+    // `focus` covers returning to the window without touching anything yet.
+    // Captured because `scroll` and `focus` don't bubble: without it, scrolling
+    // inside a board's own scroll container would read as idle. Passive because
+    // these only read the clock and must never delay a scroll.
+    (['pointerdown', 'keydown', 'scroll', 'focus'] as const).forEach((event) => {
+        window.addEventListener(event, () => { lastActivityAt = Date.now(); }, { capture: true, passive: true });
+    });
+}
+
+/**
+ * Whether the viewer is actually watching this screen, as opposed to having it
+ * open behind something else or having walked away from it.
+ */
+function isWatching(): boolean {
+    return document.visibilityState === 'visible'
+        && Date.now() - lastActivityAt < IDLE_LIMIT_MS;
+}
 
 /**
  * How long (ms) to collapse a burst of triggers into a single `handler` call.
@@ -140,13 +178,13 @@ export function usePushEvents(
             document.addEventListener('visibilitychange', onVisibility);
         }
 
-        // The tick checks visibility rather than being subscribed to it: a timer
-        // that wakes to do nothing in a hidden tab is free (browsers throttle
+        // The tick tests the conditions itself rather than being subscribed to
+        // them: a timer that wakes to do nothing is free (browsers throttle
         // background timers anyway), and the request it would have made is what
         // actually costs something. Ticks go through `schedule`, so a poll
         // landing next to a push still refetches once.
         const poll = setInterval(() => {
-            if (pollRef.current && document.visibilityState === 'visible') {
+            if (pollRef.current && isWatching()) {
                 schedule();
             }
         }, POLL_MS);
