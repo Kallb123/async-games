@@ -6,9 +6,11 @@ import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import BackLink from "@/components/ui/BackLink";
 import DevTools from "@/components/DevTools";
 import NotificationDeviceList from "@/components/NotificationDeviceList";
+import InstallOffer from "@/components/ui/InstallOffer";
 import { NotificationChannel, NOTIFICATION_CHANNELS } from "@/utils/firebase/notificationPreferences";
 import { pushSupported } from "@/utils/firebase/pushSupport";
 import useFcmToken from "@/utils/hooks/useFcmToken";
+import { useInstallPrompt } from "@/utils/hooks/useInstallPrompt";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
@@ -35,6 +37,7 @@ export default function Settings() {
     const { isAuthorised } = useAuthGuard();
     const { showToast } = useToast();
     const { fcmToken } = useFcmToken();
+    const installMethod = useInstallPrompt();
 
     const [prefs, setPrefs] = useState<NotificationPreferencesState | null>(null);
     const [isSavingPrefs, setIsSavingPrefs] = useState(false);
@@ -164,6 +167,18 @@ export default function Settings() {
             </div>
 
             <NotificationDeviceList currentToken={fcmToken} />
+
+            {/* The same offer the bottom banner makes, for anyone who dismissed
+                it. Hidden once the app is installed, or in a browser that
+                cannot install it. */}
+            {installMethod !== 'none' && (
+                <div className="ag-section">
+                    <div className="ag-section-head">
+                        <h2 className="ag-section-label">App</h2>
+                    </div>
+                    <InstallOffer method={installMethod} />
+                </div>
+            )}
 
             <div className="ag-footer">
                 <DevTools />
