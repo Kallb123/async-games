@@ -46,4 +46,10 @@ export const clerkAppearance = {
         // to the 18px `.ag-card` / 14px `.ag-btn` the rest of the app uses.
         borderRadius: '10px',
     },
+    // Clerk renders these under its sign-in/sign-up cards, which is where a
+    // new account is agreed to — so they point at our own public pages.
+    layout: {
+        privacyPageUrl: '/privacy',
+        termsPageUrl: '/terms',
+    },
 } as const;

@@ -4,6 +4,7 @@ import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useToast } from "@/components/ToastContext";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import BackLink from "@/components/ui/BackLink";
+import LegalLinks from "@/components/ui/LegalLinks";
 import DevTools from "@/components/DevTools";
 import NotificationDeviceList from "@/components/NotificationDeviceList";
 import InstallOffer from "@/components/ui/InstallOffer";
@@ -165,7 +166,8 @@ export default function Settings() {
 
             <div className="ag-footer">
                 <DevTools />
-                <div style={{ fontSize: '0.875rem', color: 'var(--ag-text-muted)', textAlign: 'center', marginTop: '1rem' }}>
+                <div style={{ marginTop: '1rem' }}><LegalLinks /></div>
+                <div style={{ fontSize: '0.875rem', color: 'var(--ag-text-muted)', textAlign: 'center', marginTop: '0.5rem' }}>
                     v{packageJson.version}
                 </div>
             </div>

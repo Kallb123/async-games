@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import Brand from "@/components/ui/Brand";
+import LegalLinks from "@/components/ui/LegalLinks";
 import GameLibrary from "@/components/ui/GameLibrary";
 import { GAME_META } from "@/utils/ui/games";
 
@@ -91,7 +92,8 @@ export default function Landing() {
             </div>
 
             <div className="ag-footer">
-                Already have an account? <Link href="/login">Sign in</Link>
+                <div>Already have an account? <Link href="/login">Sign in</Link></div>
+                <div style={{ marginTop: 6 }}><LegalLinks /></div>
             </div>
         </main>
     );
