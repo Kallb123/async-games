@@ -1,13 +1,14 @@
 # Dev container image for Async Games (Next.js 16 / React 19 / TypeScript).
 #
-# Node 22 matches the version used in CI (.github/workflows/ci.yml) so that
+# Node 24 matches the version used in CI (.github/workflows/ci.yml) and the
+# `engines.node` range in package.json (what Vercel builds with) so that
 # `npm ci`, `npx tsc --noEmit`, `npm test`, and `npx next build` behave the
 # same locally as they do on the pipeline.
 # Pinned to the bookworm variant (rather than the floating default tag, which
 # now resolves to a trixie base): the MongoDB apt repo below is configured for
 # bookworm and its Release file is signed with a SHA-1 digest, which trixie's
 # stricter apt/gpg policy refuses to verify.
-ARG NODE_VERSION=22-bookworm
+ARG NODE_VERSION=24-bookworm
 FROM mcr.microsoft.com/devcontainers/javascript-node:${NODE_VERSION}
 
 # The base image ships with a non-root `node` user, git, curl, and the common

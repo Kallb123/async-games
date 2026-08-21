@@ -620,6 +620,10 @@ one-liner fails with a message naming the exact file and line to add.
 
 - **Hosting:** Vercel. `next.config.mjs` enables production browser source maps;
   `vercel.json` registers the daily cron backstop.
+- **Node version:** 24 everywhere — `engines.node` in `package.json` (which is
+  what Vercel builds with), `node-version` in the CI workflow, and the dev
+  container's base image. Vercel's own **Node.js Version** project setting lives
+  in the dashboard rather than the repo, so it has to be set to 24.x there too.
 - **Environment variables** (see `.env.example`): `MONGODB_URI`; Clerk
   (`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, injected via the Clerk
   Vercel integration); Firebase Admin (`FIREBASE_PROJECT_ID`,
