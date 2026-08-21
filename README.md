@@ -94,7 +94,7 @@ Vercel Hobby plan limits cron jobs to once per day. Since the shortest supported
 
 1. Create a free account at [cron-job.org](https://cron-job.org).
 2. Add a new cron job with:
-   - **URL:** `https://async-games.vercel.app/api/cron/turntimer`
+   - **URL:** `https://asyncgames.com/api/cron/turntimer`
    - **Schedule:** every 15 minutes (or whatever granularity you need)
    - **Request method:** GET
    - **Header:** `Authorization: Bearer <CRON_SECRET>`  

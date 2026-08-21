@@ -15,7 +15,7 @@ export interface PushNotification {
 // Origin used to build links in push notifications. Override with the
 // APP_URL env var per deployment (e.g. a staging environment); falls back to
 // production so nothing breaks where it isn't set.
-const APP_BASE_URL = process.env.APP_URL ?? 'https://async-games.vercel.app';
+const APP_BASE_URL = process.env.APP_URL ?? 'https://asyncgames.com';
 
 // Absolute URL the service worker opens (`firebase-messaging-sw.js`'s
 // `notificationclick` handler reads `data.link`) when a notification is

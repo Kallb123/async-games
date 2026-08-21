@@ -16,7 +16,7 @@ const bricolageGrotesque = Bricolage_Grotesque({
   variable: "--ag-font-bricolage",
 });
 
-const SITE_URL = "https://async-games.vercel.app";
+const SITE_URL = "https://asyncgames.com";
 
 // The share card drawn by `scripts/generate-icons.mjs`. The tab, home-screen
 // and installed-app icons come from the same script, via the App Router's file
