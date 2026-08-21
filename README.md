@@ -121,4 +121,13 @@ its own; no external scheduler needed. It uses the same
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
+### Node version
+
+The app runs on **Node 24** everywhere: `engines.node` in `package.json`, the CI
+workflow (`.github/workflows/ci.yml`), and the dev container. Vercel reads
+`engines.node` when building, but the project's own **Settings → Build and
+Deployment → Node.js Version** dropdown is stored on Vercel, not in this repo —
+if it still says 20.x or 22.x, set it to 24.x so the dashboard and the build
+agree.
+
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.

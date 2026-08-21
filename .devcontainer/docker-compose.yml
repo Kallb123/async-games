@@ -1,6 +1,6 @@
 # Compose stack for the Async Games dev container.
 #
-#   app    – the workspace where VS Code / Claude attaches; runs Node 22.
+#   app    – the workspace where VS Code / Claude attaches; runs Node 24.
 #   mongo  – a local MongoDB 7 instance so the app and any DB-backed flows
 #            work without a hosted Atlas cluster.
 #
