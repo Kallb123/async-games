@@ -630,6 +630,16 @@ one-liner fails with a message naming the exact file and line to add.
   `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`); `CRON_SECRET`; and optional
   `ACCESS_PASSWORD`. The Firebase **client** config (in
   `src/utils/firebase/firebase.ts` and the service worker) is public by design.
+- **Environments:** production and preview/local each get their own **Clerk
+  instance** *and* their own **MongoDB database**, and the two must split
+  together. Clerk instances don't share a userbase, and Mongo stores nothing but
+  Clerk `userId`s (§9), so a database shared across instances holds games whose
+  players don't resolve — and the production turn-timer cron sweeps *every*
+  unfinished game it can see, including a dev instance's. `dbConnect()` takes the
+  database name straight from `MONGODB_URI`, so the split is one URI segment on
+  one Atlas cluster, not a second cluster.
+  [`docs/environments.md`](./docs/environments.md) has the full variable split
+  and the Clerk production cut-over.
 - **CI** (`.github/workflows/ci.yml`): on push/PR to `main`, runs
   `npx tsc --noEmit` (type check), `npm test` (Vitest), and `npx next build`. All
   must pass before merge. Locally, run `npm run build`, `npx tsc --noEmit`, and
@@ -683,6 +693,7 @@ one-liner fails with a message naming the exact file and line to add.
 - [`docs/new-game.md`](./docs/new-game.md) — step-by-step checklist for adding a new game, plus practical gotchas.
 - [`docs/turn-recap-and-planning.md`](./docs/turn-recap-and-planning.md) — the replay engine in depth.
 - [`docs/games/`](./docs/games/) — per-game rules notes (Smartthink, Settlements & Cities).
+- [`docs/environments.md`](./docs/environments.md) — the dev/production split (Clerk instances, databases, env vars) and how to take Clerk to production.
 - [`docs/deployment.png`](./docs/deployment.png) — deployment diagram.
 - [`README.md`](./README.md) — getting started, env vars, and cron setup.
 </content>
