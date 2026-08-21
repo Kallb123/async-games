@@ -33,6 +33,8 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 
 Copy `.env.example` to `.env.local` and fill in the values. All variables listed there are required for a full deployment except `ACCESS_PASSWORD`.
 
+Production and preview/local deployments use **separate Clerk instances and separate MongoDB databases** — see [`docs/environments.md`](./docs/environments.md) for the split and for the steps to take Clerk to production.
+
 ## Brand and icons
 
 <img src="public/icons/icon.svg" alt="The Async Games clock die" width="72" height="72">
