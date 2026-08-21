@@ -7,14 +7,18 @@ import { useIsAuthorised } from './useAuthGuard';
 
 /**
  * Registers this device for push, once the viewer is signed in and unlocked
- * (see `useIsAuthorised`).
+ * (see `useIsAuthorised`) *and* has already granted notification permission.
  *
- * The auth gate is what keeps the browser's notification prompt off the public
- * landing page: `FcmTokenComp` is mounted by the screens behind the login, but
- * those screens render for a moment before Clerk has loaded — long enough to
- * ask a visitor with no account for a permission they have nothing to use yet.
- * Waiting for `isAuthorised` also means the token is only ever POSTed for a
- * session the API will accept.
+ * This hook never asks for permission. `FcmTokenComp` is mounted by nearly
+ * every screen behind the login, so requesting here fires the browser's
+ * permission prompt at people who have done nothing to ask for it — the
+ * drive-by prompt that browsers penalise origins for. The only place that
+ * calls `requestPermission()` is the "Enable" button on the settings screen,
+ * where the click is the consent; this hook then picks the granted permission
+ * up and registers the token.
+ *
+ * The auth gate stays for the other half of the job: the token is only ever
+ * POSTed for a session the API will accept.
  */
 const useFcmToken = () => {
   const { isAuthorised } = useIsAuthorised();
@@ -29,8 +33,8 @@ const useFcmToken = () => {
         }
         const messaging = getMessaging(firebaseApp);
 
-        // Retrieve the notification permission status
-        const permission = await Notification.requestPermission();
+        // Read the standing permission — never request it. See above.
+        const permission = Notification.permission;
         setNotificationPermissionStatus(permission);
 
         // Check if permission is granted before retrieving the token
