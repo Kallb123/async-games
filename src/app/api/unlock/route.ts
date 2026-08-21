@@ -7,23 +7,33 @@ export async function POST(request: NextRequest) {
   const { userId } = await auth();
 
   if (!userId) {
-    return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
+    return NextResponse.json({error: "You're not signed in."}, {status: 400, statusText: "Not signed in"});
   }
 
-  if (password !== process.env.ACCESS_PASSWORD) {
-    await (await clerkClient()).users.updateUserMetadata(userId, {
-      publicMetadata: {
-        unlocked: false
-      }
-    });
-    return NextResponse.json({}, {status: 400, statusText: "Incorrect password"});
+  const setUnlocked = async (unlocked: boolean) => {
+    await (await clerkClient()).users.updateUserMetadata(userId, { publicMetadata: { unlocked } });
+  };
+
+  // Trimmed because a value pasted into a dashboard env var picks up a trailing
+  // newline easily, and that shouldn't reject the right password.
+  const accessPassword = process.env.ACCESS_PASSWORD?.trim();
+
+  if (!accessPassword) {
+    // No password configured is a deployment problem, not a wrong guess: say so
+    // rather than locking the account out on every attempt.
+    console.error('ACCESS_PASSWORD is not set in this environment');
+    return NextResponse.json(
+      {error: "No access password is configured for this deployment."},
+      {status: 500, statusText: "Access password not configured"},
+    );
   }
 
-  await (await clerkClient()).users.updateUserMetadata(userId, {
-    publicMetadata: {
-      unlocked: true
-    }
-  });
+  if (password !== accessPassword) {
+    await setUnlocked(false);
+    return NextResponse.json({error: "Incorrect password. Please try again."}, {status: 400, statusText: "Incorrect password"});
+  }
+
+  await setUnlocked(true);
 
   return NextResponse.json({success: true});
 }
