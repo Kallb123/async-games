@@ -571,12 +571,14 @@ button {
 /* Trailing chevron for a CTA that leads somewhere rather than doing something. */
 .ag-cta-arrow { font: 800 18px var(--ag-font); flex: none; }
 
-/* ---- Install banner ---- */
+/* ---- Bottom banner ---- */
 /* Fixed to the viewport rather than to the `.ag-app` column so it stays put
    through the game screens' own scrolling. Above page content, below
    Bootstrap's modals (1050) and the toasts (1100). The outer strip is
-   click-through so it never blocks a tap on whatever it happens to cover. */
-.ag-install-banner {
+   click-through so it never blocks a tap on whatever it happens to cover.
+   Shared by every offer `BottomBanner` can show — the geometry is the banner's,
+   not the install pitch's, so it is named for the slot rather than the pitch. */
+.ag-banner {
     position: fixed;
     left: 0;
     right: 0;
@@ -591,7 +593,7 @@ button {
    banner needs. Width matches `.ag-app` so it lines up with the column above
    it, and box-sizing is set here rather than inherited because the banner
    renders outside `.ag-app`, and so outside that rule. */
-.ag-install-banner-inner {
+.ag-banner-inner {
     box-sizing: border-box;
     max-width: var(--ag-app-width);
     margin: 0 auto;
@@ -600,7 +602,7 @@ button {
     box-shadow: var(--ag-shadow-lift);
 }
 
-.ag-install-dismiss {
+.ag-banner-dismiss {
     flex: none;
     background: transparent;
     border: 0;
@@ -611,7 +613,7 @@ button {
     opacity: 0.6;
     cursor: pointer;
 }
-.ag-install-dismiss:hover { opacity: 1; }
+.ag-banner-dismiss:hover { opacity: 1; }
 
 /* ---- Sticky action footer (setup) ---- */
 .ag-sticky-action {

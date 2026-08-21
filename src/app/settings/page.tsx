@@ -7,24 +7,15 @@ import BackLink from "@/components/ui/BackLink";
 import DevTools from "@/components/DevTools";
 import NotificationDeviceList from "@/components/NotificationDeviceList";
 import InstallOffer from "@/components/ui/InstallOffer";
+import NotificationOffer from "@/components/ui/NotificationOffer";
 import { NotificationChannel, NOTIFICATION_CHANNELS } from "@/utils/firebase/notificationPreferences";
-import { pushSupported } from "@/utils/firebase/pushSupport";
+import { requestNotificationPermission, useNotificationPermission } from "@/utils/hooks/useNotificationPermission";
 import useFcmToken from "@/utils/hooks/useFcmToken";
 import { useInstallPrompt } from "@/utils/hooks/useInstallPrompt";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState } from "react";
 import packageJson from "@/../package.json";
-
-// Whether this browser granted notification permission. Reading it during
-// render would break hydration and copying it into state from an effect is a
-// synchronous setState in an effect body (react-hooks/set-state-in-effect), so
-// it's read as the browser-owned value it is. Nothing to subscribe to: the
-// browser fires no event for a permission change, and `enableNotifications`
-// below reloads the page after asking.
-const subscribePermission = () => () => {};
-const getPermission = () => pushSupported() && Notification.permission === 'granted';
-const getServerPermission = () => false;
 
 interface NotificationPreferencesState {
     enabled: boolean;
@@ -41,7 +32,9 @@ export default function Settings() {
 
     const [prefs, setPrefs] = useState<NotificationPreferencesState | null>(null);
     const [isSavingPrefs, setIsSavingPrefs] = useState(false);
-    const hasPrefPermission = useSyncExternalStore(subscribePermission, getPermission, getServerPermission);
+    // Shared with the bottom banner, so granting from either updates both.
+    const permission = useNotificationPermission();
+    const hasPrefPermission = permission === 'granted';
 
     const refreshPreferences = useCallback(() => {
         fetch('/api/notificationpreferences')
@@ -59,12 +52,6 @@ export default function Settings() {
             refreshPreferences();
         }
     }, [isAuthorised, refreshPreferences]);
-
-    const enableNotifications = () => {
-        if (pushSupported()) {
-            Notification.requestPermission().then(() => window.location.reload());
-        }
-    };
 
     const updatePreferences = async (patch: { enabled?: boolean; channels?: Partial<Record<NotificationChannel, boolean>> }) => {
         if (!prefs || isSavingPrefs) return;
@@ -96,7 +83,7 @@ export default function Settings() {
 
     const toggleMaster = () => {
         if (!hasPrefPermission) {
-            enableNotifications();
+            requestNotificationPermission();
             return;
         }
         updatePreferences({ enabled: !prefs?.enabled });
@@ -122,14 +109,10 @@ export default function Settings() {
                     <h2 className="ag-section-label">Notifications</h2>
                 </div>
 
-                {!hasPrefPermission && (
-                    <div className="ag-cta" style={{ background: "oklch(0.35 0.04 45)", color: "var(--ag-on-dark)" }}>
-                        <div className="ag-cta-main">
-                            <div className="ag-cta-title">Push notifications</div>
-                            <div className="ag-cta-sub">Enable push so we can nudge you when it&apos;s your move.</div>
-                        </div>
-                        <button type="button" className="ag-btn ag-btn--light" onClick={enableNotifications}>Enable</button>
-                    </div>
+                {/* The same offer the bottom banner makes, for anyone who
+                    dismissed it. Hidden in a browser that cannot receive push. */}
+                {(permission === 'default' || permission === 'denied') && (
+                    <NotificationOffer permission={permission} />
                 )}
 
                 {hasPrefPermission && (
