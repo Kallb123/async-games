@@ -2,11 +2,13 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from "react";
+import { useUser } from "@clerk/nextjs";
 import { useToast } from "@/components/ToastContext";
 
 export default function PasswordForm() {
     const [password, setPassword] = useState('');
     const router = useRouter();
+    const { user } = useUser();
     const { showToast } = useToast();
     
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -22,13 +24,20 @@ export default function PasswordForm() {
         });
 
         if (!response.ok) {
-            throw new Error('Password incorrect');
+            const { error } = await response.json().catch(() => ({}));
+            throw new Error(error ?? 'Incorrect password. Please try again.');
         }
+
+        // The unlock was written with Clerk's *backend* client, so the copy of
+        // the user this browser holds still says locked. Navigating on it sends
+        // `useAuthGuard` straight back here — reload it first.
+        await user?.reload();
 
         router.push('/');
       } catch (error) {
         console.error(error);
-        showToast('Incorrect password. Please try again.', 'danger', 'Access Denied');
+        const message = error instanceof Error ? error.message : 'Incorrect password. Please try again.';
+        showToast(message, 'danger', 'Access Denied');
       }
     }
 
