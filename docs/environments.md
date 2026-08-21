@@ -53,6 +53,24 @@ expire in dev unless you call the endpoint yourself:
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/turntimer
 ```
 
+## Dev-only tooling
+
+The Settings footer carries two buttons that wipe collections outright
+(`DevTools`, calling `/api/dev/clearlive` and `/api/dev/clearresults`). Both
+sides are gated on `isDevDeployment` (`src/utils/devEnvironment.ts`): the
+buttons don't render, and the endpoints answer 404 as though they were never
+deployed, on anything that isn't a dev deployment.
+
+"Dev deployment" means `VERCEL_ENV` (mirrored to the browser as
+`NEXT_PUBLIC_VERCEL_ENV`, which Vercel injects for you) is `preview` or
+`development` — so Vercel's dev/preview deployments qualify and asyncgames.com
+does not. Off Vercel it falls back to `NODE_ENV`, so `npm run dev` counts and
+a local production build doesn't. Anywhere the environment can't be
+identified the tooling stays off.
+
+They still have no authentication of their own, so treat any dev deployment's
+database as wipeable by anyone who can reach it.
+
 ## Taking Clerk to production
 
 The free plan covers this — 50,000 monthly retained users, custom domain

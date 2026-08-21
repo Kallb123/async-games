@@ -1,47 +1,33 @@
 'use client'
 
+import { isDevDeployment } from "@/utils/devEnvironment";
+
+/** One-click database wipes, so they never reach the production deployment —
+ *  `/api/dev/*` refuses the calls there too, this just hides the buttons. */
+const DEV_ACTIONS = [
+    { label: 'Dev: clear live games and invites', path: '/api/dev/clearlive' },
+    { label: 'Dev: clear results', path: '/api/dev/clearresults' },
+];
+
 export default function DevTools() {
-    const clearLive = async () => {
-        await fetch('/api/dev/clearlive');
-    }
-    const clearResults = async () => {
-        await fetch('/api/dev/clearresults');
+    if (!isDevDeployment) {
+        return null;
     }
 
     return (
         <>
-            <div style={{ marginTop: 10 }}>
-                <button
-                    type="button"
-                    onClick={clearLive}
-                    style={{
-                        background: "none",
-                        border: "none",
-                        font: "500 11px var(--ag-font)",
-                        color: "var(--ag-ink-softer)",
-                        textDecoration: "underline",
-                        cursor: "pointer",
-                    }}
-                >
-                    Dev: clear live games and invites
-                </button>
-            </div>
-            <div style={{ marginTop: 10 }}>
-                <button
-                    type="button"
-                    onClick={clearResults}
-                    style={{
-                        background: "none",
-                        border: "none",
-                        font: "500 11px var(--ag-font)",
-                        color: "var(--ag-ink-softer)",
-                        textDecoration: "underline",
-                        cursor: "pointer",
-                    }}
-                >
-                    Dev: clear results
-                </button>
-            </div>
+            {DEV_ACTIONS.map(action => (
+                <div key={action.path} style={{ marginTop: 10 }}>
+                    <button
+                        type="button"
+                        className="ag-link-muted"
+                        style={{ textDecoration: "underline" }}
+                        onClick={() => { fetch(action.path); }}
+                    >
+                        {action.label}
+                    </button>
+                </div>
+            ))}
         </>
     );
 }

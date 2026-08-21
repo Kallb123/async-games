@@ -2,9 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from "../../../../utils/mongodb/mongodb";
 import { GameDataModel } from '@/utils/mongodb/GameData';
 import { InvitationModel } from '@/utils/mongodb/InvitationData';
+import { blockOutsideDevDeployment } from '@/utils/devEnvironment';
 
 export async function GET(request: NextRequest) {
   console.log(`GET ${request.nextUrl.pathname}`);
+
+  const blocked = blockOutsideDevDeployment();
+  if (blocked) {
+    return blocked;
+  }
 
   await deleteAllData();
 
