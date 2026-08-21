@@ -15,18 +15,3 @@ export const isDevDeployment: boolean = (() => {
     return vercelEnv ? vercelEnv !== 'production' : process.env.NODE_ENV === 'development';
 })();
 
-/**
- * Shared gate for the `/api/dev/*` endpoints, which wipe collections outright:
- * off a dev deployment they behave as though they were never deployed. Returns
- * the 404 to send back, or `null` when the caller may proceed.
- *
- * Deliberately a plain `Response` rather than `NextResponse` so this module
- * stays importable from client components too (`DevTools` hides itself with
- * `isDevDeployment` above).
- */
-export function blockOutsideDevDeployment(): Response | null {
-    if (isDevDeployment) {
-        return null;
-    }
-    return Response.json({}, { status: 404, statusText: 'Not Found' });
-}

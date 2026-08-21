@@ -43,14 +43,3 @@ describe('isDevDeployment', () => {
     });
 });
 
-describe('blockOutsideDevDeployment', () => {
-    it('lets a dev deployment through', async () => {
-        const { blockOutsideDevDeployment } = await loadWith({ VERCEL_ENV: 'preview' });
-        expect(blockOutsideDevDeployment()).toBeNull();
-    });
-
-    it('answers 404 in production, as though the endpoint were not deployed', async () => {
-        const { blockOutsideDevDeployment } = await loadWith({ VERCEL_ENV: 'production' });
-        expect(blockOutsideDevDeployment()?.status).toBe(404);
-    });
-});

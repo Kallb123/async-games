@@ -17,11 +17,10 @@ export default function DevTools() {
     return (
         <>
             {DEV_ACTIONS.map(action => (
-                <div key={action.path} style={{ marginTop: 10 }}>
+                <div key={action.path} className="ag-footer-action">
                     <button
                         type="button"
                         className="ag-link-muted"
-                        style={{ textDecoration: "underline" }}
                         onClick={() => { fetch(action.path); }}
                     >
                         {action.label}
