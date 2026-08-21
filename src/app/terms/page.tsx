@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import LegalPage from "@/components/ui/LegalPage";
-import { LEGAL_CONTACT } from "@/utils/ui/legal";
+import LegalEmail from "@/components/ui/LegalEmail";
 
 export const metadata: Metadata = {
     title: "Terms of Service — Async Games",
-    description: "The rules for using Async Games.",
+    description: "The terms you agree to when you play on Async Games.",
 };
 
 /**
@@ -48,7 +48,7 @@ export default function Terms() {
                 Keep your sign-in details to yourself — you&apos;re responsible for what
                 happens under your account. Give accurate details when you sign up, and
                 pick a username that isn&apos;t offensive, misleading, or impersonating
-                someone else. Tell us at <a href={`mailto:${LEGAL_CONTACT}`}>{LEGAL_CONTACT}</a> if
+                someone else. Tell us at <LegalEmail /> if
                 you think someone else is using your account.
             </p>
 
@@ -63,7 +63,7 @@ export default function Terms() {
             </ul>
             <p>
                 Found a security problem instead of exploiting it? Please tell us
-                at <a href={`mailto:${LEGAL_CONTACT}`}>{LEGAL_CONTACT}</a> — that&apos;s
+                at <LegalEmail /> — that&apos;s
                 genuinely appreciated.
             </p>
 
@@ -132,7 +132,7 @@ export default function Terms() {
             <h2>Suspension and ending your account</h2>
             <p>
                 You can stop using the service at any time, and can ask us to delete your
-                account by emailing <a href={`mailto:${LEGAL_CONTACT}`}>{LEGAL_CONTACT}</a>. We
+                account by emailing <LegalEmail />. We
                 may suspend or remove an account that breaks these terms or that
                 endangers the service or its players — where it&apos;s reasonable to do
                 so, we&apos;ll tell you why first.
@@ -162,7 +162,7 @@ export default function Terms() {
             <h2>Contact</h2>
             <p>
                 Questions about these terms go
-                to <a href={`mailto:${LEGAL_CONTACT}`}>{LEGAL_CONTACT}</a>.
+                to <LegalEmail />.
             </p>
         </LegalPage>
     );

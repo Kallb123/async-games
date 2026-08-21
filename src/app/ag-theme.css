@@ -794,7 +794,6 @@ button {
    tags rather than asking each paragraph for a class, because these are the
    only screens written as prose. */
 .ag-prose {
-    padding: 20px 20px 0;
     font: 500 14px/1.6 var(--ag-font);
     color: var(--ag-ink);
 }
@@ -825,6 +824,8 @@ button {
     text-align: center;
 }
 .ag-footer a, .ag-footer button { color: var(--ag-ink-soft); }
+/* The "Privacy · Terms" pair, wherever a footer carries it. */
+.ag-legal-links { margin-top: 8px; }
 
 .ag-divider { height: 1px; background: var(--ag-line); margin: 22px 20px 0; border: none; }
 

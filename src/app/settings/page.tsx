@@ -166,8 +166,8 @@ export default function Settings() {
 
             <div className="ag-footer">
                 <DevTools />
-                <div style={{ marginTop: '1rem' }}><LegalLinks /></div>
-                <div style={{ fontSize: '0.875rem', color: 'var(--ag-text-muted)', textAlign: 'center', marginTop: '0.5rem' }}>
+                <LegalLinks />
+                <div style={{ fontSize: '0.875rem', color: 'var(--ag-text-muted)', textAlign: 'center', marginTop: '0.75rem' }}>
                     v{packageJson.version}
                 </div>
             </div>

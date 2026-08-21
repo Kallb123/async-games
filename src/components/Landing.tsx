@@ -93,7 +93,7 @@ export default function Landing() {
 
             <div className="ag-footer">
                 <div>Already have an account? <Link href="/login">Sign in</Link></div>
-                <div style={{ marginTop: 6 }}><LegalLinks /></div>
+                <LegalLinks />
             </div>
         </main>
     );

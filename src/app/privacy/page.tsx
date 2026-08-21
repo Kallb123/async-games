@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import LegalPage from "@/components/ui/LegalPage";
-import { LEGAL_CONTACT } from "@/utils/ui/legal";
+import LegalEmail from "@/components/ui/LegalEmail";
 
 export const metadata: Metadata = {
     title: "Privacy Policy — Async Games",
-    description: "What Async Games collects, why, and who else touches it.",
+    description: "How Async Games handles your data: what it stores, which services process it, and how to have it deleted.",
 };
 
 /**
@@ -31,7 +31,7 @@ export default function Privacy() {
             </ul>
             <p>
                 The rest of this page is the detail behind those promises. If anything
-                here is unclear, email <a href={`mailto:${LEGAL_CONTACT}`}>{LEGAL_CONTACT}</a>.
+                here is unclear, email <LegalEmail />.
             </p>
 
             <h2>Who this policy covers</h2>
@@ -39,7 +39,7 @@ export default function Privacy() {
                 This policy applies to Async Games, the turn-based games service at
                 asyncgames.com and its installed app. Async Games is the controller of
                 the personal data described below. You can reach us
-                at <a href={`mailto:${LEGAL_CONTACT}`}>{LEGAL_CONTACT}</a>.
+                at <LegalEmail />.
             </p>
 
             <h2>What we collect</h2>
@@ -155,7 +155,7 @@ export default function Privacy() {
                 or restrict how we use it, and withdraw consent for notifications at any
                 time (Settings, or your browser&apos;s notification permission). Some of
                 this you can do yourself in the app; for anything else — including
-                deleting your account and the data attached to it — email <a href={`mailto:${LEGAL_CONTACT}`}>{LEGAL_CONTACT}</a> and
+                deleting your account and the data attached to it — email <LegalEmail /> and
                 we will deal with it within one month.
             </p>
             <p>

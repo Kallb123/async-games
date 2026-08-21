@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
 import BackLink from "@/components/ui/BackLink";
+import Brand from "@/components/ui/Brand";
 import LegalLinks from "@/components/ui/LegalLinks";
-import { LEGAL_UPDATED } from "@/utils/ui/legal";
+import { LEGAL_UPDATED, LegalHref } from "@/utils/ui/legal";
 
 /**
  * Shell for the two public documents (`/privacy`, `/terms`).
@@ -21,15 +21,18 @@ export default function LegalPage({
     title: string;
     summary: string;
     /** This page's own path, so the footer links to the *other* document. */
-    href: string;
+    href: LegalHref;
     children: ReactNode;
 }) {
     return (
         <main>
+            {/* The app's own name, not the document's — the hero below already
+                names the document, and a visitor who landed here from a search
+                result needs to know whose policy they're reading. */}
             <div className="ag-topbar">
                 <div className="ag-topbar-title">
                     <BackLink href="/" label="Back home" />
-                    <span className="ag-wordmark">{title}</span>
+                    <Brand />
                 </div>
             </div>
 
@@ -42,10 +45,10 @@ export default function LegalPage({
                 <div className="ag-callout">Last updated: {LEGAL_UPDATED}</div>
             </div>
 
-            <div className="ag-prose">{children}</div>
+            <div className="ag-section ag-prose">{children}</div>
 
             <div className="ag-footer">
-                <LegalLinks omit={href} /> <span aria-hidden="true">·</span> <Link href="/">Home</Link>
+                <LegalLinks omit={href} />
             </div>
         </main>
     );

@@ -12,6 +12,9 @@ export const LEGAL_PAGES = [
     { href: "/terms", label: "Terms" },
 ] as const;
 
+/** The path of one of the pages above. */
+export type LegalHref = (typeof LEGAL_PAGES)[number]["href"];
+
 /** Where privacy requests, deletion requests and legal notices go. */
 export const LEGAL_CONTACT = "privacy@asyncgames.com";
 
