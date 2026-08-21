@@ -826,6 +826,8 @@ button {
 .ag-footer a, .ag-footer button { color: var(--ag-ink-soft); }
 /* The "Privacy · Terms" pair, wherever a footer carries it. */
 .ag-legal-links { margin-top: 8px; }
+/* A stacked action row in a footer, e.g. the dev-only tools. */
+.ag-footer-action { margin-top: 8px; }
 
 .ag-divider { height: 1px; background: var(--ag-line); margin: 22px 20px 0; border: none; }
 

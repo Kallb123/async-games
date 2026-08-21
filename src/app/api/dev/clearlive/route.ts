@@ -1,21 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { dbConnect } from "../../../../utils/mongodb/mongodb";
 import { GameDataModel } from '@/utils/mongodb/GameData';
 import { InvitationModel } from '@/utils/mongodb/InvitationData';
+import { devWipeRoute } from '../wipeRoute';
 
-export async function GET(request: NextRequest) {
-  console.log(`GET ${request.nextUrl.pathname}`);
-
-  await deleteAllData();
-
-  return NextResponse.json({success: true});
-}
-
-async function deleteAllData() {
-  await dbConnect();
-  console.log("!!!---!!! Removing live games and invites")
-  await InvitationModel.deleteMany({}).exec();
-  await GameDataModel.deleteMany({}).exec();
-}
+export const GET = devWipeRoute('live games and invites', async () => {
+    await InvitationModel.deleteMany({}).exec();
+    await GameDataModel.deleteMany({}).exec();
+});
 
 export const dynamic = 'force-dynamic';
