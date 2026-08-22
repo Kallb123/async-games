@@ -44,7 +44,7 @@ export default function Home() {
       <IncomingInviteList />
       <TheirTurnList />
       <OutgoingInviteList />
-      <MyCompleteList />
+      <MyCompleteList limit={10} />
 
       <div className="ag-section ag-btn-row" style={{ marginTop: 8 }}>
         <Link href="/newgame" aria-label="New game" className="ag-cta ag-cta--dark">
