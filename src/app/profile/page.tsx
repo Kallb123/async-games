@@ -16,6 +16,7 @@ import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { useNowToTheMinute } from "@/utils/hooks/useNow";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { displayName } from "@/utils/ui/players";
+import { profileImageUrl } from "@/utils/ui/avatar";
 import type { IGameStats, IRecentMatch } from "@/app/api/stats/route";
 import type { IReceivedReaction } from "@/app/api/reactions/route";
 import { useClerk } from "@clerk/nextjs";
@@ -124,7 +125,7 @@ export default function Profile() {
             </div>
 
             {/* Identity */}
-            <ProfileIdentity name={ownDisplayName} username={user?.username} fullName={fullName} />
+            <ProfileIdentity name={ownDisplayName} username={user?.username} imageUrl={profileImageUrl(user)} fullName={fullName} />
 
             {/* Honest stats */}
             <div className="ag-section">
@@ -158,7 +159,7 @@ export default function Profile() {
             >
                 {reactions.map((reaction) => (
                     <div key={reaction.reactionId} className="ag-list-row">
-                        <Avatar name={reaction.actorUsername} size={36} />
+                        <Avatar name={reaction.actorUsername} imageUrl={reaction.actorImageUrl} size={36} />
                         <div className="ag-list-row-main">
                             <div className="ag-list-row-title">
                                 {reaction.actorUsername} · {reaction.gameName}
@@ -207,7 +208,7 @@ export default function Profile() {
                             href={`/profile/${friend.user.userId}`}
                             style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, textDecoration: "none", color: "inherit" }}
                         >
-                            <Avatar name={friend.user.username} size={36} />
+                            <Avatar name={friend.user.username} imageUrl={friend.user.imageUrl} size={36} />
                             <div className="ag-list-row-main">
                                 <div className="ag-list-row-title">{displayName(friend.user)}</div>
                                 <div className="ag-list-row-sub">
@@ -239,7 +240,7 @@ export default function Profile() {
             >
                 {incomingRequests.map((request) => (
                     <div key={request.friendshipId} className="ag-list-row">
-                        <Avatar name={request.user.username} size={36} />
+                        <Avatar name={request.user.username} imageUrl={request.user.imageUrl} size={36} />
                         <div className="ag-list-row-main">
                             <div className="ag-list-row-title">{request.user.username}</div>
                             <div className="ag-list-row-sub">wants to be friends · {moment(request.timestamp).fromNow()}</div>
@@ -259,7 +260,7 @@ export default function Profile() {
             >
                 {outgoingRequests.map((request) => (
                     <div key={request.friendshipId} className="ag-list-row">
-                        <Avatar name={request.user.username} size={36} />
+                        <Avatar name={request.user.username} imageUrl={request.user.imageUrl} size={36} />
                         <div className="ag-list-row-main">
                             <div className="ag-list-row-title">{request.user.username}</div>
                             <div className="ag-list-row-sub">waiting to accept · {moment(request.timestamp).fromNow()}</div>

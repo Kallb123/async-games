@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { FriendshipModel, IFriendshipDataDocument, IFriendRequestResponse, IFriendsResponse, IFriendUser } from '@/utils/mongodb/FriendshipData';
 import { GameDataModel } from '@/utils/mongodb/GameData';
+import { profileImageUrl } from '@/utils/ui/avatar';
 
 export async function GET(request: NextRequest) {
   console.log(`GET ${request.nextUrl.pathname}`);
@@ -48,6 +49,7 @@ export async function GET(request: NextRequest) {
         username: user.username,
         firstName: user.firstName,
         lastName: user.lastName,
+        imageUrl: profileImageUrl(user),
         lastActionTimestamp: lastActionByUserId.get(user.id) ?? null
       });
     });
