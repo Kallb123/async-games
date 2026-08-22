@@ -131,8 +131,11 @@ export default function Terms() {
 
             <h2>Suspension and ending your account</h2>
             <p>
-                You can stop using the service at any time, and can ask us to delete your
-                account by emailing <LegalEmail />. We
+                You can stop using the service at any time, and can delete your account
+                from Settings whenever you like — that removes your games, invitations,
+                results and friend connections along with it, for the players you shared
+                them with as well, and cannot be undone. You can also ask us to do it by
+                emailing <LegalEmail />. We
                 may suspend or remove an account that breaks these terms or that
                 endangers the service or its players — where it&apos;s reasonable to do
                 so, we&apos;ll tell you why first.

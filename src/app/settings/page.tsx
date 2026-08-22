@@ -1,6 +1,7 @@
 'use client'
 
 import { FcmTokenComp } from "@/components/FirebaseForeground";
+import ActionButton from "@/components/ui/ActionButton";
 import { useToast } from "@/components/ToastContext";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import BackLink from "@/components/ui/BackLink";
@@ -14,7 +15,8 @@ import { requestNotificationPermission, useNotificationPermission } from "@/util
 import useFcmToken from "@/utils/hooks/useFcmToken";
 import { useInstallPrompt } from "@/utils/hooks/useInstallPrompt";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
-import { usePathname } from "next/navigation";
+import { useClerk } from "@clerk/nextjs";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import packageJson from "@/../package.json";
 
@@ -27,12 +29,15 @@ export default function Settings() {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
     const { isAuthorised } = useAuthGuard();
+    const { signOut } = useClerk();
+    const router = useRouter();
     const { showToast } = useToast();
     const { fcmToken } = useFcmToken();
     const installMethod = useInstallPrompt();
 
     const [prefs, setPrefs] = useState<NotificationPreferencesState | null>(null);
     const [isSavingPrefs, setIsSavingPrefs] = useState(false);
+    const [isDeletingAccount, setIsDeletingAccount] = useState(false);
     // Shared with the bottom banner, so granting from either updates both.
     const permission = useNotificationPermission();
     const hasPrefPermission = permission === 'granted';
@@ -93,6 +98,24 @@ export default function Settings() {
     const toggleChannel = (channel: NotificationChannel) => {
         if (!prefs) return;
         updatePreferences({ channels: { [channel]: !prefs.channels[channel] } });
+    };
+
+    const deleteAccount = async () => {
+        if (isDeletingAccount) return;
+        if (!window.confirm("Delete your account? Your games, invites, results and friend connections go with it — including for the people you played — and this can't be undone.")) return;
+        setIsDeletingAccount(true);
+        try {
+            const response = await fetch('/api/user/delete', { method: 'POST' });
+            if (!response.ok) throw new Error('Failed to delete account');
+            // The account is gone and Clerk has already revoked the session, so
+            // a failure signing out just means the local copy was stale.
+            await signOut().catch(() => {});
+            router.push('/');
+        } catch (error) {
+            console.error('Failed to delete account', error);
+            showToast('Failed to delete your account. Please try again.', 'danger');
+            setIsDeletingAccount(false);
+        }
     };
 
     return (
@@ -163,6 +186,29 @@ export default function Settings() {
                     <InstallOffer method={installMethod} />
                 </div>
             )}
+
+            {/* Account */}
+            <div className="ag-section">
+                <div className="ag-section-head">
+                    <h2 className="ag-section-label">Account</h2>
+                </div>
+                <div className="ag-stack">
+                    <div className="ag-callout">
+                        Deleting your account is permanent. Your games — finished and in
+                        progress — invitations, results, reactions and friend connections
+                        are removed for everyone in them, along with your sign-in details
+                        and every device you registered for notifications.
+                    </div>
+                    <ActionButton
+                        className="ag-btn ag-btn--danger ag-btn--block"
+                        pending={isDeletingAccount}
+                        pendingLabel="Deleting your account…"
+                        onClick={deleteAccount}
+                    >
+                        Delete account
+                    </ActionButton>
+                </div>
+            </div>
 
             <div className="ag-footer">
                 <DevTools />
