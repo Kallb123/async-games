@@ -100,6 +100,11 @@ export default function Privacy() {
                 friends, and roughly when you last took a turn. <strong>Your email
                 address is never shown to other players.</strong>
             </p>
+            <p>
+                Because that data is shared, deleting your account also removes those
+                games, results and reactions from the players you shared them with —
+                see <em>Deleting your account</em> below.
+            </p>
 
             <h2>Who else processes your data</h2>
             <p>
@@ -143,20 +148,48 @@ export default function Privacy() {
 
             <h2>How long we keep it</h2>
             <ul>
-                <li>Account data is kept while your account exists.</li>
-                <li>Games, results and reactions are kept while your account exists, so your history and statistics stay intact — they involve other players too, so a finished game remains visible to them.</li>
+                <li>Account data is kept while your account exists, and is deleted when you delete it.</li>
+                <li>Games, results and reactions are kept while your account exists, so your history and statistics stay intact. They involve other players too, so while your account is open a finished game remains visible to them.</li>
                 <li>Notification tokens are removed as soon as they stop working, or when you remove the device.</li>
                 <li>Server logs are kept only briefly, for debugging and security.</li>
             </ul>
+
+            <h2>Deleting your account</h2>
+            <p>
+                You can delete your account yourself, at any time, from
+                <strong> Settings → Account → Delete account</strong>. We ask you to
+                confirm, and then it happens immediately — there is no waiting period
+                and no way for us to undo it. Deleting removes:
+            </p>
+            <ul>
+                <li>every game you are part of, finished or in progress, along with the moves and history in it;</li>
+                <li>the invitations you have sent and the ones you have received;</li>
+                <li>the results and statistics of your games, and the reactions you left or received;</li>
+                <li>your friend connections and any pending friend requests;</li>
+                <li>your account with Clerk — your email address, username and sign-in details — together with your notification tokens and notification preferences, which are held there.</li>
+            </ul>
+            <p>
+                Because games are shared, the players you were in a game with lose that
+                game and its result too, and the other players in a pending invitation
+                lose the invitation. Nothing of yours is kept behind under a
+                &ldquo;deleted player&rdquo; label. What can outlast the deletion is the
+                short-lived server logs described above, and any backup copies our
+                providers hold, which age out on their own schedules.
+            </p>
+            <p>
+                If you would rather we did it for you, or you can no longer sign in,
+                email <LegalEmail /> and we will deal with it within one month.
+            </p>
 
             <h2>Your rights</h2>
             <p>
                 You can access, correct, export or delete your personal data, object to
                 or restrict how we use it, and withdraw consent for notifications at any
-                time (Settings, or your browser&apos;s notification permission). Some of
-                this you can do yourself in the app; for anything else — including
-                deleting your account and the data attached to it — email <LegalEmail /> and
-                we will deal with it within one month.
+                time (Settings, or your browser&apos;s notification permission). Deleting
+                your account and the data attached to it is something you can do
+                yourself, from Settings — see <em>Deleting your account</em> above. For
+                anything else, email <LegalEmail /> and we will deal with it within one
+                month.
             </p>
             <p>
                 If you are in the UK or the EEA and you think we have handled your data

@@ -356,6 +356,16 @@ button {
 }
 .ag-btn--light:hover { color: var(--ag-ink); background: var(--ag-surface-2); }
 
+/* Irreversible actions — deleting an account, and anything else that can't be
+   undone. Outlined rather than solid: it shouldn't be the loudest thing on a
+   screen, only unmistakably the destructive one. */
+.ag-btn--danger {
+    background: transparent;
+    border-color: var(--ag-danger);
+    color: var(--ag-danger);
+}
+.ag-btn--danger:hover { background: var(--ag-danger); color: var(--ag-on-dark); }
+
 .ag-btn--block { width: 100%; }
 
 /* A row of equal-width actions — two buttons or two CTA cards side by side. */
