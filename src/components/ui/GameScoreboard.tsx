@@ -14,6 +14,9 @@ export interface ScoreEntry {
     score: React.ReactNode;
     isMe?: boolean;
     isActive?: boolean;
+    /** Ring this player in the danger colour — they're about to end the game
+     *  (Train Time's trains running out). */
+    warn?: boolean;
 }
 
 /**
@@ -26,7 +29,7 @@ export default function GameScoreboard({ entries }: { entries: ScoreEntry[] }) {
     return (
         <div className="ag-scorestrip">
             {entries.map((e) => (
-                <div key={e.id} className={`ag-score-pill${e.isMe ? ' ag-score-pill--me' : ''}`}>
+                <div key={e.id} className={`ag-score-pill${e.isMe ? ' ag-score-pill--me' : ''}${e.warn ? ' ag-score-pill--warn' : ''}`}>
                     <span className="ag-score-dot" style={{ background: e.color }} />
                     <div className="ag-score-main">
                         <div className="ag-score-name">{e.name}</div>

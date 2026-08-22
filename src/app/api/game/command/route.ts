@@ -12,6 +12,7 @@ import { DiceCitiesGameType, DiceCitiesRequestBusinessCenterOpponentSelection, D
 import { SettlementsAndCitiesGameType, SACPlaceSettlementSetup, SACPlaceRoadSetup, SACPlayKnight, SACRollDice, SACMoveRobber, SACBuildRoad, SACBuildSettlement, SACBuildCity, SACBuyDevCard, SACPlayRoadBuilding, SACPlayYearOfPlenty, SACPlayMonopoly, SACMaritimeTrade, SACEndTurn } from '@/utils/apiModels/GameLogic';
 import { WorldDominationGameType, WorldDominationDeployArmies, WorldDominationCashInCards, WorldDominationAttack, WorldDominationOccupyTerritory, WorldDominationEndAttackPhase, WorldDominationFortify, WorldDominationSkipFortify } from '@/utils/apiModels/GameLogic';
 import { SolitaireGameType, SolitaireDraw, SolitaireMoveCard, SolitaireUndo, SolitaireAutoSolve } from '@/utils/apiModels/GameLogic';
+import { TrainTimeGameType, TrainTimeDrawCarriageCard, TrainTimeClaimRoute, TrainTimeDrawTickets, TrainTimeKeepTickets, TrainTimePassTurn } from '@/utils/apiModels/GameLogic';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
 import { IGameDataResponse } from '@/utils/apiModels/GameDataApi';
 
@@ -69,6 +70,12 @@ export async function POST(request: NextRequest) {
     new SolitaireUndo(),
     new SolitaireAutoSolve(),
     new SolitaireGameType(),
+    new TrainTimeDrawCarriageCard(),
+    new TrainTimeClaimRoute(),
+    new TrainTimeDrawTickets(),
+    new TrainTimeKeepTickets(),
+    new TrainTimePassTurn(),
+    new TrainTimeGameType(),
   ];
   // console.log(commandRequest);
   console.log(commandRequest.myString());

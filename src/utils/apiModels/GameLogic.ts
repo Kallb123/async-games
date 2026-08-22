@@ -20,3 +20,4 @@ export * from "@/games/SnakesAndLadders/SnakesAndLaddersLogic";
 export * from "@/games/SettlementsAndCities/SettlementsAndCitiesLogic";
 export * from "@/games/WorldDomination/WorldDominationLogic";
 export * from "@/games/Solitaire/SolitaireLogic";
+export * from "@/games/TrainTime/TrainTimeLogic";
