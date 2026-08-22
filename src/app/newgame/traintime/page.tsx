@@ -10,13 +10,11 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
 import { GAME_META } from "@/utils/ui/games";
 import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
-import { WorldDominationInvitationRequest } from "@/games/WorldDomination/WorldDominationModels";
+import { MAX_PLAYERS, MIN_PLAYERS } from "@/games/TrainTime/board";
+import { TrainTimeInvitationRequest } from "@/games/TrainTime/TrainTimeModels";
 import { useToast } from "@/components/ToastContext";
 
-const MIN_PLAYERS = 2;
-const MAX_PLAYERS = 6;
-
-function NewGameWorldDominationForm() {
+function NewGameTrainTimeForm() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
   useAuthGuard();
@@ -33,16 +31,16 @@ function NewGameWorldDominationForm() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (badPartySize) {
-      showToast(`World Domination supports ${MIN_PLAYERS}–${MAX_PLAYERS} players.`, 'danger');
+      showToast(`Train Time supports ${MIN_PLAYERS}–${MAX_PLAYERS} players.`, 'danger');
       return;
     }
 
     try {
-      const data: WorldDominationInvitationRequest = {
+      const data: TrainTimeInvitationRequest = {
         userList: players,
         turnTimer
       };
-      const response = await fetch('/api/newgame/worlddomination', {
+      const response = await fetch('/api/newgame/traintime', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -60,7 +58,7 @@ function NewGameWorldDominationForm() {
 
   return (
     <GameSetupLayout
-      meta={GAME_META.worlddomination}
+      meta={GAME_META.traintime}
       onSubmit={handleSubmit}
       actionLabel="Send invites & start"
       actionDisabled={players.length === 0 || badPartySize}
@@ -68,16 +66,16 @@ function NewGameWorldDominationForm() {
     >
       <UserInviteList userList={userList} setItem={setItem} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
-      <PartySizeHint total={totalPlayers} min={MIN_PLAYERS} max={MAX_PLAYERS} gameName="World Domination" />
+      <PartySizeHint total={totalPlayers} min={MIN_PLAYERS} max={MAX_PLAYERS} gameName="Train Time" />
       <FcmTokenComp />
     </GameSetupLayout>
   );
 }
 
-export default function NewGameWorldDomination() {
+export default function NewGameTrainTime() {
   return (
     <Suspense fallback={null}>
-      <NewGameWorldDominationForm />
+      <NewGameTrainTimeForm />
     </Suspense>
   );
 }

@@ -397,28 +397,54 @@ an asynchronous implementation.
 
 ## 11. Implementation Status
 
-**Not yet implemented.** This document is a design specification only; there is
-no `src/games/TrainTime/` module. When it is built, follow the checklist in
-[`docs/new-game.md`](../new-game.md) and the architecture rules in
-[`ARCHITECTURE.md`](../../ARCHITECTURE.md), and reuse the existing setup-screen
-building blocks (`GameSetupLayout`, `UserInviteList`, `TurnTimerSelect`) plus a
-`src/utils/ui/games.ts` entry rather than rebuilding them.
+**Step 1 implemented** — `src/games/TrainTime/` exists and the base map is
+playable end to end: the 36-city North American board (all 100 routes,
+including the 22 double routes), the 110-card carriage deck, the five-card
+market with the three-Engine wipe, both draw sources with the Engine tax,
+route claiming with Engine substitution, route scoring, the last-lap trigger
+and final scoring on route points.
 
-Suggested build order:
+Still to build, following the order below:
+
+* **Destination Tickets** (step 2) — nothing of §6's hidden economy is in yet,
+  so a game is currently decided by route points alone.
+* **The Long Haul bonus** (step 3's longest-path search).
+* **Continental** (step 4).
+
+The build order these follow:
 
 1. **Base map, no tickets** — board data, carriage deck, market, route claiming
-   and route scoring. This is a complete playable loop on its own.
+   and route scoring. This is a complete playable loop on its own. *(Done.)*
 2. **Destination Tickets** — dealing, redaction, the keep-at-least-N choice, and
    connectivity checking at scoring time (a straightforward union-find or BFS
    over claimed routes).
-3. **End-game and bonuses** — the final-round trigger and the longest-path
-   calculation (§7), which is the only computationally interesting part: it is
-   a longest-trail search over the player's claimed-route graph.
+3. **End-game and bonuses** — the longest-path calculation (§7), which is the
+   only computationally interesting part: it is a longest-trail search over the
+   player's claimed-route graph. (The final-round trigger itself shipped with
+   step 1, since without it the game never ends.)
 4. **Continental (§9)** — a second board plus tunnels, ferries and stations,
    gated behind an expansion flag on `specificGameState` in the same style as
    [`src/games/SettlementsAndCities/expansions.ts`](../../src/games/SettlementsAndCities/expansions.ts).
 
-Keep the command surface small: `TrainTimeDrawCarriageCard { source }`,
-`TrainTimeClaimRoute { routeId, cards }`, `TrainTimeDrawTickets` /
-`TrainTimeKeepTickets { keep }`, and — for Continental —
-`TrainTimeResolveTunnel { pay }` and `TrainTimePlaceStation { cityId, cards }`.
+The command surface so far is `TrainTimeDrawCarriageCard { source, marketIndex }`
+and `TrainTimeClaimRoute { routeId, cards }`, plus a `TrainTimePassTurn` that is
+only legal when a player genuinely has no action available — without it a table
+with no cards left to draw and no affordable route would stall forever. Steps 2
+and 4 add `TrainTimeDrawTickets` / `TrainTimeKeepTickets { keep }` and —
+for Continental — `TrainTimeResolveTunnel { pay }` and
+`TrainTimePlaceStation { cityId, cards }`.
+
+### Deviations from this document
+
+* **Turn order** is drawn at random rather than by "most experienced
+  traveller", which doesn't translate to async play.
+* **Ties** are recorded as a shared win (an empty `winner`, the app's existing
+  representation of a draw) — §7's completed-ticket tie-break arrives with
+  step 2.
+* **Deadlock**: if every route still open is longer than any player's remaining
+  trains, the game ends there and then. Nothing a player could do would change
+  that (train counts only fall), and an async game can't be left unable to
+  finish.
+* **Turn timeouts** currently skip the turn via the shared turntimer cron rather
+  than auto-drawing two cards as §10 suggests; that needs a per-game hook in the
+  cron, which no game has yet.

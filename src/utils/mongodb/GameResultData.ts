@@ -53,6 +53,13 @@ import {
     solitaireGameResultStatsSchemaDef,
     formatSolitaireResultStats,
 } from "@/games/Solitaire/SolitaireModels";
+import {
+    ITrainTimeGameData,
+    ITrainTimeGameResultStats,
+    computeTrainTimeResultStats,
+    trainTimeGameResultStatsSchemaDef,
+    formatTrainTimeResultStats,
+} from "@/games/TrainTime/TrainTimeModels";
 
 export interface IGameResultData {
     gameId: uuidString,
@@ -158,6 +165,16 @@ var SolitaireGameResultSchema = new Schema<ISolitaireGameResultDataDocument>({
 }, { discriminatorKey: 'kind' });
 export var SolitaireGameResultModel = models.SolitaireGameResult || GameResultModel.discriminator<ISolitaireGameResultDataDocument, ISolitaireGameResultDataModel>('SolitaireGameResult', SolitaireGameResultSchema);
 
+export interface ITrainTimeGameResultData extends IGameResultData {
+    stats: ITrainTimeGameResultStats;
+}
+export interface ITrainTimeGameResultDataDocument extends ITrainTimeGameResultData, Document {}
+export interface ITrainTimeGameResultDataModel extends Model<ITrainTimeGameResultDataDocument> {}
+var TrainTimeGameResultSchema = new Schema<ITrainTimeGameResultDataDocument>({
+    stats: trainTimeGameResultStatsSchemaDef
+}, { discriminatorKey: 'kind' });
+export var TrainTimeGameResultModel = models.TrainTimeGameResult || GameResultModel.discriminator<ITrainTimeGameResultDataDocument, ITrainTimeGameResultDataModel>('TrainTimeGameResult', TrainTimeGameResultSchema);
+
 // Maps a GameData's gameType to the discriminator model + stats calculator
 // that boil its final specificGameState down to the interesting numbers, plus
 // a formatter that turns those numbers into display-ready stat groups. Games
@@ -221,6 +238,11 @@ const GAME_RESULT_STATS: Record<string, {
         },
         format: formatWorldDominationResultStats,
         charts: formatWorldDominationCharts,
+    },
+    TrainTime: {
+        model: TrainTimeGameResultModel,
+        compute: (gameData) => computeTrainTimeResultStats(gameData as ITrainTimeGameData),
+        format: formatTrainTimeResultStats,
     },
     Solitaire: {
         model: SolitaireGameResultModel,

@@ -1157,6 +1157,9 @@ button {
     white-space: nowrap;
 }
 .ag-board-tag--dice { display: flex; align-items: center; gap: 6px; padding: 4px 11px 4px 6px; }
+/* The same pill as a tappable control in the opposite corner (Train Time's
+   zoom toggle), rather than a second dark-pill style. */
+.ag-board-tag--action { top: 12px; right: 12px; bottom: auto; left: auto; border: none; cursor: pointer; }
 .ag-board-overlay {
     position: absolute;
     inset: 6px;
@@ -2339,6 +2342,27 @@ button {
     background: oklch(0.86 0.035 82);
     box-shadow: inset 0 2px 12px rgba(107, 79, 36, 0.13), 0 4px 0 oklch(0.72 0.04 70);
 }
+
+/* ==========================================================================
+   Train Time — rail map, card market and hand chips
+   ========================================================================== */
+/* The map is drawn on pale water, and is far wider than the app column, so it
+   sits in its own scroller and can be zoomed rather than shrunk. */
+.ag-tt-frame { background: #dcecf7; box-shadow: inset 0 2px 12px rgba(47, 63, 77, 0.13), 0 4px 0 #a9c8dd; }
+.ag-tt-scroll { overflow: auto; border-radius: 12px; -webkit-overflow-scrolling: touch; }
+.ag-tt-scroll svg { max-width: none; }
+/* A carriage-card colour, shown on every market button and hand chip. */
+.ag-tt-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    border: 1.5px solid;
+    flex: none;
+}
+
+/* One of the five face-up cards: an ag-chip that carries a colour swatch. */
+.ag-tt-card { display: inline-flex; align-items: center; gap: 7px; }
+.ag-tt-card--blocked { opacity: 0.45; }
 
 /* ==========================================================================
    Solitaire — green-felt table for the board screen
