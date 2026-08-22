@@ -11,6 +11,7 @@ import { SettlementsAndCitiesGameDataModel } from '@/games/SettlementsAndCities/
 import { SmartthinkGameDataModel } from '@/games/Smartthink/SmartthinkModels';
 import { WorldDominationGameDataModel } from '@/games/WorldDomination/WorldDominationModels';
 import { SolitaireGameDataModel } from '@/games/Solitaire/SolitaireModels';
+import { TrainTimeGameDataModel } from '@/games/TrainTime/TrainTimeModels';
 import { uuidString } from '@/utils/apiModels/GameDataApi';
 import { IGameDataDocument } from '@/utils/mongodb/GameData';
 
@@ -74,6 +75,8 @@ export async function POST(request: NextRequest) {
     gameDataM = new WorldDominationGameDataModel(gameData);
   } else if (inviteData.gameType === 'Solitaire') {
     gameDataM = new SolitaireGameDataModel(gameData);
+  } else if (inviteData.gameType === 'TrainTime') {
+    gameDataM = new TrainTimeGameDataModel(gameData);
   } else {
     throw new Error(`Unsupported game type: ${inviteData.gameType}`);
   }

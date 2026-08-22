@@ -40,6 +40,7 @@ import { meta as settlementsAndCitiesMeta } from "@/games/SettlementsAndCities/m
 import { meta as snakesAndLaddersMeta } from "@/games/SnakesAndLadders/meta";
 import { meta as worldDominationMeta } from "@/games/WorldDomination/meta";
 import { meta as solitaireMeta } from "@/games/Solitaire/meta";
+import { meta as trainTimeMeta } from "@/games/TrainTime/meta";
 
 export const GAME_META: Record<string, GameMeta> = {
     dicecities: diceCitiesMeta,
@@ -48,6 +49,7 @@ export const GAME_META: Record<string, GameMeta> = {
     snakesandladders: snakesAndLaddersMeta,
     worlddomination: worldDominationMeta,
     solitaire: solitaireMeta,
+    traintime: trainTimeMeta,
 };
 
 // Games that don't have an implementation yet but are teased in the library.
@@ -63,6 +65,7 @@ const NAME_TO_URL: Record<string, string> = {
     "snakes & ladders": "snakesandladders",
     "world domination": "worlddomination",
     "solitaire": "solitaire",
+    "train time": "traintime",
 };
 
 export function metaForGame(opts: { url?: string; friendlyName?: string }): GameMeta | undefined {

@@ -13,6 +13,9 @@ interface GameShellProps {
     right?: React.ReactNode;
     /** True while a command is in flight — shows the sync pill in the top bar. */
     syncing?: boolean;
+    /** Extra class on the shell root, for a game that re-tints the chrome
+     *  (Train Time's oxblood-and-brass rail livery). */
+    className?: string;
     children: React.ReactNode;
 }
 
@@ -25,9 +28,9 @@ interface GameShellProps {
  * tapped, there is exactly one place that says "your command is on its way",
  * so per-control feedback never has to stack up into competing spinners.
  */
-export default function GameShell({ title, subtitle, backHref = '/', right, syncing = false, children }: GameShellProps) {
+export default function GameShell({ title, subtitle, backHref = '/', right, syncing = false, className = '', children }: GameShellProps) {
     return (
-        <div className="ag-game">
+        <div className={`ag-game${className ? ` ${className}` : ''}`}>
             <div className="ag-game-topbar">
                 <Link className="ag-game-topbar-btn" href={backHref} aria-label="Back">←</Link>
                 <div className="ag-game-topbar-main">

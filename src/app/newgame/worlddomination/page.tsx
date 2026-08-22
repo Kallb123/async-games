@@ -5,6 +5,7 @@ import { Suspense, useState } from "react";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
+import PartySizeHint, { partySizeOutOfRange } from "@/components/ui/PartySizeHint";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
 import { GAME_META } from "@/utils/ui/games";
@@ -12,6 +13,7 @@ import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { WorldDominationInvitationRequest } from "@/games/WorldDomination/WorldDominationModels";
 import { useToast } from "@/components/ToastContext";
 
+const MIN_PLAYERS = 2;
 const MAX_PLAYERS = 6;
 
 function NewGameWorldDominationForm() {
@@ -26,12 +28,12 @@ function NewGameWorldDominationForm() {
 
   // The sender is always a player, so the party size is invitees + 1.
   const totalPlayers = players.length + 1;
-  const tooManyPlayers = totalPlayers > MAX_PLAYERS;
+  const badPartySize = partySizeOutOfRange(totalPlayers, MIN_PLAYERS, MAX_PLAYERS);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (tooManyPlayers) {
-      showToast(`World Domination supports at most ${MAX_PLAYERS} players.`, 'danger');
+    if (badPartySize) {
+      showToast(`World Domination supports ${MIN_PLAYERS}–${MAX_PLAYERS} players.`, 'danger');
       return;
     }
 
@@ -61,16 +63,12 @@ function NewGameWorldDominationForm() {
       meta={GAME_META.worlddomination}
       onSubmit={handleSubmit}
       actionLabel="Send invites & start"
-      actionDisabled={players.length === 0 || tooManyPlayers}
+      actionDisabled={players.length === 0 || badPartySize}
       footnote="Game begins once everyone accepts"
     >
       <UserInviteList userList={userList} setItem={setItem} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
-      <p className="ag-hint" style={tooManyPlayers ? { color: "var(--ag-terracotta)", fontWeight: 700 } : undefined}>
-        {tooManyPlayers
-          ? `⚠ Party size ${totalPlayers} · World Domination supports up to ${MAX_PLAYERS} players.`
-          : `Party size ${totalPlayers} · supports 2–${MAX_PLAYERS} players.`}
-      </p>
+      <PartySizeHint total={totalPlayers} min={MIN_PLAYERS} max={MAX_PLAYERS} gameName="World Domination" />
       <FcmTokenComp />
     </GameSetupLayout>
   );

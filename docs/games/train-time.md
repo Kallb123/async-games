@@ -397,28 +397,118 @@ an asynchronous implementation.
 
 ## 11. Implementation Status
 
-**Not yet implemented.** This document is a design specification only; there is
-no `src/games/TrainTime/` module. When it is built, follow the checklist in
-[`docs/new-game.md`](../new-game.md) and the architecture rules in
-[`ARCHITECTURE.md`](../../ARCHITECTURE.md), and reuse the existing setup-screen
-building blocks (`GameSetupLayout`, `UserInviteList`, `TurnTimerSelect`) plus a
-`src/utils/ui/games.ts` entry rather than rebuilding them.
+**Steps 1 to 3 implemented** — `src/games/TrainTime/` exists and the base game
+is complete and playable start to finish: the 36-city North American board (all
+100 routes, including the 22 double routes), the 110-card carriage deck, the
+five-card market with the three-Engine wipe, both draw sources with the Engine
+tax, route claiming with Engine substitution, route scoring, the last-lap
+trigger, the full Destination Ticket economy — the 30-ticket deck, the opening
+keep-2-of-3, Action C, redaction, the connectivity check at scoring time and the
+end-of-game reveal — and final scoring with the Long Haul bonus.
 
-Suggested build order:
+The Long Haul bonus (§7.3) is `longestRun()` in `board.ts`: a depth-first
+longest-*trail* search over the routes a player owns, since a run may revisit a
+city but never reuse a route. Longest-trail is NP-hard in general, so the walk
+cuts any branch whose remaining unwalked track can no longer beat the best run
+found so far, which settles a real network in a fraction of a millisecond — 45
+trains buy at most 27 of this map's routes, and a player may never own both
+halves of a double. That bound is not a guarantee, though, so the walk also
+counts its steps and gives up at a fixed budget: handed a board no game could
+deal (every route to one player), an unbounded search runs for minutes, and this
+is a pure helper that shouldn't be able to hang on the state it's passed.
+
+The bonus is awarded in `awardLongHaul()` at scoring time and shared by
+everybody tied for the longest run; a table where nobody claimed a route awards
+it to nobody. Because claimed routes are public, each player's current longest
+run rides on the game-state response all game (`longestRun` per player) rather
+than only at the end: the board shows the race in its "Long haul" tile, the
+claim sheet prices what a claim would do to it, and the log calls out a claim
+that takes the lead.
+
+Still to build, following the order below:
+
+* **Continental** (step 4). The setup screen already carries a disabled
+  "Continental" toggle so the option is discoverable.
+* **Turn recap** (§10) — the "route report" of design screen 14d. This is the
+  shared [since-you-were-last-here](../since-you-were-last-here.md) feature, and
+  it needs `buildTimeline()` to be able to replay a Train Time game from a
+  deterministic starting state. Train Time shuffles its deck, its market
+  refills and its ticket deck without recording what came out, so a replay
+  adapter needs those outcomes recorded on the commands first — a piece of work
+  in its own right rather than part of the base game.
+
+The build order these follow:
 
 1. **Base map, no tickets** — board data, carriage deck, market, route claiming
-   and route scoring. This is a complete playable loop on its own.
+   and route scoring. This is a complete playable loop on its own. *(Done.)*
 2. **Destination Tickets** — dealing, redaction, the keep-at-least-N choice, and
-   connectivity checking at scoring time (a straightforward union-find or BFS
-   over claimed routes).
-3. **End-game and bonuses** — the final-round trigger and the longest-path
-   calculation (§7), which is the only computationally interesting part: it is
-   a longest-trail search over the player's claimed-route graph.
+   connectivity checking at scoring time (a union-find over claimed routes:
+   `playerNetwork` in `board.ts`). *(Done.)*
+3. **End-game and bonuses** — the longest-path calculation (§7), which is the
+   only computationally interesting part: it is a longest-trail search over the
+   player's claimed-route graph. (The final-round trigger itself shipped with
+   step 1, since without it the game never ends.) *(Done.)*
 4. **Continental (§9)** — a second board plus tunnels, ferries and stations,
    gated behind an expansion flag on `specificGameState` in the same style as
    [`src/games/SettlementsAndCities/expansions.ts`](../../src/games/SettlementsAndCities/expansions.ts).
 
-Keep the command surface small: `TrainTimeDrawCarriageCard { source }`,
-`TrainTimeClaimRoute { routeId, cards }`, `TrainTimeDrawTickets` /
-`TrainTimeKeepTickets { keep }`, and — for Continental —
-`TrainTimeResolveTunnel { pay }` and `TrainTimePlaceStation { cityId, cards }`.
+The command surface so far is `TrainTimeDrawCarriageCard { source, marketIndex }`,
+`TrainTimeClaimRoute { routeId, cards }`, `TrainTimeDrawTickets` and
+`TrainTimeKeepTickets { keep }`, plus a `TrainTimePassTurn` that is only legal
+when a player genuinely has no action available — without it a table with no
+cards left to draw and no affordable route would stall forever. Continental
+adds `TrainTimeResolveTunnel { pay }` and
+`TrainTimePlaceStation { cityId, cards }`.
+
+Two of those commands leave the turn open rather than ending it, the same way
+the first of two card draws does: `TrainTimeDrawTickets` puts three tickets on
+the table and `TrainTimeKeepTickets` closes the action, and the opening
+keep-2-of-3 resolves *before* the player's first action rather than ending it.
+
+### UI
+
+The board screen follows §14 of the Claude Design interface exploration: an
+oxblood-and-brass top bar and standings, a printed rail map on parchment (one
+dashed segment per train space), the face-up row, the hand, the one-action
+picker, and a claim sheet that prices every payable combination before you
+commit. Those pieces re-tint the shared `ag-*` chrome (`GameShell`,
+`GameScoreboard`, `Stat`, `ActionButton`) under a `.ag-game--traintime` scope
+rather than duplicating it.
+
+Step 2 filled in the design's ticket strip (a bar per ticket, weighted by
+what it's worth and filled in as your network reaches it, tapping through to
+the list) and its third "Draw tickets" action. The keep-or-return choice and
+the end-of-game reveal have no artboard of their own; both are built from the
+same `TrainTimeTicket` card so a ticket looks the same wherever it appears.
+The choice sits where the action panel goes rather than taking over the
+screen, because the map is what a ticket is judged against.
+
+The "Longest" tile still waits on step 3. The route report (14d) is the
+turn-recap subsystem, which this game hasn't opted into yet.
+
+### Deviations from this document
+
+* **Turn order** is drawn at random rather than by "most experienced
+  traveller", which doesn't translate to async play.
+* **Ties** are broken on completed tickets as §7 says, and a tie that survives
+  that is recorded as a shared win (an empty `winner`, the app's existing
+  representation of a draw).
+* **Deadlock**: if every route still open is longer than any player's remaining
+  trains, the game ends there and then. Nothing a player could do would change
+  that (train counts only fall), and an async game can't be left unable to
+  finish.
+* **The opening ticket choice** happens on a player's first turn rather than in
+  a setup round of its own: they keep at least 2 of their 3, and *then* take
+  their first action. A table where everybody has to answer before anybody can
+  move would stall on the slowest player, which is exactly what async play
+  can't afford. A player skipped by the turn timer before they ever choose
+  keeps none — the tickets stay on the table for their next turn, and if the
+  game ends first they score nothing rather than being penalised for tickets
+  they never accepted.
+* **Passing** is not blocked by a ticket deck with cards left in it, even
+  though drawing tickets is technically an available action. Tickets you can
+  no longer connect score negative, so forcing a stuck player to take three
+  would make passing the punishment it exists to avoid.
+* **Turn timeouts** currently skip the turn via the shared turntimer cron rather
+  than auto-drawing two cards as §10 suggests; that needs a per-game hook in the
+  cron, which no game has yet.

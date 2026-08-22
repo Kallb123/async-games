@@ -105,6 +105,32 @@ button {
     text-decoration: none;
 }
 
+/* ---- Dev-deployment marker ----
+   The root layout stamps `data-env="dev"` on <html> everywhere except the
+   production deployment, and the badge hangs off that — so every top bar is
+   marked, including the ones a future screen adds, and no screen has to
+   remember to opt in. It rides in the title group of the light bars (a flex
+   row, so it lands beside the name) and at the end of the dark in-game bar,
+   whose title is a single ellipsed line with no room to share. */
+[data-env="dev"] .ag-topbar-title::after,
+[data-env="dev"] .ag-game-topbar::after {
+    content: "🚧 DEV";
+    flex: none;
+    padding: 3px 9px;
+    border-radius: 99px;
+    font: 800 10px/1.35 var(--ag-font);
+    letter-spacing: 0.06em;
+    background: color-mix(in oklch, var(--ag-gold) 26%, var(--ag-surface));
+    color: var(--ag-ink);
+}
+
+/* Same badge, recoloured for the dark bar it sits on — the same white scrim
+   `.ag-sync-pill` already uses there, rather than a third opacity. */
+[data-env="dev"] .ag-game-topbar::after {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--ag-on-dark);
+}
+
 .ag-back {
     width: 40px;
     height: 40px;
@@ -160,6 +186,15 @@ button {
     margin: 0;
 }
 
+/* Title over a run of sections that belong together (the home page's
+   release notes), a step up from the uppercase `.ag-section-label`s
+   underneath it. */
+.ag-block-title {
+    font: 800 18px/1.2 var(--ag-font);
+    color: var(--ag-ink);
+    margin: 0;
+}
+
 .ag-section-action {
     font: 800 12px var(--ag-font);
     color: var(--ag-terracotta);
@@ -183,15 +218,20 @@ button {
     line-height: 1;
 }
 
+/* An avatar carrying a badge on its corner — the profile picture picker's
+   camera button, an invite's game icon. Gives the badge something to hang off. */
+.ag-avatar-stack {
+    position: relative;
+    flex: none;
+    line-height: 0;
+}
+
 /* Your own avatar on the profile screen: the button that opens the
    picture picker, with a camera badge sitting on its edge. */
 .ag-avatar-edit {
-    position: relative;
-    flex: none;
     padding: 0;
     border: none;
     background: none;
-    line-height: 0;
     cursor: pointer;
 }
 .ag-avatar-edit:disabled { cursor: default; }
@@ -582,6 +622,9 @@ button {
     box-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
 .ag-toggle--on::after { transform: translateX(18px); }
+/* A toggle for something not built yet (a "coming soon" expansion) has to read
+   as unavailable, not merely as switched off. */
+.ag-toggle:disabled { opacity: 0.45; cursor: default; }
 
 /* Option rows (setup) */
 .ag-option-card { padding: 4px 16px; }
@@ -773,6 +816,7 @@ button {
     border-radius: 16px;
     padding: 12px 14px;
 }
+.ag-stat--button { font: inherit; text-align: left; cursor: pointer; }
 .ag-stat-num { font: 800 22px var(--ag-font); color: var(--ag-ink); }
 .ag-stat-label { font: 600 11px var(--ag-font); color: var(--ag-ink-softer); margin-top: 2px; }
 
@@ -812,17 +856,23 @@ button {
 .ag-result-dot--loss { background: var(--ag-terracotta); }
 .ag-result-dot--draw { background: var(--ag-gold); }
 
-/* Game-icon sub-badge on a recent-form chip */
-.ag-result-chip-icon {
+/* A game icon riding the lower-right corner of whatever it sits on — a
+   recent-form chip, an invite's avatar. Sized by the GameThumb inside it;
+   the inset and ring are per-site overrides. See ThumbBadge. */
+.ag-thumb-badge {
     position: absolute;
-    right: -4px;
-    bottom: -4px;
-    width: 14px;
-    height: 14px;
-    border-radius: 4px;
-    outline: 1.5px solid var(--ag-bg);
+    right: var(--ag-thumb-badge-inset, -3px);
+    bottom: var(--ag-thumb-badge-inset, -3px);
+    outline: var(--ag-thumb-badge-ring, 2px solid var(--ag-surface));
     overflow: hidden;
     display: block;
+    line-height: 0;
+}
+
+/* On a recent-form chip it sits tighter, and rings against the page. */
+.ag-result-chip-icon {
+    --ag-thumb-badge-inset: -4px;
+    --ag-thumb-badge-ring: 1.5px solid var(--ag-bg);
 }
 
 /* Same win/loss/draw palette, as text colour for the per-game W/L/D counts */
@@ -1117,6 +1167,7 @@ button {
     border-color: transparent;
     box-shadow: 0 0 0 2px var(--ag-gold);
 }
+.ag-score-pill--warn { box-shadow: inset 0 0 0 1.5px var(--ag-danger); }
 .ag-score-dot { width: 9px; height: 9px; flex: none; border-radius: 2px; }
 .ag-score-pill--me .ag-score-dot { outline: 1.5px solid var(--ag-on-dark); }
 .ag-score-main { flex: 1; min-width: 0; }
@@ -1157,6 +1208,9 @@ button {
     white-space: nowrap;
 }
 .ag-board-tag--dice { display: flex; align-items: center; gap: 6px; padding: 4px 11px 4px 6px; }
+/* The same pill as a tappable control in the opposite corner (Train Time's
+   zoom toggle), rather than a second dark-pill style. */
+.ag-board-tag--action { top: 12px; right: 12px; bottom: auto; left: auto; border: none; cursor: pointer; }
 .ag-board-overlay {
     position: absolute;
     inset: 6px;
@@ -2339,6 +2393,314 @@ button {
     background: oklch(0.86 0.035 82);
     box-shadow: inset 0 2px 12px rgba(107, 79, 36, 0.13), 0 4px 0 oklch(0.72 0.04 70);
 }
+
+/* ==========================================================================
+   Train Time — printed rail map on parchment, oxblood-and-brass chrome
+   ==========================================================================
+   Everything here is scoped to .ag-game--traintime, so the game re-tints the
+   shared chrome (top bar, scoreboard, stat row, buttons) rather than growing
+   private copies of it. The tokens are the game's own livery, per the design;
+   the structure underneath is the usual ag-* components. */
+.ag-game--traintime {
+    --tt-oxblood: oklch(0.28 0.06 25);
+    --tt-oxblood-2: oklch(0.34 0.055 25);
+    --tt-brass: oklch(0.72 0.12 78);
+    --tt-brass-deep: oklch(0.58 0.11 72);
+    --tt-brass-ring: oklch(0.85 0.1 82);
+    --tt-brass-tint: oklch(0.94 0.05 80);
+    --tt-parchment: oklch(0.92 0.022 85);
+    --tt-parchment-2: oklch(0.96 0.024 85);
+    --tt-panel: oklch(0.95 0.016 85);
+    --tt-panel-2: oklch(0.97 0.012 85);
+    --tt-line: oklch(0.87 0.025 80);
+    --tt-ink: oklch(0.27 0.03 40);
+    --tt-ink-soft: oklch(0.5 0.04 45);
+    --tt-ink-softer: oklch(0.55 0.03 45);
+    --tt-on-brass: #2a1a08;
+    --tt-good: oklch(0.45 0.11 145);
+    --tt-good-tint: oklch(0.94 0.05 150);
+    --tt-good-line: oklch(0.82 0.07 150);
+    --tt-bad: oklch(0.55 0.16 30);
+    background: var(--tt-panel);
+    color: var(--tt-ink);
+}
+
+/* ---- Shared chrome, re-tinted ---- */
+.ag-game--traintime .ag-game-topbar { background: var(--tt-oxblood); }
+.ag-game--traintime .ag-scorestrip { background: var(--tt-oxblood-2); }
+.ag-game--traintime .ag-score-pill { background: var(--tt-panel-2); border-color: transparent; min-width: 72px; }
+.ag-game--traintime .ag-score-pill--me {
+    background: var(--tt-brass);
+    color: var(--tt-on-brass);
+    box-shadow: 0 0 0 2px var(--tt-brass-ring);
+}
+.ag-game--traintime .ag-score-pill--warn { box-shadow: inset 0 0 0 1.5px var(--tt-bad); }
+.ag-game--traintime .ag-score-pill--warn .ag-score-sub { color: var(--tt-bad); font-weight: 700; }
+.ag-game--traintime .ag-btn--primary {
+    background: var(--tt-brass);
+    color: var(--tt-on-brass);
+    box-shadow: 0 3px 0 var(--tt-brass-deep);
+}
+.ag-game--traintime .ag-btn--primary:hover { color: var(--tt-on-brass); }
+.ag-game--traintime .ag-btn--light { background: var(--tt-panel-2); border-color: var(--tt-line); color: var(--tt-ink); }
+.ag-game--traintime .ag-btn--ghost { border-color: var(--tt-oxblood); color: var(--tt-oxblood); }
+.ag-game--traintime .ag-actionsheet,
+.ag-game--traintime .ag-hand,
+.ag-game--traintime .ag-log { background: var(--tt-panel); }
+.ag-game--traintime .ag-hand { border-top-color: var(--tt-line); }
+.ag-game--traintime .ag-hand-title,
+.ag-game--traintime .ag-hand-note { color: var(--tt-ink-soft); }
+.ag-game--traintime .ag-log-item { color: var(--tt-ink); border-color: var(--tt-line); }
+
+/* The objective strip reuses Stat/.ag-stat-row, flipped so the label reads as
+   a header above its number the way the design shows it. */
+.ag-game--traintime .ag-stat-row { padding: 0 12px 10px; background: var(--tt-oxblood-2); gap: 6px; }
+.ag-game--traintime .ag-stat {
+    display: flex;
+    flex-direction: column-reverse;
+    justify-content: flex-end;
+    background: var(--tt-panel-2);
+    border: none;
+    border-radius: 9px;
+    padding: 6px 9px 7px;
+}
+.ag-game--traintime .ag-stat-num { font-size: 15px; line-height: 1; }
+/* The tickets tile leads the strip and carries a bar per ticket, so it takes
+   the extra width the design gives it. */
+.ag-game--traintime .ag-stat-row > .ag-stat:first-child { flex: 1.5; }
+.ag-game--traintime .ag-stat-label {
+    font: 700 8px var(--ag-font);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--tt-ink-soft);
+    margin: 0 0 4px;
+}
+.ag-tt-stat-suffix { font: 600 8.5px var(--ag-font); color: var(--tt-ink-softer); margin-left: 3px; }
+
+/* The tickets tile: one bar per ticket, weighted by what it's worth, filled
+   in as the network reaches it. */
+.ag-tt-ticket-bars { display: flex; gap: 3px; }
+.ag-tt-ticket-bar { height: 8px; border-radius: 2px; background: var(--tt-line); }
+.ag-tt-ticket-bar--done { background: var(--tt-good); }
+
+/* ---- Destination Tickets ---- */
+.ag-tt-ticket-group + .ag-tt-ticket-group { margin-top: 12px; }
+.ag-tt-ticket-list { display: flex; flex-direction: column; gap: 7px; }
+.ag-tt-ticket {
+    position: relative;
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: var(--tt-panel-2);
+    border: 1.5px solid var(--tt-line);
+    border-radius: 11px;
+    padding: 9px 11px;
+    color: var(--tt-ink);
+    font: inherit;
+}
+button.ag-tt-ticket { cursor: pointer; padding-right: 34px; }
+.ag-tt-ticket--done { border-color: var(--tt-good-line); background: var(--tt-good-tint); }
+.ag-tt-ticket--on { border-color: var(--tt-brass); box-shadow: 0 0 0 2px var(--tt-brass-ring); }
+.ag-tt-ticket-route { display: flex; align-items: center; gap: 8px; }
+.ag-tt-ticket-city { font: 800 12px var(--ag-font); flex: none; }
+.ag-tt-ticket-line {
+    flex: 1;
+    height: 3px;
+    border-radius: 2px;
+    background: repeating-linear-gradient(90deg, var(--tt-ink-softer) 0 6px, transparent 6px 10px);
+}
+.ag-tt-ticket-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 5px; }
+.ag-tt-ticket-status { font: 700 9.5px var(--ag-font); color: var(--tt-ink-soft); }
+.ag-tt-ticket-status--done { color: var(--tt-good); }
+.ag-tt-ticket-points { font: 800 14px var(--ag-font); }
+.ag-tt-ticket-points--miss { color: var(--tt-bad); }
+.ag-tt-ticket-tick {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1.5px solid var(--tt-line);
+    background: var(--tt-panel);
+    color: var(--tt-on-brass);
+    font: 800 11px/17px var(--ag-font);
+    text-align: center;
+}
+.ag-tt-ticket--on .ag-tt-ticket-tick { background: var(--tt-brass); border-color: var(--tt-brass); }
+
+/* The ticket sheet's header, the sibling of .ag-tt-sheet-head's route block. */
+.ag-tt-sheet-title { font: 800 16px var(--ag-font); }
+.ag-tt-sheet-sub { font: 600 11px/1.45 var(--ag-font); opacity: 0.85; margin: 6px 0 0; }
+
+/* ---- The board: a printed map on parchment ---- */
+.ag-game--traintime .ag-board-area { background: var(--tt-parchment); padding: 12px 12px 10px; }
+.ag-tt-frame {
+    background: var(--tt-parchment-2);
+    border-radius: 16px;
+    padding: 6px;
+    box-shadow: inset 0 0 0 1.5px oklch(0.86 0.03 80), 0 3px 0 oklch(0.84 0.03 78);
+}
+.ag-game--traintime .ag-board-tag { background: var(--tt-brass); color: var(--tt-on-brass); }
+.ag-tt-scroll { overflow: auto; border-radius: 12px; -webkit-overflow-scrolling: touch; }
+.ag-tt-scroll svg { max-width: none; }
+
+/* Per-player segment counts under the map. */
+.ag-tt-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+.ag-tt-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--tt-panel-2);
+    border-radius: 99px;
+    padding: 3px 8px;
+    font: 700 9px var(--ag-font);
+}
+.ag-tt-legend-rail { width: 12px; height: 5px; border-radius: 1px; flex: none; }
+/* The narrow companion button beside a full-width CTA (Log, Back). */
+.ag-tt-side-btn { flex: none; width: 68px; padding-left: 0; padding-right: 0; }
+
+/* ---- Carriage cards: the face-up row, the hand, the payment swatches ---- */
+.ag-tt-market { display: flex; gap: 5px; }
+.ag-tt-card {
+    flex: 1;
+    height: 38px;
+    border: none;
+    border-radius: 6px;
+    display: flex;
+    align-items: flex-end;
+    padding: 3px;
+    font: 800 7px var(--ag-font);
+    cursor: pointer;
+}
+.ag-tt-card--engine { box-shadow: 0 0 0 2px var(--tt-brass); }
+.ag-tt-card:disabled { opacity: 0.42; cursor: default; }
+.ag-tt-card--deck {
+    flex: none;
+    width: 30px;
+    align-items: center;
+    justify-content: center;
+    background: oklch(0.35 0.05 30);
+    color: oklch(0.85 0.06 80);
+    font: 800 15px var(--ag-font);
+}
+.ag-tt-hand { display: flex; gap: 5px; flex-wrap: wrap; }
+.ag-tt-hand-card {
+    flex: 1 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: 7px;
+    font: 800 11px var(--ag-font);
+}
+.ag-tt-payable {
+    font: 800 8.5px var(--ag-font);
+    color: var(--tt-good);
+    background: var(--tt-good-tint);
+    border: 1px solid var(--tt-good-line);
+    border-radius: 99px;
+    padding: 2px 8px;
+}
+
+/* ---- The one-action picker ---- */
+.ag-tt-actions { display: flex; gap: 6px; }
+.ag-tt-action {
+    flex: 1;
+    background: var(--tt-panel-2);
+    border: 1px solid var(--tt-line);
+    border-radius: 10px;
+    padding: 7px 0;
+    text-align: center;
+    font: 800 8.5px var(--ag-font);
+    color: var(--tt-ink);
+    cursor: pointer;
+}
+.ag-tt-action--on {
+    background: var(--tt-brass-tint);
+    border-color: var(--tt-brass);
+    color: oklch(0.4 0.09 60);
+    box-shadow: 0 0 0 2px var(--tt-brass-ring);
+}
+.ag-tt-action:disabled { opacity: 0.45; cursor: default; }
+.ag-tt-action-glyph { font-size: 14px; }
+
+/* ---- The claim sheet ---- */
+.ag-tt-sheet-head { background: var(--tt-oxblood); color: oklch(0.96 0.015 85); padding: 18px 16px 22px; }
+.ag-tt-route { display: flex; align-items: center; gap: 10px; }
+.ag-tt-route-city { flex: none; text-align: center; font: 800 10px var(--ag-font); max-width: 78px; }
+.ag-tt-route-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fdfbf6;
+    border: 2.5px solid var(--tt-brass);
+    margin: 0 auto 5px;
+}
+.ag-tt-route-track { flex: 1; display: flex; gap: 4px; }
+.ag-tt-route-seg { flex: 1; height: 20px; border-radius: 3px; box-shadow: inset 0 0 0 1.5px #ffffff2e; }
+.ag-tt-route-tags { display: flex; justify-content: center; gap: 8px; margin-top: 14px; }
+.ag-tt-route-tag { background: #ffffff1c; border-radius: 8px; padding: 5px 10px; font: 700 9.5px var(--ag-font); }
+.ag-tt-route-tag--score { background: var(--tt-brass); color: var(--tt-on-brass); font-weight: 800; }
+
+.ag-tt-pay { display: flex; flex-direction: column; gap: 8px; }
+.ag-tt-pay-option {
+    width: 100%;
+    text-align: left;
+    background: var(--tt-panel-2);
+    border: 1px solid var(--tt-line);
+    border-radius: 12px;
+    padding: 10px 12px;
+    cursor: pointer;
+}
+.ag-tt-pay-option--on { border: 1.5px solid var(--tt-brass); box-shadow: 0 0 0 2px oklch(0.88 0.08 82); }
+.ag-tt-pay-option--short { opacity: 0.62; cursor: default; }
+.ag-tt-pay-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ag-tt-pay-cards { display: flex; gap: 4px; flex-wrap: wrap; }
+.ag-tt-pay-card { width: 22px; height: 30px; border-radius: 4px; flex: none; }
+.ag-tt-pay-card--gap { border: 1.5px dashed oklch(0.7 0.02 80); }
+.ag-tt-pay-check {
+    width: 20px;
+    height: 20px;
+    flex: none;
+    border-radius: 50%;
+    background: var(--tt-brass);
+    color: var(--tt-on-brass);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font: 800 11px var(--ag-font);
+}
+.ag-tt-pay-short { font: 800 9.5px var(--ag-font); color: var(--tt-bad); margin-left: auto; }
+.ag-tt-pay-note { font: 700 10px/1.4 var(--ag-font); color: var(--tt-ink-soft); margin: 7px 0 0; }
+
+.ag-tt-after {
+    margin-top: 14px;
+    background: var(--tt-panel-2);
+    border: 1px solid var(--tt-line);
+    border-radius: 12px;
+    padding: 11px 12px;
+}
+.ag-tt-after-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    font: 600 11px/1.3 var(--ag-font);
+    margin-top: 7px;
+}
+.ag-tt-after-row:first-of-type { margin-top: 0; }
+.ag-tt-after-value { font-weight: 800; }
+.ag-tt-after-to { color: var(--tt-good); }
+
+/* ---- The final score sheet (§7): .ag-list rows on the parchment panel, so
+   the only new thing is the total on the right. ---- */
+.ag-game--traintime .ag-list-row { border-bottom-color: var(--tt-line); }
+.ag-game--traintime .ag-list-row-title { color: var(--tt-ink); }
+.ag-game--traintime .ag-list-row-sub { color: var(--tt-ink-soft); }
+.ag-tt-score-total { flex: none; font: 800 17px var(--ag-font); color: var(--tt-ink); }
+.ag-tt-score-total--win { color: var(--tt-good); }
 
 /* ==========================================================================
    Solitaire — green-felt table for the board screen

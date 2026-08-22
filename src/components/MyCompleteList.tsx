@@ -2,13 +2,19 @@
 
 import type { ICompletedGame } from "@/app/api/game/mycompletelist/route";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import ListSection from "@/components/ui/ListSection";
 import { COMPLETED_GAME_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
 import { abandonedGameCopy } from "@/utils/ui/players";
 
-export default function MyCompleteList() {
+interface MyCompleteListProps {
+    /** Caps the rows shown and adds a "See all" link to the full page. Omit for the full, unlimited list. */
+    limit?: number;
+}
+
+export default function MyCompleteList({ limit }: MyCompleteListProps) {
     const { user } = useIsAuthorised();
     const router = useRouter();
     const { data, isLoading, isRefreshing } = useRefreshableData<{ gameList: ICompletedGame[] }>(
@@ -17,6 +23,7 @@ export default function MyCompleteList() {
     );
 
     const gameList = data?.gameList ?? [];
+    const visibleGames = limit ? gameList.slice(0, limit) : gameList;
 
     return (
         <ListSection
@@ -24,8 +31,11 @@ export default function MyCompleteList() {
             isLoading={isLoading}
             isRefreshing={isRefreshing}
             skeletonAvatar={false}
+            action={limit && gameList.length > limit
+                ? <Link href="/games/completed" className="ag-section-action">See all</Link>
+                : undefined}
         >
-            {gameList.map((game) => {
+            {visibleGames.map((game) => {
                 const iWon = game.winner && game.winner === user?.username;
                 return (
                     <button

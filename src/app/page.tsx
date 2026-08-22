@@ -10,6 +10,7 @@ import MyCompleteList from "@/components/MyCompleteList";
 import Avatar from "@/components/ui/Avatar";
 import Landing from "@/components/Landing";
 import Brand from "@/components/ui/Brand";
+import WhatsNew from "@/components/ui/WhatsNew";
 import Link from "next/link";
 import { profileImageUrl } from "@/utils/ui/avatar";
 
@@ -44,7 +45,7 @@ export default function Home() {
       <IncomingInviteList />
       <TheirTurnList />
       <OutgoingInviteList />
-      <MyCompleteList />
+      <MyCompleteList limit={10} />
 
       <div className="ag-section ag-btn-row" style={{ marginTop: 8 }}>
         <Link href="/newgame" aria-label="New game" className="ag-cta ag-cta--dark">
@@ -60,6 +61,8 @@ export default function Home() {
           </div>
         </Link>
       </div>
+
+      <WhatsNew />
     </main>
   );
 }
