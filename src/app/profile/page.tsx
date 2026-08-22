@@ -15,6 +15,7 @@ import { FRIEND_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { useNowToTheMinute } from "@/utils/hooks/useNow";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
+import { useProfilePicture } from "@/utils/hooks/useProfilePicture";
 import { displayName } from "@/utils/ui/players";
 import { profileImageUrl } from "@/utils/ui/avatar";
 import type { IGameStats, IRecentMatch } from "@/app/api/stats/route";
@@ -38,6 +39,7 @@ export default function Profile() {
     const router = useRouter();
     const { showToast } = useToast();
     const now = useNowToTheMinute();
+    const picture = useProfilePicture();
 
     const [inviteUsername, setInviteUsername] = useState("");
     const [isSending, setIsSending] = useState(false);
@@ -124,8 +126,26 @@ export default function Profile() {
                 </div>
             </div>
 
-            {/* Identity */}
-            <ProfileIdentity name={ownDisplayName} username={user?.username} imageUrl={profileImageUrl(user)} fullName={fullName} />
+            {/* Identity — your own avatar is the way in to changing your picture */}
+            <ProfileIdentity
+                name={ownDisplayName}
+                username={user?.username}
+                imageUrl={profileImageUrl(user)}
+                fullName={fullName}
+                onAvatarClick={picture.openPicker}
+                avatarBusy={picture.isSaving}
+                action={picture.hasPicture && (
+                    <button
+                        type="button"
+                        className="ag-link-muted"
+                        onClick={picture.removePicture}
+                        disabled={picture.isSaving}
+                    >
+                        Remove photo
+                    </button>
+                )}
+            />
+            {picture.fileInput}
 
             {/* Honest stats */}
             <div className="ag-section">
