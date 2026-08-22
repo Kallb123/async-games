@@ -105,6 +105,32 @@ button {
     text-decoration: none;
 }
 
+/* ---- Dev-deployment marker ----
+   The root layout stamps `data-env="dev"` on <html> everywhere except the
+   production deployment, and the badge hangs off that — so every top bar is
+   marked, including the ones a future screen adds, and no screen has to
+   remember to opt in. It rides in the title group of the light bars (a flex
+   row, so it lands beside the name) and at the end of the dark in-game bar,
+   whose title is a single ellipsed line with no room to share. */
+[data-env="dev"] .ag-topbar-title::after,
+[data-env="dev"] .ag-game-topbar::after {
+    content: "🚧 DEV";
+    flex: none;
+    padding: 3px 9px;
+    border-radius: 99px;
+    font: 800 10px/1.35 var(--ag-font);
+    letter-spacing: 0.06em;
+    background: color-mix(in oklch, var(--ag-gold) 26%, var(--ag-surface));
+    color: var(--ag-ink);
+}
+
+/* Same badge, recoloured for the dark bar it sits on — the same white scrim
+   `.ag-sync-pill` already uses there, rather than a third opacity. */
+[data-env="dev"] .ag-game-topbar::after {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--ag-on-dark);
+}
+
 .ag-back {
     width: 40px;
     height: 40px;
