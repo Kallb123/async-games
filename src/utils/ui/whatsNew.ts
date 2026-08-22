@@ -39,6 +39,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Invites show which game you've been asked to play",
+                detail: "Each invite now carries the game's icon next to the sender, so you can tell them apart at a glance.",
+            },
+            {
                 title: "Your finished games have their own page",
                 detail: "The home screen keeps the ten most recent; the rest are a tap away instead of buried.",
             },
@@ -53,10 +57,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Games no longer stall forever",
                 detail: "A game where someone keeps missing their turn is abandoned and cleared off everyone's list.",
-            },
-            {
-                title: "Snakes and Ladders got its board drawn",
-                detail: "New hand-drawn art, and rolling a six now earns you another go.",
             },
         ],
     },

@@ -5,7 +5,7 @@ import Link from "next/link";
 import Skeleton from "@/components/ui/Skeleton";
 import Refreshable from "@/components/ui/Refreshable";
 import MatchResultPopup from "@/components/ui/MatchResultPopup";
-import GameThumb from "@/components/ui/GameThumb";
+import ThumbBadge from "@/components/ui/ThumbBadge";
 import { GAME_META } from "@/utils/ui/games";
 import type { IRecentMatch, MatchOutcome } from "@/app/api/stats/route";
 import moment from 'moment';
@@ -60,11 +60,7 @@ export default function RecentFormSection({ matches, isLoading, isRefreshing = f
                                     <span className={`ag-result-dot ag-result-dot--${match.outcome}`}>
                                         {OUTCOME_LABEL[match.outcome]}
                                     </span>
-                                    {meta && (
-                                        <span className="ag-result-chip-icon">
-                                            <GameThumb meta={meta} size={14} radius={4} />
-                                        </span>
-                                    )}
+                                    {meta && <ThumbBadge meta={meta} size={14} radius={4} className="ag-result-chip-icon" />}
                                 </button>
                             );
                         })}
