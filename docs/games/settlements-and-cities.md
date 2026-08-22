@@ -442,35 +442,72 @@ path (`GameData.ts`), `notificationContent.ts` for all push copy,
 `useNowToTheMinute` for countdowns, and the `ag-trade-*` picker already in the
 maritime modal (§10.12).
 
-### 10.3 The engine change: one opt-in flag, honoured in two places
+### 10.3 The engine change: an off-turn escape hatch
 
-**Recommendation: add one optional flag to `IGameCommand`.** This is the whole
-architectural change.
+**Recommendation: let a command declare that it may be played off-turn — but
+decide that server-side, never from the request body.** This is the whole
+architectural change, and the "server-side" part is not a detail.
+
+🪨 **The obvious version of this is a security hole.** A plain
+`offTurn?: boolean` field on `IGameCommand` would be *client-controlled*.
+`Serialisable.ts`'s reviver is:
 
 ```ts
-// src/utils/apiModels/gameCommand.ts
-interface IGameCommand {
-    // …existing members…
-
-    /** Opt-in: this command may be played by a player whose turn it isn't.
-     *  Undefined everywhere else, so every existing command keeps today's
-     *  behaviour with no edit. */
-    readonly offTurn?: boolean;
-}
+Object.assign(new registry[v.className](), v)
 ```
 
+Every own enumerable property in the posted JSON overwrites the constructed
+instance, and TypeScript's `readonly` is compile-time only. So a client posting
+`{"className": "SACRollDice", …, "offTurn": true}` would get past the guard and
+**roll the dice on someone else's turn.** One narrow trade hole becomes a
+general turn-order bypass.
+
+`className` itself is safe — the reviver picks the class *by* `v.className` and
+then assigns the same value back, so it always matches the class actually
+constructed. That gives the fix: derive the flag from the class, in the route.
+
 ```ts
-// src/app/api/game/command/route.ts — replacing the single currentTurn guard
+// src/app/api/game/command/route.ts — server-owned, not body-owned
+const OFF_TURN_COMMANDS = new Set(['SACAcceptTrade']);
+const offTurn = OFF_TURN_COMMANDS.has(commandRequest.className);
+```
+
+The route already hand-maintains a per-class list (the `registration` array), so
+one more server-side set is in keeping with how this file works. A prototype
+method (`CanPlayOffTurn()`) also fails closed — JSON can't carry a function, so
+a spoofed value shadows it as a non-callable own property and the call throws —
+but it throws a 500 where the allowlist gives a clean 400. Prefer the allowlist.
+
+`replay.ts` (§10.4) reads the flag from persisted history rather than a request,
+so either form is safe there; the simplest option is for it to consult the same
+exported set.
+
+The guard block then becomes:
+
+```ts
 if (!gameData.userIdList.includes(userId)) { /* 403 not a player */ }
-if (userId !== gameData.currentTurn && !commandRequest.offTurn) { /* 400 not your turn */ }
+if (gameData.complete)                     { /* 400 game is already complete */ }
+if (userId !== gameData.currentTurn && !offTurn) { /* 400 not your turn */ }
+// the existing sender-spoof guard stays exactly as it is
+if (userId !== commandRequest.senderId)    { /* 400 can't act for someone else */ }
 ```
 
-Note the membership check is *new* — today the `currentTurn` guard implies it.
-Both `/api/game/nudge` and the reaction route already do exactly this check, so
-the shape is established.
+Two of those lines are new, and both matter:
 
-Four invariants keep this from destabilising the turn machinery. They belong in
-the route, not in each command, so no future off-turn command can forget them:
+* **The membership check.** Today the `currentTurn` guard implies it. Both
+  `/api/game/nudge` and the reaction route already do this check explicitly, so
+  the shape is established.
+* 🪨 **The `complete` check.** The command route **does not check
+  `gameData.complete` today** — and gets away with it only because
+  `CheckGameOver` sets `currentTurn = ''`, so the turn guard rejects everything
+  on a finished game. An off-turn command bypasses exactly that guard, and
+  `sacCanBuildOrTrade` only tests `phase === 'main'` and `hasRolled`, both still
+  true after a win. Without this line, resources stay tradeable on a completed
+  game and the route would re-enter its game-over branch and re-fan the win/lose
+  pushes.
+
+Four invariants keep the rest of the turn machinery intact. They belong in the
+route, not in each command, so no future off-turn command can forget them:
 
 1. **An off-turn command can never end a turn.** Force `outcome.turnOver = false`
    for off-turn commands before `CheckEndTurn` runs — otherwise accepting a
@@ -483,8 +520,24 @@ the route, not in each command, so no future off-turn command can forget them:
 4. **`CheckGameOver` still runs.** It is a no-op for trades (resources aren't
    VP), but a uniform pipeline is cheaper than a special case.
 
-The engine stays game-agnostic — the route still never branches on game type,
-and `Execute` still does all the real validation.
+#### The second contract change: telling the route who to notify
+
+`ICommandOutcome` is `{ validMove, turnOver }` and nothing else, and the route's
+`after()` push blocks are hard-coded to `YourTurn` / `GameOver`. So §10.11's
+"notify the players who could fill this offer" currently has **nowhere legal to
+live** — it needs SAC's resource model, and the route must not branch on game
+type. Both statements can't hold as written. Pick one and say so:
+
+* **Extend `ICommandOutcome`** with an optional
+  `notify?: { userIds: string[]; event: string }` that `Execute` populates and
+  the route fans out generically, with the copy built in
+  `notificationContent.ts` keyed off `event`. Additive; every existing command
+  ignores it; the engine stays game-agnostic. **This is the one that fits.**
+* Or drop the eligibility filter to "everyone else in the game", which needs no
+  contract change at all and is a perfectly good Phase 1.
+
+This is the **second-largest architectural change in the feature**, after the
+off-turn flag itself — not a notifications detail.
 
 **Alternatives considered and rejected:**
 
@@ -526,8 +579,10 @@ one hard rule attached:
 > 🪨 **`Date.now()` must never appear inside a trade command's `Execute`.** This
 > is the same rule that forced `recordedRoll1/2` and the whole `SACRandomLog`
 > class to exist. Anything time-dependent must be evaluated against the
-> command's own recorded `timestamp` field, which replays identically. See
-> §10.7 — this is what makes deadlines possible without a cron.
+> command's own recorded `timestamp` field, which replays identically — **and
+> that field is only trustworthy once the route stamps it server-side**, which
+> it does not do today. See §10.7 for both halves; together they are what make
+> deadlines possible without a cron.
 
 ### 10.5 Three shapes of offer
 
@@ -553,7 +608,7 @@ game is a coin flip. **The standing want-ad is the shape most likely to make
 async trading actually happen.** It is worth building; it just should not be
 built first, and §10.7–§10.8 price it honestly.
 
-Shape for the full version (the turn-scoped cut is this with `expiresAt: null`,
+Shape for the full version (the turn-scoped cut is this with `expiresIn: null`,
 `declinedBy` dropped, and a single slot instead of an array):
 
 ```ts
@@ -562,14 +617,15 @@ interface ISACTradeOffer {
     proposerId: string;                            // Clerk userId
     give: Record<SAC_Resource, number>;            // what the proposer hands over
     want: Record<SAC_Resource, number>;            // what they want back
-    createdAt: string;                             // the proposing command's own timestamp
-    expiresAt: string | null;                      // ISO; null = no deadline
+    createdAt: string;                             // the proposing command's server-stamped timestamp
+    expiresIn: string | null;                      // a TIMER_MS bucket key ('3h'); null = no deadline
     endsWithTurn: boolean;                         // auto-void at end of proposer's turn
     declinedBy: string[];                          // stops a declined offer nagging
 }
 ```
 
-Typed fields only — see §10.9.
+Typed fields only (§10.9), and note the deadline is stored as a **bucket key,
+not an absolute time** — §10.7 explains why that matters.
 
 ### 10.6 Replacing live negotiation
 
@@ -622,24 +678,59 @@ scheduler. A trade window shorter than 15 minutes can't be honestly enforced by
 it, and one longer than 15 minutes doesn't need it. Wrong tool, and every added
 sweep multiplies that job's per-run cost.
 
-Enforce expiry in the two places that actually matter:
+Instead, make a deadline **deterministic and unspoofable** by construction, then
+enforce it lazily.
 
-1. **In the response.** `gameStateToResponse` filters out offers past
-   `expiresAt`. Wall-clock reads are fine here — this path is never replayed.
-2. **In `SACAcceptTrade.Execute`.** Compare the offer's recorded `expiresAt`
-   against **the accepting command's own `timestamp`**, never `Date.now()`. Both
-   values are persisted in `commandHistory`, so the comparison produces the same
-   answer on the thousandth replay as it did live.
+**Store a bucket key, not an absolute time.** The offer records something like
+`expiresIn: '3h'` — a key into `TurnTimer`'s existing `TIMER_MS` — and the
+deadline is *derived* as `createdAt + TIMER_MS[expiresIn]`. This reuses the
+buckets rather than paraphrasing them, and it removes the proposer's ability to
+pick their own absolute deadline.
 
-That's the whole mechanism: correctness doesn't depend on any job running, and
-an expired offer simply stops being acceptable and stops being rendered. A tidy
-sweep could delete stale rows later if they ever accumulate, but it would be
+🪨 **`createdAt` must be server-stamped, and today it isn't.** A command's
+`timestamp` is a class field initialiser — `new Date().toISOString()` — that
+runs **in the browser**; `useSubmitCommand` overwrites only `gameId`,
+`senderId` and `senderUsername`, and the route never restamps it. So a client
+can backdate a command and accept an offer that expired yesterday, and clock
+skew does the same thing by accident. Nothing validates against `timestamp`
+today, which is precisely why trading is the first feature that makes it
+load-bearing. The fix is one line in the route, before `Execute`:
+
+```ts
+commandRequest.timestamp = new Date().toISOString();
+```
+
+It is safe for every existing game, and it makes the stored timestamp both
+authoritative *and* replayable.
+
+Then enforce expiry in the two places that matter:
+
+1. **In `SACAcceptTrade.Execute`** — compare the derived deadline against **the
+   accepting command's own (now server-stamped) `timestamp`**, never
+   `Date.now()`. Both values are persisted in `commandHistory`, so the
+   comparison gives the same answer on the thousandth replay as it did live.
+2. **On the way to the client** — hide offers that have already lapsed.
+
+🪨 **The obvious home for that second filter is the wrong one.**
+`gameStateToResponse` looks live-only but **is the replay adapter's
+`toResponseState`** — `replay.ts` imports it as
+`settlementsAndCitiesStateToModel` and runs it on *every replayed snapshot*. A
+wall-clock read inside it makes recap output depend on when the recap is viewed.
+Put the filter in `CreateDataResponse` instead (a Mongoose schema method, so
+genuinely live-only), or give `gameStateToResponse` an optional `now?: number`
+parameter where `undefined` means "don't filter" — the same convention
+`formatRemainingTimeShort(…, now)` already established for not reading the clock
+implicitly.
+
+That's the whole mechanism: correctness never depends on a job running, and an
+expired offer simply stops being acceptable and stops being rendered. A tidy
+sweep could delete stale rows later if they accumulate, but it would be
 housekeeping, not enforcement.
 
-Deadline options should reuse `TurnTimer`'s existing `TIMER_MS` buckets, trimmed
-to what suits an offer (`30m`, `1h`, `3h`, `6h`, `1d`) plus "no deadline". The
-countdown label is `formatRemainingTimeShort` fed by `useNowToTheMinute` —
-`TheirTurnList` is the working example.
+Offer buckets should be `TIMER_MS`'s, trimmed to what suits an offer (`30m`,
+`1h`, `3h`, `6h`, `1d`) plus "no deadline". The countdown label is
+`formatRemainingTimeShort` fed by `useNowToTheMinute` — `TheirTurnList` is the
+working example.
 
 ### 10.8 Settlement rules — and the deliberate house rule
 
@@ -662,7 +753,12 @@ alternative is a feature nobody gets to use, with two guardrails:
 * **No gifts.** Both `give` and `want` must be non-empty. This is Catan's actual
   rule and it is a one-line validation.
 * **Every settled trade is written to `gameState.history` in full**, so the
-  table can see who is feeding whom.
+  table can see who is feeding whom. Two conventions to follow there: SAC
+  commands **`unshift`** (the log is newest-first — push instead and it
+  inverts), and `replaceHistoryUserIds` substitutes user IDs for usernames on
+  the way out. That second one is a free win: embed **both parties' user IDs**
+  in the line and both get correct display names, which beats `senderUsername`
+  — client-supplied, and it only names one side of a two-party event.
 
 Two balance risks, documented rather than pre-solved:
 
@@ -680,7 +776,7 @@ One more guard, whichever rule is chosen: trading should be blocked while
 trading mid-robber; the same must hold for everyone else, or the robber's
 discard-and-steal can be traded around while it is resolving.
 
-### 10.9 State plumbing — three lists that must all learn the new field
+### 10.9 State plumbing — the checklist nothing enforces
 
 `specificGameState` is a **typed Mongoose sub-schema** (`makeSACStateSchemaDef`),
 not a `Mixed` blob. Two consequences worth stating loudly:
@@ -695,19 +791,34 @@ not a `Mixed` blob. Two consequences worth stating loudly:
   defaulting to `null`). The command itself is already covered — `commandHistory`
   *is* `Mixed` and the route already calls `markModified` for it.
 
-Three parallel lists must all be updated, and **nothing enforces it**:
+🪨 **Adding a field to SAC state means editing four places, and no test catches
+a miss.** This is the same class of failure as §10.4 — recap silently diverges
+from the live game — so treat it as a checklist, not prose. The Special Build
+fields did exactly this edit; follow them as the worked example.
 
-1. `makeSACStateSchemaDef()` — or the field never persists.
-2. `cloneSACState()` — or recap replays from a state the live game never had.
-3. `gameStateToResponse()` + `ISACSpecificGameStateResponse` in `apiModels.ts` —
-   or the UI can't see the offer.
+- [ ] **`makeSACStateSchemaDef()`** — or the field never persists.
+- [ ] **`cloneSACState()`** — or recap replays from a state the live game never
+      had. There is no completeness test for this function.
+- [ ] **`gameStateToResponse()` + `ISACSpecificGameStateResponse`** — or the UI
+      can't see the offer.
+- [ ] **The `registration` array** in the command route, for each new command,
+      alongside `@serializable export class`.
+      `serializableRegistry.test.ts` matches `@serializable`, `export`, `class`
+      separated by whitespace only — so a class declared without `export`, or
+      with a comment between the decorator and the class, is invisible to that
+      guard.
 
-The Special Build fields did exactly this triple edit; treat it as the
-checklist. Plus the registry: each new command needs `@serializable export class`
-*and* an entry in the `registration` array in the command route.
-`serializableRegistry.test.ts` matches the literal pattern
-`@serializable export class`, so a class declared without `export`, or with a
-comment between the decorator and the class, is invisible to that guard.
+👀 **The response speaks usernames; the offer speaks user IDs.**
+`ISACSpecificGameStateResponse.playerStates` is keyed by **username**, and
+`gameStateToResponse` already maps IDs→usernames for `longestRoadOwner` /
+`largestArmyOwner`. The offer holds `proposerId` (a Clerk user ID), so the
+response shape must carry the proposer as a **username** (or both), or the offer
+row can't render a name and `playerByUserId` gets reinvented in the UI.
+
+Finally, both new commands need the conventions every other SAC command follows:
+`myString()` — which is not cosmetic, it feeds `ITurnSnapshot.command.summary`
+and the route's request log — and `Undo()`, which is `commandHistory.pop()`
+everywhere in this game.
 
 ### 10.10 Concurrency and recap
 
@@ -735,6 +846,12 @@ case to the switch, for the *accept* only (offers and declines are noise):
 for both sides and so a reaction can be dropped on it. No new adapter, no new
 event plumbing.
 
+🪨 **The clear-first rule above collides with this one.** `toEvents` receives
+`prev` / `next` *response* snapshots, and after a clear-first `Execute` the
+offer is already gone from `nextState`. **The recap case must read the offer's
+details out of `prevState`.** Two individually correct rules that silently
+produce a broken recap event if their interaction goes unnoticed.
+
 ### 10.11 Notifications
 
 `ARCHITECTURE.md` §8 is explicit: **no silent data-only pushes** — WebKit
@@ -754,14 +871,19 @@ accident.
 * **A new `trade` notification channel**, so trading pushes can be turned off
   without losing turn pushes. Do *not* reuse the reserved `chat` channel — its
   settings label says "When a player sends you a message". Note that adding a
-  channel is currently a **four-place edit** in `notificationPreferences.ts` —
-  `ALL_NOTIFICATION_CHANNELS`, `DEFAULT_PREFERENCES.channels`, the per-key merge
-  inside `getNotificationPreferences`, and the `NOTIFICATION_CHANNELS` label
-  array — because the channel list is spelled out four times. An existing smell
-  worth tidying, not a blocker for this feature.
+  channel is a **four-place edit** in `notificationPreferences.ts` —
+  `ALL_NOTIFICATION_CHANNELS`, `DEFAULT_PREFERENCES.channels`, the hand-written
+  per-key fallback mapping inside `getNotificationPreferences`, and the
+  `NOTIFICATION_CHANNELS` label array — because the channel list is spelled out
+  four times. Nothing else needs touching: the preferences route iterates
+  `ALL_NOTIFICATION_CHANNELS` and the settings screen iterates
+  `NOTIFICATION_CHANNELS`. An existing smell worth tidying, not a blocker.
 * **Only notify players who could actually fill the offer** — holding the wanted
   resources, and not already dismissed. An open offer in a 6-player game must
-  not be five pushes.
+  not be five pushes. This needs the `ICommandOutcome.notify` contract change in
+  §10.3; it cannot be done from the route without breaking the game-agnostic
+  rule. Eligibility is evaluated **once, at proposal, and never re-evaluated**
+  (see §10.14).
 * **Rate-limit per proposer per turn** (three offers is plenty), so trading
   can't become a nuisance vector — the same concern `/api/game/nudge` lives
   under.
@@ -790,12 +912,14 @@ plain counts. One component, two callers. It stays in the game folder, **not**
 `components/ui/`: five named resources are SAC domain, not a cross-game
 primitive.
 
-While in there, fix duplication a third copy would entrench: `RESOURCES` and
-`RESOURCE_EMOJI` are declared **twice** — in `SettlementsAndCitiesActions.tsx`
-and again in `src/app/games/settlementsandcities/[gameid]/page.tsx` — and the
-trade panel would need them from a third file. Along with the `costText` /
-`shortfall` helpers, they belong in `src/games/SettlementsAndCities/ui.ts`,
-which already holds `SAC_DEV_CARD_META` for exactly this reason.
+While in there, fix duplication this feature would otherwise deepen:
+`RESOURCE_EMOJI` is already declared **three times** — in
+`SettlementsAndCitiesActions.tsx`, in
+`src/app/games/settlementsandcities/[gameid]/page.tsx`, and again in
+`SettlementsAndCitiesBoard.tsx` — and the trade panel would be the fourth.
+Along with `RESOURCES` and the `costText` / `shortfall` helpers, it belongs in
+`src/games/SettlementsAndCities/ui.ts`, which already holds `SAC_DEV_CARD_META`
+for exactly this reason.
 
 The rest of the surface should invent nothing:
 
@@ -817,6 +941,11 @@ The rest of the surface should invent nothing:
   CSS.
 * **Optimistic dismiss** — `TheirTurnList`'s pattern: local set of acted-on ids,
   disable the control, toast on success, roll back on failure.
+* **Where the "Offer a trade" button goes** — the actions sheet already has an
+  `ag-action-grid` holding exactly one button ("⚖️ Trade with the bank"), and
+  that class is `display:flex; gap:8px` with `> * { flex: 1 }`. It is literally
+  built for a second button beside it. The alternative someone will otherwise
+  reach for is a new full-width row.
 
 **Net new CSS should be zero.** A new `ag-trade-offer-*` block in the theme file
 is a sign something is being rebuilt.
@@ -859,9 +988,37 @@ Named explicitly so they don't creep in:
 
 | Phase | Scope | Why this order |
 | --- | --- | --- |
-| **1 — the hole in the wall** | `offTurn` flag + the route guard + the `replay.ts` one-liner. `SACProposeTrade` (on-turn) and `SACAcceptTrade` (`offTurn`). One nullable turn-scoped `openTrade`, cleared in `sacAdvanceMainTurn`. `SACResourcePicker` extracted; the small responder panel. Decline is client-side. One `TradeOffered` / `TradeAccepted` push pair and the `trade` channel. One recap case. | Proves the engine change end-to-end on the narrowest case. No timers, no cron, no new collection, no new CSS. Everything downstream is additive. |
-| **2 — the standing want-ad** | Offers become a list and outlive the turn: `SACCancelTrade`, persisted `declinedBy`, re-validation, and the §10.8 settlement-rule decision. | The idea most likely to make async trading actually *happen*. Deliberately second, because it is the one that changes the rules. |
-| **3 — deadlines and polish** | `expiresAt` with lazy expiry (§10.7), the live countdown, real counter-offers, offers surfaced on the home dashboard. | Pure polish on a working market. Safe to defer; safe to drop. |
+| **0 — pure refactor** | Extract `SACResourcePicker` from the maritime modal; move `RESOURCE_EMOJI` / `RESOURCES` / `costText` / `shortfall` into `ui.ts`. No behaviour change. | Lands the reuse work on a clean diff, so the risky engine change reviews on its own. |
+| **1 — the hole in the wall** | The server-side off-turn allowlist, the three-line route guard, the `timestamp` restamp, and the `replay.ts` one-liner. `SACProposeTrade` (on-turn) and `SACAcceptTrade` (off-turn). One nullable turn-scoped `openTrade`, cleared in `sacAdvanceMainTurn`. The small responder panel. Decline is client-side. One `TradeOffered` / `TradeAccepted` push pair and the `trade` channel. One recap case. | Proves the engine change end-to-end on the narrowest case. No timers, no cron, no new collection, no new CSS. |
+| **2 — the standing want-ad** | Offers become a list and outlive the turn, **with deadlines from the start** (§10.7): the bucket field, lazy expiry, persisted `declinedBy`, re-validation. Optionally `SACCancelTrade`. | The shape most likely to make async trading actually happen. **Prerequisite:** the §10.8 settlement-rule decision is a rules/balance call and must be settled *before* this phase starts, not inside it. |
+| **3 — polish** | The live countdown label, real counter-offers, offers surfaced on the home dashboard. | Genuine polish on a working market. Safe to defer. |
+
+Two notes on why deadlines sit in Phase 2 rather than Phase 3, against the
+instinct to defer them:
+
+* **Deadlines are cheaper than cancellation.** Lazy expiry (§10.7) is a derived
+  comparison; `SACCancelTrade` is a whole command plus a UI affordance. Deadlines
+  are also the natural garbage collector for a want-ads board.
+* **Standing offers without expiry is the worst intermediate state.** Offers
+  would live forever, exiting only via a cancel the proposer has to remember to
+  send — accumulating in `specificGameState`, re-validated against hands that
+  emptied days ago, and still cluttering the responder panel.
+
+Two things Phase 2 inherits that are easy to miss when scoping it:
+
+* **The rate limit loses its anchor.** §10.11's "per proposer per turn" stops
+  meaning anything once offers outlive turns — a proposer may not have a turn
+  for a day. Re-specify it as per-game or per-time-window.
+* **Eligibility is evaluated once, at proposal, and never re-evaluated.** On a
+  standing offer, players *become* able to fill it later, and "re-notify when
+  they can" needs a hook on every resource change and is a spam vector. State
+  the rule rather than leaving it to be discovered.
+
+And one thing Phase 1 should say out loud so nobody "fixes" it later: **a
+client-side decline is lost on refresh and on a second device, and that is
+acceptable for an offer that dies at the end of the turn.** Without that
+sentence, someone will persist `declinedBy` in Phase 1 and drag Phase 2's state
+model forward.
 
 Phase 1 carries all the architectural risk. Phases 2 and 3 are additive and each
 is independently shippable.
@@ -872,8 +1029,9 @@ is independently shippable.
    `expansions.ts`, so a group can play the strict printed rules? Cheap at
    creation time, awkward to retrofit — worth deciding before Phase 1 persists
    its first field.
-2. **Open market or anchored settlement (§10.8)?** Recommended open; only needs
-   answering at Phase 2.
+2. **Open market or anchored settlement (§10.8)?** Recommended open. This is a
+   rules/balance call, not an implementation detail — it must be settled
+   *before* Phase 2 starts rather than decided inside it.
 3. **Should an offer survive its proposer's turn by default?** The default
    matters more than it looks: `true` is faithful, `false` is what makes async
    trading work.
