@@ -66,15 +66,21 @@ abandons it — and it burns a real player's game, not just the guest's.
 So an account-less player needs *some* durable handle. Ranked by how little we
 ask of them:
 
-1. **A signed session cookie** (long-lived, `httpOnly`) — costs the guest
-   nothing, survives tab closes, dies with the browser profile or a private
-   window. Enough for "come back to the same device".
+1. **A long-lived session cookie** — costs the guest nothing, survives tab
+   closes, dies with the browser profile or a private window. Enough for "come
+   back to the same device". Under the recommended option below this is *not*
+   new work: it is the Clerk session the app already runs on. Only Option B
+   has to build one.
 2. **Web push permission** — works per-browser with no account at all, which
    is the interesting part: a guest *can* be notified it's their turn. Costs
    one permission prompt, and iOS requires the PWA be installed first, so it
    will not be there for everyone.
-3. **A resume link** the guest can save/share to themselves (`/resume/<token>`)
-   — no prompt, works cross-device, but relies on them actually saving it.
+3. **A resume link** the guest can save/share to themselves — no prompt, works
+   cross-device, but relies on them actually saving it. Again not new work
+   under Option A: a Clerk sign-in token *is* a resume link. A bespoke
+   `/resume/<token>` route is Option B's baggage, and building one beside a
+   Clerk session would be the same "second identity system" mistake Option B
+   is marked down for.
 4. **An email address, no password** — one field, magic-link resume. This is
    the point where "account-less" starts becoming "an account", and it should
    be the *optional upsell after the first turn*, not the entry fee.
@@ -94,9 +100,14 @@ Create a real Clerk user server-side when the guest joins
 (`clerkClient().users.createUser()`), give them a session with a sign-in
 token, and mark them `publicMetadata.guest = true`.
 
-- **Choke points touched: 0.** Every one of the five above keeps working
-  unchanged, because the guest *is* a Clerk user. Devices, preferences,
-  usernames, `auth()` — all free.
+- **Choke points touched: one — the access gate.** Four of the five keep
+  working unchanged, because the guest *is* a Clerk user: devices,
+  preferences, usernames and `auth()` all come free. The exception is #5: a
+  guest is a Clerk user who has *not* passed `publicMetadata.unlocked`, so
+  `useIsAuthorised` (`src/utils/hooks/useAuthGuard.ts`) and the server-side
+  check in `src/app/api/users/route.ts` need to accept `guest === true` as a
+  second way to be authorised. That is a one-line predicate change, not a
+  system — see §5.
 - **Claiming is trivial and lossless.** "Keep this game" = adding an email and
   password to the user that already exists. The `userId` never changes, so the
   guest's games, `GameResult` rows and friendships survive the upgrade
@@ -118,9 +129,11 @@ id or a guest id.
 
 - **Choke points touched: all five.** `auth()` calls become `resolveViewer()`;
   `clerk.ts` gains a merge step that fills guest names from Mongo;
-  `sendPushToUsers` stops taking Clerk `User[]` and takes a
-  `PushRecipient { id, tokens, prefs }` that both kinds of player can satisfy;
-  the unlock gate needs a guest branch.
+  `sendPushToUsers` stops taking Clerk `User[]` and takes the
+  `PushTarget { userId, token }` it already builds internally
+  (`src/utils/firebase/revokedTokens.ts`) — the seam is "accept targets
+  instead of deriving them from `User[]`", not a new recipient type; and the
+  unlock gate needs a guest branch.
 - **Upside:** no Clerk bill for guests, and total control over lifecycle.
 - **Downside:** it creates a second identity system, and every future feature
   has to remember both. Claiming a guest account becomes a genuine data
@@ -158,9 +171,17 @@ What an invitation lacks is a **code** and the idea of an **empty seat**:
 ```ts
 // added to IInvitationData
 joinCode?: string;     // "PLUM" — present only on open lobbies
-openSeats?: number;    // seats anyone with the code may claim
 expiresAt?: string;    // ISO; abandoned lobbies self-destruct
 ```
+
+Note what is *not* there: an `openSeats` counter. An open seat already has a
+representation — an `IUserIdAcceptance` entry with a placeholder id and
+`inviteAccepted: false`. A counter that must be decremented in lockstep with
+an array append is a second source of truth for the same fact, and it would
+also make open seats invisible to the screens that render an invitation's
+player list from `userIdList` (`OutgoingInviteList`, via
+`/api/user/outgoinginvites`). Seats live in the array; "how many are open" is
+a `filter`.
 
 Then:
 
@@ -175,17 +196,36 @@ Then:
 The game-creation block currently inlined in
 `src/app/api/invite/accept/route.ts` (the `if/else if` chain that picks the
 right `<Game>GameDataModel`, saves it, deletes the invite and sends
-`GameStart` + the first `YourTurn`) has to move into a shared
-`startGameFromInvitation(invite, actorId)` before `lobby/start` can exist. It
-is roughly forty lines and there must be exactly one copy — this is the single
-most important refactor in the whole feature, and it is also a **hard
-requirement of the new-game checklist**: `gameRegistry.test.ts` asserts every
-game has a game-start branch in the accept route, so if that chain gets copied
-the test now guards two places and a new game silently starts in only one.
+`GameStart` + the first `YourTurn`) has to become a shared
+`startGameFromInvitation(invite, actorId)` before `lobby/start` can exist,
+with the all-accept path calling the same helper. This is the single most
+important refactor in the feature, and it should go one step further than
+relocating the chain.
 
-The all-accept path in `invite/accept` then calls the same helper, and a
-lobby's seats and a named invite's acceptances are the same field, so the home
-dashboard's incoming/outgoing invite lists keep working with no changes.
+Those seven branches are a **third copy of a gameType → model map that
+already exists**: `initialiseDiscriminators()` in `src/utils/mongodb/mongodb.ts`
+holds exactly these seven models in a typed `Record` whose keys are a
+compile-time exhaustiveness check, and `GAME_META` in `src/utils/ui/games.ts`
+is the same list again. The helper wants one lookup — off an exported version
+of that `Record`, or `mongoose.model(\`${invite.gameType}GameData\`)` — after
+which the seven branches *and* their seven imports are deleted rather than
+moved, and adding a game stops needing a line in a route at all.
+
+**One correction worth carrying into the work:**
+`src/games/gameRegistry.test.ts` does not guard this the way it looks. Its
+"handles every game's game-start branch" case reads the literal path
+`src/app/api/invite/accept/route.ts` and asserts that file's source contains
+the string `` `${name}GameDataModel` ``. So the extraction *breaks that test
+for all seven games* unless it is repointed — and if the lookup replaces the
+chain, the assertion should be deleted outright, because `mongodb.ts`'s typed
+`Record` is already a stricter, compile-time version of the same check.
+
+The dashboard's incoming/outgoing invite lists then keep rendering lobbies
+without a schema fork, because a seat is just a `userIdList` entry. They are
+not free of changes, though: those routes resolve names through
+`userIdListToUsernameList`, so the placeholder and guest ids a lobby
+introduces make the name-resolution fix in §5 a **prerequisite**, not a
+tidy-up.
 
 ### The code itself
 
@@ -216,10 +256,16 @@ only for ids Clerk returns, so an unresolvable id makes the returned array
 *shorter than the input* rather than leaving a hole. `CreateResponse` then does
 `usernameList[userIdList.indexOf(currentTurn)]` — with a misaligned array, that
 is the wrong player's name against the wrong seat, and it fails silently. Any
-id the resolver can't answer for (a guest under Option B, a swept guest under
-Option A, a deleted user *today*) triggers it. Fix it to be position-preserving
-with a placeholder before adding any new kind of id — it is a latent bug in its
-own right.
+id the resolver can't answer for (an open-seat placeholder, a guest under
+Option B, a swept guest under Option A, a deleted user *today*) triggers it.
+
+It is not one call site. Every game's `gameStateToModel` builds its
+`userIdNameMap` by zipping the two arrays positionally
+(`userIdNameMap[userId] = usernameList[i]`) — all seven of them — and
+`userIdListToUsernameMap` and `usernameListToUserIdList` drop unmatched
+entries the same way. Making `userIdListToUsernameList` position-preserving
+with a placeholder fixes all of them at once, which is why it is still an S.
+Do it before adding any new kind of id: it is a latent bug in its own right.
 
 **Display names are not unique, Clerk usernames are.** Two guests both typing
 "Dave" would collide, and parts of the client identify "me" by name
@@ -227,17 +273,20 @@ own right.
 uniqueness within the lobby at join time — "Dave (2)" — and prefer id-based
 comparison anywhere it is being added.
 
-**`useAuthGuard` bounces anyone without a Clerk user to `/login`.** Guest
-screens need the same treatment the landing page already gets via
-`allowSignedOut`, extended to mean "a guest session counts as authorised". One
-hook, one option — do not let a second guard grow beside it.
+**The access gate is the one choke point a guest really does hit — and the
+guard's predicate, not its redirect, is where it lives.** Under Option A a
+guest *is* signed in, so `allowSignedOut` — the escape hatch the landing page
+uses — never comes into play. The redirect they actually hit is the one to
+`/unlockaccess`, because `useIsAuthorised` requires
+`publicMetadata.unlocked === true` (and `src/app/api/users/route.ts` applies
+the same rule server-side). The mechanism is one line in that predicate —
+`unlocked === true || publicMetadata.guest === true` — not a second guard
+beside it.
 
-**The access gate is Clerk-only.** `publicMetadata.unlocked` is what
-`/unlockaccess` flips. A guest has, by construction, not passed it. The
-resolution: **the gate belongs on lobby creation, not lobby joining** — an
-unlocked host vouches for everyone holding their code. That keeps the
-invite-only property (nobody gets in without a real user's involvement) while
-letting the guest through.
+The policy behind it: **the gate belongs on lobby creation, not lobby
+joining.** An unlocked host vouches for everyone holding their code, which
+keeps the invite-only property (nobody gets in without a real user's
+involvement) while letting the guest through.
 
 **The turn-timer cron resolves the whole `userIdList` through Clerk** to
 notify players. Under Option B that needs the recipient abstraction; under
@@ -259,22 +308,41 @@ affordances for guest seats rather than failing on them.
 Per [`AGENTS.md`](../AGENTS.md), this reuses the design system rather than
 growing a parallel one. Existing pieces that already cover most of it:
 
-- `GameSetupLayout` + `TurnTimerSelect` — the host's lobby screen is the
-  existing setup screen with the player picker swapped for a seat list.
-- `usePlayerList` — the host can still invite named friends *and* leave open
-  seats; the picker is unchanged, it just no longer has to fill every slot.
-- `Avatar` (+ `src/utils/ui/avatar.ts`) — a guest gets initials and a
-  deterministic colour from their name with no extra work; guests have no
-  profile picture, which `profileImageUrl` already returns `null` for.
-- `GameLibrary` — the public landing page already renders it for signed-out
-  visitors. A guest arriving via a code lands somewhere that already works.
-- `ag-*` classes — list rows, pills, cards. The seat list, the code display and
-  the join form are all compositions of existing classes.
+**The host's lobby screen** is the existing setup screen with the player
+picker joined by a seat list: `GameSetupLayout` + `TurnTimerSelect` +
+`usePlayerList` (unchanged — it already keeps a trailing empty slot and filters
+blanks, so "not every slot has to be filled" is behaviour it has today, not a
+change), with `PartySizeHint` and its `partySizeOutOfRange` already owning the
+min/max messaging that §8's "cap the open seats" question needs.
+
+**The seat list filling up live** is `IncomingInvitesList` with different rows:
+`useRefreshableData` + `usePushEvents`' invite events for the refresh loop, and
+`ListSection` (first-load skeleton, refetch shimmer, `useAnimatedList` grow-in)
++ `ListRow` + `Avatar` for the rows. An unclaimed seat is `PendingTag`
+(`.ag-pending-tag`) or the `.ag-dashed-add` placeholder; the join control is
+`.ag-pill-action--accept`. `Refreshable` and `Skeleton` sit under all of it.
+A guest gets initials and a deterministic colour from `Avatar` +
+`src/utils/ui/avatar.ts` with no extra work, and has no profile picture — which
+`profileImageUrl` already returns `null` for.
+
+**The `/join` screen** for a code-holder with no account is `AuthScreen`, which
+already owns the signed-out screen lockup (`Brand` + copy + card); the field is
+`.ag-input`. `GameLibrary` already renders for signed-out visitors on the
+landing page, so a guest arriving via a code lands somewhere that works.
+
+**Getting a guest notified** is almost entirely built: `useFcmToken`,
+`useNotificationPermission` (including its `'unsupported'` state),
+`NotificationOffer` and `InstallOffer` over the shared `OfferCard`, and
+`BottomBanner` — the iOS "install the PWA first" pitch is already written. The
+work is rendering the existing banner on the guest's screen at the right
+moment, not building the offer.
 
 Genuinely new, and small:
 
-- **A code display** (host's screen — big, monospaced, tap-to-copy).
-- **A code entry field** (4 boxes / one input) on `/join`.
+- **A code display** (host's screen — big, monospaced, tap-to-copy). The
+  "Copied!" flash is `useResettingState`, not a bespoke `setTimeout`.
+- **A code entry field** (4 boxes / one input) on `/join`. Join errors go
+  through `useToast` like every other flow.
 
 Keep both local to their screen until something else needs them; extract on the
 second use, per the repo's "second copy is the signal" rule.
@@ -288,15 +356,15 @@ the doc alone is internal and does not earn a line.
 
 | Piece | Size | Risk | Notes |
 |---|---|---|---|
-| Extract `startGameFromInvitation` | S | Low | Pure refactor; do it first, it stands alone |
+| Extract `startGameFromInvitation` | S | Low | Pure refactor; deletes the seven-branch chain rather than moving it, and repoints one assertion in `gameRegistry.test.ts`. Do it first, it stands alone |
 | Position-preserving name resolution | S | Low | Fixes an existing latent bug |
 | Lobby fields + code generation + TTL | S | Low | Additive schema, `Invitation` discriminator untouched |
 | `/api/lobby` create / join / start | M | Med | Join is the first public write endpoint — rate limiting matters here |
 | Guest principal (Option A) | M | Med | Sits or falls on Clerk's createUser + sign-in-token flow |
 | Guest principal (Option B) | L | High | Second identity system; all five choke points |
-| Guest session + `useAuthGuard` | S | Low | One cookie, one hook option |
+| Guest access predicate | S | Low | One line in `useIsAuthorised` + the same rule in `/api/users`; under Option A there is no cookie to build |
 | Lobby + join screens | M | Low | Mostly composition of existing pieces |
-| Guest push + notification permission | M | Med | The feature's whole value; iOS needs the PWA installed |
+| Guest push + notification permission | S | Med | The feature's whole value — but the offer banners and permission hook already exist; this is wiring, not building |
 | Claim-your-account prompt | S | Low | Trivial under A, a migration under B |
 | Guest sweeper cron | S | Low | Model it on `cron/staledevices` |
 
@@ -341,13 +409,16 @@ is worse than no guest at all.
 - **A lobby is an `Invitation` with a code and open seats**, not a new model —
   reusing it inherits every game's `CreateGame()` for free. Extracting the
   shared game-start helper out of `invite/accept` is the prerequisite.
-- **Make the guest a claimable Clerk user** (Option A). It touches none of the
-  five choke points and makes "keep my account" an update rather than a
-  migration. Re-check Clerk's current capabilities before betting on it.
+- **Make the guest a claimable Clerk user** (Option A). It touches one of the
+  five choke points — the unlocked gate, a one-line predicate — and makes
+  "keep my account" an update rather than a migration. It also means no second
+  session cookie and no bespoke resume route: Clerk already owns both.
+  Re-check Clerk's current capabilities before betting on it.
 - **The code solves joining; it does not solve returning.** Push permission,
   a durable session, and a claim prompt after the first turn are what turn a
   join-by-code game into an onboarded player.
 - **Ship it in two halves.** Codes for signed-in players first (valuable
   alone, no identity risk), then guests with push and claiming together.
 - **Fix `userIdListToUsernameList` first** regardless — it drops unresolvable
-  ids and misaligns every index-based name lookup downstream.
+  ids and misaligns the index-based name lookup in `CreateResponse` and in all
+  seven games' `gameStateToModel`.
