@@ -522,7 +522,9 @@ layout) rendered inside a centred `.ag-app` column.
 - **Design system.** UI was moved off stock Bootstrap onto a small custom
   system — the `ag-*` classes and CSS custom-property tokens in
   `src/app/ag-theme.css` (warm cream + terracotta, Bricolage Grotesque). Bootstrap
-  remains a dependency and is still used for the in-game board screens only.
+  remains a dependency and is still used for the in-game board screens only. Clerk's in-app components are themed from the same tokens via
+  `src/utils/ui/clerkAppearance.ts`; Clerk's *emails* can't read them at all and
+  are covered by [`docs/email-theme.md`](./docs/email-theme.md).
 - **Brand mark.** The "clock die" — four pips at 12, 3, 6 and 9, the brass one
   marking the seat in play. `scripts/generate-icons.mjs` (`npm run icons`) is
   the only place it is drawn: it emits the favicon, the iOS icon, the PWA and
@@ -694,6 +696,7 @@ one-liner fails with a message naming the exact file and line to add.
 - [`docs/turn-recap-and-planning.md`](./docs/turn-recap-and-planning.md) — the replay engine in depth.
 - [`docs/games/`](./docs/games/) — per-game rules notes (Smartthink, Settlements & Cities).
 - [`docs/environments.md`](./docs/environments.md) — the dev/production split (Clerk instances, databases, env vars) and how to take Clerk to production.
+- [`docs/email-theme.md`](./docs/email-theme.md) — the design system restated for email (hex palette, type, table-based components), for styling Clerk's transactional emails.
 - [`docs/deployment.png`](./docs/deployment.png) — deployment diagram.
 - [`README.md`](./README.md) — getting started, env vars, and cron setup.
 </content>
