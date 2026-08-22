@@ -590,10 +590,10 @@ cluster produces the chain reaction §10.1 describes.
 `POST /api/newgame/outbreak`, and the setup screen — `GameSetupLayout` +
 `UserInviteList` (`src/components/UserInviteList.tsx`, driven by the
 `usePlayerList` hook) + `TurnTimerSelect` + an `OptionSection` for the three
-difficulties. `meta.categories` claims `Strategy`, and adds **`Co-op`** to
-`GAME_CATEGORIES` in `src/utils/ui/games.ts` — one line, from which
-`GameLibrary`'s filter chips derive automatically, and Fires Out will want it
-too. Then the shared-file wiring of `docs/new-game.md` step 6: note that
+difficulties. `meta.categories` claims `Strategy` and `Co-op`, adding
+**`Co-op`** to `GAME_CATEGORIES` in `src/utils/ui/games.ts` — one line, from
+which `GameLibrary`'s filter chips derive automatically, and Fires Out will
+want it too. Then the shared-file wiring of `docs/new-game.md` step 6: note that
 `mongodb.ts` is four separate edits, and that the `registration` array in
 `command/route.ts` takes one line *per command class*, so that row is revisited
 in steps 4 and 10 rather than finished here. `gameRegistry.test.ts` and
