@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { TrainTimeClaimRoute, TrainTimeDrawCarriageCard, TrainTimeGameType, TrainTimePassTurn } from "./TrainTimeLogic";
+import {
+    TrainTimeClaimRoute,
+    TrainTimeDrawCarriageCard,
+    TrainTimeDrawTickets,
+    TrainTimeGameType,
+    TrainTimeKeepTickets,
+    TrainTimePassTurn,
+} from "./TrainTimeLogic";
 import { ITrainTimeGameData } from "./TrainTimeModels";
 import {
     buildInitialTrainTimeState,
@@ -10,14 +17,22 @@ import {
     TRAINS_PER_PLAYER,
     TRAIN_TIME_CARD_COLOURS,
     TrainTimeCardColour,
+    SETUP_TICKETS_KEPT_MIN,
+    TICKETS,
+    TICKET_COUNT,
     buildCarriageDeck,
     buildPayment,
     canClaimRoute,
+    cityName,
+    drawsTakenBy,
     paymentOptions,
     marketNeedsWipe,
     paymentIsValid,
     payableColours,
+    playerNetwork,
     routeScore,
+    ticketIsComplete,
+    ticketsToKeep,
 } from "./board";
 import type { ICommandOutcome, IGameCommand } from "@/utils/apiModels/gameCommand";
 
@@ -27,16 +42,41 @@ import type { ICommandOutcome, IGameCommand } from "@/utils/apiModels/gameComman
 // method the real route relies on; markDirty no-ops safely without it.
 const PLAYERS = ["u1", "u2", "u3"];
 
-function makeGame(userIds: string[] = PLAYERS, state?: ITrainTimeSpecificGameState): ITrainTimeGameData {
+function makeGame(
+    userIds: string[] = PLAYERS,
+    state?: ITrainTimeSpecificGameState,
+    // Most tests want a game already under way, so the opening keep-2-of-3 is
+    // settled by default; the ticket tests ask for it unsettled.
+    { openingTicketsSettled = true }: { openingTicketsSettled?: boolean } = {},
+): ITrainTimeGameData {
+    const specificGameState = state ?? buildInitialTrainTimeState(userIds);
+    if (openingTicketsSettled) settleOpeningTickets(specificGameState);
     return {
         gameId: "g",
         currentTurn: userIds[0],
         userIdList: userIds,
         gameState: { turnOrder: [...userIds], history: [], commandHistory: [] },
-        specificGameState: state ?? buildInitialTrainTimeState(userIds),
+        specificGameState,
         complete: false,
         winner: "",
     } as unknown as ITrainTimeGameData;
+}
+
+/** Everybody keeps the first two of their dealt tickets, as if they'd chosen. */
+function settleOpeningTickets(state: ITrainTimeSpecificGameState): void {
+    for (const ps of state.playerStates.values()) {
+        ps.tickets = ps.pendingTickets.slice(0, SETUP_TICKETS_KEPT_MIN);
+        state.ticketDeck.push(...ps.pendingTickets.slice(SETUP_TICKETS_KEPT_MIN));
+        ps.pendingTickets = [];
+    }
+}
+
+/** Drops everyone's tickets, for the tests that are only about route points. */
+function clearTickets(state: ITrainTimeSpecificGameState): void {
+    for (const ps of state.playerStates.values()) {
+        ps.tickets = [];
+        ps.pendingTickets = [];
+    }
 }
 
 /** Runs one command exactly the way the command route does. */
@@ -65,6 +105,19 @@ function claim(routeId: number, cards: TrainTimeCardColour[]) {
     command.routeId = routeId;
     command.cards = cards;
     return command;
+}
+
+function keepTickets(ids: number[]) {
+    const command = new TrainTimeKeepTickets();
+    command.keep = ids;
+    return command;
+}
+
+/** Every ticket is either in the deck, kept by somebody, or on offer to them. */
+function totalTickets(state: ITrainTimeSpecificGameState): number {
+    let held = 0;
+    for (const ps of state.playerStates.values()) held += ps.tickets.length + ps.pendingTickets.length;
+    return state.ticketDeck.length + held;
 }
 
 function totalCards(state: ITrainTimeSpecificGameState): number {
@@ -197,7 +250,7 @@ describe("Action A — drawing carriage cards", () => {
         expect((await play(game, drawFromDeck())).turnOver).toBe(true);
         expect(game.currentTurn).toBe("u2");
         expect(game.specificGameState.playerStates.get("u1")!.hand.length).toBe(6);
-        expect(game.specificGameState.drawsThisTurn).toBe(0);
+        expect(drawsTakenBy(game.specificGameState, "u1")).toBe(0);
         expect(totalCards(game.specificGameState)).toBe(110);
     });
 
@@ -213,6 +266,19 @@ describe("Action A — drawing carriage cards", () => {
         game.specificGameState.market[1] = 'engine';
         expect((await play(game, drawFromMarket(1))).validMove).toBe(false);
         expect(game.specificGameState.market[1]).toBe('engine');
+    });
+
+    it("doesn't leave half a draw behind when a turn is skipped", async () => {
+        const game = makeGame();
+        await play(game, drawFromDeck());
+        // The turn timer skips u1 mid-draw, the way the shared cron does.
+        game.currentTurn = "u2";
+
+        expect((await play(game, drawFromDeck())).turnOver).toBe(false);
+        expect((await play(game, drawFromDeck())).turnOver).toBe(true);
+        expect(game.specificGameState.playerStates.get("u2")!.hand.length).toBe(6);
+        // And u1's stale count doesn't cost them a card when they come back.
+        expect(drawsTakenBy(game.specificGameState, "u1")).toBe(0);
     });
 
     it("refills the market from the deck and keeps it at five", async () => {
@@ -311,6 +377,7 @@ describe("game end", () => {
     it("records a tie on points as a shared win", async () => {
         const game = makeGame(["u1", "u2"]);
         const gs = game.specificGameState;
+        clearTickets(gs);
         gs.finalRoundPending = ["u1"];
         gs.playerStates.get("u1")!.score = 12;
         gs.playerStates.get("u2")!.score = 12;
@@ -327,6 +394,7 @@ describe("deadlock", () => {
     it("ends the game when every route left is longer than anyone's trains", async () => {
         const game = makeGame(["u1", "u2"]);
         const gs = game.specificGameState;
+        clearTickets(gs);
         // Everything short is gone and both players are down to two trains.
         ROUTES.forEach(route => { if (route.length <= 3) gs.routeOwners[route.id] = "u2"; });
         for (const ps of gs.playerStates.values()) ps.trains = 3;
@@ -360,6 +428,230 @@ describe("passing", () => {
     });
 });
 
+describe("Destination Tickets — the deck", () => {
+    it("is 30 tickets between real cities, worth 4 to 22", () => {
+        expect(TICKET_COUNT).toBe(30);
+        expect(new Set(TICKETS.map(t => `${t.cityA}-${t.cityB}`)).size).toBe(TICKET_COUNT);
+        for (const ticket of TICKETS) {
+            expect(cityName(ticket.cityA)).not.toBe(String(ticket.cityA));
+            expect(cityName(ticket.cityB)).not.toBe(String(ticket.cityB));
+            expect(ticket.cityA).not.toBe(ticket.cityB);
+            expect(ticket.points).toBeGreaterThanOrEqual(4);
+            expect(ticket.points).toBeLessThanOrEqual(22);
+        }
+    });
+
+    it("only names city pairs the map can actually connect", () => {
+        // The whole board is one component, so every ticket is winnable by
+        // somebody — a ticket nobody could ever complete would be a pure tax.
+        const wholeBoard = ROUTES.map(() => 'anyone');
+        const network = playerNetwork(wholeBoard, 'anyone');
+        for (const ticket of TICKETS) {
+            expect(ticketIsComplete(ticket, network)).toBe(true);
+        }
+    });
+
+    it("counts a ticket complete only over an unbroken chain the player owns", () => {
+        const first = ROUTES[0];
+        const onward = ROUTES.find(r =>
+            r.id !== first.id
+            && r.id !== first.twinId
+            && (r.cityA === first.cityB || r.cityB === first.cityB))!;
+        const owners: (string | null)[] = ROUTES.map(() => null);
+
+        owners[first.id] = "u1";
+        const start = playerNetwork(owners, "u1");
+        const far = onward.cityA === first.cityB ? onward.cityB : onward.cityA;
+        expect(start[first.cityA]).toBe(start[first.cityB]);
+        expect(start[first.cityA]).not.toBe(start[far]);
+
+        // Somebody else's track doesn't join anything up for you.
+        owners[onward.id] = "u2";
+        expect(playerNetwork(owners, "u1")[far]).not.toBe(start[first.cityA]);
+
+        owners[onward.id] = "u1";
+        const joined = playerNetwork(owners, "u1");
+        expect(joined[first.cityA]).toBe(joined[far]);
+    });
+});
+
+describe("Destination Tickets — the opening deal (§4)", () => {
+    it("deals three to each player and keeps none until they choose", () => {
+        const game = makeGame(PLAYERS, undefined, { openingTicketsSettled: false });
+        const gs = game.specificGameState;
+        for (const ps of gs.playerStates.values()) {
+            expect(ps.pendingTickets.length).toBe(3);
+            expect(ps.tickets).toEqual([]);
+        }
+        expect(totalTickets(gs)).toBe(TICKET_COUNT);
+    });
+
+    it("blocks every other action until the choice is made", async () => {
+        const game = makeGame(PLAYERS, undefined, { openingTicketsSettled: false });
+        expect((await play(game, drawFromDeck())).validMove).toBe(false);
+        expect((await play(game, drawFromMarket(0))).validMove).toBe(false);
+        expect((await play(game, new TrainTimeDrawTickets())).validMove).toBe(false);
+        expect((await play(game, new TrainTimePassTurn())).validMove).toBe(false);
+        expect(game.currentTurn).toBe("u1");
+    });
+
+    it("insists on two of the three, then hands the turn back to its owner", async () => {
+        const game = makeGame(PLAYERS, undefined, { openingTicketsSettled: false });
+        const gs = game.specificGameState;
+        const dealt = [...gs.playerStates.get("u1")!.pendingTickets];
+
+        expect((await play(game, keepTickets(dealt.slice(0, 1)))).validMove).toBe(false);
+        // Tickets that were never offered aren't a way to swap the deal.
+        expect((await play(game, keepTickets([dealt[0], gs.ticketDeck[0]]))).validMove).toBe(false);
+
+        const outcome = await play(game, keepTickets(dealt.slice(0, 2)));
+        expect(outcome.validMove).toBe(true);
+        // The choice happens before the turn's action, so u1 still has it.
+        expect(outcome.turnOver).toBe(false);
+        expect(game.currentTurn).toBe("u1");
+
+        const me = gs.playerStates.get("u1")!;
+        expect(me.tickets).toEqual(dealt.slice(0, 2));
+        expect(me.pendingTickets).toEqual([]);
+        expect(gs.ticketDeck[gs.ticketDeck.length - 1]).toBe(dealt[2]);
+
+        // And now they can take their turn as normal.
+        expect((await play(game, drawFromDeck())).validMove).toBe(true);
+    });
+});
+
+describe("Action C — drawing Destination Tickets (§5)", () => {
+    it("draws three, keeps at least one, and spends the whole turn doing it", async () => {
+        const game = makeGame();
+        const gs = game.specificGameState;
+        const topThree = gs.ticketDeck.slice(0, 3);
+
+        const drawn = await play(game, new TrainTimeDrawTickets());
+        expect(drawn.validMove).toBe(true);
+        expect(drawn.turnOver).toBe(false);
+        expect(gs.playerStates.get("u1")!.pendingTickets).toEqual(topThree);
+
+        expect((await play(game, keepTickets([]))).validMove).toBe(false);
+
+        const kept = await play(game, keepTickets([topThree[1]]));
+        expect(kept.turnOver).toBe(true);
+        expect(game.currentTurn).toBe("u2");
+
+        const me = gs.playerStates.get("u1")!;
+        expect(me.tickets).toContain(topThree[1]);
+        expect(me.tickets.length).toBe(3);
+        // The two handed back are at the bottom, in the order they were offered.
+        expect(gs.ticketDeck.slice(-2)).toEqual([topThree[0], topThree[2]]);
+        expect(totalTickets(gs)).toBe(TICKET_COUNT);
+    });
+
+    it("won't start a ticket draw halfway through a card draw", async () => {
+        const game = makeGame();
+        await play(game, drawFromDeck());
+        expect((await play(game, new TrainTimeDrawTickets())).validMove).toBe(false);
+    });
+
+    it("offers whatever is left when the deck is nearly out, and never reshuffles it", async () => {
+        const game = makeGame();
+        const gs = game.specificGameState;
+        gs.ticketDeck = [TICKETS[0].id];
+
+        await play(game, new TrainTimeDrawTickets());
+        expect(gs.playerStates.get("u1")!.pendingTickets).toEqual([TICKETS[0].id]);
+        // The one ticket on the table is the minimum, so it has to be kept.
+        expect((await play(game, keepTickets([]))).validMove).toBe(false);
+        expect((await play(game, keepTickets([TICKETS[0].id]))).turnOver).toBe(true);
+
+        expect(gs.ticketDeck).toEqual([]);
+        expect((await play(game, new TrainTimeDrawTickets())).validMove).toBe(false);
+    });
+});
+
+describe("final ticket scoring (§7)", () => {
+    /** A game frozen one turn from the end, with u1 and u2 on equal route points. */
+    function endgame(): ITrainTimeGameData {
+        const game = makeGame(["u1", "u2"]);
+        const gs = game.specificGameState;
+        clearTickets(gs);
+        for (const ps of gs.playerStates.values()) {
+            ps.score = 20;
+            ps.trains = 2;
+        }
+        gs.finalRoundPending = ["u1", "u2"];
+        return game;
+    }
+
+    /** Gives a player the routes that join a ticket's two cities, if it can. */
+    function connect(game: ITrainTimeGameData, userId: string, ticketId: number): void {
+        const gs = game.specificGameState;
+        const ticket = TICKETS[ticketId];
+        // Breadth-first over the whole map, then hand over the path found.
+        const previous = new Map<number, { city: number; routeId: number }>();
+        const queue = [ticket.cityA];
+        while (queue.length > 0) {
+            const city = queue.shift() as number;
+            if (city === ticket.cityB) break;
+            for (const route of ROUTES) {
+                const next = route.cityA === city ? route.cityB : route.cityB === city ? route.cityA : null;
+                if (next === null || next === ticket.cityA || previous.has(next)) continue;
+                previous.set(next, { city, routeId: route.id });
+                queue.push(next);
+            }
+        }
+        for (let city = ticket.cityB; city !== ticket.cityA;) {
+            const step = previous.get(city);
+            if (!step) throw new Error(`no path for ticket ${ticketId}`);
+            gs.routeOwners[step.routeId] = userId;
+            city = step.city;
+        }
+    }
+
+    it("adds a connected ticket and subtracts one left hanging", async () => {
+        const game = makeGame(["u1", "u2"]);
+        const gs = game.specificGameState;
+        const short = TICKETS.reduce((a, b) => (a.points <= b.points ? a : b));
+        clearTickets(gs);
+        for (const ps of gs.playerStates.values()) ps.trains = 2;
+        gs.playerStates.get("u1")!.tickets = [short.id];
+        gs.playerStates.get("u2")!.tickets = [short.id];
+        connect(game, "u1", short.id);
+        gs.finalRoundPending = ["u1", "u2"];
+
+        await play(game, drawFromDeck());
+        await play(game, drawFromDeck());
+        await play(game, drawFromDeck());
+        await play(game, drawFromDeck());
+
+        expect(game.complete).toBe(true);
+        expect(gs.playerStates.get("u1")!.ticketScore).toBe(short.points);
+        expect(gs.playerStates.get("u1")!.ticketsCompleted).toBe(1);
+        expect(gs.playerStates.get("u2")!.ticketScore).toBe(-short.points);
+        expect(gs.playerStates.get("u2")!.ticketsCompleted).toBe(0);
+        expect(game.winner).toBe("u1");
+    });
+
+    it("breaks a tied total on completed tickets", async () => {
+        const game = endgame();
+        const gs = game.specificGameState;
+        const ticket = TICKETS.reduce((a, b) => (a.points <= b.points ? a : b));
+        // Same total: u1 scores the ticket, u2 has the same points from track.
+        gs.playerStates.get("u1")!.tickets = [ticket.id];
+        gs.playerStates.get("u1")!.score = 20 - ticket.points;
+        connect(game, "u1", ticket.id);
+
+        await play(game, drawFromDeck());
+        await play(game, drawFromDeck());
+        await play(game, drawFromDeck());
+        await play(game, drawFromDeck());
+
+        expect(game.complete).toBe(true);
+        const u1 = gs.playerStates.get("u1")!;
+        const u2 = gs.playerStates.get("u2")!;
+        expect(u1.score + u1.ticketScore).toBe(u2.score + u2.ticketScore);
+        expect(game.winner).toBe("u1");
+    });
+});
+
 describe("a full simulated game", () => {
     it("never loses or duplicates a carriage card, and always terminates", async () => {
         const game = makeGame(["u1", "u2", "u3", "u4"]);
@@ -376,13 +668,23 @@ describe("a full simulated game", () => {
                 trains: me.trains,
                 playerId: game.currentTurn,
             };
+            // Tickets on the table have to be answered before anything else.
+            if (me.pendingTickets.length > 0) {
+                await play(game, keepTickets(me.pendingTickets.slice(0, ticketsToKeep(me))));
+                expect(totalTickets(gs)).toBe(TICKET_COUNT);
+                continue;
+            }
+
             // Claim whenever possible (so the game actually races to the end),
             // otherwise draw, otherwise pass.
             // A draw is one action: once it's started it has to be finished.
-            const claimable = gs.drawsThisTurn > 0 ? undefined : ROUTES.find(route => canClaimRoute(route, ctx));
+            const midDraw = drawsTakenBy(gs, game.currentTurn) > 0;
+            const claimable = midDraw ? undefined : ROUTES.find(route => canClaimRoute(route, ctx));
             if (claimable) {
                 const colour = payableColours(claimable, me.hand)[0];
                 await play(game, claim(claimable.id, buildPayment(claimable, colour, me.hand)));
+            } else if (!midDraw && gs.ticketDeck.length > 0 && turns % 6 === 0) {
+                await play(game, new TrainTimeDrawTickets());
             } else if (gs.deck.length + gs.discard.length > 0) {
                 await play(game, drawFromDeck());
             } else if (gs.market.length > 0) {
@@ -391,6 +693,7 @@ describe("a full simulated game", () => {
                 await play(game, new TrainTimePassTurn());
             }
             expect(totalCards(gs)).toBe(110);
+            expect(totalTickets(gs)).toBe(TICKET_COUNT);
         }
 
         expect(game.complete).toBe(true);

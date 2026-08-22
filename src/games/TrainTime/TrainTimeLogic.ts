@@ -8,12 +8,19 @@ import {
     CARDS_DRAWN_PER_TURN,
     DOUBLE_ROUTES_OPEN_FROM_PLAYERS,
     FINAL_ROUND_TRAIN_THRESHOLD,
+    TICKETS_DRAWN_PER_TURN,
     TrainTimeCardColour,
     canClaimRoute,
+    drawsTakenBy,
+    isSetupTicketChoice,
     paymentIsValid,
     routeName,
     routeScore,
+    ticketOutcomes,
+    ticketPoints,
+    ticketsToKeep,
 } from "@/games/TrainTime/board";
+import { pluralize } from "@/utils/ui/text";
 import type { IGameData, IGameDataDocument } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
@@ -46,6 +53,15 @@ function claimContextFor(trainData: ITrainTimeGameData, senderId: string, ps: IT
         trains: ps.trains,
         playerId: senderId,
     };
+}
+
+/**
+ * True while this player owes an answer on tickets they've been offered — the
+ * setup deal on their first turn, or an Action C draw. Nothing else can happen
+ * on the turn until they answer.
+ */
+function awaitingTicketChoice(ps: ITrainTimePlayerState): boolean {
+    return ps.pendingTickets.length > 0;
 }
 
 /** Total cards a player could still draw from anywhere. */
@@ -82,6 +98,8 @@ function boardIsDeadlocked(trainData: ITrainTimeGameData): boolean {
 function finishTurn(trainData: ITrainTimeGameData, senderId: string, senderUsername: string): void {
     const gs = trainData.specificGameState;
     gs.drawsThisTurn = 0;
+    gs.drawTurnOwner = null;
+    const sender = playerState(gs, senderId);
 
     if (gs.finalRoundPending) {
         gs.finalRoundPending = gs.finalRoundPending.filter(userId => userId !== senderId);
@@ -89,12 +107,11 @@ function finishTurn(trainData: ITrainTimeGameData, senderId: string, senderUsern
         return;
     }
 
-    const ps = playerState(gs, senderId);
-    if (ps && ps.trains <= FINAL_ROUND_TRAIN_THRESHOLD) {
+    if (sender && sender.trains <= FINAL_ROUND_TRAIN_THRESHOLD) {
         // Everyone, the trigger included, gets exactly one more turn.
         gs.finalRoundPending = [...trainData.gameState.turnOrder];
         trainData.gameState.history.unshift(
-            `${senderUsername} is down to ${ps.trains} trains — last lap, everyone gets one more turn`,
+            `${senderUsername} is down to ${sender.trains} trains — last lap, everyone gets one more turn`,
         );
         return;
     }
@@ -128,18 +145,24 @@ export class TrainTimeGameType implements IGameType {
         const gs = trainData.specificGameState;
         if (!gs.gameOver) return false;
 
-        // Step 1 of the build order scores route points only — Destination
-        // Tickets and the Long Haul bonus (§7.2, §7.3) land with steps 2 and 3.
-        let best = -Infinity;
-        let winners: string[] = [];
+        // Final scoring (§7): route points are already on the board, so all
+        // that's left is the ticket reveal. The Long Haul bonus (§7.3) lands
+        // with step 3 of the build order.
         for (const [userId, ps] of gs.playerStates) {
-            if (ps.score > best) {
-                best = ps.score;
-                winners = [userId];
-            } else if (ps.score === best) {
-                winners.push(userId);
-            }
+            const outcomes = ticketOutcomes(ps.tickets, gs.routeOwners, userId);
+            ps.ticketScore = ticketPoints(outcomes);
+            ps.ticketsCompleted = outcomes.filter(o => o.complete).length;
         }
+
+        // Highest total wins; a tie goes to the most completed tickets (§7).
+        const total = (ps: ITrainTimePlayerState) => ps.score + ps.ticketScore;
+        const ranked = [...gs.playerStates].sort(([, a], [, b]) =>
+            (total(b) - total(a)) || (b.ticketsCompleted - a.ticketsCompleted));
+        const leader = ranked[0][1];
+        const bestTotal = total(leader);
+        const winners = ranked
+            .filter(([, ps]) => total(ps) === bestTotal && ps.ticketsCompleted === leader.ticketsCompleted)
+            .map(([userId]) => userId);
 
         trainData.complete = true;
         // A shared win is recorded as a draw (an empty winner), the same way
@@ -148,8 +171,8 @@ export class TrainTimeGameType implements IGameType {
         trainData.currentTurn = '';
         trainData.gameState.history.unshift(
             winners.length === 1
-                ? `Final scores are in — ${best} points wins it`
-                : `Final scores are in — a ${best}-point tie`,
+                ? `Final scores are in — ${bestTotal} points wins it`
+                : `Final scores are in — a ${bestTotal}-point tie`,
         );
         markDirty(gameData);
         return true;
@@ -179,7 +202,9 @@ export class TrainTimeDrawCarriageCard implements IGameCommand {
 
         const ps = playerState(gs, this.senderId);
         if (!ps) return INVALID;
-        if (gs.drawsThisTurn >= CARDS_DRAWN_PER_TURN) return INVALID;
+        if (awaitingTicketChoice(ps)) return INVALID;
+        const drawnSoFar = drawsTakenBy(gs, this.senderId);
+        if (drawnSoFar >= CARDS_DRAWN_PER_TURN) return INVALID;
 
         let drawn: TrainTimeCardColour;
         // Taking a face-up Engine costs the whole action, so it can only ever
@@ -192,7 +217,7 @@ export class TrainTimeDrawCarriageCard implements IGameCommand {
             if (this.marketIndex < 0 || this.marketIndex >= gs.market.length) return INVALID;
             drawn = gs.market[this.marketIndex];
             if (drawn === 'engine') {
-                if (gs.drawsThisTurn > 0) return INVALID;
+                if (drawnSoFar > 0) return INVALID;
                 engineTax = true;
             }
             gs.market.splice(this.marketIndex, 1);
@@ -204,7 +229,8 @@ export class TrainTimeDrawCarriageCard implements IGameCommand {
         }
 
         ps.hand.push(drawn);
-        gs.drawsThisTurn++;
+        gs.drawsThisTurn = drawnSoFar + 1;
+        gs.drawTurnOwner = this.senderId;
 
         trainData.gameState.history.unshift(
             this.source === 'market'
@@ -248,12 +274,12 @@ export class TrainTimeClaimRoute implements IGameCommand {
         const trainData = gameData as ITrainTimeGameData;
         const gs = trainData.specificGameState;
 
-        // A draw already started this turn is one action; you can't switch to
-        // claiming halfway through it.
-        if (gs.drawsThisTurn > 0) return INVALID;
-
         const ps = playerState(gs, this.senderId);
         if (!ps) return INVALID;
+        if (awaitingTicketChoice(ps)) return INVALID;
+        // A draw already started this turn is one action; you can't switch to
+        // claiming halfway through it.
+        if (drawsTakenBy(gs, this.senderId) > 0) return INVALID;
 
         const route = ROUTES[this.routeId];
         if (!route) return INVALID;
@@ -286,12 +312,120 @@ export class TrainTimeClaimRoute implements IGameCommand {
     }
 }
 
+// ─── Action C — draw Destination Tickets (§5) ───────────────────────────────
+
+@serializable
+export class TrainTimeDrawTickets implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    readonly className = 'TrainTimeDrawTickets';
+
+    myString() { return `Train Time DrawTickets`; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const trainData = gameData as ITrainTimeGameData;
+        const gs = trainData.specificGameState;
+
+        const ps = playerState(gs, this.senderId);
+        if (!ps) return INVALID;
+        // One offer at a time, and not halfway through a draw action.
+        if (awaitingTicketChoice(ps)) return INVALID;
+        if (drawsTakenBy(gs, this.senderId) > 0) return INVALID;
+        if (gs.ticketDeck.length === 0) return INVALID;
+
+        // Three, or whatever is left — the deck is never reshuffled (§5).
+        ps.pendingTickets = gs.ticketDeck.splice(0, TICKETS_DRAWN_PER_TURN);
+
+        trainData.gameState.history.unshift(
+            `${this.senderUsername} drew ${pluralize(ps.pendingTickets.length, 'destination ticket')}`,
+        );
+
+        // The turn isn't over until they say which ones they're keeping.
+        markDirty(gameData);
+        return { validMove: true, turnOver: false };
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
+    }
+}
+
+/**
+ * Answers whatever tickets are on the table: the keep-at-least-2 from setup on
+ * a player's first turn, or the keep-at-least-1 that closes an Action C draw.
+ * Which of the two it is decides whether the turn ends here — the setup choice
+ * happens *before* the player's first action, the draw *is* their action.
+ */
+@serializable
+export class TrainTimeKeepTickets implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    /** Ticket ids to keep; the rest go to the bottom of the ticket deck. */
+    keep: number[] = [];
+    readonly className = 'TrainTimeKeepTickets';
+
+    myString() { return `Train Time KeepTickets keep=${this.keep.join(',')}`; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const trainData = gameData as ITrainTimeGameData;
+        const gs = trainData.specificGameState;
+
+        const ps = playerState(gs, this.senderId);
+        if (!ps) return INVALID;
+
+        const offered = ps.pendingTickets;
+        if (offered.length === 0) return INVALID;
+
+        const setupChoice = isSetupTicketChoice(ps);
+        // A short ticket deck can offer fewer than the minimum, in which case
+        // the minimum is simply everything on the table.
+        const mustKeep = Math.min(ticketsToKeep(ps), offered.length);
+
+        const keep = [...new Set(this.keep)];
+        if (keep.length < mustKeep) return INVALID;
+        if (keep.some(id => !offered.includes(id))) return INVALID;
+
+        ps.tickets.push(...keep);
+        // Returned tickets go to the bottom, so they come round again later (§5).
+        gs.ticketDeck.push(...offered.filter(id => !keep.includes(id)));
+        ps.pendingTickets = [];
+
+        trainData.gameState.history.unshift(
+            `${this.senderUsername} kept ${keep.length} of ${pluralize(offered.length, 'destination ticket')}`,
+        );
+
+        if (setupChoice) {
+            // Their opening hand of tickets is settled; the turn itself is
+            // still theirs to spend.
+            markDirty(gameData);
+            return { validMove: true, turnOver: false };
+        }
+
+        finishTurn(trainData, this.senderId, this.senderUsername);
+        markDirty(gameData);
+        return { validMove: true, turnOver: true };
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
+    }
+}
+
 // ─── Stalemate escape hatch ─────────────────────────────────────────────────
 
 /**
  * Passing isn't one of the game's three actions — it exists only so a player
  * with nothing left to draw and no route they can pay for can't stall the
- * board forever. Rejected whenever any real action is still available.
+ * board forever. Rejected whenever any real action is still available, with
+ * one exception: a ticket deck with cards left in it doesn't block a pass.
+ * Tickets you can no longer connect score negative, so forcing somebody to
+ * draw them would make passing the punishment it exists to avoid.
  */
 @serializable
 export class TrainTimePassTurn implements IGameCommand {
@@ -310,7 +444,8 @@ export class TrainTimePassTurn implements IGameCommand {
 
         const ps = playerState(gs, this.senderId);
         if (!ps) return INVALID;
-        if (gs.drawsThisTurn > 0) return INVALID;
+        if (awaitingTicketChoice(ps)) return INVALID;
+        if (drawsTakenBy(gs, this.senderId) > 0) return INVALID;
         if (cardsAvailable(gs) > 0) return INVALID;
 
         const ctx = claimContextFor(trainData, this.senderId, ps);

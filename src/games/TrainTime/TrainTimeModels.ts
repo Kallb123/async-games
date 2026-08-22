@@ -11,12 +11,18 @@ import { TrainTimeGameType } from "@/utils/apiModels/GameLogic";
 import {
     ITrainTimeGameDataResponse,
     ITrainTimeSpecificGameStateResponse,
+    ITrainTimeTicketView,
 } from "./apiModels";
 import {
     ITrainTimePlayerState,
     ITrainTimeSpecificGameState,
+    TICKETS,
     TRAINS_PER_PLAYER,
     buildInitialTrainTimeState,
+    drawsTakenBy,
+    playerNetwork,
+    ticketIsComplete,
+    ticketsToKeep,
 } from "./board";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -94,17 +100,23 @@ var TrainTimeGameDataSchema = new Schema<ITrainTimeGameDataDocument>(
             deck: [String],
             discard: [String],
             market: [String],
+            ticketDeck: [Number],
             playerStates: {
                 type: Schema.Types.Map,
                 of: {
                     hand: [String],
+                    tickets: [Number],
+                    pendingTickets: [Number],
                     trains: Number,
                     score: Number,
+                    ticketScore: Number,
+                    ticketsCompleted: Number,
                     routesClaimed: Number,
                 },
             },
             routeOwners: Schema.Types.Mixed,
             drawsThisTurn: Number,
+            drawTurnOwner: String,
             finalRoundPending: Schema.Types.Mixed,
             gameOver: Boolean,
         },
@@ -156,11 +168,19 @@ export function gameStateToModel(
             userId,
             username,
             handCount: ps.hand.length,
+            ticketCount: ps.tickets.length,
             trains: ps.trains,
             score: ps.score,
+            ticketScore: ps.ticketScore,
+            ticketsCompleted: ps.ticketsCompleted,
             routesClaimed: ps.routesClaimed,
+            // Tickets stay secret until the game is scored, then the whole
+            // table sees everybody's (design doc §10).
+            tickets: gs.gameOver ? ticketViews(ps.tickets, gs, userId) : undefined,
         };
     }
+
+    const viewer = viewerId ? playerStatesSource.get(viewerId) : undefined;
 
     const toUsername = (userId: string | null) => (userId ? userIdNameMap[userId] ?? userId : null);
 
@@ -170,12 +190,38 @@ export function gameStateToModel(
         discardCount: gs.discard.length,
         routeOwners: gs.routeOwners.map(toUsername),
         playerStates,
-        drawsThisTurn: gs.drawsThisTurn,
+        myDrawsThisTurn: viewerId ? drawsTakenBy(gs, viewerId) : 0,
+        ticketDeckCount: gs.ticketDeck.length,
+        myTickets: viewer ? ticketViews(viewer.tickets, gs, viewerId as string) : [],
+        myPendingTickets: viewer ? ticketViews(viewer.pendingTickets, gs, viewerId as string) : [],
+        myTicketsToKeep: viewer && viewer.pendingTickets.length > 0
+            ? Math.min(ticketsToKeep(viewer), viewer.pendingTickets.length)
+            : 0,
         finalRoundPending: gs.finalRoundPending
             ? gs.finalRoundPending.map(userId => toUsername(userId) as string)
             : null,
-        myHand: viewerId ? [...(playerStatesSource.get(viewerId)?.hand ?? [])] : [],
+        myHand: viewer ? [...viewer.hand] : [],
     };
+}
+
+/**
+ * Ticket ids as the client wants them: the two cities, the value, and whether
+ * this player's network already joins them. The completion flag is computed
+ * here rather than stored, so it stays right as routes are claimed.
+ */
+function ticketViews(
+    ticketIds: number[],
+    gs: ITrainTimeSpecificGameState,
+    ownerId: string,
+): ITrainTimeTicketView[] {
+    const network = playerNetwork(gs.routeOwners, ownerId);
+    return ticketIds.map(id => TICKETS[id]).filter(Boolean).map(ticket => ({
+        id: ticket.id,
+        cityA: ticket.cityA,
+        cityB: ticket.cityB,
+        points: ticket.points,
+        complete: ticketIsComplete(ticket, network),
+    }));
 }
 
 export var TrainTimeGameDataModel =
@@ -188,7 +234,11 @@ export var TrainTimeGameDataModel =
 // unlike Dice Cities' coins — nothing needs tracking live for this.
 
 export interface ITrainTimePlayerResultStats {
+    /** Route points only — the ticket swing is its own line. */
     score: number;
+    ticketScore: number;
+    ticketsCompleted: number;
+    ticketsHeld: number;
     routesClaimed: number;
     trainsUsed: number;
 }
@@ -202,6 +252,9 @@ export const trainTimeGameResultStatsSchemaDef = {
         type: Schema.Types.Map,
         of: {
             score: Number,
+            ticketScore: Number,
+            ticketsCompleted: Number,
+            ticketsHeld: Number,
             routesClaimed: Number,
             trainsUsed: Number,
         },
@@ -213,11 +266,19 @@ export function computeTrainTimeResultStats(gameData: ITrainTimeGameData): ITrai
     for (const [userId, ps] of gameData.specificGameState.playerStates) {
         playerStats.set(userId, {
             score: ps.score,
+            ticketScore: ps.ticketScore,
+            ticketsCompleted: ps.ticketsCompleted,
+            ticketsHeld: ps.tickets.length,
             routesClaimed: ps.routesClaimed,
             trainsUsed: TRAINS_PER_PLAYER - ps.trains,
         });
     }
     return { playerStats };
+}
+
+/** "+9" / "-4" — a ticket haul reads as the swing it is, not a bare number. */
+function signed(points: number): string {
+    return points >= 0 ? `+${points}` : `${points}`;
 }
 
 export function formatTrainTimeResultStats(
@@ -229,7 +290,8 @@ export function formatTrainTimeResultStats(
         groups.push({
             username: usernameById.get(userId) ?? userId,
             lines: [
-                `${pluralize(s.score, 'point')} from track`,
+                `${s.score + s.ticketScore} points — ${s.score} from track, ${signed(s.ticketScore)} from tickets`,
+                `${s.ticketsCompleted} of ${pluralize(s.ticketsHeld, 'ticket')} connected`,
                 `${pluralize(s.routesClaimed, 'route')} claimed · ${pluralize(s.trainsUsed, 'train')} laid`,
             ],
         });

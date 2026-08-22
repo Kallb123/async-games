@@ -773,6 +773,7 @@ button {
     border-radius: 16px;
     padding: 12px 14px;
 }
+.ag-stat--button { font: inherit; text-align: left; cursor: pointer; }
 .ag-stat-num { font: 800 22px var(--ag-font); color: var(--ag-ink); }
 .ag-stat-label { font: 600 11px var(--ag-font); color: var(--ag-ink-softer); margin-top: 2px; }
 
@@ -2415,6 +2416,9 @@ button {
     padding: 6px 9px 7px;
 }
 .ag-game--traintime .ag-stat-num { font-size: 15px; line-height: 1; }
+/* The tickets tile leads the strip and carries a bar per ticket, so it takes
+   the extra width the design gives it. */
+.ag-game--traintime .ag-stat-row > .ag-stat:first-child { flex: 1.5; }
 .ag-game--traintime .ag-stat-label {
     font: 700 8px var(--ag-font);
     letter-spacing: 0.04em;
@@ -2423,6 +2427,63 @@ button {
     margin: 0 0 4px;
 }
 .ag-tt-stat-suffix { font: 600 8.5px var(--ag-font); color: var(--tt-ink-softer); margin-left: 3px; }
+
+/* The tickets tile: one bar per ticket, weighted by what it's worth, filled
+   in as the network reaches it. */
+.ag-tt-ticket-bars { display: flex; gap: 3px; }
+.ag-tt-ticket-bar { height: 8px; border-radius: 2px; background: var(--tt-line); }
+.ag-tt-ticket-bar--done { background: var(--tt-good); }
+
+/* ---- Destination Tickets ---- */
+.ag-tt-ticket-group + .ag-tt-ticket-group { margin-top: 12px; }
+.ag-tt-ticket-list { display: flex; flex-direction: column; gap: 7px; }
+.ag-tt-ticket {
+    position: relative;
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: var(--tt-panel-2);
+    border: 1.5px solid var(--tt-line);
+    border-radius: 11px;
+    padding: 9px 11px;
+    color: var(--tt-ink);
+    font: inherit;
+}
+button.ag-tt-ticket { cursor: pointer; padding-right: 34px; }
+.ag-tt-ticket--done { border-color: var(--tt-good-line); background: var(--tt-good-tint); }
+.ag-tt-ticket--on { border-color: var(--tt-brass); box-shadow: 0 0 0 2px var(--tt-brass-ring); }
+.ag-tt-ticket-route { display: flex; align-items: center; gap: 8px; }
+.ag-tt-ticket-city { font: 800 12px var(--ag-font); flex: none; }
+.ag-tt-ticket-line {
+    flex: 1;
+    height: 3px;
+    border-radius: 2px;
+    background: repeating-linear-gradient(90deg, var(--tt-ink-softer) 0 6px, transparent 6px 10px);
+}
+.ag-tt-ticket-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 5px; }
+.ag-tt-ticket-status { font: 700 9.5px var(--ag-font); color: var(--tt-ink-soft); }
+.ag-tt-ticket-status--done { color: var(--tt-good); }
+.ag-tt-ticket-points { font: 800 14px var(--ag-font); }
+.ag-tt-ticket-points--miss { color: var(--tt-bad); }
+.ag-tt-ticket-tick {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1.5px solid var(--tt-line);
+    background: var(--tt-panel);
+    color: var(--tt-on-brass);
+    font: 800 11px/17px var(--ag-font);
+    text-align: center;
+}
+.ag-tt-ticket--on .ag-tt-ticket-tick { background: var(--tt-brass); border-color: var(--tt-brass); }
+
+/* The ticket sheet's header, the sibling of .ag-tt-sheet-head's route block. */
+.ag-tt-sheet-title { font: 800 16px var(--ag-font); }
+.ag-tt-sheet-sub { font: 600 11px/1.45 var(--ag-font); opacity: 0.85; margin: 6px 0 0; }
 
 /* ---- The board: a printed map on parchment ---- */
 .ag-game--traintime .ag-board-area { background: var(--tt-parchment); padding: 12px 12px 10px; }

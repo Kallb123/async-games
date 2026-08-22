@@ -15,6 +15,8 @@ import {
 import TrainTimeBoard from "@/games/TrainTime/components/TrainTimeBoard";
 import TrainTimeActions, { TrainTimeAction } from "@/games/TrainTime/components/TrainTimeActions";
 import TrainTimeClaimSheet from "@/games/TrainTime/components/TrainTimeClaimSheet";
+import TrainTimeTicketSheet from "@/games/TrainTime/components/TrainTimeTicketSheet";
+import TrainTimeTicketPanel, { TrainTimeTicketGroup } from "@/games/TrainTime/components/TrainTimeTicketPanel";
 import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
@@ -25,7 +27,7 @@ import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
-import { TrainTimeClaimRoute } from "@/utils/apiModels/GameLogic";
+import { TrainTimeClaimRoute, TrainTimeDrawTickets, TrainTimeKeepTickets } from "@/utils/apiModels/GameLogic";
 import { TRACK_PALETTE } from "@/games/TrainTime/ui";
 import { playerColour } from "@/utils/ui/playerColours";
 import { pluralize } from "@/utils/ui/text";
@@ -40,6 +42,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     console.log(`GET ${pathName}`);
     const { user } = useAuthGuard();
     const [showLog, setShowLog] = useState(false);
+    const [showTickets, setShowTickets] = useState(false);
 
     const { gameid } = use(params);
     const gameId = gameid;
@@ -73,8 +76,8 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     // A draw already started this turn is one action, so nothing is claimable
     // until it finishes.
     const claimableRoutes = useMemo(
-        () => (claimContext && isMyTurn && gs?.drawsThisTurn === 0 ? claimableRouteIds(claimContext) : new Set<number>()),
-        [claimContext, isMyTurn, gs?.drawsThisTurn],
+        () => (claimContext && isMyTurn && gs?.myDrawsThisTurn === 0 ? claimableRouteIds(claimContext) : new Set<number>()),
+        [claimContext, isMyTurn, gs?.myDrawsThisTurn],
     );
 
     const playerName = (userId?: string): string => {
@@ -94,19 +97,36 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
         submitCommand(command, () => setSelectedRouteId(null), 'claim');
     };
 
+    const keepTickets = (ticketIds: number[]) => {
+        const command = new TrainTimeKeepTickets();
+        command.keep = ticketIds;
+        submitCommand(command, undefined, 'keep-tickets');
+    };
+
     function selectRoute(routeId: number) {
         setSelectedRouteId(routeId);
         setAction('claim');
     }
 
-    // ── Top-bar status line ──────────────────────────────────────────────────
+    // ── What the player is being asked for ───────────────────────────────────
+    // Claiming gets a screen of its own (design 14b); the ticket choice takes
+    // the action panel instead, because the map is what a ticket is judged
+    // against. Either way it has to be answered before the turn moves on.
     const claimSheetRoute = claiming && selectedRouteId !== null ? ROUTES[selectedRouteId] : null;
+    const ticketChoice = isMyTurn && (gs?.myPendingTickets.length ?? 0) > 0;
+    // Nobody finishes setup holding no tickets, so an empty pile means this
+    // offer is the opening deal — the same rule the server scores it by.
+    const settingUp = (me?.ticketCount ?? 0) === 0;
+
+    // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
     if (gs) {
         if (abandoned) {
             subtitle = abandoned.subtitle;
         } else if (complete) {
             subtitle = sharedWin ? '🤝 Shared win' : currentUserWon ? '🏆 You won!' : `${playerName(gameData?.winner)} won`;
+        } else if (ticketChoice) {
+            subtitle = settingUp ? 'Setup · keep your tickets' : 'Destination tickets';
         } else if (claimSheetRoute) {
             subtitle = `Claim route · ${routeName(claimSheetRoute)}`;
         } else {
@@ -129,7 +149,9 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                 name: isMe ? 'You' : username,
                 color: playerColour(i),
                 sub: isActive ? `▶ now · ${ps.trains} trains` : `${ps.trains} tr. · 🃏 ${ps.handCount}`,
-                score: ps.score,
+                // ticketScore is 0 until the game is scored, so this is route
+                // points during play and the final total afterwards.
+                score: ps.score + ps.ticketScore,
                 isMe,
                 isActive,
                 warn: ps.trains <= LOW_TRAINS && !complete,
@@ -145,9 +167,36 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
         onClick: endGame,
     }] : [];
 
+    // ── The ticket strip: one bar per ticket, sized by what it's worth ───────
+    const myTickets = gs?.myTickets ?? [];
+    const ticketsDone = myTickets.filter(t => t.complete).length;
+    const ticketBars = myTickets.length > 0
+        ? (
+            <span className="ag-tt-ticket-bars">
+                {myTickets.map(ticket => (
+                    <span
+                        key={ticket.id}
+                        className={`ag-tt-ticket-bar${ticket.complete ? ' ag-tt-ticket-bar--done' : ''}`}
+                        style={{ flex: ticket.points }}
+                    />
+                ))}
+            </span>
+        )
+        : <span className="ag-tt-stat-suffix">none yet</span>;
+
+    // Tickets are secret while the game runs and face-up once it's scored (§10).
+    const ticketGroups: TrainTimeTicketGroup[] = complete && gs
+        ? usernameList.flatMap((username): TrainTimeTicketGroup[] => {
+            const ps = gs.playerStates[username];
+            if (!ps?.tickets) return [];
+            return [{ title: username === myUsername ? 'Your tickets' : `${username}’s tickets`, tickets: ps.tickets }];
+        })
+        : [{ title: 'Your tickets', tickets: myTickets }];
+
     let boardTag: string | null = null;
     if (gs && isMyTurn && !complete) {
-        if (gs.drawsThisTurn > 0) boardTag = '🃏 one more card to take';
+        if (ticketChoice) boardTag = `🎫 keep at least ${gs.myTicketsToKeep}`;
+        else if (gs.myDrawsThisTurn > 0) boardTag = '🃏 one more card to take';
         else if (claimableRoutes.size > 0) boardTag = `◆ ${pluralize(claimableRoutes.size, 'route')} claimable`;
         else boardTag = '◆ nothing claimable — draw cards';
     }
@@ -172,12 +221,17 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
             {gs && me && !claimSheetRoute && (
                 <div className="ag-stat-row">
                     <Stat
+                        value={ticketBars}
+                        label={`Tickets · ${ticketsDone}/${gs.myTickets.length} done`}
+                        onClick={() => setShowTickets(v => !v)}
+                        pressed={showTickets}
+                    />
+                    <Stat
                         value={<>{me.trains}<span className="ag-tt-stat-suffix">of {TRAINS_PER_PLAYER}</span></>}
                         label="Trains"
                     />
-                    <Stat value={me.routesClaimed} label="Routes" />
                     <Stat
-                        value={<>{gs.deckCount}<span className="ag-tt-stat-suffix">+{gs.discardCount} used</span></>}
+                        value={<>{gs.deckCount}<span className="ag-tt-stat-suffix">+{gs.ticketDeckCount} tickets</span></>}
                         label="Deck"
                     />
                 </div>
@@ -208,6 +262,10 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                 />
             ) : gs && (
                 <>
+                    {(showTickets || complete) && (
+                        <TrainTimeTicketPanel groups={ticketGroups} scored={complete} />
+                    )}
+
                     <div className="ag-board-area">
                         <TrainTimeBoard
                             routeOwners={gs.routeOwners}
@@ -232,7 +290,15 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                         </div>
                     </div>
 
-                    {isMyTurn && (
+                    {ticketChoice ? (
+                        <TrainTimeTicketSheet
+                            tickets={gs.myPendingTickets}
+                            mustKeep={gs.myTicketsToKeep}
+                            settingUp={settingUp}
+                            onKeep={keepTickets}
+                            pending={pendingTarget === 'keep-tickets'}
+                        />
+                    ) : isMyTurn && (
                         <TrainTimeActions
                             gs={gs}
                             myUsername={myUsername}
@@ -241,6 +307,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                             selectedRouteId={selectedRouteId}
                             onClaim={() => setClaiming(true)}
                             claimableCount={claimableRoutes.size}
+                            onDrawTickets={() => submitCommand(new TrainTimeDrawTickets(), undefined, 'tickets')}
                             showLog={showLog}
                             onToggleLog={() => setShowLog(v => !v)}
                             submitCommand={submitCommand}

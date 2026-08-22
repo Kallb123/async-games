@@ -273,6 +273,118 @@ export function routeScore(length: number): number {
     return ROUTE_POINTS[length] ?? 0;
 }
 
+// ─── Destination Tickets (§3, §6) ───────────────────────────────────────────
+
+export interface TrainTimeTicketDef {
+    id: number;
+    cityA: number;
+    cityB: number;
+    /** Added to your score if you connect the two cities, subtracted if you don't. */
+    points: number;
+}
+
+// The 30-ticket deck: 4 points for a neighbourly hop, 22 for crossing the
+// continent. Every pair is connectable on this map — the board graph is one
+// connected component, which TrainTimeLogic.test.ts asserts.
+const TICKET_DEFS: [string, string, number][] = [
+    ['DEN', 'ELP', 4],
+    ['KCY', 'HOU', 5],
+    ['NYC', 'ATL', 6],
+    ['CHI', 'NOR', 7],
+    ['CAL', 'SLC', 7],
+    ['HEL', 'LAX', 8],
+    ['DUL', 'HOU', 8],
+    ['SSM', 'NSH', 8],
+    ['MTL', 'ATL', 9],
+    ['SSM', 'OKC', 9],
+    ['SEA', 'LAX', 9],
+    ['CHI', 'SFE', 9],
+    ['DUL', 'ELP', 10],
+    ['TOR', 'MIA', 10],
+    ['POR', 'PHX', 11],
+    ['WIN', 'LRK', 11],
+    ['DEN', 'PIT', 11],
+    ['DAL', 'NYC', 11],
+    ['BOS', 'MIA', 12],
+    ['WIN', 'HOU', 12],
+    ['MTL', 'NOR', 13],
+    ['CAL', 'PHX', 13],
+    ['VAN', 'SFE', 13],
+    ['LAX', 'CHI', 16],
+    ['POR', 'NSH', 17],
+    ['SFO', 'ATL', 17],
+    ['VAN', 'MTL', 20],
+    ['LAX', 'MIA', 20],
+    ['LAX', 'NYC', 21],
+    ['SEA', 'NYC', 22],
+];
+
+export const TICKETS: TrainTimeTicketDef[] = TICKET_DEFS.map(([a, b, points], id) => ({
+    id,
+    cityA: CITY_ID_BY_KEY[a],
+    cityB: CITY_ID_BY_KEY[b],
+    points,
+}));
+
+export const TICKET_COUNT = TICKETS.length;
+
+/** Dealt at setup (§4); the player keeps at least SETUP_TICKETS_KEPT_MIN of them. */
+export const SETUP_TICKETS_DEALT = 3;
+export const SETUP_TICKETS_KEPT_MIN = 2;
+/** Action C draws this many and makes you keep at least one (§5). */
+export const TICKETS_DRAWN_PER_TURN = 3;
+export const DRAWN_TICKETS_KEPT_MIN = 1;
+
+export function ticketName(ticket: TrainTimeTicketDef): string {
+    return `${cityName(ticket.cityA)} – ${cityName(ticket.cityB)}`;
+}
+
+/**
+ * Union-find over the routes one player owns: returns, per city id, the id of
+ * the network component that city sits in. Cities the player never reached sit
+ * alone in their own component, which is exactly what makes a ticket fail.
+ */
+export function playerNetwork(routeOwners: (string | null)[], ownerId: string): number[] {
+    const parent = CITIES.map(c => c.id);
+    const find = (city: number): number => {
+        let root = city;
+        while (parent[root] !== root) root = parent[root];
+        return root;
+    };
+
+    for (const route of ROUTES) {
+        if (routeOwners[route.id] !== ownerId) continue;
+        const rootA = find(route.cityA);
+        const rootB = find(route.cityB);
+        if (rootA !== rootB) parent[rootA] = rootB;
+    }
+    return CITIES.map(c => find(c.id));
+}
+
+/** True when an unbroken chain of the player's routes links the ticket's two cities. */
+export function ticketIsComplete(ticket: TrainTimeTicketDef, network: number[]): boolean {
+    return network[ticket.cityA] === network[ticket.cityB];
+}
+
+export interface TicketOutcome {
+    ticket: TrainTimeTicketDef;
+    complete: boolean;
+}
+
+/** How every one of a player's tickets ended up, in the order they were kept. */
+export function ticketOutcomes(ticketIds: number[], routeOwners: (string | null)[], ownerId: string): TicketOutcome[] {
+    const network = playerNetwork(routeOwners, ownerId);
+    return ticketIds
+        .map(id => TICKETS[id])
+        .filter((ticket): ticket is TrainTimeTicketDef => ticket !== undefined)
+        .map(ticket => ({ ticket, complete: ticketIsComplete(ticket, network) }));
+}
+
+/** Completed tickets add their value, incomplete ones subtract it (§7). */
+export function ticketPoints(outcomes: TicketOutcome[]): number {
+    return outcomes.reduce((total, o) => total + (o.complete ? o.ticket.points : -o.ticket.points), 0);
+}
+
 // ─── Claim legality ─────────────────────────────────────────────────────────
 
 /** Why a route can't be claimed right now, or null when it can. */
@@ -419,9 +531,35 @@ export function marketNeedsWipe(market: TrainTimeCardColour[]): boolean {
 export interface ITrainTimePlayerState {
     /** Secret — redacted from every response except its owner's (design doc §10). */
     hand: TrainTimeCardColour[];
+    /** Ticket ids this player has kept. Secret until final scoring (§10). */
+    tickets: number[];
+    /**
+     * Tickets offered but not yet answered: the setup deal on a player's first
+     * turn, or the three drawn by Action C. Also secret, and a turn can't move
+     * on until they're resolved.
+     */
+    pendingTickets: number[];
     trains: number;
+    /** Route points, scored the moment a route is claimed. */
     score: number;
+    /** Tickets, scored once at the end (§7) — negative if the network fell short. */
+    ticketScore: number;
+    ticketsCompleted: number;
     routesClaimed: number;
+}
+
+/**
+ * True while this player still owes the keep-at-least-2 choice from setup.
+ * Nobody can finish setup holding no tickets, so an empty kept pile with an
+ * offer on the table can only be the opening deal.
+ */
+export function isSetupTicketChoice(ps: ITrainTimePlayerState): boolean {
+    return ps.tickets.length === 0;
+}
+
+/** How many of the tickets currently on offer this player has to keep (§4, §5). */
+export function ticketsToKeep(ps: ITrainTimePlayerState): number {
+    return isSetupTicketChoice(ps) ? SETUP_TICKETS_KEPT_MIN : DRAWN_TICKETS_KEPT_MIN;
 }
 
 export interface ITrainTimeSpecificGameState {
@@ -430,11 +568,16 @@ export interface ITrainTimeSpecificGameState {
     discard: TrainTimeCardColour[];
     /** The five face-up cards everybody can draw from. */
     market: TrainTimeCardColour[];
+    /** Ticket ids still to be dealt; index 0 is the top, discards go to the bottom. */
+    ticketDeck: number[];
     playerStates: Map<string, ITrainTimePlayerState>;
     /** Owning userId per route id, null where unclaimed. Length ROUTE_COUNT. */
     routeOwners: (string | null)[];
-    /** Cards taken so far in the active player's draw action (0 or 1). */
+    /** Cards taken so far in the current draw action (0 or 1). */
     drawsThisTurn: number;
+    /** Whose draw that is. A skipped turn leaves the count behind, so it only
+     *  ever counts for the player it was recorded against. */
+    drawTurnOwner: string | null;
     /**
      * Once someone ends a turn on 2 or fewer trains, everyone — including them —
      * gets exactly one more turn (§7). This holds the userIds who still owe one;
@@ -446,18 +589,35 @@ export interface ITrainTimeSpecificGameState {
 }
 
 /**
+ * How far into their two-card draw this player is. The count is dropped the
+ * moment it belongs to somebody else, so a turn timer that skips a player
+ * halfway through a draw can't leave the next one owing half a turn.
+ */
+export function drawsTakenBy(gs: ITrainTimeSpecificGameState, userId: string): number {
+    return gs.drawTurnOwner === userId ? gs.drawsThisTurn : 0;
+}
+
+/**
  * Deals a fresh game: shuffled deck, four cards each, five face-up.
  * Deterministic given the shuffled deck, so it's the one place setup lives.
  */
 export function buildInitialTrainTimeState(turnOrder: string[]): ITrainTimeSpecificGameState {
     const deck = shuffle(buildCarriageDeck());
 
+    const ticketDeck = shuffle(TICKETS.map(t => t.id));
+
     const playerStates = new Map<string, ITrainTimePlayerState>();
     for (const userId of turnOrder) {
         playerStates.set(userId, {
             hand: deck.splice(-STARTING_HAND_SIZE, STARTING_HAND_SIZE),
+            // Dealt now, chosen on the player's first turn: an async table
+            // can't sit through a setup round where everybody answers at once.
+            tickets: [],
+            pendingTickets: ticketDeck.splice(0, SETUP_TICKETS_DEALT),
             trains: TRAINS_PER_PLAYER,
             score: 0,
+            ticketScore: 0,
+            ticketsCompleted: 0,
             routesClaimed: 0,
         });
     }
@@ -466,9 +626,11 @@ export function buildInitialTrainTimeState(turnOrder: string[]): ITrainTimeSpeci
         deck,
         discard: [],
         market: deck.splice(-MARKET_SIZE, MARKET_SIZE),
+        ticketDeck,
         playerStates,
         routeOwners: Array.from({ length: ROUTE_COUNT }, () => null),
         drawsThisTurn: 0,
+        drawTurnOwner: null,
         finalRoundPending: null,
         gameOver: false,
     };

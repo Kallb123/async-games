@@ -3,6 +3,7 @@ import React from 'react';
 import type { ITrainTimeSpecificGameStateResponse } from '@/games/TrainTime/apiModels';
 import {
     ROUTES,
+    TICKETS_DRAWN_PER_TURN,
     TRAIN_TIME_CARD_COLOURS,
     TrainTimeCardColour,
     routeName,
@@ -15,8 +16,8 @@ import { TrainTimeDrawCarriageCard, TrainTimePassTurn } from '@/utils/apiModels/
 
 const HAND_ORDER: TrainTimeCardColour[] = [...TRAIN_TIME_CARD_COLOURS, 'engine'];
 
-/** The turn's one action: cards or track. */
-export type TrainTimeAction = 'draw' | 'claim';
+/** The turn's one action: cards, track or tickets (§5). */
+export type TrainTimeAction = 'draw' | 'claim' | 'tickets';
 
 interface TrainTimeActionsProps {
     gs: ITrainTimeSpecificGameStateResponse;
@@ -28,6 +29,8 @@ interface TrainTimeActionsProps {
     /** Opens the claim sheet for the selected route. */
     onClaim: () => void;
     claimableCount: number;
+    /** Fires Action C — draw three tickets and keep at least one. */
+    onDrawTickets: () => void;
     showLog: boolean;
     onToggleLog: () => void;
     submitCommand: SubmitCommand;
@@ -41,7 +44,7 @@ interface TrainTimeActionsProps {
  * commits it.
  */
 export default function TrainTimeActions({
-    gs, myUsername, action, setAction, selectedRouteId, onClaim, claimableCount,
+    gs, myUsername, action, setAction, selectedRouteId, onClaim, claimableCount, onDrawTickets,
     showLog, onToggleLog, submitCommand, pendingTarget,
 }: TrainTimeActionsProps) {
     const me = gs.playerStates[myUsername];
@@ -50,11 +53,14 @@ export default function TrainTimeActions({
     const hand = gs.myHand;
     // A draw is one action across two commands: once it's started, the turn is
     // committed to drawing.
-    const midDraw = gs.drawsThisTurn > 0;
+    const midDraw = gs.myDrawsThisTurn > 0;
     const deckEmpty = gs.deckCount === 0 && gs.discardCount === 0;
     const nothingToDraw = deckEmpty && gs.market.length === 0;
     const selectedRoute = selectedRouteId === null ? null : ROUTES[selectedRouteId];
-    const drawing = action === 'draw' || midDraw;
+    // Once a draw has started the turn is committed to it, whatever the
+    // picker last had selected.
+    const chosen: TrainTimeAction = midDraw ? 'draw' : action;
+    const ticketsLeft = Math.min(TICKETS_DRAWN_PER_TURN, gs.ticketDeckCount);
 
     function draw(source: 'deck' | 'market', marketIndex = 0) {
         const command = new TrainTimeDrawCarriageCard();
@@ -130,7 +136,7 @@ export default function TrainTimeActions({
                 <div className="ag-tt-actions">
                     <button
                         type="button"
-                        className={`ag-tt-action${drawing ? ' ag-tt-action--on' : ''}`}
+                        className={`ag-tt-action${chosen === 'draw' ? ' ag-tt-action--on' : ''}`}
                         disabled={nothingToDraw}
                         onClick={() => setAction('draw')}
                     >
@@ -139,17 +145,35 @@ export default function TrainTimeActions({
                     </button>
                     <button
                         type="button"
-                        className={`ag-tt-action${!drawing ? ' ag-tt-action--on' : ''}`}
+                        className={`ag-tt-action${chosen === 'claim' ? ' ag-tt-action--on' : ''}`}
                         disabled={midDraw || claimableCount === 0}
                         onClick={() => setAction('claim')}
                     >
                         <div className="ag-tt-action-glyph">🚂</div>
                         Claim route
                     </button>
+                    <button
+                        type="button"
+                        className={`ag-tt-action${chosen === 'tickets' ? ' ag-tt-action--on' : ''}`}
+                        disabled={midDraw || ticketsLeft === 0}
+                        onClick={() => setAction('tickets')}
+                    >
+                        <div className="ag-tt-action-glyph">🎫</div>
+                        Draw tickets
+                    </button>
                 </div>
 
                 <div className="ag-btn-row" style={{ marginTop: 9, alignItems: 'center' }}>
-                    {drawing ? (
+                    {chosen === 'tickets' ? (
+                        <ActionButton
+                            className="ag-btn ag-btn--primary ag-btn--block"
+                            pending={pendingTarget === 'tickets'}
+                            pendingLabel="Drawing…"
+                            onClick={onDrawTickets}
+                        >
+                            Draw {pluralize(ticketsLeft, 'ticket')} →
+                        </ActionButton>
+                    ) : chosen === 'draw' ? (
                         <ActionButton
                             className="ag-btn ag-btn--primary ag-btn--block"
                             disabled={deckEmpty}
