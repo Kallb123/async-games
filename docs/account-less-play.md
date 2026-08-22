@@ -227,6 +227,43 @@ not free of changes, though: those routes resolve names through
 introduces make the name-resolution fix in §5 a **prerequisite**, not a
 tidy-up.
 
+### When does the lobby start?
+
+Today an invitation starts the game the moment every entry in `userIdList` has
+`inviteAccepted: true` — there is no host action in the flow at all. **Keeping
+that predicate is the whole trick.** An open seat is an unaccepted entry, so a
+lobby starts when the last seat is claimed, using the existing check verbatim.
+
+So a lobby is *sized*, not open-ended: the host picks a party — "Dave, plus two
+open seats" — and the game starts when Dave accepts and both seats fill. Named
+invitees and open seats coexist happily, because they are the same field. (The
+host is not in `userIdList`; they are `senderId`, concatenated in
+`CreateGame(invite, userIdList.concat(senderId))`, so the seat count is
+opponents.)
+
+A host can't always predict how many friends turn up, so there is one override:
+a **"start now"** button. The cheap way to express it is *not* a second start
+path — it **deletes the unclaimed seats**, which makes the existing all-accept
+predicate true, and then calls the same `startGameFromInvitation`. One start
+condition, one code path; the button edits the seat list rather than bypassing
+the rule. It stays disabled while the party is under the game's minimum, which
+`partySizeOutOfRange` already knows from `GameMeta.players` (§6).
+
+Two mechanics follow from open seats being contended:
+
+- **Claiming a seat has to be atomic.** `GameDataSchema` sets
+  `optimisticConcurrency: true`; `InvitationSchema` does **not**. Two guests
+  submitting the code at the same instant would each read the lobby, each
+  append, and one would silently overwrite the other — or both would take the
+  last seat and the party would exceed the game's maximum. The join must be a
+  single conditional update that matches an unclaimed seat, not a
+  read-modify-write. "Start now" racing a join is the same problem and wants
+  the same treatment.
+- **A claimed seat is a real acceptance**, so the last guest to join is the one
+  whose request starts the game — exactly as the last invitee to accept does
+  today, including the "skip the first `YourTurn` push for whoever triggered
+  it" branch already in the accept route.
+
 ### The code itself
 
 - **Alphabet:** uppercase minus the ambiguous glyphs — no `I`, `O`, `0`, `1`.
@@ -313,7 +350,7 @@ picker joined by a seat list: `GameSetupLayout` + `TurnTimerSelect` +
 `usePlayerList` (unchanged — it already keeps a trailing empty slot and filters
 blanks, so "not every slot has to be filled" is behaviour it has today, not a
 change), with `PartySizeHint` and its `partySizeOutOfRange` already owning the
-min/max messaging that §8's "cap the open seats" question needs.
+min/max messaging that bounds the host's open-seat count (§8).
 
 **The seat list filling up live** is `IncomingInvitesList` with different rows:
 `useRefreshableData` + `usePushEvents`' invite events for the refresh loop, and
@@ -366,7 +403,9 @@ the doc alone is internal and does not earn a line.
 | Lobby + join screens | M | Low | Mostly composition of existing pieces |
 | Guest push + notification permission | S | Med | The feature's whole value — but the offer banners and permission hook already exist; this is wiring, not building |
 | Claim-your-account prompt | S | Low | Trivial under A, a migration under B |
-| Guest sweeper cron | S | Low | Model it on `cron/staledevices` |
+| "Start now" button | S | Low | Deletes unclaimed seats, then the existing start path; plus an atomic seat claim on `Invitation` |
+| `unclaimedPlayerIds` on `GameResult` + claim `$pull` | S | Low | One filter on stats reads, one indexed update on claim |
+| Guest sweeper cron | S | Low | Model it on `cron/staledevices`; reads the existing `{ playerIds: 1, endedAt: -1 }` index |
 
 **Suggested order.** The refactor and the name-resolution fix are independently
 worth doing and unblock everything. Then lobby + code + join with *signed-in*
@@ -378,27 +417,63 @@ is worse than no guest at all.
 
 ---
 
-## 8. Open questions
+## 8. Decisions
 
-- **Does a guest's game count?** Toward `GameResult`, head-to-head, and the
-  real player's stats — or is it an exhibition match? Leaning: it counts, and
-  becomes fully attributed if the guest claims their account.
-- **What happens when a guest goes quiet?** They will, more than signed-in
-  players will. The `missedTurnCounts` abandonment path already handles it, but
-  a guest seat probably deserves a shorter fuse than a real player's.
-- **How many guests per game?** All-guest games are possible under this design
-  and are also the abuse case (free anonymous storage). Capping open seats
-  below the game's max, or requiring one unlocked player, is the cheap answer.
-- **How long does an unclaimed guest live?** Drives the sweeper, the MAU bill
-  under Option A, and how long a "resume" link keeps working.
-- **Does the code survive into the game as a spectator link?** Tempting, and a
-  different feature with different safety questions. Keep it out of v1.
-- **Moderation.** [`docs/social-features.md`](./social-features.md) §7 already
-  says: never open a text/state channel to strangers before blocking and
-  reporting are real. A join code is exactly such a channel — a guest-authored
-  display name is user-generated content visible to a real player, so name
-  filtering is table stakes, and chat must stay off for guest seats until that
-  work exists.
+These were open; they are now settled. What each one still costs is noted.
+
+**A game counts once every player is a registered account.** A game with an
+unclaimed guest in it is an exhibition match — it does not feed anyone's
+head-to-head record or win rate — and it starts counting if and when the guest
+claims their account.
+
+The cheap mechanism, given `GameResult` is append-only and written once: store
+an `unclaimedPlayerIds: string[]` alongside `playerIds` at write time. A result
+counts when that array is empty, so stats queries add one filter and never have
+to ask Clerk whether a player is a guest. Claiming an account is then a single
+indexed update — `$pull` the id from every result carrying it — with no
+recomputation and nothing to backfill. Under Option A the ids never change, so
+the record the guest played under is the record they inherit.
+
+**The abandonment fuse stays exactly as it is.** A guest who goes quiet is
+handled by the same `missedTurnCounts` counter and the same
+`MAX_CONSECUTIVE_MISSED_TURNS` ceiling in the turn-timer cron as anyone else.
+No guest-specific timing, no new code.
+
+**Every lobby has at least one registered user: the host.** Lobby creation sits
+behind the unlocked gate and a guest never sees that interface, so an all-guest
+game is impossible by construction rather than by a rule someone has to
+remember. The host chooses how many seats to open, bounded above by the game's
+maximum via `PartySizeHint`. This also disposes of the abuse case §4 raised —
+free anonymous storage would need a real, unlocked account to open the door
+first.
+
+**An unclaimed guest is swept a week after their last game concludes.** Note
+the key: *concludes*, not "was created" — a guest in a live game is never
+swept, however long the game runs. `GameResult`'s existing
+`{ playerIds: 1, endedAt: -1 }` index answers "when did this guest's last game
+end" in one query, which is the whole of the sweeper's read; model the job on
+`cron/staledevices`. Two edges worth handling:
+
+- A guest who joined a lobby that never started has no `GameResult` at all.
+  Sweep them on the lobby's own `expiresAt` instead.
+- Deleting the Clerk user makes their id unresolvable, so their name vanishes
+  from the *other* player's finished game — the position-preserving fix in §5
+  turns that into a "Guest" placeholder rather than a misaligned list, which is
+  the floor. Above the floor, and cheap: copy the guest's display name onto the
+  `GameResult` when it is written. That store is already explicitly designed to
+  outlive the game document, so a name it can render without Clerk is in
+  keeping with what it is for.
+
+**No spectators.** The code dies at game start (§4) and nothing else opens a
+read-only door into a running game.
+
+**No moderation in scope.** Recorded as a deliberate boundary, with one
+residual: a guest-typed display name is still text a real player sees, so the
+join endpoint should cap its length and character set. That is input
+validation, not moderation. And per
+[`docs/social-features.md`](./social-features.md) §7 — never open a text
+channel to strangers before blocking and reporting exist — guest seats stay out
+of any future chat feature until that work is done.
 
 ---
 
@@ -409,6 +484,10 @@ is worse than no guest at all.
 - **A lobby is an `Invitation` with a code and open seats**, not a new model —
   reusing it inherits every game's `CreateGame()` for free. Extracting the
   shared game-start helper out of `invite/accept` is the prerequisite.
+- **It starts on the predicate that already exists.** An open seat is an
+  unaccepted `userIdList` entry, so a lobby starts when the last one is
+  claimed — no new start rule. "Start now" deletes the empty seats so that
+  same predicate becomes true, rather than adding a second path.
 - **Make the guest a claimable Clerk user** (Option A). It touches one of the
   five choke points — the unlocked gate, a one-line predicate — and makes
   "keep my account" an update rather than a migration. It also means no second
@@ -419,6 +498,10 @@ is worse than no guest at all.
   join-by-code game into an onboarded player.
 - **Ship it in two halves.** Codes for signed-in players first (valuable
   alone, no identity risk), then guests with push and claiming together.
+- **The scope is settled** (§8): a game counts only once every player is a
+  real account, the abandonment fuse is unchanged, every lobby has a
+  registered host, unclaimed guests are swept a week after their last game
+  ends, and spectating and moderation are both out.
 - **Fix `userIdListToUsernameList` first** regardless — it drops unresolvable
   ids and misaligns the index-based name lookup in `CreateResponse` and in all
   seven games' `gameStateToModel`.
