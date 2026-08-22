@@ -4,6 +4,7 @@ import Link from "next/link";
 import Brand from "@/components/ui/Brand";
 import LegalLinks from "@/components/ui/LegalLinks";
 import GameLibrary from "@/components/ui/GameLibrary";
+import WhatsNew from "@/components/ui/WhatsNew";
 import { GAME_META } from "@/utils/ui/games";
 
 // Anonymous visitors have no account to set a game up with, so every game in
@@ -90,6 +91,8 @@ export default function Landing() {
                     <span aria-hidden="true" className="ag-cta-arrow">→</span>
                 </Link>
             </div>
+
+            <WhatsNew />
 
             <div className="ag-footer">
                 <div>Already have an account? <Link href="/login">Sign in</Link></div>

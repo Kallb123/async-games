@@ -55,7 +55,8 @@ out. A second copy is the signal to extract the first one.
 
 New games should add their metadata to `src/utils/ui/games.ts` and reuse
 `GameSetupLayout`, `UserInviteList`, and `TurnTimerSelect` for their setup
-screen rather than rebuilding the form.
+screen rather than rebuilding the form — and add themselves to the "What's
+new" notes (see Working practices below).
 
 ## Design system conventions
 
@@ -71,6 +72,13 @@ screen rather than rebuilding the form.
 
 - Preserve existing data flows and API contracts when restyling — the UI
   overhaul is presentational and must not change request/response shapes.
+- **Keep the "What's new" notes up to date.** The bottom of the home page
+  lists what has changed recently, in three groups — new games, enhancements
+  and bug fixes — from `src/utils/ui/whatsNew.ts`. Any change a player would
+  notice adds a line to the right group in the same PR: newest first, written
+  in the player's language, and drop the oldest line once a group runs past
+  five. Internal-only work (refactors, docs, CI, dependency bumps) does not
+  belong there.
 - Before committing UI changes, run `npm run build` and `npx tsc --noEmit`;
   both must pass. If you touch the game engine (`src/utils/apiModels/`), also run
   `npm test` — the serializable-registry test guards that every game's rules
