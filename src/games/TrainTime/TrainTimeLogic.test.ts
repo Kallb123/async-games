@@ -13,6 +13,7 @@ import {
     buildCarriageDeck,
     buildPayment,
     canClaimRoute,
+    paymentOptions,
     marketNeedsWipe,
     paymentIsValid,
     payableColours,
@@ -111,7 +112,9 @@ describe("claim legality", () => {
     it("lets any single colour pay a grey route, Engines included", () => {
         expect(payableColours(greyRoute, ['red', 'red', 'red']).sort()).toEqual(['red']);
         expect(payableColours(greyRoute, ['red', 'red', 'engine']).sort()).toEqual(['red']);
-        expect(payableColours(greyRoute, ['engine', 'engine', 'engine'])).toContain('engine');
+        // All-Engine pays anything: every card played is a wild, so every
+        // colour is "payable" and the payment comes out as three Locos.
+        expect(payableColours(greyRoute, ['engine', 'engine', 'engine']).length).toBe(8);
         expect(payableColours(greyRoute, ['red', 'red', 'blue'])).toEqual([]);
     });
 
@@ -131,6 +134,28 @@ describe("claim legality", () => {
         expect(paymentIsValid(greyRoute, ['red', 'red', 'red'], ['red', 'red'])).toBe(false);
         expect(paymentIsValid(blueRoute, ['red', 'red', 'red'], ['red', 'red', 'red'])).toBe(false);
         expect(paymentIsValid(blueRoute, ['blue', 'engine', 'engine'], ['blue', 'engine', 'engine'])).toBe(true);
+    });
+
+    it("prices every colour a route could be paid in, cheapest wild use first", () => {
+        const greyFour = ROUTES.find(r => r.colour === 'grey' && r.length === 4)!;
+        const options = paymentOptions(greyFour, ['black', 'black', 'black', 'black', 'blue', 'engine']);
+
+        // Black covers it outright, so it leads and spends no wild.
+        expect(options[0]).toMatchObject({ colour: 'black', enginesUsed: 0, shortfall: 0 });
+        // Blue is the nearest miss: 1 blue + the Loco still leaves it 2 short.
+        const blue = options.find(o => o.colour === 'blue')!;
+        expect(blue.shortfall).toBe(2);
+        expect(blue.payment).toEqual([]);
+        // Options are one per candidate colour — a grey route has all eight.
+        expect(options.length).toBe(8);
+    });
+
+    it("pays a route entirely in Engines when that's all the hand has", () => {
+        const blueThree = ROUTES.find(r => r.colour === 'blue' && r.length === 3)!;
+        const options = paymentOptions(blueThree, ['engine', 'engine', 'engine']);
+        expect(options[0]).toMatchObject({ colour: 'blue', shortfall: 0, enginesUsed: 3 });
+        expect(options[0].payment).toEqual(['engine', 'engine', 'engine']);
+        expect(paymentIsValid(blueThree, options[0].payment, ['engine', 'engine', 'engine'])).toBe(true);
     });
 
     it("closes the parallel track below 4 players, and never lets one player own both", () => {

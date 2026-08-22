@@ -1117,6 +1117,7 @@ button {
     border-color: transparent;
     box-shadow: 0 0 0 2px var(--ag-gold);
 }
+.ag-score-pill--warn { box-shadow: inset 0 0 0 1.5px var(--ag-danger); }
 .ag-score-dot { width: 9px; height: 9px; flex: none; border-radius: 2px; }
 .ag-score-pill--me .ag-score-dot { outline: 1.5px solid var(--ag-on-dark); }
 .ag-score-main { flex: 1; min-width: 0; }
@@ -2344,25 +2345,244 @@ button {
 }
 
 /* ==========================================================================
-   Train Time — rail map, card market and hand chips
-   ========================================================================== */
-/* The map is drawn on pale water, and is far wider than the app column, so it
-   sits in its own scroller and can be zoomed rather than shrunk. */
-.ag-tt-frame { background: #dcecf7; box-shadow: inset 0 2px 12px rgba(47, 63, 77, 0.13), 0 4px 0 #a9c8dd; }
-.ag-tt-scroll { overflow: auto; border-radius: 12px; -webkit-overflow-scrolling: touch; }
-.ag-tt-scroll svg { max-width: none; }
-/* A carriage-card colour, shown on every market button and hand chip. */
-.ag-tt-swatch {
-    width: 14px;
-    height: 14px;
-    border-radius: 4px;
-    border: 1.5px solid;
-    flex: none;
+   Train Time — printed rail map on parchment, oxblood-and-brass chrome
+   ==========================================================================
+   Everything here is scoped to .ag-game--traintime, so the game re-tints the
+   shared chrome (top bar, scoreboard, stat row, buttons) rather than growing
+   private copies of it. The tokens are the game's own livery, per the design;
+   the structure underneath is the usual ag-* components. */
+.ag-game--traintime {
+    --tt-oxblood: oklch(0.28 0.06 25);
+    --tt-oxblood-2: oklch(0.34 0.055 25);
+    --tt-brass: oklch(0.72 0.12 78);
+    --tt-brass-deep: oklch(0.58 0.11 72);
+    --tt-brass-ring: oklch(0.85 0.1 82);
+    --tt-brass-tint: oklch(0.94 0.05 80);
+    --tt-parchment: oklch(0.92 0.022 85);
+    --tt-parchment-2: oklch(0.96 0.024 85);
+    --tt-panel: oklch(0.95 0.016 85);
+    --tt-panel-2: oklch(0.97 0.012 85);
+    --tt-line: oklch(0.87 0.025 80);
+    --tt-ink: oklch(0.27 0.03 40);
+    --tt-ink-soft: oklch(0.5 0.04 45);
+    --tt-ink-softer: oklch(0.55 0.03 45);
+    --tt-on-brass: #2a1a08;
+    --tt-good: oklch(0.45 0.11 145);
+    --tt-good-tint: oklch(0.94 0.05 150);
+    --tt-good-line: oklch(0.82 0.07 150);
+    --tt-bad: oklch(0.55 0.16 30);
+    background: var(--tt-panel);
+    color: var(--tt-ink);
 }
 
-/* One of the five face-up cards: an ag-chip that carries a colour swatch. */
-.ag-tt-card { display: inline-flex; align-items: center; gap: 7px; }
-.ag-tt-card--blocked { opacity: 0.45; }
+/* ---- Shared chrome, re-tinted ---- */
+.ag-game--traintime .ag-game-topbar { background: var(--tt-oxblood); }
+.ag-game--traintime .ag-scorestrip { background: var(--tt-oxblood-2); }
+.ag-game--traintime .ag-score-pill { background: var(--tt-panel-2); border-color: transparent; min-width: 72px; }
+.ag-game--traintime .ag-score-pill--me {
+    background: var(--tt-brass);
+    color: var(--tt-on-brass);
+    box-shadow: 0 0 0 2px var(--tt-brass-ring);
+}
+.ag-game--traintime .ag-score-pill--warn { box-shadow: inset 0 0 0 1.5px var(--tt-bad); }
+.ag-game--traintime .ag-score-pill--warn .ag-score-sub { color: var(--tt-bad); font-weight: 700; }
+.ag-game--traintime .ag-btn--primary {
+    background: var(--tt-brass);
+    color: var(--tt-on-brass);
+    box-shadow: 0 3px 0 var(--tt-brass-deep);
+}
+.ag-game--traintime .ag-btn--primary:hover { color: var(--tt-on-brass); }
+.ag-game--traintime .ag-btn--light { background: var(--tt-panel-2); border-color: var(--tt-line); color: var(--tt-ink); }
+.ag-game--traintime .ag-btn--ghost { border-color: var(--tt-oxblood); color: var(--tt-oxblood); }
+.ag-game--traintime .ag-actionsheet,
+.ag-game--traintime .ag-hand,
+.ag-game--traintime .ag-log { background: var(--tt-panel); }
+.ag-game--traintime .ag-hand { border-top-color: var(--tt-line); }
+.ag-game--traintime .ag-hand-title,
+.ag-game--traintime .ag-hand-note { color: var(--tt-ink-soft); }
+.ag-game--traintime .ag-log-item { color: var(--tt-ink); border-color: var(--tt-line); }
+
+/* The objective strip reuses Stat/.ag-stat-row, flipped so the label reads as
+   a header above its number the way the design shows it. */
+.ag-game--traintime .ag-stat-row { padding: 0 12px 10px; background: var(--tt-oxblood-2); gap: 6px; }
+.ag-game--traintime .ag-stat {
+    display: flex;
+    flex-direction: column-reverse;
+    justify-content: flex-end;
+    background: var(--tt-panel-2);
+    border: none;
+    border-radius: 9px;
+    padding: 6px 9px 7px;
+}
+.ag-game--traintime .ag-stat-num { font-size: 15px; line-height: 1; }
+.ag-game--traintime .ag-stat-label {
+    font: 700 8px var(--ag-font);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--tt-ink-soft);
+    margin: 0 0 4px;
+}
+.ag-tt-stat-suffix { font: 600 8.5px var(--ag-font); color: var(--tt-ink-softer); margin-left: 3px; }
+
+/* ---- The board: a printed map on parchment ---- */
+.ag-game--traintime .ag-board-area { background: var(--tt-parchment); padding: 12px 12px 10px; }
+.ag-tt-frame {
+    background: var(--tt-parchment-2);
+    border-radius: 16px;
+    padding: 6px;
+    box-shadow: inset 0 0 0 1.5px oklch(0.86 0.03 80), 0 3px 0 oklch(0.84 0.03 78);
+}
+.ag-game--traintime .ag-board-tag { background: var(--tt-brass); color: var(--tt-on-brass); }
+.ag-tt-scroll { overflow: auto; border-radius: 12px; -webkit-overflow-scrolling: touch; }
+.ag-tt-scroll svg { max-width: none; }
+
+/* Per-player segment counts under the map. */
+.ag-tt-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+.ag-tt-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--tt-panel-2);
+    border-radius: 99px;
+    padding: 3px 8px;
+    font: 700 9px var(--ag-font);
+}
+.ag-tt-legend-rail { width: 12px; height: 5px; border-radius: 1px; flex: none; }
+/* The narrow companion button beside a full-width CTA (Log, Back). */
+.ag-tt-side-btn { flex: none; width: 68px; padding-left: 0; padding-right: 0; }
+
+/* ---- Carriage cards: the face-up row, the hand, the payment swatches ---- */
+.ag-tt-market { display: flex; gap: 5px; }
+.ag-tt-card {
+    flex: 1;
+    height: 38px;
+    border: none;
+    border-radius: 6px;
+    display: flex;
+    align-items: flex-end;
+    padding: 3px;
+    font: 800 7px var(--ag-font);
+    cursor: pointer;
+}
+.ag-tt-card--engine { box-shadow: 0 0 0 2px var(--tt-brass); }
+.ag-tt-card:disabled { opacity: 0.42; cursor: default; }
+.ag-tt-card--deck {
+    flex: none;
+    width: 30px;
+    align-items: center;
+    justify-content: center;
+    background: oklch(0.35 0.05 30);
+    color: oklch(0.85 0.06 80);
+    font: 800 15px var(--ag-font);
+}
+.ag-tt-hand { display: flex; gap: 5px; flex-wrap: wrap; }
+.ag-tt-hand-card {
+    flex: 1 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: 7px;
+    font: 800 11px var(--ag-font);
+}
+.ag-tt-payable {
+    font: 800 8.5px var(--ag-font);
+    color: var(--tt-good);
+    background: var(--tt-good-tint);
+    border: 1px solid var(--tt-good-line);
+    border-radius: 99px;
+    padding: 2px 8px;
+}
+
+/* ---- The one-action picker ---- */
+.ag-tt-actions { display: flex; gap: 6px; }
+.ag-tt-action {
+    flex: 1;
+    background: var(--tt-panel-2);
+    border: 1px solid var(--tt-line);
+    border-radius: 10px;
+    padding: 7px 0;
+    text-align: center;
+    font: 800 8.5px var(--ag-font);
+    color: var(--tt-ink);
+    cursor: pointer;
+}
+.ag-tt-action--on {
+    background: var(--tt-brass-tint);
+    border-color: var(--tt-brass);
+    color: oklch(0.4 0.09 60);
+    box-shadow: 0 0 0 2px var(--tt-brass-ring);
+}
+.ag-tt-action:disabled { opacity: 0.45; cursor: default; }
+.ag-tt-action-glyph { font-size: 14px; }
+
+/* ---- The claim sheet ---- */
+.ag-tt-sheet-head { background: var(--tt-oxblood); color: oklch(0.96 0.015 85); padding: 18px 16px 22px; }
+.ag-tt-route { display: flex; align-items: center; gap: 10px; }
+.ag-tt-route-city { flex: none; text-align: center; font: 800 10px var(--ag-font); max-width: 78px; }
+.ag-tt-route-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fdfbf6;
+    border: 2.5px solid var(--tt-brass);
+    margin: 0 auto 5px;
+}
+.ag-tt-route-track { flex: 1; display: flex; gap: 4px; }
+.ag-tt-route-seg { flex: 1; height: 20px; border-radius: 3px; box-shadow: inset 0 0 0 1.5px #ffffff2e; }
+.ag-tt-route-tags { display: flex; justify-content: center; gap: 8px; margin-top: 14px; }
+.ag-tt-route-tag { background: #ffffff1c; border-radius: 8px; padding: 5px 10px; font: 700 9.5px var(--ag-font); }
+.ag-tt-route-tag--score { background: var(--tt-brass); color: var(--tt-on-brass); font-weight: 800; }
+
+.ag-tt-pay { display: flex; flex-direction: column; gap: 8px; }
+.ag-tt-pay-option {
+    width: 100%;
+    text-align: left;
+    background: var(--tt-panel-2);
+    border: 1px solid var(--tt-line);
+    border-radius: 12px;
+    padding: 10px 12px;
+    cursor: pointer;
+}
+.ag-tt-pay-option--on { border: 1.5px solid var(--tt-brass); box-shadow: 0 0 0 2px oklch(0.88 0.08 82); }
+.ag-tt-pay-option--short { opacity: 0.62; cursor: default; }
+.ag-tt-pay-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ag-tt-pay-cards { display: flex; gap: 4px; flex-wrap: wrap; }
+.ag-tt-pay-card { width: 22px; height: 30px; border-radius: 4px; flex: none; }
+.ag-tt-pay-card--gap { border: 1.5px dashed oklch(0.7 0.02 80); }
+.ag-tt-pay-check {
+    width: 20px;
+    height: 20px;
+    flex: none;
+    border-radius: 50%;
+    background: var(--tt-brass);
+    color: var(--tt-on-brass);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font: 800 11px var(--ag-font);
+}
+.ag-tt-pay-short { font: 800 9.5px var(--ag-font); color: var(--tt-bad); margin-left: auto; }
+.ag-tt-pay-note { font: 700 10px/1.4 var(--ag-font); color: var(--tt-ink-soft); margin: 7px 0 0; }
+
+.ag-tt-after {
+    margin-top: 14px;
+    background: var(--tt-panel-2);
+    border: 1px solid var(--tt-line);
+    border-radius: 12px;
+    padding: 11px 12px;
+}
+.ag-tt-after-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    font: 600 11px/1.3 var(--ag-font);
+    margin-top: 7px;
+}
+.ag-tt-after-row:first-of-type { margin-top: 0; }
+.ag-tt-after-value { font-weight: 800; }
+.ag-tt-after-to { color: var(--tt-good); }
 
 /* ==========================================================================
    Solitaire — green-felt table for the board screen

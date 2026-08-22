@@ -299,25 +299,23 @@ export function doubleRouteBlocked(route: TrainTimeRouteDef, ctx: ClaimContext):
     return ctx.playerCount < DOUBLE_ROUTES_OPEN_FROM_PLAYERS ? 'twin-taken' : null;
 }
 
+/** The colours this route could be claimed in — grey takes any single one. */
+function candidateColours(route: TrainTimeRouteDef): TrainTimeCardColour[] {
+    return route.colour === 'grey' ? [...TRAIN_TIME_CARD_COLOURS] : [route.colour];
+}
+
 /**
- * The colours a hand could pay this route with, cheapest-wild-use first.
- * A grey route accepts any single colour; a coloured route only its own.
- * Engines substitute for any colour, so a colour is payable when
- * (cards of that colour) + (engines) covers the route's length.
+ * The colours a hand could pay this route with. Engines substitute for any
+ * colour, so a colour is payable when (cards of that colour) + (engines)
+ * covers the route's length — which also covers paying entirely in Engines,
+ * since every card played is then a wild.
  */
 export function payableColours(route: TrainTimeRouteDef, hand: TrainTimeCardColour[]): TrainTimeCardColour[] {
     const engines = hand.filter(c => c === 'engine').length;
-    const candidates: TrainTimeCardColour[] = route.colour === 'grey'
-        ? [...TRAIN_TIME_CARD_COLOURS]
-        : [route.colour];
-    const payable = candidates.filter(colour => {
+    return candidateColours(route).filter(colour => {
         const owned = hand.filter(c => c === colour).length;
         return owned + engines >= route.length;
     });
-    // An all-Engine payment is legal on any route — every card played is then a
-    // wild, which satisfies "every card played is the same colour" vacuously.
-    if (engines >= route.length) payable.push('engine');
-    return payable;
 }
 
 export function claimBlockedReason(route: TrainTimeRouteDef, ctx: ClaimContext): ClaimBlockedReason | null {
@@ -364,14 +362,46 @@ export function paymentIsValid(route: TrainTimeRouteDef, payment: TrainTimeCardC
     return true;
 }
 
+/** One way a route could be paid for, priced against the player's hand. */
+export interface PaymentOption {
+    colour: TrainTimeCardColour;
+    /** The cards this option would spend. Empty when the hand can't cover it. */
+    payment: TrainTimeCardColour[];
+    /** Engines this option burns — the cost the player feels later. */
+    enginesUsed: number;
+    /** How many cards short the hand is; 0 when the option is payable. */
+    shortfall: number;
+}
+
+/**
+ * Every colour this route could be claimed in, priced against a hand and
+ * ordered by what it costs: payable options first (cheapest in Engines), then
+ * the near-misses, so the claim sheet can show both "you can pay this" and
+ * "you're one card away".
+ */
+export function paymentOptions(route: TrainTimeRouteDef, hand: TrainTimeCardColour[]): PaymentOption[] {
+    const engines = hand.filter(c => c === 'engine').length;
+
+    return candidateColours(route).map((colour): PaymentOption => {
+        const owned = hand.filter(c => c === colour).length;
+        const shortfall = Math.max(0, route.length - owned - engines);
+        return {
+            colour,
+            payment: shortfall === 0 ? buildPayment(route, colour, hand) : [],
+            enginesUsed: shortfall === 0 ? Math.max(0, route.length - owned) : 0,
+            shortfall,
+        };
+    }).sort((a, b) =>
+        (a.shortfall - b.shortfall) || (a.enginesUsed - b.enginesUsed) || a.colour.localeCompare(b.colour));
+}
+
 /**
  * The default payment for a route in a given colour: spend the coloured cards
  * first and top up with Engines, so wilds are only burned when they have to be.
  */
 export function buildPayment(route: TrainTimeRouteDef, colour: TrainTimeCardColour, hand: TrainTimeCardColour[]): TrainTimeCardColour[] {
     const payment: TrainTimeCardColour[] = [];
-    const owned = hand.filter(c => c === colour).length;
-    const coloured = colour === 'engine' ? 0 : Math.min(owned, route.length);
+    const coloured = Math.min(hand.filter(c => c === colour).length, route.length);
     for (let i = 0; i < coloured; i++) payment.push(colour);
     while (payment.length < route.length) payment.push('engine');
     return payment;

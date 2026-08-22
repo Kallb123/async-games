@@ -434,6 +434,21 @@ and 4 add `TrainTimeDrawTickets` / `TrainTimeKeepTickets { keep }` and —
 for Continental — `TrainTimeResolveTunnel { pay }` and
 `TrainTimePlaceStation { cityId, cards }`.
 
+### UI
+
+The board screen follows §14 of the Claude Design interface exploration: an
+oxblood-and-brass top bar and standings, a printed rail map on parchment (one
+dashed segment per train space), the face-up row, the hand, the one-action
+picker, and a claim sheet that prices every payable combination before you
+commit. Those pieces re-tint the shared `ag-*` chrome (`GameShell`,
+`GameScoreboard`, `Stat`, `ActionButton`) under a `.ag-game--traintime` scope
+rather than duplicating it.
+
+Two things in the design wait on later steps: the ticket strip and the
+"Draw tickets" third action arrive with step 2, and the "Longest" tile with
+step 3. The route report (14d) is the turn-recap subsystem, which this game
+hasn't opted into yet.
+
 ### Deviations from this document
 
 * **Turn order** is drawn at random rather than by "most experienced

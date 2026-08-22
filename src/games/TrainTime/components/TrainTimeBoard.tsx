@@ -1,30 +1,40 @@
 'use client'
 import React, { useState } from 'react';
 import { BOARD_VIEWBOX, CITIES, ROUTES, routeName } from '@/games/TrainTime/board';
-import { CITY_LABEL_OFFSET, ROUTE_GEOMETRY, TRACK_BLOCK_HEIGHT, TRACK_PALETTE } from '@/games/TrainTime/ui';
+import { CITY_LABEL_OFFSET, ROUTE_GEOMETRY, TRACK_PALETTE } from '@/games/TrainTime/ui';
 
 interface TrainTimeBoardProps {
     /** Owning username per route id, null where unclaimed. */
     routeOwners: (string | null)[];
     usernameToColour: (username: string) => string;
-    /** Routes the current player could claim right now (highlighted). */
+    /** Routes the current player could claim right now — the tappable ones. */
     claimableRoutes: Set<number>;
+    /** Light up those routes and step everything else back, while the player
+     *  is actually choosing one. */
+    highlightClaimable?: boolean;
     selectedRouteId: number | null;
     onRouteClick?: (routeId: number) => void;
     /** Short status pill in the corner of the map. */
     boardTag?: string | null;
 }
 
+// Sized for the 1240-wide board viewBox, so the printed track reads as chunky
+// dashes at the width the app column actually renders it.
+const TRACK_WIDTH = 10;
+const CLAIMED_TRACK_WIDTH = 13;
+
 /**
- * The Train Time map: 36 cities joined by 100 routes, each drawn as one
- * carriage block per train space in its card colour, or in the owner's player
- * colour once claimed. The map is wider than the app column, so it zooms and
- * scrolls rather than shrinking the tap targets to nothing.
+ * The Train Time map, drawn as a printed rail chart on parchment: 36 cities
+ * joined by 100 runs of dashed track, one dash per train space, inked in the
+ * route's card colour until somebody claims it and it turns their own. The
+ * map is wider than the app column, so it zooms and scrolls rather than
+ * shrinking the tap targets to nothing.
  */
 export default function TrainTimeBoard({
     routeOwners,
     usernameToColour,
     claimableRoutes,
+    highlightClaimable = false,
     selectedRouteId,
     onRouteClick,
     boardTag = null,
@@ -49,12 +59,9 @@ export default function TrainTimeBoard({
                 >
                     {ROUTES.map(route => {
                         const owner = routeOwners[route.id];
-                        const palette = TRACK_PALETTE[route.colour];
-                        const fill = owner ? usernameToColour(owner) : palette.fill;
-                        const stroke = owner ? '#2f3f4d' : palette.stroke;
                         const claimable = claimableRoutes.has(route.id);
                         const selected = selectedRouteId === route.id;
-                        const geometry = ROUTE_GEOMETRY[route.id];
+                        const { trackPath, dashArray } = ROUTE_GEOMETRY[route.id];
                         return (
                             <g
                                 key={route.id}
@@ -62,26 +69,26 @@ export default function TrainTimeBoard({
                                 style={{ cursor: onRouteClick && claimable ? 'pointer' : 'default' }}
                             >
                                 <title>{routeName(route)} — {route.length} × {route.colour}{owner ? ` · ${owner}` : ''}</title>
-                                {geometry.blocks.map((block, i) => (
-                                    <rect
-                                        key={i}
-                                        x={-block.width / 2}
-                                        y={-TRACK_BLOCK_HEIGHT / 2}
-                                        width={block.width}
-                                        height={TRACK_BLOCK_HEIGHT}
-                                        rx={4}
-                                        fill={fill}
-                                        stroke={selected ? '#1d2733' : stroke}
-                                        strokeWidth={selected ? 3 : 1.2}
-                                        opacity={owner || claimable || selectedRouteId === null ? 1 : 0.55}
-                                        transform={`translate(${block.x.toFixed(2)},${block.y.toFixed(2)}) rotate(${block.angle.toFixed(2)})`}
+                                {(selected || (highlightClaimable && claimable)) && (
+                                    <path
+                                        d={trackPath}
+                                        fill="none"
+                                        stroke="var(--tt-brass)"
+                                        strokeWidth={selected ? 26 : 18}
+                                        strokeOpacity={selected ? 0.55 : 0.2}
+                                        strokeLinecap="round"
                                     />
-                                ))}
-                                {claimable && !selected && (
-                                    <path d={geometry.path} fill="none" stroke="var(--ag-gold)" strokeWidth={20} strokeOpacity={0.22} strokeLinecap="round" />
                                 )}
+                                <path
+                                    d={trackPath}
+                                    fill="none"
+                                    stroke={owner ? usernameToColour(owner) : TRACK_PALETTE[route.colour].fill}
+                                    strokeWidth={owner ? CLAIMED_TRACK_WIDTH : TRACK_WIDTH}
+                                    strokeDasharray={dashArray}
+                                    strokeOpacity={owner || claimable ? 1 : highlightClaimable ? 0.28 : 0.75}
+                                />
                                 {/* Fat invisible tap target, so a 1-space route is still hittable. */}
-                                <path d={geometry.path} fill="none" stroke="transparent" strokeWidth={18} />
+                                <path d={trackPath} fill="none" stroke="transparent" strokeWidth={30} />
                             </g>
                         );
                     })}
@@ -90,16 +97,16 @@ export default function TrainTimeBoard({
                         const label = CITY_LABEL_OFFSET[city.labelDir];
                         return (
                             <g key={city.id}>
-                                <circle cx={city.x} cy={city.y} r={8.5} fill="#fffdf9" stroke="#2f3f4d" strokeWidth={2.4} />
+                                <circle cx={city.x} cy={city.y} r={7} fill="#fdfbf6" stroke="oklch(0.42 0.04 40)" strokeWidth={2.4} />
                                 <text
                                     x={city.x + label.dx}
                                     y={city.y + label.dy}
                                     textAnchor={label.anchor}
-                                    fontSize={14}
+                                    fontSize={17}
                                     fontWeight={700}
-                                    fill="#26333f"
-                                    stroke="#dcecf7"
-                                    strokeWidth={4}
+                                    fill="oklch(0.4 0.04 45)"
+                                    stroke="oklch(0.96 0.024 85)"
+                                    strokeWidth={4.5}
                                     paintOrder="stroke"
                                     strokeLinejoin="round"
                                 >
