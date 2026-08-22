@@ -166,7 +166,7 @@ export default function Profile() {
             </div>
 
             {/* Recent match history */}
-            <RecentFormSection matches={recentMatches} isLoading={statsData.isLoading} isRefreshing={statsData.isRefreshing} />
+            <RecentFormSection matches={recentMatches} isLoading={statsData.isLoading} isRefreshing={statsData.isRefreshing} viewAllHref="/games/completed" />
 
             {/* Per-game stats */}
             <GameStatsList label="Stats by game" stats={gameStats} isLoading={statsData.isLoading} isRefreshing={statsData.isRefreshing} />

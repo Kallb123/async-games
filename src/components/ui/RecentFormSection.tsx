@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from "react";
+import Link from "next/link";
 import Skeleton from "@/components/ui/Skeleton";
 import Refreshable from "@/components/ui/Refreshable";
 import MatchResultPopup from "@/components/ui/MatchResultPopup";
@@ -18,18 +19,22 @@ interface RecentFormSectionProps {
     // Ring-highlight matches the viewer also played in. Only meaningful on a
     // friend's profile - on your own profile every match already includes you.
     highlightShared?: boolean;
+    // Link to the full completed-games history. Only meaningful on your own
+    // profile - there's no equivalent full list for a friend's profile.
+    viewAllHref?: string;
 }
 
 // "Recent form" - chips of a player's most recent match outcomes. Shared by
 // a player's own profile and a friend's read-only profile. Tapping a chip
 // opens a popup with that match's game-specific stats.
-export default function RecentFormSection({ matches, isLoading, isRefreshing = false, highlightShared = false }: RecentFormSectionProps) {
+export default function RecentFormSection({ matches, isLoading, isRefreshing = false, highlightShared = false, viewAllHref }: RecentFormSectionProps) {
     const [selected, setSelected] = useState<IRecentMatch | null>(null);
 
     return (
         <div className="ag-section">
             <div className="ag-section-head">
                 <h2 className="ag-section-label">Recent form</h2>
+                {viewAllHref && <Link href={viewAllHref} className="ag-section-action">See all</Link>}
             </div>
             {isLoading
                 ? (
