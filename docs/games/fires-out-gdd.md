@@ -302,6 +302,7 @@ The base architecture — a grid, a coordinate roll, and a state-escalation tabl
 
 **End:** 7 rescued = win · 4 lost = loss · 24 damage = collapse
 
+
 ---
 
 ## 17. Implementation Plan
@@ -313,8 +314,8 @@ doesn't, the concessions async play forces, and the order to build it in.
 Read [`docs/new-game.md`](../new-game.md) and
 [`ARCHITECTURE.md`](../../ARCHITECTURE.md) §6 first — the checklist and the
 command pattern are assumed here rather than repeated. Outbreak's §21
-(`outbreak-gdd.md`) is the sibling plan; the two co-op games share their first
-two steps and should not each pay for them.
+(`outbreak-gdd.md`) is the sibling plan; the two co-op games share Outbreak's
+steps 1 and 7, folded into one step here, and should not each pay for them.
 
 ### 17.1 What the engine already gives us
 
@@ -325,8 +326,9 @@ two steps and should not each pay for them.
 | A move that validates, mutates and logs | `IGameCommand.Execute` |
 | A turn made of many small moves | `turnOver: false` on the outcome until the player ends the turn |
 | Rolling a d6 and a d8 | `DiceRoll(6)` / `DiceRoll(8)` in `src/utils/games/DiceRoll.ts` — already arbitrary-sided |
+| Shuffling the POI pool | `shuffle()` in `src/utils/games/shuffle.ts` — four games already import it |
 | Showing dice | `Dice` / `DieFace` in `src/components/ui/` — with one caveat, see 17.2 |
-| Two rule sets from one game | The `expansions.ts` flag-on-`specificGameState` pattern from Settlements & Cities |
+| Six pawn and scoreboard colours | `playerColour()` in `src/utils/ui/playerColours.ts` — exactly six, which is the crew cap |
 | "It's your turn" push, turn timers, surrender, rematch | The command pipeline, the turntimer cron, `/api/game/end`, `GameFinishBanner` |
 | Per-turn boards for the recap | `buildTimeline()`, given a replay adapter and recorded RNG |
 
@@ -337,11 +339,11 @@ express a shared outcome (`IGameData.winner` is a single user ID, and an empty
 one reads as a *draw* in `outcomeFor()`), and the turntimer cron cannot resolve
 a timeout in a game-specific way. Both are described in full in
 `outbreak-gdd.md` §21.2 and closed by its steps 1 and 7. **Whichever game is
-built first pays for them; the second inherits them.** The timeout gap bites
-Fires Out for exactly the same reason it bites Outbreak: the fire advances at
-the end of *your* turn, so a turn the cron skips is a turn the building doesn't
-burn — and AP banking means a skipped turn even leaves you richer. Timing out
-would be the strongest play at the table.
+built first pays for the engine work; the second only registers itself.** The
+timeout gap bites Fires Out for exactly the same reason it bites Outbreak: the
+fire advances at the end of *your* turn, so a turn the cron skips is a turn the
+building doesn't burn — and AP banking means a skipped turn even leaves you
+richer. Timing out would be the strongest play at the table.
 
 **3 — The engine's turn belongs to a *player*; this game's belongs to a
 *firefighter*.** With one figure each that distinction is invisible, but §1
@@ -349,9 +351,19 @@ offers 1–6 players with solitaire play "supported by controlling multiple
 pawns", and §7's design note makes the fire advance once per *firefighter*
 turn — that per-figure advance is what keeps six-player games from being six
 times easier. `gameState.turnOrder` is a list of user IDs and `currentTurn` is
-one user ID, so a solo player driving three firefighters has no way to say
-"it's my turn, for my second figure". This is why multi-pawn control is a late,
-optional step below rather than part of setup.
+one user ID, so neither can name a figure.
+
+This needs no engine change, and specifically **must not** be solved by putting
+a user in `turnOrder` more than once. Five places in the repo advance a turn
+with `turnOrder.findIndex(to => to === currentTurn)` — `/api/game/taketurn`,
+the turntimer cron, and the `CheckEndTurn` of Snakes & Ladders, Dice Cities and
+Smartthink — and every one of them would find the *first* occurrence and jump to
+the wrong figure. Worse, `buildTimeline()` sets `state.currentTurn =
+command.senderId` for every replayed command, so duplicate IDs are
+indistinguishable on replay no matter what the live game did.
+`activeFirefighter` on `specificGameState` is therefore the single source of
+truth for which figure is up; `turnOrder` keeps one entry per user, and
+`turnOver` is true only when the next figure belongs to a different one.
 
 **4 — `DieFace` has no face above 6.** Its `PIP_LAYOUT` covers 1–6 and returns
 an empty pip grid for 7 or 8, so a d8 renders as a blank die. Octahedral dice
@@ -382,6 +394,11 @@ a d8 to solve it again.
 
 ### 17.4 State and command surface
 
+The grid is **6 rows (the d6) × 8 columns (the d8)** — §3's component table and
+its dice design note state the same 48 spaces in opposite orders, so `board.ts`
+fixes the convention once and the coordinate mapping and the CSS grid both read
+it from there.
+
 ```ts
 {
   ruleset: 'family' | 'experienced',
@@ -394,15 +411,15 @@ a d8 to solve it again.
       hotspot: boolean,
   }[],
   edges: { kind: 'wall' | 'door' | 'open', damage: 0 | 1 | 2, doorOpen: boolean }[],
-  damage: number,                 // 0–24; the collapse clock
   rescued: number,                // 7 wins
   lost: number,                   // 4 loses
-  poiPool: boolean[],             // face-down victim/false-alarm pool — redacted to a count
+  poiPool: boolean[],             // shuffled once at setup, drawn in order — redacted to a count
   firefighters: {
       ownerId: string,
       space: number,
       specialist: SpecialistId,
       apLeft: number,
+      restrictedAp: { kind: 'command' | 'moveChop' | 'extinguish', left: number } | null,
       bankedAp: number,           // 0–4
       carrying: 'victim' | 'hazmat' | null,
   }[],
@@ -412,12 +429,27 @@ a d8 to solve it again.
 }
 ```
 
-**Edges are a flat array, not a keyed map.** The 8 × 6 grid has a fixed 82
-interior wall segments (42 vertical, 40 horizontal) plus the exterior openings;
-number them once in `board.ts` and index them, the way World Domination numbers
-its territories. A `Record<string, …>` keyed by `"12-13"` would work and would
-be worse: it becomes `Schema.Types.Mixed`, it can't be validated by the schema,
-and it invites two different key orderings for the same wall.
+**There is no `damage` total.** The collapse clock is `sum(edges[].damage)`,
+derived in `rules.ts` and in `gameStateToModel`. A stored total would be a
+second source of truth mutated by every chop and every explosion, and the
+marker-conservation test below would be asserting one against the other rather
+than against the board.
+
+**Restricted AP is one optional pool, not a pool system.** Only three of §11's
+eight Specialists have one — Fire Captain (+2 command), Rescue Specialist (+3
+move/chop), CAFS Firefighter (+3 extinguish) — and none has two, so a single
+nullable `restrictedAp` covers all of them. One `spendAp(firefighter, cost,
+actionKind)` in `rules.ts` decides which pool pays; every spend site already
+knows its own action kind, so no action gains a "which pool" argument. Declaring
+it now rather than at the Specialists step avoids changing a persisted schema
+eight commits in.
+
+**Edges are a flat array, not a keyed map.** The grid has a fixed 82 interior
+wall segments (42 vertical, 40 horizontal) plus the exterior openings; number
+them once in `board.ts` and index them, the way World Domination numbers its
+territories. A `Record<string, …>` keyed by `"12-13"` would work and would be
+worse: it becomes `Schema.Types.Mixed`, the schema can't validate it, and it
+invites two different key orderings for the same wall.
 
 **Every command must call `markModified('specificGameState')`.** This is
 `docs/new-game.md`'s hardest-won gotcha and Fires Out hits it harder than any
@@ -440,8 +472,9 @@ FiresOutAction {
 There is no second decision point anywhere in the turn — Advance Fire, flashover
 and Replenish POI are all fully deterministic given their rolls, and a revealed
 POI offers no choice — so nothing needs the open-turn/second-command shape Train
-Time and Outbreak use. `{ kind: 'endTurn' }` banks up to 4 AP, then runs Phase 2
-and Phase 3 inside the same `Execute` and returns `turnOver: true`.
+Time and Outbreak use. `{ kind: 'endTurn' }` banks up to 4 AP, runs Phase 2 and
+Phase 3 inside the same `Execute`, advances `activeFirefighter`, and returns
+`turnOver: true` only when the next figure has a different owner.
 
 **Recorded randomness is the hard part of this game.** A single Advance Fire can
 roll many times: the initial d6/d8, a re-roll for an invalid replenish target,
@@ -453,27 +486,35 @@ records; replay consumes. `buildTimeline()` then reproduces the fire exactly,
 which is what `recordedRoll` does for a single die in Snakes & Ladders and
 Settlements & Cities — this is the same idea with the count left open. Get it
 wrong and the recap tells every player a different story about the same fire.
-The Experienced game's rolled setup (§6.2) lands in `initialSpecificGameState`,
-the way World Domination's territory deal does.
+
+The dice are not the only randomness. The **POI pool is shuffled once** into
+`initialSpecificGameState` and drawn in order thereafter, the way World
+Domination's territory deal is — a pool reshuffled at each Replenish would be
+unreplayable for the same reason, and `nextRoll` cannot express "draw the next
+marker". The Experienced game's rolled setup (§6.2) lands there too.
 
 **Redaction.** `gameStateToModel` sends an unrevealed POI as `{ revealed:
-false }` with no victim flag, and the face-down pool as a count. §10's design
-note is explicit that hidden POI identity is what stops the game being a pure
+false }` with no victim flag, and the undrawn pool as a count. §10's design note
+is explicit that hidden POI identity is what stops the game being a pure
 logistics optimisation; leaving it in the response hands every player a
 `Ctrl+Shift+I` cheat that deletes a design pillar.
 
 ### 17.5 The commits
 
 Each step leaves `npm run build`, `npx tsc --noEmit` and `npm test` green and is
-reviewable on its own. From step 4 the game is playable by hand.
+reviewable on its own. From step 5 the game is playable by hand.
 
 **1 — The two shared co-op steps.** `outbreak-gdd.md` §21.5 steps 1 and 7:
 extract one `finishGame()` and put the `teamwin`/`teamloss` outcome inside it
 (including the `$cond` aggregation in `getPlayerStats` that duplicates
 `outcomeFor()`), and let the cron resolve a timeout by executing the game's own
-pass command through the normal pipeline. Skip entirely if Outbreak got there
-first. Fires Out's timeout command is `FiresOutAction { kind: 'endTurn' }`,
-which already banks AP and advances the fire.
+pass command through a per-game registry. If Outbreak got there first, skip the
+engine work — but Fires Out still registers its own timeout command,
+`FiresOutAction { kind: 'endTurn' }`, which it can only do once step 4 exists.
+Worth folding in while here: `turnOrder.findIndex(to => to === currentTurn)`
+followed by a modulo is now copy-pasted in five places, and gap 3 above is the
+sixth asking to be written — one `nextInTurnOrder(gameState, currentTurn)`
+helper retires all of them.
 
 **2 — Board data and pure rules.** `src/games/FiresOut/board.ts`: both layouts
 as space and edge tables, the d6/d8 coordinate mapping, the exterior track, the
@@ -487,67 +528,87 @@ show what an action costs and what is reachable (`docs/new-game.md`,
 corridor and damages the wall at the end of it, a smoke-filled wing flashes over
 in one step, and 24 damage markers end the game.
 
-**3 — Setup and wiring.** `FiresOutModels.ts` (both discriminators,
-`buildInitialFiresOutState`, `gameStateToModel` with the redaction above),
-`apiModels.ts`, `meta.ts` with `available: false`,
+**3 — Setup, wiring, and the game type.** `FiresOutModels.ts` (both
+discriminators, `buildInitialFiresOutState`, `gameStateToModel` with the
+redaction above), `apiModels.ts`, `meta.ts` with `available: false`,
 `POST /api/newgame/firesout`, and the setup screen — `GameSetupLayout` +
 `UserInviteList` (`src/components/UserInviteList.tsx`, driven by `usePlayerList`)
-+ `TurnTimerSelect` + `OptionSection` rows for board side and, later, ruleset.
-`meta.categories` claims `Strategy` and `Co-op` (adding `Co-op` to
-`GAME_CATEGORIES` in `src/utils/ui/games.ts` if Outbreak hasn't). Then the
-shared-file wiring of `docs/new-game.md` step 6 — `mongodb.ts` is four separate
-edits, and `command/route.ts` takes one line per command class, which here is
-genuinely one line. Family game only, at this step: no hazmat, hot spots,
-vehicles or Specialists.
++ `TurnTimerSelect` + an `OptionSection` of `OptionToggleRow`s for board side
+and, later, ruleset. `meta.categories` claims `Strategy` and `Co-op` (adding
+`Co-op` to `GAME_CATEGORIES` in `src/utils/ui/games.ts` if Outbreak hasn't).
 
-**4 — The Family turn loop.** `FiresOutLogic.ts` with `FiresOutAction` and
-`FiresOutGameType`: the AP economy including banking, move/carry/door/
-extinguish/chop, POI reveal and rescue, `endTurn` running Advance Fire (with
-explosions, flashover, knock-downs) and Replenish POI, and all three end
-conditions from §5 — the win through `CheckGameOver`, the two losses through
-step 1's `teamloss`. This is the complete Family game and the whole design in
+`FiresOutLogic.ts` has to exist by the end of this step, not step 4:
+`gameRegistry.test.ts` discovers games by the presence of `meta.ts` and then
+demands the barrel export `@/games/FiresOut/FiresOutLogic`, and `CreateGame`
+needs `FiresOutGameType` anyway. So this step ships that file with
+`FiresOutGameType` and a skeleton `FiresOutAction`, and step 4 fills the action
+in. Then the rest of the shared-file wiring of `docs/new-game.md` step 6 —
+`mongodb.ts` is four separate edits, and the `registration` array in
+`command/route.ts` takes an entry per command class *and* one for the game type,
+so it is revisited whenever either changes. Family game only, at this step: no
+hazmat, hot spots, vehicles or Specialists.
+
+**4 — The AP economy and actions.** The turn's spending half: 4 AP plus banking,
+move, move-into-fire, carry, doors, extinguish, chop, POI reveal and rescue, and
+an `endTurn` that for now only banks AP and advances the figure. The win
+condition (7 rescued) goes in `CheckGameOver` here; nothing can be lost yet,
+which is the point — the AP economy is the subtlest part of this design and is
+worth testing while nothing is fighting back.
+
+**5 — The board screen.** A 6 × 8 CSS grid inside `ag-board-frame`, walls drawn
+as cell borders and doors as gaps, threat markers as smoke/fire pips, POIs as
+"?" tokens, firefighters as pawns coloured by `playerColour()`. The chrome is
+the shared kit re-tinted under a `.ag-game--firesout` scope, never rebuilt —
+`GameShell`, `Stat` for the rescued/lost/damage tracks, `ActionButton` and
+`ag-actionsheet` for the AP spend picker, `ag-log` for the history,
+`GameOptionsMenu`, `GameFinishBanner`, `useGameData`, `useSubmitCommand`,
+`usePushEvents`, `useEndGame`. The crew roster that 17.3 says has to replace
+table talk **is `GameScoreboard`**, not a new component: one entry per
+firefighter, `sub` carrying the Specialist and banked AP, `score` the AP left,
+`isActive` the figure whose turn it is. Snakes & Ladders' grid is *not*
+reusable — `.ag-sl-grid` is literally `repeat(10, 1fr)` and `.ag-sl-cell--snake`
+is that game's art — which is why this one is new and scoped. The d8 face from
+gap 4 lands here, in `DieFace`.
+
+**6 — Advance Fire, Replenish POI, and the end conditions.** `endTurn` grows its
+second half: the d6/d8 roll, §9.1's resolution, explosions and shockwaves,
+flashover to fixpoint, knock-downs, lost POIs, then Replenish. The two losses
+(§5) report through step 1's `teamloss`. This is the commit where the building
+starts fighting back and the Family game becomes the complete design in
 miniature; everything after it is content.
 
-**5 — The board screen.** An 8 × 6 CSS grid inside `ag-board-frame`, walls drawn
-as cell borders and doors as gaps, threat markers as smoke/fire pips, POIs as
-"?" tokens, firefighters as pawns. The chrome is the shared kit re-tinted under
-a `.ag-game--firesout` scope, never rebuilt — `GameShell`, `GameScoreboard`,
-`Stat` for the rescued/lost/damage tracks, `ActionButton` and `ag-actionsheet`
-for the AP spend picker, `ag-log` for the history, `GameOptionsMenu`,
-`GameFinishBanner`, `useGameData`, `useSubmitCommand`, `usePushEvents`,
-`useEndGame`. Snakes & Ladders' grid is the closest existing thing and is *not*
-reusable — `ag-sl-cell` and friends are scoped to that game's 10 × 10 board with
-its own snake and ladder art — so this is a new grid, kept inside its own scope
-for the same reason. The d8 face from gap 4 lands here, in `DieFace`.
-
-**6 — Advance Fire on screen.** The fire is the antagonist (§2) and a player
+**7 — Advance Fire on screen.** The fire is the antagonist (§2) and a player
 returning after a day away needs to see what it did, not read a log line. The
 d6/d8 roll through the shared `Dice`, then the affected spaces highlighted in
-sequence — `useAnimatedList` already exists for staged reveals. Deliberately its
-own step: it is the one piece of this game that is pure presentation, and the
-easiest thing to cut if it is bundled with something load-bearing.
+sequence. Snakes & Ladders' `SnakesAndLaddersRollResult.tsx` is the precedent —
+`Dice` with `rolling`, a timed settle onto the real value, then the reveal — and
+if the sequencing turns out to be the same in both games, extract it then rather
+than guessing now. Deliberately its own step: it is the one piece of this game
+that is pure presentation, and the easiest thing to cut if it is bundled with
+something load-bearing.
 
-**7 — Hazmat, hot spots and the Experienced setup.** The rolled setup of §6.2
+**8 — Hazmat, hot spots and the Experienced setup.** The rolled setup of §6.2
 including initial explosions and their wall damage, the three difficulty tiers,
-hazmat detonation, and flare-up chaining through `nextRoll`. Gated on the
-`ruleset` flag in the style of `SettlementsAndCities/expansions.ts`. This is the
-step that makes the game replayable (§14.4) and it is where the recorded-roll
-cursor earns its keep.
+hazmat detonation, and flare-up chaining through `nextRoll`. The switch is the
+`ruleset` field on `specificGameState`, read by `rules.ts` — one two-valued
+string, which is the whole mechanism; Settlements & Cities' `expansions.ts` is a
+five-expansion compatibility framework and would be a costume here. This is the
+step that makes the game replayable (§14.4) and where the recorded-roll cursor
+earns its keep.
 
-**8 — Vehicles.** Engine and Ambulance parking, driving with riders, the
+**9 — Vehicles.** Engine and Ambulance parking, driving with riders, the
 ambulance as the rescue destination, and the deck gun's quadrant-and-roll
 targeting. Small, self-contained, and needed before two of the Specialists mean
 anything.
 
-**9 — Specialists.** All eight at once, chosen at setup, swappable at the Engine
-for 2 AP, expressed as AP-pool modifiers and rule exceptions in `rules.ts`
-rather than branches sprayed through `Execute`. The restricted-AP roles (§11's
-design note) are the interesting ones: model AP as a small set of typed pools —
-general, plus movement/chop, extinguish or command — rather than a single number
-with special cases at every spend site, or every action gains a "which pool did
-this come from" argument.
+**10 — Specialists.** All eight at once, chosen at setup, swappable at the
+Engine for 2 AP, expressed in `rules.ts` as AP-pool values and rule exceptions
+rather than branches sprayed through `Execute`. The `restrictedAp` field and
+`spendAp()` from 17.4 are already in place, so this step is mostly a table of
+eight rows plus the four abilities that aren't AP arithmetic (Imaging remote
+reveal, Paramedic escort, Hazmat on-site disposal, Driver/Operator re-roll).
 
-**10 — Recap, stats, ship.** `recap.ts` plus a replay adapter and
+**11 — Recap, stats, ship.** `recap.ts` plus a replay adapter and
 `useTurnRecap`/`useTurnNavigation`/`TurnNavControls` on the board screen. This
 game's away-time story is unusually strong — the fire advanced once per crewmate
 since you last looked — and step 2's `nextRoll` design is what makes replaying
@@ -556,20 +617,19 @@ def, the `FiresOutGameResult` discriminator, `computeFiresOutResultStats`
 (rescued, lost, damage placed, turns survived, ruleset and tier) and
 `formatFiresOutResultStats` wired into `GAME_RESULT_STATS` — miss the formatter
 and `formatGameResultStats` returns an empty array and the result page renders
-nothing, silently, with no test failing. Then flip `meta.available`, add the
-"What's new" line to `src/utils/ui/whatsNew.ts`, and fold 17.3's deviations into
-this document.
+nothing, silently, with no test failing (`gameRegistry.test.ts` checks the
+`compute*` half only). Then flip `meta.available`, add the "What's new" line to
+`src/utils/ui/whatsNew.ts`, and fold 17.3's deviations into this document.
 
-**11 — Solitaire, optional.** Multi-pawn control, closing gap 3. A solo game
-creates its invitation with `userIdList: []` and `UNLIMITED_TURN_TIMER` exactly
-as Solitaire's `POST /api/newgame/solitaire` does, and `turnOrder` carries the
-one user ID once per firefighter they control, with `activeFirefighter` saying
-which figure is up. Note the trap before writing it: the turntimer cron advances
-turns with `turnOrder.findIndex(to => to === currentTurn)`, which finds the
-*first* occurrence and would jump to the wrong figure — safe here only because
-`isExpired()` returns false for unlimited timers and so the cron never touches a
-solo game at all. If a multi-pawn game ever gets a real timer, that lookup has
-to move to `activeFirefighter` first.
+**12 — Solitaire, optional.** Multi-pawn control, closing gap 3 with the
+`activeFirefighter` design 17.2 describes — no duplicate entries in `turnOrder`,
+so every `findIndex` in the repo stays correct and a solo game can still take a
+real turn timer. The invitation is created with `userIdList: []` exactly as
+Solitaire's `POST /api/newgame/solitaire` does, which makes
+`/api/invite/accept`'s "has everyone accepted?" check vacuously true on the
+first call. Per `docs/new-game.md`'s solo gotcha, the setup screen becomes
+mode-dependent: solo hardcodes `UNLIMITED_TURN_TIMER` and drops both
+`TurnTimerSelect` and `UserInviteList`, in favour of a crew-size picker.
 
 ### 17.6 Testing
 
