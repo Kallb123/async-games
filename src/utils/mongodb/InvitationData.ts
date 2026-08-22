@@ -45,6 +45,7 @@ export var InvitationModel = models.Invitation || model<IInvitationDataDocument,
 export interface IInvitationResponse {
     inviteId: `${string}-${string}-${string}-${string}-${string}`,
     sender: string,
+    senderImageUrl: string | null,
     userList: string[],
     timestamp: string,
     gameFriendlyName: string

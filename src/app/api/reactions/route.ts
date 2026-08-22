@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { ReactionModel, IReactionDataDocument } from '@/utils/mongodb/ReactionData';
-import { userIdListToUserIdNameMap } from '@/utils/users/clerk';
+import { userIdListToUserIdNameMap, userIdListToImageMap } from '@/utils/users/clerk';
 import { buildAllEvents } from '@/utils/games/recap';
 import { metaForGame } from '@/utils/ui/games';
 
@@ -19,6 +19,7 @@ export interface IReceivedReaction {
     gameUrl: string;
     gameName: string;
     actorUsername: string;
+    actorImageUrl: string | null;
     reaction: string;
     timestamp: string;
     eventTitle: string | null;
@@ -64,6 +65,8 @@ export async function GET(request: NextRequest) {
         eventTitlesByGame.set(gameId, new Map(events.map((e) => [e.id, { title: e.title, detail: e.detail }])));
     }
 
+    const actorImages = await userIdListToImageMap(Array.from(new Set(received.map((r) => r.actorId))));
+
     const reactions: IReceivedReaction[] = received.map((r) => {
         const gameData = gameById.get(r.gameId);
         const meta = gameData
@@ -76,6 +79,7 @@ export async function GET(request: NextRequest) {
             gameUrl: gameData?.gameType.url ?? "",
             gameName: meta?.name ?? gameData?.gameType.friendlyName ?? "a game",
             actorUsername: r.actorUsername,
+            actorImageUrl: actorImages.get(r.actorId) ?? null,
             reaction: r.reaction,
             timestamp: r.timestamp,
             eventTitle: event?.title ?? null,

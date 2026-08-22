@@ -3,12 +3,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { areFriends } from '@/utils/mongodb/FriendshipData';
 import { getPlayerStats } from '@/utils/mongodb/GameResultData';
+import { profileImageUrl } from '@/utils/ui/avatar';
 
 export interface IProfileUser {
     userId: string;
     username: string | null;
     firstName: string | null;
     lastName: string | null;
+    imageUrl: string | null;
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
@@ -34,6 +36,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         username: clerkUser.username,
         firstName: clerkUser.firstName,
         lastName: clerkUser.lastName,
+        imageUrl: profileImageUrl(clerkUser),
     };
 
     const { recent, byGame } = await getPlayerStats(profileUserId, userId);

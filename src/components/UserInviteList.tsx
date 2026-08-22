@@ -3,6 +3,7 @@ import { IFriendRequestResponse } from '@/utils/mongodb/FriendshipData';
 import { useUser } from '@clerk/nextjs';
 import { useEffect, useState } from 'react';
 import Avatar from '@/components/ui/Avatar';
+import { profileImageUrl } from '@/utils/ui/avatar';
 
 interface UserInviteProps {
     userList: string[],
@@ -44,6 +45,10 @@ export default function UserInviteList({ userList, setItem }: UserInviteProps) {
 
     const suggestions = friends.filter(f => f.user.username && !added.includes(f.user.username));
 
+    // A chip is added by typed username, so the only picture we have for one is
+    // whatever the friends list already told us about that name.
+    const pictureFor = (username: string) => friends.find(f => f.user.username === username)?.user.imageUrl ?? null;
+
     return (
         <div className="ag-section">
             <div className="ag-section-head">
@@ -52,12 +57,12 @@ export default function UserInviteList({ userList, setItem }: UserInviteProps) {
 
             <div className="ag-chips">
                 <span className="ag-person-chip ag-person-chip--you">
-                    <Avatar name={user?.firstName || user?.username || "You"} size={28} />
+                    <Avatar name={user?.firstName || user?.username || "You"} imageUrl={profileImageUrl(user)} size={28} />
                     You
                 </span>
                 {added.map(username => (
                     <span key={username} className="ag-person-chip">
-                        <Avatar name={username} size={28} />
+                        <Avatar name={username} imageUrl={pictureFor(username)} size={28} />
                         {username}
                         <button type="button" aria-label={`Remove ${username}`} onClick={() => removeUser(username)}>✕</button>
                     </span>
@@ -84,7 +89,7 @@ export default function UserInviteList({ userList, setItem }: UserInviteProps) {
                 <div className="ag-list" style={{ marginTop: 12 }}>
                     {suggestions.map(friend => (
                         <div key={friend.friendshipId} className="ag-list-row">
-                            <Avatar name={friend.user.username} size={30} />
+                            <Avatar name={friend.user.username} imageUrl={friend.user.imageUrl} size={30} />
                             <div className="ag-list-row-main">
                                 <div className="ag-list-row-title">{friend.user.username}</div>
                             </div>

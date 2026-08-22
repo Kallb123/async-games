@@ -11,6 +11,7 @@ import Avatar from "@/components/ui/Avatar";
 import Landing from "@/components/Landing";
 import Brand from "@/components/ui/Brand";
 import Link from "next/link";
+import { profileImageUrl } from "@/utils/ui/avatar";
 
 export default function Home() {
   const pathName = usePathname();
@@ -34,7 +35,7 @@ export default function Home() {
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", justifyContent: "center" }}>
           <Link href="/newgame" aria-label="New game" style={{ borderRadius: "50%", background: "var(--ag-green)", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center" }}>+</Link>
           <Link href="/profile" aria-label="Your profile">
-            <Avatar name={displayName} size={40} ring="var(--ag-terracotta)" />
+            <Avatar name={displayName} imageUrl={profileImageUrl(user)} size={40} ring="var(--ag-terracotta)" />
           </Link>
         </div>
       </div>
