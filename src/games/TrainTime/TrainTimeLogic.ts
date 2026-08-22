@@ -8,17 +8,20 @@ import {
     CARDS_DRAWN_PER_TURN,
     DOUBLE_ROUTES_OPEN_FROM_PLAYERS,
     FINAL_ROUND_TRAIN_THRESHOLD,
+    LONG_HAUL_BONUS,
     TICKETS_DRAWN_PER_TURN,
     TrainTimeCardColour,
     canClaimRoute,
     drawsTakenBy,
     isSetupTicketChoice,
+    longestRuns,
     paymentIsValid,
     routeName,
     routeScore,
     ticketOutcomes,
     ticketPoints,
     ticketsToKeep,
+    totalScore,
 } from "@/games/TrainTime/board";
 import { pluralize } from "@/utils/ui/text";
 import type { IGameData, IGameDataDocument } from "@/utils/mongodb/GameData";
@@ -122,6 +125,34 @@ function finishTurn(trainData: ITrainTimeGameData, senderId: string, senderUsern
     }
 }
 
+/**
+ * The Long Haul bonus (§7.3): +10 to whoever laid the longest continuous run
+ * of track, shared by everybody tied for it. A table where nobody claimed a
+ * route has no longest run to reward, so nobody gets it.
+ */
+function awardLongHaul(trainData: ITrainTimeGameData): void {
+    const gs = trainData.specificGameState;
+
+    const runs = longestRuns(gs.routeOwners, gs.playerStates.keys());
+    const longest = Math.max(0, ...runs.values());
+
+    const winners: string[] = [];
+    for (const [userId, ps] of gs.playerStates) {
+        const won = longest > 0 && runs.get(userId) === longest;
+        ps.longHaulBonus = won ? LONG_HAUL_BONUS : 0;
+        if (won) winners.push(userId);
+    }
+    if (winners.length === 0) return;
+
+    // Scoring runs with no sender and no username map, so — like the
+    // final-scores line below it — this reports the fact rather than the name.
+    // Who actually banked it is on the final score sheet.
+    trainData.gameState.history.unshift(
+        `Long Haul bonus (+${LONG_HAUL_BONUS}) for the longest run of track — ${pluralize(longest, 'train')}, `
+        + `${winners.length === 1 ? 'claimed outright' : `shared by ${winners.length} players`}`,
+    );
+}
+
 // ─── Game type ──────────────────────────────────────────────────────────────
 
 @serializable
@@ -145,23 +176,23 @@ export class TrainTimeGameType implements IGameType {
         const gs = trainData.specificGameState;
         if (!gs.gameOver) return false;
 
-        // Final scoring (§7): route points are already on the board, so all
-        // that's left is the ticket reveal. The Long Haul bonus (§7.3) lands
-        // with step 3 of the build order.
+        // Final scoring (§7). Route points are already on the board, so what's
+        // left is the ticket reveal and the Long Haul bonus.
         for (const [userId, ps] of gs.playerStates) {
             const outcomes = ticketOutcomes(ps.tickets, gs.routeOwners, userId);
             ps.ticketScore = ticketPoints(outcomes);
             ps.ticketsCompleted = outcomes.filter(o => o.complete).length;
         }
 
+        awardLongHaul(trainData);
+
         // Highest total wins; a tie goes to the most completed tickets (§7).
-        const total = (ps: ITrainTimePlayerState) => ps.score + ps.ticketScore;
         const ranked = [...gs.playerStates].sort(([, a], [, b]) =>
-            (total(b) - total(a)) || (b.ticketsCompleted - a.ticketsCompleted));
+            (totalScore(b) - totalScore(a)) || (b.ticketsCompleted - a.ticketsCompleted));
         const leader = ranked[0][1];
-        const bestTotal = total(leader);
+        const bestTotal = totalScore(leader);
         const winners = ranked
-            .filter(([, ps]) => total(ps) === bestTotal && ps.ticketsCompleted === leader.ticketsCompleted)
+            .filter(([, ps]) => totalScore(ps) === bestTotal && ps.ticketsCompleted === leader.ticketsCompleted)
             .map(([userId]) => userId);
 
         trainData.complete = true;
@@ -298,8 +329,15 @@ export class TrainTimeClaimRoute implements IGameCommand {
         ps.score += points;
         ps.routesClaimed++;
 
+        // Claims are public, so the Long Haul race is too — the log calls out a
+        // claim that puts this player in front (design doc §6, screen 14d).
+        const runs = longestRuns(gs.routeOwners, gs.playerStates.keys());
+        const myRun = runs.get(this.senderId) ?? 0;
+        const bestRival = Math.max(0, ...[...runs].filter(([id]) => id !== this.senderId).map(([, run]) => run));
+        const leadNote = myRun > bestRival ? ` — longest run now ${myRun}` : '';
+
         trainData.gameState.history.unshift(
-            `${this.senderUsername} claimed ${routeName(route)} (${route.length} track, +${points})`,
+            `${this.senderUsername} claimed ${routeName(route)} (${route.length} track, +${points})${leadNote}`,
         );
 
         finishTurn(trainData, this.senderId, this.senderUsername);

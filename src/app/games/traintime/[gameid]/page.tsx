@@ -6,17 +6,21 @@ import { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ITrainTimeGameDataResponse } from "@/games/TrainTime/apiModels";
 import {
     ClaimContext,
+    LONG_HAUL_BONUS,
     ROUTES,
     TRAINS_PER_PLAYER,
     TrainTimeCardColour,
     claimableRouteIds,
+    longestRun,
     routeName,
+    totalScore,
 } from "@/games/TrainTime/board";
 import TrainTimeBoard from "@/games/TrainTime/components/TrainTimeBoard";
 import TrainTimeActions, { TrainTimeAction } from "@/games/TrainTime/components/TrainTimeActions";
 import TrainTimeClaimSheet from "@/games/TrainTime/components/TrainTimeClaimSheet";
 import TrainTimeTicketSheet from "@/games/TrainTime/components/TrainTimeTicketSheet";
 import TrainTimeTicketPanel, { TrainTimeTicketGroup } from "@/games/TrainTime/components/TrainTimeTicketPanel";
+import TrainTimeScoreSheet, { TrainTimeScoreRow } from "@/games/TrainTime/components/TrainTimeScoreSheet";
 import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
@@ -137,27 +141,49 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
         }
     }
 
-    // ── Standings ────────────────────────────────────────────────────────────
-    const scoreEntries: ScoreEntry[] = gs
-        ? usernameList.flatMap((username, i): ScoreEntry[] => {
+    // ── Players ──────────────────────────────────────────────────────────────
+    // The standings, the ticket reveal and the final score sheet are all
+    // per-player lists over the same seating order, so the join happens once.
+    const players = gs
+        ? usernameList.flatMap((username, i) => {
             const ps = gs.playerStates[username];
-            if (!ps) return [];
-            const isMe = username === myUsername;
-            const isActive = username === currentTurnUsername && !complete;
-            return [{
-                id: username,
-                name: isMe ? 'You' : username,
-                color: playerColour(i),
-                sub: isActive ? `▶ now · ${ps.trains} trains` : `${ps.trains} tr. · 🃏 ${ps.handCount}`,
-                // ticketScore is 0 until the game is scored, so this is route
-                // points during play and the final total afterwards.
-                score: ps.score + ps.ticketScore,
-                isMe,
-                isActive,
-                warn: ps.trains <= LOW_TRAINS && !complete,
-            }];
+            return ps
+                ? [{ username, ps, colour: playerColour(i), isMe: username === myUsername }]
+                : [];
         })
         : [];
+
+    // ── The Long Haul race (§7) ──────────────────────────────────────────────
+    // Claimed routes are public, so every player's longest continuous run is
+    // too. The board sends them live; the bonus itself isn't settled until the
+    // game is scored.
+    const myRun = me?.longestRun ?? 0;
+    const bestRun = Math.max(0, ...players.map(({ ps }) => ps.longestRun));
+    // What claiming the selected route would do to that run, so the claim sheet
+    // can price the bonus alongside the points.
+    const runAfterClaim = useMemo(() => {
+        if (!gs || selectedRouteId === null) return myRun;
+        const owners = [...gs.routeOwners];
+        owners[selectedRouteId] = myUsername;
+        return longestRun(owners, myUsername);
+    }, [gs, selectedRouteId, myUsername, myRun]);
+
+    const scoreEntries: ScoreEntry[] = players.map(({ username, ps, colour, isMe }) => {
+        const isActive = username === currentTurnUsername && !complete;
+        return {
+            id: username,
+            name: isMe ? 'You' : username,
+            color: colour,
+            sub: isActive ? `▶ now · ${ps.trains} trains` : `${ps.trains} tr. · 🃏 ${ps.handCount}`,
+            // The ticket swing and the Long Haul bonus are both 0 until the
+            // game is scored, so this is route points during play and the
+            // final total afterwards.
+            score: totalScore(ps),
+            isMe,
+            isActive,
+            warn: ps.trains <= LOW_TRAINS && !complete,
+        };
+    });
 
     const menuOptions: GameOption[] = !complete ? [{
         key: 'end',
@@ -184,14 +210,28 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
         )
         : <span className="ag-tt-stat-suffix">none yet</span>;
 
+    // A game that was abandoned or ended early is complete without ever having
+    // been scored, so the reveal keys off the scoring flag, not completion.
+    const scored = gs?.scored ?? false;
+
     // Tickets are secret while the game runs and face-up once it's scored (§10).
-    const ticketGroups: TrainTimeTicketGroup[] = complete && gs
-        ? usernameList.flatMap((username): TrainTimeTicketGroup[] => {
-            const ps = gs.playerStates[username];
-            if (!ps?.tickets) return [];
-            return [{ title: username === myUsername ? 'Your tickets' : `${username}’s tickets`, tickets: ps.tickets }];
-        })
+    const ticketGroups: TrainTimeTicketGroup[] = scored
+        ? players.flatMap(({ username, ps, isMe }): TrainTimeTicketGroup[] => (
+            ps.tickets
+                ? [{ title: isMe ? 'Your tickets' : `${username}’s tickets`, tickets: ps.tickets }]
+                : []
+        ))
         : [{ title: 'Your tickets', tickets: myTickets }];
+
+    // The end-of-game breakdown. Who won is the server's call, not the sheet's.
+    const scoreRows: TrainTimeScoreRow[] = scored
+        ? players.map(({ ps, colour, isMe }) => ({
+            player: ps,
+            colour,
+            isMe,
+            isWinner: !!gameData?.winner && ps.userId === gameData.winner,
+        }))
+        : [];
 
     let boardTag: string | null = null;
     if (gs && isMyTurn && !complete) {
@@ -230,9 +270,17 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                         value={<>{me.trains}<span className="ag-tt-stat-suffix">of {TRAINS_PER_PLAYER}</span></>}
                         label="Trains"
                     />
+                    {/* The third tile is the Long Haul race (design 14a). The
+                        deck and discard counts live on the face-up row, which
+                        is on screen whenever it's a player's turn to draw. */}
                     <Stat
-                        value={<>{gs.deckCount}<span className="ag-tt-stat-suffix">+{gs.ticketDeckCount} tickets</span></>}
-                        label="Deck"
+                        value={<>
+                            {myRun}
+                            <span className="ag-tt-stat-suffix">
+                                {myRun > 0 && myRun === bestRun ? `you lead · +${LONG_HAUL_BONUS}` : `best ${bestRun}`}
+                            </span>
+                        </>}
+                        label="Longest"
                     />
                 </div>
             )}
@@ -256,14 +304,17 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                     route={claimSheetRoute}
                     hand={gs.myHand}
                     me={me}
+                    runAfterClaim={runAfterClaim}
                     onClaim={claimRoute}
                     onBack={() => setClaiming(false)}
                     pending={pendingTarget === 'claim'}
                 />
             ) : gs && (
                 <>
-                    {(showTickets || complete) && (
-                        <TrainTimeTicketPanel groups={ticketGroups} scored={complete} />
+                    <TrainTimeScoreSheet rows={scoreRows} sharedWin={sharedWin} />
+
+                    {(showTickets || scored) && (
+                        <TrainTimeTicketPanel groups={ticketGroups} scored={scored} />
                     )}
 
                     <div className="ag-board-area">
@@ -277,10 +328,10 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                             boardTag={boardTag}
                         />
                         <div className="ag-tt-legend">
-                            {usernameList.map((username, i) => (
+                            {players.map(({ username, ps, colour, isMe }) => (
                                 <span key={username} className="ag-tt-legend-item">
-                                    <span className="ag-tt-legend-rail" style={{ background: playerColour(i) }} />
-                                    {username === myUsername ? 'You' : username} {gs.playerStates[username]?.routesClaimed ?? 0}
+                                    <span className="ag-tt-legend-rail" style={{ background: colour }} />
+                                    {isMe ? 'You' : username} {ps.routesClaimed}
                                 </span>
                             ))}
                             <span className="ag-tt-legend-item">

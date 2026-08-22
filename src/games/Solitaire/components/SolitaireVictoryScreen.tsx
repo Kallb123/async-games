@@ -5,6 +5,7 @@ import Stat from '@/components/ui/Stat';
 import { ICard, SUITS } from '@/utils/games/Cards';
 import { ISolitaireGameStateResponse } from '@/games/Solitaire/apiModels';
 import { computeFinalScore, computeTimePenalty, foundationCardCount, formatDuration } from '@/games/Solitaire/rules';
+import { signed } from '@/utils/ui/text';
 
 interface SolitaireVictoryScreenProps {
     state: ISolitaireGameStateResponse;
@@ -61,7 +62,7 @@ export default function SolitaireVictoryScreen({ state, elapsedSeconds }: Solita
                     <div key={i} className="ag-list-row">
                         <div className="ag-list-row-main"><div className="ag-list-row-title">{row.label}</div></div>
                         <div className={`ag-solitaire-breakdown-value${row.value < 0 ? ' ag-solitaire-breakdown-value--negative' : ''}`}>
-                            {row.value >= 0 ? `+${row.value}` : row.value}
+                            {signed(row.value)}
                         </div>
                     </div>
                 ))}
