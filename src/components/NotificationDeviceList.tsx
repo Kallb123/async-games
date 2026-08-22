@@ -2,6 +2,7 @@
 
 import { useToast } from "@/components/ToastContext";
 import ListSection from "@/components/ui/ListSection";
+import ListRow from "@/components/ui/ListRow";
 import { RegisteredDevice } from "@/utils/firebase/TimedToken";
 import { deviceGlyph, deviceIdForToken, STALE_DEVICE_DAYS } from "@/utils/firebase/deviceInfo";
 import { formatRelativeTime } from "@/utils/ui/time";
@@ -61,26 +62,25 @@ export default function NotificationDeviceList({ currentToken }: { currentToken?
             </>}
         >
             {devices.map((device) => (
-                <div key={device.id} className="ag-list-row">
-                    <span className="ag-icon-box" aria-hidden>{deviceGlyph(device.type)}</span>
-                    <div className="ag-list-row-main">
-                        <div className="ag-list-row-title">
-                            {device.name}
-                            {device.id === currentId && <span className="ag-tag">This device</span>}
-                        </div>
-                        <div className="ag-list-row-sub">
-                            {now !== null && `Added ${formatRelativeTime(device.registeredAt, now)} · last active ${formatRelativeTime(device.lastSeenAt, now)}`}
-                        </div>
-                    </div>
-                    <button
-                        type="button"
-                        className="ag-link-muted"
-                        onClick={() => removeDevice(device)}
-                        disabled={removingId !== null}
-                    >
-                        {removingId === device.id ? 'Removing…' : 'Remove'}
-                    </button>
-                </div>
+                <ListRow
+                    key={device.id}
+                    icon={deviceGlyph(device.type)}
+                    title={<>
+                        {device.name}
+                        {device.id === currentId && <span className="ag-tag">This device</span>}
+                    </>}
+                    sub={now !== null && `Added ${formatRelativeTime(device.registeredAt, now)} · last active ${formatRelativeTime(device.lastSeenAt, now)}`}
+                    action={
+                        <button
+                            type="button"
+                            className="ag-link-muted"
+                            onClick={() => removeDevice(device)}
+                            disabled={removingId !== null}
+                        >
+                            {removingId === device.id ? 'Removing…' : 'Remove'}
+                        </button>
+                    }
+                />
             ))}
         </ListSection>
     );

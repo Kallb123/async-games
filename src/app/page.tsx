@@ -10,6 +10,7 @@ import MyCompleteList from "@/components/MyCompleteList";
 import Avatar from "@/components/ui/Avatar";
 import Landing from "@/components/Landing";
 import Brand from "@/components/ui/Brand";
+import WhatsNew from "@/components/ui/WhatsNew";
 import Link from "next/link";
 import { profileImageUrl } from "@/utils/ui/avatar";
 
@@ -60,6 +61,8 @@ export default function Home() {
           </div>
         </Link>
       </div>
+
+      <WhatsNew />
     </main>
   );
 }

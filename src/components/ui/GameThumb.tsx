@@ -20,6 +20,12 @@ export function accentVar(accent: GameMeta["accent"]) {
     return ACCENT_VAR[accent as ThemeAccent] ?? accent;
 }
 
+// A thumb standing in for the `ag-icon-box` at the head of a list row or a
+// top bar. Mirrors that class's box in ag-theme.css, so the two stay the same
+// size wherever they sit side by side.
+export const ROW_THUMB_SIZE = 38;
+export const ROW_THUMB_RADIUS = 10;
+
 interface GameThumbProps {
     meta: GameMeta;
     size?: number;

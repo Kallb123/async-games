@@ -4,6 +4,9 @@ import Link from "next/link";
 import Brand from "@/components/ui/Brand";
 import LegalLinks from "@/components/ui/LegalLinks";
 import GameLibrary from "@/components/ui/GameLibrary";
+import ListSection from "@/components/ui/ListSection";
+import ListRow from "@/components/ui/ListRow";
+import WhatsNew from "@/components/ui/WhatsNew";
 import { GAME_META } from "@/utils/ui/games";
 
 // Anonymous visitors have no account to set a game up with, so every game in
@@ -62,22 +65,11 @@ export default function Landing() {
                 </p>
             </div>
 
-            <div className="ag-section">
-                <div className="ag-section-head">
-                    <h2 className="ag-section-label">How it works</h2>
-                </div>
-                <div className="ag-list">
-                    {HOW_IT_WORKS.map(step => (
-                        <div key={step.title} className="ag-list-row">
-                            <div className="ag-icon-box">{step.icon}</div>
-                            <div className="ag-list-row-main">
-                                <div className="ag-list-row-title">{step.title}</div>
-                                <div className="ag-list-row-sub">{step.sub}</div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
+            <ListSection label="How it works" isLoading={false}>
+                {HOW_IT_WORKS.map(step => (
+                    <ListRow key={step.title} icon={step.icon} title={step.title} sub={step.sub} />
+                ))}
+            </ListSection>
 
             <GameLibrary hrefFor={() => SIGN_UP} featuredCta="Sign up to play" label="Browse the games" />
 
@@ -90,6 +82,8 @@ export default function Landing() {
                     <span aria-hidden="true" className="ag-cta-arrow">→</span>
                 </Link>
             </div>
+
+            <WhatsNew />
 
             <div className="ag-footer">
                 <div>Already have an account? <Link href="/login">Sign in</Link></div>
