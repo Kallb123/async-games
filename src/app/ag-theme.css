@@ -218,15 +218,20 @@ button {
     line-height: 1;
 }
 
+/* An avatar carrying a badge on its corner — the profile picture picker's
+   camera button, an invite's game icon. Gives the badge something to hang off. */
+.ag-avatar-stack {
+    position: relative;
+    flex: none;
+    line-height: 0;
+}
+
 /* Your own avatar on the profile screen: the button that opens the
    picture picker, with a camera badge sitting on its edge. */
 .ag-avatar-edit {
-    position: relative;
-    flex: none;
     padding: 0;
     border: none;
     background: none;
-    line-height: 0;
     cursor: pointer;
 }
 .ag-avatar-edit:disabled { cursor: default; }
@@ -851,17 +856,23 @@ button {
 .ag-result-dot--loss { background: var(--ag-terracotta); }
 .ag-result-dot--draw { background: var(--ag-gold); }
 
-/* Game-icon sub-badge on a recent-form chip */
-.ag-result-chip-icon {
+/* A game icon riding the lower-right corner of whatever it sits on — a
+   recent-form chip, an invite's avatar. Sized by the GameThumb inside it;
+   the inset and ring are per-site overrides. See ThumbBadge. */
+.ag-thumb-badge {
     position: absolute;
-    right: -4px;
-    bottom: -4px;
-    width: 14px;
-    height: 14px;
-    border-radius: 4px;
-    outline: 1.5px solid var(--ag-bg);
+    right: var(--ag-thumb-badge-inset, -3px);
+    bottom: var(--ag-thumb-badge-inset, -3px);
+    outline: var(--ag-thumb-badge-ring, 2px solid var(--ag-surface));
     overflow: hidden;
     display: block;
+    line-height: 0;
+}
+
+/* On a recent-form chip it sits tighter, and rings against the page. */
+.ag-result-chip-icon {
+    --ag-thumb-badge-inset: -4px;
+    --ag-thumb-badge-ring: 1.5px solid var(--ag-bg);
 }
 
 /* Same win/loss/draw palette, as text colour for the per-game W/L/D counts */

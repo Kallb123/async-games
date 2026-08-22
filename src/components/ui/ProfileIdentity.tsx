@@ -30,7 +30,7 @@ export default function ProfileIdentity({
                 ? (
                     <button
                         type="button"
-                        className="ag-avatar-edit"
+                        className="ag-avatar-stack ag-avatar-edit"
                         onClick={onAvatarClick}
                         disabled={avatarBusy}
                         aria-busy={avatarBusy || undefined}
