@@ -402,3 +402,300 @@ Directions the core system supports without structural change:
 
 **Win:** all 4 diseases cured
 **Lose:** 8 outbreaks · any cube colour exhausted · player deck empty
+
+---
+
+## 21. Implementation Plan
+
+Nothing in `src/games/Outbreak/` exists yet. This section is the bridge between
+the design above and the codebase: what the engine already provides, what it
+doesn't, the concessions async play forces, and the order to build it in.
+
+Read [`docs/new-game.md`](../new-game.md) and
+[`ARCHITECTURE.md`](../../ARCHITECTURE.md) §6 first — the checklist and the
+command pattern are assumed here rather than repeated.
+
+### 21.1 What the engine already gives us
+
+| Need | Provided by |
+|---|---|
+| Invite, accept, create a game | The shared invitation engine — one `OutbreakInvitationModel` with a `CreateGame` |
+| Persist and mutate board state | `GameData` discriminator + `specificGameState` |
+| A move that validates, mutates and logs | `IGameCommand.Execute` |
+| Multi-step turns (4 actions, then a discard choice) | `turnOver: false` on the outcome, as Train Time's `TrainTimeDrawTickets` / `TrainTimeKeepTickets` pair already does |
+| Shuffling anything | `shuffle()` in `src/utils/games/shuffle.ts` — four games already import it |
+| "It's your turn" push, turn timers, surrender, rematch | The command pipeline, the turntimer cron, `/api/game/end`, `GameFinishBanner` |
+| Per-turn boards for the recap | `buildTimeline()`, given a replay adapter and recorded RNG |
+
+`src/utils/games/Cards.ts` is **not** on that list and should not be reached
+for. It is rank/suit playing-card domain logic written for Solitaire; Outbreak's
+city/event/epidemic cards share nothing with it but the word "deck".
+
+### 21.2 What the engine does not give us yet
+
+Two gaps, each of which has to be closed by an engine change rather than by
+game code. They are the reason the build order below starts outside
+`src/games/Outbreak/`.
+
+**1. There is no shared outcome.** `IGameData.winner` is a single user ID, and
+`outcomeFor()` in `GameResultData.ts` reads an empty winner as a *draw* — which
+is what Train Time deliberately records for a tie. A co-op table needs all four
+players to read "won" or all four to read "lost", and neither is expressible
+today. The command route also hardcodes `gameData.endReason = "win"` whenever
+`CheckGameOver` returns true, so a game that ends in defeat would be filed as a
+win, and the game-over notification fan-out splits the table into one winner and
+N losers.
+
+**2. A timed-out turn is a *reward* in this game.** Everywhere else, missing
+your turn costs you something. In Outbreak the board only deteriorates during
+the draw and infect phases of a player's own turn, so a turn the cron skips is a
+turn with no infection — timing out becomes the strongest play at the table. The
+cron advances `currentTurn` and nothing else, with no way for a game to resolve
+a timeout differently (Train Time's §10 wants the same thing and notes its
+absence).
+
+### 21.3 Deviations from this document
+
+Async play forces four, all of which should be recorded in a "Deviations"
+subsection of this document as they land:
+
+* **Event cards are playable only on your own turn**, at any point in your
+  action phase, and during your own draw phase to duck the hand limit. §12 says
+  they interrupt anyone at any moment; `POST /api/game/command` rejects every
+  command from a user who isn't `currentTurn`, and the right answer is to accept
+  that rather than build an out-of-turn authorisation path around it. With turns
+  hours or days apart, "interrupt the active player" has no meaning — by the
+  time a holder saw the situation and responded, the turn would be long
+  resolved. One Quiet Night and Resilient Population lose the least (both are
+  played in anticipation); Airlift loses the most, and is the one card whose
+  power this measurably cuts.
+* **Airlift needs no consent.** There is nobody to ask in real time, and the
+  moved player can see where they were put. Co-op means no adversarial use.
+* **Discussion is out of band.** §2's "shared table, shared brain" pillar rests
+  on players talking. The app has no chat; open hands and a legible board are
+  what carry it (see step 5 and step 11 below).
+* **A player who drops out ends the game for everybody**, as in every other game
+  here — the cron's abandon path already does this, and co-op gives it a cleaner
+  reading than usual: the team lost.
+
+### 21.4 State and command surface
+
+`specificGameState` (all 48 cities in one array, indexed by city id):
+
+```ts
+{
+  difficulty: 'introductory' | 'standard' | 'heroic',
+  cities: { cubes: [number, number, number, number], station: boolean }[],
+  cubesLeft:  Record<DiseaseColour, number>,
+  cures:      Record<DiseaseColour, 'none' | 'cured' | 'eradicated'>,
+  outbreaks: number,
+  infectionRateIndex: number,
+  playerDeck: CardId[],        // top first — redacted to a count
+  playerDiscard: CardId[],
+  infectionDeck: CityId[],     // top first — redacted to a count
+  infectionDiscard: CityId[],  // public, and the game's most-read information
+  players: Map<userId, {
+      hand: CardId[],          // public by design (§2)
+      city: CityId,
+      role: RoleId,
+      contingencyCard: CardId | null,
+  }>,
+  actionsLeft: number,
+  phase: 'actions' | 'discard' | 'forecast',
+}
+```
+
+**One map of per-player subdocuments, not four parallel maps.** Both existing
+multiplayer games do it this way (`playerStates` in `WorldDominationModels.ts`
+and `SettlementsAndCitiesModels.ts`), it gives `gameStateToModel` one redaction
+loop and one `markModified` surface, it is the shape `computePerTurnStat` in
+`GameResultData.ts` expects via a single `playerByUserId` helper, and it removes
+a whole class of "the Medic moved but only three of the four maps knew" bug from
+the Airlift and Dispatcher commands.
+
+Three command classes, not fifteen — `docs/new-game.md` prefers a small number
+of parameterised commands, and all eight board actions share the same "is it
+your turn, do you have an action left, decrement, log" spine:
+
+| Command | Covers |
+|---|---|
+| `OutbreakAction { kind, … }` | Drive · Direct · Charter · Shuttle · Build · Treat · Share · Cure · Pass |
+| `OutbreakPlayEvent { cardId, … }` | The five event cards, the Contingency Planner's retrieval, and Forecast's second step (`phase === 'forecast'` gates it) |
+| `OutbreakDiscard { cardIds }` | Coming back down to the 7-card hand limit |
+
+The last action of a turn (or an `OutbreakAction { kind: 'pass' }`) runs the
+draw and infect phases inside the same `Execute` and returns `turnOver: true`,
+carrying what happened back on the outcome so the client can animate it. If the
+draw leaves the player over the hand limit, `phase` becomes `'discard'` and the
+turn stays open until `OutbreakDiscard` closes it — exactly the shape Train
+Time's draw/keep-tickets pair already has.
+
+**Redaction and recorded randomness.** Both deck orders are redacted to counts
+in `gameStateToModel` (`docs/new-game.md`, "Don't leak hidden information") —
+otherwise the infection deck, the thing the whole design is about not knowing,
+is one network tab away. The infection *discard* is public and should be
+rendered, not hidden: reading it is a skill the design rewards (§14.2). Every
+`shuffle()` at setup — infection deck, player deck, the epidemic piles, the role
+deal — lands in `initialSpecificGameState`, the way World Domination's territory
+deal does, so replay is deterministic from day one. The **only** mid-game
+randomness is the Intensify shuffle, which must be recorded onto the
+epidemic-resolving command the first time it runs, the way `recordedRoll` is in
+Snakes & Ladders and Settlements & Cities. Record it in the commit that
+introduces it — Train Time's §11 is the cautionary tale of what retrofitting
+this costs.
+
+### 21.5 The commits
+
+Each step below leaves `npm run build`, `npx tsc --noEmit` and `npm test` green,
+and each is reviewable on its own. Step 1 is useful to the repo whether or not
+Outbreak ever ships; from step 5 onward every step is playable by a human rather
+than only by the test harness.
+
+**1 — One way to finish a game, and shared outcomes.** No Outbreak code. Three
+places already end a game and each has its own copy of the same sequence — set
+`complete`/`winner`/`endReason`, `trySave`, `recordGameResult`, look up the
+roster through Clerk, fan out `GameOver` pushes: the command route's game-over
+branch, the cron's abandon path, and (partially) `/api/game/end`. Extract one
+`finishGame(gameData, { winner, endReason, forfeitedBy })` next to
+`recordGameResult` and port all three onto it, then add the co-op case *inside*
+that one function rather than as a fourth copy:
+
+* `'teamwin' | 'teamloss'` join `GameEndReason`; a co-op result records
+  `winner: ""` plus one of those two, so nothing downstream has to guess.
+* `CheckGameOver` may set `endReason` itself, and the command route stops
+  overwriting it with `"win"`.
+* `outcomeFor()` maps both new reasons to the same result for every player —
+  **and so must the `$cond` aggregation in `getPlayerStats`**, which re-encodes
+  the identical win/loss/draw rule a second time in Mongo. Fix only
+  `outcomeFor()` and a co-op table gets the right chip in "recent form" and a
+  silently wrong W/L/D on every profile. Better: delete the pipeline's
+  branching, group in JS through the one `outcomeFor()`, and keep the rule in a
+  single place.
+
+Fires Out (`fires-out-gdd.md`) is co-op too and inherits all of this.
+
+**2 — Board data and pure rules.** `src/games/Outbreak/board.ts`: the 48 cities,
+their colours, the adjacency edge list, and schematic `x`/`y` for the map SVG —
+the same shape as `WorldDomination/board.ts`. `rules.ts` alongside it holds the
+pure logic: legal moves from a city, the outbreak chain resolver (with the
+once-per-resolution rule of §10.1), cure eligibility, and the loss checks. Both
+modules are server-free so the client can import them for the action picker
+(`docs/new-game.md`, "Isomorphic rules modules"). Ships with tests: adjacency is
+symmetric, every colour has 12 cities, the graph is connected, and a hand-built
+cluster produces the chain reaction §10.1 describes.
+
+**3 — Setup and wiring.** `OutbreakModels.ts` (both discriminators,
+`buildInitialOutbreakState`, `gameStateToModel` with the redaction above),
+`apiModels.ts`, `meta.ts` with `available: false`,
+`POST /api/newgame/outbreak`, and the setup screen — `GameSetupLayout` +
+`UserInviteList` (`src/components/UserInviteList.tsx`, driven by the
+`usePlayerList` hook) + `TurnTimerSelect` + an `OptionSection` for the three
+difficulties. `meta.categories` claims `Strategy`, and adds **`Co-op`** to
+`GAME_CATEGORIES` in `src/utils/ui/games.ts` — one line, from which
+`GameLibrary`'s filter chips derive automatically, and Fires Out will want it
+too. Then the shared-file wiring of `docs/new-game.md` step 6: note that
+`mongodb.ts` is four separate edits, and that the `registration` array in
+`command/route.ts` takes one line *per command class*, so that row is revisited
+in steps 4 and 10 rather than finished here. `gameRegistry.test.ts` and
+`serializableRegistry.test.ts` name anything missed. At the end of this step a
+game can be created and its opening board — 9 infected cities, 18 cubes, a
+station in Atlanta — inspected in the API response.
+
+**4 — The action phase.** `OutbreakLogic.ts` with `OutbreakAction` and
+`OutbreakGameType`: four actions, all eight action kinds, `CheckEndTurn`
+advancing on the fourth, and `CheckGameOver` returning true when all four
+diseases are cured. The game is winnable and unloseable — which is exactly the
+point of stopping here: the action economy can be tested in isolation before
+anything is fighting back.
+
+**5 — The board screen, first pass.** Enough UI to play step 4 by hand, so every
+step after this one is playtestable as it lands rather than five commits later.
+A pan-and-zoom SVG map over map art, following `WorldDominationBoard.tsx`:
+cities as nodes, adjacency as lines, cubes as stacked pips, stations as markers.
+The chrome is the shared kit re-tinted under a `.ag-game--outbreak` scope, never
+rebuilt — `GameShell`, `GameScoreboard`, `Stat` for the outbreak/rate/cube
+counters, `ActionButton` and `ag-actionsheet` for the action picker,
+`GameOptionsMenu`, `GameFinishBanner`, `useGameData`, `useSubmitCommand`,
+`usePushEvents`, `useEndGame`.
+
+*Note for this step:* World Domination will then be the second game drawing a
+node-and-edge map over art in an SVG. If the two are genuinely the same
+component with different data, promote it to `src/components/ui/` and port World
+Domination onto it in the same commit — a second copy is the signal to extract
+the first (`AGENTS.md`). If Outbreak's per-city cube stacks and four-colour
+state make it a different component wearing the same hat, keep them apart and
+say so in the commit message. Decide by writing it, not up front.
+
+**6 — The draw and infect phases.** Draw two, the hand-limit discard step, the
+infect phase at the current rate, cube placement, outbreaks and chains, and all
+three loss conditions (§4.2) reported through step 1's `teamloss`. The game is
+now a real game: playable start to finish, winnable and loseable, at a fixed
+infection rate of 2.
+
+**7 — Turn-timeout resolution.** Now that a skipped turn is worth skipping,
+close gap 2 of 21.2. **Not** a new `IGameType` method: the cron should construct
+the game's own pass command, `Execute` it, push it onto `commandHistory` and let
+`CheckGameOver`/`CheckEndTurn` run — the same three steps the command route and
+`buildTimeline()` already perform. A per-game registry in the style of
+`registerReplayAdapter` supplies that command; games that register nothing keep
+today's advance-the-turn behaviour untouched. Doing it any other way — mutating
+`specificGameState` from the cron directly — puts cubes on the board that no
+command in history accounts for, and step 12's recap would then reconstruct a
+different board than the live one, for exactly the turns the recap exists to
+narrate. Outbreak's timeout is `OutbreakAction { kind: 'pass' }`, which already
+resolves the draw and infect phases.
+
+**8 — Epidemics.** The three-step resolution of §9.1, the pile-based deck
+construction of §6 step 7, the difficulty dial from step 3 becoming live, the
+infection rate track, and the recorded Intensify shuffle. This is the step that
+gives the game its difficulty curve; the win rate target of §3 can only be
+measured from here.
+
+**9 — Roles.** All seven at once, dealt in `buildInitialOutbreakState` and
+expressed as exceptions in `rules.ts` rather than branches sprayed through
+`Execute`. Deliberately after the base rules are stable: every role bends a rule
+step 4 or 6 established, and building them alongside those rules doubles the
+surface being debugged. The Medic's free removal on entry and the Quarantine
+Specialist's suppression are the two that reach outside their own command and
+deserve their own tests.
+
+**10 — Event cards.** The five of §12 through `OutbreakPlayEvent`, including
+Forecast's ordering step and the Contingency Planner's retrieval (which is why
+this follows roles). Own-turn-only, per 21.3.
+
+**11 — The board screen, second pass.** The pieces that make a co-op table work
+without a chat window: every player's hand rendered for everyone
+(`ag-hand`/`ag-hand-card`, already shared by Settlements & Cities and Train
+Time), the infection discard pile as a first-class panel rather than a footnote,
+the event-card tray, and the history in `ag-log`. Turn navigation lands here
+too — `useTurnNavigation` + `TurnNavControls`, the client half of step 12.
+
+**12 — Recap, stats, ship.** `recap.ts` plus a replay adapter registration and
+`useTurnRecap` on the board screen, which step 8's recorded shuffle and step 7's
+command-shaped timeout already make possible. Co-op recap is unusually valuable
+here: the away-time narrative is the board getting worse, which is the entire
+experience of §3. Result stats need all four pieces in `GameResultData.ts` —
+the schema def, the `OutbreakGameResult` discriminator model,
+`computeOutbreakResultStats` (cures discovered, outbreaks survived, turns
+lasted, difficulty) and `formatOutbreakResultStats` wired into
+`GAME_RESULT_STATS`; miss the formatter and `formatGameResultStats` returns an
+empty array and the result page renders nothing, silently, with no test failing.
+`GameResultStats` and `GameStatsList` then display it for free. Finally flip
+`meta.available` to true, add the "What's new" line to
+`src/utils/ui/whatsNew.ts`, and fold the deviations of 21.3 into this document.
+
+### 21.6 Testing
+
+`OutbreakLogic.test.ts` follows `SolitaireLogic.test.ts`'s harness — an
+in-memory `makeGame()`/`cmd()` pair over a plain `IGameData`-shaped object, no
+Mongo and no Clerk. Two things are worth more here than in any game shipped so
+far:
+
+* **Cube conservation.** 24 cubes per colour, split between the board and the
+  supply, with the loss firing the moment a placement can't be paid for. An
+  invariant asserted after every command in a simulated game catches the
+  placement bugs that outbreak chains are otherwise very good at hiding.
+* **A full auto-played game per difficulty.** Play legal moves until a win or
+  one of the three losses, asserting the game always terminates and never
+  deadlocks. The same harness doubles as the only practical way to sanity-check
+  the §3 win-rate target without a hundred human playtests.
