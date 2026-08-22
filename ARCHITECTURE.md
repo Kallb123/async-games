@@ -696,6 +696,7 @@ one-liner fails with a message naming the exact file and line to add.
 - [`docs/new-game.md`](./docs/new-game.md) — step-by-step checklist for adding a new game, plus practical gotchas.
 - [`docs/turn-recap-and-planning.md`](./docs/turn-recap-and-planning.md) — the replay engine in depth.
 - [`docs/profile-pictures.md`](./docs/profile-pictures.md) — how a player's avatar is resolved, and the roadmap for uploads/unlockables.
+- [`docs/account-less-play.md`](./docs/account-less-play.md) — plan for Jackbox-style join-by-code lobbies and guest players, and what the five identity choke points cost.
 - [`docs/games/`](./docs/games/) — per-game rules notes (Smartthink, Settlements & Cities).
 - [`docs/environments.md`](./docs/environments.md) — the dev/production split (Clerk instances, databases, env vars) and how to take Clerk to production.
 - [`docs/email-theme.md`](./docs/email-theme.md) — the design system restated for email (hex palette, type, table-based components), for styling Clerk's transactional emails.
