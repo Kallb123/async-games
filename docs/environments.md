@@ -19,8 +19,10 @@ invitee `userId`s, `Friendship.requesterId` / `recipientId`,
 
 Point two Clerk instances at one database and:
 
-- `userIdListToUsernameList` (`src/utils/users/clerk.ts`) silently skips users
-  the current instance doesn't know, so players vanish from game listings.
+- `userIdListToUsernameList` (`src/utils/users/clerk.ts`) shows "Unknown
+  player" for users the current instance doesn't know, rather than skipping
+  them — so a game with a cross-instance player shows a placeholder name in
+  that seat instead of a real one.
 - `/api/users` only lists current-instance users, so old games reference people
   the invite picker can't show.
 - `/api/cron/turntimer` runs `GameDataModel.find({ complete: false })` over

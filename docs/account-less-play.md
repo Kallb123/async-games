@@ -288,21 +288,25 @@ Two mechanics follow from open seats being contended:
 These are things reading the code turned up that will bite whichever option is
 chosen. Most are small; the first is not.
 
-**`userIdListToUsernameList` silently drops unknown ids.** It pushes a name
-only for ids Clerk returns, so an unresolvable id makes the returned array
-*shorter than the input* rather than leaving a hole. `CreateResponse` then does
-`usernameList[userIdList.indexOf(currentTurn)]` — with a misaligned array, that
-is the wrong player's name against the wrong seat, and it fails silently. Any
-id the resolver can't answer for (an open-seat placeholder, a guest under
-Option B, a swept guest under Option A, a deleted user *today*) triggers it.
+**`userIdListToUsernameList` silently dropped unknown ids — fixed.** It used
+to push a name only for ids Clerk returned, so an unresolvable id made the
+returned array *shorter than the input* rather than leaving a hole.
+`CreateResponse` then does `usernameList[userIdList.indexOf(currentTurn)]` —
+with a misaligned array, that was the wrong player's name against the wrong
+seat, and it failed silently. Any id the resolver can't answer for (an
+open-seat placeholder, a guest under Option B, a swept guest under Option A,
+a deleted user *today*) triggered it.
 
-It is not one call site. Every game's `gameStateToModel` builds its
+It was not one call site: every game's `gameStateToModel` builds its
 `userIdNameMap` by zipping the two arrays positionally
-(`userIdNameMap[userId] = usernameList[i]`) — all seven of them — and
-`userIdListToUsernameMap` and `usernameListToUserIdList` drop unmatched
-entries the same way. Making `userIdListToUsernameList` position-preserving
-with a placeholder fixes all of them at once, which is why it is still an S.
-Do it before adding any new kind of id: it is a latent bug in its own right.
+(`userIdNameMap[userId] = usernameList[i]`) — all seven of them. Both
+`userIdListToUsernameList` and `userIdListToUsernameMap`
+(`src/utils/users/clerk.ts`) now stay position/key-complete: an unresolvable
+id gets the placeholder `UNKNOWN_PLAYER_NAME` ("Unknown player") instead of
+being dropped, so every call site keeps its alignment. `usernameListToUserIdList`
+(username → id, the reverse direction) is unaffected — it has no callers yet,
+and there is no meaningful id to place as a stand-in — so revisit it if a
+caller appears.
 
 **Display names are not unique, Clerk usernames are.** Two guests both typing
 "Dave" would collide, and parts of the client identify "me" by name

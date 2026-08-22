@@ -2,17 +2,18 @@ import { clerkClient, User } from "@clerk/nextjs/server";
 import { readableName } from "@/utils/ui/players";
 import { profileImageUrl } from "@/utils/ui/avatar";
 
+// Shown for a userId Clerk can't resolve (a deleted account, most likely
+// today) instead of silently dropping it. Every caller below zips this
+// result back up against the userId list it was given by position, so a
+// dropped entry would shift every name after it onto the wrong seat.
+export const UNKNOWN_PLAYER_NAME = "Unknown player";
+
 export async function userIdListToUsernameList(userIdList: string[]): Promise<string[]> {
     const { data: users } = await (await clerkClient()).users.getUserList({userId: userIdList});
-    const usernameList: string[] = [];
-    userIdList.forEach(userId => {
+    return userIdList.map(userId => {
         const user = users.find(u => u.id === userId);
-        if (!user) {
-            return;
-        }
-        usernameList.push(user.username ?? "No username");
+        return user ? (user.username ?? "No username") : UNKNOWN_PLAYER_NAME;
     });
-    return usernameList;
 }
 
 export async function userIdListToUsernameMap(userIdList: string[]): Promise<Map<string, string>> {
@@ -20,10 +21,7 @@ export async function userIdListToUsernameMap(userIdList: string[]): Promise<Map
     const usernameMap: Map<string, string> = new Map;
     userIdList.forEach(userId => {
         const user = users.find(u => u.id === userId);
-        if (!user) {
-            return;
-        }
-        usernameMap.set(userId, user.username ?? "No username");
+        usernameMap.set(userId, user ? (user.username ?? "No username") : UNKNOWN_PLAYER_NAME);
     });
     return usernameMap;
 }
