@@ -183,6 +183,37 @@ button {
     line-height: 1;
 }
 
+/* Your own avatar on the profile screen: the button that opens the
+   picture picker, with a camera badge sitting on its edge. */
+.ag-avatar-edit {
+    position: relative;
+    flex: none;
+    padding: 0;
+    border: none;
+    background: none;
+    line-height: 0;
+    cursor: pointer;
+}
+.ag-avatar-edit:disabled { cursor: default; }
+.ag-avatar-edit:hover:not(:disabled) .ag-avatar-edit-badge { background: var(--ag-terracotta-deep); }
+
+.ag-avatar-edit-badge {
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--ag-terracotta);
+    color: var(--ag-on-dark);
+    border: 2px solid var(--ag-surface);
+    font-size: 11px;
+    line-height: 1;
+}
+
 /* ---- Generic surface card ---- */
 .ag-card {
     background: var(--ag-surface);

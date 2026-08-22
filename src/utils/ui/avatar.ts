@@ -31,3 +31,15 @@ export function initials(name: string | null | undefined): string {
     if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
     return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
+
+// The picture to show for a user, or null when they have never set one.
+// Clerk hands every user an `imageUrl` — but for a user who has never set a
+// picture that URL is a generated placeholder, and our own initials badge is
+// the better default there, so only a real picture (an SSO avatar today,
+// uploads/unlockables later) counts. Takes the shape shared by Clerk's
+// server `User` and client `UserResource`, so both sides use this one rule.
+export function profileImageUrl(
+    user: { hasImage?: boolean | null; imageUrl?: string | null } | null | undefined
+): string | null {
+    return user?.hasImage && user.imageUrl ? user.imageUrl : null;
+}

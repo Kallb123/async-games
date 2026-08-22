@@ -50,7 +50,7 @@ export default function IncomingInviteList() {
         >
             {inviteList.map((invite) => (
                 <div key={invite.inviteId} className="ag-list-row">
-                    <Avatar name={invite.sender} size={34} />
+                    <Avatar name={invite.sender} imageUrl={invite.senderImageUrl} size={34} />
                     <div className="ag-list-row-main">
                         <div style={{ font: "500 13px/1.4 var(--ag-font)", color: "var(--ag-ink)" }}>
                             <strong style={{ fontWeight: 800 }}>{invite.sender}</strong> invited you to<br />

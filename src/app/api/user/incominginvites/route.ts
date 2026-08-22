@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from "../../../../utils/mongodb/mongodb";
 import { IInvitationDataDocument, InvitationModel, IInvitationResponse } from '@/utils/mongodb/InvitationData';
 import { userIdListToUsernameList } from '@/utils/users/clerk';
+import { profileImageUrl } from '@/utils/ui/avatar';
 
 export async function GET(request: NextRequest) {
   console.log(`GET ${request.nextUrl.pathname}`);
@@ -18,12 +19,13 @@ export async function GET(request: NextRequest) {
 
   const inviteResponses: IInvitationResponse[] = [];
   for(const invite of inviteData) {
-    const sender = (await (await clerkClient()).users.getUser(invite.senderId)).username ?? "Unknown User";
+    const senderUser = await (await clerkClient()).users.getUser(invite.senderId);
     const userList = await userIdListToUsernameList(invite.userIdList.map(userIdAcceptance => userIdAcceptance.userId));
     inviteResponses.push({
       timestamp: invite.timestamp,
       inviteId: invite.inviteId,
-      sender,
+      sender: senderUser.username ?? "Unknown User",
+      senderImageUrl: profileImageUrl(senderUser),
       userList,
       gameFriendlyName: invite.gameFriendlyName
     });

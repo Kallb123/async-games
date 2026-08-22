@@ -1,5 +1,6 @@
 import { clerkClient, User } from "@clerk/nextjs/server";
 import { readableName } from "@/utils/ui/players";
+import { profileImageUrl } from "@/utils/ui/avatar";
 
 export async function userIdListToUsernameList(userIdList: string[]): Promise<string[]> {
     const { data: users } = await (await clerkClient()).users.getUserList({userId: userIdList});
@@ -43,6 +44,17 @@ export function userListToUserIdNameMap(users: User[]): { [key: string]: string 
     const userIdNameMap: { [key: string]: string } = {};
     users.forEach(user => { userIdNameMap[user.id] = readableName(user, "No username"); });
     return userIdNameMap;
+}
+
+// Profile pictures for a set of users, keyed by user id — null for anyone who
+// has never set one (see profileImageUrl). For routes that show people the
+// current user isn't necessarily friends with, e.g. who reacted to their move.
+export async function userIdListToImageMap(userIdList: string[]): Promise<Map<string, string | null>> {
+    // An empty userId filter is not a filter — Clerk would hand back its whole
+    // user list, so answer the "nobody to look up" case here.
+    if (userIdList.length === 0) return new Map;
+    const { data: users } = await (await clerkClient()).users.getUserList({userId: userIdList});
+    return new Map(users.map(user => [user.id, profileImageUrl(user)]));
 }
 
 export async function usernameListToUserIdList(usernameList: string[]): Promise<string[]> {

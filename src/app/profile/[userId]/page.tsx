@@ -61,7 +61,7 @@ export default function FriendProfile({ params }: { params: Promise<{ userId: st
                 : (
                     <>
                         {/* Identity */}
-                        <ProfileIdentity name={friendDisplayName} username={profileUser?.username} fullName={fullName} />
+                        <ProfileIdentity name={friendDisplayName} username={profileUser?.username} imageUrl={profileUser?.imageUrl} fullName={fullName} />
 
                         {/* Recent form */}
                         <RecentFormSection matches={recentMatches} isLoading={isLoading} isRefreshing={isRefreshing} highlightShared />
