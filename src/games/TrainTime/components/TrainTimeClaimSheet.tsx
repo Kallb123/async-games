@@ -18,6 +18,8 @@ interface TrainTimeClaimSheetProps {
     route: TrainTimeRouteDef;
     hand: TrainTimeCardColour[];
     me: ITrainTimePlayerStateResponse;
+    /** The player's longest continuous run of track if this claim goes through (§7). */
+    runAfterClaim: number;
     onClaim: (payment: TrainTimeCardColour[]) => void;
     onBack: () => void;
     pending: boolean;
@@ -51,7 +53,7 @@ function explain(option: PaymentOption, route: TrainTimeRouteDef, hand: TrainTim
  * behind. Claiming is the only scoring action in the game, so it gets a whole
  * screen rather than a button.
  */
-export default function TrainTimeClaimSheet({ route, hand, me, onClaim, onBack, pending }: TrainTimeClaimSheetProps) {
+export default function TrainTimeClaimSheet({ route, hand, me, runAfterClaim, onClaim, onBack, pending }: TrainTimeClaimSheetProps) {
     const options = paymentOptions(route, hand);
     const payable = options.filter(o => o.shortfall === 0);
     // Near-misses are worth showing — "one more black" is the whole reason to
@@ -146,6 +148,15 @@ export default function TrainTimeClaimSheet({ route, hand, me, onClaim, onBack, 
                     <div className="ag-tt-after-row">
                         <span>Cards in hand</span>
                         <span className="ag-tt-after-value">{hand.length} → {hand.length - route.length}</span>
+                    </div>
+                    {/* The Long Haul bonus is +10 at the end, so a claim that
+                        extends your longest run is worth more than its points. */}
+                    <div className="ag-tt-after-row">
+                        <span>Longest run</span>
+                        <span className="ag-tt-after-value">
+                            {me.longestRun}
+                            {runAfterClaim > me.longestRun && <> → <span className="ag-tt-after-to">{runAfterClaim}</span></>}
+                        </span>
                     </div>
                     {me.trains - route.length <= 2 && (
                         <p className="ag-tt-pay-note">

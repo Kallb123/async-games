@@ -24,6 +24,14 @@ export interface ITrainTimePlayerStateResponse {
     /** 0 until final scoring, then the tickets' net contribution (§7). */
     ticketScore: number;
     ticketsCompleted: number;
+    /** 0 until final scoring, then LONG_HAUL_BONUS if they laid the longest run (§7). */
+    longHaulBonus: number;
+    /**
+     * Their longest continuous run of track right now, in train spaces. Public
+     * and live all game — every claim is on the board for everyone to count —
+     * so the Long Haul race can be read before it's scored.
+     */
+    longestRun: number;
     routesClaimed: number;
     /** Every player's tickets, revealed to the table once the game is over (§10). */
     tickets?: ITrainTimeTicketView[];
@@ -41,6 +49,13 @@ export interface ITrainTimeSpecificGameStateResponse {
     myDrawsThisTurn: number;
     /** Usernames who still owe a final turn once the last lap has started, else null. */
     finalRoundPending: string[] | null;
+    /**
+     * True once the game has actually been played out and scored — tickets
+     * revealed, the Long Haul settled (§7). A game that was abandoned or ended
+     * early is `complete` without ever being scored, so the two aren't the same
+     * question.
+     */
+    scored: boolean;
     /** The requesting player's own hand — never anybody else's. */
     myHand: TrainTimeCardColour[];
     ticketDeckCount: number;

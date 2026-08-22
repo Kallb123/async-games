@@ -74,7 +74,12 @@ export default function TrainTimeActions({
             <div className="ag-hand">
                 <div className="ag-hand-head">
                     <span className="ag-hand-title">{midDraw ? 'Pick 2 · one more card' : 'Face up · take 2'}</span>
-                    <span className="ag-hand-note">deck {gs.deckCount} · discard {gs.discardCount}</span>
+                    {/* The supply counts, the one place they're shown: how
+                        deep the carriage deck still is, and whether Action C
+                        has any tickets left to offer. */}
+                    <span className="ag-hand-note">
+                        deck {gs.deckCount} · discard {gs.discardCount} · 🎫 {gs.ticketDeckCount}
+                    </span>
                 </div>
                 <div className="ag-tt-market">
                     {gs.market.map((colour, index) => {

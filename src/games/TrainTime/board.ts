@@ -13,6 +13,7 @@
 // definition of "is this claim legal" rather than each growing their own.
 
 import { shuffle } from "@/utils/games/shuffle";
+import { pluralize, signed } from "@/utils/ui/text";
 
 // ─── Colours ────────────────────────────────────────────────────────────────
 
@@ -385,6 +386,116 @@ export function ticketPoints(outcomes: TicketOutcome[]): number {
     return outcomes.reduce((total, o) => total + (o.complete ? o.ticket.points : -o.ticket.points), 0);
 }
 
+// ─── The Long Haul bonus (§7) ───────────────────────────────────────────────
+
+/** Awarded at the end to the longest continuous run of track — shared on a tie. */
+export const LONG_HAUL_BONUS = 10;
+
+/**
+ * A player's whole score: track points banked as they claimed, the ticket
+ * swing, and the Long Haul bonus (§7). Both the persisted player state and the
+ * response shape carry these three, so scoring, the standings and the final
+ * score sheet all add them up the same way.
+ */
+export function totalScore(ps: { score: number; ticketScore: number; longHaulBonus: number }): number {
+    return ps.score + ps.ticketScore + ps.longHaulBonus;
+}
+
+// Finding a longest trail is exponential in the worst case. The bound inside
+// the walk settles a real network in a fraction of a millisecond — 45 trains
+// buy at most 27 of this map's routes, and a player may never own both halves
+// of a double — but it is a bound, not a guarantee: handed a board no game
+// could deal (every route to one player), the search runs for minutes. So the
+// walk counts its steps and gives up too, which keeps a pure helper from
+// spinning on whatever state it is passed. Real boards never come near it.
+const LONGEST_RUN_STEP_BUDGET = 200_000;
+
+/**
+ * The longest continuous run of track a player owns, measured in train spaces
+ * (§7.3). Branches and loops are fine as part of a network, but the measured
+ * run may not use the same route twice — so this is a longest *trail*, not a
+ * longest simple path: cities may repeat, routes may not.
+ *
+ * Depth-first from every city the player has reached, walking each of their
+ * routes at most once, and cutting any branch whose remaining track can no
+ * longer beat the best run already found.
+ */
+export function longestRun(routeOwners: (string | null)[], ownerId: string): number {
+    /** One of the player's routes, as seen from one of its two cities. */
+    interface Link { to: number; routeId: number; length: number }
+
+    const linksFrom = new Map<number, Link[]>();
+    const addLink = (city: number, link: Link) => {
+        const links = linksFrom.get(city);
+        if (links) links.push(link);
+        else linksFrom.set(city, [link]);
+    };
+    let unwalked = 0;
+    for (const route of ROUTES) {
+        if (routeOwners[route.id] !== ownerId) continue;
+        addLink(route.cityA, { to: route.cityB, routeId: route.id, length: route.length });
+        addLink(route.cityB, { to: route.cityA, routeId: route.id, length: route.length });
+        unwalked += route.length;
+    }
+
+    // Longest track first, so a good run turns up early and the bound starts
+    // cutting sooner.
+    for (const links of linksFrom.values()) links.sort((a, b) => b.length - a.length);
+
+    const walked = new Set<number>();
+    let longest = 0;
+    let stepsTaken = 0;
+
+    const walk = (city: number, run: number): void => {
+        if (run > longest) longest = run;
+        if (stepsTaken++ >= LONGEST_RUN_STEP_BUDGET) return;
+        // Even laying every route still unwalked wouldn't beat the best run,
+        // so nothing below here can either.
+        if (run + unwalked <= longest) return;
+        for (const link of linksFrom.get(city) ?? []) {
+            if (walked.has(link.routeId)) continue;
+            walked.add(link.routeId);
+            unwalked -= link.length;
+            walk(link.to, run + link.length);
+            unwalked += link.length;
+            walked.delete(link.routeId);
+        }
+    };
+    for (const city of linksFrom.keys()) walk(city, 0);
+
+    return longest;
+}
+
+/**
+ * Every player's longest run in one pass, keyed by the id they own routes
+ * under. The Long Haul is a comparison between players, so both the award at
+ * scoring time and the "took the lead" note on a claim want the whole table's
+ * runs rather than one player's.
+ */
+export function longestRuns(routeOwners: (string | null)[], ownerIds: Iterable<string>): Map<string, number> {
+    const runs = new Map<string, number>();
+    for (const ownerId of ownerIds) runs.set(ownerId, longestRun(routeOwners, ownerId));
+    return runs;
+}
+
+/**
+ * A player's total, broken into the parts that made it (§7) — the same four
+ * facts wherever a Train Time result is explained: the in-game score sheet and
+ * the stored GameResult summary. Callers join them with whatever separator
+ * suits, so the wording can't drift between the two.
+ */
+export function scoreBreakdown(ps: {
+    score: number;
+    ticketScore: number;
+    longHaulBonus: number;
+    longestRun: number;
+}): string[] {
+    const parts = [`${ps.score} from track`, `${signed(ps.ticketScore)} tickets`];
+    if (ps.longHaulBonus > 0) parts.push(`${signed(ps.longHaulBonus)} Long Haul`);
+    parts.push(`longest run ${pluralize(ps.longestRun, 'train')}`);
+    return parts;
+}
+
 // ─── Claim legality ─────────────────────────────────────────────────────────
 
 /** Why a route can't be claimed right now, or null when it can. */
@@ -545,6 +656,8 @@ export interface ITrainTimePlayerState {
     /** Tickets, scored once at the end (§7) — negative if the network fell short. */
     ticketScore: number;
     ticketsCompleted: number;
+    /** LONG_HAUL_BONUS if this player's run was the longest, else 0. Set at scoring (§7). */
+    longHaulBonus: number;
     routesClaimed: number;
 }
 
@@ -618,6 +731,7 @@ export function buildInitialTrainTimeState(turnOrder: string[]): ITrainTimeSpeci
             score: 0,
             ticketScore: 0,
             ticketsCompleted: 0,
+            longHaulBonus: 0,
             routesClaimed: 0,
         });
     }

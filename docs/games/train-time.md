@@ -397,19 +397,45 @@ an asynchronous implementation.
 
 ## 11. Implementation Status
 
-**Steps 1 and 2 implemented** — `src/games/TrainTime/` exists and the base
-game is playable end to end: the 36-city North American board (all 100 routes,
-including the 22 double routes), the 110-card carriage deck, the five-card
-market with the three-Engine wipe, both draw sources with the Engine tax,
-route claiming with Engine substitution, route scoring, the last-lap trigger,
-and the full Destination Ticket economy — the 30-ticket deck, the opening
-keep-2-of-3, Action C, redaction, the connectivity check at scoring time and
-the end-of-game reveal.
+**Steps 1 to 3 implemented** — `src/games/TrainTime/` exists and the base game
+is complete and playable start to finish: the 36-city North American board (all
+100 routes, including the 22 double routes), the 110-card carriage deck, the
+five-card market with the three-Engine wipe, both draw sources with the Engine
+tax, route claiming with Engine substitution, route scoring, the last-lap
+trigger, the full Destination Ticket economy — the 30-ticket deck, the opening
+keep-2-of-3, Action C, redaction, the connectivity check at scoring time and the
+end-of-game reveal — and final scoring with the Long Haul bonus.
+
+The Long Haul bonus (§7.3) is `longestRun()` in `board.ts`: a depth-first
+longest-*trail* search over the routes a player owns, since a run may revisit a
+city but never reuse a route. Longest-trail is NP-hard in general, so the walk
+cuts any branch whose remaining unwalked track can no longer beat the best run
+found so far, which settles a real network in a fraction of a millisecond — 45
+trains buy at most 27 of this map's routes, and a player may never own both
+halves of a double. That bound is not a guarantee, though, so the walk also
+counts its steps and gives up at a fixed budget: handed a board no game could
+deal (every route to one player), an unbounded search runs for minutes, and this
+is a pure helper that shouldn't be able to hang on the state it's passed.
+
+The bonus is awarded in `awardLongHaul()` at scoring time and shared by
+everybody tied for the longest run; a table where nobody claimed a route awards
+it to nobody. Because claimed routes are public, each player's current longest
+run rides on the game-state response all game (`longestRun` per player) rather
+than only at the end: the board shows the race in its "Long haul" tile, the
+claim sheet prices what a claim would do to it, and the log calls out a claim
+that takes the lead.
 
 Still to build, following the order below:
 
-* **The Long Haul bonus** (step 3's longest-path search).
-* **Continental** (step 4).
+* **Continental** (step 4). The setup screen already carries a disabled
+  "Continental" toggle so the option is discoverable.
+* **Turn recap** (§10) — the "route report" of design screen 14d. This is the
+  shared [since-you-were-last-here](../since-you-were-last-here.md) feature, and
+  it needs `buildTimeline()` to be able to replay a Train Time game from a
+  deterministic starting state. Train Time shuffles its deck, its market
+  refills and its ticket deck without recording what came out, so a replay
+  adapter needs those outcomes recorded on the commands first — a piece of work
+  in its own right rather than part of the base game.
 
 The build order these follow:
 
@@ -421,7 +447,7 @@ The build order these follow:
 3. **End-game and bonuses** — the longest-path calculation (§7), which is the
    only computationally interesting part: it is a longest-trail search over the
    player's claimed-route graph. (The final-round trigger itself shipped with
-   step 1, since without it the game never ends.)
+   step 1, since without it the game never ends.) *(Done.)*
 4. **Continental (§9)** — a second board plus tunnels, ferries and stations,
    gated behind an expansion flag on `specificGameState` in the same style as
    [`src/games/SettlementsAndCities/expansions.ts`](../../src/games/SettlementsAndCities/expansions.ts).

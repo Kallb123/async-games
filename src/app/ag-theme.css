@@ -582,6 +582,9 @@ button {
     box-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
 .ag-toggle--on::after { transform: translateX(18px); }
+/* A toggle for something not built yet (a "coming soon" expansion) has to read
+   as unavailable, not merely as switched off. */
+.ag-toggle:disabled { opacity: 0.45; cursor: default; }
 
 /* Option rows (setup) */
 .ag-option-card { padding: 4px 16px; }
@@ -2644,6 +2647,14 @@ button.ag-tt-ticket { cursor: pointer; padding-right: 34px; }
 .ag-tt-after-row:first-of-type { margin-top: 0; }
 .ag-tt-after-value { font-weight: 800; }
 .ag-tt-after-to { color: var(--tt-good); }
+
+/* ---- The final score sheet (§7): .ag-list rows on the parchment panel, so
+   the only new thing is the total on the right. ---- */
+.ag-game--traintime .ag-list-row { border-bottom-color: var(--tt-line); }
+.ag-game--traintime .ag-list-row-title { color: var(--tt-ink); }
+.ag-game--traintime .ag-list-row-sub { color: var(--tt-ink-soft); }
+.ag-tt-score-total { flex: none; font: 800 17px var(--ag-font); color: var(--tt-ink); }
+.ag-tt-score-total--win { color: var(--tt-good); }
 
 /* ==========================================================================
    Solitaire — green-felt table for the board screen

@@ -20,9 +20,12 @@ import {
     TRAINS_PER_PLAYER,
     buildInitialTrainTimeState,
     drawsTakenBy,
+    longestRun,
     playerNetwork,
+    scoreBreakdown,
     ticketIsComplete,
     ticketsToKeep,
+    totalScore,
 } from "./board";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -111,6 +114,7 @@ var TrainTimeGameDataSchema = new Schema<ITrainTimeGameDataDocument>(
                     score: Number,
                     ticketScore: Number,
                     ticketsCompleted: Number,
+                    longHaulBonus: Number,
                     routesClaimed: Number,
                 },
             },
@@ -173,6 +177,8 @@ export function gameStateToModel(
             score: ps.score,
             ticketScore: ps.ticketScore,
             ticketsCompleted: ps.ticketsCompleted,
+            longHaulBonus: ps.longHaulBonus ?? 0,
+            longestRun: longestRun(gs.routeOwners, userId),
             routesClaimed: ps.routesClaimed,
             // Tickets stay secret until the game is scored, then the whole
             // table sees everybody's (design doc §10).
@@ -200,6 +206,7 @@ export function gameStateToModel(
         finalRoundPending: gs.finalRoundPending
             ? gs.finalRoundPending.map(userId => toUsername(userId) as string)
             : null,
+        scored: gs.gameOver,
         myHand: viewer ? [...viewer.hand] : [],
     };
 }
@@ -234,11 +241,15 @@ export var TrainTimeGameDataModel =
 // unlike Dice Cities' coins — nothing needs tracking live for this.
 
 export interface ITrainTimePlayerResultStats {
-    /** Route points only — the ticket swing is its own line. */
+    /** Route points only — the ticket swing and the bonus are their own lines. */
     score: number;
     ticketScore: number;
     ticketsCompleted: number;
     ticketsHeld: number;
+    /** LONG_HAUL_BONUS if they laid the longest run of track, else 0 (§7). */
+    longHaulBonus: number;
+    /** How long that run was, in train spaces. */
+    longestRun: number;
     routesClaimed: number;
     trainsUsed: number;
 }
@@ -255,6 +266,8 @@ export const trainTimeGameResultStatsSchemaDef = {
             ticketScore: Number,
             ticketsCompleted: Number,
             ticketsHeld: Number,
+            longHaulBonus: Number,
+            longestRun: Number,
             routesClaimed: Number,
             trainsUsed: Number,
         },
@@ -269,16 +282,14 @@ export function computeTrainTimeResultStats(gameData: ITrainTimeGameData): ITrai
             ticketScore: ps.ticketScore,
             ticketsCompleted: ps.ticketsCompleted,
             ticketsHeld: ps.tickets.length,
+            // A game dealt before the bonus existed has no field to read.
+            longHaulBonus: ps.longHaulBonus ?? 0,
+            longestRun: longestRun(gameData.specificGameState.routeOwners, userId),
             routesClaimed: ps.routesClaimed,
             trainsUsed: TRAINS_PER_PLAYER - ps.trains,
         });
     }
     return { playerStats };
-}
-
-/** "+9" / "-4" — a ticket haul reads as the swing it is, not a bare number. */
-function signed(points: number): string {
-    return points >= 0 ? `+${points}` : `${points}`;
 }
 
 export function formatTrainTimeResultStats(
@@ -290,7 +301,7 @@ export function formatTrainTimeResultStats(
         groups.push({
             username: usernameById.get(userId) ?? userId,
             lines: [
-                `${s.score + s.ticketScore} points — ${s.score} from track, ${signed(s.ticketScore)} from tickets`,
+                `${totalScore(s)} points — ${scoreBreakdown(s).join(', ')}`,
                 `${s.ticketsCompleted} of ${pluralize(s.ticketsHeld, 'ticket')} connected`,
                 `${pluralize(s.routesClaimed, 'route')} claimed · ${pluralize(s.trainsUsed, 'train')} laid`,
             ],

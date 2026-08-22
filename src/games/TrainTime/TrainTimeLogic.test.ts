@@ -18,6 +18,7 @@ import {
     TRAIN_TIME_CARD_COLOURS,
     TrainTimeCardColour,
     SETUP_TICKETS_KEPT_MIN,
+    LONG_HAUL_BONUS,
     TICKETS,
     TICKET_COUNT,
     buildCarriageDeck,
@@ -25,6 +26,7 @@ import {
     canClaimRoute,
     cityName,
     drawsTakenBy,
+    longestRun,
     paymentOptions,
     marketNeedsWipe,
     paymentIsValid,
@@ -33,6 +35,7 @@ import {
     routeScore,
     ticketIsComplete,
     ticketsToKeep,
+    totalScore,
 } from "./board";
 import type { ICommandOutcome, IGameCommand } from "@/utils/apiModels/gameCommand";
 
@@ -111,6 +114,24 @@ function keepTickets(ids: number[]) {
     const command = new TrainTimeKeepTickets();
     command.keep = ids;
     return command;
+}
+
+/** Two players level on track points, one turn from the end, holding no tickets. */
+function endgame(): ITrainTimeGameData {
+    const game = makeGame(["u1", "u2"]);
+    const gs = game.specificGameState;
+    clearTickets(gs);
+    for (const ps of gs.playerStates.values()) {
+        ps.score = 20;
+        ps.trains = 2;
+    }
+    gs.finalRoundPending = ["u1", "u2"];
+    return game;
+}
+
+/** Plays out the last lap of a two-player game with draws only. */
+async function playOutLastLap(game: ITrainTimeGameData): Promise<void> {
+    for (let i = 0; i < 4; i++) await play(game, drawFromDeck());
 }
 
 /** Every ticket is either in the deck, kept by somebody, or on offer to them. */
@@ -398,13 +419,16 @@ describe("deadlock", () => {
         // Everything short is gone and both players are down to two trains.
         ROUTES.forEach(route => { if (route.length <= 3) gs.routeOwners[route.id] = "u2"; });
         for (const ps of gs.playerStates.values()) ps.trains = 3;
-        gs.playerStates.get("u1")!.score = 9;
+        gs.playerStates.get("u1")!.score = 20;
 
         await play(game, drawFromDeck());
         expect(game.complete).toBe(false);
         await play(game, drawFromDeck());
 
         expect(game.complete).toBe(true);
+        // u2 laid all that track, so the Long Haul is theirs — u1's points
+        // still win it.
+        expect(gs.playerStates.get("u2")!.longHaulBonus).toBe(LONG_HAUL_BONUS);
         expect(game.winner).toBe("u1");
     });
 });
@@ -568,19 +592,6 @@ describe("Action C — drawing Destination Tickets (§5)", () => {
 });
 
 describe("final ticket scoring (§7)", () => {
-    /** A game frozen one turn from the end, with u1 and u2 on equal route points. */
-    function endgame(): ITrainTimeGameData {
-        const game = makeGame(["u1", "u2"]);
-        const gs = game.specificGameState;
-        clearTickets(gs);
-        for (const ps of gs.playerStates.values()) {
-            ps.score = 20;
-            ps.trains = 2;
-        }
-        gs.finalRoundPending = ["u1", "u2"];
-        return game;
-    }
-
     /** Gives a player the routes that join a ticket's two cities, if it can. */
     function connect(game: ITrainTimeGameData, userId: string, ticketId: number): void {
         const gs = game.specificGameState;
@@ -617,10 +628,7 @@ describe("final ticket scoring (§7)", () => {
         connect(game, "u1", short.id);
         gs.finalRoundPending = ["u1", "u2"];
 
-        await play(game, drawFromDeck());
-        await play(game, drawFromDeck());
-        await play(game, drawFromDeck());
-        await play(game, drawFromDeck());
+        await playOutLastLap(game);
 
         expect(game.complete).toBe(true);
         expect(gs.playerStates.get("u1")!.ticketScore).toBe(short.points);
@@ -634,21 +642,148 @@ describe("final ticket scoring (§7)", () => {
         const game = endgame();
         const gs = game.specificGameState;
         const ticket = TICKETS.reduce((a, b) => (a.points <= b.points ? a : b));
-        // Same total: u1 scores the ticket, u2 has the same points from track.
+        // Same total: u1 gets there via the ticket and — since u2 laid no track
+        // at all — the Long Haul too, so u1's track points come down by both.
+        // What's left to separate them is the completed ticket.
         gs.playerStates.get("u1")!.tickets = [ticket.id];
-        gs.playerStates.get("u1")!.score = 20 - ticket.points;
+        gs.playerStates.get("u1")!.score = 20 - ticket.points - LONG_HAUL_BONUS;
         connect(game, "u1", ticket.id);
 
-        await play(game, drawFromDeck());
-        await play(game, drawFromDeck());
-        await play(game, drawFromDeck());
-        await play(game, drawFromDeck());
+        await playOutLastLap(game);
 
         expect(game.complete).toBe(true);
         const u1 = gs.playerStates.get("u1")!;
         const u2 = gs.playerStates.get("u2")!;
-        expect(u1.score + u1.ticketScore).toBe(u2.score + u2.ticketScore);
+        expect(totalScore(u1)).toBe(totalScore(u2));
         expect(game.winner).toBe("u1");
+    });
+});
+
+describe("the Long Haul bonus (§7)", () => {
+    function cityId(name: string): number {
+        const city = CITIES.find(c => c.name === name);
+        if (!city) throw new Error(`no city called ${name}`);
+        return city.id;
+    }
+
+    /** The route between two named cities — the first half, for a double. */
+    function routeBetween(a: string, b: string): number {
+        const from = cityId(a);
+        const to = cityId(b);
+        const route = ROUTES.find(r =>
+            (r.cityA === from && r.cityB === to) || (r.cityA === to && r.cityB === from));
+        if (!route) throw new Error(`no route between ${a} and ${b}`);
+        return route.id;
+    }
+
+    /** Hands a player the named routes and reports their longest run. */
+    function runOver(pairs: [string, string][], ownerId = "u1"): number {
+        const owners: (string | null)[] = ROUTES.map(() => null);
+        for (const [a, b] of pairs) owners[routeBetween(a, b)] = ownerId;
+        return longestRun(owners, ownerId);
+    }
+
+    it("measures a chain in train spaces, not in routes", () => {
+        // Vancouver → Calgary (3) → Helena (4) → Denver (4).
+        expect(runOver([
+            ["Vancouver", "Calgary"],
+            ["Calgary", "Helena"],
+            ["Helena", "Denver"],
+        ])).toBe(11);
+    });
+
+    it("is 0 for a player who never claimed anything", () => {
+        expect(runOver([])).toBe(0);
+        expect(longestRun(ROUTES.map(() => "u2"), "u1")).toBe(0);
+    });
+
+    it("walks a loop once and keeps going down a spur", () => {
+        // Denver → Santa Fe (2) → Phoenix (3) → Denver (5) closes a loop worth
+        // 10; the Salt Lake City spur (3) extends the trail rather than
+        // repeating a route.
+        const loop: [string, string][] = [
+            ["Denver", "Santa Fe"],
+            ["Santa Fe", "Phoenix"],
+            ["Phoenix", "Denver"],
+        ];
+        expect(runOver(loop)).toBe(10);
+        expect(runOver([...loop, ["Salt Lake City", "Denver"]])).toBe(13);
+    });
+
+    it("still answers when handed a board no game could produce", () => {
+        // 100 routes, both halves of every double, all one player's: far past
+        // anything 45 trains could buy, and dense enough that an unbounded
+        // trail search runs for minutes. The step budget is what keeps this
+        // from hanging, so this test is the guard on it.
+        expect(longestRun(ROUTES.map(() => "u1"), "u1")).toBeGreaterThan(0);
+    });
+
+    it("takes the best two arms of a branch, never the whole network", () => {
+        // Three routes meeting at Denver: 2, 4 and 4. A trail can use two of
+        // them, so the run is 8 — not the 10 the network adds up to.
+        expect(runOver([
+            ["Denver", "Santa Fe"],
+            ["Denver", "Oklahoma City"],
+            ["Helena", "Denver"],
+        ])).toBe(8);
+    });
+
+    function give(game: ITrainTimeGameData, userId: string, pairs: [string, string][]): void {
+        for (const [a, b] of pairs) game.specificGameState.routeOwners[routeBetween(a, b)] = userId;
+    }
+
+    it("adds 10 for the longest run, and can decide the game on its own", async () => {
+        const game = endgame();
+        const gs = game.specificGameState;
+        // Both are level on track points; only u1 laid any continuous track.
+        give(game, "u1", [["Denver", "Santa Fe"], ["Santa Fe", "Phoenix"]]);
+
+        await playOutLastLap(game);
+
+        expect(game.complete).toBe(true);
+        expect(gs.playerStates.get("u1")!.longHaulBonus).toBe(LONG_HAUL_BONUS);
+        expect(gs.playerStates.get("u2")!.longHaulBonus).toBe(0);
+        expect(totalScore(gs.playerStates.get("u1")!)).toBe(20 + LONG_HAUL_BONUS);
+        expect(totalScore(gs.playerStates.get("u2")!)).toBe(20);
+        expect(game.winner).toBe("u1");
+    });
+
+    it("is shared by everyone tied for the longest run", async () => {
+        const game = endgame();
+        const gs = game.specificGameState;
+        // Denver → Santa Fe → Phoenix is 5; so is Los Angeles → Las Vegas →
+        // Salt Lake City.
+        give(game, "u1", [["Denver", "Santa Fe"], ["Santa Fe", "Phoenix"]]);
+        give(game, "u2", [["Los Angeles", "Las Vegas"], ["Las Vegas", "Salt Lake City"]]);
+
+        await playOutLastLap(game);
+
+        expect(game.complete).toBe(true);
+        for (const ps of gs.playerStates.values()) expect(ps.longHaulBonus).toBe(LONG_HAUL_BONUS);
+        // Still level, so the win is shared rather than bought by the bonus.
+        expect(game.winner).toBe("");
+    });
+
+    it("goes to nobody when the board is empty", async () => {
+        const game = endgame();
+        const gs = game.specificGameState;
+
+        await playOutLastLap(game);
+
+        expect(game.complete).toBe(true);
+        for (const ps of gs.playerStates.values()) expect(ps.longHaulBonus).toBe(0);
+    });
+
+    it("calls out a claim that takes the longest-run lead", async () => {
+        const game = makeGame(["u1", "u2"]);
+        const gs = game.specificGameState;
+        const routeId = routeBetween("Denver", "Santa Fe");
+        const route = ROUTES[routeId];
+        gs.playerStates.get("u1")!.hand = Array(route.length).fill('red');
+
+        await play(game, claim(routeId, Array(route.length).fill('red')));
+
+        expect(game.gameState.history[0]).toContain(`longest run now ${route.length}`);
     });
 });
 
