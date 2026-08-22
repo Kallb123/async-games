@@ -2,7 +2,7 @@
 
 import { ReactNode } from "react";
 import { GameMeta } from "@/utils/ui/games";
-import GameThumb from "@/components/ui/GameThumb";
+import GameThumb, { ROW_THUMB_RADIUS, ROW_THUMB_SIZE } from "@/components/ui/GameThumb";
 import BackLink from "@/components/ui/BackLink";
 
 interface GameSetupLayoutProps {
@@ -23,7 +23,7 @@ export default function GameSetupLayout({ meta, children, actionLabel, actionDis
                 <div className="ag-topbar">
                     <div className="ag-topbar-title">
                         <BackLink href="/newgame" label="Back to library" />
-                        <GameThumb meta={meta} size={38} radius={10} />
+                        <GameThumb meta={meta} size={ROW_THUMB_SIZE} radius={ROW_THUMB_RADIUS} />
                         <div style={{ minWidth: 0 }}>
                             <div style={{ font: "800 20px/1.1 var(--ag-font)", color: "var(--ag-ink)" }}>New {meta.name}</div>
                             <div style={{ font: "500 11.5px var(--ag-font)", color: "var(--ag-ink-soft)" }}>{meta.players}</div>

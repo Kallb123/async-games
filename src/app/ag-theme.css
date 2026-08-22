@@ -186,6 +186,15 @@ button {
     margin: 0;
 }
 
+/* Title over a run of sections that belong together (the home page's
+   release notes), a step up from the uppercase `.ag-section-label`s
+   underneath it. */
+.ag-block-title {
+    font: 800 18px/1.2 var(--ag-font);
+    color: var(--ag-ink);
+    margin: 0;
+}
+
 .ag-section-action {
     font: 800 12px var(--ag-font);
     color: var(--ag-terracotta);
