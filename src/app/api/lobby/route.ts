@@ -1,9 +1,9 @@
-import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { dbConnect, invitationModelFor } from '@/utils/mongodb/mongodb';
 import { IInvitationDataDocument, IUserIdAcceptance, IInvitationRequest } from '@/utils/mongodb/InvitationData';
-import { isUnlockedUser } from '@/utils/users/clerk';
+import { isUnlockedUser, usersByUsername } from '@/utils/users/clerk';
 import { GAME_META } from '@/utils/ui/games';
 import { partySizeErrorMessage } from '@/components/ui/PartySizeHint';
 import { OPEN_SEAT_ID, LOBBY_TTL_MS } from '@/utils/games/lobby';
@@ -54,7 +54,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({}, { status: 400, statusText: "Invalid seat count" });
     }
 
-    const { data: invitedUsers } = await (await clerkClient()).users.getUserList({ username: usernames });
+    // Via usersByUsername, so an open-seat-only lobby (nobody named) looks up
+    // nobody rather than having Clerk hand back its entire user list and fail
+    // the resolved-every-name check below.
+    const invitedUsers = await usersByUsername(usernames);
     if (invitedUsers.length !== usernames.length) {
         return NextResponse.json({}, { status: 404, statusText: "User not found" });
     }

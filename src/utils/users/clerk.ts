@@ -17,8 +17,26 @@ export function isUnlockedUser(user: User | null | undefined): boolean {
     return user?.publicMetadata.unlocked === true;
 }
 
+// Clerk treats an empty filter as *no* filter: `getUserList({ username: [] })`
+// hands back the whole instance rather than nothing. Every lookup below goes
+// through these two so "nobody to look up" is answered here instead of coming
+// back as somebody else's users — a lobby of nothing but open seats asked for
+// zero usernames and got the entire user list, which then failed its
+// "did every name resolve?" check and 404'd the host's own lobby.
+export async function usersByUsername(usernameList: string[]): Promise<User[]> {
+    if (usernameList.length === 0) return [];
+    const { data } = await (await clerkClient()).users.getUserList({username: usernameList});
+    return data;
+}
+
+export async function usersById(userIdList: string[]): Promise<User[]> {
+    if (userIdList.length === 0) return [];
+    const { data } = await (await clerkClient()).users.getUserList({userId: userIdList});
+    return data;
+}
+
 export async function userIdListToUsernameList(userIdList: string[]): Promise<string[]> {
-    const { data: users } = await (await clerkClient()).users.getUserList({userId: userIdList});
+    const users = await usersById(userIdList);
     return userIdList.map(userId => {
         const user = users.find(u => u.id === userId);
         return user ? (user.username ?? "No username") : UNKNOWN_PLAYER_NAME;
@@ -26,7 +44,7 @@ export async function userIdListToUsernameList(userIdList: string[]): Promise<st
 }
 
 export async function userIdListToUsernameMap(userIdList: string[]): Promise<Map<string, string>> {
-    const { data: users } = await (await clerkClient()).users.getUserList({userId: userIdList});
+    const users = await usersById(userIdList);
     const usernameMap: Map<string, string> = new Map;
     userIdList.forEach(userId => {
         const user = users.find(u => u.id === userId);
@@ -57,15 +75,12 @@ export function userListToUserIdNameMap(users: User[]): { [key: string]: string 
 // has never set one (see profileImageUrl). For routes that show people the
 // current user isn't necessarily friends with, e.g. who reacted to their move.
 export async function userIdListToImageMap(userIdList: string[]): Promise<Map<string, string | null>> {
-    // An empty userId filter is not a filter — Clerk would hand back its whole
-    // user list, so answer the "nobody to look up" case here.
-    if (userIdList.length === 0) return new Map;
-    const { data: users } = await (await clerkClient()).users.getUserList({userId: userIdList});
+    const users = await usersById(userIdList);
     return new Map(users.map(user => [user.id, profileImageUrl(user)]));
 }
 
 export async function usernameListToUserIdList(usernameList: string[]): Promise<string[]> {
-    const { data: users } = await (await clerkClient()).users.getUserList({username: usernameList});
+    const users = await usersByUsername(usernameList);
     const userIdList: string[] = [];
     usernameList.forEach(username => {
         const user = users.find(u => u.username === username);
