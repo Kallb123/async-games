@@ -4,6 +4,7 @@ import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { usePathname } from "next/navigation";
 import GameLibrary from "@/components/ui/GameLibrary";
 import BackLink from "@/components/ui/BackLink";
+import Link from "next/link";
 
 export default function NewGame() {
   const pathName = usePathname();
@@ -17,6 +18,7 @@ export default function NewGame() {
           <BackLink href="/" label="Back home" />
           <span className="ag-wordmark">The library</span>
         </div>
+        <Link href="/join" className="ag-pill-action">Have a code?</Link>
       </div>
 
       <GameLibrary hrefFor={game => `/newgame/${game.url}`} />

@@ -5,8 +5,10 @@ import { Suspense, useState } from "react";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
+import SeatCountSelect from "@/components/ui/SeatCountSelect";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
+import { useCreateLobbyOrInvite } from "@/utils/hooks/useCreateLobbyOrInvite";
 import { GAME_META } from "@/utils/ui/games";
 import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { SmartthinkInvitationRequest } from "@/games/Smartthink/SmartthinkModels";
@@ -21,28 +23,16 @@ function NewGameSmartthinkForm() {
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
   const router = useRouter();
   const { showToast } = useToast();
+  const { maxPlayers } = GAME_META.smartthink;
+  const { seatCount, setSeatCount, submit } = useCreateLobbyOrInvite('Smartthink', '/api/newgame/smartthink');
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    try {
-      const data: SmartthinkInvitationRequest = {
-        userList: players,
-        turnTimer
-      };
-      const response = await fetch('/api/newgame/smartthink', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      if (!response.ok) {
-        throw new Error('Failed to send invite');
-      }
-      showToast('Invitation sent! Waiting for players to accept.', 'success', 'Invite Sent');
-      router.push('/');
-    } catch (error) {
-      console.error(error);
-      showToast('Failed to send the invitation. Please try again.', 'danger');
-    }
+    const data: SmartthinkInvitationRequest = {
+      userList: players,
+      turnTimer
+    };
+    await submit(data);
   };
 
   const handlePlaySolo = async () => {
@@ -78,6 +68,7 @@ function NewGameSmartthinkForm() {
       </div>
 
       <UserInviteList userList={userList} setItem={setItem} />
+      <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxPlayers - players.length - 1} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
       <FcmTokenComp />
     </GameSetupLayout>

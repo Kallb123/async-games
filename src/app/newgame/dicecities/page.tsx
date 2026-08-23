@@ -1,18 +1,19 @@
 'use client'
 import { FcmTokenComp } from "@/components/FirebaseForeground";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import OptionSection from "@/components/ui/OptionSection";
+import SeatCountSelect from "@/components/ui/SeatCountSelect";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
+import { useCreateLobbyOrInvite } from "@/utils/hooks/useCreateLobbyOrInvite";
 import { GAME_META } from "@/utils/ui/games";
 import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { DiceCitiesInvitationRequest } from "@/games/DiceCities/DiceCitiesModels";
-import { useToast } from "@/components/ToastContext";
 
 function NewGameDiceCitiesForm() {
   const pathName = usePathname();
@@ -23,33 +24,19 @@ function NewGameDiceCitiesForm() {
   const [enabledDocks, setEnabledDocks] = useState(false);
   const [enabledBillionaireRow, setEnabledBillionaireRow] = useState(false);
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
-  const router = useRouter();
-  const { showToast } = useToast();
+  const { maxPlayers } = GAME_META.dicecities;
+  const { seatCount, setSeatCount, submit } = useCreateLobbyOrInvite('DiceCities', '/api/newgame/dicecities');
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    try {
-      const data: DiceCitiesInvitationRequest = {
-        userList: players,
-        enabledDocks,
-        enabledBillionaireRow,
-        turnTimer
-      };
-      const response = await fetch('/api/newgame/dicecities', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      if (!response.ok) {
-        throw new Error('Failed to send invite');
-      }
-      showToast('Invitation sent! Waiting for players to accept.', 'success', 'Invite Sent');
-      router.push('/');
-    } catch (error) {
-      console.error(error);
-      showToast('Failed to send the invitation. Please try again.', 'danger');
-    }
+    const data: DiceCitiesInvitationRequest = {
+      userList: players,
+      enabledDocks,
+      enabledBillionaireRow,
+      turnTimer
+    };
+    await submit(data);
   }
 
   return (
@@ -61,6 +48,7 @@ function NewGameDiceCitiesForm() {
       footnote="Game begins once everyone accepts"
     >
       <UserInviteList userList={userList} setItem={setItem} />
+      <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxPlayers - players.length - 1} />
 
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
 

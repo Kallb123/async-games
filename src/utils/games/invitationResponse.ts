@@ -2,12 +2,7 @@ import { clerkClient } from "@clerk/nextjs/server";
 import { IInvitationDataDocument, IInvitationResponse } from "@/utils/mongodb/InvitationData";
 import { userIdListToUsernameList } from "@/utils/users/clerk";
 import { profileImageUrl } from "@/utils/ui/avatar";
-import { isOpenSeat } from "@/utils/games/lobby";
-
-// What an unclaimed seat renders as in an invite list. The client needs no
-// change for this: IInvitationResponse.userList is already a list of display
-// strings, so a lobby's placeholder seats slot in as one more value in it.
-export const OPEN_SEAT_LABEL = "Open seat";
+import { isOpenSeat, OPEN_SEAT_LABEL } from "@/utils/games/lobby";
 
 // Shared by /api/user/incominginvites and /api/user/outgoinginvites, which
 // were otherwise byte-for-byte identical but for their find() filter.
@@ -33,6 +28,7 @@ export async function invitationToResponse(invite: IInvitationDataDocument): Pro
         sender: senderUser.username ?? "Unknown User",
         senderImageUrl: profileImageUrl(senderUser),
         userList,
-        gameFriendlyName: invite.gameFriendlyName
+        gameFriendlyName: invite.gameFriendlyName,
+        joinCode: invite.joinCode
     };
 }

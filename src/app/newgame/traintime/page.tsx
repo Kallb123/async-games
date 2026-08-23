@@ -1,6 +1,6 @@
 'use client'
 import { FcmTokenComp } from "@/components/FirebaseForeground";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
@@ -8,8 +8,10 @@ import GameSetupLayout from "@/components/ui/GameSetupLayout";
 import OptionSection from "@/components/ui/OptionSection";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import PartySizeHint, { partySizeOutOfRange } from "@/components/ui/PartySizeHint";
+import SeatCountSelect from "@/components/ui/SeatCountSelect";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
+import { useCreateLobbyOrInvite } from "@/utils/hooks/useCreateLobbyOrInvite";
 import { GAME_META } from "@/utils/ui/games";
 import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { TrainTimeInvitationRequest } from "@/games/TrainTime/TrainTimeModels";
@@ -22,12 +24,12 @@ function NewGameTrainTimeForm() {
   const searchParams = useSearchParams();
   const { userList, setItem, players } = usePlayerList(readRematchPlayers(searchParams));
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
-  const router = useRouter();
   const { showToast } = useToast();
   const { minPlayers, maxPlayers } = GAME_META.traintime;
+  const { seatCount, setSeatCount, submit } = useCreateLobbyOrInvite('TrainTime', '/api/newgame/traintime');
 
-  // The sender is always a player, so the party size is invitees + 1.
-  const totalPlayers = players.length + 1;
+  // The sender is always a player, so the party size is invitees + open seats + 1.
+  const totalPlayers = players.length + seatCount + 1;
   const badPartySize = partySizeOutOfRange(totalPlayers, minPlayers, maxPlayers);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -37,25 +39,11 @@ function NewGameTrainTimeForm() {
       return;
     }
 
-    try {
-      const data: TrainTimeInvitationRequest = {
-        userList: players,
-        turnTimer
-      };
-      const response = await fetch('/api/newgame/traintime', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      if (!response.ok) {
-        throw new Error('Failed to send invite');
-      }
-      showToast('Invitation sent! Waiting for players to accept.', 'success', 'Invite Sent');
-      router.push('/');
-    } catch (error) {
-      console.error(error);
-      showToast('Failed to send the invitation. Please try again.', 'danger');
-    }
+    const data: TrainTimeInvitationRequest = {
+      userList: players,
+      turnTimer
+    };
+    await submit(data);
   }
 
   return (
@@ -67,6 +55,7 @@ function NewGameTrainTimeForm() {
       footnote="Game begins once everyone accepts"
     >
       <UserInviteList userList={userList} setItem={setItem} />
+      <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxPlayers - players.length - 1} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
       <PartySizeHint total={totalPlayers} min={minPlayers} max={maxPlayers} gameName="Train Time" />
 

@@ -39,6 +39,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Join a game with a code",
+                detail: "Open a few seats when you set up a game and share the code — anyone who enters it grabs a spot, no invite required.",
+            },
+            {
                 title: "Invites show which game you've been asked to play",
                 detail: "Each invite now carries the game's icon next to the sender, so you can tell them apart at a glance.",
             },
@@ -53,10 +57,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Install it like an app",
                 detail: "Add Async Games to your home screen and take your turns without the browser in the way.",
-            },
-            {
-                title: "Games no longer stall forever",
-                detail: "A game where someone keeps missing their turn is abandoned and cleared off everyone's list.",
             },
         ],
     },
