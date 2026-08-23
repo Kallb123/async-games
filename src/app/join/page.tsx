@@ -1,24 +1,79 @@
 'use client'
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+// The classic isLoaded/signIn/setActive shape, not @clerk/nextjs's default
+// signals-based useSignIn — this is a one-off custom sign-in flow (the
+// ticket strategy a guest's claim hands back), and every other Clerk usage
+// in the app is the declarative <SignIn/>/<SignUp/> component, so there's no
+// existing custom-flow convention this needs to match either way.
+import { useSignIn } from "@clerk/nextjs/legacy";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useToast } from "@/components/ToastContext";
+import AuthScreen from "@/components/ui/AuthScreen";
 import BackLink from "@/components/ui/BackLink";
-import { normaliseJoinCode, readJoinCode } from "@/utils/games/joinCode";
+import { JOIN_CODE_LENGTH, normaliseJoinCode, readJoinCode } from "@/utils/games/joinCode";
+import { MAX_GUEST_NAME_LENGTH, isValidGuestName } from "@/utils/games/guestName";
 import { useEnterStartedGame } from "@/utils/hooks/useEnterStartedGame";
+import type { ILobbyPreviewResponse } from "@/app/api/lobby/code/[code]/route";
 
 // What a code that opens nothing gets told — the same sentence whether the
 // route refused it or the request never landed, so it's written once.
 const BAD_CODE_MESSAGE = "That code doesn't work — check it and try again.";
 
+// The code field and submit button, shared by the signed-in form below and
+// the signed-out guest form beside it — same field, same button, on two
+// screens that otherwise differ in what else they ask for.
+function JoinCodeField({ code, onChange }: { code: string; onChange: (value: string) => void }) {
+  return (
+    <input
+      className="ag-input ag-joincode"
+      type="text"
+      autoComplete="off"
+      autoCapitalize="characters"
+      maxLength={8}
+      value={code}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder="PLUM"
+      aria-label="Join code"
+    />
+  );
+}
+
+function JoinButton({ joining, disabled }: { joining: boolean; disabled: boolean }) {
+  return (
+    <button
+      type="submit"
+      className="ag-btn ag-btn--primary ag-btn--block"
+      style={{ marginTop: 12 }}
+      disabled={disabled}
+    >
+      {joining ? 'Joining…' : 'Join game'}
+    </button>
+  );
+}
+
+interface JoinResult {
+    gameStarted: boolean;
+    gameId?: string;
+    gameUrl?: string;
+    inviteId: string;
+    alreadySeated?: boolean;
+    // Present only when the join minted a guest (docs/account-less-play.md
+    // §14) — the client's one round trip through Clerk to turn a brand-new
+    // guest account into a signed-in session.
+    ticket?: string;
+}
+
 // A code-holder with an account, landing here from a link or by typing the
 // URL. A guest with no account belongs on this same route, but goes through
-// its own signed-out lockup (AuthScreen) — step 13, not this commit.
+// its own signed-out lockup (AuthScreen) below — the join link isn't a
+// convenience for them, it's the whole flow.
 function JoinForm() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
-  useAuthGuard();
+  const { user, isLoaded } = useAuthGuard({ allowSignedOut: true });
+  const { signIn, setActive } = useSignIn();
   const router = useRouter();
   const { showToast } = useToast();
   const enterStartedGame = useEnterStartedGame();
@@ -30,7 +85,69 @@ function JoinForm() {
   // sees what they're joining first.
   const linkedCode = readJoinCode(searchParams);
   const [code, setCode] = useState(linkedCode);
+  const [name, setName] = useState('');
   const [joining, setJoining] = useState(false);
+  // Tagged with the code it was fetched for, rather than cleared directly:
+  // setting it from inside the effect below on an incomplete code would be a
+  // synchronous setState in an effect body (react-hooks/set-state-in-effect),
+  // and deriving `preview` from the tag also means a code someone is still
+  // editing never shows a stale lobby's details (see useGameResult.ts, same
+  // shape).
+  const [fetchedPreview, setFetchedPreview] = useState<{ joinCode: string; preview: ILobbyPreviewResponse | null } | null>(null);
+
+  // The lobby preview §4 deferred: a guest with no account of their own is
+  // being asked for a name by a site they've never used, and deserves to
+  // know whose game it is before they hand it over. Only matters for the
+  // signed-out screen below — fetched as soon as a complete code is on
+  // screen, whether it arrived by link or by typing.
+  useEffect(() => {
+    if (user) return;
+    const joinCode = normaliseJoinCode(code);
+    if (joinCode.length !== JOIN_CODE_LENGTH) return;
+    let cancelled = false;
+    fetch(`/api/lobby/code/${joinCode}`)
+      .then(response => response.ok ? response.json() : null)
+      .then(data => { if (!cancelled) setFetchedPreview({ joinCode, preview: data }); })
+      .catch(() => { if (!cancelled) setFetchedPreview({ joinCode, preview: null }); });
+    return () => { cancelled = true; };
+  }, [code, user]);
+
+  const preview = fetchedPreview?.joinCode === normaliseJoinCode(code) ? fetchedPreview.preview : null;
+
+  // Shared by both submit handlers below: post the code (and, for a guest, a
+  // name) and turn a failed response into the one toast either flow shows.
+  const submitJoin = async (joinCode: string, guestName?: string): Promise<JoinResult | null> => {
+    const response = await fetch('/api/lobby/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(guestName === undefined ? { joinCode } : { joinCode, name: guestName })
+    });
+    if (!response.ok) {
+      // A full lobby reads differently from a code that opens nothing: the
+      // code was right, there was just nowhere to sit. Branch on the status
+      // rather than the route's statusText, which HTTP/2 doesn't carry.
+      showToast(response.status === 409
+        ? "That lobby's full — every seat is taken."
+        : BAD_CODE_MESSAGE, 'danger');
+      return null;
+    }
+    return response.json();
+  };
+
+  // Into the lobby with the host and whoever else has claimed a seat, rather
+  // than home: the remaining seats fill live there, and it takes everyone
+  // waiting on it straight into the game once they do.
+  const enterLobby = (result: JoinResult) => {
+    if (result.gameStarted) {
+      enterStartedGame(result.gameUrl!, result.gameId!);
+      return;
+    }
+    const { title, body } = result.alreadySeated
+      ? { title: 'Already In', body: "You're already in this one — here's the lobby." }
+      : { title: 'Seat Claimed', body: "You're in! Waiting for the rest of the party." };
+    showToast(body, 'success', title);
+    router.push(`/lobby/${result.inviteId}`);
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -39,43 +156,80 @@ function JoinForm() {
     setJoining(true);
 
     try {
-      const response = await fetch('/api/lobby/join', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ joinCode })
-      });
-      if (!response.ok) {
-        // A full lobby reads differently from a code that opens nothing: the
-        // code was right, there was just nowhere to sit. Branch on the status
-        // rather than the route's statusText, which HTTP/2 doesn't carry.
-        showToast(response.status === 409
-          ? "That lobby's full — every seat is taken."
-          : BAD_CODE_MESSAGE, 'danger');
+      const result = await submitJoin(joinCode);
+      if (!result) {
         setJoining(false);
         return;
       }
-      const { gameStarted, gameId, gameUrl, inviteId, alreadySeated } = await response.json();
-      if (gameStarted) {
-        enterStartedGame(gameUrl, gameId);
-      } else {
-        // Into the lobby with the host and whoever else has claimed a seat,
-        // rather than home: the remaining seats fill live there, and it takes
-        // everyone waiting on it straight into the game once they do. Someone
-        // who already has a place here (their other device, or the host with
-        // their own code) lands on the same screen — one seat each — so only
-        // the wording changes.
-        const { title, body } = alreadySeated
-          ? { title: 'Already In', body: "You're already in this one — here's the lobby." }
-          : { title: 'Seat Claimed', body: "You're in! Waiting for the rest of the party." };
-        showToast(body, 'success', title);
-        router.push(`/lobby/${inviteId}`);
-      }
+      enterLobby(result);
     } catch (error) {
       console.error(error);
       showToast(BAD_CODE_MESSAGE, 'danger');
       setJoining(false);
     }
   };
+
+  const handleGuestSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const joinCode = normaliseJoinCode(code);
+    const guestName = name.trim();
+    if (!joinCode || !isValidGuestName(guestName) || joining || !signIn || !setActive) return;
+    setJoining(true);
+
+    try {
+      const result = await submitJoin(joinCode, guestName);
+      if (!result?.ticket) {
+        setJoining(false);
+        return;
+      }
+      // The seat is already claimed server-side; this is just turning the
+      // brand-new guest account it minted into a session on this device.
+      const signInAttempt = await signIn.create({ strategy: 'ticket', ticket: result.ticket });
+      if (signInAttempt.status !== 'complete' || !signInAttempt.createdSessionId) {
+        throw new Error('Guest sign-in did not complete');
+      }
+      await setActive({ session: signInAttempt.createdSessionId });
+      enterLobby(result);
+    } catch (error) {
+      console.error(error);
+      showToast(BAD_CODE_MESSAGE, 'danger');
+      setJoining(false);
+    }
+  };
+
+  if (!isLoaded) {
+    return null;
+  }
+
+  if (!user) {
+    const seatsLeft = preview
+      ? `${preview.openSeatCount} seat${preview.openSeatCount === 1 ? '' : 's'} left`
+      : '';
+    const title = preview ? "You're invited!" : (linkedCode ? "You've been invited" : "Got a code?");
+    const subtitle = preview
+      ? `${preview.sender} invited you to ${preview.gameFriendlyName} — ${seatsLeft}.`
+      : "Enter your host's code and pick a name to grab an open seat.";
+
+    return (
+      <AuthScreen title={title} subtitle={subtitle}>
+        <form onSubmit={handleGuestSubmit} className="ag-section" style={{ width: "100%" }}>
+          <JoinCodeField code={code} onChange={setCode} />
+          <input
+            className="ag-input"
+            type="text"
+            autoComplete="off"
+            maxLength={MAX_GUEST_NAME_LENGTH}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Your name"
+            aria-label="Your name"
+            style={{ marginTop: 12 }}
+          />
+          <JoinButton joining={joining} disabled={joining || !normaliseJoinCode(code) || !isValidGuestName(name.trim())} />
+        </form>
+      </AuthScreen>
+    );
+  }
 
   return (
     <main>
@@ -99,25 +253,8 @@ function JoinForm() {
       </div>
 
       <form onSubmit={handleSubmit} className="ag-section">
-        <input
-          className="ag-input ag-joincode"
-          type="text"
-          autoComplete="off"
-          autoCapitalize="characters"
-          maxLength={8}
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          placeholder="PLUM"
-          aria-label="Join code"
-        />
-        <button
-          type="submit"
-          className="ag-btn ag-btn--primary ag-btn--block"
-          style={{ marginTop: 12 }}
-          disabled={joining || !normaliseJoinCode(code)}
-        >
-          {joining ? 'Joining…' : 'Join game'}
-        </button>
+        <JoinCodeField code={code} onChange={setCode} />
+        <JoinButton joining={joining} disabled={joining || !normaliseJoinCode(code)} />
       </form>
 
       <FcmTokenComp />

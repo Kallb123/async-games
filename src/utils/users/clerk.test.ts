@@ -39,4 +39,12 @@ describe('Clerk user lookups', () => {
         expect(await userIdListToUsernameList([])).toEqual([]);
         expect(getUserList).not.toHaveBeenCalled();
     });
+
+    it('shows a guest by the name they typed, not their account id', async () => {
+        getUserList.mockResolvedValue({
+            data: [{ id: 'user_guest_1', username: 'guest_abc123', firstName: 'Dave', publicMetadata: { guest: true } }],
+        });
+
+        expect(await userIdListToUsernameList(['user_guest_1'])).toEqual(['Dave']);
+    });
 });

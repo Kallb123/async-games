@@ -3,7 +3,10 @@
 // and the digits 0/1 themselves.
 export const JOIN_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-const JOIN_CODE_LENGTH = 4;
+// Exported so a caller deciding "is this code complete yet?" — the lobby
+// preview fetch on /join's guest screen (step 14) — has one place to read
+// the length from rather than hard-coding 4 a second time.
+export const JOIN_CODE_LENGTH = 4;
 
 export function generateJoinCode(): string {
     let code = '';
