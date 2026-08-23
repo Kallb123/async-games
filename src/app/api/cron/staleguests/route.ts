@@ -1,4 +1,3 @@
-import { clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { isAuthorisedCron } from '@/utils/cronAuth';
 import { dbConnect } from '@/utils/mongodb/mongodb';
@@ -6,11 +5,8 @@ import { GameDataModel } from '@/utils/mongodb/GameData';
 import { GameResultModel } from '@/utils/mongodb/GameResultData';
 import { InvitationModel } from '@/utils/mongodb/InvitationData';
 import { deleteGuest, GUEST_SWEEP_DAYS } from '@/utils/users/guest';
+import { forEachClerkUser } from '@/utils/users/clerk';
 import { isGuest } from '@/utils/ui/players';
-
-const PAGE_SIZE = 100;
-// Belt and braces against a paging bug turning into an unbounded loop.
-const MAX_PAGES = 100;
 
 const GUEST_SWEEP_MS = GUEST_SWEEP_DAYS * 24 * 60 * 60 * 1000;
 
@@ -61,44 +57,27 @@ export async function GET(request: NextRequest) {
     }
 
     await dbConnect();
-    const client = await clerkClient();
 
-    let scanned = 0;
     let guests = 0;
     let swept = 0;
 
-    for (let page = 0; page < MAX_PAGES; page++) {
-        const { data: users } = await client.users.getUserList({
-            limit: PAGE_SIZE,
-            offset: page * PAGE_SIZE,
-        });
-        if (!users.length) {
-            break;
+    const scanned = await forEachClerkUser(async user => {
+        if (!isGuest(user)) {
+            return;
         }
-        scanned += users.length;
+        guests++;
 
-        for (const user of users) {
-            if (!isGuest(user)) {
-                continue;
-            }
-            guests++;
-
-            const endedAt = await lastGameEndedAt(user.id);
-            const sweepable = endedAt
-                ? Date.now() - new Date(endedAt).getTime() >= GUEST_SWEEP_MS
-                : !(await stillHasSomewhereToBe(user.id));
-            if (!sweepable) {
-                continue;
-            }
-
-            await deleteGuest(user.id);
-            swept++;
+        const endedAt = await lastGameEndedAt(user.id);
+        const sweepable = endedAt
+            ? Date.now() - new Date(endedAt).getTime() >= GUEST_SWEEP_MS
+            : !(await stillHasSomewhereToBe(user.id));
+        if (!sweepable) {
+            return;
         }
 
-        if (users.length < PAGE_SIZE) {
-            break;
-        }
-    }
+        await deleteGuest(user.id);
+        swept++;
+    });
 
     console.log(`Swept ${swept} unclaimed guest(s) of ${guests} scanned, ${GUEST_SWEEP_DAYS}+ days idle`);
 
