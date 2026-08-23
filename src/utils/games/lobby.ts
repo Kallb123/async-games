@@ -6,6 +6,12 @@ import { IInvitationData, IUserIdAcceptance } from "@/utils/mongodb/InvitationDa
 // than a separate open-seats counter (see docs/account-less-play.md §4).
 export const OPEN_SEAT_ID = "open-seat";
 
+// How long an open lobby lives before its TTL index reaps it (see the
+// `expiresAt` index on InvitationSchema, and docs/account-less-play.md §4) —
+// long enough for a host's friends to type in a code, short enough that a
+// code nobody used stops working and frees itself back into the pool.
+export const LOBBY_TTL_MS = 60 * 60 * 1000;
+
 export function isOpenSeat(entry: IUserIdAcceptance): boolean {
     return entry.userId === OPEN_SEAT_ID;
 }
