@@ -43,7 +43,15 @@ describe('createGuest', () => {
         const guest = await createGuest('Dave');
 
         expect(createSignInToken).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user_guest_1' }));
-        expect(guest).toEqual({ userId: 'user_guest_1', ticket: 'a-sign-in-token' });
+        expect(guest).toEqual({ userId: 'user_guest_1', ticket: 'a-sign-in-token', resumeTicket: 'a-sign-in-token' });
+    });
+
+    it('mints the resume ticket with a longer expiry than the join ticket', async () => {
+        await createGuest('Dave');
+
+        const expiries = createSignInToken.mock.calls.map(([params]) => params.expiresInSeconds);
+        expect(expiries).toHaveLength(2);
+        expect(Math.max(...expiries)).toBeGreaterThan(Math.min(...expiries));
     });
 });
 

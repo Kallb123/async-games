@@ -833,7 +833,7 @@ nudge affordances stay exactly as they were: neither one offers a per-seat
 action on the lobby screen today, so there was nothing to hide — the guest
 seat already renders through the same `ListRow` a named seat does.
 
-**15 — Bringing the guest back.** Less work than it looks: `BottomBanner` is
+**15 — Bringing the guest back.** *(Done.)* Less work than it looks: `BottomBanner` is
 mounted app-wide by `Providers` and gates its notification offer on
 `useIsAuthorised`, so step 12's predicate already turned the existing offer on
 for guests — building a second one on the board screen would be a third copy of

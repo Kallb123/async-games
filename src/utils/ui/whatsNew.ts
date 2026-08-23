@@ -39,6 +39,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Guests can play, no account needed",
+                detail: "Anyone with a code can join and play without signing up — just a name. Save the link you're given to find your way back in.",
+            },
+            {
                 title: "Share a link, not just a code",
                 detail: "Tap the code in your lobby to send a link — whoever opens it lands on the join screen with the code already filled in.",
             },
@@ -53,10 +57,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Join a game with a code",
                 detail: "Open a few seats when you set up a game and share the code — anyone who enters it grabs a spot, no invite required.",
-            },
-            {
-                title: "Invites show which game you've been asked to play",
-                detail: "Each invite now carries the game's icon next to the sender, so you can tell them apart at a glance.",
             },
         ],
     },

@@ -14,7 +14,9 @@ import AuthScreen from "@/components/ui/AuthScreen";
 import BackLink from "@/components/ui/BackLink";
 import { JOIN_CODE_LENGTH, normaliseJoinCode, readJoinCode } from "@/utils/games/joinCode";
 import { MAX_GUEST_NAME_LENGTH, isValidGuestName } from "@/utils/games/guestName";
+import { readResumeTicket } from "@/utils/users/resumeLink";
 import { useEnterStartedGame } from "@/utils/hooks/useEnterStartedGame";
+import ResumeLinkOffer from "@/components/ui/ResumeLinkOffer";
 import type { ILobbyPreviewResponse } from "@/app/api/lobby/code/[code]/route";
 
 // What a code that opens nothing gets told — the same sentence whether the
@@ -63,6 +65,10 @@ interface JoinResult {
     // §14) — the client's one round trip through Clerk to turn a brand-new
     // guest account into a signed-in session.
     ticket?: string;
+    // Present alongside `ticket`: the guest's resume fallback
+    // (docs/account-less-play.md §2/§15), shown once before they leave this
+    // screen.
+    resumeUrl?: string;
 }
 
 // A code-holder with an account, landing here from a link or by typing the
@@ -87,6 +93,46 @@ function JoinForm() {
   const [code, setCode] = useState(linkedCode);
   const [name, setName] = useState('');
   const [joining, setJoining] = useState(false);
+  // A guest's saved resume link (docs/account-less-play.md §2/§15) lands here
+  // instead of a join code — signing back in is the whole flow, so it's
+  // handled before anything below asks for a code. `resuming` starts true
+  // only when there's a ticket to consume, and stays true (rather than being
+  // read straight off the URL a second time) so the effect below can clear it
+  // once without racing a re-render.
+  const resumeTicket = readResumeTicket(searchParams);
+  const [resuming, setResuming] = useState(!!resumeTicket);
+  // The same resume link, offered back once right after a brand-new guest's
+  // ticket sign-in completes (below) — nothing persists it, so this is the
+  // only time it's ever on screen.
+  const [resumeOffer, setResumeOffer] = useState<{ url: string; result: JoinResult } | null>(null);
+
+  useEffect(() => {
+    if (!resuming || !isLoaded) return;
+    if (user) {
+      // Already signed in — on this device, or a second tap on the same
+      // link — so there's no ticket to consume.
+      setResuming(false);
+      return;
+    }
+    if (!signIn || !setActive) return;
+    (async () => {
+      try {
+        const attempt = await signIn.create({ strategy: 'ticket', ticket: resumeTicket! });
+        if (attempt.status === 'complete' && attempt.createdSessionId) {
+          await setActive({ session: attempt.createdSessionId });
+        } else {
+          showToast("That link has expired.", 'danger');
+        }
+      } catch (error) {
+        console.error(error);
+        showToast("That link has expired.", 'danger');
+      } finally {
+        setResuming(false);
+        router.replace('/');
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resuming, isLoaded, user, signIn, setActive]);
   // Tagged with the code it was fetched for, rather than cleared directly:
   // setting it from inside the effect below on an incomplete code would be a
   // synchronous setState in an effect body (react-hooks/set-state-in-effect),
@@ -189,7 +235,14 @@ function JoinForm() {
         throw new Error('Guest sign-in did not complete');
       }
       await setActive({ session: signInAttempt.createdSessionId });
-      enterLobby(result);
+      // The resume link is this guest's only way back if they close the tab
+      // (docs/account-less-play.md §2/§15) — offered once, here, before
+      // they're carried on into the lobby.
+      if (result.resumeUrl) {
+        setResumeOffer({ url: result.resumeUrl, result });
+      } else {
+        enterLobby(result);
+      }
     } catch (error) {
       console.error(error);
       showToast(BAD_CODE_MESSAGE, 'danger');
@@ -197,8 +250,26 @@ function JoinForm() {
     }
   };
 
-  if (!isLoaded) {
+  if (!isLoaded || resuming) {
     return null;
+  }
+
+  if (resumeOffer) {
+    return (
+      <AuthScreen title="You're in!" subtitle="Save your way back before you go any further.">
+        <div className="ag-section" style={{ width: "100%" }}>
+          <ResumeLinkOffer url={resumeOffer.url} />
+          <button
+            type="button"
+            className="ag-btn ag-btn--primary ag-btn--block"
+            style={{ marginTop: 12 }}
+            onClick={() => enterLobby(resumeOffer.result)}
+          >
+            Continue to lobby
+          </button>
+        </div>
+      </AuthScreen>
+    );
   }
 
   if (!user) {

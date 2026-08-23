@@ -19,8 +19,13 @@ const NOTIFICATIONS_DISMISSED_KEY = 'ag-notifications-dismissed';
  *
  * Two offers can qualify at the same time — install the app, turn on
  * notifications — and stacking both would be two dark cards nagging at once, so
- * this shows at most one. Notifications go first: they are what makes an async
- * game playable, and the install offer keeps for the next visit.
+ * this shows at most one. Install goes first, notifications keeps for the next
+ * visit: on iOS, installing to the home screen is a precondition for web push
+ * at all (`pushSupported`/`useNotificationPermission` report 'unsupported'
+ * until then), so an install-first rule is the one order that's never
+ * backwards there — and elsewhere, where push needs no install, showing
+ * whichever one qualifies first costs nothing. One rule for every platform
+ * rather than a special case for iOS.
  *
  * The notification offer is gated on being signed in, because it is only worth
  * anything to someone with games to be notified about, and because asking a
@@ -42,12 +47,12 @@ export default function BottomBanner() {
     // render matches the server's empty output.
     let label: string;
     let offer: ReactNode;
-    if (isAuthorised && permission === 'default' && !notifications.dismissed) {
-        label = 'Turn on notifications';
-        offer = <NotificationOffer permission={permission} className="ag-banner-inner" onDismiss={notifications.dismiss} />;
-    } else if (installMethod !== 'none' && !install.dismissed) {
+    if (installMethod !== 'none' && !install.dismissed) {
         label = 'Install Async Games';
         offer = <InstallOffer method={installMethod} className="ag-banner-inner" onDismiss={install.dismiss} />;
+    } else if (isAuthorised && permission === 'default' && !notifications.dismissed) {
+        label = 'Turn on notifications';
+        offer = <NotificationOffer permission={permission} className="ag-banner-inner" onDismiss={notifications.dismiss} />;
     } else {
         return null;
     }
