@@ -39,6 +39,13 @@ describe('createGuest', () => {
         expect(new Set(usernames).size).toBe(2);
     });
 
+    it('gives every guest a throwaway email address matching their username', async () => {
+        await createGuest('Dave');
+
+        const [{ username, emailAddress }] = createUser.mock.calls[0];
+        expect(emailAddress).toEqual([`${username}@guests.asyncgames.com`]);
+    });
+
     it('mints a sign-in token for the new user and hands back the ticket', async () => {
         const guest = await createGuest('Dave');
 
