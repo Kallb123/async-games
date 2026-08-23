@@ -320,28 +320,31 @@ function JoinForm() {
       <AuthScreen title={title} subtitle={subtitle}>
         <form onSubmit={handleGuestSubmit} className="ag-section" style={{ width: "100%" }}>
           <JoinCodeField code={code} onChange={setCode} />
-          <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
-            <input
-              className="ag-input"
-              type="text"
-              autoComplete="off"
-              maxLength={MAX_GUEST_NAME_LENGTH}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Your name"
-              aria-label="Your name"
-              style={{ flex: 1 }}
-            />
-            <button
-              type="button"
-              className="ag-die-btn"
-              onClick={rerollName}
-              disabled={joining}
-              aria-label="Shuffle to a new random name"
-              title="Shuffle to a new random name"
-            >
-              <DieFace value={nameDie} size={32} />
-            </button>
+          <div style={{ marginTop: 12 }}>
+            <label htmlFor="guest-name" className="ag-section-label ag-field-label">Your name</label>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                id="guest-name"
+                className="ag-input"
+                type="text"
+                autoComplete="off"
+                maxLength={MAX_GUEST_NAME_LENGTH}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Your name"
+                style={{ flex: 1 }}
+              />
+              <button
+                type="button"
+                className="ag-die-btn"
+                onClick={rerollName}
+                disabled={joining}
+                aria-label="Shuffle to a new random name"
+                title="Shuffle to a new random name"
+              >
+                <DieFace value={nameDie} size={32} />
+              </button>
+            </div>
           </div>
           <JoinButton joining={joining} disabled={joining || !normaliseJoinCode(code) || !isValidGuestName(name.trim())} />
         </form>
