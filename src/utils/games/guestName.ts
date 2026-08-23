@@ -36,22 +36,35 @@ export function uniqueGuestName(name: string, takenNames: string[]): string {
 // button beside it rerolls to. Kept short by design: every combination
 // clears MAX_GUEST_NAME_LENGTH, so the result is always a valid guest name.
 const GUEST_NAME_ADJECTIVES = [
-    'Agitated', 'Amiable', 'Bouncy', 'Brave', 'Curious', 'Clumsy', 'Daring', 'Dizzy',
-    'Eager', 'Elegant', 'Fuzzy', 'Feisty', 'Grumpy', 'Giddy', 'Happy', 'Hasty',
-    'Itchy', 'Icy', 'Jumping', 'Jolly', 'Kooky', 'Keen', 'Lazy', 'Lively',
-    'Mighty', 'Merry', 'Nimble', 'Noisy', 'Odd', 'Orderly', 'Playful', 'Plucky',
-    'Quirky', 'Quiet', 'Rowdy', 'Rusty', 'Sneaky', 'Silly', 'Tiny', 'Tidy',
-    'Upbeat', 'Unruly', 'Vexed', 'Vivid', 'Wobbly', 'Witty', 'Yawning', 'Yappy',
-    'Zany', 'Zealous',
+    'Agitated', 'Amiable', 'Awkward', 'Ancient', 'Bouncy', 'Brave', 'Bold', 'Breezy',
+    'Curious', 'Clumsy', 'Cheeky', 'Chill', 'Daring', 'Dizzy', 'Dapper', 'Drowsy',
+    'Eager', 'Elegant', 'Excited', 'Earnest', 'Fuzzy', 'Feisty', 'Frisky', 'Friendly',
+    'Grumpy', 'Giddy', 'Goofy', 'Gentle', 'Happy', 'Hasty', 'Handsome', 'Hungry',
+    'Itchy', 'Icy', 'Impish', 'Iconic', 'Jumping', 'Jolly', 'Jaunty', 'Jazzy',
+    'Kooky', 'Keen', 'Klutzy', 'Kind', 'Lazy', 'Lively', 'Loud', 'Loyal',
+    'Mighty', 'Merry', 'Moody', 'Muddy', 'Nimble', 'Noisy', 'Naughty', 'Nervous',
+    'Odd', 'Orderly', 'Outgoing', 'Oafish', 'Playful', 'Plucky', 'Peppy', 'Prickly',
+    'Quirky', 'Quiet', 'Quaint', 'Quick', 'Rowdy', 'Rusty', 'Ready', 'Rare',
+    'Sneaky', 'Silly', 'Spry', 'Sturdy', 'Tiny', 'Tidy', 'Tender', 'Tough',
+    'Upbeat', 'Unruly', 'Uneasy', 'Useful', 'Vexed', 'Vivid', 'Valiant', 'Velvety',
+    'Wobbly', 'Witty', 'Weary', 'Wacky', 'Yawning', 'Yappy', 'Young', 'Yummy',
+    'Zany', 'Zealous', 'Zippy', 'Zesty',
 ];
 
 const GUEST_NAME_ANIMALS = [
-    'Ape', 'Antelope', 'Bear', 'Badger', 'Cat', 'Coyote', 'Dolphin', 'Duck',
-    'Eagle', 'Elk', 'Fox', 'Ferret', 'Goat', 'Gecko', 'Hippo', 'Hare',
-    'Iguana', 'Impala', 'Jackal', 'Jaguar', 'Koala', 'Kiwi', 'Lion', 'Lynx',
-    'Moose', 'Mole', 'Newt', 'Narwhal', 'Otter', 'Owl', 'Panda', 'Puma',
-    'Quail', 'Quokka', 'Rabbit', 'Raccoon', 'Skunk', 'Sloth', 'Tiger', 'Toad',
-    'Urchin', 'Uakari', 'Viper', 'Vulture', 'Walrus', 'Wombat', 'Yak', 'Zebra',
+    'Ape', 'Antelope', 'Alpaca', 'Armadillo', 'Bear', 'Badger', 'Beaver', 'Bison',
+    'Cat', 'Coyote', 'Cheetah', 'Cobra', 'Dolphin', 'Duck', 'Deer', 'Donkey',
+    'Eagle', 'Elk', 'Emu', 'Egret', 'Fox', 'Ferret', 'Falcon', 'Flamingo',
+    'Goat', 'Gecko', 'Gorilla', 'Giraffe', 'Hippo', 'Hare', 'Hedgehog', 'Heron',
+    'Iguana', 'Impala', 'Ibis', 'Ibex', 'Jackal', 'Jaguar', 'Jay', 'Jerboa',
+    'Koala', 'Kiwi', 'Kangaroo', 'Kestrel', 'Lion', 'Lynx', 'Llama', 'Leopard',
+    'Moose', 'Mole', 'Manatee', 'Meerkat', 'Newt', 'Narwhal', 'Nutria', 'Numbat',
+    'Otter', 'Owl', 'Ocelot', 'Orca', 'Panda', 'Puma', 'Penguin', 'Pelican',
+    'Quail', 'Quokka', 'Quetzal', 'Quoll', 'Rabbit', 'Raccoon', 'Rhino', 'Robin',
+    'Skunk', 'Sloth', 'Seal', 'Squirrel', 'Tiger', 'Toad', 'Turtle', 'Tapir',
+    'Urchin', 'Uakari', 'Urial', 'Umbrellabird', 'Viper', 'Vulture', 'Vole', 'Vervet',
+    'Walrus', 'Wombat', 'Weasel', 'Wolf', 'Yak', 'Yabby', 'Yeti', 'Zebra',
+    'Zorilla', 'Zokor',
 ];
 
 function pick<T>(items: readonly T[]): T {
