@@ -1791,6 +1791,19 @@ button {
     overflow: hidden;
     flex-shrink: 0;
 }
+/* A DieFace worn as a button — the reroll control beside /join's guest name
+   field. Only strips the native <button> chrome; .ag-die already supplies
+   the raised, tactile look, and :active/:disabled ride .ag-btn's own rules. */
+.ag-die-btn {
+    display: inline-flex;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+}
+.ag-die-btn:active .ag-die { transform: translateY(2px); box-shadow: 0 4px 0 oklch(0.75 0.05 60), 0 6px 10px rgba(0, 0, 0, 0.2); }
+.ag-die-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
 .ag-die-pip {
     width: calc(var(--ag-die-size) * 0.14);
     height: calc(var(--ag-die-size) * 0.14);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_GUEST_NAME_LENGTH, isValidGuestName, uniqueGuestName } from './guestName';
+import { MAX_GUEST_NAME_LENGTH, isValidGuestName, randomGuestName, uniqueGuestName } from './guestName';
 
 describe('isValidGuestName', () => {
     it('accepts an ordinary name', () => {
@@ -43,5 +43,43 @@ describe('uniqueGuestName', () => {
 
     it('is empty-list safe', () => {
         expect(uniqueGuestName('Dave', [])).toBe('Dave');
+    });
+});
+
+describe('randomGuestName', () => {
+    it('always produces a valid guest name', () => {
+        for (let i = 0; i < 100; i++) {
+            expect(isValidGuestName(randomGuestName())).toBe(true);
+        }
+    });
+
+    it('is an Adjective+Animal pairing (two capitalised words run together)', () => {
+        for (let i = 0; i < 100; i++) {
+            expect(randomGuestName()).toMatch(/^[A-Z][a-z]+[A-Z][a-z]+$/);
+        }
+    });
+
+    it('prefers alliteration', () => {
+        let alliterative = 0;
+        const attempts = 200;
+        for (let i = 0; i < attempts; i++) {
+            const name = randomGuestName();
+            const secondCapital = name.slice(1).search(/[A-Z]/) + 1;
+            if (name[0] === name[secondCapital]) {
+                alliterative++;
+            }
+        }
+        // Every animal in the list has at least one matching-letter
+        // adjective, so alliteration should dominate, not just edge out chance.
+        expect(alliterative / attempts).toBeGreaterThan(0.8);
+    });
+
+    it('avoids names already in the exclude list', () => {
+        const seen = new Set<string>();
+        for (let i = 0; i < 30; i++) {
+            const name = randomGuestName([...seen]);
+            expect(seen.has(name)).toBe(false);
+            seen.add(name);
+        }
     });
 });
