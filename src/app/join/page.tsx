@@ -321,7 +321,7 @@ function JoinForm() {
         <form onSubmit={handleGuestSubmit} className="ag-section" style={{ width: "100%" }}>
           <JoinCodeField code={code} onChange={setCode} />
           <div style={{ marginTop: 12 }}>
-            <label htmlFor="guest-name" className="ag-section-label ag-field-label">Your name</label>
+            <label htmlFor="guest-name" className="ag-section-label ag-field-label">Your username</label>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <input
                 id="guest-name"
