@@ -13,6 +13,9 @@ import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { WorldDominationInvitationRequest } from "@/games/WorldDomination/WorldDominationModels";
 import { useToast } from "@/components/ToastContext";
 
+const MIN_PLAYERS = 2;
+const MAX_PLAYERS = 6;
+
 function NewGameWorldDominationForm() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
@@ -22,16 +25,15 @@ function NewGameWorldDominationForm() {
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
   const router = useRouter();
   const { showToast } = useToast();
-  const { minPlayers, maxPlayers } = GAME_META.worlddomination;
 
   // The sender is always a player, so the party size is invitees + 1.
   const totalPlayers = players.length + 1;
-  const badPartySize = partySizeOutOfRange(totalPlayers, minPlayers, maxPlayers);
+  const badPartySize = partySizeOutOfRange(totalPlayers, MIN_PLAYERS, MAX_PLAYERS);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (badPartySize) {
-      showToast(`World Domination supports ${minPlayers}–${maxPlayers} players.`, 'danger');
+      showToast(`World Domination supports ${MIN_PLAYERS}–${MAX_PLAYERS} players.`, 'danger');
       return;
     }
 
@@ -66,7 +68,7 @@ function NewGameWorldDominationForm() {
     >
       <UserInviteList userList={userList} setItem={setItem} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
-      <PartySizeHint total={totalPlayers} min={minPlayers} max={maxPlayers} gameName="World Domination" />
+      <PartySizeHint total={totalPlayers} min={MIN_PLAYERS} max={MAX_PLAYERS} gameName="World Domination" />
       <FcmTokenComp />
     </GameSetupLayout>
   );

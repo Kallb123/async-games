@@ -103,7 +103,7 @@ rather than the game breaking silently at runtime.
 |---|---|
 | `src/utils/apiModels/GameLogic.ts` | `export * from "@/games/<Game>/<Game>Logic";` |
 | `src/utils/ui/games.ts` | import the `meta.ts`, add it to `GAME_META` |
-| `src/utils/mongodb/mongodb.ts` | the discriminator key in both union types, and the model in both records (`GAME_DATA_MODELS` and `INVITATION_MODELS`) |
+| `src/utils/mongodb/mongodb.ts` | the discriminator key in both union types, and the model in both records (`GAME_DATA_MODELS` and the invitation record inside `initialiseDiscriminators()`) |
 | `src/app/api/game/command/route.ts` | every command/game-type instance in the `registration` array |
 | `src/utils/mongodb/GameResultData.ts` | *(only if you added `compute<Game>ResultStats`)* the discriminator + wire it into `GAME_RESULT_STATS` |
 

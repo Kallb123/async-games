@@ -12,6 +12,7 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
 import { GAME_META } from "@/utils/ui/games";
 import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
+import { MAX_PLAYERS, MIN_PLAYERS } from "@/games/TrainTime/board";
 import { TrainTimeInvitationRequest } from "@/games/TrainTime/TrainTimeModels";
 import { useToast } from "@/components/ToastContext";
 
@@ -24,16 +25,15 @@ function NewGameTrainTimeForm() {
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
   const router = useRouter();
   const { showToast } = useToast();
-  const { minPlayers, maxPlayers } = GAME_META.traintime;
 
   // The sender is always a player, so the party size is invitees + 1.
   const totalPlayers = players.length + 1;
-  const badPartySize = partySizeOutOfRange(totalPlayers, minPlayers, maxPlayers);
+  const badPartySize = partySizeOutOfRange(totalPlayers, MIN_PLAYERS, MAX_PLAYERS);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (badPartySize) {
-      showToast(`Train Time supports ${minPlayers}–${maxPlayers} players.`, 'danger');
+      showToast(`Train Time supports ${MIN_PLAYERS}–${MAX_PLAYERS} players.`, 'danger');
       return;
     }
 
@@ -68,7 +68,7 @@ function NewGameTrainTimeForm() {
     >
       <UserInviteList userList={userList} setItem={setItem} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
-      <PartySizeHint total={totalPlayers} min={minPlayers} max={maxPlayers} gameName="Train Time" />
+      <PartySizeHint total={totalPlayers} min={MIN_PLAYERS} max={MAX_PLAYERS} gameName="Train Time" />
 
       {/* Continental (design doc §9) is the alternative Europe board — a whole
           second map plus tunnels, ferries and stations, and step 4 of the build
