@@ -14,11 +14,13 @@ import { GAME_META, gamePath } from "@/utils/ui/games";
 import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { SmartthinkInvitationRequest } from "@/games/Smartthink/SmartthinkModels";
 import { useToast } from "@/components/ToastContext";
+import { isGuest } from "@/utils/ui/players";
 
 function NewGameSmartthinkForm() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
-  useAuthGuard();
+  const { user } = useAuthGuard();
+  const guest = !!user && isGuest(user);
   const searchParams = useSearchParams();
   const { userList, setItem, players } = usePlayerList(readRematchPlayers(searchParams));
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
@@ -69,7 +71,7 @@ function NewGameSmartthinkForm() {
             <div className="ag-cta-title">Play solo</div>
             <div className="ag-cta-sub">Guess an auto-generated code, right away</div>
           </div>
-          <button type="button" className="ag-btn ag-btn--light" onClick={handlePlaySolo}>Start</button>
+          <button type="button" className="ag-btn ag-btn--light" onClick={handlePlaySolo} disabled={guest}>Start</button>
         </div>
       </div>
 
