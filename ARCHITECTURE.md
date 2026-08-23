@@ -132,15 +132,20 @@ Invite ──► (all accept) ──► Game created ──► [ turn ─► tur
 1. **Invite.** A player creates an invitation (`POST /api/newgame/<game>`), which
    persists an `Invitation` discriminator document and pushes a notification to
    the invitees.
-2. **Accept.** Each invitee accepts (`POST /api/invite/accept`). When *everyone*
-   has accepted, the route hands the invitation to
-   `startGameFromInvitation()` (`src/utils/games/startGame.ts`): the
-   invitation's `CreateGame()` builds the initial game document (rolling for
-   turn order, seeding the initial state), the game's discriminator model —
-   looked up in `GAME_DATA_MODELS` — is saved, the invitation is deleted, and a
-   `GameStart` push goes out (plus the opening `YourTurn` push, unless the
-   player who triggered the start is the one up first). That helper is the
-   single game-start path, so any future route that starts a game shares it.
+2. **Accept.** Each invitee accepts (`POST /api/invite/accept`), or — for a
+   join-by-code lobby — a joiner claims an open seat
+   (`POST /api/lobby/join`, one conditional update matching the lobby *and*
+   an unclaimed seat, so racing joiners can't double up on the last seat).
+   Both routes call the shared `acceptSeat(invite, actorId)`
+   (`src/utils/games/startGame.ts`), which flips that seat's acceptance and,
+   once *everyone* has accepted, hands the invitation to
+   `startGameFromInvitation()`: the invitation's `CreateGame()` builds the
+   initial game document (rolling for turn order, seeding the initial
+   state), the game's discriminator model — looked up in `GAME_DATA_MODELS`
+   — is saved, the invitation is deleted, and a `GameStart` push goes out
+   (plus the opening `YourTurn` push, unless the player who triggered the
+   start is the one up first). That helper is the single game-start path, so
+   any future route that starts a game shares it.
 3. **Play.** On each turn the active player submits a **command**
    (`POST /api/game/command`). The server validates it's their turn, executes the
    command against the persisted game, checks for game-over / end-of-turn,
