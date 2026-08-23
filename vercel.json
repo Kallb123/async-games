@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/staledevices",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/staleguests",
+      "schedule": "0 5 * * *"
     }
   ]
 }

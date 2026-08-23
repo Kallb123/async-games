@@ -38,6 +38,40 @@ export async function usersById(userIdList: string[]): Promise<User[]> {
     return data;
 }
 
+const CLERK_USER_PAGE_SIZE = 100;
+// Belt and braces against a paging bug turning into an unbounded loop.
+const CLERK_USER_MAX_PAGES = 100;
+
+// Pages through every Clerk user, calling `visit` for each — the shared shape
+// behind every `/api/cron/*` sweep that has to look at the whole instance
+// rather than a known id list (staledevices, staleguests). Returns how many
+// users it visited, which every caller reports back as its own `scanned`.
+export async function forEachClerkUser(visit: (user: User) => Promise<void>): Promise<number> {
+    const client = await clerkClient();
+    let scanned = 0;
+
+    for (let page = 0; page < CLERK_USER_MAX_PAGES; page++) {
+        const { data: users } = await client.users.getUserList({
+            limit: CLERK_USER_PAGE_SIZE,
+            offset: page * CLERK_USER_PAGE_SIZE,
+        });
+        if (!users.length) {
+            break;
+        }
+        scanned += users.length;
+
+        for (const user of users) {
+            await visit(user);
+        }
+
+        if (users.length < CLERK_USER_PAGE_SIZE) {
+            break;
+        }
+    }
+
+    return scanned;
+}
+
 // A guest's Clerk username is the random account id createGuest() minted
 // (docs/account-less-play.md §5), not something anyone chose to be seen
 // under — their firstName carries the name they actually typed at the

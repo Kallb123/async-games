@@ -21,6 +21,12 @@ export interface GuestTicket {
     resumeTicket: string;
 }
 
+// An unclaimed guest is swept this long after their last game concludes
+// (docs/account-less-play.md §8, step 17) — long enough that closing the tab
+// mid-game isn't mistaken for abandoning the account, short enough that a
+// guest who never comes back doesn't sit on the Clerk bill forever.
+export const GUEST_SWEEP_DAYS = 7;
+
 // Clerk usernames are unique across the instance (docs/account-less-play.md
 // §3), so a guest can't just be handed the name they'll display under — that
 // is a per-lobby concern for whoever mints the guest (step 14). This is only

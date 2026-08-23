@@ -874,15 +874,25 @@ reuses `BottomBanner`/`OfferCard` as a third, guest-only offer behind install
 and notifications, and hands off to a `ClaimAccountForm` on Settings rather
 than building a second copy of the email/password form inline.
 
-**17 — Sweeping unclaimed guests.** `GET /api/cron/staleguests`, modelled on
-`cron/staledevices`: same `CRON_SECRET` bearer auth, same `vercel.json`
-registration, same "rewrite only what actually changed" pass. For each guest,
-the most recent `endedAt` across the `GameResult` documents carrying their id —
-one query on the existing `{ playerIds: 1, endedAt: -1 }` index — and delete
-them a week after it. A guest with no results at all is swept on their lobby's
-`expiresAt` instead. Deleting the Clerk user is safe by then because step 13
-already copied their name onto the record, and because #240 renders an
-unresolvable id as a placeholder rather than misaligning the list.
+**17 — Sweeping unclaimed guests.** *(Done.)* `GET /api/cron/staleguests`, modelled on
+`cron/staledevices`: same `CRON_SECRET` bearer auth (`isAuthorisedCron`), same
+`vercel.json` registration, same paged scan over every Clerk user. For each
+guest, the most recent `endedAt` across the `GameResult` documents carrying
+their id — one query on the existing `{ playerIds: 1, endedAt: -1 }` index —
+and delete them `GUEST_SWEEP_DAYS` (7) after it.
+
+A guest with no `GameResult` at all is either still playing or never started a
+game, and those read the same way: no result exists yet either way. So instead
+of reading a timestamp, the route asks whether there's still somewhere for
+them to be — a live `GameData` still listing their id (§8: never swept mid-game,
+however long it runs), or an unexpired lobby seat. Once neither is true, "swept
+on the lobby's `expiresAt`" has already happened one layer down: that field's
+own TTL index (step 2) reaped the invitation itself, so there is nothing left
+to wait out — the guest is swept on this run rather than a future one.
+
+Deleting the Clerk user is safe by then because step 13 already copied their
+name onto the record, and because #240 renders an unresolvable id as a
+placeholder rather than misaligning the list.
 
 ### 9.2 What to check as you go
 
