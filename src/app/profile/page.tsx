@@ -16,7 +16,7 @@ import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { useNowToTheMinute } from "@/utils/hooks/useNow";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useProfilePicture } from "@/utils/hooks/useProfilePicture";
-import { displayName } from "@/utils/ui/players";
+import { displayName, isGuest } from "@/utils/ui/players";
 import { profileImageUrl } from "@/utils/ui/avatar";
 import type { IGameStats, IRecentMatch } from "@/app/api/stats/route";
 import type { IReceivedReaction } from "@/app/api/reactions/route";
@@ -116,6 +116,7 @@ export default function Profile() {
 
     const fullName = [user?.firstName, user?.lastName].filter(name => name).join(" ");
     const ownDisplayName = user?.firstName || user?.username || "You";
+    const guest = !!user && isGuest(user);
 
     return (
         <main>
@@ -208,19 +209,31 @@ export default function Profile() {
                         {showAdd ? "Close" : "+ Add friend"}
                     </button>
                 }
-                beforeList={showAdd && (
-                    <form onSubmit={handleInvite} style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                        <input
-                            className="ag-input"
-                            type="text"
-                            value={inviteUsername}
-                            onChange={(e) => setInviteUsername(e.target.value)}
-                            placeholder="Their username"
-                        />
-                        <button type="submit" className="ag-btn ag-btn--dark" disabled={isSending || inviteUsername.trim() === ""}>Send</button>
-                    </form>
-                )}
                 empty={<div className="ag-empty">No friends yet. Add someone to start a game together.</div>}
+                // Not `hint` — that prop only renders once the list is
+                // non-empty, and a guest should see this before they've
+                // added their first friend, not just after.
+                beforeList={(guest || showAdd) && (
+                    <>
+                        {guest && (
+                            <p className="ag-hint" style={{ marginBottom: showAdd ? 12 : 0 }}>
+                                You&apos;re playing as a guest — <Link href="/settings">sign up</Link> to keep your friends long term.
+                            </p>
+                        )}
+                        {showAdd && (
+                            <form onSubmit={handleInvite} style={{ display: "flex", gap: 8 }}>
+                                <input
+                                    className="ag-input"
+                                    type="text"
+                                    value={inviteUsername}
+                                    onChange={(e) => setInviteUsername(e.target.value)}
+                                    placeholder="Their username"
+                                />
+                                <button type="submit" className="ag-btn ag-btn--dark" disabled={isSending || inviteUsername.trim() === ""}>Send</button>
+                            </form>
+                        )}
+                    </>
+                )}
             >
                 {friends.map((friend) => (
                     <div key={friend.friendshipId} className="ag-list-row">

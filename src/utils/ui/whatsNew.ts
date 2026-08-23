@@ -39,6 +39,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Guests can explore before signing up",
+                detail: "Set up a game or add friends as a guest — the host button greys out with a straight line to Settings when you're ready to sign up.",
+            },
+            {
                 title: "Keep the account you're already playing on",
                 detail: "Played your first turn as a guest? Add an email and password and it's yours for good — every game and result carries over.",
             },
@@ -53,10 +57,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Start without waiting for a full lobby",
                 detail: "Friends not turning up? Start now plays the game with everyone who's here and drops the empty seats.",
-            },
-            {
-                title: "Everyone waits in the lobby",
-                detail: "Claim a seat with a code and you wait on the lobby screen with the host, watching the last seats fill instead of guessing.",
             },
         ],
     },

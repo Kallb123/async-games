@@ -20,6 +20,16 @@ export function isUnlockedUser(user: User | null | undefined): boolean {
     return user?.publicMetadata.unlocked === true || user?.publicMetadata.guest === true;
 }
 
+// The gate belongs on lobby/game creation, not on joining one (§8): an
+// unlocked host vouches for everyone holding their code. isUnlockedUser also
+// passes a guest — correct for the general app-access gate, which a guest
+// must clear the moment they exist — but a guest is exactly the account with
+// nobody vouching for them, so every route that starts a new game (a lobby,
+// or a direct invite) rejects them explicitly with this on top.
+export function canHostGame(user: User | null | undefined): boolean {
+    return !!user && !isGuest(user) && isUnlockedUser(user);
+}
+
 // Clerk treats an empty filter as *no* filter: `getUserList({ username: [] })`
 // hands back the whole instance rather than nothing. Every lookup below goes
 // through these two so "nobody to look up" is answered here instead of coming
