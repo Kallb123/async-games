@@ -133,10 +133,14 @@ Invite ──► (all accept) ──► Game created ──► [ turn ─► tur
    persists an `Invitation` discriminator document and pushes a notification to
    the invitees.
 2. **Accept.** Each invitee accepts (`POST /api/invite/accept`). When *everyone*
-   has accepted, the invitation's `CreateGame()` builds the initial game document
-   (rolling for turn order, seeding the initial state), the correct game
-   discriminator model is saved, the invitation is deleted, and a `GameStart`
-   push goes out.
+   has accepted, the route hands the invitation to
+   `startGameFromInvitation()` (`src/utils/games/startGame.ts`): the
+   invitation's `CreateGame()` builds the initial game document (rolling for
+   turn order, seeding the initial state), the game's discriminator model —
+   looked up in `GAME_DATA_MODELS` — is saved, the invitation is deleted, and a
+   `GameStart` push goes out (plus the opening `YourTurn` push, unless the
+   player who triggered the start is the one up first). That helper is the
+   single game-start path, so any future route that starts a game shares it.
 3. **Play.** On each turn the active player submits a **command**
    (`POST /api/game/command`). The server validates it's their turn, executes the
    command against the persisted game, checks for game-over / end-of-turn,
@@ -582,9 +586,9 @@ in one new folder, `src/games/<Game>/`. Roughly:
    `src/utils/mongodb/mongodb.ts` (the typed unions enforce this at compile time),
    and add the new command/type instances to the `registration` array in
    `src/app/api/game/command/route.ts`.
-4. **Wire invite creation & acceptance** — a `POST /api/newgame/<game>` route and
-   a branch in `src/app/api/invite/accept/route.ts` that instantiates the right
-   game model.
+4. **Wire invite creation** — a `POST /api/newgame/<game>` route. Acceptance
+   needs nothing: `startGameFromInvitation()` finds the game's model in
+   `GAME_DATA_MODELS`, which step 3 already filled in.
 5. **UI** — board/action components under `src/games/<Game>/components/` and
    (if the game needs bespoke rendering helpers) a `src/games/<Game>/ui.ts`;
    a `meta.ts` in the same folder with the library-card metadata, wired into
@@ -608,9 +612,8 @@ runtime:
 | Shared file | What to add | Guarded by |
 |---|---|---|
 | `src/utils/apiModels/GameLogic.ts` | `export * from "@/games/<Game>/<Game>Logic";` | `src/games/gameRegistry.test.ts` ("wires every game's rules module into the GameLogic barrel"); the classes it exports are additionally checked by `serializableRegistry.test.ts` |
-| `src/utils/mongodb/mongodb.ts` | the discriminator key in both union types, and the model in both records inside `initialiseDiscriminators()` | TypeScript (the typed `Record`s are a compile-time exhaustiveness check) **and** `src/games/gameRegistry.test.ts` ("registers every game's Mongoose discriminator models") |
+| `src/utils/mongodb/mongodb.ts` | the discriminator key in both union types, and the model in both records (`GAME_DATA_MODELS` and the invitation record inside `initialiseDiscriminators()`) | TypeScript (the typed `Record`s are a compile-time exhaustiveness check) **and** `src/games/gameRegistry.test.ts` ("registers every game's Mongoose discriminator models") |
 | `src/app/api/game/command/route.ts` | every command/game-type instance in the `registration` array | `serializableRegistry.test.ts` ("wires every command/game-type class into the command route's registration array") |
-| `src/app/api/invite/accept/route.ts` | an `else if` branch instantiating the game's `<Game>GameDataModel` | `src/games/gameRegistry.test.ts` ("handles every game's game-start branch in the invite accept route") |
 | `src/utils/ui/games.ts` | import the game's `meta.ts` and add it to `GAME_META` | `src/games/gameRegistry.test.ts` ("wires every game's metadata into GAME_META") |
 
 `src/games/gameRegistry.test.ts` discovers games the same way
