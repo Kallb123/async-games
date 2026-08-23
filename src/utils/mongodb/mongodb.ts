@@ -1,6 +1,5 @@
 import mongoose, { Model } from 'mongoose';
 import { GameDataModel, IGameDataDocument } from './GameData';
-import { IInvitationDataDocument } from './InvitationData';
 import { DiceCitiesGameDataModel, DiceCitiesInvitationModel } from '@/games/DiceCities/DiceCitiesModels';
 import { SnakesAndLaddersGameDataModel, SnakesAndLaddersInvitationModel } from '@/games/SnakesAndLadders/SnakesAndLaddersModels';
 import { SettlementsAndCitiesGameDataModel, SettlementsAndCitiesInvitationModel } from '@/games/SettlementsAndCities/SettlementsAndCitiesModels';
@@ -12,7 +11,7 @@ import { InvitationModel } from './InvitationData';
 
 // Add new game discriminator keys here whenever a new game is introduced.
 // TypeScript will produce a compile error if a key is listed but its model is
-// not present in GAME_DATA_MODELS / INVITATION_MODELS.
+// not present in GAME_DATA_MODELS / the record inside initialiseDiscriminators().
 type GameDataDiscriminatorKey = 'DiceCitiesGameData' | 'SnakesAndLaddersGameData' | 'SettlementsAndCitiesGameData' | 'SmartthinkGameData' | 'WorldDominationGameData' | 'SolitaireGameData' | 'TrainTimeGameData';
 type InvitationDiscriminatorKey = 'DiceCitiesInvitation' | 'SnakesAndLaddersInvitation' | 'SettlementsAndCitiesInvitation' | 'SmartthinkInvitation' | 'WorldDominationInvitation' | 'SolitaireInvitation' | 'TrainTimeInvitation';
 
@@ -36,6 +35,7 @@ export async function dbConnect() {
   }
 
   if (cached.conn) {
+    initialiseDiscriminators();
     return cached.conn;
   }
   if (!cached.promise) {
@@ -53,6 +53,7 @@ export async function dbConnect() {
     throw e;
   }
 
+  initialiseDiscriminators();
   return cached.conn;
 }
 
@@ -61,7 +62,7 @@ export async function dbConnect() {
 // the typed Record is a compile-time exhaustiveness check: adding a key to
 // GameDataDiscriminatorKey but omitting its model here is a TypeScript error.
 // It lives at module scope so importing this file registers the game-data
-// discriminators.
+// discriminators, the same way initialiseDiscriminators() does for invitations.
 const GAME_DATA_MODELS: Record<GameDataDiscriminatorKey, Model<IGameDataDocument>> = {
   DiceCitiesGameData: DiceCitiesGameDataModel,
   SnakesAndLaddersGameData: SnakesAndLaddersGameDataModel,
@@ -80,25 +81,17 @@ export function gameDataModelFor(gameType: string): Model<IGameDataDocument> | u
   return models[`${gameType}GameData`];
 }
 
-// Every game's Invitation discriminator model, keyed by discriminator name —
-// the invitation-side counterpart of GAME_DATA_MODELS above, in exactly the
-// same shape. It lives at module scope so importing this file registers the
-// invitation discriminators.
-const INVITATION_MODELS: Record<InvitationDiscriminatorKey, Model<IInvitationDataDocument>> = {
-  DiceCitiesInvitation: DiceCitiesInvitationModel,
-  SnakesAndLaddersInvitation: SnakesAndLaddersInvitationModel,
-  SettlementsAndCitiesInvitation: SettlementsAndCitiesInvitationModel,
-  SmartthinkInvitation: SmartthinkInvitationModel,
-  WorldDominationInvitation: WorldDominationInvitationModel,
-  SolitaireInvitation: SolitaireInvitationModel,
-  TrainTimeInvitation: TrainTimeInvitationModel,
-};
-
-// The model that persists an invitation of `gameType` — the invitation-side
-// counterpart of gameDataModelFor() above. Undefined for a gameType with no
-// registered discriminator, which callers should treat as an unsupported
-// game rather than a crash.
-export function invitationModelFor(gameType: string): Model<IInvitationDataDocument> | undefined {
-  const models: Record<string, Model<IInvitationDataDocument> | undefined> = INVITATION_MODELS;
-  return models[`${gameType}Invitation`];
+function initialiseDiscriminators() {
+  // Evaluating these model variables ensures Mongoose has registered every
+  // invitation discriminator before the connection is used.
+  const _invitations: Record<InvitationDiscriminatorKey, unknown> = {
+    DiceCitiesInvitation: DiceCitiesInvitationModel,
+    SnakesAndLaddersInvitation: SnakesAndLaddersInvitationModel,
+    SettlementsAndCitiesInvitation: SettlementsAndCitiesInvitationModel,
+    SmartthinkInvitation: SmartthinkInvitationModel,
+    WorldDominationInvitation: WorldDominationInvitationModel,
+    SolitaireInvitation: SolitaireInvitationModel,
+    TrainTimeInvitation: TrainTimeInvitationModel,
+  };
+  void _invitations;
 }

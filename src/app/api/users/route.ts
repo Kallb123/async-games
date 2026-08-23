@@ -1,7 +1,6 @@
 import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { redirect } from 'next/navigation';
-import { isUnlockedUser } from '@/utils/users/clerk';
 
 export async function GET(request: NextRequest) {
   console.log(`GET ${request.nextUrl.pathname}`);
@@ -15,7 +14,9 @@ export async function GET(request: NextRequest) {
   // Get the Backend API User object when you need access to the user's information
   const thisUser = await currentUser();
   // Use `user` to render user details or create UI elements
-  if (!isUnlockedUser(thisUser)) {
+  const unlocked = thisUser?.publicMetadata.unlocked;
+
+  if (unlocked !== true) {
     redirect('/')
   }
 
