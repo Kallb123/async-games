@@ -19,7 +19,8 @@ export function useIsAuthorised() {
 
 /**
  * `useIsAuthorised` plus the redirect: wait for Clerk to load, then send
- * anonymous visitors to `/login` and locked-out accounts to `/unlockaccess`.
+ * anonymous visitors to `/login` — carrying the screen they were after, so
+ * signing in returns them to it — and locked-out accounts to `/unlockaccess`.
  *
  * One per screen — every authenticated page mounts exactly one of these, and
  * the components on it use `useIsAuthorised` so a screen fires one redirect
@@ -32,7 +33,7 @@ export function useIsAuthorised() {
  */
 export function useAuthGuard({ allowSignedOut = false }: { allowSignedOut?: boolean } = {}) {
     const state = useIsAuthorised();
-    const { user, isLoaded } = state;
+    const { user, isLoaded, isAuthorised } = state;
     const router = useRouter();
 
     useEffect(() => {
@@ -41,14 +42,25 @@ export function useAuthGuard({ allowSignedOut = false }: { allowSignedOut?: bool
         }
         if (!user) {
             if (!allowSignedOut) {
-                router.push('/login');
+                // Carry where they were through Clerk, so someone who followed
+                // a join link comes back to it — code still in the box — rather
+                // than to an empty home page having done everything right.
+                // `<SignIn>` already honours `redirect_url` from the query, so
+                // /login needs nothing of its own.
+                //
+                // Read from `window.location` rather than `useSearchParams()`:
+                // every authenticated screen mounts this guard, and pulling
+                // that hook in here would make each of them a Suspense-boundary
+                // question at build time for no gain.
+                const returnTo = `${window.location.pathname}${window.location.search}`;
+                router.push(`/login?redirect_url=${encodeURIComponent(returnTo)}`);
             }
             return;
         }
-        if (user.publicMetadata.unlocked !== true) {
+        if (!isAuthorised) {
             router.push('/unlockaccess');
         }
-    }, [isLoaded, user, router, allowSignedOut]);
+    }, [isLoaded, user, isAuthorised, router, allowSignedOut]);
 
     return state;
 }

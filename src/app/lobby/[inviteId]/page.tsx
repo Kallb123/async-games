@@ -1,5 +1,5 @@
 'use client'
-import { use, useEffect, useRef } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
@@ -8,13 +8,15 @@ import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { INVITE_EVENTS } from "@/utils/hooks/usePushEvents";
 import { IInvitationResponse } from "@/utils/mongodb/InvitationData";
 import { OPEN_SEAT_LABEL } from "@/utils/games/lobby";
-import { metaForGame } from "@/utils/ui/games";
+import { buildJoinHref } from "@/utils/games/joinCode";
+import { metaForGame, partySizeErrorMessage } from "@/utils/ui/games";
 import { fetchWithSessionRetry } from "@/utils/hooks/fetchWithSessionRetry";
 import { useEnterStartedGame } from "@/utils/hooks/useEnterStartedGame";
 import GameIdentityHeader from "@/components/ui/GameIdentityHeader";
 import ListSection from "@/components/ui/ListSection";
 import ListRow from "@/components/ui/ListRow";
 import Avatar from "@/components/ui/Avatar";
+import PartySizeHint from "@/components/ui/PartySizeHint";
 
 // Where everyone with a seat waits: the host who opened the lobby and each
 // player who has claimed a seat with the code. Same screen for both — the code
@@ -29,6 +31,7 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
   const router = useRouter();
   const { showToast } = useToast();
   const enterStartedGame = useEnterStartedGame();
+  const [starting, setStarting] = useState(false);
 
   // One lobby, whichever seat the viewer holds — the host's own invitation and
   // a seat-holder's are the same document, but they arrive in different lists
@@ -95,11 +98,71 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
   const seats = invite?.userList ?? [];
   const claimedSeats = seats.filter(name => name !== OPEN_SEAT_LABEL);
 
-  const handleCopy = () => {
-    if (!invite?.joinCode) return;
-    navigator.clipboard.writeText(invite.joinCode)
-      .then(() => showToast('Copied!', 'success'))
-      .catch(() => showToast('Could not copy — copy it by hand instead.', 'danger'));
+  // What the card hands over is the code's second form: a link that opens
+  // /join with the code already in the box (docs/account-less-play.md §4).
+  // "Go to the site, tap Join, type PLUM" is three instructions a friend can
+  // abandon at any one of them; a link is one tap, and it is a strict superset
+  // of the code it contains — which is why this is a change to the control
+  // that's already here rather than a second button beside it. The code stays
+  // on screen, large, for whoever is sitting opposite and typing it.
+  const handleShare = async () => {
+    const joinCode = invite?.joinCode;
+    if (!joinCode) return;
+    const url = `${window.location.origin}${buildJoinHref(joinCode)}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Async Games', text: `Join my game — the code is ${joinCode}.`, url });
+        return;
+      } catch (error) {
+        // A dismissed share sheet rejects with AbortError: the host changed
+        // their mind, which is not a failure to report. Anything else falls
+        // through to the clipboard.
+        if ((error as Error)?.name === 'AbortError') return;
+      }
+    }
+    navigator.clipboard.writeText(url)
+      .then(() => showToast('Link copied!', 'success'))
+      .catch(() => showToast('Could not copy — share the code instead.', 'danger'));
+  };
+
+  // The party if the host starts right now: every claimed seat plus the host,
+  // which is what POST /api/lobby/start leaves once it drops the empty ones.
+  const partySize = claimedSeats.length + 1;
+  const startError = meta ? partySizeErrorMessage(meta, partySize) : null;
+
+  // The way out of a lobby whose last friends never turned up. There is no
+  // second start rule: the route drops the unclaimed seats and the existing
+  // all-accepted predicate does the rest, so a lobby still waiting on a named
+  // invitee stays put and says so.
+  const handleStart = async () => {
+    if (starting) return;
+    setStarting(true);
+    try {
+      const response = await fetch('/api/lobby/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inviteId })
+      });
+      if (!response.ok) {
+        showToast("Couldn't start the game just yet — try again.", 'danger');
+        setStarting(false);
+        return;
+      }
+      const { gameStarted, gameId, gameUrl } = await response.json();
+      if (gameStarted) {
+        // Claim the exit before the refresh loop sees the invitation vanish,
+        // so the 404 above doesn't send them a second time.
+        leavingRef.current = true;
+        enterStartedGame(gameUrl, gameId);
+      } else {
+        showToast('Waiting on the players you invited by name.', 'success', 'Seats Closed');
+        setStarting(false);
+      }
+    } catch (error) {
+      console.error(error);
+      showToast("Couldn't start the game just yet — try again.", 'danger');
+      setStarting(false);
+    }
   };
 
   return (
@@ -109,22 +172,18 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
       <div className="ag-section">
         <button
           type="button"
-          className="ag-card"
-          onClick={handleCopy}
+          className="ag-card ag-joincode-card"
+          onClick={handleShare}
           disabled={!invite?.joinCode}
-          style={{
-            width: "100%", padding: "22px 16px", textAlign: "center",
-            border: "1.5px dashed var(--ag-line)", background: "var(--ag-surface)", cursor: "pointer",
-          }}
         >
-          <div style={{ font: "800 12px var(--ag-font)", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--ag-ink-soft)" }}>
-            Tap to copy
+          <div className="ag-section-label">
+            Tap to share
           </div>
-          <div style={{ font: "800 44px/1.1 var(--ag-font)", letterSpacing: "0.16em", color: "var(--ag-ink)", marginTop: 4 }}>
+          <div className="ag-joincode" style={{ "--ag-joincode-size": "44px", marginTop: 4 } as React.CSSProperties}>
             {invite?.joinCode ?? "····"}
           </div>
         </button>
-        <p className="ag-hint" style={{ textAlign: "center" }}>Share this code — anyone who enters it grabs an open seat.</p>
+        <p className="ag-hint" style={{ textAlign: "center" }}>Sends a link that opens straight onto an open seat — or read the code out.</p>
       </div>
 
       <ListSection
@@ -167,6 +226,22 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
           )),
         ]}
       </ListSection>
+
+      {isHost && invite && (
+        <div className="ag-section">
+          <button
+            type="button"
+            className="ag-btn ag-btn--primary ag-btn--block"
+            onClick={handleStart}
+            disabled={starting || !!startError}
+          >
+            {starting ? 'Starting…' : 'Start now'}
+          </button>
+          {startError && meta
+            ? <PartySizeHint meta={meta} total={partySize} />
+            : <p className="ag-hint" style={{ textAlign: "center" }}>Begins with everyone who&apos;s here — the empty seats are dropped.</p>}
+        </div>
+      )}
 
       <FcmTokenComp />
     </main>

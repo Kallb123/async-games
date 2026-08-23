@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { JOIN_CODE_ALPHABET, generateJoinCode, normaliseJoinCode } from './joinCode';
+import { JOIN_CODE_ALPHABET, buildJoinHref, generateJoinCode, normaliseJoinCode, readJoinCode } from './joinCode';
 
 describe('JOIN_CODE_ALPHABET', () => {
     it('excludes every ambiguous glyph', () => {
@@ -49,5 +49,29 @@ describe('generateJoinCode', () => {
                 expect(JOIN_CODE_ALPHABET).toContain(char);
             }
         }
+    });
+});
+
+describe('the join link', () => {
+    it('round-trips a generated code', () => {
+        for (let i = 0; i < 50; i++) {
+            const code = generateJoinCode();
+            const href = buildJoinHref(code);
+            expect(readJoinCode(new URLSearchParams(href.split('?')[1]))).toBe(code);
+        }
+    });
+
+    it('points at the /join screen', () => {
+        expect(buildJoinHref('PLUM')).toBe('/join?code=PLUM');
+    });
+
+    it('normalises the code it reads, so a hand-typed link still works', () => {
+        expect(readJoinCode(new URLSearchParams('code=plum'))).toBe('PLUM');
+        expect(readJoinCode(new URLSearchParams('code=pl+um'))).toBe('PLUM');
+    });
+
+    it('reads an empty code when the link carries none', () => {
+        expect(readJoinCode(new URLSearchParams(''))).toBe('');
+        expect(readJoinCode(new URLSearchParams('code='))).toBe('');
     });
 });

@@ -560,6 +560,30 @@ button {
 .ag-input:focus { border-color: var(--ag-terracotta); }
 .ag-input::placeholder { color: var(--ag-ink-softer); font-weight: 500; }
 
+/* A lobby's join code, wherever it is shown or typed: bold, wide-tracked,
+   centred and uppercase. Set `--ag-joincode-size` for the display size (the
+   big tap-to-share card wants far more than the field someone types into).
+   After .ag-input, so the field can wear both. */
+.ag-joincode {
+    font: 800 var(--ag-joincode-size, 26px)/1.1 var(--ag-font);
+    letter-spacing: 0.16em;
+    text-align: center;
+    text-transform: uppercase;
+    color: var(--ag-ink);
+}
+
+/* The card the code sits on, which the host taps to share it: `.ag-card`'s
+   surface, redrawn dashed like `.ag-empty` so it reads as "something is still
+   to happen here". */
+.ag-joincode-card {
+    width: 100%;
+    padding: 22px 16px;
+    text-align: center;
+    border: 1.5px dashed var(--ag-line);
+    background: var(--ag-surface);
+    cursor: pointer;
+}
+
 /* ---- Select dropdown ---- */
 .ag-select {
     width: 100%;

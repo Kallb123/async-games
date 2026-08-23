@@ -138,6 +138,9 @@ Invite ──► (all accept) ──► Game created ──► [ turn ─► tur
    unclaimed seat, *and* a claimant who isn't already at it, so racing joiners
    can't double up on the last seat and one player on two devices can't hold
    two seats — a code they're already in with takes them to the seat they have).
+   The host shares that code as a link (`/join?code=<CODE>`, built and read
+   through `src/utils/games/joinCode.ts`); it only prefills the field, since
+   claiming the seat stays the deliberate tap on `/join`.
    Both routes call the shared `acceptSeat(invite, actorId)`
    (`src/utils/games/startGame.ts`), which flips that seat's acceptance and,
    once *everyone* has accepted, hands the invitation to
@@ -518,7 +521,9 @@ game — is documented fully in
   `@clerk/nextjs/server` and reject unauthenticated requests.
 - **Access gating.** Beyond sign-in, the app checks `user.publicMetadata.unlocked`.
   Pages redirect users to `/login` if signed out and `/unlockaccess` if not
-  unlocked. `/unlockaccess` posts an `ACCESS_PASSWORD` to `/api/unlock` to flip
+  unlocked. `useAuthGuard` sends the screen they were after along as Clerk's
+  `redirect_url`, so signing in returns them to it — a shared join link keeps
+  its code rather than dropping them on the home page. `/unlockaccess` posts an `ACCESS_PASSWORD` to `/api/unlock` to flip
   the flag — an optional invite-only gate.
 - **The public landing page** is the one exception to the first redirect: `/`
   mounts `useAuthGuard({ allowSignedOut: true })`, so a visitor with no account
