@@ -52,5 +52,7 @@ export async function POST(request: NextRequest) {
     // invite start through identical code.
     const { gameStarted, gameId, gameUrl } = await acceptSeat(invite, userId);
 
-    return NextResponse.json({ success: true, gameStarted, gameId, gameUrl });
+    // `inviteId` is for the seat-holder who is now waiting: it's the lobby
+    // screen they wait on, alongside the host (GET /api/lobby/[inviteId]).
+    return NextResponse.json({ success: true, gameStarted, gameId, gameUrl, inviteId: invite.inviteId });
 }

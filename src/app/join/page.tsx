@@ -36,12 +36,15 @@ export default function Join() {
       if (!response.ok) {
         throw new Error('Failed to join lobby');
       }
-      const { gameStarted, gameId, gameUrl } = await response.json();
+      const { gameStarted, gameId, gameUrl, inviteId } = await response.json();
       if (gameStarted) {
         enterStartedGame(gameUrl, gameId);
       } else {
+        // Into the lobby with the host and whoever else has claimed a seat,
+        // rather than home: the remaining seats fill live there, and it takes
+        // everyone waiting on it straight into the game once they do.
         showToast("You're in! Waiting for the rest of the party.", 'success', 'Seat Claimed');
-        router.push('/');
+        router.push(`/lobby/${inviteId}`);
       }
     } catch (error) {
       console.error(error);
