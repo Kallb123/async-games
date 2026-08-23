@@ -26,7 +26,7 @@ export default function ClaimAccountOffer({ className, onDismiss }: ClaimAccount
                 </Link>
             }
         >
-            Add an email and password and everything you've played stays yours — no new sign-up.
+            Add an email and password and everything you&apos;ve played stays yours — no new sign-up.
         </OfferCard>
     );
 }

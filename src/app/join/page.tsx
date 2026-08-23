@@ -130,8 +130,8 @@ function JoinForm() {
     if (!resuming || !isLoaded) return;
     if (user) {
       // Already signed in — on this device, or a second tap on the same
-      // link — so there's no ticket to consume.
-      setResuming(false);
+      // link — so there's no ticket to consume. No state to flip here: the
+      // render check below already stops blocking once `user` is set.
       return;
     }
     if (!signIn || !setActive) return;
@@ -265,7 +265,7 @@ function JoinForm() {
     }
   };
 
-  if (!isLoaded || resuming) {
+  if (!isLoaded || (resuming && !user)) {
     return null;
   }
 

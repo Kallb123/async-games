@@ -200,8 +200,8 @@ export default function Settings() {
                         <h2 className="ag-section-label">Save your account</h2>
                     </div>
                     <div className="ag-callout" style={{ marginBottom: 12 }}>
-                        You're playing as a guest. Add an email and password and
-                        everything you've played — games, results, turn history —
+                        You&apos;re playing as a guest. Add an email and password and
+                        everything you&apos;ve played — games, results, turn history —
                         stays yours, under the same account.
                     </div>
                     <ClaimAccountForm />
