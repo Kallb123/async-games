@@ -70,7 +70,17 @@ export interface IGameResultData {
     endReason?: GameEndReason,
     forfeitedBy?: string,
     endedAt: string,
-    totalTurns: number
+    totalTurns: number,
+    // A guest still in this game's roster (docs/account-less-play.md §8): a
+    // non-empty list means the game is an exhibition match that doesn't count
+    // toward anyone's stats yet. Emptied by $pull when a guest claims their
+    // account (step 16).
+    unclaimedPlayerIds: string[],
+    // Each unclaimed guest's display name, keyed by id — copied here because
+    // the sweeper (step 17) deletes the Clerk user behind that id, which would
+    // otherwise leave every other player's finished game with an
+    // unresolvable name.
+    guestNames: Map<string, string>,
 }
 
 export interface IGameResultDataDocument extends IGameResultData, Document {
@@ -96,12 +106,26 @@ export var GameResultSchema = new Schema<IGameResultDataDocument>({
     endReason: String,
     forfeitedBy: String,
     endedAt: String,
-    totalTurns: Number
+    totalTurns: Number,
+    unclaimedPlayerIds: { type: [String], default: () => [] },
+    guestNames: { type: Schema.Types.Map, of: String, default: () => new Map() },
 }, { discriminatorKey: 'kind' });
 // Per-player match history / stats, most recent first.
 GameResultSchema.index({ playerIds: 1, endedAt: -1 });
 // Per-player, per-game stats (and head-to-head via playerIds $all).
 GameResultSchema.index({ playerIds: 1, gameType: 1 });
+
+// A game counts once every player is a registered account
+// (docs/account-less-play.md §8). Matches both an explicitly empty array and
+// a pre-guest record that predates this field entirely — `$size` alone would
+// exclude every result recorded before this field existed, since it has no
+// array there to measure.
+export const RESULT_COUNTS_FILTER = {
+    $or: [
+        { unclaimedPlayerIds: { $exists: false } },
+        { unclaimedPlayerIds: { $size: 0 } },
+    ],
+};
 
 export var GameResultModel = models.GameResult || model<IGameResultDataDocument, IGameResultDataModel>('GameResult', GameResultSchema);
 
@@ -310,7 +334,7 @@ function outcomeFor(winner: string, forfeitedBy: string | undefined, userId: str
 // profile); each match reports whether the viewer also played in it.
 export async function getPlayerStats(userId: string, viewerId: string): Promise<IPlayerStats> {
     const recentResults = await GameResultModel
-        .find({ playerIds: userId })
+        .find({ playerIds: userId, ...RESULT_COUNTS_FILTER })
         .sort({ endedAt: -1 })
         .limit(10)
         .exec();
@@ -324,7 +348,7 @@ export async function getPlayerStats(userId: string, viewerId: string): Promise<
     }));
 
     const byGameAgg: { _id: string, wins: number, losses: number, draws: number, total: number }[] = await GameResultModel.aggregate([
-        { $match: { playerIds: userId } },
+        { $match: { playerIds: userId, ...RESULT_COUNTS_FILTER } },
         { $group: {
             _id: '$url',
             total: { $sum: 1 },
@@ -348,7 +372,16 @@ export async function getPlayerStats(userId: string, viewerId: string): Promise<
 // Writes the one, permanent result record for a finished game. Call this
 // once gameData.complete/winner are set (win via CheckGameOver, or a forced
 // end). Idempotent on gameId in case it's ever invoked twice for the same game.
-export async function recordGameResult(gameData: IGameData): Promise<void> {
+//
+// unclaimedPlayerIds/guestNames (docs/account-less-play.md §13, see
+// unclaimedGuestsOf) are passed in rather than looked up here: this stays the
+// one place on the per-command path with no Clerk round trip, and every
+// caller already resolves the roster for its own push notifications.
+export async function recordGameResult(
+    gameData: IGameData,
+    unclaimedPlayerIds: string[],
+    guestNames: Map<string, string>,
+): Promise<void> {
     const base = {
         gameId: gameData.gameId,
         gameType: gameData.gameType.gameType,
@@ -358,7 +391,9 @@ export async function recordGameResult(gameData: IGameData): Promise<void> {
         endReason: gameData.endReason,
         forfeitedBy: gameData.forfeitedBy,
         endedAt: new Date().toISOString(),
-        totalTurns: gameData.gameState.commandHistory.length
+        totalTurns: gameData.gameState.commandHistory.length,
+        unclaimedPlayerIds,
+        guestNames,
     };
     const specific = GAME_RESULT_STATS[gameData.gameType.gameType];
     try {

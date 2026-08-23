@@ -1,8 +1,9 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth, clerkClient } from '@clerk/nextjs/server';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, trySave } from '@/utils/mongodb/GameData';
 import { recordGameResult } from '@/utils/mongodb/GameResultData';
+import { unclaimedGuestsOf } from '@/utils/users/guest';
 
 export async function POST(request: NextRequest) {
   const { gameId } = await request.json();
@@ -41,7 +42,12 @@ export async function POST(request: NextRequest) {
   // idempotent on gameId, so a retried request is a no-op.
   after(async () => {
     try {
-      await recordGameResult(gameData);
+      const { data: userList } = await (await clerkClient()).users.getUserList({
+        userId: gameData.userIdList
+      });
+
+      const { unclaimedPlayerIds, guestNames } = unclaimedGuestsOf(userList);
+      await recordGameResult(gameData, unclaimedPlayerIds, guestNames);
     } catch (error) {
       console.error(`Post-response result recording failed for game ${gameData.gameId}`, error);
     }
