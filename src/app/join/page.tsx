@@ -55,6 +55,26 @@ function JoinButton({ joining, disabled }: { joining: boolean; disabled: boolean
   );
 }
 
+type SignInHook = ReturnType<typeof useSignIn>;
+
+// Turns a Clerk sign-in ticket into a session on this device — the three-line
+// Clerk dance both ticket flows on this screen need: a guest's own join
+// (`ticket`) and a returning guest's resume link (`resumeTicket`, §2/§15).
+// Each keeps its own follow-up and its own error handling; this is only the
+// part that's identical.
+async function completeTicketSignIn(
+  signIn: NonNullable<SignInHook['signIn']>,
+  setActive: NonNullable<SignInHook['setActive']>,
+  ticket: string,
+): Promise<boolean> {
+  const attempt = await signIn.create({ strategy: 'ticket', ticket });
+  if (attempt.status !== 'complete' || !attempt.createdSessionId) {
+    return false;
+  }
+  await setActive({ session: attempt.createdSessionId });
+  return true;
+}
+
 interface JoinResult {
     gameStarted: boolean;
     gameId?: string;
@@ -117,10 +137,7 @@ function JoinForm() {
     if (!signIn || !setActive) return;
     (async () => {
       try {
-        const attempt = await signIn.create({ strategy: 'ticket', ticket: resumeTicket! });
-        if (attempt.status === 'complete' && attempt.createdSessionId) {
-          await setActive({ session: attempt.createdSessionId });
-        } else {
+        if (!(await completeTicketSignIn(signIn, setActive, resumeTicket!))) {
           showToast("That link has expired.", 'danger');
         }
       } catch (error) {
@@ -230,11 +247,9 @@ function JoinForm() {
       }
       // The seat is already claimed server-side; this is just turning the
       // brand-new guest account it minted into a session on this device.
-      const signInAttempt = await signIn.create({ strategy: 'ticket', ticket: result.ticket });
-      if (signInAttempt.status !== 'complete' || !signInAttempt.createdSessionId) {
+      if (!(await completeTicketSignIn(signIn, setActive, result.ticket))) {
         throw new Error('Guest sign-in did not complete');
       }
-      await setActive({ session: signInAttempt.createdSessionId });
       // The resume link is this guest's only way back if they close the tab
       // (docs/account-less-play.md §2/§15) — offered once, here, before
       // they're carried on into the lobby.
