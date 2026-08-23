@@ -852,6 +852,17 @@ changes, so games, results and turn history carry over with no migration — the
 only writes are dropping `guest` from their metadata and `$pull`-ing their id
 out of every `GameResult.unclaimedPlayerIds`.
 
+`createGuest` (`src/utils/users/guest.ts`) gives every guest a throwaway
+`<username>@guests.asyncgames.com` address, because this Clerk instance
+requires *some* email on every user at creation — without one, `createUser`
+rejects with `form_data_missing`/`email_address`. Clerk allows more than one
+email address per user, so adding the real one here must not just be a bare
+`createEmailAddress` call: that would leave the placeholder sitting on the
+account as a second verified-but-undeliverable address. This step's write has
+to delete the guest address (or set the real one primary, then delete the
+guest address) in the same pass that adds it, not assume the new one silently
+replaces it.
+
 **17 — Sweeping unclaimed guests.** `GET /api/cron/staleguests`, modelled on
 `cron/staledevices`: same `CRON_SECRET` bearer auth, same `vercel.json`
 registration, same "rewrite only what actually changed" pass. For each guest,

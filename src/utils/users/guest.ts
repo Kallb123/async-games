@@ -29,6 +29,15 @@ function generateGuestUsername(): string {
     return `guest_${randomUUID().replace(/-/g, "")}`;
 }
 
+// Some Clerk instances require an email address on every user regardless of
+// `skipPasswordRequirement` (form_data_missing / email_address). A guest has
+// none to give, so this mints a throwaway address under a domain we own —
+// never delivered to, since the Backend API marks an address it creates as
+// verified without sending mail.
+function generateGuestEmail(username: string): string {
+    return `${username}@guests.asyncgames.com`;
+}
+
 // A guest principal (docs/account-less-play.md §3 Option A): a real Clerk
 // user, marked `publicMetadata.guest` so the rest of the app's authorisation
 // checks (`useIsAuthorised`, `isUnlockedUser`) let them in without the
@@ -43,8 +52,10 @@ function generateGuestUsername(): string {
 // to prefer firstName for a guest.
 export async function createGuest(displayName: string): Promise<GuestTicket> {
     const client = await clerkClient();
+    const username = generateGuestUsername();
     const user = await client.users.createUser({
-        username: generateGuestUsername(),
+        username,
+        emailAddress: [generateGuestEmail(username)],
         firstName: displayName,
         skipPasswordRequirement: true,
         publicMetadata: { guest: true },
