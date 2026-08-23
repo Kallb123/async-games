@@ -9,7 +9,7 @@ import { OPEN_SEAT_ID, LOBBY_TTL_MS } from '@/utils/games/lobby';
 import { generateJoinCode } from '@/utils/games/joinCode';
 import { sendPushToUsers, homeNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildGameInviteNotification } from '@/utils/firebase/notificationContent';
-import { readableName } from '@/utils/ui/players';
+import { isGuest, readableName } from '@/utils/ui/players';
 
 // A lobby's create request is just a game's existing invite payload
 // (IInvitationRequest, plus whatever extra settings that game's own
@@ -36,8 +36,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({}, { status: 400, statusText: "Not signed in" });
     }
     // The gate belongs on lobby creation, not lobby joining (§8): an
-    // unlocked host vouches for everyone holding their code.
-    if (!isUnlockedUser(thisUser)) {
+    // unlocked host vouches for everyone holding their code. isUnlockedUser
+    // also passes a guest — that's correct for the general app-access gate
+    // (§5/§12), which a guest must clear the moment they exist, but a guest
+    // is exactly the account with nobody vouching for them, so it can't
+    // double as the lobby-creation gate on its own: every lobby needs a real
+    // registered host (§8), so a guest is rejected here explicitly.
+    if (isGuest(thisUser) || !isUnlockedUser(thisUser)) {
         return NextResponse.json({}, { status: 403, statusText: "Account not unlocked" });
     }
 
