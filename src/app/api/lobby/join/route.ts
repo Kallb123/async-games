@@ -7,6 +7,7 @@ import { normaliseJoinCode } from '@/utils/games/joinCode';
 import { isValidGuestName, uniqueGuestName } from '@/utils/games/guestName';
 import { acceptSeat } from '@/utils/games/startGame';
 import { createGuest, deleteGuest } from '@/utils/users/guest';
+import { buildResumeHref } from '@/utils/users/resumeLink';
 import { userIdListToUsernameList } from '@/utils/users/clerk';
 import { clientIp, consumeRateLimit } from '@/utils/rateLimit';
 
@@ -112,6 +113,11 @@ export async function POST(request: NextRequest) {
             // 'ticket', ticket })`) before it can even look at the lobby it
             // just joined.
             ticket: guest.ticket,
+            // The resume fallback (docs/account-less-play.md §2/§15): shown
+            // once, right after this response lands, so a guest who closes
+            // the tab has a way back that isn't "hope this browser still has
+            // the session cookie".
+            resumeUrl: `${request.nextUrl.origin}${buildResumeHref(guest.resumeTicket)}`,
         });
     }
 

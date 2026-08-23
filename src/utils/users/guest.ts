@@ -8,9 +8,17 @@ import { readableName } from "@/utils/ui/players";
 // docs/account-less-play.md §2 gives a *returning* guest's sign-in link.
 const GUEST_TICKET_TTL_SECONDS = 60;
 
+// The resume link (docs/account-less-play.md §2/§15) is the same mechanism —
+// a Clerk sign-in token — held open long enough to be worth saving rather
+// than consumed on arrival. It only needs to outlive the guest account it
+// signs back into, and §8 already gives that a number: a week after their
+// last game concludes. No point minting a link that outlasts the principal.
+const GUEST_RESUME_TICKET_TTL_SECONDS = 7 * 24 * 60 * 60;
+
 export interface GuestTicket {
     userId: string;
     ticket: string;
+    resumeTicket: string;
 }
 
 // Clerk usernames are unique across the instance (docs/account-less-play.md
@@ -45,7 +53,11 @@ export async function createGuest(displayName: string): Promise<GuestTicket> {
         userId: user.id,
         expiresInSeconds: GUEST_TICKET_TTL_SECONDS,
     });
-    return { userId: user.id, ticket: token };
+    const { token: resumeToken } = await client.signInTokens.createSignInToken({
+        userId: user.id,
+        expiresInSeconds: GUEST_RESUME_TICKET_TTL_SECONDS,
+    });
+    return { userId: user.id, ticket: token, resumeTicket: resumeToken };
 }
 
 // The other half of a guest claim that lost the race for a seat (step 14):
