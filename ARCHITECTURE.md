@@ -161,10 +161,13 @@ when a push notification event arrives (foreground events are re-dispatched as
 connection on `global` (so hot-reload / serverless invocations reuse one
 connection). Every API route calls `await dbConnect()` before touching the DB.
 
-`dbConnect()` also calls `initialiseDiscriminators()`, which *references* every
-game's discriminator model so Mongoose has registered them. The discriminator
-key unions there double as a **compile-time exhaustiveness check** — add a game
-to the union but forget to wire its model and TypeScript fails the build.
+`src/utils/mongodb/mongodb.ts` also defines `GAME_DATA_MODELS` and
+`INVITATION_MODELS`, module-scope `Record`s mapping every game's discriminator
+key to its model (`gameDataModelFor(gameType)` / `invitationModelFor(gameType)`
+look one up). Importing this file evaluates those records, which is what
+registers the discriminators with Mongoose. The discriminator key unions
+double as a **compile-time exhaustiveness check** — add a game to the union
+but forget to wire its model and TypeScript fails the build.
 
 ### Mongoose discriminators
 
@@ -612,7 +615,7 @@ runtime:
 | Shared file | What to add | Guarded by |
 |---|---|---|
 | `src/utils/apiModels/GameLogic.ts` | `export * from "@/games/<Game>/<Game>Logic";` | `src/games/gameRegistry.test.ts` ("wires every game's rules module into the GameLogic barrel"); the classes it exports are additionally checked by `serializableRegistry.test.ts` |
-| `src/utils/mongodb/mongodb.ts` | the discriminator key in both union types, and the model in both records (`GAME_DATA_MODELS` and the invitation record inside `initialiseDiscriminators()`) | TypeScript (the typed `Record`s are a compile-time exhaustiveness check) **and** `src/games/gameRegistry.test.ts` ("registers every game's Mongoose discriminator models") |
+| `src/utils/mongodb/mongodb.ts` | the discriminator key in both union types, and the model in both records (`GAME_DATA_MODELS` and `INVITATION_MODELS`) | TypeScript (the typed `Record`s are a compile-time exhaustiveness check) **and** `src/games/gameRegistry.test.ts` ("registers every game's Mongoose discriminator models") |
 | `src/app/api/game/command/route.ts` | every command/game-type instance in the `registration` array | `serializableRegistry.test.ts` ("wires every command/game-type class into the command route's registration array") |
 | `src/utils/ui/games.ts` | import the game's `meta.ts` and add it to `GAME_META` | `src/games/gameRegistry.test.ts` ("wires every game's metadata into GAME_META") |
 

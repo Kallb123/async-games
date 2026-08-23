@@ -72,7 +72,7 @@ describe("game registry completeness", () => {
             missing,
             `These games are missing their discriminator models in ` +
                 `src/utils/mongodb/mongodb.ts (the GameDataDiscriminatorKey/` +
-                `InvitationDiscriminatorKey unions and the initialiseDiscriminators() records):\n` +
+                `InvitationDiscriminatorKey unions and the GAME_DATA_MODELS/INVITATION_MODELS records):\n` +
                 missing.map((n) => `  - ${n}`).join("\n"),
         ).toEqual([]);
     });
