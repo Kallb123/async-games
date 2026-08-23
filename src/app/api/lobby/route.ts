@@ -5,7 +5,7 @@ import { dbConnect, invitationModelFor } from '@/utils/mongodb/mongodb';
 import { IInvitationDataDocument, IUserIdAcceptance, IInvitationRequest } from '@/utils/mongodb/InvitationData';
 import { isUnlockedUser } from '@/utils/users/clerk';
 import { GAME_META } from '@/utils/ui/games';
-import { partySizeOutOfRange } from '@/components/ui/PartySizeHint';
+import { partySizeErrorMessage } from '@/components/ui/PartySizeHint';
 import { OPEN_SEAT_ID, LOBBY_TTL_MS } from '@/utils/games/lobby';
 import { generateJoinCode } from '@/utils/games/joinCode';
 import { sendPushToUsers, homeNotificationLink } from '@/utils/firebase/pushNotification';
@@ -62,8 +62,9 @@ export async function POST(request: NextRequest) {
     // The host isn't a userIdList entry (they're senderId), so the party is
     // the named invitees, plus the open seats, plus the host themselves.
     const partySize = invitedUsers.length + seatCount + 1;
-    if (partySizeOutOfRange(partySize, meta.minPlayers, meta.maxPlayers)) {
-        return NextResponse.json({}, { status: 400, statusText: `${meta.name} supports ${meta.players}` });
+    const partySizeError = partySizeErrorMessage(meta, partySize);
+    if (partySizeError) {
+        return NextResponse.json({}, { status: 400, statusText: partySizeError });
     }
 
     await dbConnect();
