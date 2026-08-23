@@ -12,9 +12,12 @@ export const UNKNOWN_PLAYER_NAME = "Unknown player";
 // without being allowed to use the app yet. Every route that lets someone
 // create content — today just `/api/users`, and lobby creation from this
 // commit on — needs this check server-side; it is not implied by being
-// signed in.
+// signed in. A guest (`publicMetadata.guest === true`, §5/§12) is authorised
+// the moment they exist — the unlock gate is for the real account that vouches
+// for them, not for the guest — so this accepts the same second clause
+// `useIsAuthorised` does client-side.
 export function isUnlockedUser(user: User | null | undefined): boolean {
-    return user?.publicMetadata.unlocked === true;
+    return user?.publicMetadata.unlocked === true || user?.publicMetadata.guest === true;
 }
 
 // Clerk treats an empty filter as *no* filter: `getUserList({ username: [] })`
