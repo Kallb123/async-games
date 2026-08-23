@@ -7,13 +7,17 @@ import { useRouter } from "next/navigation";
  * Whether the viewer is signed in *and* unlocked — the "safe to fetch" signal,
  * with no side effects of its own. Use this in components that only need to
  * know; the screen they sit on owns the redirect via `useAuthGuard`.
+ *
+ * A guest (`publicMetadata.guest === true`, docs/account-less-play.md §5/§12)
+ * is authorised the moment they exist — the unlock gate is for the real
+ * account that vouches for them, not for the guest.
  */
 export function useIsAuthorised() {
     const { user, isLoaded } = useUser();
     return {
         user,
         isLoaded,
-        isAuthorised: isLoaded && !!user && user.publicMetadata.unlocked === true,
+        isAuthorised: isLoaded && !!user && (user.publicMetadata.unlocked === true || user.publicMetadata.guest === true),
     };
 }
 
