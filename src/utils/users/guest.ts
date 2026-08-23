@@ -1,5 +1,6 @@
-import { clerkClient } from "@clerk/nextjs/server";
+import { clerkClient, User } from "@clerk/nextjs/server";
 import { randomUUID } from "crypto";
+import { readableName } from "@/utils/ui/players";
 
 // A ticket is minted and handed to the client to consume immediately
 // (`signIn.create({ strategy: 'ticket', ticket })`), not stored anywhere —
@@ -37,4 +38,25 @@ export async function createGuest(): Promise<GuestTicket> {
         expiresInSeconds: GUEST_TICKET_TTL_SECONDS,
     });
     return { userId: user.id, ticket: token };
+}
+
+export interface UnclaimedGuests {
+    unclaimedPlayerIds: string[];
+    guestNames: Map<string, string>;
+}
+
+// A finished game's still-unclaimed guests, and the display name each should
+// be remembered by (docs/account-less-play.md §13): a guest's Clerk user is
+// swept a week after their last game (step 17), which makes their id
+// unresolvable, so their name has to be copied onto the GameResult record
+// while it's still known. recordGameResult stays Clerk-free on the
+// per-command path, so this is the one derivation every caller runs on the
+// roster it already resolved for its own pushes, rather than each
+// re-deriving "is this player a guest" itself.
+export function unclaimedGuestsOf(users: User[]): UnclaimedGuests {
+    const guests = users.filter(user => user.publicMetadata.guest === true);
+    return {
+        unclaimedPlayerIds: guests.map(user => user.id),
+        guestNames: new Map(guests.map(user => [user.id, readableName(user)])),
+    };
 }

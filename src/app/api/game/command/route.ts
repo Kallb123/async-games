@@ -8,6 +8,7 @@ import { dbConnect } from '@/utils/mongodb/mongodb';
 import { DiceCitiesRequestRadioTowerReroll, ICommandOutcome, IGameCommand, IGameType, SmartthinkGameType, SmartthinkSetSecretCode, SmartthinkSubmitGuess, SnakesAndLaddersGameType, SnakesAndLaddersRequestDiceRoll } from '@/utils/apiModels/GameLogic';
 import { GameDataModel, IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
 import { recordGameResult } from '@/utils/mongodb/GameResultData';
+import { unclaimedGuestsOf } from '@/utils/users/guest';
 import { DiceCitiesGameType, DiceCitiesRequestBusinessCenterOpponentSelection, DiceCitiesRequestBusinessCenterOwnSelection, DiceCitiesRequestCardPurchase, DiceCitiesRequestDiceRoll, DiceCitiesRequestPassTurn, DiceCitiesRequestTvStationSelection, DiceCitiesRequestUnlockAmusementPark, DiceCitiesRequestUnlockRadioTower, DiceCitiesRequestUnlockShoppingMall, DiceCitiesRequestUnlockTrainStation } from '@/utils/apiModels/GameLogic';
 import { SettlementsAndCitiesGameType, SACPlaceSettlementSetup, SACPlaceRoadSetup, SACPlayKnight, SACRollDice, SACMoveRobber, SACBuildRoad, SACBuildSettlement, SACBuildCity, SACBuyDevCard, SACPlayRoadBuilding, SACPlayYearOfPlenty, SACPlayMonopoly, SACMaritimeTrade, SACEndTurn } from '@/utils/apiModels/GameLogic';
 import { WorldDominationGameType, WorldDominationDeployArmies, WorldDominationCashInCards, WorldDominationAttack, WorldDominationOccupyTerritory, WorldDominationEndAttackPhase, WorldDominationFortify, WorldDominationSkipFortify } from '@/utils/apiModels/GameLogic';
@@ -130,11 +131,12 @@ export async function POST(request: NextRequest) {
     // recordGameResult is idempotent on gameId, so a retried request is a no-op.
     after(async () => {
       try {
-        await recordGameResult(gameData);
-
         const { data: userList } = await (await clerkClient()).users.getUserList({
           userId: gameData.userIdList
         });
+
+        const { unclaimedPlayerIds, guestNames } = unclaimedGuestsOf(userList);
+        await recordGameResult(gameData, unclaimedPlayerIds, guestNames);
 
         const winnerUser = userList.find(u => u.id === gameData.winner);
         const losers = userList.filter(u => u.id !== gameData.winner);

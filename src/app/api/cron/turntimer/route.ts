@@ -3,6 +3,7 @@ import { buildGameLostNotification, buildTurnExpiringNotification, buildYourTurn
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
 import { recordGameResult } from '@/utils/mongodb/GameResultData';
+import { unclaimedGuestsOf } from '@/utils/users/guest';
 import { clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { hasAbandonedGame, isExpired, isWarningThreshold, formatRemainingTime } from '@/utils/games/TurnTimer';
@@ -52,11 +53,12 @@ export async function GET(request: NextRequest) {
                 // skip this game rather than clobber their move with a stale expiry.
                 if (!(await trySave(gameData))) continue;
 
-                await recordGameResult(gameData);
-
                 const { data: userList } = await (await clerkClient()).users.getUserList({
                     userId: gameData.userIdList
                 });
+
+                const { unclaimedPlayerIds, guestNames } = unclaimedGuestsOf(userList);
+                await recordGameResult(gameData, unclaimedPlayerIds, guestNames);
 
                 await sendPushToUsers(userList, {
                     event: 'GameOver',
