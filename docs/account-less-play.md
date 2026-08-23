@@ -299,6 +299,27 @@ being dropped, so every call site keeps its alignment. `usernameListToUserIdList
 and there is no meaningful id to place as a stand-in — so revisit it if a
 caller appears.
 
+**One principal, one seat.** A lobby's seats are claimed by id, so the claim
+has to refuse an id that already has a place at that lobby — as a named
+invitee, as a seat it already claimed, or as the host, who holds no seat entry
+of their own. Without that, one player signed in on two devices took a seat on
+each, the game dealt them two turns, and everyone else was a seat short. The
+refusal belongs *inside* the conditional update of step 8 rather than as a read
+before it (`notSeatedFilter` in `src/utils/games/lobby.ts`, alongside the
+open-seat filter): two devices racing is the same race as two joiners, so a
+read-then-claim has both devices reading "not seated yet". A code from someone
+who is already in takes them to the seat they hold, and accepts it if it was a
+named invite still waiting on them — otherwise they would sit on the lobby
+screen watching a game their own unaccepted seat is blocking.
+
+Step 13 inherits this and adds one wrinkle: a guest's claim mints a principal,
+so the seated check has to run *before* the mint, or every re-typed code
+creates a fresh guest and a fresh seat. A returning guest on the same device is
+signed in as the guest principal they already are, so the check is the same
+id-based one. Two *different* devices with no shared identity are genuinely two
+guests — that is the intended reading of a code, and the only guard there is
+the per-lobby display-name uniqueness below.
+
 **Display names are not unique, Clerk usernames are.** Two guests both typing
 "Dave" would collide, and parts of the client identify "me" by name
 (`currentUsername(user)` in the board pages) rather than id. Enforce
@@ -584,7 +605,8 @@ the difference between one copy and three.
 
 **8 — Claiming a seat.** `POST /api/lobby/join`, signed-in players only for now:
 normalise the code, find the open lobby, and claim a seat with a **single
-conditional update** that matches the lobby *and* an unclaimed seat. Not
+conditional update** that matches the lobby, an unclaimed seat *and* a claimant
+who isn't already at it (§5, one principal one seat). Not
 read-modify-write — `InvitationSchema` has no `optimisticConcurrency` where
 `GameDataSchema` sets it, so two joiners racing would otherwise lose one of the
 two, or both take the last seat and overflow the game's maximum. Then

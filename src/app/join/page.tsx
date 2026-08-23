@@ -8,6 +8,10 @@ import BackLink from "@/components/ui/BackLink";
 import { normaliseJoinCode } from "@/utils/games/joinCode";
 import { useEnterStartedGame } from "@/utils/hooks/useEnterStartedGame";
 
+// What a code that opens nothing gets told — the same sentence whether the
+// route refused it or the request never landed, so it's written once.
+const BAD_CODE_MESSAGE = "That code doesn't work — check it and try again.";
+
 // A code-holder with an account, landing here from a link or by typing the
 // URL. A guest with no account belongs on this same route, but goes through
 // its own signed-out lockup (AuthScreen) — step 13, not this commit.
@@ -34,21 +38,34 @@ export default function Join() {
         body: JSON.stringify({ joinCode })
       });
       if (!response.ok) {
-        throw new Error('Failed to join lobby');
+        // A full lobby reads differently from a code that opens nothing: the
+        // code was right, there was just nowhere to sit. Branch on the status
+        // rather than the route's statusText, which HTTP/2 doesn't carry.
+        showToast(response.status === 409
+          ? "That lobby's full — every seat is taken."
+          : BAD_CODE_MESSAGE, 'danger');
+        setJoining(false);
+        return;
       }
-      const { gameStarted, gameId, gameUrl, inviteId } = await response.json();
+      const { gameStarted, gameId, gameUrl, inviteId, alreadySeated } = await response.json();
       if (gameStarted) {
         enterStartedGame(gameUrl, gameId);
       } else {
         // Into the lobby with the host and whoever else has claimed a seat,
         // rather than home: the remaining seats fill live there, and it takes
-        // everyone waiting on it straight into the game once they do.
-        showToast("You're in! Waiting for the rest of the party.", 'success', 'Seat Claimed');
+        // everyone waiting on it straight into the game once they do. Someone
+        // who already has a place here (their other device, or the host with
+        // their own code) lands on the same screen — one seat each — so only
+        // the wording changes.
+        const { title, body } = alreadySeated
+          ? { title: 'Already In', body: "You're already in this one — here's the lobby." }
+          : { title: 'Seat Claimed', body: "You're in! Waiting for the rest of the party." };
+        showToast(body, 'success', title);
         router.push(`/lobby/${inviteId}`);
       }
     } catch (error) {
       console.error(error);
-      showToast("That code doesn't work — check it and try again.", 'danger');
+      showToast(BAD_CODE_MESSAGE, 'danger');
       setJoining(false);
     }
   };

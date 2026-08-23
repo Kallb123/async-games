@@ -134,8 +134,10 @@ Invite ──► (all accept) ──► Game created ──► [ turn ─► tur
    the invitees.
 2. **Accept.** Each invitee accepts (`POST /api/invite/accept`), or — for a
    join-by-code lobby — a joiner claims an open seat
-   (`POST /api/lobby/join`, one conditional update matching the lobby *and*
-   an unclaimed seat, so racing joiners can't double up on the last seat).
+   (`POST /api/lobby/join`, one conditional update matching the lobby, an
+   unclaimed seat, *and* a claimant who isn't already at it, so racing joiners
+   can't double up on the last seat and one player on two devices can't hold
+   two seats — a code they're already in with takes them to the seat they have).
    Both routes call the shared `acceptSeat(invite, actorId)`
    (`src/utils/games/startGame.ts`), which flips that seat's acceptance and,
    once *everyone* has accepted, hands the invitation to
