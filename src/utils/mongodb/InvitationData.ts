@@ -1,7 +1,7 @@
 import { Document, Model, Schema, model, models } from "mongoose";
 import { IGameData } from "./GameData";
 
-interface IUserIdAcceptance {
+export interface IUserIdAcceptance {
     userId: string,
     inviteAccepted: boolean
 }

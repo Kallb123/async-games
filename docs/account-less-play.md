@@ -543,7 +543,7 @@ page). Add `minPlayers`/`maxPlayers` to `GameMeta` and to each game's
 `gameRegistry.test.ts` — which already scans every `meta.ts`. One numeric
 source, which steps 6 and 9 both need and the existing screens want anyway.
 
-**5 — The open seat, as pure helpers.** `src/utils/games/lobby.ts` holds the one
+**5 — The open seat, as pure helpers.** *(Done — #246.)* `src/utils/games/lobby.ts` holds the one
 convention: a seat is a `userIdList` entry whose `userId` is a placeholder, with
 `isOpenSeat()`, `openSeats(invite)` and the claim filter beside it.
 `IUserIdAcceptance` gets exported from `InvitationData.ts` (it isn't today) so
