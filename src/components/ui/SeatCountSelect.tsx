@@ -1,7 +1,5 @@
 'use client'
 
-import { useEffect } from "react";
-
 interface SeatCountSelectProps {
     value: number;
     onChange: (value: number) => void;
@@ -17,18 +15,10 @@ interface SeatCountSelectProps {
  * six copies of the same `<select>`.
  */
 export default function SeatCountSelect({ value, onChange, max }: SeatCountSelectProps) {
+    // `useCreateLobbyOrInvite` clamps the chosen count to `max` already, so
+    // `value` is always in range; this only guards a full party, where the
+    // game's maximum leaves no seat to open.
     const bound = Math.max(max, 0);
-
-    // `max` shrinks as named invitees are added; keep the chosen count from
-    // going stale rather than silently submitting a party size that no
-    // longer fits.
-    useEffect(() => {
-        if (value > bound) {
-            onChange(bound);
-        }
-    }, [value, bound, onChange]);
-
-    const seatCount = Math.min(value, bound);
 
     return (
         <div className="ag-section" style={{ padding: "20px 20px 0" }}>
@@ -37,7 +27,7 @@ export default function SeatCountSelect({ value, onChange, max }: SeatCountSelec
             </div>
             <select
                 className="ag-select"
-                value={seatCount}
+                value={value}
                 onChange={(e) => onChange(Number(e.target.value))}
             >
                 {Array.from({ length: bound + 1 }, (_, seats) => seats).map(seats => (
@@ -47,9 +37,9 @@ export default function SeatCountSelect({ value, onChange, max }: SeatCountSelec
                 ))}
             </select>
             <p className="ag-hint">
-                {seatCount === 0
+                {value === 0
                     ? "Only the people you invite above can join."
-                    : `Anyone with the code can grab ${seatCount === 1 ? "the open seat" : `one of the ${seatCount} open seats`} once the game is created.`}
+                    : `Anyone with the code can grab ${value === 1 ? "the open seat" : `one of the ${value} open seats`} once the game is created.`}
             </p>
         </div>
     );

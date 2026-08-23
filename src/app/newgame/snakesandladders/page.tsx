@@ -5,6 +5,7 @@ import { Suspense, useState } from "react";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
+import PartySizeHint from "@/components/ui/PartySizeHint";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import OptionSection from "@/components/ui/OptionSection";
 import SeatCountSelect from "@/components/ui/SeatCountSelect";
@@ -24,8 +25,13 @@ function NewGameSnakesAndLaddersForm() {
   const { userList, setItem, players } = usePlayerList(readRematchPlayers(searchParams));
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
   const [reRollOnSix, setReRollOnSix] = useState(() => readRematchFlag(searchParams, SL_REROLL_PARAM));
-  const { maxPlayers } = GAME_META.snakesandladders;
-  const { seatCount, setSeatCount, submit } = useCreateLobbyOrInvite('SnakesAndLadders', '/api/newgame/snakesandladders');
+  const gameMeta = GAME_META.snakesandladders;
+  const { seatCount, setSeatCount, maxSeats, partySize, canSubmit, actionLabel, footnote, submit } = useCreateLobbyOrInvite({
+    meta: gameMeta,
+    gameType: 'SnakesAndLadders',
+    invitePath: '/api/newgame/snakesandladders',
+    invitedCount: players.length,
+  });
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -40,15 +46,16 @@ function NewGameSnakesAndLaddersForm() {
 
   return (
     <GameSetupLayout
-      meta={GAME_META.snakesandladders}
+      meta={gameMeta}
       onSubmit={handleSubmit}
-      actionLabel="Send invites & start"
-      actionDisabled={players.length === 0}
-      footnote="Game begins once everyone accepts"
+      actionLabel={actionLabel}
+      actionDisabled={!canSubmit}
+      footnote={footnote}
     >
       <UserInviteList userList={userList} setItem={setItem} />
-      <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxPlayers - players.length - 1} />
+      <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxSeats} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
+      <PartySizeHint meta={gameMeta} total={partySize} />
 
       <OptionSection label="House rules">
         <OptionToggleRow
