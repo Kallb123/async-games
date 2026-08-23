@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useState } from "react";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
-import { GAME_META } from "@/utils/ui/games";
+import { GAME_META, gamePath } from "@/utils/ui/games";
 import { SolitaireDrawMode, SolitaireInvitationRequest } from "@/games/Solitaire/SolitaireModels";
 import { useToast } from "@/components/ToastContext";
 
@@ -48,7 +48,7 @@ export default function NewGameSolitaire() {
       if (!gameStarted) {
         throw new Error('Game did not start');
       }
-      router.push(`/games/${gameUrl}/${gameId}`);
+      router.push(gamePath(gameUrl, gameId));
     } catch (error) {
       console.error(error);
       showToast('Failed to start the game. Please try again.', 'danger');

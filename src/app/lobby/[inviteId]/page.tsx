@@ -50,6 +50,15 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
   // Set the moment we start leaving, so a refresh landing while the lookup
   // below is still in flight doesn't kick off a second one.
   const leavingRef = useRef(false);
+  // Whether the screen is still here to be redirected. The lookup below can
+  // resolve after the player has gone (fetchWithSessionRetry waits out a
+  // transient 401 before retrying), and a toast and a push on an unmounted
+  // screen would land them somewhere they didn't ask to be.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
   useEffect(() => {
     if (invite) {
       everSeenRef.current = true;
@@ -69,8 +78,9 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
     // same landing a joiner gets from /api/lobby/join. A lobby that was
     // cancelled or expired rather than started has no game: fall back home.
     (async () => {
-      const response = await fetchWithSessionRetry(`/api/lobby/${inviteId}/game`, () => false);
+      const response = await fetchWithSessionRetry(`/api/lobby/${inviteId}/game`, () => !mountedRef.current);
       const started = response?.ok ? await response.json() : null;
+      if (!mountedRef.current) return;
       if (started?.gameId) {
         enterStartedGame(started.gameUrl, started.gameId);
       } else {
