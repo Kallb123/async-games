@@ -549,7 +549,7 @@ convention: a seat is a `userIdList` entry whose `userId` is a placeholder, with
 `IUserIdAcceptance` gets exported from `InvitationData.ts` (it isn't today) so
 the helpers can type against it. Pure module, unit-tested, nothing calls it yet.
 
-**6 — Creating a lobby.** `POST /api/lobby`, using `invitationModelFor` from
+**6 — Creating a lobby.** *(Done — #247.)* `POST /api/lobby`, using `invitationModelFor` from
 step 3: the game's existing invite payload plus a seat count bounded by step 4's
 numbers. It writes the code (retrying on the duplicate-key error the partial
 index throws — no coordination, no counter), `expiresAt`, and the placeholder
