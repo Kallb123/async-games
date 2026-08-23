@@ -179,7 +179,12 @@ Games and invitations share a base schema and specialise via Mongoose
   its `Models.ts`, adding a game-specific `specificGameState` sub-schema.
 - **`Invitation`** (`src/utils/mongodb/InvitationData.ts`) is the base invite.
   Each game defines `<Game>InvitationModel` with a `CreateGame()` method that
-  produces the initial `IGameData`.
+  produces the initial `IGameData`. It optionally carries `joinCode` and
+  `expiresAt`: an invitation with these set is an open, join-by-code lobby
+  rather than a named-invitee-only invite — a seat with no name yet is a
+  `userIdList` entry holding the `OPEN_SEAT_ID` placeholder
+  (`src/utils/games/lobby.ts`) rather than a separate open-seats counter. See
+  `docs/account-less-play.md` §4 for the design.
 - **`Friendship`** (`src/utils/mongodb/FriendshipData.ts`) is a flat
   requester/recipient/accepted record — no discriminator.
 

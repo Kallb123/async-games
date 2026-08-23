@@ -8,6 +8,15 @@ import { profileImageUrl } from "@/utils/ui/avatar";
 // dropped entry would shift every name after it onto the wrong seat.
 export const UNKNOWN_PLAYER_NAME = "Unknown player";
 
+// The invite-only gate (docs/account-less-play.md §5/§8): a user can sign in
+// without being allowed to use the app yet. Every route that lets someone
+// create content — today just `/api/users`, and lobby creation from this
+// commit on — needs this check server-side; it is not implied by being
+// signed in.
+export function isUnlockedUser(user: User | null | undefined): boolean {
+    return user?.publicMetadata.unlocked === true;
+}
+
 export async function userIdListToUsernameList(userIdList: string[]): Promise<string[]> {
     const { data: users } = await (await clerkClient()).users.getUserList({userId: userIdList});
     return userIdList.map(userId => {
