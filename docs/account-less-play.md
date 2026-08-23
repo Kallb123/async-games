@@ -718,7 +718,7 @@ First `whatsNew.ts` line, under enhancements.
 > wherever `acceptSeat` sends the rest of the party — the smallest remaining
 > piece of the signed-in half, and it belongs in step 11 with the link.
 
-**11 — The join link.** What step 10 shipped works only for someone willing to
+**11 — The join link.** *(Done.)* What step 10 shipped works only for someone willing to
 type four letters into a site they already use. §4's second form of the code
 closes that, and it is smaller than it sounds: no new route, no new screen.
 `/join` reads the code from its query string exactly as the seven `newgame`

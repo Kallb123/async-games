@@ -18,3 +18,25 @@ export function generateJoinCode(): string {
 export function normaliseJoinCode(joinCode: string): string {
     return joinCode.toUpperCase().replace(/\s+/g, '');
 }
+
+// The code's second form: a link that opens `/join` with the code already in
+// the box (see docs/account-less-play.md §4). The link *is* the code in a URL
+// — same normalisation, same join route, same lobby — so the param name and
+// its reader live here beside the code rules rather than in the screen, for
+// the reason `src/utils/ui/rematch.ts` gives for its own params: one format,
+// shared by whoever encodes it (the host's lobby card) and whoever decodes it
+// (`/join`), instead of each end inventing its own.
+const JOIN_CODE_PARAM = 'code';
+
+/** The in-app path a shared join link points at. Prefix with an origin to share it. */
+export function buildJoinHref(joinCode: string): string {
+    return `/join?${new URLSearchParams({ [JOIN_CODE_PARAM]: joinCode })}`;
+}
+
+/**
+ * The code a `/join` link arrived with, normalised — empty when the visitor
+ * typed the bare URL, which is the same screen with different hero copy.
+ */
+export function readJoinCode(searchParams: URLSearchParams): string {
+    return normaliseJoinCode(searchParams.get(JOIN_CODE_PARAM) ?? '');
+}

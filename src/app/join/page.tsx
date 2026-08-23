@@ -1,11 +1,11 @@
 'use client'
-import { useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useToast } from "@/components/ToastContext";
 import BackLink from "@/components/ui/BackLink";
-import { normaliseJoinCode } from "@/utils/games/joinCode";
+import { normaliseJoinCode, readJoinCode } from "@/utils/games/joinCode";
 import { useEnterStartedGame } from "@/utils/hooks/useEnterStartedGame";
 
 // What a code that opens nothing gets told — the same sentence whether the
@@ -15,14 +15,21 @@ const BAD_CODE_MESSAGE = "That code doesn't work — check it and try again.";
 // A code-holder with an account, landing here from a link or by typing the
 // URL. A guest with no account belongs on this same route, but goes through
 // its own signed-out lockup (AuthScreen) — step 13, not this commit.
-export default function Join() {
+function JoinForm() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
   useAuthGuard();
   const router = useRouter();
   const { showToast } = useToast();
   const enterStartedGame = useEnterStartedGame();
-  const [code, setCode] = useState("");
+  const searchParams = useSearchParams();
+  // A shared link carries the code (docs/account-less-play.md §4) — it lands
+  // in the field rather than joining on arrival, because arriving at a URL is
+  // a read and link unfurlers, prefetchers and stray taps all perform reads.
+  // The player still takes the seat with the tap the screen already has, and
+  // sees what they're joining first.
+  const linkedCode = readJoinCode(searchParams);
+  const [code, setCode] = useState(linkedCode);
   const [joining, setJoining] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -80,14 +87,20 @@ export default function Join() {
       </div>
 
       <div className="ag-hero">
-        <h1 className="ag-hero-title">Got a code?</h1>
-        <p className="ag-hero-sub">Enter the code your host shared to grab an open seat.</p>
+        {/* One screen, not two: a link and a bare URL differ in the copy that
+            greets them and nothing else. Branching on the code the link
+            carried rather than the field means it doesn't change as they type. */}
+        <h1 className="ag-hero-title">{linkedCode ? "You've been invited" : "Got a code?"}</h1>
+        <p className="ag-hero-sub">
+          {linkedCode
+            ? "Your seat is waiting — tap below to take it."
+            : "Enter the code your host shared to grab an open seat."}
+        </p>
       </div>
 
       <form onSubmit={handleSubmit} className="ag-section">
         <input
-          className="ag-input"
-          style={{ font: "800 26px var(--ag-font)", letterSpacing: "0.3em", textAlign: "center", textTransform: "uppercase" }}
+          className="ag-input ag-joincode"
           type="text"
           autoComplete="off"
           autoCapitalize="characters"
@@ -109,5 +122,15 @@ export default function Join() {
 
       <FcmTokenComp />
     </main>
+  );
+}
+
+// useSearchParams needs a Suspense boundary to be read during rendering, the
+// same wrapper every `newgame` setup screen uses to read a rematch link.
+export default function Join() {
+  return (
+    <Suspense fallback={null}>
+      <JoinForm />
+    </Suspense>
   );
 }

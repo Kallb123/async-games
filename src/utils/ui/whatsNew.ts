@@ -39,6 +39,14 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Share a link, not just a code",
+                detail: "Tap the code in your lobby to send a link — whoever opens it lands on the join screen with the code already filled in.",
+            },
+            {
+                title: "Start without waiting for a full lobby",
+                detail: "Friends not turning up? Start now plays the game with everyone who's here and drops the empty seats.",
+            },
+            {
                 title: "Everyone waits in the lobby",
                 detail: "Claim a seat with a code and you wait on the lobby screen with the host, watching the last seats fill instead of guessing.",
             },
@@ -49,14 +57,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Invites show which game you've been asked to play",
                 detail: "Each invite now carries the game's icon next to the sender, so you can tell them apart at a glance.",
-            },
-            {
-                title: "Your finished games have their own page",
-                detail: "The home screen keeps the ten most recent; the rest are a tap away instead of buried.",
-            },
-            {
-                title: "Profile pictures",
-                detail: "Upload a photo of your own, or keep the one from the account you signed in with.",
             },
         ],
     },
