@@ -26,10 +26,18 @@ function generateGuestUsername(): string {
 // checks (`useIsAuthorised`, `isUnlockedUser`) let them in without the
 // invite-only unlock a real signup requires. Claiming later is then just
 // dropping that flag off the same user — the id never changes.
-export async function createGuest(): Promise<GuestTicket> {
+//
+// `displayName` is the name they typed at the lobby's join screen (step 14),
+// already validated and suffixed for per-lobby uniqueness by the caller —
+// stored as `firstName` rather than `username`, since username is the
+// unrelated, meaningless account id above and every name-resolution choke
+// point (userIdListToUsernameList/Map, readableName, currentUsername) knows
+// to prefer firstName for a guest.
+export async function createGuest(displayName: string): Promise<GuestTicket> {
     const client = await clerkClient();
     const user = await client.users.createUser({
         username: generateGuestUsername(),
+        firstName: displayName,
         skipPasswordRequirement: true,
         publicMetadata: { guest: true },
     });
@@ -38,6 +46,16 @@ export async function createGuest(): Promise<GuestTicket> {
         expiresInSeconds: GUEST_TICKET_TTL_SECONDS,
     });
     return { userId: user.id, ticket: token };
+}
+
+// The other half of a guest claim that lost the race for a seat (step 14):
+// the account exists for exactly as long as its lobby does, so a mint with
+// nowhere to sit doesn't outlive the request that made it — otherwise it's
+// the billable ghost §3's sweeper exists to clean up, just early and for no
+// reason.
+export async function deleteGuest(userId: string): Promise<void> {
+    const client = await clerkClient();
+    await client.users.deleteUser(userId);
 }
 
 export interface UnclaimedGuests {

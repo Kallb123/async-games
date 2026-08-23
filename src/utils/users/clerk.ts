@@ -1,5 +1,5 @@
 import { clerkClient, User } from "@clerk/nextjs/server";
-import { readableName } from "@/utils/ui/players";
+import { isGuest, readableName } from "@/utils/ui/players";
 import { profileImageUrl } from "@/utils/ui/avatar";
 
 // Shown for a userId Clerk can't resolve (a deleted account, most likely
@@ -38,11 +38,21 @@ export async function usersById(userIdList: string[]): Promise<User[]> {
     return data;
 }
 
+// A guest's Clerk username is the random account id createGuest() minted
+// (docs/account-less-play.md §5), not something anyone chose to be seen
+// under — their firstName carries the name they actually typed at the
+// lobby's join screen (step 14), so name resolution inverts the usual
+// username-first preference for them. The one place both list-shaped
+// resolvers below reach for a name, so they can't drift apart.
+function displayHandle(user: User): string | null {
+    return isGuest(user) ? user.firstName : user.username;
+}
+
 export async function userIdListToUsernameList(userIdList: string[]): Promise<string[]> {
     const users = await usersById(userIdList);
     return userIdList.map(userId => {
         const user = users.find(u => u.id === userId);
-        return user ? (user.username ?? "No username") : UNKNOWN_PLAYER_NAME;
+        return user ? (displayHandle(user) ?? "No username") : UNKNOWN_PLAYER_NAME;
     });
 }
 
@@ -51,7 +61,7 @@ export async function userIdListToUsernameMap(userIdList: string[]): Promise<Map
     const usernameMap: Map<string, string> = new Map;
     userIdList.forEach(userId => {
         const user = users.find(u => u.id === userId);
-        usernameMap.set(userId, user ? (user.username ?? "No username") : UNKNOWN_PLAYER_NAME);
+        usernameMap.set(userId, user ? (displayHandle(user) ?? "No username") : UNKNOWN_PLAYER_NAME);
     });
     return usernameMap;
 }
