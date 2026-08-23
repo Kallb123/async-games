@@ -65,6 +65,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Right names, right seats",
+                detail: "A player Clerk couldn't look up used to shift every other name in the game out of place; now they just show as \"Unknown player\".",
+            },
+            {
                 title: "Boards keep themselves up to date",
                 detail: "An open board now refreshes on its own, so you see your opponent's move without reloading.",
             },
