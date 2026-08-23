@@ -32,3 +32,47 @@ export function openSeats(invite: Pick<IInvitationData, "userIdList">): IUserIdA
 // to exactly one matching array element, so concurrent claims never collide
 // even though every open seat carries the same placeholder id.
 export const OPEN_SEAT_CLAIM_FILTER = { "userIdList.userId": OPEN_SEAT_ID };
+
+// Whether this id already has a place at the lobby: the host (who holds no
+// seat of their own — they're the invitation's sender) or any seat already
+// carrying their id, named or claimed. The readable half of notSeatedFilter
+// below, for deciding what a refused claim meant.
+export function isSeatedAt(
+    invite: Pick<IInvitationData, "senderId" | "userIdList">,
+    claimantId: string
+): boolean {
+    return invite.senderId === claimantId
+        || invite.userIdList.some(entry => entry.userId === claimantId);
+}
+
+// The other half of the atomic claim: one principal, one seat. A code-holder
+// signed in on a second device is the same player, so a lobby they already
+// have a place at must not hand them a second seat — the game would deal them
+// two turns and every other player would be short one. Combine with
+// OPEN_SEAT_CLAIM_FILTER, so the claim can only land on a lobby that has a
+// seat going *and* isn't already theirs.
+//
+// The claimant's own id is excluded with an `$expr` rather than a second
+// `"userIdList.userId"` condition on purpose: the claim's `$set` writes through
+// the positional `$` operator, which resolves to the array element the *query*
+// matched, and a second predicate on that same path would leave which seat
+// gets written ambiguous. An `$expr` is not a path predicate, so
+// OPEN_SEAT_CLAIM_FILTER stays the only thing `$` can resolve from.
+export function notSeatedFilter(claimantId: string) {
+    return {
+        senderId: { $ne: claimantId },
+        $expr: { $not: [{ $in: [claimantId, "$userIdList.userId"] }] },
+    };
+}
+
+// The seat this id holds at the lobby but hasn't accepted yet, if any — a
+// named invitee who was sent an invite and hasn't answered it. Beside
+// isSeatedAt rather than inline in the join route so all three phrasings of
+// "does this player already have a place here?" live together and move
+// together.
+export function pendingSeatFor(
+    invite: Pick<IInvitationData, "userIdList">,
+    claimantId: string
+): IUserIdAcceptance | undefined {
+    return invite.userIdList.find(entry => entry.userId === claimantId && !entry.inviteAccepted);
+}

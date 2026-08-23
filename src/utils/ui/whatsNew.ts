@@ -65,6 +65,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "One seat each, however many devices",
+                detail: "Entering a code you're already in with takes you back to your own seat instead of quietly claiming a second one.",
+            },
+            {
                 title: "Your lobby takes you into the game",
                 detail: "Waiting on the lobby screen when the last seat fills now drops everyone straight onto the board instead of back at the home screen.",
             },
@@ -79,10 +83,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Right names, right seats",
                 detail: "A player Clerk couldn't look up used to shift every other name in the game out of place; now they just show as \"Unknown player\".",
-            },
-            {
-                title: "Boards keep themselves up to date",
-                detail: "An open board now refreshes on its own, so you see your opponent's move without reloading.",
             },
         ],
     },

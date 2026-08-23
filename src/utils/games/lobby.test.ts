@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { OPEN_SEAT_CLAIM_FILTER, OPEN_SEAT_ID, isOpenSeat, openSeats } from './lobby';
+import { OPEN_SEAT_CLAIM_FILTER, OPEN_SEAT_ID, isOpenSeat, isSeatedAt, notSeatedFilter, openSeats, pendingSeatFor } from './lobby';
 
 describe('isOpenSeat', () => {
     it('is true for the placeholder seat id', () => {
@@ -46,5 +46,66 @@ describe('openSeats', () => {
 describe('OPEN_SEAT_CLAIM_FILTER', () => {
     it('matches on the same placeholder id isOpenSeat checks', () => {
         expect(OPEN_SEAT_CLAIM_FILTER).toEqual({ 'userIdList.userId': OPEN_SEAT_ID });
+    });
+});
+
+describe('isSeatedAt', () => {
+    const lobby = {
+        senderId: 'user_host',
+        userIdList: [
+            { userId: 'user_named', inviteAccepted: false },
+            { userId: 'user_claimed', inviteAccepted: true },
+            { userId: OPEN_SEAT_ID, inviteAccepted: false },
+        ],
+    };
+
+    it('is true for the host, who holds no seat of their own', () => {
+        expect(isSeatedAt(lobby, 'user_host')).toBe(true);
+    });
+
+    it('is true for a named invitee who has not accepted yet', () => {
+        expect(isSeatedAt(lobby, 'user_named')).toBe(true);
+    });
+
+    it('is true for a seat already claimed', () => {
+        expect(isSeatedAt(lobby, 'user_claimed')).toBe(true);
+    });
+
+    it('is false for someone with no place at the lobby', () => {
+        expect(isSeatedAt(lobby, 'user_stranger')).toBe(false);
+    });
+});
+
+describe('notSeatedFilter', () => {
+    it('excludes the claimant as host and as any seat', () => {
+        expect(notSeatedFilter('user_a')).toEqual({
+            senderId: { $ne: 'user_a' },
+            $expr: { $not: [{ $in: ['user_a', '$userIdList.userId'] }] },
+        });
+    });
+
+    it('leaves the open-seat path to OPEN_SEAT_CLAIM_FILTER, so the positional `$` stays unambiguous', () => {
+        expect(Object.keys(notSeatedFilter('user_a'))).not.toContain('userIdList.userId');
+    });
+});
+
+describe('pendingSeatFor', () => {
+    const lobby = {
+        userIdList: [
+            { userId: 'user_named', inviteAccepted: false },
+            { userId: 'user_claimed', inviteAccepted: true },
+        ],
+    };
+
+    it('finds a seat still waiting on its player', () => {
+        expect(pendingSeatFor(lobby, 'user_named')).toEqual({ userId: 'user_named', inviteAccepted: false });
+    });
+
+    it('is undefined for a seat already accepted', () => {
+        expect(pendingSeatFor(lobby, 'user_claimed')).toBeUndefined();
+    });
+
+    it('is undefined for someone with no seat at all — the host included', () => {
+        expect(pendingSeatFor(lobby, 'user_host')).toBeUndefined();
     });
 });
