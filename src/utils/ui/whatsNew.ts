@@ -39,6 +39,14 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Everyone waits in the lobby",
+                detail: "Claim a seat with a code and you wait on the lobby screen with the host, watching the last seats fill instead of guessing.",
+            },
+            {
+                title: "Join a game with a code",
+                detail: "Open a few seats when you set up a game and share the code — anyone who enters it grabs a spot, no invite required.",
+            },
+            {
                 title: "Invites show which game you've been asked to play",
                 detail: "Each invite now carries the game's icon next to the sender, so you can tell them apart at a glance.",
             },
@@ -50,14 +58,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Profile pictures",
                 detail: "Upload a photo of your own, or keep the one from the account you signed in with.",
             },
-            {
-                title: "Install it like an app",
-                detail: "Add Async Games to your home screen and take your turns without the browser in the way.",
-            },
-            {
-                title: "Games no longer stall forever",
-                detail: "A game where someone keeps missing their turn is abandoned and cleared off everyone's list.",
-            },
         ],
     },
     {
@@ -65,24 +65,24 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "One seat each, however many devices",
+                detail: "Entering a code you're already in with takes you back to your own seat instead of quietly claiming a second one.",
+            },
+            {
+                title: "Your lobby takes you into the game",
+                detail: "Waiting on the lobby screen when the last seat fills now drops everyone straight onto the board instead of back at the home screen.",
+            },
+            {
+                title: "Open-seat games get their code",
+                detail: "Setting up a game with open seats and nobody invited no longer fails with an error — you get the code to share straight away.",
+            },
+            {
+                title: "Open seats count as players",
+                detail: "Leaving seats open with nobody named no longer greys out the start button — set the seats, get your code and share it.",
+            },
+            {
                 title: "Right names, right seats",
                 detail: "A player Clerk couldn't look up used to shift every other name in the game out of place; now they just show as \"Unknown player\".",
-            },
-            {
-                title: "Boards keep themselves up to date",
-                detail: "An open board now refreshes on its own, so you see your opponent's move without reloading.",
-            },
-            {
-                title: "Double-tapping setup no longer skips a turn",
-                detail: "Sending the same command twice while a game is being set up can't push the turn out of step any more.",
-            },
-            {
-                title: "Lists stop jumping about",
-                detail: "Your games stay where they are while the screen refreshes in the background.",
-            },
-            {
-                title: "Unlocking takes you straight in",
-                detail: "Entering your access code lands you on your games instead of bouncing back to the code screen.",
             },
         ],
     },

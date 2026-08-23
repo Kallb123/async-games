@@ -23,6 +23,11 @@ export interface IGameData {
     // the game instead of rotating past them again — see turntimer/route.ts.
     missedTurnCounts: Map<string, number>,
     gameState: IGameState,
+    // The invitation/lobby this game was started from, when it came from one.
+    // The invitation is deleted the moment the game exists, so this is the
+    // only link back to it — it lets a host still sitting on their lobby
+    // screen find the game their lobby became (see /api/lobby/[inviteId]/game).
+    inviteId?: uuidString,
     complete: boolean,
     winner: string,
     endReason?: GameEndReason,
@@ -69,6 +74,7 @@ export var GameDataSchema = new Schema<IGameDataDocument> ({
             // }
         ]
     },
+    inviteId: String,
     complete: Boolean,
     winner: String,
     endReason: String,

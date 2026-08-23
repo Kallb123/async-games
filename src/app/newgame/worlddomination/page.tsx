@@ -1,20 +1,18 @@
 'use client'
 import { FcmTokenComp } from "@/components/FirebaseForeground";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
-import PartySizeHint, { partySizeOutOfRange } from "@/components/ui/PartySizeHint";
+import PartySizeHint from "@/components/ui/PartySizeHint";
+import SeatCountSelect from "@/components/ui/SeatCountSelect";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
+import { useCreateLobbyOrInvite } from "@/utils/hooks/useCreateLobbyOrInvite";
 import { GAME_META } from "@/utils/ui/games";
 import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { WorldDominationInvitationRequest } from "@/games/WorldDomination/WorldDominationModels";
-import { useToast } from "@/components/ToastContext";
-
-const MIN_PLAYERS = 2;
-const MAX_PLAYERS = 6;
 
 function NewGameWorldDominationForm() {
   const pathName = usePathname();
@@ -23,52 +21,36 @@ function NewGameWorldDominationForm() {
   const searchParams = useSearchParams();
   const { userList, setItem, players } = usePlayerList(readRematchPlayers(searchParams));
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
-  const router = useRouter();
-  const { showToast } = useToast();
-
-  // The sender is always a player, so the party size is invitees + 1.
-  const totalPlayers = players.length + 1;
-  const badPartySize = partySizeOutOfRange(totalPlayers, MIN_PLAYERS, MAX_PLAYERS);
+  const gameMeta = GAME_META.worlddomination;
+  const { seatCount, setSeatCount, maxSeats, partySize, canSubmit, actionLabel, footnote, submit } = useCreateLobbyOrInvite({
+    meta: gameMeta,
+    gameType: 'WorldDomination',
+    invitePath: '/api/newgame/worlddomination',
+    invitedCount: players.length,
+  });
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (badPartySize) {
-      showToast(`World Domination supports ${MIN_PLAYERS}–${MAX_PLAYERS} players.`, 'danger');
-      return;
-    }
 
-    try {
-      const data: WorldDominationInvitationRequest = {
-        userList: players,
-        turnTimer
-      };
-      const response = await fetch('/api/newgame/worlddomination', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      if (!response.ok) {
-        throw new Error('Failed to send invite');
-      }
-      showToast('Invitation sent! Waiting for players to accept.', 'success', 'Invite Sent');
-      router.push('/');
-    } catch (error) {
-      console.error(error);
-      showToast('Failed to send the invitation. Please try again.', 'danger');
-    }
+    const data: WorldDominationInvitationRequest = {
+      userList: players,
+      turnTimer
+    };
+    await submit(data);
   }
 
   return (
     <GameSetupLayout
-      meta={GAME_META.worlddomination}
+      meta={gameMeta}
       onSubmit={handleSubmit}
-      actionLabel="Send invites & start"
-      actionDisabled={players.length === 0 || badPartySize}
-      footnote="Game begins once everyone accepts"
+      actionLabel={actionLabel}
+      actionDisabled={!canSubmit}
+      footnote={footnote}
     >
       <UserInviteList userList={userList} setItem={setItem} />
+      <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxSeats} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
-      <PartySizeHint total={totalPlayers} min={MIN_PLAYERS} max={MAX_PLAYERS} gameName="World Domination" />
+      <PartySizeHint meta={gameMeta} total={partySize} />
       <FcmTokenComp />
     </GameSetupLayout>
   );

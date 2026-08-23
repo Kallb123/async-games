@@ -1,7 +1,7 @@
 import { Document, Model, Schema, model, models } from "mongoose";
 import { IGameData } from "./GameData";
 
-interface IUserIdAcceptance {
+export interface IUserIdAcceptance {
     userId: string,
     inviteAccepted: boolean
 }
@@ -13,7 +13,12 @@ export interface IInvitationData {
     turnTimer: string,
     timestamp: string,
     gameType: string,
-    gameFriendlyName: string
+    gameFriendlyName: string,
+    // Present only on an open, join-by-code lobby. A real Date (unlike the
+    // ISO-string timestamps above) because the TTL index below only expires
+    // Date-typed fields.
+    joinCode?: string,
+    expiresAt?: Date
 }
 
 export interface IInvitationDataDocument extends IInvitationData, Document {
@@ -35,8 +40,17 @@ export var InvitationSchema = new Schema<IInvitationDataDocument> ({
     turnTimer: String,
     timestamp: String,
     gameType: String,
-    gameFriendlyName: String
+    gameFriendlyName: String,
+    joinCode: String,
+    expiresAt: Date
 }, {discriminatorKey: 'kind'});
+// Codes are only unique among *live* lobbies, so the index only applies to
+// documents that actually have one - a finished/expired invitation can reuse
+// a code without tripping the constraint.
+InvitationSchema.index({ joinCode: 1 }, { unique: true, partialFilterExpression: { joinCode: { $exists: true } } });
+// Reaps abandoned lobbies once their code expires, which also frees the code.
+// Documents without expiresAt are left alone.
+InvitationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 InvitationSchema.methods.CreateGame = async function(invite: IInvitationData, userIdList: string[]) {
     console.log("CreateGame: Generic game");
 };
@@ -48,7 +62,9 @@ export interface IInvitationResponse {
     senderImageUrl: string | null,
     userList: string[],
     timestamp: string,
-    gameFriendlyName: string
+    gameFriendlyName: string,
+    // Present only on an open, join-by-code lobby (see IInvitationData.joinCode).
+    joinCode?: string
 }
 
 export interface IInvitationRequest {

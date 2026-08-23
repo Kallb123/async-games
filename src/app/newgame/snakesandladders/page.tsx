@@ -1,19 +1,21 @@
 'use client'
 import { FcmTokenComp } from "@/components/FirebaseForeground";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
+import PartySizeHint from "@/components/ui/PartySizeHint";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import OptionSection from "@/components/ui/OptionSection";
+import SeatCountSelect from "@/components/ui/SeatCountSelect";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
+import { useCreateLobbyOrInvite } from "@/utils/hooks/useCreateLobbyOrInvite";
 import { GAME_META } from "@/utils/ui/games";
 import { readRematchFlag, readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { SnakesAndLaddersInvitationRequest } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
 import { SL_REROLL_PARAM } from "@/games/SnakesAndLadders/ui";
-import { useToast } from "@/components/ToastContext";
 
 function NewGameSnakesAndLaddersForm() {
   const pathName = usePathname();
@@ -23,44 +25,37 @@ function NewGameSnakesAndLaddersForm() {
   const { userList, setItem, players } = usePlayerList(readRematchPlayers(searchParams));
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
   const [reRollOnSix, setReRollOnSix] = useState(() => readRematchFlag(searchParams, SL_REROLL_PARAM));
-  const router = useRouter();
-  const { showToast } = useToast();
+  const gameMeta = GAME_META.snakesandladders;
+  const { seatCount, setSeatCount, maxSeats, partySize, canSubmit, actionLabel, footnote, submit } = useCreateLobbyOrInvite({
+    meta: gameMeta,
+    gameType: 'SnakesAndLadders',
+    invitePath: '/api/newgame/snakesandladders',
+    invitedCount: players.length,
+  });
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    try {
-      const data: SnakesAndLaddersInvitationRequest = {
-        userList: players,
-        turnTimer,
-        reRollOnSix
-      };
-      const response = await fetch('/api/newgame/snakesandladders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      if (!response.ok) {
-        throw new Error('Failed to send invite');
-      }
-      showToast('Invitation sent! Waiting for players to accept.', 'success', 'Invite Sent');
-      router.push('/');
-    } catch (error) {
-      console.error(error);
-      showToast('Failed to send the invitation. Please try again.', 'danger');
-    }
+    const data: SnakesAndLaddersInvitationRequest = {
+      userList: players,
+      turnTimer,
+      reRollOnSix
+    };
+    await submit(data);
   }
 
   return (
     <GameSetupLayout
-      meta={GAME_META.snakesandladders}
+      meta={gameMeta}
       onSubmit={handleSubmit}
-      actionLabel="Send invites & start"
-      actionDisabled={players.length === 0}
-      footnote="Game begins once everyone accepts"
+      actionLabel={actionLabel}
+      actionDisabled={!canSubmit}
+      footnote={footnote}
     >
       <UserInviteList userList={userList} setItem={setItem} />
+      <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxSeats} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
+      <PartySizeHint meta={gameMeta} total={partySize} />
 
       <OptionSection label="House rules">
         <OptionToggleRow

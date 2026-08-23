@@ -5,9 +5,12 @@ import { Suspense, useState } from "react";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
+import PartySizeHint from "@/components/ui/PartySizeHint";
+import SeatCountSelect from "@/components/ui/SeatCountSelect";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
-import { GAME_META } from "@/utils/ui/games";
+import { useCreateLobbyOrInvite } from "@/utils/hooks/useCreateLobbyOrInvite";
+import { GAME_META, gamePath } from "@/utils/ui/games";
 import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { SmartthinkInvitationRequest } from "@/games/Smartthink/SmartthinkModels";
 import { useToast } from "@/components/ToastContext";
@@ -21,28 +24,21 @@ function NewGameSmartthinkForm() {
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
   const router = useRouter();
   const { showToast } = useToast();
+  const gameMeta = GAME_META.smartthink;
+  const { seatCount, setSeatCount, maxSeats, partySize, canSubmit, actionLabel, footnote, submit } = useCreateLobbyOrInvite({
+    meta: gameMeta,
+    gameType: 'Smartthink',
+    invitePath: '/api/newgame/smartthink',
+    invitedCount: players.length,
+  });
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    try {
-      const data: SmartthinkInvitationRequest = {
-        userList: players,
-        turnTimer
-      };
-      const response = await fetch('/api/newgame/smartthink', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      if (!response.ok) {
-        throw new Error('Failed to send invite');
-      }
-      showToast('Invitation sent! Waiting for players to accept.', 'success', 'Invite Sent');
-      router.push('/');
-    } catch (error) {
-      console.error(error);
-      showToast('Failed to send the invitation. Please try again.', 'danger');
-    }
+    const data: SmartthinkInvitationRequest = {
+      userList: players,
+      turnTimer
+    };
+    await submit(data);
   };
 
   const handlePlaySolo = async () => {
@@ -52,7 +48,7 @@ function NewGameSmartthinkForm() {
         throw new Error('Failed to start solo game');
       }
       const data = await response.json();
-      router.push(`/games/${data.gameUrl}/${data.gameId}`);
+      router.push(gamePath(data.gameUrl, data.gameId));
     } catch (error) {
       console.error(error);
       showToast('Failed to start the solo game. Please try again.', 'danger');
@@ -61,11 +57,11 @@ function NewGameSmartthinkForm() {
 
   return (
     <GameSetupLayout
-      meta={GAME_META.smartthink}
+      meta={gameMeta}
       onSubmit={handleSubmit}
-      actionLabel="Send invites & start"
-      actionDisabled={players.length === 0}
-      footnote="Game begins once everyone accepts"
+      actionLabel={actionLabel}
+      actionDisabled={!canSubmit}
+      footnote={footnote}
     >
       <div className="ag-section">
         <div className="ag-cta" style={{ background: "var(--ag-green)", color: "var(--ag-on-dark)" }}>
@@ -78,7 +74,9 @@ function NewGameSmartthinkForm() {
       </div>
 
       <UserInviteList userList={userList} setItem={setItem} />
+      <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxSeats} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
+      <PartySizeHint meta={gameMeta} total={partySize} />
       <FcmTokenComp />
     </GameSetupLayout>
   );

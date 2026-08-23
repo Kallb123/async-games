@@ -1,4 +1,4 @@
-import { User } from '@clerk/nextjs/server';
+import { User, clerkClient } from '@clerk/nextjs/server';
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildYourTurnNotification } from '@/utils/firebase/notificationContent';
 import { userListToUserIdNameMap } from '@/utils/users/clerk';
@@ -38,7 +38,11 @@ export async function startGameFromInvitation(
     if (!gameDataModel) {
         throw new Error(`Unsupported game type: ${invite.gameType}`);
     }
-    await new gameDataModel(gameData).save();
+    // Stamp the lobby/invitation it came from onto the game, so a host still
+    // sitting on their lobby screen when the last seat fills can find the game
+    // their lobby just became — the invitation is deleted a line below, and
+    // nothing else links the two.
+    await new gameDataModel({ ...gameData, inviteId: invite.inviteId }).save();
 
     await invite.deleteOne();
 
@@ -66,4 +70,62 @@ export async function startGameFromInvitation(
     }
 
     return gameData;
+}
+
+export interface AcceptSeatResult {
+    gameStarted: boolean;
+    gameId?: uuidString;
+    gameUrl?: string;
+}
+
+/**
+ * Accept a seat on an invitation - a named invitee accepting, or (from step
+ * 8 on) a guest claiming an open lobby seat - and start the game if that
+ * acceptance was the last one needed.
+ *
+ * This is the accept-and-maybe-start sequence /api/invite/accept already
+ * ran inline: flip this seat's acceptance, resolve the roster (every
+ * invitee plus the sender, for their pushes and dashboards), push
+ * InviteAccepted, and call startGameFromInvitation once every seat has
+ * accepted. The lobby's join and start-now routes need the identical
+ * sequence, so it lives here rather than being copied a second and third
+ * time.
+ *
+ * @param invite  the invitation to accept a seat on
+ * @param actorId whoever is accepting, matched against userIdList
+ */
+export async function acceptSeat(
+    invite: IInvitationDataDocument,
+    actorId: string
+): Promise<AcceptSeatResult> {
+    const acceptance = invite.userIdList.find(uid => uid.userId === actorId);
+    if (acceptance) {
+        acceptance.inviteAccepted = true;
+    }
+
+    const userIdList = invite.userIdList.map(uid => uid.userId);
+    // Notify every invitee *and* the original sender: the sender's outgoing-invite
+    // list / home dashboard needs to react live when their invite is accepted and
+    // when the game finally starts.
+    const { data: userList } = await (await clerkClient()).users.getUserList({
+        userId: [...userIdList, invite.senderId]
+    });
+
+    const allAccepted = invite.userIdList.every(uid => uid.inviteAccepted === true);
+    if (!allAccepted) {
+        await invite.save();
+    }
+
+    await sendPushToUsers(userList, {
+        event: 'InviteAccepted',
+        inviteId: invite.inviteId
+    });
+
+    if (!allAccepted) {
+        return { gameStarted: false };
+    }
+
+    const gameData = await startGameFromInvitation(invite, actorId, userList);
+
+    return { gameStarted: true, gameId: gameData.gameId, gameUrl: gameData.gameType.url };
 }

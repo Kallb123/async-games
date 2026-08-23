@@ -21,6 +21,11 @@ export interface GameMeta {
     name: string;
     categories: GameCategory[];
     players: string;
+    // Numeric bounds a lobby's seats must satisfy to start, backing
+    // PartySizeHint on setup screens. `players` above stays the free-form
+    // display copy ("2–6 players"); these are the machine-checkable version.
+    minPlayers: number;
+    maxPlayers: number;
     tagline: string;
     // Either a named accent from the theme palette, or a raw hex colour
     // (e.g. "#009DCA") for games that need a bespoke tint.
@@ -53,6 +58,27 @@ export const GAME_META: Record<string, GameMeta> = {
 };
 
 // Games that don't have an implementation yet but are teased in the library.
+/** The bounds the party-size rule below needs — a `GameMeta` satisfies it. */
+export type PartySizeMeta = Pick<GameMeta, "name" | "players" | "minPlayers" | "maxPlayers">;
+
+/**
+ * The 400 statusText a lobby route sends when a party is out of range, and the
+ * warning PartySizeHint shows for the same party — `null` when it's fine.
+ * Shared so "look up the bounds, check the size, phrase the rejection" isn't
+ * copy-pasted into every route and screen that can change a seat count.
+ *
+ * It lives here, beside the bounds it reads, rather than with the component
+ * that renders it: PartySizeHint is a `'use client'` module, and a route
+ * handler importing a value out of one gets a client reference that throws
+ * when called ("Attempted to call partySizeErrorMessage() from the server"),
+ * not the function.
+ */
+export function partySizeErrorMessage(meta: PartySizeMeta, total: number): string | null {
+    return total < meta.minPlayers || total > meta.maxPlayers
+        ? `${meta.name} supports ${meta.players}`
+        : null;
+}
+
 export const COMING_SOON = ["Ludo", "Chess", "Haunted Campground"];
 
 // Map a game's friendlyName (as returned by the API) to its url slug.
@@ -75,4 +101,13 @@ export function metaForGame(opts: { url?: string; friendlyName?: string }): Game
         if (url) return GAME_META[url];
     }
     return undefined;
+}
+
+// The in-app path of a game's board — `/games/<url slug>/<gameId>`. Every
+// screen that sends a player to a board (the turn lists, an accepted invite,
+// a lobby whose game has just started) goes through here, and
+// `gameNotificationLink` builds the absolute push-notification URL on top of
+// it, so the route's shape is written down once.
+export function gamePath(gameUrl: string, gameId: string): string {
+    return `/games/${gameUrl}/${gameId}`;
 }

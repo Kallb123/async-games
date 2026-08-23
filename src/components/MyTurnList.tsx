@@ -2,7 +2,7 @@
 
 import { IGameResponse } from "@/utils/apiModels/GameDataApi";
 import { useRouter } from "next/navigation";
-import { metaForGame } from "@/utils/ui/games";
+import { gamePath, metaForGame } from "@/utils/ui/games";
 import { opponents } from "@/utils/ui/players";
 import GameThumb, { accentVar } from "@/components/ui/GameThumb";
 import Refreshable from "@/components/ui/Refreshable";
@@ -39,10 +39,10 @@ export default function MyTurnList() {
                 key={game.gameId}
                 className="ag-turn-card"
                 style={{ background: accent, cursor: "pointer" }}
-                onClick={() => router.push(`/games/${game.url}/${game.gameId}`)}
+                onClick={() => router.push(gamePath(game.url, game.gameId))}
                 role="button"
                 tabIndex={0}
-                onKeyDown={(e) => { if (e.key === "Enter") router.push(`/games/${game.url}/${game.gameId}`); }}
+                onKeyDown={(e) => { if (e.key === "Enter") router.push(gamePath(game.url, game.gameId)); }}
             >
                 <div className="ag-turn-card-head">
                     {meta

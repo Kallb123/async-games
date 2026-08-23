@@ -299,6 +299,27 @@ being dropped, so every call site keeps its alignment. `usernameListToUserIdList
 and there is no meaningful id to place as a stand-in — so revisit it if a
 caller appears.
 
+**One principal, one seat.** A lobby's seats are claimed by id, so the claim
+has to refuse an id that already has a place at that lobby — as a named
+invitee, as a seat it already claimed, or as the host, who holds no seat entry
+of their own. Without that, one player signed in on two devices took a seat on
+each, the game dealt them two turns, and everyone else was a seat short. The
+refusal belongs *inside* the conditional update of step 8 rather than as a read
+before it (`notSeatedFilter` in `src/utils/games/lobby.ts`, alongside the
+open-seat filter): two devices racing is the same race as two joiners, so a
+read-then-claim has both devices reading "not seated yet". A code from someone
+who is already in takes them to the seat they hold, and accepts it if it was a
+named invite still waiting on them — otherwise they would sit on the lobby
+screen watching a game their own unaccepted seat is blocking.
+
+Step 13 inherits this and adds one wrinkle: a guest's claim mints a principal,
+so the seated check has to run *before* the mint, or every re-typed code
+creates a fresh guest and a fresh seat. A returning guest on the same device is
+signed in as the guest principal they already are, so the check is the same
+id-based one. Two *different* devices with no shared identity are genuinely two
+guests — that is the intended reading of a code, and the only guard there is
+the per-lobby display-name uniqueness below.
+
 **Display names are not unique, Clerk usernames are.** Two guests both typing
 "Dave" would collide, and parts of the client identify "me" by name
 (`currentUsername(user)` in the board pages) rather than id. Enforce
@@ -508,7 +529,7 @@ Steps 3, 4 and 7 are the ones that stop this feature growing a second copy of
 something. Each follows the shape #241 already proved: extract, port the
 existing caller onto it, no behaviour change.
 
-**1 — The join code, as a pure module.** `src/utils/games/joinCode.ts`: the
+**1 — The join code, as a pure module.** *(Done — #243.)* `src/utils/games/joinCode.ts`: the
 22-symbol alphabet (uppercase minus `I`, `O`, `0` and `1`),
 `generateJoinCode()`, and `normaliseJoinCode()` — someone typing `plum` or
 `pl um` must reach the same lobby as someone typing `PLUM`, and that rule
@@ -517,7 +538,7 @@ belongs beside the alphabet rather than in a route. Ships with
 excludes every ambiguous glyph, normalisation is idempotent, and a generated
 code always normalises to itself. Nothing imports it yet.
 
-**2 — Lobby fields on the invitation.** `joinCode` and `expiresAt` on
+**2 — Lobby fields on the invitation.** *(Done — #244.)* `joinCode` and `expiresAt` on
 `IInvitationData` and `InvitationSchema` — the *base* schema, so every game's
 discriminator inherits them and no `CreateGame` changes. A partial unique index
 on `joinCode` scoped to documents that have one, and a TTL index on `expiresAt`
@@ -525,7 +546,7 @@ to reap abandoned lobbies. Both fields optional, so every existing invitation
 stays valid. Nothing writes them yet: the index build lands on its own rather
 than tangled with behaviour.
 
-**3 — One lookup for invitation models.** `/api/lobby` serves all seven games
+**3 — One lookup for invitation models.** *(Done — #245.)* `/api/lobby` serves all seven games
 from one route, so it needs a `gameType` → invitation model map — and #241 only
 exported the *game data* half (`GAME_DATA_MODELS` / `gameDataModelFor`). The
 invitation record already exists, but is trapped as a local inside
@@ -533,7 +554,7 @@ invitation record already exists, but is trapped as a local inside
 `invitationModelFor(gameType)` beside `gameDataModelFor`, in exactly the same
 shape. Without this, step 6 hand-rolls the seven-branch chain #241 just deleted.
 
-**4 — Numeric player bounds in `GameMeta`.** `meta.players` is display copy
+**4 — Numeric player bounds in `GameMeta`.** *(Done — #245.)* `meta.players` is display copy
 (`"2–6 players"`), so nothing today can bound a lobby's seats numerically:
 `PartySizeHint` takes `min`/`max` numbers, only two of the seven setup screens
 use it, and those two get their numbers from different places (Train Time
@@ -543,13 +564,13 @@ page). Add `minPlayers`/`maxPlayers` to `GameMeta` and to each game's
 `gameRegistry.test.ts` — which already scans every `meta.ts`. One numeric
 source, which steps 6 and 9 both need and the existing screens want anyway.
 
-**5 — The open seat, as pure helpers.** `src/utils/games/lobby.ts` holds the one
+**5 — The open seat, as pure helpers.** *(Done — #246.)* `src/utils/games/lobby.ts` holds the one
 convention: a seat is a `userIdList` entry whose `userId` is a placeholder, with
 `isOpenSeat()`, `openSeats(invite)` and the claim filter beside it.
 `IUserIdAcceptance` gets exported from `InvitationData.ts` (it isn't today) so
 the helpers can type against it. Pure module, unit-tested, nothing calls it yet.
 
-**6 — Creating a lobby.** `POST /api/lobby`, using `invitationModelFor` from
+**6 — Creating a lobby.** *(Done — #247.)* `POST /api/lobby`, using `invitationModelFor` from
 step 3: the game's existing invite payload plus a seat count bounded by step 4's
 numbers. It writes the code (retrying on the duplicate-key error the partial
 index throws — no coordination, no counter), `expiresAt`, and the placeholder
@@ -571,7 +592,7 @@ Two things this commit must not do twice:
   substitution is entirely server-side and `OutgoingInviteList` /
   `IncomingInvitesList` render it as-is.
 
-**7 — Accepting a seat, extracted.** #241 extracted the *start*; the
+**7 — Accepting a seat, extracted.** *(Done — #248.)* #241 extracted the *start*; the
 accept-and-maybe-start body around it is still inline in
 `src/app/api/invite/accept/route.ts` — find the invitation, flip
 `inviteAccepted`, resolve the roster including the sender, push
@@ -584,7 +605,8 @@ the difference between one copy and three.
 
 **8 — Claiming a seat.** `POST /api/lobby/join`, signed-in players only for now:
 normalise the code, find the open lobby, and claim a seat with a **single
-conditional update** that matches the lobby *and* an unclaimed seat. Not
+conditional update** that matches the lobby, an unclaimed seat *and* a claimant
+who isn't already at it (§5, one principal one seat). Not
 read-modify-write — `InvitationSchema` has no `optimisticConcurrency` where
 `GameDataSchema` sets it, so two joiners racing would otherwise lose one of the
 two, or both take the last seat and overflow the game's maximum. Then

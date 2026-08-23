@@ -1,14 +1,16 @@
 'use client'
 import { FcmTokenComp } from "@/components/FirebaseForeground";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import OptionSection from "@/components/ui/OptionSection";
+import SeatCountSelect from "@/components/ui/SeatCountSelect";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
+import { useCreateLobbyOrInvite } from "@/utils/hooks/useCreateLobbyOrInvite";
 import { GAME_META } from "@/utils/ui/games";
 import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { SettlementsAndCitiesInvitationRequest } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
@@ -71,14 +73,18 @@ function NewGameSettlementsAndCitiesForm() {
   const { userList, setItem, players } = usePlayerList(readRematchPlayers(searchParams));
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
   const [expansions, setExpansions] = useState(() => expansionsFromParam(searchParams.get('expansions')));
-  const router = useRouter();
   const { showToast } = useToast();
+  const gameMeta = GAME_META.settlementsandcities;
+  const { seatCount, setSeatCount, maxSeats, partySize, canSubmit, actionLabel, footnote, submit } = useCreateLobbyOrInvite({
+    meta: gameMeta,
+    gameType: 'SettlementsAndCities',
+    invitePath: '/api/newgame/settlementsandcities',
+    invitedCount: players.length,
+  });
 
-  // The sender is always a player, so the party size is invitees + 1.
-  const totalPlayers = players.length + 1;
   const validation = useMemo(
-    () => validateExpansions(expansions, totalPlayers),
-    [expansions, totalPlayers],
+    () => validateExpansions(expansions, partySize),
+    [expansions, partySize],
   );
 
   const toggle = (id: SACExpansionId) =>
@@ -92,37 +98,24 @@ function NewGameSettlementsAndCitiesForm() {
       return;
     }
 
-    try {
-      const data: SettlementsAndCitiesInvitationRequest = {
-        userList: players,
-        turnTimer,
-        expansions,
-      };
-      const response = await fetch('/api/newgame/settlementsandcities', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      if (!response.ok) {
-        throw new Error('Failed to send invite');
-      }
-      showToast('Invitation sent! Waiting for players to accept.', 'success', 'Invite Sent');
-      router.push('/');
-    } catch (error) {
-      console.error(error);
-      showToast('Failed to send the invitation. Please try again.', 'danger');
-    }
+    const data: SettlementsAndCitiesInvitationRequest = {
+      userList: players,
+      turnTimer,
+      expansions,
+    };
+    await submit(data);
   };
 
   return (
     <GameSetupLayout
-      meta={GAME_META.settlementsandcities}
+      meta={gameMeta}
       onSubmit={handleSubmit}
-      actionLabel="Send invites & start"
-      actionDisabled={players.length === 0 || !validation.ok}
-      footnote="Game begins once everyone accepts"
+      actionLabel={actionLabel}
+      actionDisabled={!canSubmit || !validation.ok}
+      footnote={footnote}
     >
       <UserInviteList userList={userList} setItem={setItem} />
+      <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxSeats} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
 
       <OptionSection
@@ -130,7 +123,7 @@ function NewGameSettlementsAndCitiesForm() {
         footer={<>
           {/* Live compatibility + player-count feedback (design doc §8). */}
           <p className="ag-hint">
-            Party size {totalPlayers} · supports {validation.min}–{validation.max} players · first to{' '}
+            Party size {partySize} · supports {validation.min}–{validation.max} players · first to{' '}
             <span className="ag-hi">{validation.victoryTarget} VP</span> wins.
           </p>
           {validation.errors.map((msg, i) => (

@@ -132,15 +132,22 @@ Invite ──► (all accept) ──► Game created ──► [ turn ─► tur
 1. **Invite.** A player creates an invitation (`POST /api/newgame/<game>`), which
    persists an `Invitation` discriminator document and pushes a notification to
    the invitees.
-2. **Accept.** Each invitee accepts (`POST /api/invite/accept`). When *everyone*
-   has accepted, the route hands the invitation to
-   `startGameFromInvitation()` (`src/utils/games/startGame.ts`): the
-   invitation's `CreateGame()` builds the initial game document (rolling for
-   turn order, seeding the initial state), the game's discriminator model —
-   looked up in `GAME_DATA_MODELS` — is saved, the invitation is deleted, and a
-   `GameStart` push goes out (plus the opening `YourTurn` push, unless the
-   player who triggered the start is the one up first). That helper is the
-   single game-start path, so any future route that starts a game shares it.
+2. **Accept.** Each invitee accepts (`POST /api/invite/accept`), or — for a
+   join-by-code lobby — a joiner claims an open seat
+   (`POST /api/lobby/join`, one conditional update matching the lobby, an
+   unclaimed seat, *and* a claimant who isn't already at it, so racing joiners
+   can't double up on the last seat and one player on two devices can't hold
+   two seats — a code they're already in with takes them to the seat they have).
+   Both routes call the shared `acceptSeat(invite, actorId)`
+   (`src/utils/games/startGame.ts`), which flips that seat's acceptance and,
+   once *everyone* has accepted, hands the invitation to
+   `startGameFromInvitation()`: the invitation's `CreateGame()` builds the
+   initial game document (rolling for turn order, seeding the initial
+   state), the game's discriminator model — looked up in `GAME_DATA_MODELS`
+   — is saved, the invitation is deleted, and a `GameStart` push goes out
+   (plus the opening `YourTurn` push, unless the player who triggered the
+   start is the one up first). That helper is the single game-start path, so
+   any future route that starts a game shares it.
 3. **Play.** On each turn the active player submits a **command**
    (`POST /api/game/command`). The server validates it's their turn, executes the
    command against the persisted game, checks for game-over / end-of-turn,
@@ -161,10 +168,13 @@ when a push notification event arrives (foreground events are re-dispatched as
 connection on `global` (so hot-reload / serverless invocations reuse one
 connection). Every API route calls `await dbConnect()` before touching the DB.
 
-`dbConnect()` also calls `initialiseDiscriminators()`, which *references* every
-game's discriminator model so Mongoose has registered them. The discriminator
-key unions there double as a **compile-time exhaustiveness check** — add a game
-to the union but forget to wire its model and TypeScript fails the build.
+`src/utils/mongodb/mongodb.ts` also defines `GAME_DATA_MODELS` and
+`INVITATION_MODELS`, module-scope `Record`s mapping every game's discriminator
+key to its model (`gameDataModelFor(gameType)` / `invitationModelFor(gameType)`
+look one up). Importing this file evaluates those records, which is what
+registers the discriminators with Mongoose. The discriminator key unions
+double as a **compile-time exhaustiveness check** — add a game to the union
+but forget to wire its model and TypeScript fails the build.
 
 ### Mongoose discriminators
 
@@ -176,7 +186,12 @@ Games and invitations share a base schema and specialise via Mongoose
   its `Models.ts`, adding a game-specific `specificGameState` sub-schema.
 - **`Invitation`** (`src/utils/mongodb/InvitationData.ts`) is the base invite.
   Each game defines `<Game>InvitationModel` with a `CreateGame()` method that
-  produces the initial `IGameData`.
+  produces the initial `IGameData`. It optionally carries `joinCode` and
+  `expiresAt`: an invitation with these set is an open, join-by-code lobby
+  rather than a named-invitee-only invite — a seat with no name yet is a
+  `userIdList` entry holding the `OPEN_SEAT_ID` placeholder
+  (`src/utils/games/lobby.ts`) rather than a separate open-seats counter. See
+  `docs/account-less-play.md` §4 for the design.
 - **`Friendship`** (`src/utils/mongodb/FriendshipData.ts`) is a flat
   requester/recipient/accepted record — no discriminator.
 
@@ -612,7 +627,7 @@ runtime:
 | Shared file | What to add | Guarded by |
 |---|---|---|
 | `src/utils/apiModels/GameLogic.ts` | `export * from "@/games/<Game>/<Game>Logic";` | `src/games/gameRegistry.test.ts` ("wires every game's rules module into the GameLogic barrel"); the classes it exports are additionally checked by `serializableRegistry.test.ts` |
-| `src/utils/mongodb/mongodb.ts` | the discriminator key in both union types, and the model in both records (`GAME_DATA_MODELS` and the invitation record inside `initialiseDiscriminators()`) | TypeScript (the typed `Record`s are a compile-time exhaustiveness check) **and** `src/games/gameRegistry.test.ts` ("registers every game's Mongoose discriminator models") |
+| `src/utils/mongodb/mongodb.ts` | the discriminator key in both union types, and the model in both records (`GAME_DATA_MODELS` and `INVITATION_MODELS`) | TypeScript (the typed `Record`s are a compile-time exhaustiveness check) **and** `src/games/gameRegistry.test.ts` ("registers every game's Mongoose discriminator models") |
 | `src/app/api/game/command/route.ts` | every command/game-type instance in the `registration` array | `serializableRegistry.test.ts` ("wires every command/game-type class into the command route's registration array") |
 | `src/utils/ui/games.ts` | import the game's `meta.ts` and add it to `GAME_META` | `src/games/gameRegistry.test.ts` ("wires every game's metadata into GAME_META") |
 
