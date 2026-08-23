@@ -72,9 +72,19 @@ describe("game registry completeness", () => {
             missing,
             `These games are missing their discriminator models in ` +
                 `src/utils/mongodb/mongodb.ts (the GameDataDiscriminatorKey/` +
-                `InvitationDiscriminatorKey unions and the initialiseDiscriminators() records):\n` +
+                `InvitationDiscriminatorKey unions and the GAME_DATA_MODELS/INVITATION_MODELS records):\n` +
                 missing.map((n) => `  - ${n}`).join("\n"),
         ).toEqual([]);
+    });
+
+    it("declares valid numeric player bounds in every game's meta.ts", async () => {
+        for (const name of gameNames) {
+            const { meta } = await import(`./${name}/meta.ts`);
+            expect(Number.isInteger(meta.minPlayers), `${name}: meta.minPlayers must be an integer`).toBe(true);
+            expect(Number.isInteger(meta.maxPlayers), `${name}: meta.maxPlayers must be an integer`).toBe(true);
+            expect(meta.minPlayers, `${name}: meta.minPlayers must be at least 1`).toBeGreaterThanOrEqual(1);
+            expect(meta.maxPlayers, `${name}: meta.maxPlayers must be >= minPlayers`).toBeGreaterThanOrEqual(meta.minPlayers);
+        }
     });
 
     it("wires every game's recap adapter into the recap engine", () => {
