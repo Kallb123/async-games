@@ -1,5 +1,5 @@
 'use client'
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 // The classic isLoaded/signIn/setActive shape, not @clerk/nextjs's default
 // signals-based useSignIn — this is a one-off custom sign-in flow (the
@@ -12,8 +12,10 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useToast } from "@/components/ToastContext";
 import AuthScreen from "@/components/ui/AuthScreen";
 import BackLink from "@/components/ui/BackLink";
+import DieFace from "@/components/ui/DieFace";
+import { DiceRoll } from "@/utils/games/DiceRoll";
 import { JOIN_CODE_LENGTH, normaliseJoinCode, readJoinCode } from "@/utils/games/joinCode";
-import { MAX_GUEST_NAME_LENGTH, isValidGuestName } from "@/utils/games/guestName";
+import { MAX_GUEST_NAME_LENGTH, isValidGuestName, randomGuestName } from "@/utils/games/guestName";
 import { readResumeTicket } from "@/utils/users/resumeLink";
 import { useEnterStartedGame } from "@/utils/hooks/useEnterStartedGame";
 import ResumeLinkOffer from "@/components/ui/ResumeLinkOffer";
@@ -111,7 +113,25 @@ function JoinForm() {
   // sees what they're joining first.
   const linkedCode = readJoinCode(searchParams);
   const [code, setCode] = useState(linkedCode);
-  const [name, setName] = useState('');
+  // Auto-populated with a random Adjective+Animal name (AgitatedApe,
+  // JumpingJackal) so a guest with nothing typed yet still has a name to
+  // join under; free to override, or reroll with the dice button beside it.
+  // The ref tracks every name this reroll sequence has already offered, so
+  // mashing the dice doesn't hand back the same name twice in a row — it's
+  // not render state, nothing on screen depends on the history itself.
+  const offeredNamesRef = useRef<string[]>([]);
+  const [name, setName] = useState(() => {
+    const initial = randomGuestName();
+    offeredNamesRef.current = [initial];
+    return initial;
+  });
+  const [nameDie, setNameDie] = useState(() => DiceRoll(6));
+  const rerollName = () => {
+    const next = randomGuestName(offeredNamesRef.current);
+    offeredNamesRef.current = [...offeredNamesRef.current, next];
+    setName(next);
+    setNameDie(DiceRoll(6));
+  };
   const [joining, setJoining] = useState(false);
   // A guest's saved resume link (docs/account-less-play.md §2/§15) lands here
   // instead of a join code — signing back in is the whole flow, so it's
@@ -300,17 +320,29 @@ function JoinForm() {
       <AuthScreen title={title} subtitle={subtitle}>
         <form onSubmit={handleGuestSubmit} className="ag-section" style={{ width: "100%" }}>
           <JoinCodeField code={code} onChange={setCode} />
-          <input
-            className="ag-input"
-            type="text"
-            autoComplete="off"
-            maxLength={MAX_GUEST_NAME_LENGTH}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Your name"
-            aria-label="Your name"
-            style={{ marginTop: 12 }}
-          />
+          <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              className="ag-input"
+              type="text"
+              autoComplete="off"
+              maxLength={MAX_GUEST_NAME_LENGTH}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Your name"
+              aria-label="Your name"
+              style={{ flex: 1 }}
+            />
+            <button
+              type="button"
+              className="ag-die-btn"
+              onClick={rerollName}
+              disabled={joining}
+              aria-label="Shuffle to a new random name"
+              title="Shuffle to a new random name"
+            >
+              <DieFace value={nameDie} size={32} />
+            </button>
+          </div>
           <JoinButton joining={joining} disabled={joining || !normaliseJoinCode(code) || !isValidGuestName(name.trim())} />
         </form>
       </AuthScreen>

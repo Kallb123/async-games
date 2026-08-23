@@ -30,3 +30,54 @@ export function uniqueGuestName(name: string, takenNames: string[]): string {
     }
     return `${name} (${suffix})`;
 }
+
+// Adjective+Animal, e.g. "AgitatedApe" — what a guest's name field
+// auto-populates with before they've typed their own, and what the dice
+// button beside it rerolls to. Kept short by design: every combination
+// clears MAX_GUEST_NAME_LENGTH, so the result is always a valid guest name.
+const GUEST_NAME_ADJECTIVES = [
+    'Agitated', 'Amiable', 'Bouncy', 'Brave', 'Curious', 'Clumsy', 'Daring', 'Dizzy',
+    'Eager', 'Elegant', 'Fuzzy', 'Feisty', 'Grumpy', 'Giddy', 'Happy', 'Hasty',
+    'Itchy', 'Icy', 'Jumping', 'Jolly', 'Kooky', 'Keen', 'Lazy', 'Lively',
+    'Mighty', 'Merry', 'Nimble', 'Noisy', 'Odd', 'Orderly', 'Playful', 'Plucky',
+    'Quirky', 'Quiet', 'Rowdy', 'Rusty', 'Sneaky', 'Silly', 'Tiny', 'Tidy',
+    'Upbeat', 'Unruly', 'Vexed', 'Vivid', 'Wobbly', 'Witty', 'Yawning', 'Yappy',
+    'Zany', 'Zealous',
+];
+
+const GUEST_NAME_ANIMALS = [
+    'Ape', 'Antelope', 'Bear', 'Badger', 'Cat', 'Coyote', 'Dolphin', 'Duck',
+    'Eagle', 'Elk', 'Fox', 'Ferret', 'Goat', 'Gecko', 'Hippo', 'Hare',
+    'Iguana', 'Impala', 'Jackal', 'Jaguar', 'Koala', 'Kiwi', 'Lion', 'Lynx',
+    'Moose', 'Mole', 'Newt', 'Narwhal', 'Otter', 'Owl', 'Panda', 'Puma',
+    'Quail', 'Quokka', 'Rabbit', 'Raccoon', 'Skunk', 'Sloth', 'Tiger', 'Toad',
+    'Urchin', 'Uakari', 'Viper', 'Vulture', 'Walrus', 'Wombat', 'Yak', 'Zebra',
+];
+
+function pick<T>(items: readonly T[]): T {
+    return items[Math.floor(Math.random() * items.length)];
+}
+
+/**
+ * A random Adjective+Animal name. Prefers alliteration (AgitatedApe,
+ * JumpingJackal) — falling back to any adjective once every alliterative
+ * pairing for the animal it tried has already come up. `exclude` holds
+ * names already offered in this reroll sequence (see the dice button on
+ * /join), so mashing it doesn't hand back the same name twice in a row.
+ */
+export function randomGuestName(exclude: string[] = []): string {
+    const taken = new Set(exclude);
+    for (let attempt = 0; attempt < 50; attempt++) {
+        const animal = pick(GUEST_NAME_ANIMALS);
+        const alliterative = GUEST_NAME_ADJECTIVES.filter(adjective => adjective[0] === animal[0]);
+        const candidates = alliterative.length > 0 ? alliterative : GUEST_NAME_ADJECTIVES;
+        const untried = candidates.filter(adjective => !taken.has(`${adjective}${animal}`));
+        if (untried.length > 0) {
+            return `${pick(untried)}${animal}`;
+        }
+    }
+    // Every pairing this loop tried was already excluded — an exclude list
+    // this large only happens in a determined reroll spree, so a numeric
+    // suffix keeps things moving instead of retrying forever.
+    return `${pick(GUEST_NAME_ADJECTIVES)}${pick(GUEST_NAME_ANIMALS)}${Math.floor(Math.random() * 100)}`;
+}

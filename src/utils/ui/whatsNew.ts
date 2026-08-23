@@ -39,6 +39,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "A name, ready before you type it",
+                detail: "Joining as a guest now suggests a random name like JumpingJackal — keep it, tweak it, or tap the dice for another.",
+            },
+            {
                 title: "Guests can explore before signing up",
                 detail: "Set up a game or add friends as a guest — the host button greys out with a straight line to Settings when you're ready to sign up.",
             },
@@ -53,10 +57,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Share a link, not just a code",
                 detail: "Tap the code in your lobby to send a link — whoever opens it lands on the join screen with the code already filled in.",
-            },
-            {
-                title: "Start without waiting for a full lobby",
-                detail: "Friends not turning up? Start now plays the game with everyone who's here and drops the empty seats.",
             },
         ],
     },
