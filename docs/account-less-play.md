@@ -80,7 +80,9 @@ ask of them:
    under Option A: a Clerk sign-in token *is* a resume link. A bespoke
    `/resume/<token>` route is Option B's baggage, and building one beside a
    Clerk session would be the same "second identity system" mistake Option B
-   is marked down for.
+   is marked down for. Not to be confused with the **join** link in §4: that
+   one is a door into a lobby that anyone holding it may walk through, this one
+   is a credential for exactly one person.
 4. **An email address, no password** — one field, magic-link resume. This is
    the point where "account-less" starts becoming "an account", and it should
    be the *optional upsell after the first turn*, not the entry fee.
@@ -271,6 +273,60 @@ Two mechanics follow from open seats being contended:
   still walk it. Rate-limit joins per IP and bound the lobby's lifetime; both
   are cheap and both are needed before this is public.
 
+### The code is also a link
+
+Four letters read aloud is the right shape when the host is in the room. It is
+the wrong shape everywhere else, and everywhere else is where this app lives:
+the host is pasting into a group chat, and *"go to asyncgames.com, tap Join,
+type PLUM"* is three instructions a friend can abandon at any one of them. A
+Jackbox code is typed because a TV cannot be tapped; a phone can.
+
+So the code has a second form — a link that opens `/join` with the code
+already in the box — and the two are one mechanism, not two. The link *is* the
+code, in a URL: same `normaliseJoinCode`, same `POST /api/lobby/join`, same
+lobby, same seat, same expiry. Nothing is authorised by holding a link that
+isn't authorised by knowing the code, which is what keeps this a UI affordance
+rather than a second door with its own rules.
+
+What it costs is small, and mostly decisions rather than code:
+
+- **A query param, and no new route: `/join?code=PLUM`.** This repo already
+  has a shareable-link-that-prefills-a-screen convention, and it is
+  `src/utils/ui/rematch.ts` — "kept as a pure module so the finish banner
+  (encode) and every setup page (decode) share one param format instead of each
+  inventing its own", read with `useSearchParams()` on all seven `newgame`
+  setup pages. The join link is that same shape, so the param name and its
+  reader belong beside `normaliseJoinCode` in `src/utils/games/joinCode.ts`,
+  and `/join` reads it exactly as a setup page reads a rematch link.
+  A prettier `/join/PLUM` would need `[[...code]]` (a plain `[code]` cannot
+  also serve bare `/join`) — a route file, an array unwrap, and a decision
+  about what `/join/PLUM/oops` does — and it buys nothing for a link that gets
+  tapped rather than recited. Worth paying for only if a URL someone reads out
+  or a QR code becomes a real requirement, and then it is a one-file change
+  *because* the reader lives in `joinCode.ts`.
+- **The link never joins on arrival.** Arriving at a URL is a read; claiming a
+  seat is a write, and link unfurlers, prefetchers and stray taps all perform
+  reads. So the code lands in the field and the player takes the seat with the
+  tap the screen already has. It also means they see *what* they are joining
+  before they are in it.
+- **One screen, not two.** `/join` with a code in the URL and `/join` with an
+  empty box differ in two strings of copy ("You've been invited" rather than
+  "Got a code?") and nothing else. Not a second screen, and specifically not
+  `AuthScreen` — that is the signed-out lockup, and it belongs to the guest
+  step.
+- **It expires with the lobby and dies at game start**, because it is the same
+  code — no second lifetime to reason about, and no permanent "anyone can join
+  your game" URL (above).
+- **Enumeration is unchanged.** A link is not more guessable than the code
+  inside it, so the per-IP rate limit is the same one, in the same place.
+- **A signed-out visitor must not lose the code.** `useAuthGuard` pushes
+  `/login` today and the URL is gone, so a friend who followed a link is
+  returned to an empty home page having done everything right. Carrying the
+  current path and query through Clerk's `redirect_url` fixes it for every
+  guarded screen, not just this one. Until then, the link only works for
+  someone already signed in — which is why it belongs *with* the guest work,
+  not after it: for a guest, the link is the whole flow (§9.1 step 14).
+
 ---
 
 ## 5. Landmines in the current code
@@ -312,7 +368,7 @@ who is already in takes them to the seat they hold, and accepts it if it was a
 named invite still waiting on them — otherwise they would sit on the lobby
 screen watching a game their own unaccepted seat is blocking.
 
-Step 13 inherits this and adds one wrinkle: a guest's claim mints a principal,
+Step 14 inherits this and adds one wrinkle: a guest's claim mints a principal,
 so the seated check has to run *before* the mint, or every re-typed code
 creates a fresh guest and a fresh seat. A returning guest on the same device is
 signed in as the guest principal they already are, so the check is the same
@@ -405,6 +461,29 @@ Genuinely new, and small:
   it, so it cannot drive a message that appears and fades.
 - **A code entry field** (4 boxes / one input) on `/join`. Join errors go
   through `useToast` like every other flow.
+- **Handing the code over as a link** (§4) — which is not a second control
+  next to the code display, but a change to what the one that's already there
+  hands over. The card says "Tap to copy" and copies four characters; it should
+  say "Tap to share" and offer the link, through `navigator.share` where the
+  browser has it (which is where the host already is — mid-conversation in a
+  chat app) and the clipboard where it doesn't. A link is a strict superset of
+  the code it contains, so a second "Share link" button beside it would be two
+  affordances for one intent, and it is the only reason the screen would need a
+  second clipboard call site or a hook to share between them. The code stays
+  displayed, large, for the person sitting opposite to type.
+  The origin comes from `window.location.origin` at that one call site rather
+  than a new `NEXT_PUBLIC_` base URL or a `joinLink.ts` with one caller;
+  `APP_BASE_URL` in `src/utils/firebase/pushNotification.ts` stays the server's
+  answer for push links, and neither needs to know about the other. Sharing
+  carries one piece of logic a copy doesn't: a dismissed share sheet rejects
+  with `AbortError`, and that is not a failure to report.
+
+**The code's own type styling is already written twice** — `join/page.tsx`
+and the lobby screen each spell out bold, wide-tracked, centred, uppercase as
+an inline `style` blob, differing only in size and tracking, and `ag-theme.css`
+has no class for it. Both files are open in the step below, so that is the
+moment it becomes one `.ag-joincode` class with the size as a custom property.
+The lobby card also re-declares `.ag-empty`'s dashed-surface recipe inline.
 
 Keep both local to their screen until something else needs them; extract on the
 second use, per the repo's "second copy is the signal" rule.
@@ -428,6 +507,8 @@ the doc alone is internal and does not earn a line.
 | Guest principal (Option B) | L | High | Second identity system; all five choke points |
 | Guest access predicate | S | Low | One line in `useIsAuthorised` + the same rule in `/api/users`; under Option A there is no cookie to build |
 | Lobby + join screens | M | Low | Mostly composition of existing pieces |
+| Join by link + share action | S | Low | No new route — the link is the code in a query param, `rematch.ts`'s shape (§4) |
+| Sign-in that returns to where you were | S | Low | One `redirect_url` in `useAuthGuard`; every guarded screen benefits |
 | Guest push + notification permission | S | Med | The feature's whole value — but the offer banners and permission hook already exist; this is wiring, not building |
 | Claim-your-account prompt | S | Low | Trivial under A, a migration under B |
 | "Start now" button | S | Low | Deletes unclaimed seats, then the existing start path; plus an atomic seat claim on `Invitation` |
@@ -522,7 +603,7 @@ buildable in order:
 
 Each step leaves `npm run build`, `npx tsc --noEmit` and `npm test` green and is
 reviewable on its own. Steps 1–9 are API-only; **step 10 is the first a human
-can play**, and steps 1–10 are a complete, shippable feature for signed-in
+can play**, and steps 1–11 are a complete, shippable feature for signed-in
 players before any guest exists.
 
 Steps 3, 4 and 7 are the ones that stop this feature growing a second copy of
@@ -580,7 +661,7 @@ Two things this commit must not do twice:
 
 * **The unlocked gate.** §8 leans on every lobby having a registered host, but
   the `newgame` routes never check `publicMetadata.unlocked` — only
-  `/api/users` does. Rather than a third inline copy (step 11 adds a fourth),
+  `/api/users` does. Rather than a third inline copy (step 12 adds a fourth),
   extract `isUnlockedUser(user)` server-side beside `src/utils/users/clerk.ts`
   and use it here and there.
 * **The invite-list rendering.** `/api/user/incominginvites` and
@@ -603,65 +684,135 @@ and 9 both need that sequence, so extract `acceptSeat(invite, actorId)` beside
 route onto it in the same commit. No behaviour change — the #241 pattern, and
 the difference between one copy and three.
 
-**8 — Claiming a seat.** `POST /api/lobby/join`, signed-in players only for now:
-normalise the code, find the open lobby, and claim a seat with a **single
-conditional update** that matches the lobby, an unclaimed seat *and* a claimant
-who isn't already at it (§5, one principal one seat). Not
-read-modify-write — `InvitationSchema` has no `optimisticConcurrency` where
+**8 — Claiming a seat.** *(Done — #249.)* `POST /api/lobby/join`, signed-in
+players only for now: normalise the code, find the open lobby, and claim a
+seat with a **single conditional update** that matches the lobby, an unclaimed
+seat *and* a claimant who isn't already at it (§5, one principal one seat).
+Not read-modify-write — `InvitationSchema` has no `optimisticConcurrency` where
 `GameDataSchema` sets it, so two joiners racing would otherwise lose one of the
 two, or both take the last seat and overflow the game's maximum. Then
 `acceptSeat`, so a lobby and a named invite start through identical code.
 
-**9 — "Start now".** `POST /api/lobby/start`, host only. It `$pull`s the
+**9 — "Start now".** *(Route done — #250; the button that calls it is still
+outstanding, see step 10.)* `POST /api/lobby/start`, host only. It `$pull`s the
 unclaimed seats, then calls the same `acceptSeat`. There is deliberately no
 second start rule — the button edits the seat list until the existing predicate
 is true. Refused below the game's `minPlayers` from step 4.
 
-**10 — The screens.** The first playable commit. Host side: the existing setup
-screen (`GameSetupLayout` + `UserInviteList`/`usePlayerList` + `TurnTimerSelect`
-+ `PartySizeHint`) gains a seat count, and after creation shows the lobby — the
-code large and tap-to-copy (`useToast` for the "Copied!" confirmation), the seat
-list from `ListSection` + `ListRow` + `Avatar`, an unclaimed seat as
+**10 — The screens.** *(Done — #252.)* The first playable commit. Host side:
+the existing setup screen (`GameSetupLayout` + `UserInviteList`/`usePlayerList`
++ `TurnTimerSelect` + `PartySizeHint`) gains a seat count, and after creation
+shows the lobby — the code large and tap-to-copy (`useToast` for the "Copied!"
+confirmation), the seat list from `ListSection` + `ListRow` + `Avatar`, an
+unclaimed seat as
 `.ag-dashed-add` / `.ag-empty`, refreshing via `useRefreshableData` +
 `usePushEvents` exactly as `IncomingInvitesList` does. Joiner side: `/join`, a
 code field (`.ag-input`) on the ordinary signed-in shell — `AuthScreen` is the
-signed-out lockup and belongs to step 13, not here. Errors through `useToast`.
+signed-out lockup and belongs to step 14, not here. Errors through `useToast`.
 First `whatsNew.ts` line, under enhancements.
 
-**11 — The guest principal.** `src/utils/users/guest.ts`: create a Clerk user
+> Shipped without one thing it needs: the lobby screen has no **"start now"**
+> button, so step 9's route has no caller and a host whose friends don't all
+> turn up has no way out of the lobby. It is a host-only `ag-btn` under the
+> seat list, disabled below `minPlayers` (`partySizeOutOfRange`), landing
+> wherever `acceptSeat` sends the rest of the party — the smallest remaining
+> piece of the signed-in half, and it belongs in step 11 with the link.
+
+**11 — The join link.** What step 10 shipped works only for someone willing to
+type four letters into a site they already use. §4's second form of the code
+closes that, and it is smaller than it sounds: no new route, no new screen.
+`/join` reads the code from its query string exactly as the seven `newgame`
+pages read a rematch link, so the param name and its reader go beside
+`normaliseJoinCode` in `src/utils/games/joinCode.ts` — `rematch.ts`'s shape,
+for `rematch.ts`'s stated reason — and the field's initial value comes from
+there. The hero copy branches on whether a code arrived ("You've been invited"
+rather than "Got a code?"). Nothing else about the screen changes: same field,
+same button, same `useToast` errors, and the player still takes the seat with a
+tap (§4 — arriving at a URL is a read).
+
+Three things ride along, because each is a line in a file this commit already
+has open:
+
+* **The host's card shares the link** rather than copying the code (§6): the
+  existing control, relabelled, through `navigator.share` with a clipboard
+  fallback and `AbortError` swallowed. Not a second button, so no second
+  clipboard call site and nothing to extract.
+* **The "start now" button** step 9 left without a caller (above). Host-only,
+  under the seat list, disabled below `minPlayers`.
+* **Sign-in that comes back.** `useAuthGuard` pushes `/login` and the URL is
+  lost, so today's link only works for someone already signed in — pass the
+  current path and query as Clerk's `redirect_url`. Read it from
+  `window.location` inside the guard's existing effect, *not* from
+  `useSearchParams()`: that hook is mounted by twenty-two client pages, and
+  pulling search params into it makes every one of them a Suspense-boundary
+  question at build time for no gain. `<SignIn>` already honours `redirect_url`
+  from the query, so `/login` needs no change at all — confirm that holds in
+  `@clerk/nextjs` v7 and that the origin is in Clerk's allowed redirect list,
+  with `forceRedirectUrl` as the fallback if not.
+
+While in that effect, collapse the duplicate predicate step 12 was going to
+come back for: line 48 re-derives `unlocked !== true`, which `useIsAuthorised`
+already computed as `isAuthorised`. Two commits editing the same six lines for
+different reasons is worse than one.
+
+`.ag-joincode` from §6 lands here too, since both files that hand-style the
+code are already open. Second `whatsNew.ts` line, under enhancements — that
+group is at five, so the oldest comes out. `caveman` before committing.
+
+Two things deliberately left out, so the omission is a decision and not an
+oversight:
+
+- **No lobby preview.** A link recipient learns which game and whose lobby it
+  is *after* claiming a seat, on the lobby screen. A public
+  `GET /api/lobby/code/<CODE>` could say "Dave invited you to Train Time — two
+  seats left" first, but it would be the app's first public *read*, and a
+  cheaper enumeration oracle than the join route is: taking a seat is
+  self-limiting in a way looking never is. A signed-in player doesn't need it.
+  A guest, arriving from a link at a site they've never seen and being asked
+  for a name, probably does — so it is step 14's call, recorded here rather
+  than rediscovered there.
+- **No QR code, and no pretty `/join/PLUM` path.** Both serve the case where
+  everyone is in the same room, which four letters on a screen already serve.
+  §4 has the terms on which either becomes worth it.
+
+**12 — The guest principal.** `src/utils/users/guest.ts`: create a Clerk user
 with `publicMetadata.guest = true` and a generated unique username, mint a
-sign-in token, hand the client the ticket. Then one authorisation predicate,
-not two: `useAuthGuard` currently re-derives `unlocked !== true` for its
-redirect instead of reading `isAuthorised` from `useIsAuthorised`, so collapse
-that duplicate *first* — otherwise a guest passes the predicate and is still
-bounced to `/unlockaccess`. Server-side, `isUnlockedUser` from step 6 gains the
-same clause.
+sign-in token, hand the client the ticket. Then the authorisation predicate:
+`isAuthorised` in `useIsAuthorised` accepts `publicMetadata.guest === true` as
+a second way to be authorised, and server-side `isUnlockedUser` from step 6
+gains the same clause. One predicate, because step 11 already collapsed
+`useAuthGuard`'s duplicate copy of it — without that, a guest passes the
+predicate and is still bounced to `/unlockaccess`.
 
 > This is the risky commit, and it is deliberately alone and late. If Clerk's
 > `createUser` + sign-in-token flow doesn't behave as Option A assumes, this is
-> where the plan forks to Option B (§3) — and steps 1–10 have already shipped a
+> where the plan forks to Option B (§3) — and steps 1–11 have already shipped a
 > working feature regardless.
 
-**12 — A guest's game doesn't count yet.** `unclaimedPlayerIds: string[]` on
+**13 — A guest's game doesn't count yet.** `unclaimedPlayerIds: string[]` on
 `GameResultData`, plus each guest's display name, and an is-empty filter added
 to the stats reads. Both values are **passed in by the caller**, not looked up
 inside `recordGameResult` — it takes only `gameData` today and is deliberately
 Clerk-free on the per-command path, and all three callers already hold the
 resolved roster for their own pushes. Lands *before* any guest can play, so
 there is never a window in which a guest game is recorded as counting, and the
-name is on the record before step 16 can delete the user behind it.
+name is on the record before step 17 can delete the user behind it.
 
-**13 — Guests can join.** `/api/lobby/join` accepts `{ code, name }` from a
+**14 — Guests can join.** `/api/lobby/join` accepts `{ code, name }` from a
 signed-out visitor: validate the name (length and character set — input
 validation, not moderation, per §8), suffix it for per-lobby uniqueness, mint
 the guest, claim the seat through the same conditional update as step 8. This
 is the app's first public write endpoint, so per-IP rate limiting lands here
-too. `/join` grows its signed-out variant on `AuthScreen`. Friend and nudge
+too. `/join` grows its signed-out variant on `AuthScreen`, reading the code from
+the URL as step 11 taught it to — for a guest that link is not a convenience,
+it is the flow: nobody types a code into a site they have never heard of. This
+is also where §4's deferred lobby preview gets decided, because a stranger
+being asked for a name deserves to know whose game it is. Friend and nudge
 affordances hide for guest seats rather than failing on them.
 
-**14 — Bringing the guest back.** Less work than it looks: `BottomBanner` is
+**15 — Bringing the guest back.** Less work than it looks: `BottomBanner` is
 mounted app-wide by `Providers` and gates its notification offer on
-`useIsAuthorised`, so step 11's predicate already turned the existing offer on
+`useIsAuthorised`, so step 12's predicate already turned the existing offer on
 for guests — building a second one on the board screen would be a third copy of
 what the banner and the settings page already compose. What actually remains is
 the ordering decision and the fallback: on iOS a PWA install is a precondition
@@ -672,19 +823,19 @@ A the guest's FCM token lands in Clerk `privateMetadata` like anyone else's, so
 `sendPushToUsers` needs no change at all. Second `whatsNew.ts` line: guests can
 play.
 
-**15 — Claiming an account.** After the guest's first turn, offer to keep it:
+**16 — Claiming an account.** After the guest's first turn, offer to keep it:
 adding an email and password to the Clerk user they already are. The id never
 changes, so games, results and turn history carry over with no migration — the
 only writes are dropping `guest` from their metadata and `$pull`-ing their id
 out of every `GameResult.unclaimedPlayerIds`.
 
-**16 — Sweeping unclaimed guests.** `GET /api/cron/staleguests`, modelled on
+**17 — Sweeping unclaimed guests.** `GET /api/cron/staleguests`, modelled on
 `cron/staledevices`: same `CRON_SECRET` bearer auth, same `vercel.json`
 registration, same "rewrite only what actually changed" pass. For each guest,
 the most recent `endedAt` across the `GameResult` documents carrying their id —
 one query on the existing `{ playerIds: 1, endedAt: -1 }` index — and delete
 them a week after it. A guest with no results at all is swept on their lobby's
-`expiresAt` instead. Deleting the Clerk user is safe by then because step 12
+`expiresAt` instead. Deleting the Clerk user is safe by then because step 13
 already copied their name onto the record, and because #240 renders an
 unresolvable id as a placeholder rather than misaligning the list.
 
@@ -692,23 +843,31 @@ unresolvable id as a placeholder rather than misaligning the list.
 
 - **Every commit:** `npm run build`, `npx tsc --noEmit`, `npm test`. CI runs all
   three on PRs to `main`.
-- **UI commits (10, 13, 14, 15):** a `caveman` review before committing, per
-  [`AGENTS.md`](../AGENTS.md). Step 10 is where the reuse rules bite hardest,
-  because a lobby screen is almost entirely composition of things that exist.
-- **Player-visible commits (10 and 14):** a `whatsNew.ts` line in the same PR,
-  newest first, oldest dropped once the group runs past five. Every other step
-  is internal and earns none.
+- **UI commits (10, 11, 14, 15, 16):** a `caveman` review before committing,
+  per [`AGENTS.md`](../AGENTS.md). Steps 10 and 11 are where the reuse rules
+  bite hardest, because a lobby screen is almost entirely composition of things
+  that exist — and step 11's whole shape came out of asking that question first
+  (no new route, no new hook, no second share button).
+- **Player-visible commits (10, 11 and 15):** a `whatsNew.ts` line in the same
+  PR, newest first, oldest dropped once the group runs past five. Enhancements
+  is already at five, so 11 and 15 each drop one. Every other step is internal
+  and earns none.
 - **Tests:** the suite is fifteen files — five game-logic suites, two registry
   scans, and pure unit tests for helpers — with no route or database harness at
   all. So the *pure* modules this feature adds (`joinCode.ts`, `lobby.ts`'s seat
   helpers, the name validator) carry tests in the `TurnTimer.test.ts` shape, the
   registry scan gains step 4's assertion, and the routes are verified by hand.
+  Step 11's query-param reader is one of those pure additions, so it extends
+  `joinCode.test.ts` rather than being checked by clicking a link.
   Don't invent an integration harness here; if one is wanted, that is its own
   work.
 - **Two things no test will catch**, so check them deliberately: the seat-claim
   race (two joins with the same code at the same instant must not both take the
   last seat, nor both start the game), and a started or expired lobby rejecting
-  a code someone still has open on screen.
+  a code someone still has open on screen. Add a third from step 11: following
+  a join link while signed out has to come back to the code after sign-in, and
+  that round trip runs through Clerk rather than through anything this repo can
+  assert on.
 - **`ARCHITECTURE.md`** §4's lifecycle and §5's `IInvitationData` both describe
   behaviour these commits change — update it in the step that changes it (2, 6
   and 8), not in a catch-up commit at the end.
@@ -734,12 +893,17 @@ unresolvable id as a placeholder rather than misaligning the list.
 - **The code solves joining; it does not solve returning.** Push permission,
   a durable session, and a claim prompt after the first turn are what turn a
   join-by-code game into an onboarded player.
-- **Ship it in two halves** (§9 breaks it into sixteen commits). Codes for
-  signed-in players first — steps 1–10, a complete feature on their own with no
+- **The code is also a link, and the link is the same code** — `/join` with the
+  code in a query param, read the way `rematch.ts` links already are, so
+  nothing new is authorised and no second route exists. Typing four letters is
+  the fallback, not the flow: a host shares into a chat, and for a guest with
+  no account the link is the only realistic way in at all.
+- **Ship it in two halves** (§9 breaks it into seventeen commits). Codes for
+  signed-in players first — steps 1–11, a complete feature on their own with no
   identity risk — then guests with push and claiming together. The one commit
   that could invalidate the approach (the Clerk guest principal) is isolated
   and late, so everything before it ships regardless.
-- **Three of the sixteen exist only to stop a second copy appearing**: an
+- **Three of the seventeen exist only to stop a second copy appearing**: an
   `invitationModelFor` to match #241's `gameDataModelFor`, numeric player
   bounds in `GameMeta` so a seat count has one source, and an `acceptSeat`
   extraction so the join route, the start route and the accept route share one
