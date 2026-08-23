@@ -31,12 +31,29 @@ interface SenderUser {
     username?: string | null;
     firstName?: string | null;
     id?: string | null;
+    // A guest's Clerk username is the random account id createGuest() minted
+    // (docs/account-less-play.md §5), not something anyone chose to be seen
+    // under — their firstName carries the name they actually typed at join
+    // time (step 14), so both name-preference functions below invert their
+    // usual username-first order for a guest.
+    publicMetadata?: { guest?: boolean };
+}
+
+// The one place "is this user a guest?" gets asked — clerk.ts's own
+// name-resolution helpers (userIdListToUsernameList/Map) reuse this rather
+// than re-declaring the same publicMetadata check a second time.
+export function isGuest(user: SenderUser): boolean {
+    return user.publicMetadata?.guest === true;
 }
 
 // The username a signed-in user acts under (as command sender or game
-// player): prefers their Clerk username, then first name, then their id.
+// player): prefers their Clerk username, then first name, then their id —
+// or, for a guest, just the name they typed (falling back to their id the
+// same way).
 export function currentUsername(user: SenderUser | null | undefined): string {
-    return user?.username || user?.firstName || user?.id || "";
+    if (!user) return "";
+    if (isGuest(user)) return user.firstName || user.id || "";
+    return user.username || user.firstName || user.id || "";
 }
 
 // The name to use for a user in copy another person reads (push notifications,
@@ -44,7 +61,9 @@ export function currentUsername(user: SenderUser | null | undefined): string {
 // falls back to a raw user id — a notification saying "user_2abc… is waiting"
 // is worse than one saying "Someone is waiting".
 export function readableName(user: SenderUser | null | undefined, fallback = "Someone"): string {
-    return user?.username || user?.firstName || fallback;
+    if (!user) return fallback;
+    if (isGuest(user)) return user.firstName || fallback;
+    return user.username || user.firstName || fallback;
 }
 
 // The one piece of finish-line copy shared by every game: a player missed

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { JOIN_CODE_ALPHABET, buildJoinHref, generateJoinCode, normaliseJoinCode, readJoinCode } from './joinCode';
+import { JOIN_CODE_ALPHABET, JOIN_CODE_LENGTH, buildJoinHref, generateJoinCode, normaliseJoinCode, readJoinCode } from './joinCode';
 
 describe('JOIN_CODE_ALPHABET', () => {
     it('excludes every ambiguous glyph', () => {
@@ -49,6 +49,10 @@ describe('generateJoinCode', () => {
                 expect(JOIN_CODE_ALPHABET).toContain(char);
             }
         }
+    });
+
+    it('matches JOIN_CODE_LENGTH', () => {
+        expect(generateJoinCode()).toHaveLength(JOIN_CODE_LENGTH);
     });
 });
 

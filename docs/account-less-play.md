@@ -798,19 +798,42 @@ resolved roster for their own pushes. Lands *before* any guest can play, so
 there is never a window in which a guest game is recorded as counting, and the
 name is on the record before step 17 can delete the user behind it.
 
-**14 — Guests can join.** `/api/lobby/join` accepts `{ code, name }` from a
+**14 — Guests can join.** *(Done.)* `/api/lobby/join` accepts `{ joinCode, name }` from a
 signed-out visitor: validate the name (length and character set — input
-validation, not moderation, per §8), suffix it for per-lobby uniqueness, mint
-the guest, claim the seat through the same conditional update as step 8. This
-is the app's first public write endpoint, so per-IP rate limiting lands here
-too. `/join` grows its signed-out variant on `AuthScreen`, reading the code from
-the URL as step 11 taught it to — for a guest that link is not a convenience,
-it is the flow: nobody types a code into a site they have never heard of. This
-is also where §4's deferred lobby preview gets decided, because a stranger
-being asked for a name deserves to know whose game it is. Friend and nudge
-affordances hide for guest seats rather than failing on them.
+validation, not moderation, per §8), suffix it for per-lobby uniqueness against
+everyone already seated, mint the guest, claim the seat through the same
+conditional update as step 8 (`claimOpenSeat`, now shared by both paths in the
+one route file rather than copied). A guest's typed name lands on the Clerk
+user's `firstName` — `username` stays the meaningless `guest_<uuid>` account id
+step 12 mints — so the id→name choke point (§1) is where this actually shows
+up: `userIdListToUsernameList`/`Map` and `readableName`/`currentUsername` all
+gained the one `publicMetadata.guest` branch that prefers `firstName` for a
+guest, rather than a second name field threaded through every response DTO.
 
-**15 — Bringing the guest back.** Less work than it looks: `BottomBanner` is
+This is the app's first public write endpoint, so per-IP rate limiting lands
+here too — a small Mongo-backed fixed-window counter (`src/utils/rateLimit.ts`),
+since a serverless deployment has no shared memory to keep an in-process one
+in and this avoids a new datastore. §4's deferred lobby preview is decided the
+same way it was raised: built, because a stranger being asked for a name
+deserves to know whose game it is before they hand it over, and rate-limited
+under the same throttle as the join route beside it, because a read is a
+cheaper enumeration oracle than a write. It answers with only what justifies
+that — sender, game, seats left, no player list.
+
+`/join` grows its signed-out variant on `AuthScreen` (broadened from
+"Clerk-card screens" to "signed-out screens" — the guest form isn't a Clerk
+component, but the same lockup fits it), reading the code from the URL as step
+11 taught it to and fetching the preview once a complete code is on screen,
+whichever way it arrived — for a guest that link is not a convenience, it is
+the flow: nobody types a code into a site they have never heard of. A
+successful join hands the client a Clerk sign-in ticket, which `/join` redeems
+with `signIn.create({ strategy: 'ticket', ticket })` before entering the lobby
+— the guest has no session at all until that round trip completes. Friend and
+nudge affordances stay exactly as they were: neither one offers a per-seat
+action on the lobby screen today, so there was nothing to hide — the guest
+seat already renders through the same `ListRow` a named seat does.
+
+**15 — Bringing the guest back.** *(Done.)* Less work than it looks: `BottomBanner` is
 mounted app-wide by `Providers` and gates its notification offer on
 `useIsAuthorised`, so step 12's predicate already turned the existing offer on
 for guests — building a second one on the board screen would be a third copy of
@@ -823,21 +846,53 @@ A the guest's FCM token lands in Clerk `privateMetadata` like anyone else's, so
 `sendPushToUsers` needs no change at all. Second `whatsNew.ts` line: guests can
 play.
 
-**16 — Claiming an account.** After the guest's first turn, offer to keep it:
-adding an email and password to the Clerk user they already are. The id never
-changes, so games, results and turn history carry over with no migration — the
-only writes are dropping `guest` from their metadata and `$pull`-ing their id
-out of every `GameResult.unclaimedPlayerIds`.
+**16 — Claiming an account.** *(Done.)* After the guest's first turn, offer to
+keep it: adding an email and password to the Clerk user they already are. The
+id never changes, so games, results and turn history carry over with no
+migration — the only writes are dropping `guest` from their metadata and
+`$pull`-ing their id out of every `GameResult.unclaimedPlayerIds`.
 
-**17 — Sweeping unclaimed guests.** `GET /api/cron/staleguests`, modelled on
-`cron/staledevices`: same `CRON_SECRET` bearer auth, same `vercel.json`
-registration, same "rewrite only what actually changed" pass. For each guest,
-the most recent `endedAt` across the `GameResult` documents carrying their id —
-one query on the existing `{ playerIds: 1, endedAt: -1 }` index — and delete
-them a week after it. A guest with no results at all is swept on their lobby's
-`expiresAt` instead. Deleting the Clerk user is safe by then because step 13
-already copied their name onto the record, and because #240 renders an
-unresolvable id as a placeholder rather than misaligning the list.
+`createGuest` (`src/utils/users/guest.ts`) gives every guest a throwaway
+`<username>@guests.asyncgames.com` address, because this Clerk instance
+requires some email on every user at creation. Adding the real one is
+therefore not a bare `createEmailAddress` call — that would leave the
+placeholder sitting on the account as a second verified-but-undeliverable
+address. `POST /api/user/claim` creates the real address as `primary: true`
+in the same call (moving primary status off the placeholder immediately,
+never a moment with two or with none), then deletes the placeholder
+(`isGuestPlaceholderEmail`, exported from `guest.ts` so the route doesn't
+re-derive the domain), then sets the password. Only once all three succeed
+does it clear `publicMetadata.guest` and `$pull` the guest's id out of every
+`GameResult.unclaimedPlayerIds` — a Clerk rejection (taken email, weak
+password) leaves the guest account untouched rather than partially claimed.
+
+"After the first turn" is `useGuestMoved` (`src/utils/hooks/useGuestMoved.ts`):
+`useSubmitCommand` — the one hook every game's board already calls to send a
+command — marks it the moment a guest's command succeeds, so the trigger is
+shared across all seven games rather than seven copies. The offer itself
+reuses `BottomBanner`/`OfferCard` as a third, guest-only offer behind install
+and notifications, and hands off to a `ClaimAccountForm` on Settings rather
+than building a second copy of the email/password form inline.
+
+**17 — Sweeping unclaimed guests.** *(Done.)* `GET /api/cron/staleguests`, modelled on
+`cron/staledevices`: same `CRON_SECRET` bearer auth (`isAuthorisedCron`), same
+`vercel.json` registration, same paged scan over every Clerk user. For each
+guest, the most recent `endedAt` across the `GameResult` documents carrying
+their id — one query on the existing `{ playerIds: 1, endedAt: -1 }` index —
+and delete them `GUEST_SWEEP_DAYS` (7) after it.
+
+A guest with no `GameResult` at all is either still playing or never started a
+game, and those read the same way: no result exists yet either way. So instead
+of reading a timestamp, the route asks whether there's still somewhere for
+them to be — a live `GameData` still listing their id (§8: never swept mid-game,
+however long it runs), or an unexpired lobby seat. Once neither is true, "swept
+on the lobby's `expiresAt`" has already happened one layer down: that field's
+own TTL index (step 2) reaped the invitation itself, so there is nothing left
+to wait out — the guest is swept on this run rather than a future one.
+
+Deleting the Clerk user is safe by then because step 13 already copied their
+name onto the record, and because #240 renders an unresolvable id as a
+placeholder rather than misaligning the list.
 
 ### 9.2 What to check as you go
 
@@ -848,10 +903,10 @@ unresolvable id as a placeholder rather than misaligning the list.
   bite hardest, because a lobby screen is almost entirely composition of things
   that exist — and step 11's whole shape came out of asking that question first
   (no new route, no new hook, no second share button).
-- **Player-visible commits (10, 11 and 15):** a `whatsNew.ts` line in the same
-  PR, newest first, oldest dropped once the group runs past five. Enhancements
-  is already at five, so 11 and 15 each drop one. Every other step is internal
-  and earns none.
+- **Player-visible commits (10, 11, 15 and 16):** a `whatsNew.ts` line in the
+  same PR, newest first, oldest dropped once the group runs past five.
+  Enhancements is already at five, so each of these drops one. Every other
+  step is internal and earns none.
 - **Tests:** the suite is fifteen files — five game-logic suites, two registry
   scans, and pure unit tests for helpers — with no route or database harness at
   all. So the *pure* modules this feature adds (`joinCode.ts`, `lobby.ts`'s seat

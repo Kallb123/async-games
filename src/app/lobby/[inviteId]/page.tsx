@@ -10,6 +10,7 @@ import { IInvitationResponse } from "@/utils/mongodb/InvitationData";
 import { OPEN_SEAT_LABEL } from "@/utils/games/lobby";
 import { buildJoinHref } from "@/utils/games/joinCode";
 import { metaForGame, partySizeErrorMessage } from "@/utils/ui/games";
+import { shareOrCopyLink } from "@/utils/ui/share";
 import { fetchWithSessionRetry } from "@/utils/hooks/fetchWithSessionRetry";
 import { useEnterStartedGame } from "@/utils/hooks/useEnterStartedGame";
 import GameIdentityHeader from "@/components/ui/GameIdentityHeader";
@@ -109,20 +110,9 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
     const joinCode = invite?.joinCode;
     if (!joinCode) return;
     const url = `${window.location.origin}${buildJoinHref(joinCode)}`;
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: 'Async Games', text: `Join my game — the code is ${joinCode}.`, url });
-        return;
-      } catch (error) {
-        // A dismissed share sheet rejects with AbortError: the host changed
-        // their mind, which is not a failure to report. Anything else falls
-        // through to the clipboard.
-        if ((error as Error)?.name === 'AbortError') return;
-      }
-    }
-    navigator.clipboard.writeText(url)
-      .then(() => showToast('Link copied!', 'success'))
-      .catch(() => showToast('Could not copy — share the code instead.', 'danger'));
+    const result = await shareOrCopyLink(url, `Join my game — the code is ${joinCode}.`);
+    if (result === 'copied') showToast('Link copied!', 'success');
+    if (result === 'failed') showToast('Could not copy — share the code instead.', 'danger');
   };
 
   // The party if the host starts right now: every claimed seat plus the host,

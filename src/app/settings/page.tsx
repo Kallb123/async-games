@@ -10,6 +10,8 @@ import DevTools from "@/components/DevTools";
 import NotificationDeviceList from "@/components/NotificationDeviceList";
 import InstallOffer from "@/components/ui/InstallOffer";
 import NotificationOffer from "@/components/ui/NotificationOffer";
+import ClaimAccountForm from "@/components/ClaimAccountForm";
+import { isGuest } from "@/utils/ui/players";
 import { NotificationChannel, NOTIFICATION_CHANNELS } from "@/utils/firebase/notificationPreferences";
 import { requestNotificationPermission, useNotificationPermission } from "@/utils/hooks/useNotificationPermission";
 import useFcmToken from "@/utils/hooks/useFcmToken";
@@ -28,7 +30,7 @@ interface NotificationPreferencesState {
 export default function Settings() {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
-    const { isAuthorised } = useAuthGuard();
+    const { user, isAuthorised } = useAuthGuard();
     const { signOut } = useClerk();
     const router = useRouter();
     const { showToast } = useToast();
@@ -184,6 +186,25 @@ export default function Settings() {
                         <h2 className="ag-section-label">App</h2>
                     </div>
                     <InstallOffer method={installMethod} />
+                </div>
+            )}
+
+            {/* A guest playing under a Clerk user they haven't claimed yet
+                (docs/account-less-play.md step 16) — the id never changes,
+                so adding an email and password is all "keeping" this account
+                takes. The bottom banner links here once they've taken their
+                first turn; this is the one place the form itself lives. */}
+            {user && isGuest(user) && (
+                <div className="ag-section">
+                    <div className="ag-section-head">
+                        <h2 className="ag-section-label">Save your account</h2>
+                    </div>
+                    <div className="ag-callout" style={{ marginBottom: 12 }}>
+                        You&apos;re playing as a guest. Add an email and password and
+                        everything you&apos;ve played — games, results, turn history —
+                        stays yours, under the same account.
+                    </div>
+                    <ClaimAccountForm />
                 </div>
             )}
 

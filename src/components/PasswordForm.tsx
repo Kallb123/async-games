@@ -4,16 +4,20 @@ import { useRouter } from 'next/navigation'
 import { useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useToast } from "@/components/ToastContext";
+import ActionButton from "@/components/ui/ActionButton";
 
 export default function PasswordForm() {
     const [password, setPassword] = useState('');
+    const [unlocking, setUnlocking] = useState(false);
     const router = useRouter();
     const { user } = useUser();
     const { showToast } = useToast();
-    
+
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
-  
+      if (unlocking) return;
+      setUnlocking(true);
+
       try {
         const response = await fetch('/api/unlock', {
           method: "POST",
@@ -38,13 +42,14 @@ export default function PasswordForm() {
         console.error(error);
         const message = error instanceof Error ? error.message : 'Incorrect password. Please try again.';
         showToast(message, 'danger', 'Access Denied');
+        setUnlocking(false);
       }
     }
 
     return (
-        <form onSubmit={handleSubmit} className="ag-card" style={{ padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
+        <form onSubmit={handleSubmit} className="ag-card ag-form-card">
             <div>
-                <label htmlFor="access-password" className="ag-section-label" style={{ display: "block", marginBottom: 8 }}>Access password</label>
+                <label htmlFor="access-password" className="ag-section-label ag-field-label">Access password</label>
                 <input
                     id="access-password"
                     className="ag-input"
@@ -55,7 +60,14 @@ export default function PasswordForm() {
                     required
                 />
             </div>
-            <button type="submit" className="ag-btn ag-btn--primary ag-btn--block">Unlock</button>
+            <ActionButton
+                type="submit"
+                className="ag-btn ag-btn--primary ag-btn--block"
+                pending={unlocking}
+                pendingLabel="Unlocking…"
+            >
+                Unlock
+            </ActionButton>
         </form>
     );
 }

@@ -1,5 +1,5 @@
 import { clerkClient, User } from "@clerk/nextjs/server";
-import { readableName } from "@/utils/ui/players";
+import { isGuest, readableName } from "@/utils/ui/players";
 import { profileImageUrl } from "@/utils/ui/avatar";
 
 // Shown for a userId Clerk can't resolve (a deleted account, most likely
@@ -12,9 +12,12 @@ export const UNKNOWN_PLAYER_NAME = "Unknown player";
 // without being allowed to use the app yet. Every route that lets someone
 // create content — today just `/api/users`, and lobby creation from this
 // commit on — needs this check server-side; it is not implied by being
-// signed in.
+// signed in. A guest (`publicMetadata.guest === true`, §5/§12) is authorised
+// the moment they exist — the unlock gate is for the real account that vouches
+// for them, not for the guest — so this accepts the same second clause
+// `useIsAuthorised` does client-side.
 export function isUnlockedUser(user: User | null | undefined): boolean {
-    return user?.publicMetadata.unlocked === true;
+    return user?.publicMetadata.unlocked === true || user?.publicMetadata.guest === true;
 }
 
 // Clerk treats an empty filter as *no* filter: `getUserList({ username: [] })`
@@ -35,11 +38,55 @@ export async function usersById(userIdList: string[]): Promise<User[]> {
     return data;
 }
 
+const CLERK_USER_PAGE_SIZE = 100;
+// Belt and braces against a paging bug turning into an unbounded loop.
+const CLERK_USER_MAX_PAGES = 100;
+
+// Pages through every Clerk user, calling `visit` for each — the shared shape
+// behind every `/api/cron/*` sweep that has to look at the whole instance
+// rather than a known id list (staledevices, staleguests). Returns how many
+// users it visited, which every caller reports back as its own `scanned`.
+export async function forEachClerkUser(visit: (user: User) => Promise<void>): Promise<number> {
+    const client = await clerkClient();
+    let scanned = 0;
+
+    for (let page = 0; page < CLERK_USER_MAX_PAGES; page++) {
+        const { data: users } = await client.users.getUserList({
+            limit: CLERK_USER_PAGE_SIZE,
+            offset: page * CLERK_USER_PAGE_SIZE,
+        });
+        if (!users.length) {
+            break;
+        }
+        scanned += users.length;
+
+        for (const user of users) {
+            await visit(user);
+        }
+
+        if (users.length < CLERK_USER_PAGE_SIZE) {
+            break;
+        }
+    }
+
+    return scanned;
+}
+
+// A guest's Clerk username is the random account id createGuest() minted
+// (docs/account-less-play.md §5), not something anyone chose to be seen
+// under — their firstName carries the name they actually typed at the
+// lobby's join screen (step 14), so name resolution inverts the usual
+// username-first preference for them. The one place both list-shaped
+// resolvers below reach for a name, so they can't drift apart.
+function displayHandle(user: User): string | null {
+    return isGuest(user) ? user.firstName : user.username;
+}
+
 export async function userIdListToUsernameList(userIdList: string[]): Promise<string[]> {
     const users = await usersById(userIdList);
     return userIdList.map(userId => {
         const user = users.find(u => u.id === userId);
-        return user ? (user.username ?? "No username") : UNKNOWN_PLAYER_NAME;
+        return user ? (displayHandle(user) ?? "No username") : UNKNOWN_PLAYER_NAME;
     });
 }
 
@@ -48,7 +95,7 @@ export async function userIdListToUsernameMap(userIdList: string[]): Promise<Map
     const usernameMap: Map<string, string> = new Map;
     userIdList.forEach(userId => {
         const user = users.find(u => u.id === userId);
-        usernameMap.set(userId, user ? (user.username ?? "No username") : UNKNOWN_PLAYER_NAME);
+        usernameMap.set(userId, user ? (displayHandle(user) ?? "No username") : UNKNOWN_PLAYER_NAME);
     });
     return usernameMap;
 }

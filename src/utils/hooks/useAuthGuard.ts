@@ -7,13 +7,17 @@ import { useRouter } from "next/navigation";
  * Whether the viewer is signed in *and* unlocked — the "safe to fetch" signal,
  * with no side effects of its own. Use this in components that only need to
  * know; the screen they sit on owns the redirect via `useAuthGuard`.
+ *
+ * A guest (`publicMetadata.guest === true`, docs/account-less-play.md §5/§12)
+ * is authorised the moment they exist — the unlock gate is for the real
+ * account that vouches for them, not for the guest.
  */
 export function useIsAuthorised() {
     const { user, isLoaded } = useUser();
     return {
         user,
         isLoaded,
-        isAuthorised: isLoaded && !!user && user.publicMetadata.unlocked === true,
+        isAuthorised: isLoaded && !!user && (user.publicMetadata.unlocked === true || user.publicMetadata.guest === true),
     };
 }
 
@@ -26,10 +30,11 @@ export function useIsAuthorised() {
  * the components on it use `useIsAuthorised` so a screen fires one redirect
  * effect rather than one per list.
  *
- * `allowSignedOut` drops only the `/login` redirect, for the one screen that
- * has something to show a visitor with no account — the home page, which
- * renders the public landing page instead of bouncing them. Locked-out
- * accounts still go to `/unlockaccess`.
+ * `allowSignedOut` drops only the `/login` redirect, for a screen that has
+ * something to show a visitor with no account: the home page, which renders
+ * the public landing page instead of bouncing them, and /join, whose guest
+ * variant (docs/account-less-play.md §14) is that visitor's whole way in.
+ * Locked-out accounts still go to `/unlockaccess`.
  */
 export function useAuthGuard({ allowSignedOut = false }: { allowSignedOut?: boolean } = {}) {
     const state = useIsAuthorised();
