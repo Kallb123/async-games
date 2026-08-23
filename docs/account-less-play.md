@@ -571,7 +571,7 @@ Two things this commit must not do twice:
   substitution is entirely server-side and `OutgoingInviteList` /
   `IncomingInvitesList` render it as-is.
 
-**7 — Accepting a seat, extracted.** #241 extracted the *start*; the
+**7 — Accepting a seat, extracted.** *(Done — #248.)* #241 extracted the *start*; the
 accept-and-maybe-start body around it is still inline in
 `src/app/api/invite/accept/route.ts` — find the invitation, flip
 `inviteAccepted`, resolve the roster including the sender, push
