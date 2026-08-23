@@ -193,32 +193,22 @@ Then:
 - `POST /api/lobby/start` — host starts when ready, rather than waiting for
   every named invitee to accept.
 
-The game-creation block currently inlined in
-`src/app/api/invite/accept/route.ts` (the `if/else if` chain that picks the
-right `<Game>GameDataModel`, saves it, deletes the invite and sends
-`GameStart` + the first `YourTurn`) has to become a shared
-`startGameFromInvitation(invite, actorId)` before `lobby/start` can exist,
-with the all-accept path calling the same helper. This is the single most
-important refactor in the feature, and it should go one step further than
-relocating the chain.
+**The shared start path already exists** (#241). Turning an invitation into a
+live game used to be inlined in `src/app/api/invite/accept/route.ts`; it is now
+`startGameFromInvitation(invite, actorId, userList)` in
+`src/utils/games/startGame.ts` — build the game document, save it, delete the
+invitation, send `GameStart`, and send the opening `YourTurn` to whoever is up
+first unless they triggered the start. `lobby/start` and `lobby/join` call that
+same function, so there is one place a game comes into existence.
 
-Those seven branches are a **third copy of a gameType → model map that
-already exists**: `initialiseDiscriminators()` in `src/utils/mongodb/mongodb.ts`
-holds exactly these seven models in a typed `Record` whose keys are a
-compile-time exhaustiveness check, and `GAME_META` in `src/utils/ui/games.ts`
-is the same list again. The helper wants one lookup — off an exported version
-of that `Record`, or `mongoose.model(\`${invite.gameType}GameData\`)` — after
-which the seven branches *and* their seven imports are deleted rather than
-moved, and adding a game stops needing a line in a route at all.
-
-**One correction worth carrying into the work:**
-`src/games/gameRegistry.test.ts` does not guard this the way it looks. Its
-"handles every game's game-start branch" case reads the literal path
-`src/app/api/invite/accept/route.ts` and asserts that file's source contains
-the string `` `${name}GameDataModel` ``. So the extraction *breaks that test
-for all seven games* unless it is repointed — and if the lookup replaces the
-chain, the assertion should be deleted outright, because `mongodb.ts`'s typed
-`Record` is already a stricter, compile-time version of the same check.
+The seven-branch `if/else` chain that picked a `<Game>GameDataModel` was
+deleted rather than moved — it was a third copy of a gameType → model map the
+codebase already had. `mongodb.ts` now exports that record as
+`GAME_DATA_MODELS` with a `gameDataModelFor(gameType)` lookup, and
+`gameRegistry.test.ts`'s "game-start branch" case is gone with it (the
+discriminator case above it already scans `mongodb.ts`, and the typed keys make
+it a compile-time check on top). **A new game no longer needs a line in any
+route** — worth knowing before adding one to the lobby routes below.
 
 The dashboard's incoming/outgoing invite lists then keep rendering lobbies
 without a schema fork, because a seat is just a `userIdList` entry. They are
@@ -286,7 +276,8 @@ Two mechanics follow from open seats being contended:
 ## 5. Landmines in the current code
 
 These are things reading the code turned up that will bite whichever option is
-chosen. Most are small; the first is not.
+chosen. The first has since been fixed (#240) and is kept here for the
+reasoning; the rest are still ahead.
 
 **`userIdListToUsernameList` silently dropped unknown ids — fixed.** It used
 to push a name only for ids Clerk returned, so an unresolvable id made the
@@ -397,8 +388,8 @@ the doc alone is internal and does not earn a line.
 
 | Piece | Size | Risk | Notes |
 |---|---|---|---|
-| Extract `startGameFromInvitation` | S | Low | Pure refactor; deletes the seven-branch chain rather than moving it, and repoints one assertion in `gameRegistry.test.ts`. Do it first, it stands alone |
-| Position-preserving name resolution | S | Low | Fixes an existing latent bug |
+| ~~Extract `startGameFromInvitation`~~ | S | Low | **Done** (#241) — `src/utils/games/startGame.ts`, plus `GAME_DATA_MODELS`/`gameDataModelFor` in place of the seven-branch chain |
+| ~~Position-preserving name resolution~~ | S | Low | **Done** (#240) — `UNKNOWN_PLAYER_NAME` placeholder keeps every positional zip aligned |
 | Lobby fields + code generation + TTL | S | Low | Additive schema, `Invitation` discriminator untouched |
 | `/api/lobby` create / join / start | M | Med | Join is the first public write endpoint — rate limiting matters here |
 | Guest principal (Option A) | M | Med | Sits or falls on Clerk's createUser + sign-in-token flow |
@@ -411,13 +402,10 @@ the doc alone is internal and does not earn a line.
 | `unclaimedPlayerIds` on `GameResult` + claim `$pull` | S | Low | One filter on stats reads, one indexed update on claim |
 | Guest sweeper cron | S | Low | Model it on `cron/staledevices`; reads the existing `{ playerIds: 1, endedAt: -1 }` index |
 
-**Suggested order.** The refactor and the name-resolution fix are independently
-worth doing and unblock everything. Then lobby + code + join with *signed-in*
-players only — that is a real feature on its own ("start a game, share a code,
-no need to know usernames") and it proves the lobby model with zero identity
-risk. Only then add the guest principal, and add push and claiming in the same
-step as the guest — a guest who cannot be notified and cannot keep their game
-is worse than no guest at all.
+**The shape of the order** — codes for signed-in players first (a real feature
+on its own, with zero identity risk), then guests, with push and claiming
+landing alongside the guest rather than after them. §10 breaks that into
+commits.
 
 ---
 
@@ -481,7 +469,170 @@ of any future chat feature until that work is done.
 
 ---
 
-## 9. TL;DR
+## 9. Implementation plan
+
+The two prerequisites this document called out are done, so the rest is
+buildable in order:
+
+- **#240** made `userIdListToUsernameList`/`Map` position- and key-complete,
+  filling `UNKNOWN_PLAYER_NAME` for an id Clerk can't resolve. Open-seat
+  placeholders and guest ids can now flow through the response builders
+  without misaligning anyone's name.
+- **#241** extracted `startGameFromInvitation(invite, actorId, userList)` into
+  `src/utils/games/startGame.ts` and replaced the seven-branch model chain with
+  `gameDataModelFor()`. There is now one place a game comes into existence, and
+  the lobby routes below call it rather than repeating it.
+
+### 9.1 The commits
+
+Each step leaves `npm run build`, `npx tsc --noEmit` and `npm test` green and is
+reviewable on its own. Steps 1–6 are API-only; **step 7 is the first a human can
+play**, and steps 1–7 are a complete, shippable feature for signed-in players
+before any guest exists.
+
+**1 — The join code, as a pure module.** `src/utils/games/joinCode.ts`: the
+22-symbol alphabet (uppercase minus `I`, `O`, `0` and `1`),
+`generateJoinCode()`, and `normaliseJoinCode()` — someone typing `plum` or
+`pl um` must reach the same lobby as someone typing `PLUM`, and that rule
+belongs beside the alphabet rather than in a route. Ships with
+`joinCode.test.ts` in the same shape as `TurnTimer.test.ts`: the alphabet
+excludes every ambiguous glyph, normalisation is idempotent, and a generated
+code always normalises to itself. Nothing imports it yet.
+
+**2 — Lobby fields on the invitation.** `joinCode` and `expiresAt` on
+`IInvitationData` and `InvitationSchema` — the *base* schema, so every game's
+discriminator inherits them and no `CreateGame` changes. A partial unique index
+on `joinCode` scoped to documents that have one, and a TTL index on `expiresAt`
+to reap abandoned lobbies. Both fields optional, so every existing invitation
+stays valid. Nothing writes them yet: the index build lands on its own rather
+than tangled with behaviour.
+
+**3 — The open seat.** `src/utils/games/lobby.ts` holds the one convention: a
+seat is a `userIdList` entry whose `userId` is a placeholder, with
+`isOpenSeat()`, `openSeats(invite)` and the claim filter beside it. The screens
+that already render an invitation's players learn to show "Open seat" rather
+than the `UNKNOWN_PLAYER_NAME` the resolver would now hand them —
+`/api/user/outgoinginvites`, `/api/user/incominginvites`, and the
+`OutgoingInviteList` / `IncomingInvitesList` rows. Pure helpers get unit tests;
+the rendering is visible from step 4.
+
+**4 — Creating a lobby.** `POST /api/lobby`: the game's existing invite payload
+plus `openSeats: n`, behind the same signed-in + unlocked checks the `newgame`
+routes use — this is the gate that guarantees every lobby has a registered host
+(§8). It writes the code (retrying on the duplicate-key error the partial index
+throws — no coordination, no counter), `expiresAt`, and n placeholder seats.
+The per-game settings ride along unchanged, because a lobby *is* that game's
+invitation discriminator.
+
+> Out of scope, deliberately: the seven `POST /api/newgame/<game>` routes are
+> near-identical and differ only in their settings block, so there is a real
+> refactor available here. It is a bigger prize than this feature and should be
+> its own change rather than smuggled in — `/api/lobby` sits beside them.
+
+**5 — Claiming a seat, and starting.** `POST /api/lobby/join`, signed-in players
+only for now: normalise the code, find the open lobby, and claim a seat with a
+**single conditional update** that matches the lobby *and* an unclaimed seat.
+Not read-modify-write — `InvitationSchema` has no `optimisticConcurrency` where
+`GameDataSchema` sets it, so two joiners racing would otherwise lose one of the
+two, or both take the last seat and overflow the game's maximum. If that claim
+filled the lobby and every named invitee has accepted, the route calls
+`startGameFromInvitation`: same predicate, same helper, so a lobby and a named
+invite start identically.
+
+**6 — "Start now".** `POST /api/lobby/start`, host only. It `$pull`s the
+unclaimed seats, then runs the same all-accept check and the same
+`startGameFromInvitation`. There is deliberately no second start rule — the
+button edits the seat list until the existing predicate is true. Refused below
+the game's minimum player count, the bound `partySizeOutOfRange` already
+applies on the setup screen.
+
+**7 — The screens.** The first playable commit. Host side: the existing setup
+screen (`GameSetupLayout` + `UserInviteList`/`usePlayerList` + `TurnTimerSelect`
++ `PartySizeHint`) gains an open-seat count, and after creation shows the lobby
+— the code large and tap-to-copy (`useResettingState` for the "Copied!" flash),
+the seat list from `ListSection` + `ListRow` + `Avatar` + `PendingTag` /
+`.ag-dashed-add`, refreshing via `useRefreshableData` + `usePushEvents` exactly
+as `IncomingInvitesList` does. Joiner side: `/join`, a code field (`.ag-input`)
+on `AuthScreen`, errors through `useToast`. First `whatsNew.ts` line, under
+enhancements.
+
+**8 — The guest principal.** `src/utils/users/guest.ts`: create a Clerk user
+with `publicMetadata.guest = true` and a generated unique username, mint a
+sign-in token, hand the client the ticket. `useIsAuthorised` gains one clause —
+`unlocked === true || publicMetadata.guest === true` — and `/api/users` applies
+the same rule server-side, so the app keeps one authorisation predicate rather
+than growing a second guard.
+
+> This is the risky commit, and it is deliberately alone and late. If Clerk's
+> `createUser` + sign-in-token flow doesn't behave as Option A assumes, this is
+> where the plan forks to Option B (§3) — and steps 1–7 have already shipped a
+> working feature regardless.
+
+**9 — A guest's game doesn't count yet.** `unclaimedPlayerIds: string[]` on
+`GameResultData`, filled by `recordGameResult` from whichever `playerIds` are
+still guests, with an is-empty filter added to the stats reads. It also copies
+each guest's display name onto the record, so a swept guest's name survives in
+the other player's history (§8). This lands *before* any guest can play, so
+there is never a window in which a guest game is recorded as counting.
+
+**10 — Guests can join.** `/api/lobby/join` accepts `{ code, name }` from a
+signed-out visitor: validate the name (length and character set — input
+validation, not moderation, per §8), suffix it for per-lobby uniqueness, mint
+the guest, claim the seat through the same conditional update as step 5. This
+is the app's first public write endpoint, so per-IP rate limiting lands here
+too. `/join` gains the name field. Friend and nudge affordances hide for guest
+seats rather than failing on them.
+
+**11 — Bringing the guest back.** The point of the whole feature. On the
+guest's first board screen, offer notifications through the kit that already
+exists — `NotificationOffer` over `OfferCard` in `BottomBanner`,
+`useNotificationPermission`, `useFcmToken` — with `InstallOffer` first on iOS,
+where a PWA install is a precondition for web push. Under Option A their FCM
+token lands in Clerk `privateMetadata` like anyone else's, so `sendPushToUsers`
+needs no change at all. A sign-in-token resume link is the fallback for anyone
+who declines. Second `whatsNew.ts` line: guests can play.
+
+**12 — Claiming an account.** After the guest's first turn, offer to keep it:
+adding an email and password to the Clerk user they already are. The id never
+changes, so games, results and turn history carry over with no migration — the
+only writes are dropping `guest` from their metadata and `$pull`-ing their id
+out of every `GameResult.unclaimedPlayerIds`.
+
+**13 — Sweeping unclaimed guests.** `GET /api/cron/staleguests`, modelled on
+`cron/staledevices`: same `CRON_SECRET` bearer auth, same `vercel.json`
+registration, same "rewrite only what actually changed" pass. For each guest,
+the most recent `endedAt` across the `GameResult` documents carrying their id —
+one query on the existing `{ playerIds: 1, endedAt: -1 }` index — and delete
+them a week after it. A guest with no results at all is swept on their lobby's
+`expiresAt` instead. Deleting the Clerk user is safe by then, because step 9
+already copied their name onto the record.
+
+### 9.2 What to check as you go
+
+- **Every commit:** `npm run build`, `npx tsc --noEmit`, `npm test`. CI runs all
+  three on PRs to `main`.
+- **UI commits (3, 7, 10, 11, 12):** a `caveman` review before committing, per
+  [`AGENTS.md`](../AGENTS.md). Steps 7 and 10 are where the reuse rules bite
+  hardest, because a lobby screen is almost entirely composition.
+- **Player-visible commits (7 and 11):** a `whatsNew.ts` line in the same PR,
+  newest first, oldest dropped once the group runs past five. Steps 1–6, 8, 9,
+  12 and 13 are internal and earn none.
+- **Tests:** this repo has no route or database harness — the suite is two
+  registry scans plus pure unit tests. So the *pure* modules this feature adds
+  (`joinCode.ts`, `lobby.ts`'s seat helpers, the name validator) carry tests in
+  the `TurnTimer.test.ts` shape, and the routes are verified by hand. Don't
+  invent an integration harness here; if one is wanted, that is its own work.
+- **Two things no test will catch**, so check them deliberately: the seat-claim
+  race (two joins with the same code at the same instant must not both take the
+  last seat, nor both start the game), and a started or expired lobby rejecting
+  a code someone still has open on screen.
+- **`ARCHITECTURE.md`** §4's lifecycle and §5's `IInvitationData` both describe
+  behaviour these commits change — update it in the step that changes it (2 and
+  5), not in a catch-up commit at the end.
+
+---
+
+## 10. TL;DR
 
 - **The infrastructure is unusually ready for this.** Identity is an opaque
   string everywhere that matters; only five places actually resolve it.
@@ -500,8 +651,11 @@ of any future chat feature until that work is done.
 - **The code solves joining; it does not solve returning.** Push permission,
   a durable session, and a claim prompt after the first turn are what turn a
   join-by-code game into an onboarded player.
-- **Ship it in two halves.** Codes for signed-in players first (valuable
-  alone, no identity risk), then guests with push and claiming together.
+- **Ship it in two halves** (§9 breaks it into thirteen commits). Codes for
+  signed-in players first — steps 1–7, a complete feature on their own with no
+  identity risk — then guests with push and claiming together. The one commit
+  that could invalidate the approach (the Clerk guest principal) is isolated
+  and late, so everything before it ships regardless.
 - **The scope is settled** (§8): a game counts only once every player is a
   real account, the abandonment fuse is unchanged, every lobby has a
   registered host, unclaimed guests are swept a week after their last game
