@@ -846,22 +846,33 @@ A the guest's FCM token lands in Clerk `privateMetadata` like anyone else's, so
 `sendPushToUsers` needs no change at all. Second `whatsNew.ts` line: guests can
 play.
 
-**16 — Claiming an account.** After the guest's first turn, offer to keep it:
-adding an email and password to the Clerk user they already are. The id never
-changes, so games, results and turn history carry over with no migration — the
-only writes are dropping `guest` from their metadata and `$pull`-ing their id
-out of every `GameResult.unclaimedPlayerIds`.
+**16 — Claiming an account.** *(Done.)* After the guest's first turn, offer to
+keep it: adding an email and password to the Clerk user they already are. The
+id never changes, so games, results and turn history carry over with no
+migration — the only writes are dropping `guest` from their metadata and
+`$pull`-ing their id out of every `GameResult.unclaimedPlayerIds`.
 
 `createGuest` (`src/utils/users/guest.ts`) gives every guest a throwaway
 `<username>@guests.asyncgames.com` address, because this Clerk instance
-requires *some* email on every user at creation — without one, `createUser`
-rejects with `form_data_missing`/`email_address`. Clerk allows more than one
-email address per user, so adding the real one here must not just be a bare
-`createEmailAddress` call: that would leave the placeholder sitting on the
-account as a second verified-but-undeliverable address. This step's write has
-to delete the guest address (or set the real one primary, then delete the
-guest address) in the same pass that adds it, not assume the new one silently
-replaces it.
+requires some email on every user at creation. Adding the real one is
+therefore not a bare `createEmailAddress` call — that would leave the
+placeholder sitting on the account as a second verified-but-undeliverable
+address. `POST /api/user/claim` creates the real address as `primary: true`
+in the same call (moving primary status off the placeholder immediately,
+never a moment with two or with none), then deletes the placeholder
+(`isGuestPlaceholderEmail`, exported from `guest.ts` so the route doesn't
+re-derive the domain), then sets the password. Only once all three succeed
+does it clear `publicMetadata.guest` and `$pull` the guest's id out of every
+`GameResult.unclaimedPlayerIds` — a Clerk rejection (taken email, weak
+password) leaves the guest account untouched rather than partially claimed.
+
+"After the first turn" is `useGuestMoved` (`src/utils/hooks/useGuestMoved.ts`):
+`useSubmitCommand` — the one hook every game's board already calls to send a
+command — marks it the moment a guest's command succeeds, so the trigger is
+shared across all seven games rather than seven copies. The offer itself
+reuses `BottomBanner`/`OfferCard` as a third, guest-only offer behind install
+and notifications, and hands off to a `ClaimAccountForm` on Settings rather
+than building a second copy of the email/password form inline.
 
 **17 — Sweeping unclaimed guests.** `GET /api/cron/staleguests`, modelled on
 `cron/staledevices`: same `CRON_SECRET` bearer auth, same `vercel.json`
@@ -882,10 +893,10 @@ unresolvable id as a placeholder rather than misaligning the list.
   bite hardest, because a lobby screen is almost entirely composition of things
   that exist — and step 11's whole shape came out of asking that question first
   (no new route, no new hook, no second share button).
-- **Player-visible commits (10, 11 and 15):** a `whatsNew.ts` line in the same
-  PR, newest first, oldest dropped once the group runs past five. Enhancements
-  is already at five, so 11 and 15 each drop one. Every other step is internal
-  and earns none.
+- **Player-visible commits (10, 11, 15 and 16):** a `whatsNew.ts` line in the
+  same PR, newest first, oldest dropped once the group runs past five.
+  Enhancements is already at five, so each of these drops one. Every other
+  step is internal and earns none.
 - **Tests:** the suite is fifteen files — five game-logic suites, two registry
   scans, and pure unit tests for helpers — with no route or database harness at
   all. So the *pure* modules this feature adds (`joinCode.ts`, `lobby.ts`'s seat

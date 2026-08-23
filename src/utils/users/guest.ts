@@ -34,8 +34,20 @@ function generateGuestUsername(): string {
 // none to give, so this mints a throwaway address under a domain we own —
 // never delivered to, since the Backend API marks an address it creates as
 // verified without sending mail.
+const GUEST_EMAIL_DOMAIN = "@guests.asyncgames.com";
+
 function generateGuestEmail(username: string): string {
-    return `${username}@guests.asyncgames.com`;
+    return `${username}${GUEST_EMAIL_DOMAIN}`;
+}
+
+// Whether an address is the throwaway placeholder above, rather than a real
+// one a claim (step 16) added. Exported so the claim route can find the
+// placeholder still sitting on a guest's account without re-deriving the
+// domain a second time — deleting it is the other half of that write, since
+// a bare createEmailAddress would leave it behind as a second
+// verified-but-undeliverable address.
+export function isGuestPlaceholderEmail(emailAddress: string): boolean {
+    return emailAddress.endsWith(GUEST_EMAIL_DOMAIN);
 }
 
 // A guest principal (docs/account-less-play.md §3 Option A): a real Clerk
