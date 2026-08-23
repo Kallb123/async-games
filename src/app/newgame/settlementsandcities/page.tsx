@@ -74,14 +74,17 @@ function NewGameSettlementsAndCitiesForm() {
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
   const [expansions, setExpansions] = useState(() => expansionsFromParam(searchParams.get('expansions')));
   const { showToast } = useToast();
-  const { maxPlayers } = GAME_META.settlementsandcities;
-  const { seatCount, setSeatCount, submit } = useCreateLobbyOrInvite('SettlementsAndCities', '/api/newgame/settlementsandcities');
+  const gameMeta = GAME_META.settlementsandcities;
+  const { seatCount, setSeatCount, maxSeats, partySize, canSubmit, actionLabel, footnote, submit } = useCreateLobbyOrInvite({
+    meta: gameMeta,
+    gameType: 'SettlementsAndCities',
+    invitePath: '/api/newgame/settlementsandcities',
+    invitedCount: players.length,
+  });
 
-  // The sender is always a player, so the party size is invitees + open seats + 1.
-  const totalPlayers = players.length + seatCount + 1;
   const validation = useMemo(
-    () => validateExpansions(expansions, totalPlayers),
-    [expansions, totalPlayers],
+    () => validateExpansions(expansions, partySize),
+    [expansions, partySize],
   );
 
   const toggle = (id: SACExpansionId) =>
@@ -105,14 +108,14 @@ function NewGameSettlementsAndCitiesForm() {
 
   return (
     <GameSetupLayout
-      meta={GAME_META.settlementsandcities}
+      meta={gameMeta}
       onSubmit={handleSubmit}
-      actionLabel="Send invites & start"
-      actionDisabled={players.length === 0 || !validation.ok}
-      footnote="Game begins once everyone accepts"
+      actionLabel={actionLabel}
+      actionDisabled={!canSubmit || !validation.ok}
+      footnote={footnote}
     >
       <UserInviteList userList={userList} setItem={setItem} />
-      <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxPlayers - players.length - 1} />
+      <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxSeats} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
 
       <OptionSection
@@ -120,7 +123,7 @@ function NewGameSettlementsAndCitiesForm() {
         footer={<>
           {/* Live compatibility + player-count feedback (design doc §8). */}
           <p className="ag-hint">
-            Party size {totalPlayers} · supports {validation.min}–{validation.max} players · first to{' '}
+            Party size {partySize} · supports {validation.min}–{validation.max} players · first to{' '}
             <span className="ag-hi">{validation.victoryTarget} VP</span> wins.
           </p>
           {validation.errors.map((msg, i) => (

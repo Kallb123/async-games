@@ -5,6 +5,7 @@ import { Suspense, useState } from "react";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
+import PartySizeHint from "@/components/ui/PartySizeHint";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import OptionSection from "@/components/ui/OptionSection";
 import SeatCountSelect from "@/components/ui/SeatCountSelect";
@@ -24,8 +25,13 @@ function NewGameDiceCitiesForm() {
   const [enabledDocks, setEnabledDocks] = useState(false);
   const [enabledBillionaireRow, setEnabledBillionaireRow] = useState(false);
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
-  const { maxPlayers } = GAME_META.dicecities;
-  const { seatCount, setSeatCount, submit } = useCreateLobbyOrInvite('DiceCities', '/api/newgame/dicecities');
+  const gameMeta = GAME_META.dicecities;
+  const { seatCount, setSeatCount, maxSeats, partySize, canSubmit, actionLabel, footnote, submit } = useCreateLobbyOrInvite({
+    meta: gameMeta,
+    gameType: 'DiceCities',
+    invitePath: '/api/newgame/dicecities',
+    invitedCount: players.length,
+  });
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -41,16 +47,17 @@ function NewGameDiceCitiesForm() {
 
   return (
     <GameSetupLayout
-      meta={GAME_META.dicecities}
+      meta={gameMeta}
       onSubmit={handleSubmit}
-      actionLabel="Send invites & start"
-      actionDisabled={players.length === 0}
-      footnote="Game begins once everyone accepts"
+      actionLabel={actionLabel}
+      actionDisabled={!canSubmit}
+      footnote={footnote}
     >
       <UserInviteList userList={userList} setItem={setItem} />
-      <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxPlayers - players.length - 1} />
+      <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxSeats} />
 
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
+      <PartySizeHint meta={gameMeta} total={partySize} />
 
       <OptionSection label="Dice Cities options">
         <OptionToggleRow

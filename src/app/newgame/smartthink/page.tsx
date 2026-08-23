@@ -5,6 +5,7 @@ import { Suspense, useState } from "react";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
+import PartySizeHint from "@/components/ui/PartySizeHint";
 import SeatCountSelect from "@/components/ui/SeatCountSelect";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
@@ -23,8 +24,13 @@ function NewGameSmartthinkForm() {
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
   const router = useRouter();
   const { showToast } = useToast();
-  const { maxPlayers } = GAME_META.smartthink;
-  const { seatCount, setSeatCount, submit } = useCreateLobbyOrInvite('Smartthink', '/api/newgame/smartthink');
+  const gameMeta = GAME_META.smartthink;
+  const { seatCount, setSeatCount, maxSeats, partySize, canSubmit, actionLabel, footnote, submit } = useCreateLobbyOrInvite({
+    meta: gameMeta,
+    gameType: 'Smartthink',
+    invitePath: '/api/newgame/smartthink',
+    invitedCount: players.length,
+  });
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -51,11 +57,11 @@ function NewGameSmartthinkForm() {
 
   return (
     <GameSetupLayout
-      meta={GAME_META.smartthink}
+      meta={gameMeta}
       onSubmit={handleSubmit}
-      actionLabel="Send invites & start"
-      actionDisabled={players.length === 0}
-      footnote="Game begins once everyone accepts"
+      actionLabel={actionLabel}
+      actionDisabled={!canSubmit}
+      footnote={footnote}
     >
       <div className="ag-section">
         <div className="ag-cta" style={{ background: "var(--ag-green)", color: "var(--ag-on-dark)" }}>
@@ -68,8 +74,9 @@ function NewGameSmartthinkForm() {
       </div>
 
       <UserInviteList userList={userList} setItem={setItem} />
-      <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxPlayers - players.length - 1} />
+      <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxSeats} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
+      <PartySizeHint meta={gameMeta} total={partySize} />
       <FcmTokenComp />
     </GameSetupLayout>
   );

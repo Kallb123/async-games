@@ -65,6 +65,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Open seats count as players",
+                detail: "Leaving seats open with nobody named no longer greys out the start button — set the seats, get your code and share it.",
+            },
+            {
                 title: "Right names, right seats",
                 detail: "A player Clerk couldn't look up used to shift every other name in the game out of place; now they just show as \"Unknown player\".",
             },
@@ -79,10 +83,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Lists stop jumping about",
                 detail: "Your games stay where they are while the screen refreshes in the background.",
-            },
-            {
-                title: "Unlocking takes you straight in",
-                detail: "Entering your access code lands you on your games instead of bouncing back to the code screen.",
             },
         ],
     },
