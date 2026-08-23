@@ -9,8 +9,7 @@ import { INVITE_EVENTS } from "@/utils/hooks/usePushEvents";
 import { IInvitationResponse } from "@/utils/mongodb/InvitationData";
 import { OPEN_SEAT_LABEL } from "@/utils/games/lobby";
 import { metaForGame } from "@/utils/ui/games";
-import BackLink from "@/components/ui/BackLink";
-import GameThumb, { ROW_THUMB_RADIUS, ROW_THUMB_SIZE } from "@/components/ui/GameThumb";
+import GameIdentityHeader from "@/components/ui/GameIdentityHeader";
 import ListSection from "@/components/ui/ListSection";
 import ListRow from "@/components/ui/ListRow";
 import Avatar from "@/components/ui/Avatar";
@@ -67,16 +66,7 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
 
   return (
     <main>
-      <div className="ag-topbar">
-        <div className="ag-topbar-title">
-          <BackLink href="/" label="Back home" />
-          {meta && <GameThumb meta={meta} size={ROW_THUMB_SIZE} radius={ROW_THUMB_RADIUS} />}
-          <div style={{ minWidth: 0 }}>
-            <div style={{ font: "800 20px/1.1 var(--ag-font)", color: "var(--ag-ink)" }}>Your lobby</div>
-            {meta && <div style={{ font: "500 11.5px var(--ag-font)", color: "var(--ag-ink-soft)" }}>{meta.name}</div>}
-          </div>
-        </div>
-      </div>
+      <GameIdentityHeader backHref="/" backLabel="Back home" meta={meta} title="Your lobby" subtitle={meta?.name} />
 
       <div className="ag-section">
         <button
@@ -111,7 +101,12 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
             <ListRow
               key={`seat-${i}`}
               icon="🪑"
-              title={<span className="ag-dashed-add">Open seat</span>}
+              title={
+                // .ag-dashed-add is styled as a button (cursor, hover) elsewhere;
+                // this seat isn't clickable, so pointer-events:none keeps the
+                // dashed-pill look without the borrowed interactivity cues.
+                <span className="ag-dashed-add" style={{ cursor: "default", pointerEvents: "none" }}>Open seat</span>
+              }
               sub="Waiting for a player"
             />
           ) : (
