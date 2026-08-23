@@ -10,7 +10,7 @@ import SeatCountSelect from "@/components/ui/SeatCountSelect";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
 import { useCreateLobbyOrInvite } from "@/utils/hooks/useCreateLobbyOrInvite";
-import { GAME_META } from "@/utils/ui/games";
+import { GAME_META, gamePath } from "@/utils/ui/games";
 import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { SmartthinkInvitationRequest } from "@/games/Smartthink/SmartthinkModels";
 import { useToast } from "@/components/ToastContext";
@@ -48,7 +48,7 @@ function NewGameSmartthinkForm() {
         throw new Error('Failed to start solo game');
       }
       const data = await response.json();
-      router.push(`/games/${data.gameUrl}/${data.gameId}`);
+      router.push(gamePath(data.gameUrl, data.gameId));
     } catch (error) {
       console.error(error);
       showToast('Failed to start the solo game. Please try again.', 'danger');

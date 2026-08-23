@@ -38,7 +38,11 @@ export async function startGameFromInvitation(
     if (!gameDataModel) {
         throw new Error(`Unsupported game type: ${invite.gameType}`);
     }
-    await new gameDataModel(gameData).save();
+    // Stamp the lobby/invitation it came from onto the game, so a host still
+    // sitting on their lobby screen when the last seat fills can find the game
+    // their lobby just became — the invitation is deleted a line below, and
+    // nothing else links the two.
+    await new gameDataModel({ ...gameData, inviteId: invite.inviteId }).save();
 
     await invite.deleteOne();
 

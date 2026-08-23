@@ -39,6 +39,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Everyone waits in the lobby",
+                detail: "Claim a seat with a code and you wait on the lobby screen with the host, watching the last seats fill instead of guessing.",
+            },
+            {
                 title: "Join a game with a code",
                 detail: "Open a few seats when you set up a game and share the code — anyone who enters it grabs a spot, no invite required.",
             },
@@ -54,16 +58,16 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Profile pictures",
                 detail: "Upload a photo of your own, or keep the one from the account you signed in with.",
             },
-            {
-                title: "Install it like an app",
-                detail: "Add Async Games to your home screen and take your turns without the browser in the way.",
-            },
         ],
     },
     {
         label: "Bug fixes",
         icon: "🔧",
         items: [
+            {
+                title: "Your lobby takes you into the game",
+                detail: "Waiting on the lobby screen when the last seat fills now drops everyone straight onto the board instead of back at the home screen.",
+            },
             {
                 title: "Open-seat games get their code",
                 detail: "Setting up a game with open seats and nobody invited no longer fails with an error — you get the code to share straight away.",
@@ -79,10 +83,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Boards keep themselves up to date",
                 detail: "An open board now refreshes on its own, so you see your opponent's move without reloading.",
-            },
-            {
-                title: "Double-tapping setup no longer skips a turn",
-                detail: "Sending the same command twice while a game is being set up can't push the turn out of step any more.",
             },
         ],
     },

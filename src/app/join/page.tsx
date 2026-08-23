@@ -6,6 +6,7 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useToast } from "@/components/ToastContext";
 import BackLink from "@/components/ui/BackLink";
 import { normaliseJoinCode } from "@/utils/games/joinCode";
+import { useEnterStartedGame } from "@/utils/hooks/useEnterStartedGame";
 
 // A code-holder with an account, landing here from a link or by typing the
 // URL. A guest with no account belongs on this same route, but goes through
@@ -16,6 +17,7 @@ export default function Join() {
   useAuthGuard();
   const router = useRouter();
   const { showToast } = useToast();
+  const enterStartedGame = useEnterStartedGame();
   const [code, setCode] = useState("");
   const [joining, setJoining] = useState(false);
 
@@ -34,13 +36,15 @@ export default function Join() {
       if (!response.ok) {
         throw new Error('Failed to join lobby');
       }
-      const { gameStarted, gameId, gameUrl } = await response.json();
+      const { gameStarted, gameId, gameUrl, inviteId } = await response.json();
       if (gameStarted) {
-        showToast('Game is starting! Redirecting you now...', 'success', 'Game Started');
-        router.push(`/games/${gameUrl}/${gameId}`);
+        enterStartedGame(gameUrl, gameId);
       } else {
+        // Into the lobby with the host and whoever else has claimed a seat,
+        // rather than home: the remaining seats fill live there, and it takes
+        // everyone waiting on it straight into the game once they do.
         showToast("You're in! Waiting for the rest of the party.", 'success', 'Seat Claimed');
-        router.push('/');
+        router.push(`/lobby/${inviteId}`);
       }
     } catch (error) {
       console.error(error);
