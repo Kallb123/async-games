@@ -1,5 +1,5 @@
-import mongoose from 'mongoose';
-import { GameDataModel } from './GameData';
+import mongoose, { Model } from 'mongoose';
+import { GameDataModel, IGameDataDocument } from './GameData';
 import { DiceCitiesGameDataModel, DiceCitiesInvitationModel } from '@/games/DiceCities/DiceCitiesModels';
 import { SnakesAndLaddersGameDataModel, SnakesAndLaddersInvitationModel } from '@/games/SnakesAndLadders/SnakesAndLaddersModels';
 import { SettlementsAndCitiesGameDataModel, SettlementsAndCitiesInvitationModel } from '@/games/SettlementsAndCities/SettlementsAndCitiesModels';
@@ -11,7 +11,7 @@ import { InvitationModel } from './InvitationData';
 
 // Add new game discriminator keys here whenever a new game is introduced.
 // TypeScript will produce a compile error if a key is listed but its model is
-// not present in the records inside initialiseDiscriminators().
+// not present in GAME_DATA_MODELS / the record inside initialiseDiscriminators().
 type GameDataDiscriminatorKey = 'DiceCitiesGameData' | 'SnakesAndLaddersGameData' | 'SettlementsAndCitiesGameData' | 'SmartthinkGameData' | 'WorldDominationGameData' | 'SolitaireGameData' | 'TrainTimeGameData';
 type InvitationDiscriminatorKey = 'DiceCitiesInvitation' | 'SnakesAndLaddersInvitation' | 'SettlementsAndCitiesInvitation' | 'SmartthinkInvitation' | 'WorldDominationInvitation' | 'SolitaireInvitation' | 'TrainTimeInvitation';
 
@@ -57,20 +57,33 @@ export async function dbConnect() {
   return cached.conn;
 }
 
+// Every game's GameData discriminator model, keyed by discriminator name.
+// This is the one gameType -> model map — see gameDataModelFor() below — and
+// the typed Record is a compile-time exhaustiveness check: adding a key to
+// GameDataDiscriminatorKey but omitting its model here is a TypeScript error.
+// It lives at module scope so importing this file registers the game-data
+// discriminators, the same way initialiseDiscriminators() does for invitations.
+const GAME_DATA_MODELS: Record<GameDataDiscriminatorKey, Model<IGameDataDocument>> = {
+  DiceCitiesGameData: DiceCitiesGameDataModel,
+  SnakesAndLaddersGameData: SnakesAndLaddersGameDataModel,
+  SettlementsAndCitiesGameData: SettlementsAndCitiesGameDataModel,
+  SmartthinkGameData: SmartthinkGameDataModel,
+  WorldDominationGameData: WorldDominationGameDataModel,
+  SolitaireGameData: SolitaireGameDataModel,
+  TrainTimeGameData: TrainTimeGameDataModel,
+};
+
+// The model that persists a game of `gameType` — one lookup in place of a
+// branch per game. Undefined for a gameType with no registered discriminator,
+// which callers should treat as an unsupported game rather than a crash.
+export function gameDataModelFor(gameType: string): Model<IGameDataDocument> | undefined {
+  const models: Record<string, Model<IGameDataDocument> | undefined> = GAME_DATA_MODELS;
+  return models[`${gameType}GameData`];
+}
+
 function initialiseDiscriminators() {
   // Evaluating these model variables ensures Mongoose has registered every
-  // discriminator before the connection is used.  The typed Record also acts
-  // as a compile-time exhaustiveness check: adding a key to the union types
-  // above but omitting the corresponding model here is a TypeScript error.
-  const _gameData: Record<GameDataDiscriminatorKey, unknown> = {
-    DiceCitiesGameData: DiceCitiesGameDataModel,
-    SnakesAndLaddersGameData: SnakesAndLaddersGameDataModel,
-    SettlementsAndCitiesGameData: SettlementsAndCitiesGameDataModel,
-    SmartthinkGameData: SmartthinkGameDataModel,
-    WorldDominationGameData: WorldDominationGameDataModel,
-    SolitaireGameData: SolitaireGameDataModel,
-    TrainTimeGameData: TrainTimeGameDataModel,
-  };
+  // invitation discriminator before the connection is used.
   const _invitations: Record<InvitationDiscriminatorKey, unknown> = {
     DiceCitiesInvitation: DiceCitiesInvitationModel,
     SnakesAndLaddersInvitation: SnakesAndLaddersInvitationModel,
@@ -80,5 +93,5 @@ function initialiseDiscriminators() {
     SolitaireInvitation: SolitaireInvitationModel,
     TrainTimeInvitation: TrainTimeInvitationModel,
   };
-  void _gameData, _invitations;
+  void _invitations;
 }

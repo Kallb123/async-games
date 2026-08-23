@@ -6,9 +6,8 @@ import { describe, expect, it } from "vitest";
 // Everything about a game lives in its src/games/<Game>/ folder (see
 // ARCHITECTURE.md §3, §12), but a handful of shared files outside that folder
 // still need a one-line addition per game: the GameLogic barrel, the GAME_META
-// aggregator, the Mongoose discriminator registration, and the invite-accept
-// branch that creates the game document. Unlike the rules/command wiring
-// guarded by serializableRegistry.test.ts (which rides on the @serializable
+// aggregator, and the Mongoose discriminator registration. Unlike the
+// rules/command wiring guarded by serializableRegistry.test.ts (which rides on the @serializable
 // decorator and a compiler-checked Record), these are plain string references
 // with nothing forcing them to be added, so this test scans source for each
 // game folder's expected artifacts and asserts every shared file mentions it.
@@ -59,6 +58,10 @@ describe("game registry completeness", () => {
     });
 
     it("registers every game's Mongoose discriminator models in mongodb.ts", () => {
+        // This also covers game creation: startGameFromInvitation picks a game's
+        // model straight out of GAME_DATA_MODELS in this same file, so there is
+        // no per-game branch in the invite-accept route left to check — and the
+        // record's typed keys make it a compile-time check on top of this one.
         const mongodbSource = read("src/utils/mongodb/mongodb.ts");
         const missing = gameNames.filter(
             (name) =>
@@ -110,17 +113,6 @@ describe("game registry completeness", () => {
             missing,
             `These games export a compute<Game>ResultStats() but it isn't wired into ` +
                 `GAME_RESULT_STATS in src/utils/mongodb/GameResultData.ts:\n` +
-                missing.map((n) => `  - ${n}`).join("\n"),
-        ).toEqual([]);
-    });
-
-    it("handles every game's game-start branch in the invite accept route", () => {
-        const acceptRoute = read("src/app/api/invite/accept/route.ts");
-        const missing = gameNames.filter((name) => !acceptRoute.includes(`${name}GameDataModel`));
-        expect(
-            missing,
-            `These games have no branch in src/app/api/invite/accept/route.ts to ` +
-                `create their game document once every invitee has accepted:\n` +
                 missing.map((n) => `  - ${n}`).join("\n"),
         ).toEqual([]);
     });

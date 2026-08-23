@@ -1,19 +1,9 @@
-import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
-import { buildYourTurnNotification } from '@/utils/firebase/notificationContent';
-import { userListToUserIdNameMap } from '@/utils/users/clerk';
+import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { IInvitationDataDocument, InvitationModel } from '@/utils/mongodb/InvitationData';
-import { DiceCitiesGameDataModel } from '@/games/DiceCities/DiceCitiesModels';
-import { SnakesAndLaddersGameDataModel } from '@/games/SnakesAndLadders/SnakesAndLaddersModels';
-import { SettlementsAndCitiesGameDataModel } from '@/games/SettlementsAndCities/SettlementsAndCitiesModels';
-import { SmartthinkGameDataModel } from '@/games/Smartthink/SmartthinkModels';
-import { WorldDominationGameDataModel } from '@/games/WorldDomination/WorldDominationModels';
-import { SolitaireGameDataModel } from '@/games/Solitaire/SolitaireModels';
-import { TrainTimeGameDataModel } from '@/games/TrainTime/TrainTimeModels';
-import { uuidString } from '@/utils/apiModels/GameDataApi';
-import { IGameDataDocument } from '@/utils/mongodb/GameData';
+import { startGameFromInvitation } from '@/utils/games/startGame';
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
@@ -39,8 +29,7 @@ export async function POST(request: NextRequest) {
   const userIdList = inviteData.userIdList.map(uid => uid.userId);
   // Notify every invitee *and* the original sender: the sender's outgoing-invite
   // list / home dashboard needs to react live when their invite is accepted and
-  // when the game finally starts. `userIdList` (invitees only) is what CreateGame
-  // expects, so keep it separate from this notification list.
+  // when the game finally starts.
   const { data: userList } = await (await clerkClient()).users.getUserList({
     userId: [...userIdList, inviteData.senderId]
   });
@@ -60,53 +49,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({success: true, gameStarted: false});
   }
 
-  // Create game
-  const gameData = await inviteData.CreateGame(inviteData, userIdList.concat(inviteData.senderId));
-  let gameDataM: IGameDataDocument;
-  if (inviteData.gameType === 'SnakesAndLadders') {
-    gameDataM = new SnakesAndLaddersGameDataModel(gameData);
-  } else if (inviteData.gameType === 'SettlementsAndCities') {
-    gameDataM = new SettlementsAndCitiesGameDataModel(gameData);
-  } else if (inviteData.gameType === 'DiceCities') {
-    gameDataM = new DiceCitiesGameDataModel(gameData);
-  } else if (inviteData.gameType === 'Smartthink') {
-    gameDataM = new SmartthinkGameDataModel(gameData);
-  } else if (inviteData.gameType === 'WorldDomination') {
-    gameDataM = new WorldDominationGameDataModel(gameData);
-  } else if (inviteData.gameType === 'Solitaire') {
-    gameDataM = new SolitaireGameDataModel(gameData);
-  } else if (inviteData.gameType === 'TrainTime') {
-    gameDataM = new TrainTimeGameDataModel(gameData);
-  } else {
-    throw new Error(`Unsupported game type: ${inviteData.gameType}`);
-  }
-
-  await gameDataM.save();
-  
-  await inviteData.deleteOne();
-
-  await sendPushToUsers(userList, {
-    event: 'GameStart',
-    inviteId: inviteId,
-    gameId: gameData.gameId.toString() as uuidString
-  });
-
-  // Whoever won the roll for turn order is up immediately, and until now nothing
-  // told them so — the first "your move" push only went out once someone had
-  // played. Skip it for the player who triggered the game starting: they're
-  // looking at the app right now (and for solo games they're the only player).
-  const firstUser = userList.find(u => u.id === gameData.currentTurn);
-  if (firstUser && firstUser.id !== authResponse.userId) {
-    await sendPushToUsers([firstUser], {
-      event: 'YourTurn',
-      gameId: gameData.gameId.toString() as uuidString,
-      link: gameNotificationLink(gameData.gameType.url, gameData.gameId.toString())
-    }, await buildYourTurnNotification(gameData, firstUser.id, userListToUserIdNameMap(userList), {
-      gameJustStarted: true
-    }), {
-      channel: 'yourTurn'
-    });
-  }
+  const gameData = await startGameFromInvitation(inviteData, authResponse.userId, userList);
 
   return NextResponse.json({success: true, gameStarted: true, gameId: gameData.gameId, gameUrl: gameData.gameType.url});
 }

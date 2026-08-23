@@ -103,8 +103,7 @@ rather than the game breaking silently at runtime.
 |---|---|
 | `src/utils/apiModels/GameLogic.ts` | `export * from "@/games/<Game>/<Game>Logic";` |
 | `src/utils/ui/games.ts` | import the `meta.ts`, add it to `GAME_META` |
-| `src/utils/mongodb/mongodb.ts` | the discriminator key in both union types, and the model in both records inside `initialiseDiscriminators()` |
-| `src/app/api/invite/accept/route.ts` | an `else if` branch instantiating `<Game>GameDataModel` |
+| `src/utils/mongodb/mongodb.ts` | the discriminator key in both union types, and the model in both records (`GAME_DATA_MODELS` and the invitation record inside `initialiseDiscriminators()`) |
 | `src/app/api/game/command/route.ts` | every command/game-type instance in the `registration` array |
 | `src/utils/mongodb/GameResultData.ts` | *(only if you added `compute<Game>ResultStats`)* the discriminator + wire it into `GAME_RESULT_STATS` |
 
@@ -141,8 +140,7 @@ list. So a solo game's `POST /api/newgame/<game>` creates an invitation with
 `userIdList: []` and returns its `inviteId`; the setup page immediately calls
 the existing, unmodified `POST /api/invite/accept`, which completes on that
 very first call. This reuses 100% of the existing engine — no special-casing
-of the shared accept route beyond the one `<Game>GameDataModel` branch every
-game needs regardless (Solitaire's `SolitaireModels.ts` /
+of the shared accept route at all (Solitaire's `SolitaireModels.ts` /
 `src/app/api/newgame/solitaire/route.ts` /
 `src/app/newgame/solitaire/page.tsx` are the reference implementation). Also
 hardcode `turnTimer` to `UNLIMITED_TURN_TIMER` (from
