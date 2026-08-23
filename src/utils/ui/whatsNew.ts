@@ -39,6 +39,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Guests get a warning before signing out",
+                detail: "Signing out of a guest account now asks you to confirm first — there's no way back in, and your games and history go with it.",
+            },
+            {
                 title: "A name, ready before you type it",
                 detail: "Joining as a guest now suggests a random name like JumpingJackal — keep it, tweak it, or tap the dice for another.",
             },
@@ -53,10 +57,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Guests can play, no account needed",
                 detail: "Anyone with a code can join and play without signing up — just a name. Save the link you're given to find your way back in.",
-            },
-            {
-                title: "Share a link, not just a code",
-                detail: "Tap the code in your lobby to send a link — whoever opens it lands on the join screen with the code already filled in.",
             },
         ],
     },
