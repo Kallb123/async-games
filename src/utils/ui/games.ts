@@ -58,6 +58,27 @@ export const GAME_META: Record<string, GameMeta> = {
 };
 
 // Games that don't have an implementation yet but are teased in the library.
+/** The bounds the party-size rule below needs — a `GameMeta` satisfies it. */
+export type PartySizeMeta = Pick<GameMeta, "name" | "players" | "minPlayers" | "maxPlayers">;
+
+/**
+ * The 400 statusText a lobby route sends when a party is out of range, and the
+ * warning PartySizeHint shows for the same party — `null` when it's fine.
+ * Shared so "look up the bounds, check the size, phrase the rejection" isn't
+ * copy-pasted into every route and screen that can change a seat count.
+ *
+ * It lives here, beside the bounds it reads, rather than with the component
+ * that renders it: PartySizeHint is a `'use client'` module, and a route
+ * handler importing a value out of one gets a client reference that throws
+ * when called ("Attempted to call partySizeErrorMessage() from the server"),
+ * not the function.
+ */
+export function partySizeErrorMessage(meta: PartySizeMeta, total: number): string | null {
+    return total < meta.minPlayers || total > meta.maxPlayers
+        ? `${meta.name} supports ${meta.players}`
+        : null;
+}
+
 export const COMING_SOON = ["Ludo", "Chess", "Haunted Campground"];
 
 // Map a game's friendlyName (as returned by the API) to its url slug.

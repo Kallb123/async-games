@@ -2,10 +2,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ToastContext";
-import { partySizeErrorMessage } from "@/components/ui/PartySizeHint";
 import type { IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import type { ILobbyRequest } from "@/app/api/lobby/route";
-import type { GameMeta } from "@/utils/ui/games";
+import { partySizeErrorMessage, type GameMeta } from "@/utils/ui/games";
 
 interface CreateLobbyOrInviteOptions {
     /** The game's presentation metadata — supplies the party-size bounds. */

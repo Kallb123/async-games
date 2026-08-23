@@ -3,8 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { IInvitationDataDocument, InvitationModel } from '@/utils/mongodb/InvitationData';
 import { isOpenSeat, OPEN_SEAT_ID } from '@/utils/games/lobby';
-import { GAME_META } from '@/utils/ui/games';
-import { partySizeErrorMessage } from '@/components/ui/PartySizeHint';
+import { GAME_META, partySizeErrorMessage } from '@/utils/ui/games';
 import { acceptSeat } from '@/utils/games/startGame';
 
 export interface ILobbyStartRequest {
