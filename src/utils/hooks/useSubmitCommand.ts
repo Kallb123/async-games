@@ -2,11 +2,14 @@ import { useCallback, useState } from "react";
 import type { IGameCommand } from "@/utils/apiModels/GameLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
+import { isGuest } from "@/utils/ui/players";
+import { recordGuestMoved } from "@/utils/hooks/useGuestMoved";
 
 interface SubmittingUser {
     id: string;
     username?: string | null;
     firstName?: string | null;
+    publicMetadata?: { guest?: boolean };
 }
 
 /**
@@ -73,6 +76,12 @@ export function useSubmitCommand<T>(
             }
             setGameData(data.gameData as T);
             callback?.(data);
+            // The claim-account offer's whole trigger (docs/account-less-play.md
+            // step 16) — shared by every game through this one hook rather than
+            // each board page marking it separately.
+            if (isGuest(user)) {
+                recordGuestMoved();
+            }
         } catch (err) {
             console.error('submitCommand failed', err);
             await getGameData();

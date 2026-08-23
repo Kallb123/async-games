@@ -11,7 +11,7 @@ vi.mock('@clerk/nextjs/server', () => ({
 }));
 
 // Safe as a plain import: vitest hoists the vi.mock above it.
-import { createGuest, deleteGuest, unclaimedGuestsOf } from './guest';
+import { createGuest, deleteGuest, isGuestPlaceholderEmail, unclaimedGuestsOf } from './guest';
 
 describe('createGuest', () => {
     beforeEach(() => {
@@ -71,6 +71,17 @@ describe('deleteGuest', () => {
         await deleteGuest('user_guest_1');
 
         expect(deleteUser).toHaveBeenCalledWith('user_guest_1');
+    });
+});
+
+describe('isGuestPlaceholderEmail', () => {
+    it('matches an address on the throwaway guest domain', () => {
+        expect(isGuestPlaceholderEmail('guest_abc123@guests.asyncgames.com')).toBe(true);
+    });
+
+    it('does not match a real address, even on a similar domain', () => {
+        expect(isGuestPlaceholderEmail('dave@example.com')).toBe(false);
+        expect(isGuestPlaceholderEmail('dave@asyncgames.com')).toBe(false);
     });
 });
 

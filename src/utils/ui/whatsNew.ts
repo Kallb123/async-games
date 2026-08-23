@@ -39,6 +39,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Keep the account you're already playing on",
+                detail: "Played your first turn as a guest? Add an email and password and it's yours for good — every game and result carries over.",
+            },
+            {
                 title: "Guests can play, no account needed",
                 detail: "Anyone with a code can join and play without signing up — just a name. Save the link you're given to find your way back in.",
             },
@@ -53,10 +57,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Everyone waits in the lobby",
                 detail: "Claim a seat with a code and you wait on the lobby screen with the host, watching the last seats fill instead of guessing.",
-            },
-            {
-                title: "Join a game with a code",
-                detail: "Open a few seats when you set up a game and share the code — anyone who enters it grabs a spot, no invite required.",
             },
         ],
     },
