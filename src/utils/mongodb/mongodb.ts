@@ -12,7 +12,7 @@ import { InvitationModel } from './InvitationData';
 // Add new game discriminator keys here whenever a new game is introduced.
 // TypeScript will produce a compile error if a key is listed but its model is
 // not present in GAME_DATA_MODELS / the record inside initialiseDiscriminators().
-export type GameDataDiscriminatorKey = 'DiceCitiesGameData' | 'SnakesAndLaddersGameData' | 'SettlementsAndCitiesGameData' | 'SmartthinkGameData' | 'WorldDominationGameData' | 'SolitaireGameData' | 'TrainTimeGameData';
+type GameDataDiscriminatorKey = 'DiceCitiesGameData' | 'SnakesAndLaddersGameData' | 'SettlementsAndCitiesGameData' | 'SmartthinkGameData' | 'WorldDominationGameData' | 'SolitaireGameData' | 'TrainTimeGameData';
 type InvitationDiscriminatorKey = 'DiceCitiesInvitation' | 'SnakesAndLaddersInvitation' | 'SettlementsAndCitiesInvitation' | 'SmartthinkInvitation' | 'WorldDominationInvitation' | 'SolitaireInvitation' | 'TrainTimeInvitation';
 
 declare global {
@@ -58,11 +58,12 @@ export async function dbConnect() {
 }
 
 // Every game's GameData discriminator model, keyed by discriminator name.
-// This is the one gameType -> model map: `startGameFromInvitation` looks a
-// game document's model up here rather than branching per game, and the typed
-// Record is also a compile-time exhaustiveness check — adding a key to
+// This is the one gameType -> model map — see gameDataModelFor() below — and
+// the typed Record is a compile-time exhaustiveness check: adding a key to
 // GameDataDiscriminatorKey but omitting its model here is a TypeScript error.
-export const GAME_DATA_MODELS: Record<GameDataDiscriminatorKey, Model<IGameDataDocument>> = {
+// It lives at module scope so importing this file registers the game-data
+// discriminators, the same way initialiseDiscriminators() does for invitations.
+const GAME_DATA_MODELS: Record<GameDataDiscriminatorKey, Model<IGameDataDocument>> = {
   DiceCitiesGameData: DiceCitiesGameDataModel,
   SnakesAndLaddersGameData: SnakesAndLaddersGameDataModel,
   SettlementsAndCitiesGameData: SettlementsAndCitiesGameDataModel,
@@ -72,12 +73,17 @@ export const GAME_DATA_MODELS: Record<GameDataDiscriminatorKey, Model<IGameDataD
   TrainTimeGameData: TrainTimeGameDataModel,
 };
 
+// The model that persists a game of `gameType` — one lookup in place of a
+// branch per game. Undefined for a gameType with no registered discriminator,
+// which callers should treat as an unsupported game rather than a crash.
+export function gameDataModelFor(gameType: string): Model<IGameDataDocument> | undefined {
+  const models: Record<string, Model<IGameDataDocument> | undefined> = GAME_DATA_MODELS;
+  return models[`${gameType}GameData`];
+}
+
 function initialiseDiscriminators() {
   // Evaluating these model variables ensures Mongoose has registered every
-  // discriminator before the connection is used.  The typed Record also acts
-  // as a compile-time exhaustiveness check: adding a key to the union types
-  // above but omitting the corresponding model here is a TypeScript error.
-  // GAME_DATA_MODELS above is the same thing for the game-data side.
+  // invitation discriminator before the connection is used.
   const _invitations: Record<InvitationDiscriminatorKey, unknown> = {
     DiceCitiesInvitation: DiceCitiesInvitationModel,
     SnakesAndLaddersInvitation: SnakesAndLaddersInvitationModel,
@@ -87,5 +93,5 @@ function initialiseDiscriminators() {
     SolitaireInvitation: SolitaireInvitationModel,
     TrainTimeInvitation: TrainTimeInvitationModel,
   };
-  void GAME_DATA_MODELS, _invitations;
+  void _invitations;
 }

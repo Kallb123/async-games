@@ -4,7 +4,7 @@ import { buildYourTurnNotification } from '@/utils/firebase/notificationContent'
 import { userListToUserIdNameMap } from '@/utils/users/clerk';
 import { IInvitationDataDocument } from '@/utils/mongodb/InvitationData';
 import { IGameData } from '@/utils/mongodb/GameData';
-import { GAME_DATA_MODELS, GameDataDiscriminatorKey } from '@/utils/mongodb/mongodb';
+import { gameDataModelFor } from '@/utils/mongodb/mongodb';
 import { uuidString } from '@/utils/apiModels/GameDataApi';
 
 /**
@@ -31,10 +31,10 @@ export async function startGameFromInvitation(
     const userIdList = invite.userIdList.map(uid => uid.userId);
     const gameData = await invite.CreateGame(invite, userIdList.concat(invite.senderId));
 
-    // One lookup instead of a branch per game: GAME_DATA_MODELS is the same
+    // One lookup instead of a branch per game: the models come from the same
     // typed record Mongoose's discriminators are registered from, so a new game
     // needs no line here at all.
-    const gameDataModel = GAME_DATA_MODELS[`${invite.gameType}GameData` as GameDataDiscriminatorKey];
+    const gameDataModel = gameDataModelFor(invite.gameType);
     if (!gameDataModel) {
         throw new Error(`Unsupported game type: ${invite.gameType}`);
     }
