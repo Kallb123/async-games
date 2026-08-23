@@ -51,9 +51,9 @@ export default function ClaimAccountForm() {
     };
 
     return (
-        <form onSubmit={handleSubmit} className="ag-card" style={{ padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
+        <form onSubmit={handleSubmit} className="ag-card ag-form-card">
             <div>
-                <label htmlFor="claim-email" className="ag-section-label" style={{ display: "block", marginBottom: 8 }}>Email</label>
+                <label htmlFor="claim-email" className="ag-section-label ag-field-label">Email</label>
                 <input
                     id="claim-email"
                     className="ag-input"
@@ -66,7 +66,7 @@ export default function ClaimAccountForm() {
                 />
             </div>
             <div>
-                <label htmlFor="claim-password" className="ag-section-label" style={{ display: "block", marginBottom: 8 }}>Password</label>
+                <label htmlFor="claim-password" className="ag-section-label ag-field-label">Password</label>
                 <input
                     id="claim-password"
                     className="ag-input"

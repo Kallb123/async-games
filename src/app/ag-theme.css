@@ -262,6 +262,21 @@ button {
     box-shadow: var(--ag-shadow);
 }
 
+/* An `.ag-card` laid out as a labelled-field form (the unlock password box,
+   the guest account-claim form) — every field's label uses `.ag-field-label`
+   below it. */
+.ag-form-card {
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--ag-stack-gap);
+}
+
+.ag-field-label {
+    display: block;
+    margin-bottom: 8px;
+}
+
 /* ---- Grouped list card with dashed dividers ---- */
 .ag-list {
     background: var(--ag-surface);
