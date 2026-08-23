@@ -5,6 +5,8 @@ export const meta: GameMeta = {
     name: "Settlements & Cities",
     categories: ["Strategy", "Dice"],
     players: "2–6 players",
+    minPlayers: 2,
+    maxPlayers: 6,
     tagline: "Trade, build and out-manoeuvre for the most victory points.",
     accent: "gold",
     glyph: "🏘️",

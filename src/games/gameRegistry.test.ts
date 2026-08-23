@@ -77,6 +77,16 @@ describe("game registry completeness", () => {
         ).toEqual([]);
     });
 
+    it("declares valid numeric player bounds in every game's meta.ts", async () => {
+        for (const name of gameNames) {
+            const { meta } = await import(`./${name}/meta.ts`);
+            expect(Number.isInteger(meta.minPlayers), `${name}: meta.minPlayers must be an integer`).toBe(true);
+            expect(Number.isInteger(meta.maxPlayers), `${name}: meta.maxPlayers must be an integer`).toBe(true);
+            expect(meta.minPlayers, `${name}: meta.minPlayers must be at least 1`).toBeGreaterThanOrEqual(1);
+            expect(meta.maxPlayers, `${name}: meta.maxPlayers must be >= minPlayers`).toBeGreaterThanOrEqual(meta.minPlayers);
+        }
+    });
+
     it("wires every game's recap adapter into the recap engine", () => {
         // Turn recap ("since you were last here") is opt-in per game via a
         // src/games/<Game>/recap.ts that registers an IRecapAdapter. Games

@@ -21,6 +21,11 @@ export interface GameMeta {
     name: string;
     categories: GameCategory[];
     players: string;
+    // Numeric bounds a lobby's seats must satisfy to start, backing
+    // PartySizeHint on setup screens. `players` above stays the free-form
+    // display copy ("2–6 players"); these are the machine-checkable version.
+    minPlayers: number;
+    maxPlayers: number;
     tagline: string;
     // Either a named accent from the theme palette, or a raw hex colour
     // (e.g. "#009DCA") for games that need a bespoke tint.

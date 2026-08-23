@@ -508,7 +508,7 @@ Steps 3, 4 and 7 are the ones that stop this feature growing a second copy of
 something. Each follows the shape #241 already proved: extract, port the
 existing caller onto it, no behaviour change.
 
-**1 — The join code, as a pure module.** `src/utils/games/joinCode.ts`: the
+**1 — The join code, as a pure module.** *(Done — #243.)* `src/utils/games/joinCode.ts`: the
 22-symbol alphabet (uppercase minus `I`, `O`, `0` and `1`),
 `generateJoinCode()`, and `normaliseJoinCode()` — someone typing `plum` or
 `pl um` must reach the same lobby as someone typing `PLUM`, and that rule
@@ -517,7 +517,7 @@ belongs beside the alphabet rather than in a route. Ships with
 excludes every ambiguous glyph, normalisation is idempotent, and a generated
 code always normalises to itself. Nothing imports it yet.
 
-**2 — Lobby fields on the invitation.** `joinCode` and `expiresAt` on
+**2 — Lobby fields on the invitation.** *(Done — #244.)* `joinCode` and `expiresAt` on
 `IInvitationData` and `InvitationSchema` — the *base* schema, so every game's
 discriminator inherits them and no `CreateGame` changes. A partial unique index
 on `joinCode` scoped to documents that have one, and a TTL index on `expiresAt`
@@ -525,7 +525,7 @@ to reap abandoned lobbies. Both fields optional, so every existing invitation
 stays valid. Nothing writes them yet: the index build lands on its own rather
 than tangled with behaviour.
 
-**3 — One lookup for invitation models.** `/api/lobby` serves all seven games
+**3 — One lookup for invitation models.** *(Done — #245.)* `/api/lobby` serves all seven games
 from one route, so it needs a `gameType` → invitation model map — and #241 only
 exported the *game data* half (`GAME_DATA_MODELS` / `gameDataModelFor`). The
 invitation record already exists, but is trapped as a local inside
@@ -533,7 +533,7 @@ invitation record already exists, but is trapped as a local inside
 `invitationModelFor(gameType)` beside `gameDataModelFor`, in exactly the same
 shape. Without this, step 6 hand-rolls the seven-branch chain #241 just deleted.
 
-**4 — Numeric player bounds in `GameMeta`.** `meta.players` is display copy
+**4 — Numeric player bounds in `GameMeta`.** *(Done — #245.)* `meta.players` is display copy
 (`"2–6 players"`), so nothing today can bound a lobby's seats numerically:
 `PartySizeHint` takes `min`/`max` numbers, only two of the seven setup screens
 use it, and those two get their numbers from different places (Train Time
