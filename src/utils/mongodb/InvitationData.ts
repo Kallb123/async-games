@@ -62,7 +62,9 @@ export interface IInvitationResponse {
     senderImageUrl: string | null,
     userList: string[],
     timestamp: string,
-    gameFriendlyName: string
+    gameFriendlyName: string,
+    // Present only on an open, join-by-code lobby (see IInvitationData.joinCode).
+    joinCode?: string
 }
 
 export interface IInvitationRequest {

@@ -114,5 +114,5 @@ export async function POST(request: NextRequest) {
         inviteId: invite.inviteId,
     });
 
-    return NextResponse.json({ success: true, joinCode: invite.joinCode });
+    return NextResponse.json({ success: true, inviteId: invite.inviteId, joinCode: invite.joinCode });
 }

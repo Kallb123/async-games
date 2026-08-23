@@ -1,14 +1,16 @@
 'use client'
 import { FcmTokenComp } from "@/components/FirebaseForeground";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import OptionSection from "@/components/ui/OptionSection";
+import SeatCountSelect from "@/components/ui/SeatCountSelect";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
+import { useCreateLobbyOrInvite } from "@/utils/hooks/useCreateLobbyOrInvite";
 import { GAME_META } from "@/utils/ui/games";
 import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { SettlementsAndCitiesInvitationRequest } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
@@ -71,11 +73,12 @@ function NewGameSettlementsAndCitiesForm() {
   const { userList, setItem, players } = usePlayerList(readRematchPlayers(searchParams));
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
   const [expansions, setExpansions] = useState(() => expansionsFromParam(searchParams.get('expansions')));
-  const router = useRouter();
   const { showToast } = useToast();
+  const { maxPlayers } = GAME_META.settlementsandcities;
+  const { seatCount, setSeatCount, submit } = useCreateLobbyOrInvite('SettlementsAndCities', '/api/newgame/settlementsandcities');
 
-  // The sender is always a player, so the party size is invitees + 1.
-  const totalPlayers = players.length + 1;
+  // The sender is always a player, so the party size is invitees + open seats + 1.
+  const totalPlayers = players.length + seatCount + 1;
   const validation = useMemo(
     () => validateExpansions(expansions, totalPlayers),
     [expansions, totalPlayers],
@@ -92,26 +95,12 @@ function NewGameSettlementsAndCitiesForm() {
       return;
     }
 
-    try {
-      const data: SettlementsAndCitiesInvitationRequest = {
-        userList: players,
-        turnTimer,
-        expansions,
-      };
-      const response = await fetch('/api/newgame/settlementsandcities', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      if (!response.ok) {
-        throw new Error('Failed to send invite');
-      }
-      showToast('Invitation sent! Waiting for players to accept.', 'success', 'Invite Sent');
-      router.push('/');
-    } catch (error) {
-      console.error(error);
-      showToast('Failed to send the invitation. Please try again.', 'danger');
-    }
+    const data: SettlementsAndCitiesInvitationRequest = {
+      userList: players,
+      turnTimer,
+      expansions,
+    };
+    await submit(data);
   };
 
   return (
@@ -123,6 +112,7 @@ function NewGameSettlementsAndCitiesForm() {
       footnote="Game begins once everyone accepts"
     >
       <UserInviteList userList={userList} setItem={setItem} />
+      <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxPlayers - players.length - 1} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
 
       <OptionSection
