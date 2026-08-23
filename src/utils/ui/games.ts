@@ -102,3 +102,12 @@ export function metaForGame(opts: { url?: string; friendlyName?: string }): Game
     }
     return undefined;
 }
+
+// The in-app path of a game's board — `/games/<url slug>/<gameId>`. Every
+// screen that sends a player to a board (the turn lists, an accepted invite,
+// a lobby whose game has just started) goes through here, and
+// `gameNotificationLink` builds the absolute push-notification URL on top of
+// it, so the route's shape is written down once.
+export function gamePath(gameUrl: string, gameId: string): string {
+    return `/games/${gameUrl}/${gameId}`;
+}

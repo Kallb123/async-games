@@ -1,7 +1,6 @@
 'use client'
 
 import { IInvitationResponse } from "@/utils/mongodb/InvitationData";
-import { useRouter } from "next/navigation";
 import moment from 'moment';
 import { useToast } from "@/components/ToastContext";
 import Avatar from "@/components/ui/Avatar";
@@ -10,10 +9,11 @@ import ThumbBadge from "@/components/ui/ThumbBadge";
 import { metaForGame } from "@/utils/ui/games";
 import { INVITE_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
+import { useEnterStartedGame } from "@/utils/hooks/useEnterStartedGame";
 
 export default function IncomingInviteList() {
-    const router = useRouter();
     const { showToast } = useToast();
+    const enterStartedGame = useEnterStartedGame();
     const { data, isLoading, isRefreshing, refresh } = useRefreshableData<{ inviteList: IInvitationResponse[] }>(
         '/api/user/incominginvites',
         INVITE_EVENTS,
@@ -33,8 +33,7 @@ export default function IncomingInviteList() {
         })
         .then(data => {
             if (data.gameStarted) {
-                showToast('Game is starting! Redirecting you now...', 'success', 'Game Started');
-                router.push(`/games/${data.gameUrl}/${data.gameId}`);
+                enterStartedGame(data.gameUrl, data.gameId);
             } else {
                 showToast('Invite accepted! Waiting for other players to accept.', 'success', 'Invite Accepted');
                 refresh();

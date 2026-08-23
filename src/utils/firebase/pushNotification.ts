@@ -4,7 +4,7 @@ import { getAdminMessaging } from './adminFirebase';
 import { getDeviceTokens, removeDevices } from './deviceTokens';
 import { deadTokensByUser, PushTarget } from './revokedTokens';
 import { getNotificationPreferences, isChannelEnabled, NotificationChannel } from './notificationPreferences';
-import { metaForGame } from '@/utils/ui/games';
+import { gamePath, metaForGame } from '@/utils/ui/games';
 
 export interface PushNotification {
     title: string;
@@ -22,7 +22,7 @@ const APP_BASE_URL = process.env.APP_URL ?? 'https://asyncgames.com';
 // tapped. Include this in `data` alongside any `notification` payload, or
 // tapping the notification won't take the player anywhere.
 export function gameNotificationLink(gameTypeUrl: string, gameId: string): string {
-    return `${APP_BASE_URL}/games/${gameTypeUrl}/${gameId}`;
+    return `${APP_BASE_URL}${gamePath(gameTypeUrl, gameId)}`;
 }
 
 export function homeNotificationLink(): string {

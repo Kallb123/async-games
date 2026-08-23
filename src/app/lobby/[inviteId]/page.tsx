@@ -9,6 +9,8 @@ import { INVITE_EVENTS } from "@/utils/hooks/usePushEvents";
 import { IInvitationResponse } from "@/utils/mongodb/InvitationData";
 import { OPEN_SEAT_LABEL } from "@/utils/games/lobby";
 import { metaForGame } from "@/utils/ui/games";
+import { fetchWithSessionRetry } from "@/utils/hooks/fetchWithSessionRetry";
+import { useEnterStartedGame } from "@/utils/hooks/useEnterStartedGame";
 import GameIdentityHeader from "@/components/ui/GameIdentityHeader";
 import ListSection from "@/components/ui/ListSection";
 import ListRow from "@/components/ui/ListRow";
@@ -25,6 +27,7 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
   useAuthGuard();
   const router = useRouter();
   const { showToast } = useToast();
+  const enterStartedGame = useEnterStartedGame();
 
   const { data, isLoading, isRefreshing } = useRefreshableData<{ inviteList: IInvitationResponse[] }>(
     '/api/user/outgoinginvites',
@@ -38,18 +41,36 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
   // see startGameFromInvitation). Never having been seen at all means the
   // code was wrong, or the lobby already expired.
   const everSeenRef = useRef(false);
+  // Set the moment we start leaving, so a refresh landing while the lookup
+  // below is still in flight doesn't kick off a second one.
+  const leavingRef = useRef(false);
   useEffect(() => {
     if (!data) return;
     if (invite) {
       everSeenRef.current = true;
       return;
     }
-    if (everSeenRef.current) {
-      showToast('Game is starting! Look for it on your home screen.', 'success', 'Game Started');
-    } else {
+    if (leavingRef.current) return;
+    leavingRef.current = true;
+    if (!everSeenRef.current) {
       showToast("That lobby isn't open any more.", 'danger');
+      router.push('/');
+      return;
     }
-    router.push('/');
+    // The game exists by the time the invitation is gone (it is saved first),
+    // so ask which game this lobby became and go straight to the board — the
+    // same landing a joiner gets from /api/lobby/join. A lobby that was
+    // cancelled or expired rather than started has no game: fall back home.
+    (async () => {
+      const response = await fetchWithSessionRetry(`/api/lobby/${inviteId}/game`, () => false);
+      const started = response?.ok ? await response.json() : null;
+      if (started?.gameId) {
+        enterStartedGame(started.gameUrl, started.gameId);
+      } else {
+        showToast('Game is starting! Look for it on your home screen.', 'success', 'Game Started');
+        router.push('/');
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, invite]);
 

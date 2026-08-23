@@ -65,6 +65,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Your lobby takes you into the game",
+                detail: "Waiting on the lobby screen when the last seat fills now drops you straight onto the board instead of back at the home screen.",
+            },
+            {
                 title: "Open-seat games get their code",
                 detail: "Setting up a game with open seats and nobody invited no longer fails with an error — you get the code to share straight away.",
             },
@@ -79,10 +83,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Boards keep themselves up to date",
                 detail: "An open board now refreshes on its own, so you see your opponent's move without reloading.",
-            },
-            {
-                title: "Double-tapping setup no longer skips a turn",
-                detail: "Sending the same command twice while a game is being set up can't push the turn out of step any more.",
             },
         ],
     },

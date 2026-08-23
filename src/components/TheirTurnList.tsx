@@ -4,6 +4,7 @@ import { IGameResponse } from "@/utils/apiModels/GameDataApi";
 import Link from "next/link";
 import { useState } from "react";
 import { opponents } from "@/utils/ui/players";
+import { gamePath } from "@/utils/ui/games";
 import ListSection from "@/components/ui/ListSection";
 import { TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
@@ -63,7 +64,7 @@ export default function TheirTurnList() {
                     <div key={game.gameId} className="ag-list-row">
                         <div style={{ width: 8, height: 8, borderRadius: "50%", background: "oklch(0.7 0.05 60)", flex: "none" }} />
                         <Link
-                            href={`/games/${game.url}/${game.gameId}`}
+                            href={gamePath(game.url, game.gameId)}
                             className="ag-list-row-main"
                             style={{ textDecoration: "none", color: "var(--ag-ink)" }}
                         >
