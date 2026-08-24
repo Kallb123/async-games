@@ -1,4 +1,4 @@
-import { GameDataModel, IGameData, IGameDataDocument } from "@/utils/mongodb/GameData";
+import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/utils/mongodb/GameData";
 import { IInvitationData, IInvitationDataDocument, InvitationModel } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { ISolitaireGameDataResponse, ISolitaireGameStateResponse } from "./apiModels";
@@ -135,7 +135,7 @@ SolitaireGameDataSchema.methods.CreateDataResponse = async function(): Promise<I
         usernameList: await userIdListToUsernameList(gameDataDocument.userIdList),
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
-        gameState: gameDataDocument.gameState,
+        gameState: publicGameState(gameDataDocument.gameState),
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
         specificGameState: gameStateToModel(gameDataDocument.specificGameState)

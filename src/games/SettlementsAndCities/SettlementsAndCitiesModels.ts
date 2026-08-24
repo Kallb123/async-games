@@ -1,4 +1,4 @@
-import { GameDataModel, IGameData, IGameDataDocument } from "@/utils/mongodb/GameData";
+import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/utils/mongodb/GameData";
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { ISACGameDataResponse, ISACSpecificGameStateResponse, ISACPlayerStateResponse } from "./apiModels";
@@ -393,10 +393,10 @@ SettlementsAndCitiesGameDataSchema.methods.CreateDataResponse = async function()
         usernameList,
         turnTimer: doc.turnTimer,
         currentTurn: doc.currentTurn,
-        gameState: {
-            ...doc.gameState,
-            history: replaceHistoryUserIds(doc.gameState.history, userIdNameMap),
-        },
+        gameState: publicGameState(
+            doc.gameState,
+            replaceHistoryUserIds(doc.gameState.history, userIdNameMap),
+        ),
         complete: doc.complete,
         winner: doc.winner,
         endReason: doc.endReason,

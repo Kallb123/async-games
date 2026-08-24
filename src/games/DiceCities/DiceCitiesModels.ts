@@ -1,4 +1,4 @@
-import { GameDataModel, IGameData, IGameDataDocument } from "@/utils/mongodb/GameData";
+import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/utils/mongodb/GameData";
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { BANK_TOTAL_COINS, DiceCitiesCardIds, STARTING_PLAYER_COINS } from "./cards";
@@ -270,7 +270,7 @@ DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(): Promise<
         usernameList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
-        gameState: gameDataDocument.gameState,
+        gameState: publicGameState(gameDataDocument.gameState),
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
         endReason: gameDataDocument.endReason,
