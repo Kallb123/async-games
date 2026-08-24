@@ -64,7 +64,9 @@ handful of one-line additions to shared files in the last step.
   `initialSpecificGameState` snapshot here too — see §7(a), and note that this
   is the one decision you cannot make retroactively.
 - `<Game>GameDataModel`: a `Schema` discriminating `GameDataModel`, with a
-  `CreateDataResponse()` method that calls:
+  `CreateDataResponse(viewerId)` method — the viewer is the signed-in player the
+  response is for, and it's required so a game with hidden information can't
+  inherit the everybody-sees-everything view by accident — that calls:
 - `gameStateToModel(specificGameState)` — converts internal state to the
   client-facing DTO shape. **Redact anything the player shouldn't see yet**
   (see "Don't leak hidden information" below). Keep it a pure function of its
@@ -310,6 +312,27 @@ is trivially inspectable. Solitaire's `gameStateToModel` strips `rank`/`suit`
 from any card with `faceUp: false`, and sends the stock as a bare
 `stockCount: number` rather than an array of opaque objects, since individual
 stock cards are never individually inspectable or targetable anyway.
+
+The failure mode to watch for is subtler than "we forgot": it is a DTO that was
+correct on screen and wrong on the wire. World Domination and Settlements &
+Cities both shipped *every* player's hand to every player for months, and
+neither looked broken, because both board screens only ever rendered a count
+for opponents. Two rules that would have caught it:
+
+- **Send the count, not the contents.** Hand *size* is usually public and
+  usually all the scoreboard needs; identities almost never are. Give every
+  player a `<thing>Count`, and send the thing itself only to its owner —
+  `cardCount`/`cards` in World Domination, `resourceCount`/`resources` in
+  Settlements & Cities, `handCount`/`myHand` in Train Time.
+- **Assert on the serialised response, not the typings.** A per-player field
+  that is `undefined` for everyone else is only redacted if it's absent from
+  `JSON.stringify(response)`. See
+  `src/utils/apiModels/games/hiddenHands.test.ts`.
+
+And take care that the *derived* views stay honest too: your recap adapter reads
+the same redacted snapshots, so compute its deltas from the public counts
+(Settlements & Cities' monopoly and discard rows do) rather than from a
+composition that is only present for one player.
 
 **Build genuinely reusable pieces, not per-game copies, for anything a future
 game might also need.** Solitaire needed a "card" concept; since more card

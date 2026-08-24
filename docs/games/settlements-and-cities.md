@@ -429,9 +429,36 @@ Three genuine free wins are already sitting there:
   players who can respond to an offer. Anyone with the board open sees a new
   offer within 10s with no new code. This is what makes the "no silent pushes"
   rule (§10.11) free rather than painful.
-* **Every player's hand is already public.** `ISACPlayerStateResponse.resources`
-  ships every player's exact resource counts to everyone, so a trade UI needs no
-  new server data and an open offer is fully informed.
+* **Every player's hand size is public.** `ISACPlayerStateResponse.resourceCount`
+  gives every player's total to everyone, so an offer can show who could
+  plausibly cover it. What it *can't* show is who actually holds the goods:
+  `resources` is the composition, and it is now sent only to the player it
+  belongs to (§10.2a).
+
+#### 10.2a What changed here, and what it costs the design
+
+An earlier draft of this section was written against a response that shipped
+every player's exact resource composition — and their dev card identities — to
+everyone at the table. That was a bug, not a feature: §6 hides both (the robber
+steals *at random* precisely because a hand is unknown, and victory-point cards
+are supposed to stay hidden until they win the game), and the board screen has
+always reduced opponents to a card total. The response now matches the rules:
+composition and dev cards go to their owner alone.
+
+The consequence for trading is that **an open offer is no longer fully
+informed**, and the design has to stop assuming it is:
+
+* An offer can be addressed to a player who cannot fill it. That is how the
+  physical game works — you ask, and they say no — so treat "can't fill this"
+  as a normal decline, not an error state, and don't render an
+  offer as impossible on the proposer's screen.
+* Any "who can accept this?" affordance has to be built from `resourceCount`
+  (a bound, not an answer), never from `resources`.
+* Acceptance has to be validated **server-side**, against the accepting
+  player's real hand. That was always true; it is now the only check there is.
+* A UI that greys out recipients who lack the goods would leak exactly what
+  this fix hides — the proposer would learn a player's composition by watching
+  which offers light up. Don't build one.
 * **The next player's push describes itself.** `buildYourTurnNotification`
   already leads with the most recent recap event, so once a settled trade is a
   recap event (§10.10), it shows up in the next "your move" push for free.
@@ -880,7 +907,10 @@ accident.
   `NOTIFICATION_CHANNELS`. An existing smell worth tidying, not a blocker.
 * **Only notify players who could actually fill the offer** — holding the wanted
   resources, and not already dismissed. An open offer in a 6-player game must
-  not be five pushes. This needs the `ICommandOutcome.notify` contract change in
+  not be five pushes. This is a server-side filter over hands the server can
+  see; who it selected must never come back to the proposer, in the response or
+  anywhere else, or the offer becomes a probe for what everyone is holding
+  (§10.2a). This needs the `ICommandOutcome.notify` contract change in
   §10.3; it cannot be done from the route without breaking the game-agnostic
   rule. Eligibility is evaluated **once, at proposal, and never re-evaluated**
   (see §10.14).
@@ -971,8 +1001,9 @@ Named explicitly so they don't creep in:
   allow, for a large UI and a small payoff.
 * **Counter-offer chains** — a counter is a replaced offer (turn-scoped) or a
   new offer (standing). Don't build a tree.
-* **Targeted offers ("offer to Sam only")** — every player's hand is already
-  public, so an open offer is fully informed. Targeting adds a picker and a
+* **Targeted offers ("offer to Sam only")** — an open offer already reaches
+  everyone who could fill it, and since hands are hidden (§10.2a) the proposer
+  has no better information to target *with*. Targeting adds a picker and a
   permission check for very little, and only becomes interesting once standing
   offers exist.
 * **Auto-accept rules / trading bots** — turns a social mechanic into a config

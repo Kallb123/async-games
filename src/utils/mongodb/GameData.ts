@@ -58,7 +58,18 @@ export interface IGameData {
 export interface IGameDataDocument extends IGameData, Document {
     // Instance methods
     CreateResponse: () => Promise<IGameResponse>;
-    CreateDataResponse: () => Promise<IGameDataResponse>;
+    // `viewerId` is the signed-in player the response is being built for.
+    //
+    // A game's response is not the same for everybody: hands, tickets and dev
+    // cards belong to one player, and the only way to send a player their own
+    // secrets without sending everyone else's is to know who is asking. The
+    // parameter is required rather than optional so that a game with hidden
+    // information can't quietly inherit the everybody-sees-everything view —
+    // adding a game makes the compiler ask the question at every call site.
+    //
+    // Games whose whole state is public (Snakes & Ladders, Dice Cities) ignore
+    // it. Pass null only where nobody in particular is asking.
+    CreateDataResponse: (viewerId: string | null) => Promise<IGameDataResponse>;
 }
 
 export interface IGameDataModel extends Model<IGameDataDocument> {
@@ -127,7 +138,7 @@ GameDataSchema.methods.CreateResponse = async function(): Promise<IGameResponse>
             : undefined
     }
 };
-GameDataSchema.methods.CreateDataResponse = async function(): Promise<IGameDataResponse> {
+GameDataSchema.methods.CreateDataResponse = async function(_viewerId: string | null): Promise<IGameDataResponse> {
     console.log("CreateDataResponse: Generic game");
 
     const gameDataDocument: IGameData = this as IGameData;

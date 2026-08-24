@@ -23,10 +23,15 @@ export interface IWorldDominationPlayerStateResponse {
     // Cumulative armies deployed via WorldDominationDeployArmies over the
     // whole match so far (never decreases, unlike `armies` above).
     totalArmiesDeployed: number;
-    // Full hand, keyed by username same as SAC's playerDevCards: only the
-    // requesting user's hand is meaningful client-side, but every hand is sent
-    // for simplicity (this app doesn't hide hidden info server-side elsewhere).
-    cards: IWorldDominationCardResponse[];
+    // How many territory cards this player holds. Public: hand size is visible
+    // to the table, and it's what tells everyone a player is about to be forced
+    // to cash in.
+    cardCount: number;
+    // The identities behind that count. Cards are dealt face down
+    // (docs/games/worlddomination.md §2.4, §3), so this is sent only
+    // for the player who asked — everyone else gets cardCount alone. Undefined
+    // for other players, and for a viewerless view (recap/result replays).
+    cards?: IWorldDominationCardResponse[];
     eliminated: boolean;
 }
 

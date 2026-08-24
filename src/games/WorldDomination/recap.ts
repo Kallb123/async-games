@@ -101,7 +101,7 @@ function toEvents(
 				type: "wd_cards",
 				glyph: "🃏",
 				title: `${name} cashed in a card set`,
-				detail: me ? `+${cardData.cardSetBonus} armies · ${me.cards.length} card${me.cards.length === 1 ? "" : "s"} left` : `+${cardData.cardSetBonus} armies`,
+				detail: me ? `+${cardData.cardSetBonus} armies · ${me.cardCount} card${me.cardCount === 1 ? "" : "s"} left` : `+${cardData.cardSetBonus} armies`,
 			});
 			break;
 		}
@@ -322,7 +322,7 @@ function tip(liveState: unknown, forUserId: string): IRecapTip | null {
 	}
 
 	// General tip
-	const cardCount = me.cards?.length ?? 0;
+	const cardCount = me.cardCount;
 	if (cardCount >= 3) {
 		return {
 			glyph: "🃏",

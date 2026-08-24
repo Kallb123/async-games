@@ -25,7 +25,20 @@ export interface ISACHarborResponse {
 export interface ISACPlayerStateResponse {
     userId: string;
     username: string;
-    resources: { [K in SAC_Resource]: number };
+    // How many resource cards this player holds. Public: hand size is open
+    // information in Catan — it's what the robber and the 7-discard are played
+    // around — and it's all the scoreboard needs.
+    resourceCount: number;
+    // Which resources make up that count. A hand's composition is hidden
+    // (docs/games/settlements-and-cities.md §6 "The Robber" — a hand is stolen
+    // from at random, not chosen from), so this is sent only for the
+    // player who asked. Undefined for everyone else, and for a viewerless view
+    // (recap/result replays).
+    resources?: { [K in SAC_Resource]: number };
+    // Dev cards held — playable and just-bought counted together, since a
+    // purchase happens in the open even though the card drawn doesn't. This is
+    // the only dev-card figure other players get; playerDevCards below carries
+    // the identities, and only for the viewer.
     devCardCount: number;
     knightsPlayed: number;
     // Cumulative resources gathered from any source this match (production,
@@ -60,11 +73,16 @@ export interface ISACSpecificGameStateResponse {
     devCardDeckSize: number;
     pendingRoadBuilding: number;
     playedDevCard: boolean;
-    // Own dev cards (only sent for the requesting user, but for simplicity we always include all)
+    // Dev card identities, keyed by username. Development cards are hidden —
+    // including the victory-point ones, which stay hidden until they win the
+    // game (docs/games/settlements-and-cities.md §6 "Development Cards", §7) —
+    // so this carries exactly one entry: the player who asked.
+    // Empty for a viewerless view. Everyone else's holding is devCardCount.
     playerDevCards: { [username: string]: { [K in SAC_DevCard]: number } };
     // Dev cards bought this turn — held but not yet playable until the turn ends
     // (they're promoted into playerDevCards on end-of-turn). Surfaced so the hand
-    // can distinguish a just-bought card from a playable one.
+    // can distinguish a just-bought card from a playable one. Viewer-only, same
+    // as playerDevCards.
     playerNewDevCards: { [username: string]: { [K in SAC_DevCard]: number } };
     // 5–6 Player Extension Special Build Phase (§8.5). `specialBuildActive` is
     // true while other players take their between-turns build; `specialBuildQueue`

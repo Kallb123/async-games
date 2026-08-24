@@ -277,7 +277,7 @@ var WorldDominationGameDataSchema = new Schema<IWorldDominationGameDataDocument>
     { discriminatorKey: 'kind' },
 );
 
-WorldDominationGameDataSchema.methods.CreateDataResponse = async function(): Promise<IWorldDominationGameDataResponse> {
+WorldDominationGameDataSchema.methods.CreateDataResponse = async function(viewerId: string | null): Promise<IWorldDominationGameDataResponse> {
     console.log('CreateDataResponse: World Domination game');
 
     const doc: IWorldDominationGameData = this as IWorldDominationGameData;
@@ -300,7 +300,7 @@ WorldDominationGameDataSchema.methods.CreateDataResponse = async function(): Pro
         winner: doc.winner,
         endReason: doc.endReason,
         forfeitedBy: doc.forfeitedBy,
-        specificGameState: gameStateToResponse(doc.specificGameState, userIdNameMap),
+        specificGameState: gameStateToResponse(doc.specificGameState, userIdNameMap, viewerId),
         recapAvailable: !!doc.initialSpecificGameState,
     };
 };
@@ -319,6 +319,10 @@ function replaceHistoryUserIds(history: string[], userIdNameMap: { [key: string]
 export function gameStateToResponse(
     gs: IWorldDominationSpecificGameState,
     userIdNameMap: { [key: string]: string },
+    // The player this view is for. Their hand comes back in full; everybody
+    // else's is reduced to a count. Null builds the view nobody's hand is in.
+    // Required (no default) so a caller has to say who is looking.
+    viewerId: string | null,
 ): IWorldDominationSpecificGameStateResponse {
     const playerStates: IWorldDominationSpecificGameStateResponse['playerStates'] = {};
     const playerStatesSource = gs.playerStates instanceof Map
@@ -334,7 +338,10 @@ export function gameStateToResponse(
             territoryCount: owned.length,
             armies: owned.reduce((sum, t) => sum + t.armies, 0),
             totalArmiesDeployed: ps.totalArmiesDeployed,
-            cards: ps.cards.map(c => ({ id: c.id, type: c.type, territoryId: c.territoryId })),
+            cardCount: ps.cards.length,
+            cards: userId === viewerId
+                ? ps.cards.map(c => ({ id: c.id, type: c.type, territoryId: c.territoryId }))
+                : undefined,
             eliminated: ps.eliminated,
         };
     }

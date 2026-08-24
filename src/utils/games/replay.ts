@@ -145,8 +145,8 @@ registerReplayAdapter({
     className: "SettlementsAndCitiesGameType",
     buildInitialSpecificGameState: (gameData) =>
         buildInitialSettlementsAndCitiesState(gameData as ISettlementsAndCitiesGameData),
-    toResponseState: (specificGameState, userIdNameMap) =>
-        settlementsAndCitiesStateToModel(specificGameState as never, userIdNameMap),
+    toResponseState: (specificGameState, userIdNameMap, viewerId) =>
+        settlementsAndCitiesStateToModel(specificGameState as never, userIdNameMap, viewerId),
     // Deck freeze is feasible here but unbuilt. Note for whoever builds it that
     // SACBuyDevCard is not the only command to leave out: SACMoveRobber samples
     // a real resource out of the victim's hand, and SACPlayMonopoly reads how
@@ -157,8 +157,8 @@ registerReplayAdapter({
 registerReplayAdapter({
     className: "WorldDominationGameType",
     buildInitialSpecificGameState: (gameData) => buildInitialWorldDominationState(gameData as IWorldDominationGameData),
-    toResponseState: (specificGameState, userIdNameMap) =>
-        worldDominationStateToModel(specificGameState as never, userIdNameMap),
+    toResponseState: (specificGameState, userIdNameMap, viewerId) =>
+        worldDominationStateToModel(specificGameState as never, userIdNameMap, viewerId),
     // Deck freeze is feasible here but unbuilt: battle dice are memoryless and
     // the only deck contact is the end-of-turn draw in riskEndTurn, reached
     // only via WorldDominationFortify / WorldDominationSkipFortify.

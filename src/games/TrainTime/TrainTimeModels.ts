@@ -1,7 +1,6 @@
 import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/utils/mongodb/GameData";
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
-import { auth } from "@clerk/nextjs/server";
 import { v4 as uuidv4 } from 'uuid';
 import {
     uuidString,
@@ -217,19 +216,13 @@ var TrainTimeGameDataSchema = new Schema<ITrainTimeGameDataDocument>(
     { discriminatorKey: 'kind' },
 );
 
-TrainTimeGameDataSchema.methods.CreateDataResponse = async function(): Promise<ITrainTimeGameDataResponse> {
+TrainTimeGameDataSchema.methods.CreateDataResponse = async function(viewerId: string | null): Promise<ITrainTimeGameDataResponse> {
     console.log('CreateDataResponse: Train Time game');
 
     const doc: ITrainTimeGameData = this as ITrainTimeGameData;
     const usernameList = await userIdListToUsernameList(doc.userIdList);
     const userIdNameMap: { [key: string]: string } = {};
     doc.userIdList.forEach((userId, i) => { userIdNameMap[userId] = usernameList[i]; });
-
-    // Hands are secret (design doc §10), so the response has to be built for
-    // one viewer rather than being the same for everybody. Both callers of
-    // CreateDataResponse are authenticated request handlers, so Clerk's request
-    // auth is the viewer — no extra plumbing through the shared engine needed.
-    const { userId: viewerId } = await auth();
 
     return {
         gameType: doc.gameType,

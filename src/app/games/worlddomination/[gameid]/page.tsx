@@ -197,7 +197,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
             let sub: React.ReactNode;
             if (ps.eliminated) sub = '💀 out';
             else if (isActive) sub = PHASE_LABEL[gs.phase];
-            else sub = `🃏 ${ps.cards.length}`;
+            else sub = `🃏 ${ps.cardCount}`;
             return [{
                 id: username,
                 name: isMe ? 'You' : username,

@@ -4,6 +4,12 @@ import { shuffle as shuffleArray } from '@/utils/games/shuffle';
 // ─── Resource / Terrain / Card types ──────────────────────────────────────────
 
 export type SAC_Resource = 'lumber' | 'wool' | 'grain' | 'brick' | 'ore';
+
+// An all-zero resource hand. The response only carries a player's `resources`
+// when they are the one asking (see apiModels), so viewer-side code reads it as
+// `ps.resources ?? NO_RESOURCES` rather than repeating this literal.
+export const NO_RESOURCES: Record<SAC_Resource, number> =
+    { lumber: 0, wool: 0, grain: 0, brick: 0, ore: 0 };
 export type SAC_Terrain  = 'forest' | 'pasture' | 'fields' | 'hills' | 'mountains' | 'desert';
 export type SAC_DevCard  = 'knight' | 'victoryPoint' | 'roadBuilding' | 'yearOfPlenty' | 'monopoly';
 export type SAC_Harbor   = '3to1' | 'lumber' | 'wool' | 'grain' | 'brick' | 'ore';

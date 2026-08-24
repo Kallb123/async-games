@@ -86,16 +86,22 @@ export default function WorldDominationActions({
             return [...prev, id];
         });
     }
-    const selectedCards = me.cards.filter(c => selectedCardIds.includes(c.id));
+    // Only the viewer's own hand comes down from the server, and this sheet is
+    // only ever rendered for them — but the field is optional on every player,
+    // so read it once here rather than guarding at each use.
+    const myCards = me.cards ?? [];
+    const selectedCards = myCards.filter(c => selectedCardIds.includes(c.id));
     const canCashIn = selectedCards.length === 3 && isValidCardSet(selectedCards);
     function cashIn() {
         const cmd = new WorldDominationCashInCards();
         cmd.cardIds = selectedCardIds;
         submitCommand(cmd, () => setSelectedCardIds([]), 'cashIn');
     }
-    const mustCashIn = me.cards.length >= 5;
+    // The rules gate reads the authoritative public count, not the hand array:
+    // it has to hold even if this screen is ever handed a viewerless response.
+    const mustCashIn = me.cardCount >= 5;
 
-    const cardHand = me.cards.length > 0 ? (
+    const cardHand = myCards.length > 0 ? (
         <div className="ag-actionsheet" style={{ paddingTop: mustCashIn ? 10 : 0 }}>
             {mustCashIn && (
                 <div className="ag-callout" style={{ marginBottom: 10 }}>
@@ -103,7 +109,7 @@ export default function WorldDominationActions({
                 </div>
             )}
             <div className="ag-chips">
-                {me.cards.map(c => (
+                {myCards.map(c => (
                     <button
                         key={c.id}
                         type="button"

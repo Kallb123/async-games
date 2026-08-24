@@ -378,7 +378,7 @@ var SettlementsAndCitiesGameDataSchema = new Schema<ISettlementsAndCitiesGameDat
     { discriminatorKey: 'kind' },
 );
 
-SettlementsAndCitiesGameDataSchema.methods.CreateDataResponse = async function(): Promise<ISACGameDataResponse> {
+SettlementsAndCitiesGameDataSchema.methods.CreateDataResponse = async function(viewerId: string | null): Promise<ISACGameDataResponse> {
     console.log('CreateDataResponse: Settlements and Cities game');
 
     const doc: ISettlementsAndCitiesGameData = this as ISettlementsAndCitiesGameData;
@@ -401,7 +401,7 @@ SettlementsAndCitiesGameDataSchema.methods.CreateDataResponse = async function()
         winner: doc.winner,
         endReason: doc.endReason,
         forfeitedBy: doc.forfeitedBy,
-        specificGameState: gameStateToResponse(doc.specificGameState, userIdNameMap),
+        specificGameState: gameStateToResponse(doc.specificGameState, userIdNameMap, viewerId),
         // Turn recap replays from the stored initial snapshot; only games created
         // after recap support carry it, so the UI gates its controls on this.
         recapAvailable: !!doc.initialSpecificGameState,
@@ -422,6 +422,11 @@ function replaceHistoryUserIds(history: string[], userIdNameMap: { [key: string]
 export function gameStateToResponse(
     gs: ISACSpecificGameState,
     userIdNameMap: { [key: string]: string },
+    // The player this view is for. Their resource hand and dev cards come back
+    // in full; everybody else's are reduced to counts. Null builds the view
+    // nobody's hand is in. Required (no default) so a caller has to say who is
+    // looking.
+    viewerId: string | null,
 ): ISACSpecificGameStateResponse {
     const playerStates: ISACSpecificGameStateResponse['playerStates'] = {};
     const playerDevCards: ISACSpecificGameStateResponse['playerDevCards'] = {};
@@ -432,8 +437,10 @@ export function gameStateToResponse(
         playerStates[username] = {
             userId,
             username,
-            resources: { ...ps.resources },
-            devCardCount: Object.values(ps.devCards).reduce((s, n) => s + n, 0),
+            resourceCount: Object.values(ps.resources).reduce((s, n) => s + n, 0),
+            resources: userId === viewerId ? { ...ps.resources } : undefined,
+            devCardCount: Object.values(ps.devCards).reduce((s, n) => s + n, 0)
+                + Object.values(ps.newDevCards).reduce((s, n) => s + n, 0),
             knightsPlayed: ps.knightsPlayed,
             resourcesGathered: ps.resourcesGathered,
             remainingRoads: ps.remainingRoads,
@@ -441,8 +448,10 @@ export function gameStateToResponse(
             remainingCities: ps.remainingCities,
             visibleVP: calculateVisibleVP(userId, gs.vertices, gs.longestRoadOwner, gs.largestArmyOwner),
         };
-        playerDevCards[username] = { ...ps.devCards };
-        playerNewDevCards[username] = { ...ps.newDevCards };
+        if (userId === viewerId) {
+            playerDevCards[username] = { ...ps.devCards };
+            playerNewDevCards[username] = { ...ps.newDevCards };
+        }
     }
 
     // Convert owner userId → username in vertices and edges

@@ -137,7 +137,7 @@ var SnakesAndLaddersGameDataSchema = new Schema<ISnakesAndLaddersGameDataDocumen
     }
 }, { discriminatorKey: 'kind' });
 
-SnakesAndLaddersGameDataSchema.methods.CreateDataResponse = async function(): Promise<ISnakesAndLaddersGameDataResponse> {
+SnakesAndLaddersGameDataSchema.methods.CreateDataResponse = async function(_viewerId: string | null): Promise<ISnakesAndLaddersGameDataResponse> {
     console.log("CreateDataResponse: Snakes and Ladders game");
 
     const gameDataDocument: ISnakesAndLaddersGameData = this as ISnakesAndLaddersGameData;

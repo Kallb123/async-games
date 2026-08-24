@@ -254,7 +254,7 @@ var DiceCitiesGameDataSchema = new Schema<IDiceCitiesGameDataDocument>({
         hasReRolled: Boolean
     }
 }, {discriminatorKey: 'kind'});
-DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(): Promise<IDiceCitiesGameDataResponse> {
+DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(_viewerId: string | null): Promise<IDiceCitiesGameDataResponse> {
     console.log("CreateDataResponse: Dice Cities game");
 
     const gameDataDocument: IDiceCitiesGameData = this as IDiceCitiesGameData;

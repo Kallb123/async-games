@@ -27,7 +27,7 @@ export async function GET(request: NextRequest, {params}: { params: Promise<IGet
     if (!gameData) {
         return NextResponse.json({}, {status: 404, statusText: "Game not found"});
     }
-    const gameDataResponse = await gameData.CreateDataResponse();
+    const gameDataResponse = await gameData.CreateDataResponse(userId);
 
     return NextResponse.json({success: true, gameData: gameDataResponse});
 }

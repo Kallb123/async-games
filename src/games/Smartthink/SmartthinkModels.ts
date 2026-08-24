@@ -273,7 +273,7 @@ SmartthinkGameDataSchema.methods.CreateResponse = async function(): Promise<IGam
     };
 };
 
-SmartthinkGameDataSchema.methods.CreateDataResponse = async function(): Promise<ISmartthinkGameDataResponse> {
+SmartthinkGameDataSchema.methods.CreateDataResponse = async function(_viewerId: string | null): Promise<ISmartthinkGameDataResponse> {
     console.log("CreateDataResponse: Smartthink game");
 
     const gameDataDocument: ISmartthinkGameData = this as ISmartthinkGameData;

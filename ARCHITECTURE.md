@@ -237,10 +237,21 @@ Key modelling decisions:
 ### Response shaping
 
 Documents are never sent raw to the client. `CreateResponse()` (list summary) and
-`CreateDataResponse()` (full game) methods convert a document into a DTO: they
-resolve usernames via Clerk and run the game's `gameStateToModel` to turn
+`CreateDataResponse(viewerId)` (full game) methods convert a document into a DTO:
+they resolve usernames via Clerk and run the game's `gameStateToModel` to turn
 internal Maps/IDs into a client-friendly, username-keyed shape. DTO interfaces
 live in `src/utils/apiModels/GameDataApi.ts` and each game's `apiModels.ts`.
+
+A game's response is **not the same for everybody**. `CreateDataResponse` takes
+the signed-in player it is being built for, and passes it to `gameStateToModel`,
+which shapes in that player's own hidden state and nobody else's: World
+Domination's territory cards, Settlements & Cities' resource composition and dev
+cards, Train Time's hand and tickets. Everyone else gets a count. The parameter
+is required rather than optional so that a new game has to answer the question;
+`src/utils/apiModels/games/` holds the guards (`publicGameState.test.ts` for the
+shared shape, `hiddenHands.test.ts` for the two games that redact per player).
+The same `viewerId` runs through `IReplayAdapter.toResponseState`, so recap and
+planning snapshots are redacted the same way the live response is.
 
 ### Match results (`GameResult`)
 

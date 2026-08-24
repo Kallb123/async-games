@@ -4,10 +4,16 @@ import type { ITurnSnapshot } from "@/utils/games/replay";
 import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic";
 import type { ISACSpecificGameStateResponse, ISACPlayerStateResponse } from "./apiModels";
 import type { SAC_Resource } from "./board";
+import { NO_RESOURCES } from "./board";
 
 function player(overrides: Partial<ISACPlayerStateResponse> & { userId: string; username: string }): ISACPlayerStateResponse {
+    // Fixtures describe a hand as its composition, the way the game state holds
+    // it; the response's public count is derived from that, same as the server
+    // does — so a test that hands someone 3 wool also gives them 3 cards.
+    const resources = overrides.resources ?? NO_RESOURCES;
     return {
-        resources: { lumber: 0, wool: 0, grain: 0, brick: 0, ore: 0 },
+        resourceCount: Object.values(resources).reduce((sum, n) => sum + n, 0),
+        resources,
         devCardCount: 0,
         knightsPlayed: 0,
         resourcesGathered: 0,
