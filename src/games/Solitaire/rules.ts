@@ -18,6 +18,14 @@ export interface ISolitaireLegalMoveState {
     stockCount: number;
 }
 
+// The server's board keeps the whole stock pile while the client's DTO only
+// carries a count, so this is the one projection that differs between them —
+// `ISolitaireGameStateResponse` already satisfies ISolitaireLegalMoveState and
+// can be passed straight to getLegalMoves/hasAnyLegalMove.
+export function toLegalMoveState(state: { waste: ICard[]; foundations: Record<Suit, ICard[]>; tableau: ICard[][]; stock: ICard[] }): ISolitaireLegalMoveState {
+    return { waste: state.waste, foundations: state.foundations, tableau: state.tableau, stockCount: state.stock.length };
+}
+
 export interface ISolitaireLegalMove {
     source: SolitaireZoneRef;
     count: number;
@@ -111,10 +119,16 @@ export function getLegalMoves(state: ISolitaireLegalMoveState): ISolitaireLegalM
             state.tableau.forEach((destColumn, to) => {
                 if (to === from) return;
                 const destTop = destColumn[destColumn.length - 1];
-                if (canPlaceOnTableau(mover, destTop)) {
-                    const reason = willExposeHiddenCard(column, count) ? "Frees a face-down card" : `From column ${from + 1}`;
-                    push({ zone: "tableau", column: from }, count, { zone: "tableau", column: to }, tableauLabel(to, destTop), reason);
-                }
+                if (!canPlaceOnTableau(mover, destTop)) return;
+                // A King-headed run that already sits at the bottom of its
+                // column has nothing underneath it to free, so shifting the
+                // whole column into an empty one leaves an identical board:
+                // it's not a move worth offering, and — because
+                // hasAnyLegalMove counts these — it must not be what stops a
+                // dead board from reading as stuck.
+                if (!destTop && index === 0) return;
+                const reason = willExposeHiddenCard(column, count) ? "Frees a face-down card" : `From column ${from + 1}`;
+                push({ zone: "tableau", column: from }, count, { zone: "tableau", column: to }, tableauLabel(to, destTop), reason);
             });
 
             if (count === 1 && mover.suit && canPlaceOnFoundation(mover, state.foundations[mover.suit])) {

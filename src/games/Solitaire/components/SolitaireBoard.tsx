@@ -31,11 +31,9 @@ export default function SolitaireBoard({ state, disabled = false, onDraw, onMove
     const [selection, setSelection] = useState<Selection | null>(null);
     const [sentMove, setSentMove] = useState<{ source: SolitaireZoneRef; count: number } | null>(null);
 
-    const legalMoveState = { waste: state.waste, foundations: state.foundations, tableau: state.tableau, stockCount: state.stockCount };
-
     const select = (source: SolitaireZoneRef, count: number, card: ICard) => {
         if (disabled) return;
-        const moves = getLegalMoves(legalMoveState).filter((m) => matchesSource(m.source, source) && m.count === count);
+        const moves = getLegalMoves(state).filter((m) => matchesSource(m.source, source) && m.count === count);
         setSelection({ source, count, card, moves });
     };
 
