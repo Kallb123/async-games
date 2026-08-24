@@ -69,4 +69,10 @@ export interface ITrainTimeSpecificGameStateResponse {
 
 export interface ITrainTimeGameDataResponse extends IGameDataResponse {
     specificGameState: ITrainTimeSpecificGameStateResponse;
+    /**
+     * Whether this game carries the starting snapshot turn recap replays from.
+     * False for games dealt before recap support, whose shuffled decks can't be
+     * reconstructed — the review controls stay off the screen for those.
+     */
+    recapAvailable?: boolean;
 }

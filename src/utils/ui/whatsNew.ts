@@ -39,6 +39,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Train Time remembers what you missed",
+                detail: "Open a Train Time game and you get the same welcome-back recap the other games have — every route claimed while you were away, plus a nudge at what your hand can pay for. You can step back through the whole match too, and the log has moved to the ⋯ menu so it's there on anyone's turn.",
+                game: "traintime",
+            },
+            {
                 title: "Turn review, in the game's colours",
                 detail: "Stepping back through a match now happens on a warm dark scrubber with a turn track, and the screen stays in the app's theme instead of running to white below it.",
             },
@@ -54,10 +59,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Guests get a warning before signing out",
                 detail: "Signing out of a guest account now asks you to confirm first — there's no way back in, and your games and history go with it.",
-            },
-            {
-                title: "A name, ready before you type it",
-                detail: "Joining as a guest now suggests a random name like JumpingJackal — keep it, tweak it, or tap the dice for another.",
             },
         ],
     },

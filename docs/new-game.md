@@ -40,8 +40,9 @@ For the component-reuse rules you must follow while building the UI, see
      persisted `initialSpecificGameState` snapshot — decided in `CreateGame`,
      on day one.
    - **Does every `Execute` that touches `Math.random` record its outcome?**
-   - **Is your response converter a pure function of state + name map?** A
-     viewer-scoped DTO doesn't fit the current adapter signature.
+   - **Does your response converter redact per viewer?** That's fine — the
+     replay adapter takes a viewer — but the converter still has to be a pure
+     function of state, name map and that viewer.
 
    The reasons these can't wait, and what each costs, are in
    [§7](#7-turn-recap--planning) — read it *before* step 1, not after step 6.
@@ -66,9 +67,9 @@ handful of one-line additions to shared files in the last step.
   `CreateDataResponse()` method that calls:
 - `gameStateToModel(specificGameState)` — converts internal state to the
   client-facing DTO shape. **Redact anything the player shouldn't see yet**
-  (see "Don't leak hidden information" below). Keep it a pure function of the
-  state plus the username map if you can: a viewer-scoped converter doesn't fit
-  the replay adapter's signature as it stands (§7(c)).
+  (see "Don't leak hidden information" below). Keep it a pure function of its
+  arguments: state, the username map, and — if your game redacts per player —
+  the viewer, which the replay adapter passes down (§7(c)).
 - *(Optional)* `compute<Game>ResultStats(gameData)` +
   `format<Game>ResultStats(stats)` + a schema def, if your game has
   interesting per-game stats worth recording in `GameResult` (see
@@ -178,8 +179,10 @@ initialSpecificGameState: clone<Game>State(specificGameState, turnOrder),
 
 plus a second Mongoose path using the *same* sub-schema factory, and
 `recapAvailable: !!doc.initialSpecificGameState` on the response so games
-created before the field simply don't offer recap. Settlements & Cities and
-World Domination are the reference implementations. **Do this at creation
+created before the field simply don't offer recap. Settlements & Cities,
+World Domination and Train Time are the reference implementations — and
+Train Time is the cautionary tale, retrofitted a release late, so every game
+already dealt by then has no recap and never will. **Do this at creation
 time even if you're not shipping recap yet** — it is one field, it costs
 nothing, and it's the only part that cannot be added retroactively.
 
@@ -195,15 +198,20 @@ Commands are stored as `Schema.Types.Mixed`, so the recorded field persists for
 free. Watch for randomness hidden inside shared helpers and for a *variable*
 number of draws per command (SAC's discard-on-7 loop, a deck reshuffle during a
 market refill) — thread a small recorder object through the helper and store
-the resulting draw log on the command, the way `SACRandomLog` does.
+the resulting draw log on the command, the way `SACRandomLog` and Train Time's
+`TrainTimeShuffleLog` do.
 
 **c. A replay-friendly response converter.** `gameStateToModel(state,
-userIdNameMap)` must be a pure function of those two arguments.
-`IReplayAdapter.toResponseState` has no viewer to pass, so a **viewer-scoped
-DTO doesn't fit today's signature** — if your game redacts per viewer (hands,
-face-down cards, secret tickets), you'll need to widen the adapter to thread
-the viewer's userId through `buildTimeline` as part of your game's work. Don't
-work around it locally.
+userIdNameMap, viewerId)` must be a pure function of its arguments.
+`IReplayAdapter.toResponseState` passes the viewer down from `buildTimeline`,
+so a **viewer-scoped DTO is fine** — if your game redacts per viewer (hands,
+face-down cards, secret tickets), take the third argument and shape in that
+player's secrets and nobody else's, the way Train Time does. Don't reach for
+the live document to fill the gap locally.
+
+Recap **events** are the one place this doesn't apply: they describe what
+happened to whoever reads the feed, so `toEvents` must stay to what the whole
+table can see (Train Time names a face-up card taken, never a blind draw).
 
 **d. The adapters and the wiring.**
 
@@ -212,10 +220,13 @@ work around it locally.
 | `src/utils/games/replay.ts` | `registerReplayAdapter({ className, buildInitialSpecificGameState, toResponseState })` |
 | `src/games/<Game>/recap.ts` | an `IRecapAdapter`: `toEvents` (one replayed command → display events), `summarize`, optional `tip` (the green advice box) and `postProcess` (fold two commands that are one logical action into one row) |
 | `src/utils/games/recap.ts` | `import "@/games/<Game>/recap";` — **`gameRegistry.test.ts` fails without it**, since an unimported adapter never registers and the feed silently returns nothing |
-| `src/app/games/<game>/[gameid]/page.tsx` | `useTurnRecap(gameId)` + `<TurnRecap …>`, and `useTurnNavigation` + `TurnNavControls` for the step-back controls; render `nav.displayedState`, drive the log from `nav.displayedHistory`, and disable interactive controls while `!nav.isLive` |
+| `src/app/games/<game>/[gameid]/page.tsx` | `useTurnRecap(gameId)` + `<TurnRecapScreen …>` (one `if (recap.show)` early return; the page supplies only its call-to-action wording), and `useTurnNavigation` + `TurnNavControls` for the step-back controls; render `nav.displayedState`, drive the log from `nav.displayedHistory`, and disable interactive controls while `!nav.isLive` |
 
 Add a `recap.test.ts` alongside the adapter (see `DiceCities/recap.test.ts`) —
-it's plain snapshot-in, events-out, so it needs no Mongo or Clerk.
+it's plain snapshot-in, events-out, so it needs no Mongo or Clerk. If your game
+records RNG, add a `replay.test.ts` too (see `TrainTime/replay.test.ts`): it
+replays a played-out game with `Math.random` stubbed to throw, which is the only
+cheap way to know a recorded outcome actually covers every random path.
 
 **Planning mode** (queueing hypothetical future turns) is a further opt-in on
 top of replay, via `canPlan` on `TurnNavControls`. Only Snakes & Ladders has it;

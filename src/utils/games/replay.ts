@@ -7,6 +7,7 @@ import { buildInitialSmartthinkState, gameStateToModel as smartthinkStateToModel
 import { buildInitialSettlementsAndCitiesState, gameStateToResponse as settlementsAndCitiesStateToModel } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import { buildInitialWorldDominationState, gameStateToResponse as worldDominationStateToModel, IWorldDominationGameData } from "@/games/WorldDomination/WorldDominationModels";
+import { buildInitialTrainTimeStateFromGameData, gameStateToModel as trainTimeStateToModel, ITrainTimeGameData } from "@/games/TrainTime/TrainTimeModels";
 // Side-effect import: evaluating GameLogic registers every @serializable command
 // class so deserializeJSON can rehydrate them during replay.
 import "../apiModels/GameLogic";
@@ -64,7 +65,15 @@ export interface IReplayAdapter {
     // persisted gameData so it can read static creation-time fields (e.g.
     // Smartthink's solo secret code) that never change during play.
     buildInitialSpecificGameState(gameData: IGameData): unknown;
-    toResponseState(specificGameState: unknown, userIdNameMap: { [key: string]: string }): unknown;
+    // `viewerId` is the player the snapshots are being built for, or null when
+    // nobody in particular is asking. Games whose state is the same for
+    // everybody ignore it; a game with hidden information (Train Time's hand
+    // and tickets) shapes that player's own secrets — and only theirs — in.
+    toResponseState(
+        specificGameState: unknown,
+        userIdNameMap: { [key: string]: string },
+        viewerId: string | null,
+    ): unknown;
 }
 
 const adapters: Record<string, IReplayAdapter> = {};
@@ -110,6 +119,13 @@ registerReplayAdapter({
 });
 
 registerReplayAdapter({
+    className: "TrainTimeGameType",
+    buildInitialSpecificGameState: (gameData) => buildInitialTrainTimeStateFromGameData(gameData as ITrainTimeGameData),
+    toResponseState: (specificGameState, userIdNameMap, viewerId) =>
+        trainTimeStateToModel(specificGameState as never, userIdNameMap, viewerId),
+});
+
+registerReplayAdapter({
     className: "SmartthinkGameType",
     buildInitialSpecificGameState: (gameData) =>
         buildInitialSmartthinkState((gameData as unknown as { specificGameState: never }).specificGameState),
@@ -128,7 +144,10 @@ export async function buildTimeline(
     // Optional observer invoked once per applied command (real or planned) with
     // the surrounding snapshots plus the command/outcome. Additive: existing
     // callers that only want the snapshots can ignore it.
-    onStep?: (step: IReplayStep) => void
+    onStep?: (step: IReplayStep) => void,
+    // Who the snapshots are for, when the game keeps per-player secrets — see
+    // IReplayAdapter.toResponseState. Null builds the everybody-can-see-it view.
+    viewerId: string | null = null
 ): Promise<ITimeline> {
     const adapter = getReplayAdapter(gameData.gameType.className);
     if (!adapter) {
@@ -164,7 +183,7 @@ export async function buildTimeline(
     const snapshot = (command: IGameCommand | null, planned: boolean) => {
         snapshots.push({
             index: index++,
-            specificGameState: adapter.toResponseState(state.specificGameState, userIdNameMap),
+            specificGameState: adapter.toResponseState(state.specificGameState, userIdNameMap, viewerId),
             currentTurn: state.currentTurn,
             complete: state.complete,
             winner: state.winner,
