@@ -118,6 +118,11 @@ export default function Profile() {
     const ownDisplayName = user?.firstName || user?.username || "You";
     const guest = !!user && isGuest(user);
 
+    const handleSignOut = () => {
+        if (guest && !window.confirm("Sign out? There's no way back into a guest account — you'll lose your games and history for good.")) return;
+        signOut().then(() => router.push('/login'));
+    };
+
     return (
         <main>
             <div className="ag-topbar">
@@ -317,7 +322,7 @@ export default function Profile() {
                     <button
                         type="button"
                         className="ag-list-row ag-list-row--button"
-                        onClick={() => { signOut().then(() => router.push('/login')); }}
+                        onClick={handleSignOut}
                         style={{
                             borderTop: "1.5px dashed var(--ag-line-dashed)",
                             font: "700 13px var(--ag-font)", color: "var(--ag-ink)",
