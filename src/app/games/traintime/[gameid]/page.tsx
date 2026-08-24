@@ -36,6 +36,7 @@ import { TRACK_PALETTE } from "@/games/TrainTime/ui";
 import { playerColour } from "@/utils/ui/playerColours";
 import { pluralize } from "@/utils/ui/text";
 import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
+import MatchHistory from "@/components/games/MatchHistory";
 
 // Trains at or below this leave a player one big route from ending the game —
 // the standings ring them so everybody can see the clock running down.
@@ -367,16 +368,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                     )}
 
                     {showLog && (
-                        <div className="ag-log">
-                            <ul className="ag-log-list">
-                                {gameData?.gameState?.history?.map((entry, i) => (
-                                    <li key={i} className="ag-log-item">{entry}</li>
-                                ))}
-                                {!gameData?.gameState?.history?.length && (
-                                    <li className="ag-log-item">No moves yet.</li>
-                                )}
-                            </ul>
-                        </div>
+                        <MatchHistory entries={gameData?.gameState?.history ?? []} usernames={usernameList} />
                     )}
                 </>
             )}

@@ -28,6 +28,7 @@ import { SL_REROLL_PARAM } from "@/games/SnakesAndLadders/ui";
 import { rematchFlag } from "@/utils/ui/rematch";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
+import MatchHistory from "@/components/games/MatchHistory";
 
 export default function GameSnakesAndLadders({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
@@ -267,6 +268,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
             <TurnNavControls
                 nav={nav as unknown as ReturnType<typeof useTurnNavigation>}
                 canPlan={!complete}
+                usernames={usernameList}
                 planningActions={
                     <SnakesAndLaddersPlayerActions
                         hasRolled={false}
@@ -277,16 +279,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
             />
 
             {showLog && (
-                <div className="ag-log">
-                    <ul className="ag-log-list">
-                        {nav.displayedHistory.slice().reverse().map((h, i) => (
-                            <li key={i} className="ag-log-item">{h}</li>
-                        ))}
-                        {nav.displayedHistory.length === 0 && (
-                            <li className="ag-log-item">No moves yet.</li>
-                        )}
-                    </ul>
-                </div>
+                <MatchHistory entries={nav.displayedHistory} usernames={usernameList} oldestFirst />
             )}
         </GameShell>
     );

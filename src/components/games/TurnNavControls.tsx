@@ -1,5 +1,8 @@
-import { Button, ButtonGroup } from "react-bootstrap";
+'use client'
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
+import { useNowToTheMinute } from "@/utils/hooks/useNow";
+import { formatRelativeTime } from "@/utils/ui/time";
+import { playerColourFor } from "@/utils/ui/playerColours";
 import { pluralize } from "@/utils/ui/text";
 
 // The subset of the navigation hook this control needs, kept game-agnostic.
@@ -11,35 +14,31 @@ interface TurnNavControlsProps {
     // (e.g. the game's normal action panel wired to nav.planMove).
     planningActions?: React.ReactNode;
     canPlan?: boolean;
+    /** The game's usernames in seat order, used to colour the reviewed turn's swatch. */
+    usernames?: string[];
 }
 
-export default function TurnNavControls({ nav, planningActions, canPlan = true }: TurnNavControlsProps) {
-    const containerStyle: React.CSSProperties = {
-        margin: "12px 0",
-        padding: "12px",
-        border: "1px solid #dee2e6",
-        borderRadius: "8px",
-        background: nav.isPlannedView ? "#fff8e1" : "#f8f9fa",
-        // Pin dark text so the panel stays readable regardless of the page theme
-        // (the app's default text colour is light, which would vanish on this
-        // light/yellow background).
-        color: "#212529",
-    };
+// The war-room scrubber from the design: a dark dock carrying the transport
+// buttons, a turn track showing where in the match you are standing, and a line
+// naming the turn you are looking at. Themed like the rest of the shell — the
+// panel is the app's dark ink, the key control its brass, never stock Bootstrap.
+export default function TurnNavControls({ nav, planningActions, canPlan = true, usernames = [] }: TurnNavControlsProps) {
+    const now = useNowToTheMinute();
 
     if (nav.isLive) {
         return (
-            <div style={containerStyle}>
-                <ButtonGroup>
-                    <Button variant="outline-secondary" size="sm" onClick={nav.enterRecap} disabled={nav.loading}>
+            <div className="ag-actionsheet">
+                <div className="ag-btn-row">
+                    <button type="button" className="ag-btn ag-btn--light" onClick={nav.enterRecap} disabled={nav.loading}>
                         🕐 Review turns
-                    </Button>
+                    </button>
                     {canPlan && (
-                        <Button variant="outline-primary" size="sm" onClick={nav.enterPlanning} disabled={nav.loading}>
+                        <button type="button" className="ag-btn ag-btn--light" onClick={nav.enterPlanning} disabled={nav.loading}>
                             🧭 Plan ahead
-                        </Button>
+                        </button>
                     )}
-                </ButtonGroup>
-                {nav.error && <div style={{ color: "#c0392b", marginTop: "6px" }}>{nav.error}</div>}
+                </div>
+                {nav.error && <div className="ag-review-error">{nav.error}</div>}
             </div>
         );
     }
@@ -60,52 +59,78 @@ export default function TurnNavControls({ nav, planningActions, canPlan = true }
           ? "Start of game"
           : `Turn ${nav.viewIndex} of ${nav.currentIndex}`;
 
-    const commandText = nav.displayedCommand
-        ? `${nav.displayedCommand.senderUsername}: ${nav.displayedCommand.summary}`
-        : nav.viewIndex === 0
-          ? "Initial position"
-          : "";
+    const command = nav.displayedCommand;
+    const when = command ? formatRelativeTime(command.timestamp, now) : null;
+    const swatch = playerColourFor(command?.senderUsername, usernames);
+
+    // One tick per point on the timeline, index 0 (the opening position) first.
+    const ticks = Array.from({ length: nav.totalTurns + 1 }, (_, i) =>
+        i === nav.viewIndex ? "now" : i > nav.currentIndex ? "planned" : i < nav.viewIndex ? "played" : "ahead"
+    );
 
     return (
-        <div style={containerStyle}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                <strong>{nav.mode === "planning" ? "🧭 Planning" : "🕐 Review"}</strong>
-                <ButtonGroup size="sm">
-                    <Button variant="outline-secondary" onClick={nav.jumpToStart} disabled={!nav.canBack} title="Jump to start of game">⏮</Button>
-                    <Button variant="outline-secondary" onClick={nav.stepBack} disabled={!nav.canBack} title="Previous turn">◀</Button>
-                    <Button variant="outline-secondary" onClick={nav.stepForward} disabled={!nav.canForward} title="Next turn">▶</Button>
-                    <Button variant="outline-secondary" onClick={nav.jumpToCurrent} disabled={!nav.canForward} title="Jump to current turn">⏭</Button>
-                </ButtonGroup>
-                <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
-                    <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>{relativeLabel}</span>
-                    <span style={{ fontSize: "0.75rem", color: "#5c5c5c" }}>{positionLabel}</span>
-                </span>
-                <Button variant="secondary" size="sm" onClick={nav.returnToLive} style={{ marginLeft: "auto" }} title="Leave this view and resume the live game">
-                    Back to live game
-                </Button>
+        <>
+            <div className="ag-review">
+                <div className="ag-review-head">
+                    <div className="ag-review-title">{nav.mode === "planning" ? "🧭 Planning ahead" : "🕐 Match review"}</div>
+                    <div className="ag-review-rule" />
+                    <div className="ag-review-pos">{positionLabel}</div>
+                </div>
+
+                <div className="ag-review-transport">
+                    <button type="button" className="ag-review-btn" onClick={nav.jumpToStart} disabled={!nav.canBack} aria-label="Jump to start of game" title="Jump to start of game">⏮</button>
+                    <button type="button" className="ag-review-btn" onClick={nav.stepBack} disabled={!nav.canBack} aria-label="Previous turn" title="Previous turn">◀</button>
+                    <button type="button" className="ag-review-btn ag-review-btn--key" onClick={nav.stepForward} disabled={!nav.canForward} aria-label="Next turn" title="Next turn">▶</button>
+                    <button type="button" className="ag-review-btn" onClick={nav.jumpToCurrent} disabled={!nav.canForward} aria-label="Jump to current turn" title="Jump to current turn">⏭</button>
+                </div>
+
+                <div className="ag-review-track" aria-hidden="true">
+                    {ticks.map((state, i) => (
+                        <span key={i} className={`ag-review-tick${state === "ahead" ? "" : ` ag-review-tick--${state}`}`} />
+                    ))}
+                </div>
+
+                <div className="ag-review-now">
+                    <span className="ag-review-swatch" style={{ background: swatch }} />
+                    <div className="ag-review-now-text">
+                        {command ? (
+                            <>
+                                <b>{command.senderUsername}</b> · {command.summary}
+                                {when && <span className="ag-review-now-when"> · {when}</span>}
+                            </>
+                        ) : (
+                            "Initial position"
+                        )}
+                    </div>
+                    <div className="ag-review-delta">{relativeLabel}</div>
+                </div>
+
+                {nav.error && <div className="ag-review-error">{nav.error}</div>}
             </div>
 
-            {commandText && (
-                <div style={{ marginTop: "8px", fontSize: "0.9rem", color: "#555" }}>{commandText}</div>
-            )}
-
             {nav.mode === "planning" && (
-                <div style={{ marginTop: "10px" }}>
+                <>
                     {nav.atCurrent && !nav.isPlannedView && (
-                        <div style={{ fontSize: "0.85rem", color: "#5c5c5c", marginBottom: "6px" }}>
+                        <div className="ag-review-hint">
                             You&apos;re at the current position. Make a hypothetical move to plan ahead.
                         </div>
                     )}
                     {planningActions}
                     {nav.plannedCount > 0 && (
-                        <Button variant="outline-danger" size="sm" onClick={nav.clearPlan} style={{ marginTop: "8px" }} title="Remove your hypothetical moves and start the plan over">
-                            Discard plan
-                        </Button>
+                        <div className="ag-actionsheet">
+                            <button type="button" className="ag-btn ag-btn--danger ag-btn--block" onClick={nav.clearPlan} title="Remove your hypothetical moves and start the plan over">
+                                Discard plan
+                            </button>
+                        </div>
                     )}
-                </div>
+                </>
             )}
 
-            {nav.error && <div style={{ color: "#c0392b", marginTop: "6px" }}>{nav.error}</div>}
-        </div>
+            <div className="ag-actionsheet">
+                <button type="button" className="ag-btn ag-btn--primary ag-btn--block" onClick={nav.returnToLive} title="Leave this view and resume the live game">
+                    Back to live game →
+                </button>
+            </div>
+        </>
     );
 }
