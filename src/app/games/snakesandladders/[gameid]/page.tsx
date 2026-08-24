@@ -134,10 +134,9 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
             if (!ps) return [];
             const isMe = ps.userId === user?.id;
             const isActive = ps.userId === displayedCurrentTurn && !complete;
-            let sub: React.ReactNode;
-            if (isActive) sub = '▶ now';
-            else if (ps.position === leaderPosition && leaderPosition > 0) sub = '👑 lead';
-            else sub = `sq ${ps.position}`;
+            const sub = ps.position === leaderPosition && leaderPosition > 0
+                ? '👑 lead'
+                : `sq ${ps.position}`;
             return [{
                 id: username,
                 name: isMe ? 'You' : username,
