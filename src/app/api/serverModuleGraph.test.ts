@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+
+import { walkFiles } from '@/utils/testing/walkFiles';
 
 // A `'use client'` module is a *client reference* in the server graph: importing
 // a function out of one from a route handler hands you a proxy that throws
@@ -14,14 +16,6 @@ import { join, relative } from 'node:path';
 // plain module (src/utils/**), which the component can import too.
 
 const SRC = join(process.cwd(), 'src');
-
-function walk(dir: string): string[] {
-    return readdirSync(dir).flatMap(entry => {
-        const path = join(dir, entry);
-        if (statSync(path).isDirectory()) return walk(path);
-        return /\.tsx?$/.test(path) ? [path] : [];
-    });
-}
 
 const isClientModule = (path: string) =>
     /^\s*['"]use client['"]/.test(readFileSync(path, 'utf8'));
@@ -58,7 +52,7 @@ function reachableFrom(entry: string): Map<string, string[]> {
 }
 
 describe('API route handlers', () => {
-    const routes = walk(join(SRC, 'app', 'api')).filter(path => /route\.tsx?$/.test(path));
+    const routes = walkFiles(join(SRC, 'app', 'api'), name => /^route\.tsx?$/.test(name));
 
     it('finds the route handlers to check', () => {
         expect(routes.length).toBeGreaterThan(10);

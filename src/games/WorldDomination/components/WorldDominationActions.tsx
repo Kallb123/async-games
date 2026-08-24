@@ -86,9 +86,7 @@ export default function WorldDominationActions({
             return [...prev, id];
         });
     }
-    // Only the viewer's own hand comes down from the server, and this sheet is
-    // only ever rendered for them — but the field is optional on every player,
-    // so read it once here rather than guarding at each use.
+    // Only the viewer's own hand comes down from the server.
     const myCards = me.cards ?? [];
     const selectedCards = myCards.filter(c => selectedCardIds.includes(c.id));
     const canCashIn = selectedCards.length === 3 && isValidCardSet(selectedCards);
@@ -97,8 +95,6 @@ export default function WorldDominationActions({
         cmd.cardIds = selectedCardIds;
         submitCommand(cmd, () => setSelectedCardIds([]), 'cashIn');
     }
-    // The rules gate reads the authoritative public count, not the hand array:
-    // it has to hold even if this screen is ever handed a viewerless response.
     const mustCashIn = me.cardCount >= 5;
 
     const cardHand = myCards.length > 0 ? (

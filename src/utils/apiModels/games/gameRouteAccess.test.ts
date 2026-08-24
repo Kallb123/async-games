@@ -1,7 +1,9 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+
+import { walkFiles } from "@/utils/testing/walkFiles";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const apiRoot = path.resolve(here, "../../../app/api");
@@ -15,13 +17,6 @@ const apiRoot = path.resolve(here, "../../../app/api");
 //
 // Discovered by walking the tree rather than listed by hand, so a route added
 // tomorrow is covered without anyone remembering to add it here.
-function routeFiles(dir: string): string[] {
-    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) return routeFiles(full);
-        return entry.name === "route.ts" ? [full] : [];
-    });
-}
 
 // The three ways a route legitimately establishes membership:
 //
@@ -36,7 +31,7 @@ const MEMBERSHIP_GATES = [
     /findOne\(\s*\{[^}]*userIdList:\s*(?:auth\w*\.)?userId/,
 ];
 
-const singleGameRoutes = routeFiles(apiRoot)
+const singleGameRoutes = walkFiles(apiRoot, (name) => name === "route.ts")
     .filter((file) => readFileSync(file, "utf8").includes("GameDataModel.findOne"))
     .map((file) => path.relative(apiRoot, file));
 

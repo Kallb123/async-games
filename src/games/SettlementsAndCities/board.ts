@@ -323,7 +323,8 @@ export function generateBoard(): GeneratedBoard {
 
 export function createInitialPlayerState(): ISACPlayerState {
     return {
-        resources: { lumber: 0, wool: 0, grain: 0, brick: 0, ore: 0 },
+        // Spread, not shared: a player's hand is mutated in place all game.
+        resources: { ...NO_RESOURCES },
         devCards:    { knight: 0, victoryPoint: 0, roadBuilding: 0, yearOfPlenty: 0, monopoly: 0 },
         newDevCards: { knight: 0, victoryPoint: 0, roadBuilding: 0, yearOfPlenty: 0, monopoly: 0 },
         knightsPlayed: 0,

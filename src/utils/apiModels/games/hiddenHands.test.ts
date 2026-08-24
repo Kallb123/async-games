@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { gameStateToResponse as worldDominationStateToResponse } from "@/games/WorldDomination/WorldDominationModels";
 import type { IWorldDominationSpecificGameState } from "@/games/WorldDomination/WorldDominationModels";
+import {
+    makeState as makeWorldDominationState,
+    player as worldDominationPlayer,
+} from "@/games/WorldDomination/testFixtures";
 import { gameStateToResponse as sacStateToResponse } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
-import type { ISACPlayerState, ISACSpecificGameState } from "@/games/SettlementsAndCities/board";
+import type { ISACSpecificGameState } from "@/games/SettlementsAndCities/board";
+import { makeState as makeSacState, player as sacPlayer } from "@/games/SettlementsAndCities/testFixtures";
 
 // The two games this guards were both sending every player's hidden hand to
 // every player: World Domination shipped each player's territory cards, and
@@ -26,20 +31,12 @@ const ALICE_CARD = { id: "alice-secret-card", type: "infantry" as const, territo
 const BOB_CARD = { id: "bob-secret-card", type: "cavalry" as const, territoryId: 7 };
 
 function worldDominationState(): IWorldDominationSpecificGameState {
-    return {
-        territories: Array.from({ length: 4 }, (_, i) => ({ owner: i < 2 ? "u1" : "u2", armies: 1 })),
+    return makeWorldDominationState({
         playerStates: new Map([
-            ["u1", { cards: [ALICE_CARD], eliminated: false, conqueredTerritoryThisTurn: false, totalArmiesDeployed: 4 }],
-            ["u2", { cards: [BOB_CARD, { ...BOB_CARD, id: "bob-second-card" }], eliminated: false, conqueredTerritoryThisTurn: false, totalArmiesDeployed: 4 }],
+            ["u1", worldDominationPlayer({ cards: [ALICE_CARD] })],
+            ["u2", worldDominationPlayer({ cards: [BOB_CARD, { ...BOB_CARD, id: "bob-second-card" }] })],
         ]),
-        phase: "reinforce",
-        reinforcementsRemaining: 3,
-        pendingOccupation: null,
-        fortifyUsed: false,
-        cardSetsCashedIn: 0,
-        cardDeck: [],
-        lastBattle: null,
-    };
+    });
 }
 
 describe("World Domination's response", () => {
@@ -77,57 +74,19 @@ describe("World Domination's response", () => {
 
 // ─── Settlements & Cities ────────────────────────────────────────────────────
 
-function sacPlayer(overrides: Partial<ISACPlayerState> = {}): ISACPlayerState {
-    return {
-        resources: { lumber: 0, wool: 0, grain: 0, brick: 0, ore: 0 },
-        devCards: { knight: 0, victoryPoint: 0, roadBuilding: 0, yearOfPlenty: 0, monopoly: 0 },
-        newDevCards: { knight: 0, victoryPoint: 0, roadBuilding: 0, yearOfPlenty: 0, monopoly: 0 },
-        knightsPlayed: 0,
-        remainingRoads: 15,
-        remainingSettlements: 5,
-        remainingCities: 4,
-        devCardsBought: 0,
-        resourcesGathered: 0,
-        robberUses: 0,
-        ...overrides,
-    };
-}
-
 function sacState(): ISACSpecificGameState {
-    return {
-        hexes: [],
-        vertices: [],
-        edges: [],
-        harbors: [],
+    return makeSacState({
         playerStates: new Map([
-            ["u1", sacPlayer({ resources: { lumber: 2, wool: 1, grain: 0, brick: 0, ore: 0 } })],
-            // Bob is holding the game: three ore, and a victory-point card that
-            // is supposed to stay hidden until it wins.
+            ["u1", sacPlayer({ resources: { lumber: 2, wool: 1 } })],
+            // Bob is holding the game: three ore, and victory-point cards that
+            // are supposed to stay hidden until they win it.
             ["u2", sacPlayer({
-                resources: { lumber: 0, wool: 0, grain: 1, brick: 0, ore: 3 },
-                devCards: { knight: 1, victoryPoint: 2, roadBuilding: 0, yearOfPlenty: 0, monopoly: 0 },
-                newDevCards: { knight: 0, victoryPoint: 0, roadBuilding: 1, yearOfPlenty: 0, monopoly: 0 },
+                resources: { grain: 1, ore: 3 },
+                devCards: { knight: 1, victoryPoint: 2 },
+                newDevCards: { roadBuilding: 1 },
             })],
         ]),
-        robberHexIndex: 0,
-        phase: "main",
-        setupStep: 0,
-        pendingRoadSetup: false,
-        lastSetupSettlementVertex: null,
-        hasRolled: true,
-        lastRoll: 8,
-        lastRollDie1: 4,
-        lastRollDie2: 4,
-        pendingRobber: false,
-        longestRoadOwner: null,
-        largestArmyOwner: null,
-        devCardDeck: [],
-        pendingRoadBuilding: 0,
-        playedDevCard: false,
-        specialBuildActive: false,
-        specialBuildQueue: [],
-        specialBuildMainPlayer: null,
-    } as unknown as ISACSpecificGameState;
+    });
 }
 
 describe("Settlements & Cities' response", () => {

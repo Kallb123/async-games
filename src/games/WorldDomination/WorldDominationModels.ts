@@ -319,9 +319,7 @@ function replaceHistoryUserIds(history: string[], userIdNameMap: { [key: string]
 export function gameStateToResponse(
     gs: IWorldDominationSpecificGameState,
     userIdNameMap: { [key: string]: string },
-    // The player this view is for. Their hand comes back in full; everybody
-    // else's is reduced to a count. Null builds the view nobody's hand is in.
-    // Required (no default) so a caller has to say who is looking.
+    // Their hand in full; everyone else a count. Null = nobody's hand.
     viewerId: string | null,
 ): IWorldDominationSpecificGameStateResponse {
     const playerStates: IWorldDominationSpecificGameStateResponse['playerStates'] = {};

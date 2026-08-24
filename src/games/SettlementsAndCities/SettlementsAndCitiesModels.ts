@@ -422,12 +422,11 @@ function replaceHistoryUserIds(history: string[], userIdNameMap: { [key: string]
 export function gameStateToResponse(
     gs: ISACSpecificGameState,
     userIdNameMap: { [key: string]: string },
-    // The player this view is for. Their resource hand and dev cards come back
-    // in full; everybody else's are reduced to counts. Null builds the view
-    // nobody's hand is in. Required (no default) so a caller has to say who is
-    // looking.
+    // Their hand and dev cards in full; everyone else counts. Null = nobody's.
     viewerId: string | null,
 ): ISACSpecificGameStateResponse {
+    const total = (cards: ISACResources | ISACDevCards) => Object.values(cards).reduce((sum, n) => sum + n, 0);
+
     const playerStates: ISACSpecificGameStateResponse['playerStates'] = {};
     const playerDevCards: ISACSpecificGameStateResponse['playerDevCards'] = {};
     const playerNewDevCards: ISACSpecificGameStateResponse['playerNewDevCards'] = {};
@@ -437,10 +436,9 @@ export function gameStateToResponse(
         playerStates[username] = {
             userId,
             username,
-            resourceCount: Object.values(ps.resources).reduce((s, n) => s + n, 0),
+            resourceCount: total(ps.resources),
             resources: userId === viewerId ? { ...ps.resources } : undefined,
-            devCardCount: Object.values(ps.devCards).reduce((s, n) => s + n, 0)
-                + Object.values(ps.newDevCards).reduce((s, n) => s + n, 0),
+            devCardCount: total(ps.devCards) + total(ps.newDevCards),
             knightsPlayed: ps.knightsPlayed,
             resourcesGathered: ps.resourcesGathered,
             remainingRoads: ps.remainingRoads,

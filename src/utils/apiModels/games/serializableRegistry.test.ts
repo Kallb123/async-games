@@ -1,7 +1,9 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+
+import { walkFiles } from "@/utils/testing/walkFiles";
 
 // Importing the barrel must register every @serializable class as a side
 // effect (the decorator runs on module load). This test is the guard promised
@@ -16,26 +18,12 @@ import "../GameLogic";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const srcRoot = path.resolve(here, "../../..");
 
-// Recursively collect every .ts file under src/, excluding test files.
-function collectTsFiles(dir: string): string[] {
-    const out: string[] = [];
-    for (const entry of readdirSync(dir)) {
-        const full = path.join(dir, entry);
-        if (statSync(full).isDirectory()) {
-            out.push(...collectTsFiles(full));
-        } else if (entry.endsWith(".ts") && !entry.endsWith(".test.ts")) {
-            out.push(full);
-        }
-    }
-    return out;
-}
-
 // Every class decorated with @serializable, discovered by scanning source so
 // the test needs no hand-maintained list and can never drift out of date.
 function discoverSerialisableClasses(): { name: string; file: string }[] {
     const pattern = /@serializable\s+export\s+class\s+(\w+)/g;
     const found: { name: string; file: string }[] = [];
-    for (const file of collectTsFiles(srcRoot)) {
+    for (const file of walkFiles(srcRoot, (name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))) {
         const source = readFileSync(file, "utf8");
         for (const match of source.matchAll(pattern)) {
             found.push({ name: match[1], file: path.relative(srcRoot, file) });
