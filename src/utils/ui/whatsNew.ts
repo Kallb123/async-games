@@ -65,6 +65,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Whose turn it is, at a glance",
+                detail: "Every game's scoreboard now marks the player to move with a caret next to their name — it was easy to miss in Train Time and missing altogether in Dice Cities.",
+            },
+            {
                 title: "One seat each, however many devices",
                 detail: "Entering a code you're already in with takes you back to your own seat instead of quietly claiming a second one.",
             },
@@ -79,10 +83,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Open seats count as players",
                 detail: "Leaving seats open with nobody named no longer greys out the start button — set the seats, get your code and share it.",
-            },
-            {
-                title: "Right names, right seats",
-                detail: "A player Clerk couldn't look up used to shift every other name in the game out of place; now they just show as \"Unknown player\".",
             },
         ],
     },

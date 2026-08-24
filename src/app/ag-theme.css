@@ -1216,6 +1216,20 @@ button {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+/* Whose turn it is. Inherits the pill's text colour so it stays readable on
+   every per-game re-tint of `.ag-score-pill`. */
+.ag-score-turn {
+    margin-right: 3px;
+    font-size: 0.9em;
+    animation: ag-score-turn-pulse 1.6s ease-in-out infinite;
+}
+@keyframes ag-score-turn-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ag-score-turn { animation: none; }
+}
 .ag-score-sub { font: 600 9px/1.1 var(--ag-font); opacity: 0.85; margin-top: 3px; }
 .ag-score-vp { font: 800 15px var(--ag-font); }
 .ag-score-vp-target { font-size: 0.7em; font-weight: 700; opacity: 0.55; }
