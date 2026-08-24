@@ -119,12 +119,8 @@ function JoinForm() {
   // The ref tracks every name this reroll sequence has already offered, so
   // mashing the dice doesn't hand back the same name twice in a row — it's
   // not render state, nothing on screen depends on the history itself.
-  const offeredNamesRef = useRef<string[]>([]);
-  const [name, setName] = useState(() => {
-    const initial = randomGuestName();
-    offeredNamesRef.current = [initial];
-    return initial;
-  });
+  const [name, setName] = useState(() => randomGuestName());
+  const offeredNamesRef = useRef<string[]>([name]);
   const [nameDie, setNameDie] = useState(() => DiceRoll(6));
   const rerollName = () => {
     const next = randomGuestName(offeredNamesRef.current);
