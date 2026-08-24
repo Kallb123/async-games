@@ -5,7 +5,7 @@ import { readableName } from '@/utils/ui/players';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { DiceCitiesRequestRadioTowerReroll, ICommandOutcome, IGameCommand, IGameType, SmartthinkGameType, SmartthinkSetSecretCode, SmartthinkSubmitGuess, SnakesAndLaddersGameType, SnakesAndLaddersRequestDiceRoll } from '@/utils/apiModels/GameLogic';
+import { DiceCitiesRequestRadioTowerReroll, ICommandOutcome, IGameCommand, IGameType, SmartthinkGameType, SmartthinkSetSecretCode, SmartthinkSubmitGuess, SnakesAndLaddersGameType, SnakesAndLaddersRequestDiceRoll, stripRecordedRandomness } from '@/utils/apiModels/GameLogic';
 import { GameDataModel, IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
 import { recordGameResult } from '@/utils/mongodb/GameResultData';
 import { unclaimedGuestsOf } from '@/utils/users/guest';
@@ -97,6 +97,12 @@ export async function POST(request: NextRequest) {
   if (userId !== commandRequest.senderId) {
     return NextResponse.json({}, {status: 400, statusText: "Can't request for someone else"});
   }
+
+  // The client supplies the move, never the randomness it consumes. Recorded
+  // RNG is a replay mechanism, and every Execute prefers a recorded value over
+  // rolling fresh, so a request that arrived carrying one would be choosing its
+  // own dice. Replay (buildTimeline) still honours them; a live request can't.
+  stripRecordedRandomness(commandRequest);
 
   const commandOutcome = await commandRequest.Execute(gameData);
   if (!commandOutcome.validMove) {

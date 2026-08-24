@@ -68,6 +68,24 @@ recorded value is persisted automatically (the schema stores commands as
 `resolvedPlannedCommands` (with recorded RNG) so the client can resend them and
 keep earlier planned rolls stable while adding new ones.
 
+**Name the field `recorded…`, or a player can pick their own dice.** Because
+every `Execute` *prefers* a recorded value over rolling fresh, a recorded field
+is the one part of a command a client must never supply — and
+`POST /api/game/command` deserialises the request body straight into a command
+instance, so a request could otherwise arrive carrying one. The route therefore
+calls `stripRecordedRandomness(command)` (in
+`src/utils/apiModels/gameCommand.ts`) before `Execute`, which deletes every
+property whose name starts with `recorded`. The naming convention is what makes
+that work, so a new game's recorded field **must** use the prefix; a field
+called `savedRoll` or `rngLog` would sail straight through.
+`recordedRandomness.test.ts` guards the route's call site, but it cannot guard
+your field's name.
+
+Replay is the only legitimate source of these values, so neither `buildTimeline`
+nor the timeline route strips them: their commands come from persisted
+`commandHistory` (already trusted) or from a player's own planned moves, which
+are never saved and only ever rendered back to that same player.
+
 Creation-time randomness (e.g. turn-order rolls) is fine as long as its **result**
 is already persisted in a stable field (like `gameState.turnOrder`) — the adapter
 seeds the initial state from those persisted fields.
