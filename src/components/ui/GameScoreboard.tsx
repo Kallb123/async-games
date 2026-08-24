@@ -35,7 +35,10 @@ export default function GameScoreboard({ entries }: { entries: ScoreEntry[] }) {
                     <span className="ag-score-dot" style={{ background: e.color }} />
                     <div className="ag-score-main">
                         <div className="ag-score-name">
-                            {e.isActive && <span className="ag-score-turn" role="img" aria-label="playing now">▶</span>}
+                            {/* Decorative: the shell subtitle already announces
+                                whose move it is in prose. Sits before the name
+                                so it survives the name's ellipsis. */}
+                            {e.isActive && <span className="ag-score-turn" aria-hidden="true">▶</span>}
                             {e.name}
                         </div>
                         {e.sub != null && <div className="ag-score-sub">{e.sub}</div>}

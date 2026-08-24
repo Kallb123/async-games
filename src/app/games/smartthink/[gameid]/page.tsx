@@ -94,12 +94,11 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
             const isMe = p.userId === user?.id;
             const isSetter = p.userId === displayed.codeSetterId;
             const isActive = p.userId === nav.displayedCurrentTurn && !complete;
-            const sub = isSetter ? '🔒 setter' : '🔓 breaker';
             return {
                 id: p.userId,
                 name: isMe ? 'You' : p.username,
                 color: PLAYER_COLORS[i % PLAYER_COLORS.length],
-                sub,
+                sub: isSetter ? '🔒 setter' : '🔓 breaker',
                 score: isSetter ? '🔒' : displayed.guessRows.length,
                 isMe,
                 isActive,
