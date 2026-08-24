@@ -27,6 +27,17 @@ export async function GET(request: NextRequest, {params}: { params: Promise<IGet
     if (!gameData) {
         return NextResponse.json({}, {status: 404, statusText: "Game not found"});
     }
+
+    // Every sibling route under this one checks membership (/recap, /timeline,
+    // /reaction, /end, /nudge); this one — the route that returns the whole
+    // game — never did. Game ids are v4 UUIDs so nothing is enumerable, but
+    // they travel in push-notification links and shareable URLs, and a viewer
+    // who isn't a player still has no business reading the board.
+    if (!gameData.userIdList.includes(userId)) {
+        console.warn(`GET ${request.nextUrl.pathname} 403: not a player in this game`);
+        return NextResponse.json({}, {status: 403, statusText: "Not a player in this game"});
+    }
+
     const gameDataResponse = await gameData.CreateDataResponse(userId);
 
     return NextResponse.json({success: true, gameData: gameDataResponse});
