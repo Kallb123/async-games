@@ -499,8 +499,8 @@ subsection of this document as they land:
       city: CityId,
       role: RoleId,
       contingencyCard: CardId | null,
+      actionsLeft: number,
   }>,
-  actionsLeft: number,
   phase: 'actions' | 'discard' | 'forecast',
 }
 ```
@@ -513,22 +513,43 @@ loop and one `markModified` surface, it is the shape `computePerTurnStat` in
 a whole class of "the Medic moved but only three of the four maps knew" bug from
 the Airlift and Dispatcher commands.
 
-Three command classes, not fifteen — `docs/new-game.md` prefers a small number
-of parameterised commands, and all eight board actions share the same "is it
-your turn, do you have an action left, decrement, log" spine:
+**`actionsLeft` lives on the player, and refills at the start of that player's
+turn** rather than at the end of the previous one. Live play cannot tell the
+difference; the crew planner of 21.5 cannot work without it, because a plan that
+crosses to the next player would otherwise stall on an exhausted counter. Both
+halves of that are a persisted-schema decision, which is why they are here rather
+than nine commits in.
+
+Four command classes, not fifteen — `docs/new-game.md` prefers a small number of
+parameterised commands, and all eight board actions share the same "is it your
+turn, do you have an action left, decrement, log" spine:
 
 | Command | Covers |
 |---|---|
 | `OutbreakAction { kind, … }` | Drive · Direct · Charter · Shuttle · Build · Treat · Share · Cure · Pass |
 | `OutbreakPlayEvent { cardId, … }` | The five event cards, the Contingency Planner's retrieval, and Forecast's second step (`phase === 'forecast'` gates it) |
+| `OutbreakEndTurn` | The draw and infect phases: draw two, infect at the current rate, outbreaks and chains, epidemics |
 | `OutbreakDiscard { cardIds }` | Coming back down to the 7-card hand limit |
 
-The last action of a turn (or an `OutbreakAction { kind: 'pass' }`) runs the
-draw and infect phases inside the same `Execute` and returns `turnOver: true`,
-carrying what happened back on the outcome so the client can animate it. If the
-draw leaves the player over the hand limit, `phase` becomes `'discard'` and the
-turn stays open until `OutbreakDiscard` closes it — exactly the shape Train
-Time's draw/keep-tickets pair already has.
+**`OutbreakEndTurn` is deliberately separate from the last action**, and it is the
+only command in the game that touches a deck or consumes randomness. Folding the
+draw and infect phases into the fourth action's `Execute` would be one fewer
+round trip and would make the crew planner of 21.5 impossible: with the deck
+firing inside an action, a plan cannot cross from one player to the next without
+resolving it. Keeping it apart means planning excludes exactly one command class,
+enforced by which classes are queueable rather than by careful behaviour inside
+them.
+
+So the fourth action returns `turnOver: false` and the client follows it with
+`OutbreakEndTurn`, which returns `turnOver: true` and carries what happened back
+on the outcome so the client can animate it. If the draw leaves the player over
+the hand limit, `phase` becomes `'discard'` and the turn stays open until
+`OutbreakDiscard` closes it — the same open-turn shape Train Time's
+draw/keep-tickets pair already has, and the same machinery covers a player who
+vanishes mid-turn (step 7's cron resolution executes `OutbreakEndTurn` for them).
+
+Do **not** trigger the draw from `CheckEndTurn`: it runs during replay too, so
+the deck would fire inside a plan with no command accounting for it.
 
 **Redaction and recorded randomness.** Both deck orders are redacted to counts
 in `gameStateToModel` (`docs/new-game.md`, "Don't leak hidden information") —
@@ -538,13 +559,103 @@ rendered, not hidden: reading it is a skill the design rewards (§14.2). Every
 `shuffle()` at setup — infection deck, player deck, the epidemic piles, the role
 deal — lands in `initialSpecificGameState`, the way World Domination's territory
 deal does, so replay is deterministic from day one. The **only** mid-game
-randomness is the Intensify shuffle, which must be recorded onto the
-epidemic-resolving command the first time it runs, the way `recordedRoll` is in
-Snakes & Ladders and Settlements & Cities. Record it in the commit that
-introduces it — Train Time's §11 is the cautionary tale of what retrofitting
-this costs.
+randomness is the Intensify shuffle, which must be recorded onto
+`OutbreakEndTurn` the first time it runs, the way `recordedRoll` is in Snakes &
+Ladders and Settlements & Cities. Record it in the commit that introduces it —
+Train Time's §11 is the cautionary tale of what retrofitting this costs — and
+**name the field `recordedIntensifyOrder` or similar**: the command route strips
+every incoming `recorded…` property precisely because `Execute` prefers a
+recorded value, and a differently-named field would let a player pick their own
+epidemic.
 
-### 21.5 The commits
+### 21.5 Turn recap & planning
+
+`docs/new-game.md` §7 asks for this decision before step 1 rather than after
+step 6, and 21.4 has already paid most of it: the snapshot, the redaction and the
+recorded Intensify shuffle are all replay decisions. This subsection records the
+three-column outcome for the table in
+[`turn-recap-and-planning.md`](../turn-recap-and-planning.md#per-game-status).
+
+**Replay — yes**, from the `initialSpecificGameState` snapshot of 21.4. Note that
+the recorded-shuffle field **must** be named `recorded…`: the command route
+strips every property with that prefix off an incoming request, because each
+`Execute` prefers a recorded value over rolling fresh and would otherwise let a
+player choose their own epidemic. A field named `intensifyOrder` would sail
+straight through.
+
+**Recap — yes**, and it is the most valuable recap in the repo: the away-time
+narrative is the board getting worse, which is the entire experience of §3.
+Step 12 builds it.
+
+**Planning — yes, as a crew planner**, and this is the one that shapes the
+command surface. It is worth the deviation because it answers the question a
+co-op table actually argues about — *do we have enough actions?* — and because
+nothing else in the app can answer it.
+
+#### The crew planner
+
+Queue any `OutbreakAction`, from **any player**, in any order, and watch the
+board move. What you cannot queue is `OutbreakEndTurn`, which is the only command
+that touches a deck. The plan therefore never draws, never infects, and never
+consults an order the live game is hiding: the deck is *frozen*, and no
+redaction, faking or recorded randomness is involved at all. The general pattern,
+and the two-axis test behind it, is
+[in the shared doc](../turn-recap-and-planning.md#planning-what-can-be-planned).
+
+It costs three things, all cheap now and expensive later:
+
+1. **The deck must be its own command** — see the command surface in 21.4. Fold
+   draw-and-infect into the last action's `Execute` and there is no way to cross
+   from one player's actions to the next without firing the deck.
+2. **`actionsLeft` is per-player and refills at the *start* of your turn**, not
+   at the end of the previous one. Live behaviour is identical either way; the
+   difference is that a plan crossing to the next player doesn't stall on an
+   exhausted counter. A single top-level `actionsLeft` makes the crew planner
+   impossible without planning-specific code in `Execute`.
+3. **Cross-player planning is a route opt-in.** The timeline endpoint currently
+   clamps every planned command's `senderId` to the caller; the replay engine has
+   no such limit. Outbreak qualifies for the opt-in **because §2 makes hands
+   public** — planning a teammate's turn discloses nothing that the response
+   didn't already carry. That reasoning does not transfer to a hidden-hand game,
+   so the flag is per-game and off by default.
+
+**Say what it is in the UI.** A frozen plan shows a board that *cannot occur* —
+in the real game cubes land between each player's turn. A city that is clean in
+the plan may be alight by the time the fourth player reaches it, and a plan that
+avoids an outbreak is not a promise. This is an action-budget and reach
+calculator, not a forecast, and the copy has to carry that, because the natural
+"improvement" someone will later reach for is to resolve the deck.
+
+#### The decoy deck, and why not
+
+Outbreak is the **only** game in the repo where drawing a planned card from a
+reshuffled decoy would leak nothing. Because §2 makes hands public and both
+discards are public, the remaining *multiset* of each deck is already derivable
+from the response — the player deck is 48 city cards + 5 events + N epidemics
+minus every hand, discard and contingency card — so only the order is secret, and
+a permutation of public information is still public. It is nonetheless rejected:
+
+* **A uniform reshuffle would misrepresent the epidemics.** §6 step 7 builds the
+  deck as piles with one epidemic each, so players can already infer "an epidemic
+  is due within k draws" from public counts. A decoy that ignores pile structure
+  puts epidemics at plausible-but-wrong positions — confidently wrong about the
+  one variable that decides whether a plan survives, given §10.1's ratchet. A
+  faithful decoy has to reproduce deck *construction*, in lockstep with the real
+  builder, verifiable only against itself.
+* **One sample is not a strategy test.** Players will read "the plan worked" off
+  a future that occurs one time in forty.
+* **It reintroduces client-supplied randomness.** Decoy draws must be recorded so
+  stepping back and forth doesn't reshuffle them, and `resolvedPlannedCommands`
+  round-trips through the browser — putting recorded deck draws on the same class
+  live play executes.
+
+**Build the risk annotation instead.** The frozen plan plus a line computed from
+the public composition: *"9 draws before your next turn · Lagos 19% · 3 cities at
+2 cubes · epidemic due within 4."* That is the information the decoy gestures at,
+stated honestly, stable across sessions, and a pure function of public state in
+`rules.ts` — so it is unit-testable, which no decoy ever is.
+
+### 21.6 The commits
 
 Each step below leaves `npm run build`, `npx tsc --noEmit` and `npm test` green,
 and each is reviewable on its own. Step 1 is useful to the repo whether or not
@@ -626,11 +737,13 @@ the first (`AGENTS.md`). If Outbreak's per-city cube stacks and four-colour
 state make it a different component wearing the same hat, keep them apart and
 say so in the commit message. Decide by writing it, not up front.
 
-**6 — The draw and infect phases.** Draw two, the hand-limit discard step, the
-infect phase at the current rate, cube placement, outbreaks and chains, and all
-three loss conditions (§4.2) reported through step 1's `teamloss`. The game is
-now a real game: playable start to finish, winnable and loseable, at a fixed
-infection rate of 2.
+**6 — The draw and infect phases.** `OutbreakEndTurn`: draw two, the hand-limit
+discard step, the infect phase at the current rate, cube placement, outbreaks and
+chains, and all three loss conditions (§4.2) reported through step 1's
+`teamloss`. The game is now a real game: playable start to finish, winnable and
+loseable, at a fixed infection rate of 2. Keep this the *only* command that
+touches a deck (21.4) — step 13's planner is built on that and on nothing
+else.
 
 **7 — Turn-timeout resolution.** Now that a skipped turn is worth skipping,
 close gap 2 of 21.2. **Not** a new `IGameType` method: the cron should construct
@@ -642,8 +755,8 @@ today's advance-the-turn behaviour untouched. Doing it any other way — mutatin
 `specificGameState` from the cron directly — puts cubes on the board that no
 command in history accounts for, and step 12's recap would then reconstruct a
 different board than the live one, for exactly the turns the recap exists to
-narrate. Outbreak's timeout is `OutbreakAction { kind: 'pass' }`, which already
-resolves the draw and infect phases.
+narrate. Outbreak's timeout is `OutbreakEndTurn`, which resolves the draw and
+infect phases from wherever the turn was left.
 
 **8 — Epidemics.** The three-step resolution of §9.1, the pile-based deck
 construction of §6 step 7, the difficulty dial from step 3 becoming live, the
@@ -668,7 +781,8 @@ without a chat window: every player's hand rendered for everyone
 (`ag-hand`/`ag-hand-card`, already shared by Settlements & Cities and Train
 Time), the infection discard pile as a first-class panel rather than a footnote,
 the event-card tray, and the history in `ag-log`. Turn navigation lands here
-too — `useTurnNavigation` + `TurnNavControls`, the client half of step 12.
+too — `useTurnNavigation` + `TurnNavControls`, the client half of step 12, with
+`canPlan={false}` until step 13 turns it on.
 
 **12 — Recap, stats, ship.** `recap.ts` plus a replay adapter registration and
 `useTurnRecap` on the board screen, which step 8's recorded shuffle and step 7's
@@ -684,7 +798,28 @@ empty array and the result page renders nothing, silently, with no test failing.
 `meta.available` to true, add the "What's new" line to
 `src/utils/ui/whatsNew.ts`, and fold the deviations of 21.3 into this document.
 
-### 21.6 Testing
+**13 — The crew planner.** Last deliberately: it is the most novel thing here and
+the easiest to cut, and the game ships complete without it. Three pieces, per
+21.5:
+
+* **The route opt-in.** `POST /api/game/[gameid]/timeline` stops clamping planned
+  `senderId`s to the caller and instead validates each against
+  `gameData.userIdList`, gated on a per-game flag so no other game's planning
+  widens. Outbreak sets it; the default stays own-moves-only.
+* **The planner UI.** `canPlan={!complete}`, plus planning actions that let the
+  player pick *whose* action they're queueing — the existing per-command
+  stepping ("Planned move N of M") already handles the rest. `OutbreakEndTurn`
+  must not be queueable: that exclusion is the whole safety argument, so it
+  belongs in one place with a comment saying why, not spread across the action
+  picker.
+* **The risk annotation.** The line described in 21.5, computed in `rules.ts`
+  from the public deck composition. Pure function, unit-tested, and the reason
+  the frozen plan doesn't need a decoy.
+
+Then a second "What's new" line, in the player's language — the planner is the
+most visible thing in this game that no other game has.
+
+### 21.7 Testing
 
 `OutbreakLogic.test.ts` follows `SolitaireLogic.test.ts`'s harness — an
 in-memory `makeGame()`/`cmd()` pair over a plain `IGameData`-shaped object, no
@@ -699,3 +834,13 @@ far:
   one of the three losses, asserting the game always terminates and never
   deadlocks. The same harness doubles as the only practical way to sanity-check
   the §3 win-rate target without a hundred human playtests.
+* **Replay equality**, on the model of `src/games/TrainTime/replay.test.ts` —
+  play a game, rebuild it through `buildTimeline()` with `Math.random` stubbed to
+  throw, and assert the final snapshot equals the live state. SAC and World
+  Domination never got this and the doc says so; a game with an epidemic shuffle
+  in it should not be the third.
+* **The planner resolves nothing hidden.** Assert that a planned command list
+  containing only `OutbreakAction`s consumes no randomness and leaves both deck
+  lengths untouched, and that `OutbreakEndTurn` is rejected from a planned list.
+  This is the test that stops a later refactor quietly turning the crew planner
+  into a deck peek.

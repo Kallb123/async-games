@@ -163,6 +163,15 @@ decision you have to make and the four things it costs.
 | Multiplayer, but hidden-information/deduction | Design for replay anyway, then deliberately **opt out** of recap and planning, and write down why — Smartthink's recap would hand out free feedback about the secret code. Say so in the per-game table in `turn-recap-and-planning.md`. |
 | Solo | Skip all of it. Nothing happens while you're away, so there's no gap to recap; build a one-off victory/summary screen shown when `complete` flips true (see `SolitaireVictoryScreen`). |
 
+Planning adds a question of its own: can a *hypothetical* turn be shown
+to a player without disclosing what the live game is hiding? The answer
+turns on whether your randomness is memoryless (dice) or stateful (deck
+order), and on whether the step that touches the deck is its own
+command. That last one is a command-surface decision you cannot cheaply
+reverse, so read
+[what can be planned](./turn-recap-and-planning.md#planning-what-can-be-planned)
+alongside this section rather than after shipping.
+
 Then record the outcome in the per-game table in
 [`turn-recap-and-planning.md`](./turn-recap-and-planning.md#per-game-status) —
 whether it's ✅, ✖ by design, or 🚧 not yet. A game missing from that table is
