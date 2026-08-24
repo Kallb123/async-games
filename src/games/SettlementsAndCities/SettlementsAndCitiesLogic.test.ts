@@ -7,7 +7,7 @@ import {
     SACPlayYearOfPlenty,
     SACPlayMonopoly,
 } from "./SettlementsAndCitiesLogic";
-import { createInitialPlayerState } from "./board";
+import { makeState, player } from "./testFixtures";
 import type { ISACSpecificGameState, ISACPlayerState, SAC_DevCard } from "./board";
 import type { ISettlementsAndCitiesGameData } from "./SettlementsAndCitiesModels";
 import type { IGameData } from "@/utils/mongodb/GameData";
@@ -15,43 +15,6 @@ import type { IGameData } from "@/utils/mongodb/GameData";
 // ─── Minimal in-memory game harness ───────────────────────────────────────────
 // The dev-card commands only touch playerStates + a handful of scalar flags, so
 // we build a bare main-phase state rather than a full board.
-
-function makeState(overrides: Partial<ISACSpecificGameState> = {}): ISACSpecificGameState {
-    return {
-        hexes: [],
-        vertices: [],
-        edges: [],
-        harbors: [],
-        playerStates: new Map<string, ISACPlayerState>(),
-        robberHexIndex: 0,
-        phase: "main",
-        setupStep: 0,
-        pendingRoadSetup: false,
-        lastSetupSettlementVertex: null,
-        hasRolled: true,
-        lastRoll: 8,
-        lastRollDie1: 5,
-        lastRollDie2: 3,
-        pendingRobber: false,
-        longestRoadOwner: null,
-        largestArmyOwner: null,
-        devCardDeck: [],
-        pendingRoadBuilding: 0,
-        playedDevCard: false,
-        specialBuildActive: false,
-        specialBuildQueue: [],
-        specialBuildMainPlayer: null,
-        expansions: {
-            seasAndSailors: false,
-            knightsAndCommerce: false,
-            tradersAndRaiders: false,
-            explorersAndPirates: false,
-            fiveSixPlayerExtension: false,
-        },
-        victoryTarget: 10,
-        ...overrides,
-    };
-}
 
 function makeGame(gs: ISACSpecificGameState, currentTurn = "u1"): ISettlementsAndCitiesGameData {
     return {
@@ -62,17 +25,6 @@ function makeGame(gs: ISACSpecificGameState, currentTurn = "u1"): ISettlementsAn
         complete: false,
         winner: "",
     } as unknown as ISettlementsAndCitiesGameData;
-}
-
-function player(overrides: Partial<ISACPlayerState> = {}): ISACPlayerState {
-    const base = createInitialPlayerState();
-    return {
-        ...base,
-        ...overrides,
-        resources: { ...base.resources, ...(overrides.resources ?? {}) },
-        devCards: { ...base.devCards, ...(overrides.devCards ?? {}) },
-        newDevCards: { ...base.newDevCards, ...(overrides.newDevCards ?? {}) },
-    };
 }
 
 function cmd<T extends { senderId: string; senderUsername: string }>(c: T, sender = "u1"): T {

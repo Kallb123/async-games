@@ -79,4 +79,19 @@ describe("every CreateDataResponse", () => {
         expect(assignment, `no gameState assignment found in ${relativePath}`).not.toBeNull();
         expect(assignment![1]).toMatch(/^publicGameState\(/);
     });
+
+    // The other half of the same hole. IGameDataDocument declares
+    // CreateDataResponse as taking a viewerId, but a function with fewer
+    // parameters is assignable to one with more — so an implementation that
+    // just writes `async function()` type-checks and silently builds the
+    // everybody-sees-everything view. Hands, tickets and dev cards depend on
+    // this argument arriving, so require it in the signature: a game that
+    // genuinely ignores its viewer names the parameter `_viewerId` and says so.
+    it.each(RESPONSE_BUILDERS)("declares %s's CreateDataResponse with a viewer", (relativePath) => {
+        const source = readFileSync(path.join(srcRoot, relativePath), "utf8");
+
+        const signature = /CreateDataResponse\s*=\s*async function\s*\(([^)]*)\)/.exec(source);
+        expect(signature, `no CreateDataResponse found in ${relativePath}`).not.toBeNull();
+        expect(signature![1]).toMatch(/^_?viewerId:/);
+    });
 });

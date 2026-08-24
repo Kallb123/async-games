@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Button, Form, Modal } from 'react-bootstrap';
 import type { ISACSpecificGameStateResponse } from '@/games/SettlementsAndCities/apiModels';
 import type { SAC_Resource, SAC_DevCard } from '@/games/SettlementsAndCities/board';
+import { NO_RESOURCES } from '@/games/SettlementsAndCities/board';
 import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER } from '@/games/SettlementsAndCities/ui';
 import { IGameCommand } from '@/utils/apiModels/GameLogic';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
@@ -104,7 +105,7 @@ export default function SettlementsAndCitiesActions({
     // ── Shared build list (settlement / road / city + dev card + bank trade) ────
     // Reused by the post-roll main turn and the 5–6 Special Build Phase, which
     // both let a player spend resources on the board and trade with the bank.
-    const res = myState.resources;
+    const res = myState.resources ?? NO_RESOURCES;
     const ROAD_COST: Cost = { brick: 1, lumber: 1 };
     const SETTLEMENT_COST: Cost = { brick: 1, lumber: 1, wool: 1, grain: 1 };
     const CITY_COST: Cost = { grain: 2, ore: 3 };

@@ -19,36 +19,10 @@ import {
     type IWorldDominationTerritory,
     type IWorldDominationCard,
 } from "./board";
-import type { IWorldDominationSpecificGameState, IWorldDominationPlayerState, IWorldDominationGameData } from "./WorldDominationModels";
+import type { IWorldDominationSpecificGameState, IWorldDominationGameData } from "./WorldDominationModels";
+import { makeState, makeTerritories, player } from "./testFixtures";
 
 // ─── Minimal in-memory game harness ────────────────────────────────────────
-
-function makeTerritories(defaultOwner: string, overrides: Record<number, Partial<IWorldDominationTerritory>> = {}): IWorldDominationTerritory[] {
-    return Array.from({ length: TERRITORY_COUNT }, (_, id) => ({
-        owner: defaultOwner,
-        armies: 3,
-        ...overrides[id],
-    }));
-}
-
-function player(overrides: Partial<IWorldDominationPlayerState> = {}): IWorldDominationPlayerState {
-    return { cards: [], eliminated: false, conqueredTerritoryThisTurn: false, totalArmiesDeployed: 0, ...overrides };
-}
-
-function makeState(overrides: Partial<IWorldDominationSpecificGameState> = {}): IWorldDominationSpecificGameState {
-    return {
-        territories: makeTerritories("u1"),
-        playerStates: new Map([["u1", player()], ["u2", player()]]),
-        phase: "reinforce",
-        reinforcementsRemaining: 0,
-        pendingOccupation: null,
-        fortifyUsed: false,
-        cardSetsCashedIn: 0,
-        cardDeck: [],
-        lastBattle: null,
-        ...overrides,
-    };
-}
 
 function makeGame(gs: IWorldDominationSpecificGameState, currentTurn = "u1"): IWorldDominationGameData {
     return {

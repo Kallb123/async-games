@@ -6,7 +6,7 @@ import { useState } from "react";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ISACGameDataResponse, ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
 import type { SAC_Resource } from "@/games/SettlementsAndCities/board";
-import { BOARD_TOPOLOGY, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
+import { BOARD_TOPOLOGY, NO_RESOURCES, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
 import { SAC_EXPANSION_IDS, enabledExpansionNames, normaliseExpansions } from "@/games/SettlementsAndCities/expansions";
 import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER, type SACSpotKind } from "@/games/SettlementsAndCities/ui";
 import SettlementsAndCitiesBoard from "@/games/SettlementsAndCities/components/SettlementsAndCitiesBoard";
@@ -196,8 +196,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             const v = gs.vertices[vid];
             if (v.owner && v.owner !== myUsername && v.building) {
                 const ps = gs.playerStates[v.owner];
-                const total = ps ? Object.values(ps.resources ?? {}).reduce((s, n) => s + n, 0) : 0;
-                if (total > 0) adjacentUsernames.add(v.owner);
+                if ((ps?.resourceCount ?? 0) > 0) adjacentUsernames.add(v.owner);
             }
         }
 
@@ -274,7 +273,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             if (!ps) return [];
             const isMe = username === myUsername;
             const isActive = username === currentTurnUsername && !complete;
-            const totalCards = Object.values(ps.resources ?? {}).reduce((s, n) => s + n, 0);
+            const totalCards = ps.resourceCount;
             let sub: React.ReactNode;
             if (gs.longestRoadOwner === username) sub = '🛣️ LR';
             else if (gs.largestArmyOwner === username) sub = '⚔️ LA';
@@ -297,7 +296,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     const myNewDevCards = gs?.playerNewDevCards?.[myUsername];
     const myDevCount = myDevCards ? Object.values(myDevCards).reduce((s, n) => s + n, 0) : 0;
     const myNewDevCount = myNewDevCards ? Object.values(myNewDevCards).reduce((s, n) => s + n, 0) : 0;
-    const myHandTotal = myState ? Object.values(myState.resources ?? {}).reduce((s, n) => s + n, 0) : 0;
+    const myHandTotal = myState?.resourceCount ?? 0;
 
     const menuOptions: GameOption[] = [
         ...(recap.hasRecap ? [{
@@ -390,7 +389,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                             </div>
                             <div className="ag-hand-cards">
                                 {RESOURCE_ORDER.map(r => {
-                                    const n = myState.resources?.[r] ?? 0;
+                                    const n = (myState.resources ?? NO_RESOURCES)[r];
                                     return (
                                         <div key={r} className={`ag-hand-card${n === 0 ? ' ag-hand-card--empty' : ''}`}>
                                             <div className="ag-hand-emoji">{RESOURCE_EMOJI[r]}</div>

@@ -3,6 +3,7 @@ import type { ITurnSnapshot } from "@/utils/games/replay";
 import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic";
 import type { ISACSpecificGameStateResponse, ISACPlayerStateResponse } from "@/games/SettlementsAndCities/apiModels";
 import type { SAC_Resource } from "@/games/SettlementsAndCities/board";
+import { NO_RESOURCES } from "@/games/SettlementsAndCities/board";
 import { playerByUserId } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 
 type SACState = ISACSpecificGameStateResponse;
@@ -14,9 +15,10 @@ function userIdForUsername(state: SACState | undefined, username: string | null)
     return state.playerStates[username]?.userId;
 }
 
+// Hand *size* is public, and it's all these deltas need — the response only
+// carries a hand's composition for the viewer.
 function totalResources(ps: ISACPlayerStateResponse | undefined): number {
-    if (!ps) return 0;
-    return Object.values(ps.resources).reduce((s, n) => s + n, 0);
+    return ps?.resourceCount ?? 0;
 }
 
 // Compares a player's resource total between two snapshots (by userId).
@@ -178,11 +180,11 @@ function toEvents(
             // Everyone whose stock of that resource fell was robbed by the monopoly.
             const affectedIds = Object.values(nextState.playerStates)
                 .filter((p) => p.userId !== command.senderId)
-                .filter((p) => {
-                    const before = playerByUserId(prevState, p.userId)?.resources[resource] ?? 0;
-                    const after = p.resources[resource];
-                    return after < before;
-                })
+                // Monopoly's only effect is moving that one resource, so a
+                // drop in a player's total hand size is exactly a player who
+                // handed some over — no need for the composition, which is
+                // only sent for the viewer anyway.
+                .filter((p) => resourceDelta(prevState, nextState, p.userId) < 0)
                 .map((p) => p.userId);
             events.push({
                 ...base,
@@ -241,7 +243,7 @@ function tip(liveState: unknown, forUserId: string): IRecapTip | null {
     const state = liveState as SACState | undefined;
     const me = playerByUserId(state, forUserId);
     if (!me) return null;
-    const r = me.resources;
+    const r = me.resources ?? NO_RESOURCES;
 
     if (me.remainingCities > 0 && r.grain >= 2 && r.ore >= 3) {
         return { glyph: "🏙️", text: "You can afford a city (2🌾 + 3⛏️) — upgrade a settlement for +1 VP." };

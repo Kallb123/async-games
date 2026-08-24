@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
 
     const response: ICommandResponse = {
       outcome: commandOutcome,
-      gameData: await gameData.CreateDataResponse()
+      gameData: await gameData.CreateDataResponse(userId)
     }
 
     // Recording the match result and telling everyone the game is over doesn't
@@ -183,7 +183,7 @@ export async function POST(request: NextRequest) {
 
   const response: ICommandResponse = {
     outcome: commandOutcome,
-    gameData: await gameData.CreateDataResponse()
+    gameData: await gameData.CreateDataResponse(userId)
   }
 
   if (!commandOutcome.turnOver) {

@@ -68,6 +68,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Your hand is actually your hand",
+                detail: "World Domination sent every player's territory cards to everyone, and Settlements & Cities did the same with resource hands and development cards — hidden on screen, but sitting in plain sight for anyone who went looking. Now only you get yours; everyone else sees a count, the way the games always meant it.",
+            },
+            {
                 title: "Whose turn it is, at a glance",
                 detail: "Every game's scoreboard now marks the player to move with a caret next to their name — it was easy to miss in Train Time and missing altogether in Dice Cities.",
             },
@@ -82,10 +86,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Open-seat games get their code",
                 detail: "Setting up a game with open seats and nobody invited no longer fails with an error — you get the code to share straight away.",
-            },
-            {
-                title: "Open seats count as players",
-                detail: "Leaving seats open with nobody named no longer greys out the start button — set the seats, get your code and share it.",
             },
         ],
     },

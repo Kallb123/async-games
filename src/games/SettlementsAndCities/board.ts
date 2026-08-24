@@ -4,6 +4,12 @@ import { shuffle as shuffleArray } from '@/utils/games/shuffle';
 // ─── Resource / Terrain / Card types ──────────────────────────────────────────
 
 export type SAC_Resource = 'lumber' | 'wool' | 'grain' | 'brick' | 'ore';
+
+// An all-zero resource hand. The response only carries a player's `resources`
+// when they are the one asking (see apiModels), so viewer-side code reads it as
+// `ps.resources ?? NO_RESOURCES` rather than repeating this literal.
+export const NO_RESOURCES: Record<SAC_Resource, number> =
+    { lumber: 0, wool: 0, grain: 0, brick: 0, ore: 0 };
 export type SAC_Terrain  = 'forest' | 'pasture' | 'fields' | 'hills' | 'mountains' | 'desert';
 export type SAC_DevCard  = 'knight' | 'victoryPoint' | 'roadBuilding' | 'yearOfPlenty' | 'monopoly';
 export type SAC_Harbor   = '3to1' | 'lumber' | 'wool' | 'grain' | 'brick' | 'ore';
@@ -317,7 +323,8 @@ export function generateBoard(): GeneratedBoard {
 
 export function createInitialPlayerState(): ISACPlayerState {
     return {
-        resources: { lumber: 0, wool: 0, grain: 0, brick: 0, ore: 0 },
+        // Spread, not shared: a player's hand is mutated in place all game.
+        resources: { ...NO_RESOURCES },
         devCards:    { knight: 0, victoryPoint: 0, roadBuilding: 0, yearOfPlenty: 0, monopoly: 0 },
         newDevCards: { knight: 0, victoryPoint: 0, roadBuilding: 0, yearOfPlenty: 0, monopoly: 0 },
         knightsPlayed: 0,
