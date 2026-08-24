@@ -275,8 +275,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             const isActive = username === currentTurnUsername && !complete;
             const totalCards = Object.values(ps.resources ?? {}).reduce((s, n) => s + n, 0);
             let sub: React.ReactNode;
-            if (isActive) sub = '▶ now';
-            else if (gs.longestRoadOwner === username) sub = '🛣️ LR';
+            if (gs.longestRoadOwner === username) sub = '🛣️ LR';
             else if (gs.largestArmyOwner === username) sub = '⚔️ LA';
             else sub = `${totalCards} cards`;
             return [{

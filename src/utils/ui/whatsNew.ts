@@ -39,24 +39,25 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Zoom in on the World Domination map",
+                detail: "Tap Zoom in to blow the map up and pan around it, so those crowded territories are easy to hit — the same toggle Train Time has.",
+                game: "worlddomination",
+            },
+            {
+                title: "Guests get a warning before signing out",
+                detail: "Signing out of a guest account now asks you to confirm first — there's no way back in, and your games and history go with it.",
+            },
+            {
+                title: "A name, ready before you type it",
+                detail: "Joining as a guest now suggests a random name like JumpingJackal — keep it, tweak it, or tap the dice for another.",
+            },
+            {
+                title: "Guests can explore before signing up",
+                detail: "Set up a game or add friends as a guest — the host button greys out with a straight line to Settings when you're ready to sign up.",
+            },
+            {
                 title: "Keep the account you're already playing on",
                 detail: "Played your first turn as a guest? Add an email and password and it's yours for good — every game and result carries over.",
-            },
-            {
-                title: "Guests can play, no account needed",
-                detail: "Anyone with a code can join and play without signing up — just a name. Save the link you're given to find your way back in.",
-            },
-            {
-                title: "Share a link, not just a code",
-                detail: "Tap the code in your lobby to send a link — whoever opens it lands on the join screen with the code already filled in.",
-            },
-            {
-                title: "Start without waiting for a full lobby",
-                detail: "Friends not turning up? Start now plays the game with everyone who's here and drops the empty seats.",
-            },
-            {
-                title: "Everyone waits in the lobby",
-                detail: "Claim a seat with a code and you wait on the lobby screen with the host, watching the last seats fill instead of guessing.",
             },
         ],
     },
@@ -64,6 +65,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         label: "Bug fixes",
         icon: "🔧",
         items: [
+            {
+                title: "Whose turn it is, at a glance",
+                detail: "Every game's scoreboard now marks the player to move with a caret next to their name — it was easy to miss in Train Time and missing altogether in Dice Cities.",
+            },
             {
                 title: "One seat each, however many devices",
                 detail: "Entering a code you're already in with takes you back to your own seat instead of quietly claiming a second one.",
@@ -79,10 +84,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Open seats count as players",
                 detail: "Leaving seats open with nobody named no longer greys out the start button — set the seats, get your code and share it.",
-            },
-            {
-                title: "Right names, right seats",
-                detail: "A player Clerk couldn't look up used to shift every other name in the game out of place; now they just show as \"Unknown player\".",
             },
         ],
     },

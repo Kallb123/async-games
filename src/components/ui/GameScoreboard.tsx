@@ -8,11 +8,13 @@ export interface ScoreEntry {
     name: string;
     /** Player colour swatch. */
     color: string;
-    /** Small status under the name (e.g. "▶ now", "🛣️ LR", "4 cards"). */
+    /** Small status under the name (e.g. "🛣️ LR", "4 cards"). Whose turn it
+     *  is comes from `isActive` — don't spell it out here too. */
     sub?: React.ReactNode;
     /** The big number on the right — victory points. */
     score: React.ReactNode;
     isMe?: boolean;
+    /** It's this player's turn — draws the caret beside their name. */
     isActive?: boolean;
     /** Ring this player in the danger colour — they're about to end the game
      *  (Train Time's trains running out). */
@@ -32,7 +34,13 @@ export default function GameScoreboard({ entries }: { entries: ScoreEntry[] }) {
                 <div key={e.id} className={`ag-score-pill${e.isMe ? ' ag-score-pill--me' : ''}${e.warn ? ' ag-score-pill--warn' : ''}`}>
                     <span className="ag-score-dot" style={{ background: e.color }} />
                     <div className="ag-score-main">
-                        <div className="ag-score-name">{e.name}</div>
+                        <div className="ag-score-name">
+                            {/* Decorative: the shell subtitle already announces
+                                whose move it is in prose. Sits before the name
+                                so it survives the name's ellipsis. */}
+                            {e.isActive && <span className="ag-score-turn" aria-hidden="true">▶</span>}
+                            {e.name}
+                        </div>
                         {e.sub != null && <div className="ag-score-sub">{e.sub}</div>}
                     </div>
                     <div className="ag-score-vp">{e.score}</div>

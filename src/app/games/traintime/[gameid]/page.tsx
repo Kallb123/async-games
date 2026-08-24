@@ -174,7 +174,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
             id: username,
             name: isMe ? 'You' : username,
             color: colour,
-            sub: isActive ? `▶ now · ${ps.trains} trains` : `${ps.trains} tr. · 🃏 ${ps.handCount}`,
+            sub: `${ps.trains} tr. · 🃏 ${ps.handCount}`,
             // The ticket swing and the Long Haul bonus are both 0 until the
             // game is scored, so this is route points during play and the
             // final total afterwards.

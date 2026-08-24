@@ -968,17 +968,22 @@ button {
     padding: 4px 0;
 }
 
-/* ---- Skeleton loading placeholders ---- */
-@keyframes ag-skeleton-pulse {
+/* The one "something is still happening" fade, shared by everything that
+   breathes: skeletons, background refreshes, the whose-turn caret. Each user
+   sets how far down it dips with `--ag-pulse-min` and picks its own duration
+   rather than copying the keyframe again. */
+@keyframes ag-pulse {
     0%, 100% { opacity: 1; }
-    50% { opacity: 0.45; }
+    50% { opacity: var(--ag-pulse-min, 0.45); }
 }
 
+/* ---- Skeleton loading placeholders ---- */
 .ag-skeleton {
     display: block;
     background: var(--ag-surface-2);
     border-radius: 6px;
-    animation: ag-skeleton-pulse 1.4s ease-in-out infinite;
+    --ag-pulse-min: 0.45;
+    animation: ag-pulse 1.4s ease-in-out infinite;
 }
 
 /* Neutral surface for placeholder cards that stand in for coloured turn cards. */
@@ -1003,11 +1008,6 @@ button {
     to { background-position: 0% 0; }
 }
 
-@keyframes ag-refresh-dim {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.78; }
-}
-
 @keyframes ag-refresh-in {
     from { opacity: 0; }
     to { opacity: 1; }
@@ -1015,7 +1015,8 @@ button {
 
 .ag-refreshing {
     position: relative;
-    animation: ag-refresh-dim 1.3s ease-in-out 0.2s infinite;
+    --ag-pulse-min: 0.78;
+    animation: ag-pulse 1.3s ease-in-out 0.2s infinite;
 }
 
 .ag-refreshing::after {
@@ -1216,6 +1217,17 @@ button {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+/* Whose turn it is. Inherits the pill's text colour so it stays readable on
+   every per-game re-tint of `.ag-score-pill`. */
+.ag-score-turn {
+    margin-right: 3px;
+    font-size: 0.9em;
+    --ag-pulse-min: 0.35;
+    animation: ag-pulse 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+    .ag-score-turn { animation: none; }
+}
 .ag-score-sub { font: 600 9px/1.1 var(--ag-font); opacity: 0.85; margin-top: 3px; }
 .ag-score-vp { font: 800 15px var(--ag-font); }
 .ag-score-vp-target { font-size: 0.7em; font-weight: 700; opacity: 0.55; }
@@ -1233,6 +1245,10 @@ button {
     box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.13), 0 4px 0 oklch(0.6 0.09 235);
 }
 .ag-board-frame svg { display: block; width: 100%; height: auto; border-radius: 12px; }
+/* Boards wider than the app column scroll inside the frame, at whatever width
+   BoardZoom's toggle has set. */
+.ag-board-scroll { overflow: auto; border-radius: 12px; -webkit-overflow-scrolling: touch; }
+.ag-board-scroll svg { width: var(--ag-board-zoom, 100%); max-width: none; }
 .ag-board-tag {
     position: absolute;
     bottom: 12px;
@@ -1247,7 +1263,7 @@ button {
     white-space: nowrap;
 }
 .ag-board-tag--dice { display: flex; align-items: center; gap: 6px; padding: 4px 11px 4px 6px; }
-/* The same pill as a tappable control in the opposite corner (Train Time's
+/* The same pill as a tappable control in the opposite corner (BoardZoom's
    zoom toggle), rather than a second dark-pill style. */
 .ag-board-tag--action { top: 12px; right: 12px; bottom: auto; left: auto; border: none; cursor: pointer; }
 .ag-board-overlay {
@@ -1791,6 +1807,19 @@ button {
     overflow: hidden;
     flex-shrink: 0;
 }
+/* A DieFace worn as a button — the reroll control beside /join's guest name
+   field. Only strips the native <button> chrome; .ag-die already supplies
+   the raised, tactile look, and :active/:disabled ride .ag-btn's own rules. */
+.ag-die-btn {
+    display: inline-flex;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+}
+.ag-die-btn:active .ag-die { transform: translateY(2px); box-shadow: 0 4px 0 oklch(0.75 0.05 60), 0 6px 10px rgba(0, 0, 0, 0.2); }
+.ag-die-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
 .ag-die-pip {
     width: calc(var(--ag-die-size) * 0.14);
     height: calc(var(--ag-die-size) * 0.14);
@@ -2582,8 +2611,6 @@ button.ag-tt-ticket { cursor: pointer; padding-right: 34px; }
     box-shadow: inset 0 0 0 1.5px oklch(0.86 0.03 80), 0 3px 0 oklch(0.84 0.03 78);
 }
 .ag-game--traintime .ag-board-tag { background: var(--tt-brass); color: var(--tt-on-brass); }
-.ag-tt-scroll { overflow: auto; border-radius: 12px; -webkit-overflow-scrolling: touch; }
-.ag-tt-scroll svg { max-width: none; }
 
 /* Per-player segment counts under the map. */
 .ag-tt-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 5px; margin-top: 9px; }

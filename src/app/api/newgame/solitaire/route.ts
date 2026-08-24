@@ -5,6 +5,7 @@ import { dbConnect } from '@/utils/mongodb/mongodb';
 import { SolitaireInvitationModel, SolitaireInvitationRequest } from '@/games/Solitaire/SolitaireModels';
 import { UNLIMITED_TURN_TIMER } from '@/utils/games/TurnTimer';
 import { IInvitationDataDocument } from '@/utils/mongodb/InvitationData';
+import { canHostGame } from '@/utils/users/clerk';
 
 // Solitaire is solo, so there's nobody to invite: userIdList is always empty,
 // which makes /api/invite/accept's "has everyone accepted?" check vacuously
@@ -23,6 +24,11 @@ export async function POST(request: NextRequest) {
   const thisUser = await currentUser();
   if (!thisUser) {
     return NextResponse.json({}, { status: 400, statusText: "Not signed in" });
+  }
+  // Every lobby needs a real, registered host — see canHostGame's own
+  // comment (docs/account-less-play.md §8).
+  if (!canHostGame(thisUser)) {
+    return NextResponse.json({}, { status: 403, statusText: "Account not unlocked" });
   }
 
   await dbConnect();
