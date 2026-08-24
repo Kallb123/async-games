@@ -167,6 +167,102 @@ Where the randomness is memoryless the decoy is unambiguously right, because
 there is no real ordering to diverge from: a fabricated d6 *is* the honest
 hypothetical. Fires Out is the clean case.
 
+### Retrofitting planning onto a shipped game
+
+**Planning persists nothing.** `plannedCommands` arrive on the request,
+`resolvedPlannedCommands` go back on the response, and nothing is ever saved. So
+no game needs a *new persisted field* to become plannable — which is worth
+checking rather than assuming, because it is the difference between "we can do
+this whenever we like" and "the games already out there are stuck".
+
+Checked against the four games the analysis above unblocks:
+
+| Game | Replay adapter | Snapshot gate | Recorded RNG the plan needs | New persisted data |
+|---|---|---|---|---|
+| Dice Cities | ✅ from scratch | none needed | `recordedRoll1/2` — exists | **None** |
+| Settlements & Cities | ✅ from snapshot | `recapAvailable` | none — its plannable set is deterministic | **None** |
+| World Domination | ✅ from snapshot | `recapAvailable` | battle dice — exist | **None** |
+| Train Time | ✅ from snapshot | `recapAvailable` | none — its plannable set is deterministic | **None** |
+
+All four are UI plus logic on data that already exists. Two consequences follow
+from the existing gates rather than from anything missing:
+
+- **The snapshot cohort gap carries over.** A SAC, World Domination or Train Time
+  game created before its `initialSpecificGameState` landed can never be planned,
+  for the same reason it can never be recapped. The flag already exists; planning
+  gates on it and no new field helps.
+- **Dice Cities has no cohort gap at all.** It rebuilds its starting state from
+  `userIdList`, so every Dice Cities game ever created is plannable. It is the
+  only one of the four where that is true.
+
+#### The exclusion has to be enforced server-side
+
+A deck freeze is only as good as its enforcement, and `canPlan` is a **prop on
+`TurnNavControls`** — a UI affordance, not an authorisation check. The timeline
+route accepts whatever `plannedCommands` array it is given and hands it straight
+to `buildTimeline`, with no restriction on which command classes may appear and no
+check that the game offers planning at all.
+
+That is already exploitable, ahead of any planning UI being built. A player in a
+Settlements & Cities game can POST a planned `SACBuyDevCard` and read the top of
+the dev-card deck out of the returned snapshot; a Train Time player can POST a
+planned `TrainTimeDrawCarriageCard` and see the next card in their own hand, which
+their snapshot renders in full. `state.currentTurn` is set to the planned
+command's sender before each `Execute`, so it works off-turn too.
+
+So the shared piece every deck-freeze game needs is a **server-side list of
+command classes that may not be planned**, declared per game and checked by the
+timeline route before replay — plus a check that the game opts into planning in
+the first place. Same lesson as `stripRecordedRandomness`: client-side discipline
+is not enforcement, and the client is where the planning UI lives.
+
+#### Three decisions that are already frozen
+
+None of these is a data-retrofit problem, and all three are why Outbreak's
+command surface had to be settled in its §21.4 rather than at its planner step.
+They are properties of *replaying stored commands through today's code*:
+
+1. **Command granularity.** `buildTimeline` deserialises each stored command by
+   `className` and calls the **current** `Execute`. Move behaviour between command
+   classes after games exist and every existing game's recap silently changes:
+   split Outbreak's draw out of `OutbreakAction` post-launch and old histories
+   replay as though nobody ever drew a card. Not an error — a wrong board. The
+   command boundaries of the four games above are therefore fixed, and what each
+   can plan is whatever those boundaries already allow.
+2. **Where mutable state lives.** `Execute` validates against state during replay,
+   and `applyCommands` treats a failed validation as `continue` — the command is
+   **silently dropped** from the timeline. So moving a counter (Outbreak's
+   `actionsLeft` from the game to the player, say) after games exist can make old
+   commands fail validation and quietly vanish from their own recap.
+3. **`CheckEndTurn` and `CheckGameOver` are replay surface too.** They run after
+   every replayed command, planned ones included. World Domination draws its
+   end-of-turn card inside `CheckEndTurn`, which survives planning only because
+   the draw is gated on `commandOutcome.turnOver` and exactly one pair of commands
+   reports it outside setup. That makes its plannable set "any command that
+   doesn't end the turn", which is a weaker and more fragile invariant than "not
+   this command class" — a future command reporting `turnOver` would draw a card
+   inside a plan. Outbreak's GDD takes the stricter rule for this reason.
+
+#### The plannable set of each game
+
+Precise, because the server-side list above has to be exactly right:
+
+- **Dice Cities** — everything. No deck, no shuffle, no redaction anywhere; there
+  is nothing to exclude.
+- **Settlements & Cities** — builds, trades, road building, and dev-card *plays*.
+  Not `SACBuyDevCard` (draws from the deck) and **not `SACRollDice`**: a rolled 7
+  discards from every other player's real hand and `SACMoveRobber` steals a real
+  card from a victim. The valuable plan here needs no roll anyway — "given this
+  hand, what can I build?" is entirely deterministic.
+- **World Domination** — deploy, cash-in, attack, occupy. Not
+  `WorldDominationFortify`/`SkipFortify`, which end the turn and so trigger the
+  card draw. Note that an attack which *eliminates* a player folds the victim's
+  real cards into the attacker's hand, so an eliminating attack is a second thing
+  a plan must not resolve.
+- **Train Time** — `TrainTimeClaimRoute` and `TrainTimePassTurn`, and nothing
+  else. Both are fully deterministic and touch only the planner's own hand and the
+  public route map.
+
 ### Cross-player planning
 
 `POST /api/game/[gameid]/timeline` overwrites every planned command's `senderId`
@@ -325,10 +421,10 @@ The pilot for all three features, and still the only game with planning.
   snapshot throws on replay and `buildEventFeed` treats that as "no recap".
 - **Planning** — deferred on *value*, not feasibility: turns are long sequences
   of trades and builds. Feasible as a deck freeze whenever it's wanted — the
-  dice are memoryless and `SACBuyDevCard` is the only command that touches the
-  dev-card deck, so a plan that never buys a dev card resolves nothing hidden.
-  "Given this hand, what can I build, and what does a 9 pay for?" is the shape
-  it would take.
+  valuable plan is deterministic: "given this hand, what can I build?" needs no
+  roll at all. Its plannable set is narrower than just "not `SACBuyDevCard`",
+  though — see [the plannable set of each
+  game](#the-plannable-set-of-each-game).
 
 ### World Domination
 
@@ -347,12 +443,18 @@ The pilot for all three features, and still the only game with planning.
   merge happens in the post-pass over the full event list.
 - **Planning** — deferred, and for the same per-turn framing as Dice Cities: a
   turn spans four phases (reinforce → attack → occupy → fortify) across many
-  commands. As a deck freeze it works, because the only deck contact is the
-  end-of-turn card draw in `riskEndTurn`, reached only through the
-  fortify/end-turn command — so reinforce → attack → occupy is plannable and
-  battle dice are honest memoryless hypotheticals. What a plan can't tell you is
-  which card a conquest would win. A decoy deck is *not* available here: cards
-  are face-down by design, so the remaining multiset isn't public.
+  commands. As a deck freeze it works: the only deck contact is the end-of-turn
+  card draw, so reinforce → attack → occupy is plannable and battle dice are
+  honest memoryless hypotheticals. What a plan can't tell you is which card a
+  conquest would win. A decoy deck is *not* available here: cards are face-down
+  by design, so the remaining multiset isn't public.
+
+  Two exactness notes, both from [the plannable set of each
+  game](#the-plannable-set-of-each-game): the draw lives in `riskEndTurn` called
+  from **`CheckEndTurn`**, not inside a command's `Execute`, so what a plan must
+  avoid is any command reporting `turnOver` rather than one named class; and an
+  attack that eliminates a player folds the victim's real cards into the
+  attacker's hand, which a plan must not resolve either.
 
 ### Solitaire
 

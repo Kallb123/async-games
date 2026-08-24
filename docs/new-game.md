@@ -40,6 +40,17 @@ For the component-reuse rules you must follow while building the UI, see
      persisted `initialSpecificGameState` snapshot — decided in `CreateGame`,
      on day one.
    - **Does every `Execute` that touches `Math.random` record its outcome?**
+     Name the field `recorded…` — the command route strips incoming properties
+     with that prefix, and a differently-named one would let a player choose
+     their own roll.
+   - **Is each command boundary where you want it?** Replay calls *today's*
+     `Execute` on stored commands, so moving behaviour between command classes
+     after games exist silently changes what those games replay to — and a
+     command that stops validating is dropped from the timeline rather than
+     raising. Putting anything random or hidden behind its own command class is
+     also what makes planning possible later — see "Retrofitting planning
+     onto a shipped game" in
+     [`turn-recap-and-planning.md`](./turn-recap-and-planning.md).
    - **Does your response converter redact per viewer?** That's fine — the
      replay adapter takes a viewer — but the converter still has to be a pure
      function of state, name map and that viewer.
@@ -242,9 +253,14 @@ replays a played-out game with `Math.random` stubbed to throw, which is the only
 cheap way to know a recorded outcome actually covers every random path.
 
 **Planning mode** (queueing hypothetical future turns) is a further opt-in on
-top of replay, via `canPlan` on `TurnNavControls`. Only Snakes & Ladders has it;
-it fits games whose turn is a single command, and not games whose turn is a
-multi-step sequence. Getting (a)–(c) right is what keeps the option open.
+top of replay, via `canPlan` on `TurnNavControls`. Only Snakes & Ladders ships
+it so far. A multi-step turn is *not* the blocker it was once thought to be —
+planning has always worked per command, not per turn — so what decides it is
+whether a hypothetical turn would disclose hidden state, and whether the step
+that touches that state has its own command class. Getting (a)–(c) right keeps
+the option open; keeping randomness behind its own command is what makes it
+cheap. `canPlan` is a UI prop and not an authorisation check, so a game that
+excludes some commands from planning has to enforce that server-side.
 
 ## Gotchas (learned the hard way on Solitaire)
 
