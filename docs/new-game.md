@@ -4,8 +4,9 @@ This is the step-by-step companion to [`ARCHITECTURE.md`](../ARCHITECTURE.md)
 §12 ("Adding a new game"). Read that section first for the *why* — this doc is
 the practical checklist plus the gotchas that only show up once you've
 actually built one. It's written from experience adding **Solitaire**, the
-first solo game, alongside the existing multiplayer games (Snakes & Ladders,
-Dice Cities, Smartthink, Settlements & Cities, World Domination).
+first solo game, and **Train Time**, alongside the earlier multiplayer games
+(Snakes & Ladders, Dice Cities, Smartthink, Settlements & Cities, World
+Domination).
 
 For the component-reuse rules you must follow while building the UI, see
 [`AGENTS.md`](../AGENTS.md) — this doc assumes you've read it.
@@ -27,6 +28,23 @@ For the component-reuse rules you must follow while building the UI, see
    every zone-to-zone transition) over one class per near-identical move —
    fewer classes to wire into the registration array, less duplicated
    validation logic.
+4. **Decide your recap story now, not later.** Turn recap and the
+   "since you were last here" card are opt-in *features*, but they are not an
+   opt-in *design consideration* — they replay your command history, so they
+   constrain how state and commands are built. Three decisions are nearly free
+   while you're writing the game and expensive-to-impossible afterwards:
+
+   - **Can the starting state be rebuilt from persisted fields?** If anything
+     is shuffled at creation and then consumed during play (a deck that
+     shrinks, a hand dealt face-down), the answer is no and you need a
+     persisted `initialSpecificGameState` snapshot — decided in `CreateGame`,
+     on day one.
+   - **Does every `Execute` that touches `Math.random` record its outcome?**
+   - **Is your response converter a pure function of state + name map?** A
+     viewer-scoped DTO doesn't fit the current adapter signature.
+
+   The reasons these can't wait, and what each costs, are in
+   [§7](#7-turn-recap--planning) — read it *before* step 1, not after step 6.
 
 ## The checklist
 
@@ -39,13 +57,18 @@ handful of one-line additions to shared files in the last step.
   `CreateGame(invite, userIdList)` method that rolls turn order (if relevant)
   and returns the initial `IGameData`, built by:
 - `buildInitial<Game>State(...)` — the deterministic starting
-  `specificGameState`. Reused by `CreateGame` *and*, if you add turn recap
-  later, the replay adapter.
+  `specificGameState`. Reused by `CreateGame` *and* by the replay adapter that
+  turn recap needs, so keep it a pure function of persisted fields. If it
+  shuffles anything that gets consumed during play, persist an
+  `initialSpecificGameState` snapshot here too — see §7(a), and note that this
+  is the one decision you cannot make retroactively.
 - `<Game>GameDataModel`: a `Schema` discriminating `GameDataModel`, with a
   `CreateDataResponse()` method that calls:
 - `gameStateToModel(specificGameState)` — converts internal state to the
   client-facing DTO shape. **Redact anything the player shouldn't see yet**
-  (see "Don't leak hidden information" below).
+  (see "Don't leak hidden information" below). Keep it a pure function of the
+  state plus the username map if you can: a viewer-scoped converter doesn't fit
+  the replay adapter's signature as it stands (§7(c)).
 - *(Optional)* `compute<Game>ResultStats(gameData)` +
   `format<Game>ResultStats(stats)` + a schema def, if your game has
   interesting per-game stats worth recording in `GameResult` (see
@@ -67,6 +90,10 @@ handful of one-line additions to shared files in the last step.
   `{ validMove: false }` and mutates nothing if illegal, or mutates
   `specificGameState` in place, appends a line to `gameState.history`, and
   returns `{ validMove: true, turnOver }`.
+- **Any `Execute` that consumes randomness records its outcome on the command**
+  (`this.recordedRoll ?? DiceRoll(6)`) — §7(b). Do this as you write the
+  command, not as a later pass: commands already in `commandHistory` can never
+  be given the field retroactively.
 - If your validation logic is non-trivial (legal-move computation, sequence
   checks, scoring formulas), put it in a separate pure `rules.ts` module
   instead of inlining it in the command classes — see "Isomorphic rules
@@ -88,7 +115,8 @@ none fit, it's a single source of truth other UI derives from), `players`,
   for a solo game — see below).
 - `src/app/games/<game>/[gameid]/page.tsx` — a thin board screen using
   `GameShell`, `useGameData`, `usePushEvents`, `useEndGame`, and (for
-  multiplayer games) `useTurnNavigation`/`TurnNavControls`/`useTurnRecap`.
+  multiplayer games) `useTurnNavigation`/`TurnNavControls`/`useTurnRecap`
+  (§7).
 - `src/app/api/newgame/<game>/route.ts` — creates the `Invitation` document.
 
 ### 6. Wire the shared files
@@ -107,17 +135,104 @@ rather than the game breaking silently at runtime.
 | `src/app/api/game/command/route.ts` | every command/game-type instance in the `registration` array |
 | `src/utils/mongodb/GameResultData.ts` | *(only if you added `compute<Game>ResultStats`)* the discriminator + wire it into `GAME_RESULT_STATS` |
 
-### 7. (Optional) Turn recap / planning
+### 7. Turn recap & planning
 
-If your game should support "since you were last here" recap or planning
-mode, add `src/games/<Game>/recap.ts` (an `IRecapAdapter`) and register an
-`IReplayAdapter` in `src/utils/games/replay.ts`. Both are opt-in — see
-[`docs/turn-recap-and-planning.md`](./turn-recap-and-planning.md). A solo
-game with no "away time" to recap (nothing happened without you — you're the
-only player) can skip this entirely; build a one-off victory/summary screen
-instead, shown when `complete` flips true.
+Whether your game *ships* recap is a choice. Whether you *design for* it isn't
+— see step 4 of "Before you write any code". Both the "since you were last
+here" catch-up card and the step-back-through-past-turns controls work by
+replaying `commandHistory` from the starting state, so a game that wasn't built
+with replay in mind can only get recap for games created *after* the retrofit.
+Existing games are stuck without it forever: you can't go back and record dice
+rolls that were rolled months ago.
+
+That asymmetry is the whole reason this section sits in the checklist rather
+than in a "nice to have later" pile. The full design is in
+[`docs/turn-recap-and-planning.md`](./turn-recap-and-planning.md); this is the
+decision you have to make and the four things it costs.
+
+#### First, decide
+
+| Your game is… | Do this |
+|---|---|
+| Multiplayer | Design for replay (below) and ship at least the recap adapter. Every multiplayer game except Smartthink has one. |
+| Multiplayer, but hidden-information/deduction | Design for replay anyway, then deliberately **opt out** of recap and planning, and write down why — Smartthink's recap would hand out free feedback about the secret code. Say so in the per-game table in `turn-recap-and-planning.md`. |
+| Solo | Skip all of it. Nothing happens while you're away, so there's no gap to recap; build a one-off victory/summary screen shown when `complete` flips true (see `SolitaireVictoryScreen`). |
+
+Then record the outcome in the per-game table in
+[`turn-recap-and-planning.md`](./turn-recap-and-planning.md#per-game-status) —
+whether it's ✅, ✖ by design, or 🚧 not yet. A game missing from that table is
+the bug this section exists to prevent.
+
+#### Then, build for it
+
+**a. A reproducible starting state.** Export `buildInitial<Game>State(...)`,
+use it in `CreateGame`, and make it a pure function of persisted fields.
+If creation-time randomness is *consumed* during play — a shuffled deck that
+shrinks, a hand dealt down, tickets drawn — it can't be read back off the live
+state, and you must instead persist the whole starting state:
+
+```ts
+// in CreateGame
+initialSpecificGameState: clone<Game>State(specificGameState, turnOrder),
+```
+
+plus a second Mongoose path using the *same* sub-schema factory, and
+`recapAvailable: !!doc.initialSpecificGameState` on the response so games
+created before the field simply don't offer recap. Settlements & Cities and
+World Domination are the reference implementations. **Do this at creation
+time even if you're not shipping recap yet** — it is one field, it costs
+nothing, and it's the only part that cannot be added retroactively.
+
+**b. Recorded RNG on every command that rolls.** The first execution records
+its outcome onto the command, and replay reuses it:
+
+```ts
+const roll = this.recordedRoll ?? DiceRoll(6);
+this.recordedRoll = roll; // persisted with the command in commandHistory
+```
+
+Commands are stored as `Schema.Types.Mixed`, so the recorded field persists for
+free. Watch for randomness hidden inside shared helpers and for a *variable*
+number of draws per command (SAC's discard-on-7 loop, a deck reshuffle during a
+market refill) — thread a small recorder object through the helper and store
+the resulting draw log on the command, the way `SACRandomLog` does.
+
+**c. A replay-friendly response converter.** `gameStateToModel(state,
+userIdNameMap)` must be a pure function of those two arguments.
+`IReplayAdapter.toResponseState` has no viewer to pass, so a **viewer-scoped
+DTO doesn't fit today's signature** — if your game redacts per viewer (hands,
+face-down cards, secret tickets), you'll need to widen the adapter to thread
+the viewer's userId through `buildTimeline` as part of your game's work. Don't
+work around it locally.
+
+**d. The adapters and the wiring.**
+
+| File | What to add |
+|---|---|
+| `src/utils/games/replay.ts` | `registerReplayAdapter({ className, buildInitialSpecificGameState, toResponseState })` |
+| `src/games/<Game>/recap.ts` | an `IRecapAdapter`: `toEvents` (one replayed command → display events), `summarize`, optional `tip` (the green advice box) and `postProcess` (fold two commands that are one logical action into one row) |
+| `src/utils/games/recap.ts` | `import "@/games/<Game>/recap";` — **`gameRegistry.test.ts` fails without it**, since an unimported adapter never registers and the feed silently returns nothing |
+| `src/app/games/<game>/[gameid]/page.tsx` | `useTurnRecap(gameId)` + `<TurnRecap …>`, and `useTurnNavigation` + `TurnNavControls` for the step-back controls; render `nav.displayedState`, drive the log from `nav.displayedHistory`, and disable interactive controls while `!nav.isLive` |
+
+Add a `recap.test.ts` alongside the adapter (see `DiceCities/recap.test.ts`) —
+it's plain snapshot-in, events-out, so it needs no Mongo or Clerk.
+
+**Planning mode** (queueing hypothetical future turns) is a further opt-in on
+top of replay, via `canPlan` on `TurnNavControls`. Only Snakes & Ladders has it;
+it fits games whose turn is a single command, and not games whose turn is a
+multi-step sequence. Getting (a)–(c) right is what keeps the option open.
 
 ## Gotchas (learned the hard way on Solitaire)
+
+**Recap code can be added later; recap *data* cannot.** The adapters, the
+route, the card — all of that can be bolted on any time. What can't is the
+`initialSpecificGameState` snapshot and the `recorded…` fields on commands:
+those are written *as a game is played*, so a game that ships without them has
+its history permanently un-replayable, and every table already in flight when
+you retrofit is excluded for good. Settlements & Cities and World Domination
+both carry a `recapAvailable` flag precisely because their pre-change games can
+never be recapped. Pay the one field and the `?? DiceRoll(6)` up front even if
+recap itself is a later milestone.
 
 **`Schema.Types.Mixed` doesn't auto-track in-place mutations.** If any part of
 your `specificGameState` is `Schema.Types.Mixed` (reach for this when a zone's
@@ -182,7 +297,10 @@ Before considering the game done:
 1. `npx tsc --noEmit` and `npm run build` must pass.
 2. `npm test` must pass — `serializableRegistry.test.ts` and
    `gameRegistry.test.ts` scan the source and fail with the exact missing
-   wiring line if you forgot one of the additions in step 6.
+   wiring line if you forgot one of the additions in step 6. Note what it
+   *can't* check: it verifies a `recap.ts` you wrote is imported by the engine,
+   but nothing fails if you never wrote one. Recap coverage is on you, not on
+   CI — which is exactly how games have shipped without it before.
 3. Consider adding a `<Game>Logic.test.ts` alongside your rules module (see
    `SettlementsAndCitiesLogic.test.ts` or `SolitaireLogic.test.ts` for the
    pattern: a tiny in-memory `makeGame()`/`cmd()` harness, no real Mongo/Clerk
@@ -195,6 +313,9 @@ Before considering the game done:
    `tsc`/`build` never will.
 4. Play a full game by hand in a real dev environment if you can — the
    automated checks catch wiring and logic bugs, not "does this feel right."
+   If you shipped recap, open the game as a second player and check the
+   catch-up card and the step-back controls on a real game — replay
+   determinism has no automated guard.
 5. Run the **`caveman`** agent (or its `caveman-review` skill) against the new
    files before committing, per `AGENTS.md` — it catches missed reuse and
    copy-pasted markup that the checks above don't.

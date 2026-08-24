@@ -5,8 +5,12 @@ A per-player recap shown when you open a game where it's your turn: a short
 elapsed since your last move, a one-line summary, an optional strategic tip,
 and a call-to-action into the board.
 
-This is a planning document. It records the agreed design and the work to do;
-it is not yet implemented.
+This was the planning document for the feature, and it records the agreed
+design. **It is now implemented** — phase 1 and the roll-out in phase 2
+shipped (minus the optional home-dashboard teaser, and phase 3's unification of
+`GameHistoryList` was not done) — so read it for the *why*, and treat
+[`turn-recap-and-planning.md`](./turn-recap-and-planning.md) as the current
+state of the code. Where the two disagree, that one is right.
 
 ## 1. Motivation & what exists today
 
@@ -198,12 +202,16 @@ shown on the home dashboard's "my turn" card.
 
 ## 6. Per-game scope
 
-| Game | Recap | Notes |
-|---|---|---|
-| Snakes & Ladders | ✅ pilot | Already has a replay adapter; simplest event set. |
-| Dice Cities | ✅ | Café/landmark events map cleanly; has a replay adapter. |
-| Settlements & Cities | ✅ | Inherits SAC's `recapAvailable` gate for pre-change games. |
-| Smartthink | ✖ by design | No recap adapter registered — recapping guesses leaks deduction info (same rationale as planning being disabled). |
+Recap is opt-in per game, and which games have it moves as games are added.
+The live list is the per-game table in
+[`turn-recap-and-planning.md`](./turn-recap-and-planning.md#per-game-status) —
+kept there so recap, planning and replay status are read in one place rather
+than drifting apart across two docs.
+
+The rule of thumb the table records: every multiplayer game gets a recap
+adapter, except where recapping would leak hidden information (Smartthink's
+deduction feedback), and solo games skip it entirely because nothing happens
+while you're away.
 
 ## 7. Phasing
 
@@ -232,6 +240,13 @@ assert that every game which registers a **replay** adapter also registers a
 **recap** adapter, minus an explicit opt-out list (Smartthink), so a new game
 can't silently ship without recap. Determinism is inherited from the existing
 replay engine, so no new replay-determinism harness is needed.
+
+**As shipped, this is weaker than planned.** `gameRegistry.test.ts` only checks
+that a `recap.ts` which *exists* is imported by the engine — nothing fails when
+a game has none. Adapters are covered by per-game unit tests
+(`DiceCities/recap.test.ts`, `SettlementsAndCities/recap.test.ts`). The
+parity assertion above is still worth adding: Train Time was built without a
+recap adapter, which is exactly what it was meant to catch.
 
 ## 10. New / touched files at a glance
 
