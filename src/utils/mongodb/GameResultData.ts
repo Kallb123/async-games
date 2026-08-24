@@ -1,6 +1,10 @@
 import { Document, Model, Schema, model, models } from "mongoose";
 import type { IGameData } from "./GameData";
 import type { uuidString, GameEndReason, GameResultStatGroup, GameResultChart } from "../apiModels/GameDataApi";
+// The shared, generic player lookup. The older games each wrap it in a typed
+// alias of their own; a new one doesn't need to — the state type infers the
+// player type.
+import { playerByUserId } from "../apiModels/GameDataApi";
 import {
     IDiceCitiesGameData,
     IDiceCitiesGameResultStats,
@@ -59,7 +63,9 @@ import {
     computeTrainTimeResultStats,
     trainTimeGameResultStatsSchemaDef,
     formatTrainTimeResultStats,
+    formatTrainTimeCharts,
 } from "@/games/TrainTime/TrainTimeModels";
+import type { ITrainTimeSpecificGameStateResponse } from "@/games/TrainTime/apiModels";
 
 export interface IGameResultData {
     gameId: uuidString,
@@ -265,8 +271,20 @@ const GAME_RESULT_STATS: Record<string, {
     },
     TrainTime: {
         model: TrainTimeGameResultModel,
-        compute: (gameData) => computeTrainTimeResultStats(gameData as ITrainTimeGameData),
+        compute: async (gameData) => {
+            const trainGameData = gameData as ITrainTimeGameData;
+            const pointsPerTurn = await computePerTurnStat<ITrainTimeSpecificGameStateResponse>(
+                trainGameData,
+                (state, userId) => playerByUserId(state, userId)?.score,
+            );
+            const longestRunPerTurn = await computePerTurnStat<ITrainTimeSpecificGameStateResponse>(
+                trainGameData,
+                (state, userId) => playerByUserId(state, userId)?.longestRun,
+            );
+            return computeTrainTimeResultStats(trainGameData, pointsPerTurn, longestRunPerTurn);
+        },
         format: formatTrainTimeResultStats,
+        charts: formatTrainTimeCharts,
     },
     Solitaire: {
         model: SolitaireGameResultModel,

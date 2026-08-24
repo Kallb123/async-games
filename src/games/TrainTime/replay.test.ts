@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildTimeline } from "@/utils/games/replay";
+import { buildTimeline, computePerTurnStat } from "@/utils/games/replay";
 import { buildEventFeed } from "@/utils/games/recap";
 import { deserializeJSON } from "@/utils/apiModels/Serialisable";
 import {
@@ -25,6 +25,8 @@ import {
     ticketsToKeep,
 } from "./board";
 import type { IGameCommand } from "@/utils/apiModels/gameCommand";
+import type { ITrainTimeSpecificGameStateResponse } from "./apiModels";
+import { playerByUserId } from "@/utils/apiModels/GameDataApi";
 
 // Train Time deals two shuffled decks and reshuffles the discards back in when
 // the deck runs dry, so recap can only replay it if the starting snapshot is
@@ -249,6 +251,34 @@ describe("Train Time replay", () => {
         // The tip reads the viewer's own hand, which only reaches it because the
         // feed replays the game as that player.
         expect(feed.tip?.text).toBeTruthy();
+    });
+
+    it("tracks the points race turn by turn, ending on the final scores", async () => {
+        const game = await playWholeGame();
+        const pointsPerTurn = await computePerTurnStat<ITrainTimeSpecificGameStateResponse>(
+            game,
+            (state, userId) => playerByUserId(state, userId)?.score,
+        );
+
+        expect(pointsPerTurn.length).toBeGreaterThan(0);
+        for (const userId of PLAYERS) {
+            const series = pointsPerTurn.map(turn => turn.get(userId) ?? 0);
+            // Route points are laid down and never come back off the board.
+            expect(series).toEqual([...series].sort((a, b) => a - b));
+            // The chart's last point is the score the result screen shows —
+            // route points, before the tickets and the Long Haul are settled.
+            expect(series[series.length - 1])
+                .toBe(game.specificGameState.playerStates.get(userId)!.score);
+        }
+    });
+
+    it("plots nothing rather than throwing when a game can't be replayed", async () => {
+        // This runs inside recordGameResult on the final move, so a game with
+        // no starting snapshot has to cost its chart, never its last turn.
+        const game = await playWholeGame(6);
+        delete (game as { initialSpecificGameState?: unknown }).initialSpecificGameState;
+
+        await expect(computePerTurnStat(game, () => 1)).resolves.toEqual([]);
     });
 
     it("has no recap for a game dealt before the starting snapshot existed", async () => {

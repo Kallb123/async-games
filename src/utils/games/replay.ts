@@ -284,16 +284,28 @@ export async function computePerTurnStat<TState>(
 ): Promise<Map<string, number>[]> {
     const identityMap = Object.fromEntries(gameData.userIdList.map(userId => [userId, userId]));
     const perTurn: Map<string, number>[] = [];
-    await buildTimeline(gameData, identityMap, [], (step) => {
-        if (!step.outcome.turnOver) {
-            return;
-        }
-        const responseState = step.next.specificGameState as TState;
-        const entry = new Map<string, number>();
-        for (const userId of gameData.userIdList) {
-            entry.set(userId, extractValue(responseState, userId) ?? 0);
-        }
-        perTurn.push(entry);
-    });
+    try {
+        await buildTimeline(gameData, identityMap, [], (step) => {
+            if (!step.outcome.turnOver) {
+                return;
+            }
+            const responseState = step.next.specificGameState as TState;
+            const entry = new Map<string, number>();
+            for (const userId of gameData.userIdList) {
+                entry.set(userId, extractValue(responseState, userId) ?? 0);
+            }
+            perTurn.push(entry);
+        });
+    } catch (error) {
+        // A snapshot-replay game created before its snapshot existed can't be
+        // replayed at all (see docs/turn-recap-and-planning.md). This runs on
+        // the last move of a game, inside recordGameResult, so throwing here
+        // would cost the player their final turn to lose a chart nobody has
+        // seen yet. Downgrade to no series — the same graceful no-op recap
+        // already makes for those games — but say so, since the other way to
+        // land here is a genuinely broken adapter.
+        console.warn(`No per-turn stat for game ${gameData.gameId}: ${error}`);
+        return [];
+    }
     return perTurn;
 }

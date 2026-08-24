@@ -1,6 +1,7 @@
 # Turn recap & planning
 
-Three related features let players move off the live game state:
+Three related features let players move off the live game state, and a fourth
+reads the same history after the fact:
 
 - **Turn recap** — step backward through the *actual* turns of a game and see the
   exact board as it looked at each past turn.
@@ -11,8 +12,12 @@ Three related features let players move off the live game state:
 - **Planning mode** — from the current state, queue *hypothetical* future turns,
   step forward/back through them, then return to the live game. (Currently only
   Snakes & Ladders.)
+- **Per-turn result charts** — the turn-by-turn lines on a finished game's
+  result page (coins, resources, points…). Replay is what makes them possible:
+  the numbers were never stored per turn, so they're recomputed once when the
+  game ends and saved onto the `GameResult`.
 
-All three are driven by the same reconstructed timeline, so most of the
+All four are driven by the same reconstructed timeline, so most of the
 machinery is shared.
 
 ## How it works
@@ -44,6 +49,7 @@ commands after it. Same engine, two inputs.
 | Recap engine | `src/utils/games/recap.ts` | `buildEventFeed(gameData, userIdNameMap, forUserId)` replays the timeline through a per-game `IRecapAdapter` and windows the events to "since your last turn" |
 | Recap API | `src/app/api/game/[gameid]/recap/route.ts` | `POST` returns the viewer's event feed, summary, tip and player colours |
 | Recap hook + card | `src/utils/hooks/useTurnRecap.ts`, `src/components/games/TurnRecapScreen.tsx`, `src/components/games/TurnRecap.tsx` | Fetch-on-load, then the shared screen every game renders — a page passes its recap and its own call-to-action wording, nothing else |
+| Per-turn stats | `computePerTurnStat` (`replay.ts`) + a game's `charts` entry in `GameResultData.ts` | Replays the finished game, sampling one value per player at each turn's end, for the result page's line charts. A game that can't be replayed (no snapshot) yields no series rather than throwing — this runs on the final move, and a missing chart must never cost a player their last turn |
 
 ### Deterministic replay & RNG recording
 
@@ -206,6 +212,10 @@ is also the game that closed the viewer gap below.
   it reads the viewer's own hand, which is why the feed replays per viewer.
 - **Planning** — `canPlan={false}`, **by design**: a hypothetical draw would
   deal off the real deck and show the player the card at the top of it.
+- **Result charts** — route points and longest run per turn, sampled from the
+  same replay. The points line is the race as it ran; the Long Haul line moves
+  in jumps as separate stretches of network finally join up, which is why it's
+  worth plotting beside the points rather than as a rescaling of them.
 
 ### Viewer-scoped state
 
