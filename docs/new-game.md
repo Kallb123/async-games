@@ -242,9 +242,15 @@ replays a played-out game with `Math.random` stubbed to throw, which is the only
 cheap way to know a recorded outcome actually covers every random path.
 
 **Planning mode** (queueing hypothetical future turns) is a further opt-in on
-top of replay, via `canPlan` on `TurnNavControls`. Only Snakes & Ladders has it;
-it fits games whose turn is a single command, and not games whose turn is a
-multi-step sequence. Getting (a)–(c) right is what keeps the option open.
+top of replay, and it takes two: `plannableCommands` on your replay adapter,
+which is what the server will actually run, and `canPlan` on `TurnNavControls`,
+which is what the board offers. `plannableCommands` is required and starts
+empty — leave it empty until you have done the
+[what can be planned](./turn-recap-and-planning.md#planning-what-can-be-planned)
+analysis, because planning replays your commands against the game's real state
+and anything on that list resolves against real hidden information. Only Snakes
+& Ladders has planning today. Getting (a)–(c) right is what keeps the option
+open.
 
 ## Gotchas (learned the hard way on Solitaire)
 

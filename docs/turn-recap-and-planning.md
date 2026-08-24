@@ -121,6 +121,32 @@ deterministic action, planning cannot avoid it. If it has its own command class,
 planning avoids it for free by never queueing that command. That is a **deck
 freeze**, and it is the pattern that unblocks most of the games below.
 
+**4. Does the plan reach the end of the game?** A game whose DTO reveals
+something at game over — Train Time releases every player's tickets once
+`gs.gameOver` is set — reveals it in a *planned* snapshot too, because the
+snapshot is built by the same converter. A command that only ends a turn in
+normal play can end the game on the last turn, so this is a question about the
+plannable set, not about the UI. Train Time's `ClaimRoute` and `PassTurn` both
+reach `finishTurn`, which is what sets `gameOver`.
+
+### Where this is enforced
+
+`IReplayAdapter.plannableCommands` — the list of command classNames a game will
+run as a planned move. `POST /api/game/[gameid]/timeline` refuses the whole plan
+with a 400 if it contains anything else, so the answers above are a control
+rather than a note.
+
+The field is required and has no default, so a new game has to answer the
+question. **Empty is the right answer until a planning UI exists**: default deny
+means the failure mode of forgetting is "planning doesn't work yet", not
+"planning quietly resolves against hidden state".
+
+`canPlan` on `TurnNavControls` is a separate, *client-side* thing: it decides
+what the board offers. It is not a permission and never reaches the server — the
+timeline route is a plain authenticated POST, so a board with `canPlan={false}`
+is not thereby protected from a planned command sent by hand. Both need setting
+to ship planning; only `plannableCommands` keeps anything out.
+
 ### Deck freeze
 
 Queue the deterministic part of a turn — across as many players as you like —
@@ -194,6 +220,13 @@ adapter; the default stays own-moves-only.
 | Solitaire | shuffled face-down deal | No | No — drawing *is* the game | Out |
 | Outbreak | both decks + Intensify shuffle | **Yes** (hands and discards public by §2) | By design — see its GDD | Deck freeze (decoy rejected) |
 | Fires Out | d6/d8 + POI pool | Yes (pool composition known) | Yes — `endTurn` | Deck freeze **and** decoy |
+
+Every row above except Snakes & Ladders currently declares
+`plannableCommands: []`, because none of them has a planning UI. The "Planning"
+column is the analysis — what the game *could* allow — not what it does allow
+today; switching one on means writing the list out alongside the UI, and the
+adapter's comment in `replay.ts` carries the per-game caveats found while
+auditing this.
 
 Three of the four "deferred" games above were deferred for a reason that no
 longer holds, and one was ruled out for a reason narrower than it looked:
@@ -326,7 +359,10 @@ The pilot for all three features, and still the only game with planning.
 - **Planning** — deferred on *value*, not feasibility: turns are long sequences
   of trades and builds. Feasible as a deck freeze whenever it's wanted — the
   dice are memoryless and `SACBuyDevCard` is the only command that touches the
-  dev-card deck, so a plan that never buys a dev card resolves nothing hidden.
+  dev-card deck. It is not the only exclusion, though: `SACMoveRobber` samples a
+  real resource out of the victim's hand, and `SACPlayMonopoly` reads how much
+  of a resource every player is holding. Both are hidden state under question 1
+  even though neither touches a deck.
   "Given this hand, what can I build, and what does a 9 pay for?" is the shape
   it would take.
 

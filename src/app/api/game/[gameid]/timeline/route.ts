@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { userIdListToUserIdNameMap } from '@/utils/users/clerk';
-import { buildTimeline } from '@/utils/games/replay';
+import { buildTimeline, plannableCommands } from '@/utils/games/replay';
 import { IGameCommand } from '@/utils/apiModels/GameLogic';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
 
@@ -45,6 +45,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
 
     if (!gameData.userIdList.includes(userId)) {
         return NextResponse.json({}, { status: 403, statusText: "Not a player in this game" });
+    }
+
+    // Planning runs client-supplied commands against the game's real
+    // reconstructed state, so what a game will plan has to be decided by the
+    // server. Anything outside the game's allowlist would resolve against real
+    // hidden state — a planned draw reads the top of the real deck, a planned
+    // Smartthink guess is scored against the real code — so the plan is refused
+    // rather than partly run. See plannableCommands() and
+    // docs/turn-recap-and-planning.md.
+    //
+    // This is the only enforcement point: `canPlan` on the board screens is a UI
+    // affordance, not a permission, and never reaches the server.
+    const plannable = plannableCommands(gameData.gameType.className);
+    if (plannedCommands.some((command) => !plannable.includes(command?.className))) {
+        console.warn(`POST ${request.nextUrl.pathname} 400: command not plannable in ${gameData.gameType.className}`);
+        return NextResponse.json({}, { status: 400, statusText: "That move can't be planned in this game" });
     }
 
     // Planned moves are hypothetical and never persisted; for v1 planning we only
