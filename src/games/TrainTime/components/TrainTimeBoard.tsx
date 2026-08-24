@@ -1,5 +1,6 @@
 'use client'
-import React, { useState } from 'react';
+import React from 'react';
+import BoardZoom from '@/components/ui/BoardZoom';
 import { BOARD_VIEWBOX, CITIES, ROUTES, routeName } from '@/games/TrainTime/board';
 import { CITY_LABEL_OFFSET, ROUTE_GEOMETRY, TRACK_PALETTE } from '@/games/TrainTime/ui';
 
@@ -39,24 +40,11 @@ export default function TrainTimeBoard({
     onRouteClick,
     boardTag = null,
 }: TrainTimeBoardProps) {
-    const [zoomed, setZoomed] = useState(false);
-
     return (
         <div className="ag-board-frame ag-tt-frame">
             {boardTag && <div className="ag-board-tag">{boardTag}</div>}
-            <button
-                type="button"
-                className="ag-board-tag ag-board-tag--action"
-                aria-pressed={zoomed}
-                onClick={() => setZoomed(z => !z)}
-            >
-                {zoomed ? '➖ Fit map' : '➕ Zoom in'}
-            </button>
-            <div className="ag-tt-scroll">
-                <svg
-                    viewBox={`0 0 ${BOARD_VIEWBOX.width} ${BOARD_VIEWBOX.height}`}
-                    style={{ width: zoomed ? '260%' : '100%' }}
-                >
+            <BoardZoom zoomWidth="260%">
+                <svg viewBox={`0 0 ${BOARD_VIEWBOX.width} ${BOARD_VIEWBOX.height}`}>
                     {ROUTES.map(route => {
                         const owner = routeOwners[route.id];
                         const claimable = claimableRoutes.has(route.id);
@@ -116,7 +104,7 @@ export default function TrainTimeBoard({
                         );
                     })}
                 </svg>
-            </div>
+            </BoardZoom>
         </div>
     );
 }

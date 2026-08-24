@@ -1245,6 +1245,10 @@ button {
     box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.13), 0 4px 0 oklch(0.6 0.09 235);
 }
 .ag-board-frame svg { display: block; width: 100%; height: auto; border-radius: 12px; }
+/* Boards wider than the app column scroll inside the frame, at whatever width
+   BoardZoom's toggle has set. */
+.ag-board-scroll { overflow: auto; border-radius: 12px; -webkit-overflow-scrolling: touch; }
+.ag-board-scroll svg { width: var(--ag-board-zoom, 100%); max-width: none; }
 .ag-board-tag {
     position: absolute;
     bottom: 12px;
@@ -1259,7 +1263,7 @@ button {
     white-space: nowrap;
 }
 .ag-board-tag--dice { display: flex; align-items: center; gap: 6px; padding: 4px 11px 4px 6px; }
-/* The same pill as a tappable control in the opposite corner (Train Time's
+/* The same pill as a tappable control in the opposite corner (BoardZoom's
    zoom toggle), rather than a second dark-pill style. */
 .ag-board-tag--action { top: 12px; right: 12px; bottom: auto; left: auto; border: none; cursor: pointer; }
 .ag-board-overlay {
@@ -2607,8 +2611,6 @@ button.ag-tt-ticket { cursor: pointer; padding-right: 34px; }
     box-shadow: inset 0 0 0 1.5px oklch(0.86 0.03 80), 0 3px 0 oklch(0.84 0.03 78);
 }
 .ag-game--traintime .ag-board-tag { background: var(--tt-brass); color: var(--tt-on-brass); }
-.ag-tt-scroll { overflow: auto; border-radius: 12px; -webkit-overflow-scrolling: touch; }
-.ag-tt-scroll svg { max-width: none; }
 
 /* Per-player segment counts under the map. */
 .ag-tt-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 5px; margin-top: 9px; }

@@ -39,6 +39,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Zoom in on the World Domination map",
+                detail: "Tap Zoom in to blow the map up and pan around it, so those crowded territories are easy to hit — the same toggle Train Time has.",
+                game: "worlddomination",
+            },
+            {
                 title: "Guests get a warning before signing out",
                 detail: "Signing out of a guest account now asks you to confirm first — there's no way back in, and your games and history go with it.",
             },
@@ -53,10 +58,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Keep the account you're already playing on",
                 detail: "Played your first turn as a guest? Add an email and password and it's yours for good — every game and result carries over.",
-            },
-            {
-                title: "Guests can play, no account needed",
-                detail: "Anyone with a code can join and play without signing up — just a name. Save the link you're given to find your way back in.",
             },
         ],
     },
