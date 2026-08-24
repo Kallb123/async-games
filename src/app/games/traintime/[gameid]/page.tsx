@@ -95,6 +95,11 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     const [selectedRouteId, setSelectedRouteId] = useResettingState<number | null>(null, turnKey);
     const [action, setAction] = useResettingState<TrainTimeAction>('draw', turnKey);
     const [claiming, setClaiming] = useResettingState(false, `${turnKey}:${selectedRouteId}`);
+    // Which tickets are being kept on the keep-or-return sheet, and which one is
+    // being read in the tickets panel. Both light their cities up on the map;
+    // closing the panel, like the turn moving on, puts the lit one out.
+    const [keeping, setKeeping] = useResettingState<number[]>([], turnKey);
+    const [openTicketId, setOpenTicketId] = useResettingState<number | null>(null, `${turnKey}:${showTickets}`);
 
     // One claim context for the screen — the board highlights from it and the
     // claim sheet prices against it.
@@ -131,8 +136,13 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     const keepTickets = (ticketIds: number[]) => {
         const command = new TrainTimeKeepTickets();
         command.keep = ticketIds;
-        submitCommand(command, undefined, 'keep-tickets');
+        // Kept tickets move into the panel, where they'd otherwise still read as
+        // picked — the choice is over, so the picks go with it.
+        submitCommand(command, () => setKeeping([]), 'keep-tickets');
     };
+
+    const toggleKeep = (ticketId: number) =>
+        setKeeping(keeping.includes(ticketId) ? keeping.filter(id => id !== ticketId) : [...keeping, ticketId]);
 
     function selectRoute(routeId: number) {
         setSelectedRouteId(routeId);
@@ -265,6 +275,15 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
         ))
         : [{ title: 'Your tickets', tickets: myTickets }];
 
+    // The cities lit up on the map: both ends of every ticket picked out right
+    // now, whether that's a keep on the ticket sheet or one opened in the panel.
+    // A stale pick can't match anything, so putting a ticket down puts its
+    // cities out with it.
+    const highlightedCities = new Set(
+        [...(gs?.myPendingTickets ?? []), ...ticketGroups.flatMap(group => group.tickets)]
+            .filter(ticket => ticket.id === openTicketId || keeping.includes(ticket.id))
+            .flatMap(ticket => [ticket.cityA, ticket.cityB]));
+
     // The end-of-game breakdown. Who won is the server's call, not the sheet's.
     const scoreRows: TrainTimeScoreRow[] = scored
         ? players.map(({ ps, colour, isMe }) => ({
@@ -369,7 +388,12 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                     <TrainTimeScoreSheet rows={scoreRows} sharedWin={sharedWin} />
 
                     {(showTickets || scored) && (
-                        <TrainTimeTicketPanel groups={ticketGroups} scored={scored} />
+                        <TrainTimeTicketPanel
+                            groups={ticketGroups}
+                            selectedTicketId={openTicketId}
+                            onSelectTicket={id => setOpenTicketId(id === openTicketId ? null : id)}
+                            scored={scored}
+                        />
                     )}
 
                     <div className="ag-board-area">
@@ -379,6 +403,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                             claimableRoutes={claimableRoutes}
                             highlightClaimable={action === 'claim'}
                             selectedRouteId={selectedRouteId}
+                            highlightedCities={highlightedCities}
                             onRouteClick={isMyTurn && !submitting ? selectRoute : undefined}
                             boardTag={boardTag}
                         />
@@ -401,6 +426,8 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                             tickets={gs.myPendingTickets}
                             mustKeep={gs.myTicketsToKeep}
                             settingUp={settingUp}
+                            chosen={keeping}
+                            onToggle={toggleKeep}
                             onKeep={keepTickets}
                             pending={pendingTarget === 'keep-tickets'}
                         />

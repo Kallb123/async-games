@@ -39,6 +39,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Find your Train Time tickets on the map",
+                detail: "Tap a ticket — while you're choosing which to keep, or in your ticket list — and its two cities light up on the board. Tap it again to put them out.",
+                game: "traintime",
+            },
+            {
                 title: "See how the Train Time race actually ran",
                 detail: "A finished game now charts route points turn by turn, and the Long Haul race beside it — so you can see where the game was won, not just the final total.",
                 game: "traintime",
@@ -55,11 +60,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "The match log reads like a timeline",
                 detail: "Open the log in any game and the moves run down a thread, each dotted in the colour of the player who made it.",
-            },
-            {
-                title: "Zoom in on the World Domination map",
-                detail: "Tap Zoom in to blow the map up and pan around it, so those crowded territories are easy to hit — the same toggle Train Time has.",
-                game: "worlddomination",
             },
         ],
     },

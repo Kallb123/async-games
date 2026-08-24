@@ -14,6 +14,8 @@ interface TrainTimeBoardProps {
      *  is actually choosing one. */
     highlightClaimable?: boolean;
     selectedRouteId: number | null;
+    /** City ids to ring — the two ends of whichever ticket is being looked at. */
+    highlightedCities?: Set<number>;
     onRouteClick?: (routeId: number) => void;
     /** Short status pill in the corner of the map. */
     boardTag?: string | null;
@@ -37,6 +39,7 @@ export default function TrainTimeBoard({
     claimableRoutes,
     highlightClaimable = false,
     selectedRouteId,
+    highlightedCities,
     onRouteClick,
     boardTag = null,
 }: TrainTimeBoardProps) {
@@ -83,16 +86,36 @@ export default function TrainTimeBoard({
 
                     {CITIES.map(city => {
                         const label = CITY_LABEL_OFFSET[city.labelDir];
+                        // A ticket end: brass halo, filled dot, its name pulled forward.
+                        const onTicket = !!highlightedCities?.has(city.id);
                         return (
                             <g key={city.id}>
-                                <circle cx={city.x} cy={city.y} r={7} fill="#fdfbf6" stroke="oklch(0.42 0.04 40)" strokeWidth={2.4} />
+                                {onTicket && (
+                                    <circle
+                                        cx={city.x}
+                                        cy={city.y}
+                                        r={18}
+                                        fill="var(--tt-brass)"
+                                        fillOpacity={0.3}
+                                        stroke="var(--tt-brass)"
+                                        strokeWidth={3}
+                                    />
+                                )}
+                                <circle
+                                    cx={city.x}
+                                    cy={city.y}
+                                    r={onTicket ? 9 : 7}
+                                    fill={onTicket ? 'var(--tt-brass)' : '#fdfbf6'}
+                                    stroke="oklch(0.42 0.04 40)"
+                                    strokeWidth={2.4}
+                                />
                                 <text
                                     x={city.x + label.dx}
                                     y={city.y + label.dy}
                                     textAnchor={label.anchor}
-                                    fontSize={17}
-                                    fontWeight={700}
-                                    fill="oklch(0.4 0.04 45)"
+                                    fontSize={onTicket ? 19 : 17}
+                                    fontWeight={onTicket ? 800 : 700}
+                                    fill={onTicket ? 'var(--tt-ink)' : 'oklch(0.4 0.04 45)'}
                                     stroke="oklch(0.96 0.024 85)"
                                     strokeWidth={4.5}
                                     paintOrder="stroke"
