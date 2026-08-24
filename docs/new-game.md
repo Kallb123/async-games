@@ -75,6 +75,10 @@ handful of one-line additions to shared files in the last step.
   interesting per-game stats worth recording in `GameResult` (see
   `ARCHITECTURE.md` §5, "Match results"). Skip this if there's nothing
   game-specific worth tracking beyond the base win/loss/turns fields.
+  Add `format<Game>Charts(stats)` too if a number is worth watching *move* —
+  a score, a resource, a race. Those series aren't stored per turn by the
+  game; `computePerTurnStat` replays the finished match to recover them, so
+  they're free once your game replays at all (§7).
 
 ### 2. Response DTOs — `src/games/<Game>/apiModels.ts`
 
@@ -134,7 +138,7 @@ rather than the game breaking silently at runtime.
 | `src/utils/ui/games.ts` | import the `meta.ts`, add it to `GAME_META` |
 | `src/utils/mongodb/mongodb.ts` | the discriminator key in both union types, and the model in both records (`GAME_DATA_MODELS` and `INVITATION_MODELS`) |
 | `src/app/api/game/command/route.ts` | every command/game-type instance in the `registration` array |
-| `src/utils/mongodb/GameResultData.ts` | *(only if you added `compute<Game>ResultStats`)* the discriminator + wire it into `GAME_RESULT_STATS` |
+| `src/utils/mongodb/GameResultData.ts` | *(only if you added `compute<Game>ResultStats`)* the discriminator + wire it into `GAME_RESULT_STATS`, with a `charts` entry if you added per-turn series |
 
 ### 7. Turn recap & planning
 

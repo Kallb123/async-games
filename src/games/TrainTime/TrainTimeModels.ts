@@ -3,7 +3,13 @@ import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationR
 import { Model, Schema, models } from "mongoose";
 import { auth } from "@clerk/nextjs/server";
 import { v4 as uuidv4 } from 'uuid';
-import { uuidString, GameResultStatGroup } from "@/utils/apiModels/GameDataApi";
+import {
+    uuidString,
+    GameResultStatGroup,
+    GameResultChart,
+    compactCharts,
+    formatPerTurnChart,
+} from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
 import { shuffle } from "@/utils/games/shuffle";
@@ -338,6 +344,17 @@ export interface ITrainTimePlayerResultStats {
 
 export interface ITrainTimeGameResultStats {
     playerStats: Map<string, ITrainTimePlayerResultStats>;
+    // Route points per player at the end of each turn, in turn order — the
+    // race as it actually ran, which the game-end totals above can't show.
+    // Not tracked on specificGameState, so it's computed by replaying
+    // commandHistory via computePerTurnStat (see replay.ts), driven from this
+    // game's GAME_RESULT_STATS entry in GameResultData.ts.
+    pointsPerTurn: Map<string, number>[];
+    // The Long Haul race over the same turns: each player's longest continuous
+    // run of track. Worth +10 at scoring and often the tie-break, and it moves
+    // in jumps as separate stretches of network finally join up — a different
+    // shape from the points line, not a rescaling of it.
+    longestRunPerTurn: Map<string, number>[];
 }
 
 export const trainTimeGameResultStatsSchemaDef = {
@@ -354,9 +371,15 @@ export const trainTimeGameResultStatsSchemaDef = {
             trainsUsed: Number,
         },
     },
+    pointsPerTurn: [{ type: Schema.Types.Map, of: Number }],
+    longestRunPerTurn: [{ type: Schema.Types.Map, of: Number }],
 };
 
-export function computeTrainTimeResultStats(gameData: ITrainTimeGameData): ITrainTimeGameResultStats {
+export function computeTrainTimeResultStats(
+    gameData: ITrainTimeGameData,
+    pointsPerTurn: Map<string, number>[],
+    longestRunPerTurn: Map<string, number>[],
+): ITrainTimeGameResultStats {
     const playerStats = new Map<string, ITrainTimePlayerResultStats>();
     for (const [userId, ps] of gameData.specificGameState.playerStates) {
         playerStats.set(userId, {
@@ -371,7 +394,19 @@ export function computeTrainTimeResultStats(gameData: ITrainTimeGameData): ITrai
             trainsUsed: TRAINS_PER_PLAYER - ps.trains,
         });
     }
-    return { playerStats };
+    return { playerStats, pointsPerTurn, longestRunPerTurn };
+}
+
+// Renders the per-turn series as GameResult charts: the points race, and the
+// Long Haul race beside it.
+export function formatTrainTimeCharts(
+    stats: ITrainTimeGameResultStats,
+    usernameById: Map<string, string>,
+): GameResultChart[] {
+    return compactCharts(
+        formatPerTurnChart(stats.pointsPerTurn, usernameById, "Route points per turn", "Points"),
+        formatPerTurnChart(stats.longestRunPerTurn, usernameById, "Longest run per turn", "Track"),
+    );
 }
 
 export function formatTrainTimeResultStats(

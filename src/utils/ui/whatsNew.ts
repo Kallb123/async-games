@@ -39,6 +39,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "See how the Train Time race actually ran",
+                detail: "A finished game now charts route points turn by turn, and the Long Haul race beside it — so you can see where the game was won, not just the final total.",
+                game: "traintime",
+            },
+            {
                 title: "Train Time remembers what you missed",
                 detail: "Open a Train Time game and you get the same welcome-back recap the other games have — every route claimed while you were away, plus a nudge at what your hand can pay for. You can step back through the whole match too, and the log has moved to the ⋯ menu so it's there on anyone's turn.",
                 game: "traintime",
@@ -55,10 +60,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Zoom in on the World Domination map",
                 detail: "Tap Zoom in to blow the map up and pan around it, so those crowded territories are easy to hit — the same toggle Train Time has.",
                 game: "worlddomination",
-            },
-            {
-                title: "Guests get a warning before signing out",
-                detail: "Signing out of a guest account now asks you to confirm first — there's no way back in, and your games and history go with it.",
             },
         ],
     },
