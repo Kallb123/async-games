@@ -9,6 +9,27 @@ export interface IGameState {
     commandHistory: IGameCommand[]
 }
 
+// The response-safe view of a game's shared state: turn order and the plain-text
+// history log, and deliberately not commandHistory.
+//
+// commandHistory is the engine's private replay log, and every game hangs its
+// own fields off its commands — Smartthink's secret code, Train Time's kept
+// ticket ids and deck reshuffles, SAC's robber/discard RNG. Sending it hands
+// each player state their game keeps hidden. IGameDataResponse['gameState'] has
+// always been declared without it, but TypeScript can't hold the line on its
+// own: excess-property checks don't apply to a whole-object assignment or to
+// spread properties, so `gameState: doc.gameState` type-checks and ships
+// everything. Every CreateDataResponse goes through here instead.
+//
+// `history` is a parameter because games whose log records userIds swap them
+// for usernames on the way out (see World Domination and Settlements & Cities).
+export function publicGameState(
+    gameState: IGameState,
+    history: string[] = gameState.history
+): IGameDataResponse['gameState'] {
+    return { turnOrder: gameState.turnOrder, history };
+}
+
 export interface IGameData {
     gameId: uuidString,
     gameType: IGameType,
@@ -116,7 +137,7 @@ GameDataSchema.methods.CreateDataResponse = async function(): Promise<IGameDataR
         usernameList: await userIdListToUsernameList(gameDataDocument.userIdList),
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
-        gameState: gameDataDocument.gameState,
+        gameState: publicGameState(gameDataDocument.gameState),
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
         endReason: gameDataDocument.endReason,

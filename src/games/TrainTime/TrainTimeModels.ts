@@ -1,4 +1,4 @@
-import { GameDataModel, IGameData, IGameDataDocument } from "@/utils/mongodb/GameData";
+import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/utils/mongodb/GameData";
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { auth } from "@clerk/nextjs/server";
@@ -236,7 +236,7 @@ TrainTimeGameDataSchema.methods.CreateDataResponse = async function(): Promise<I
         usernameList,
         turnTimer: doc.turnTimer,
         currentTurn: doc.currentTurn,
-        gameState: doc.gameState,
+        gameState: publicGameState(doc.gameState),
         complete: doc.complete,
         winner: doc.winner,
         endReason: doc.endReason,

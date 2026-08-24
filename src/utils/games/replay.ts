@@ -74,6 +74,14 @@ export interface IReplayAdapter {
         userIdNameMap: { [key: string]: string },
         viewerId: string | null,
     ): unknown;
+    // Which of this game's commands may be run as a *planned* (hypothetical)
+    // move. Required, with no default, so a new game has to make the call that
+    // new-game.md §7 asks for rather than inheriting one.
+    //
+    // Empty means planning is off, and that is the right answer for every game
+    // that hasn't built a planning UI. See plannableCommands() below for why
+    // this is the control rather than `canPlan`.
+    plannableCommands: string[];
 }
 
 const adapters: Record<string, IReplayAdapter> = {};
@@ -82,6 +90,28 @@ export function registerReplayAdapter(adapter: IReplayAdapter) {
 }
 export function getReplayAdapter(className: string): IReplayAdapter | undefined {
     return adapters[className];
+}
+
+// The command classNames a game will run as part of a planned turn — the
+// server-side half of planning, and the half that matters.
+//
+// Planning replays client-supplied hypothetical commands against the game's
+// *real* reconstructed state, so a command that consumes a deck or reads another
+// player's hidden state answers exactly the question the live game is keeping
+// from the planner: plan a draw and you are told the card on top of the real
+// deck. That is what the deck freeze in docs/turn-recap-and-planning.md is —
+// a game names the commands whose outcome is deterministic or memoryless, and
+// planning never runs the rest.
+//
+// `canPlan` on TurnNavControls decides what the UI *offers*; this decides what
+// the server will *run*. Only the second is a control — the timeline route is a
+// plain authenticated POST, so a game whose board sets `canPlan={false}` is not
+// thereby protected from a planned command sent by hand.
+//
+// A game with no replay adapter at all (Solitaire) plans nothing, same as a game
+// that declares an empty list.
+export function plannableCommands(gameTypeClassName: string): string[] {
+    return getReplayAdapter(gameTypeClassName)?.plannableCommands ?? [];
 }
 
 registerReplayAdapter({
@@ -94,6 +124,10 @@ registerReplayAdapter({
     ),
     toResponseState: (specificGameState, userIdNameMap) =>
         snakesAndLaddersStateToModel(specificGameState as never, userIdNameMap),
+    // The pilot, and still the only game with a planning UI. Its one command
+    // rolls a die, which is memoryless — a hypothetical roll is statistically
+    // identical to the real one and there is no deck to read.
+    plannableCommands: ["SnakesAndLaddersRequestDiceRoll"],
 });
 
 registerReplayAdapter({
@@ -101,6 +135,10 @@ registerReplayAdapter({
     buildInitialSpecificGameState: (gameData) => buildInitialDiceCitiesState(gameData.userIdList),
     toResponseState: (specificGameState, userIdNameMap) =>
         diceCitiesStateToModel(specificGameState as never, userIdNameMap),
+    // Nothing about the game blocks planning — no deck, no shuffle, no
+    // redaction — but no planning UI has been built, and the safe set is a
+    // decision for whoever builds it. Off until then.
+    plannableCommands: [],
 });
 
 registerReplayAdapter({
@@ -109,6 +147,11 @@ registerReplayAdapter({
         buildInitialSettlementsAndCitiesState(gameData as ISettlementsAndCitiesGameData),
     toResponseState: (specificGameState, userIdNameMap) =>
         settlementsAndCitiesStateToModel(specificGameState as never, userIdNameMap),
+    // Deck freeze is feasible here but unbuilt. Note for whoever builds it that
+    // SACBuyDevCard is not the only command to leave out: SACMoveRobber samples
+    // a real resource out of the victim's hand, and SACPlayMonopoly reads how
+    // much of a resource every player is holding.
+    plannableCommands: [],
 });
 
 registerReplayAdapter({
@@ -116,6 +159,10 @@ registerReplayAdapter({
     buildInitialSpecificGameState: (gameData) => buildInitialWorldDominationState(gameData as IWorldDominationGameData),
     toResponseState: (specificGameState, userIdNameMap) =>
         worldDominationStateToModel(specificGameState as never, userIdNameMap),
+    // Deck freeze is feasible here but unbuilt: battle dice are memoryless and
+    // the only deck contact is the end-of-turn draw in riskEndTurn, reached
+    // only via WorldDominationFortify / WorldDominationSkipFortify.
+    plannableCommands: [],
 });
 
 registerReplayAdapter({
@@ -123,6 +170,11 @@ registerReplayAdapter({
     buildInitialSpecificGameState: (gameData) => buildInitialTrainTimeStateFromGameData(gameData as ITrainTimeGameData),
     toResponseState: (specificGameState, userIdNameMap, viewerId) =>
         trainTimeStateToModel(specificGameState as never, userIdNameMap, viewerId),
+    // Deck freeze is feasible here but unbuilt. Two things to weigh first: the
+    // draw commands are the obvious exclusions, but ClaimRoute and PassTurn can
+    // *end the game* through finishTurn, and this game's DTO reveals every
+    // player's tickets once gs.gameOver is set.
+    plannableCommands: [],
 });
 
 registerReplayAdapter({
@@ -131,6 +183,11 @@ registerReplayAdapter({
         buildInitialSmartthinkState((gameData as unknown as { specificGameState: never }).specificGameState),
     toResponseState: (specificGameState, userIdNameMap) =>
         smartthinkStateToModel(specificGameState as never, userIdNameMap),
+    // Out by design, and permanently: SmartthinkSubmitGuess scores against the
+    // real secret code, so a planned guess returns real feedback. There is no
+    // randomness to freeze and a decoy would score against a fake code, which
+    // teaches the player nothing.
+    plannableCommands: [],
 });
 
 // Reconstructs a game's full timeline by replaying its recorded commandHistory

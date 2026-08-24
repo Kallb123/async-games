@@ -1,0 +1,82 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+
+import { publicGameState } from "@/utils/mongodb/GameData";
+import type { IGameState } from "@/utils/mongodb/GameData";
+import type { IGameCommand } from "../GameLogic";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const srcRoot = path.resolve(here, "../../..");
+
+// Every file that implements a CreateDataResponse: the generic one plus one
+// discriminator per game. Games are listed explicitly rather than globbed so
+// that adding a game without adding it here is a failure, not a silent pass.
+const RESPONSE_BUILDERS = [
+    "utils/mongodb/GameData.ts",
+    "games/DiceCities/DiceCitiesModels.ts",
+    "games/SettlementsAndCities/SettlementsAndCitiesModels.ts",
+    "games/Smartthink/SmartthinkModels.ts",
+    "games/SnakesAndLadders/SnakesAndLaddersModels.ts",
+    "games/Solitaire/SolitaireModels.ts",
+    "games/TrainTime/TrainTimeModels.ts",
+    "games/WorldDomination/WorldDominationModels.ts",
+];
+
+function makeGameState(): IGameState {
+    return {
+        turnOrder: ["user-1", "user-2"],
+        history: ["user-1 rolled a 6"],
+        // Stands in for the real thing: a command carrying a field its game
+        // means to keep private (Smartthink's secret code, Train Time's kept
+        // ticket ids, SAC's robber RNG).
+        commandHistory: [{ className: "SecretBearingCommand", secretCode: [3, 1, 4, 1] } as unknown as IGameCommand],
+    };
+}
+
+describe("publicGameState", () => {
+    it("drops commandHistory and keeps the public fields", () => {
+        const state = makeGameState();
+
+        const result = publicGameState(state);
+
+        expect(result.turnOrder).toEqual(["user-1", "user-2"]);
+        expect(result.history).toEqual(["user-1 rolled a 6"]);
+        expect("commandHistory" in result).toBe(false);
+        // The whole point is what a client can read off the wire, so assert on
+        // the serialised form too — an own-property check alone would miss a
+        // regression that reintroduced the field via a spread.
+        expect(JSON.stringify(result)).not.toContain("secretCode");
+    });
+
+    it("takes a rewritten history when a game substitutes usernames for userIds", () => {
+        const state = makeGameState();
+
+        const result = publicGameState(state, ["Alice rolled a 6"]);
+
+        expect(result.history).toEqual(["Alice rolled a 6"]);
+        expect(result.turnOrder).toEqual(["user-1", "user-2"]);
+        expect("commandHistory" in result).toBe(false);
+    });
+});
+
+// A source scan rather than a per-game assertion, for the same reason as the
+// recorded-randomness guard: `gameState: doc.gameState` type-checks against
+// IGameDataResponse (excess-property checks don't apply to a whole-object
+// assignment, nor to spread properties), so a game that skips publicGameState
+// ships its entire commandHistory to every player and nothing else notices.
+describe("every CreateDataResponse", () => {
+    it.each(RESPONSE_BUILDERS)("builds %s's gameState through publicGameState", (relativePath) => {
+        const source = readFileSync(path.join(srcRoot, relativePath), "utf8");
+
+        const body = /CreateDataResponse\s*=\s*async function[\s\S]*?\n};/.exec(source);
+        expect(body, `no CreateDataResponse found in ${relativePath}`).not.toBeNull();
+
+        // Anchored to the start of a line so a commented-out assignment can't
+        // satisfy the guard.
+        const assignment = /^[ \t]*gameState:[ \t]*(.*)$/m.exec(body![0]);
+        expect(assignment, `no gameState assignment found in ${relativePath}`).not.toBeNull();
+        expect(assignment![1]).toMatch(/^publicGameState\(/);
+    });
+});
