@@ -116,14 +116,19 @@ export function useTurnRecap(gameId: string, enabled: boolean = true) {
             .catch(() => fetchRecap());
     }, [gameId, fetchRecap]);
 
+    // A recap is only showable once the whole payload the screen renders is
+    // there, so every game can hand it straight to TurnRecapScreen rather than
+    // re-checking the parts itself.
+    const ready = !!recap?.hasRecap && !!recap.header && !!recap.summary && !!recap.events;
+
     return {
         recap,
         loading,
         // Only surface once loaded, when there's something to show and the player
         // hasn't dismissed it this visit.
-        show: !loading && !dismissed && !!recap?.hasRecap,
+        show: !loading && !dismissed && ready,
         // Whether there's a recap available to replay, regardless of dismissal.
-        hasRecap: !loading && !!recap?.hasRecap,
+        hasRecap: !loading && ready,
         dismiss,
         reshow,
         react,

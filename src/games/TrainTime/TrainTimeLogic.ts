@@ -11,6 +11,7 @@ import {
     LONG_HAUL_BONUS,
     TICKETS_DRAWN_PER_TURN,
     TrainTimeCardColour,
+    TrainTimeShuffleLog,
     canClaimRoute,
     drawsTakenBy,
     isSetupTicketChoice,
@@ -224,6 +225,12 @@ export class TrainTimeDrawCarriageCard implements IGameCommand {
     /** Which face-up card, for a market draw. */
     marketIndex: number = 0;
     readonly className = 'TrainTimeDrawCarriageCard';
+    /**
+     * Recorded RNG: the deck recycles this draw caused, in order, so a replay
+     * (turn recap) deals exactly the same cards. Absent on the draws that
+     * didn't empty the deck, which is nearly all of them.
+     */
+    recordedShuffles?: TrainTimeCardColour[][];
 
     myString() { return `Train Time DrawCarriageCard source=${this.source} index=${this.marketIndex}`; }
 
@@ -241,6 +248,7 @@ export class TrainTimeDrawCarriageCard implements IGameCommand {
         // Taking a face-up Engine costs the whole action, so it can only ever
         // be the first of the turn's draws (§5, "The Engine exception").
         let engineTax = false;
+        const shuffles = new TrainTimeShuffleLog(this.recordedShuffles);
 
         if (this.source === 'market') {
             // The market is shared state and moves while you're away: a draw
@@ -252,12 +260,13 @@ export class TrainTimeDrawCarriageCard implements IGameCommand {
                 engineTax = true;
             }
             gs.market.splice(this.marketIndex, 1);
-            refillMarket(gs);
+            refillMarket(gs, shuffles);
         } else {
-            const card = drawFromDeck(gs);
+            const card = drawFromDeck(gs, shuffles);
             if (card === null) return INVALID;
             drawn = card;
         }
+        if (shuffles.shuffles.length) this.recordedShuffles = shuffles.shuffles;
 
         ps.hand.push(drawn);
         gs.drawsThisTurn = drawnSoFar + 1;

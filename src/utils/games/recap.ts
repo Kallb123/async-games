@@ -5,6 +5,7 @@ import { snakesAndLaddersRecapAdapter } from "@/games/SnakesAndLadders/recap";
 import { diceCitiesRecapAdapter } from "@/games/DiceCities/recap";
 import { settlementsAndCitiesRecapAdapter } from "@/games/SettlementsAndCities/recap";
 import { worldDominationRecapAdapter } from "@/games/WorldDomination/recap";
+import { trainTimeRecapAdapter } from "@/games/TrainTime/recap";
 
 // A single "here's what happened" entry in a since-you-were-last-here recap.
 // Games synthesise these from replayed turns via an IRecapAdapter; the generic
@@ -90,14 +91,18 @@ export interface IEventFeed {
 async function replayEvents(
     gameData: IGameData,
     userIdNameMap: { [key: string]: string },
-    adapter: IRecapAdapter
+    adapter: IRecapAdapter,
+    // The player the feed is for, so a game with hidden information can shape
+    // their own cards into the snapshots the adapter reads (the tip needs
+    // them). Null when the feed isn't being built for anybody in particular.
+    viewerId: string | null
 ): Promise<{ events: IGameEvent[]; timeline: ITimeline }> {
     const steps: IReplayStep[] = [];
     const timeline = await buildTimeline(gameData, userIdNameMap, [], (step) => {
         if (!step.planned) {
             steps.push(step);
         }
-    });
+    }, viewerId);
 
     const events: IGameEvent[] = [];
     for (const step of steps) {
@@ -131,7 +136,7 @@ export async function buildEventFeed(
     let allEvents: IGameEvent[];
     let timeline: ITimeline;
     try {
-        ({ events: allEvents, timeline } = await replayEvents(gameData, userIdNameMap, adapter));
+        ({ events: allEvents, timeline } = await replayEvents(gameData, userIdNameMap, adapter, forUserId));
     } catch {
         // Some games can't be replayed for every historical game (e.g. Settlements
         // & Cities games created before recap support lack the stored initial-state
@@ -180,7 +185,7 @@ export async function buildAllEvents(
         return [];
     }
     try {
-        const { events } = await replayEvents(gameData, userIdNameMap, adapter);
+        const { events } = await replayEvents(gameData, userIdNameMap, adapter, null);
         return events;
     } catch {
         return [];
@@ -196,3 +201,4 @@ registerRecapAdapter(snakesAndLaddersRecapAdapter);
 registerRecapAdapter(diceCitiesRecapAdapter);
 registerRecapAdapter(settlementsAndCitiesRecapAdapter);
 registerRecapAdapter(worldDominationRecapAdapter);
+registerRecapAdapter(trainTimeRecapAdapter);

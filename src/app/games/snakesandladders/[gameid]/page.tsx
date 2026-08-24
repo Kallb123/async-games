@@ -15,7 +15,7 @@ import SnakesAndLaddersBoard from "@/games/SnakesAndLadders/components/SnakesAnd
 import SnakesAndLaddersPlayerActions from "@/games/SnakesAndLadders/components/SnakesAndLaddersPlayerActions";
 import SnakesAndLaddersRollResult, { buildRollResult, RollResult } from "@/games/SnakesAndLadders/components/SnakesAndLaddersRollResult";
 import TurnNavControls from "@/components/games/TurnNavControls";
-import TurnRecap from "@/components/games/TurnRecap";
+import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
@@ -195,24 +195,12 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
 
     // Recap intro: a standalone welcome-back screen shown before the board when
     // it's our turn and moves happened while we were away.
-    if (recap.show && recap.recap?.hasRecap && recap.recap.header && recap.recap.summary && recap.recap.events) {
-        const r = recap.recap;
+    if (recap.show) {
         return (
-            <TurnRecap
-                header={r.header!}
-                summary={r.summary!}
-                events={r.events!.map((e) => ({
-                    id: e.id,
-                    glyph: e.glyph,
-                    title: e.title,
-                    detail: e.detail,
-                    timestamp: e.timestamp,
-                    dotColour: e.dotColour,
-                    reaction: e.reaction,
-                }))}
-                tip={r.tip}
-                cta={{ label: "Roll the die →", onClick: recap.dismiss }}
-                backHref="/"
+            <TurnRecapScreen
+                recap={recap.recap!}
+                cta="Roll the die →"
+                onDismiss={recap.dismiss}
                 onReact={recap.react}
             />
         );

@@ -37,13 +37,13 @@ commands after it. Same engine, two inputs.
 
 | Piece | File | Role |
 |---|---|---|
-| Replay engine | `src/utils/games/replay.ts` | `buildTimeline(gameData, userIdNameMap, plannedCommands?)` reconstructs the timeline; per-game `IReplayAdapter`s provide the initial state + response conversion |
+| Replay engine | `src/utils/games/replay.ts` | `buildTimeline(gameData, userIdNameMap, plannedCommands?, onStep?, viewerId?)` reconstructs the timeline; per-game `IReplayAdapter`s provide the initial state + response conversion |
 | Timeline API | `src/app/api/game/[gameid]/timeline/route.ts` | `POST` returns the snapshots (recap history + optional planned turns) |
 | Navigation hook | `src/utils/hooks/useTurnNavigation.ts` | Owns view index / mode, fetches the timeline, exposes step/return/plan actions |
 | Controls | `src/components/games/TurnNavControls.tsx` | Game-agnostic ⏮ ◀ ▶ / "Back to live game" / (planning) controls |
 | Recap engine | `src/utils/games/recap.ts` | `buildEventFeed(gameData, userIdNameMap, forUserId)` replays the timeline through a per-game `IRecapAdapter` and windows the events to "since your last turn" |
 | Recap API | `src/app/api/game/[gameid]/recap/route.ts` | `POST` returns the viewer's event feed, summary, tip and player colours |
-| Recap hook + card | `src/utils/hooks/useTurnRecap.ts`, `src/components/games/TurnRecap.tsx` | Fetch-on-load + the shared catch-up card every game renders |
+| Recap hook + card | `src/utils/hooks/useTurnRecap.ts`, `src/components/games/TurnRecapScreen.tsx`, `src/components/games/TurnRecap.tsx` | Fetch-on-load, then the shared screen every game renders — a page passes its recap and its own call-to-action wording, nothing else |
 
 ### Deterministic replay & RNG recording
 
@@ -85,7 +85,7 @@ Three separate opt-ins, so a game can have one without the others:
 | Settlements & Cities | ✅ from snapshot | ✅ (tip) | ✖ deferred |
 | World Domination | ✅ from snapshot | ✅ (tip, `postProcess`) | ✖ deferred |
 | Solitaire | ✖ by design | ✖ by design | ✖ by design |
-| Train Time | 🚧 not yet | 🚧 not yet | 🚧 not yet |
+| Train Time | ✅ from snapshot | ✅ (tip, `postProcess`) | ✖ by design |
 
 "From scratch" means the adapter rebuilds the starting state from persisted,
 never-changing fields. "From snapshot" means creation-time randomness is
@@ -178,50 +178,63 @@ nor `useTurnRecap`, and the end-of-game moment is a one-off
 If we ever wanted "step back through my own game" review here, it would need
 both of the harder patterns below: a snapshot (the deal is shuffled) *and* a
 viewer for the response converter (`gameStateToModel` redacts face-down cards).
+The second of those is no longer a blocker — Train Time widened the adapter to
+take a viewer (see [Viewer-scoped state](#viewer-scoped-state)) — but the
+snapshot still can't be added to games already dealt.
 
 ### Train Time
 
-**Not implemented yet** — no replay adapter, no `recap.ts`, and the board page
-mounts neither hook. It's the first multiplayer game built since recap landed
-that doesn't have it, which is what prompted the "decide this up front" section
-in [`new-game.md`](./new-game.md#7-turn-recap--planning). Treat the list below
-as the to-do rather than the design:
+Retrofitted after the fact — it was the game that prompted the "decide this up
+front" section in [`new-game.md`](./new-game.md#7-turn-recap--planning), and it
+is also the game that closed the viewer gap below.
 
-1. **It must be a snapshot game.** `buildInitialTrainTimeState` shuffles both
-   the carriage deck and the ticket deck, and both are dealt down as play goes
-   on, so the starting order can't be read back. Persist
-   `initialSpecificGameState` in `CreateGame` and expose `recapAvailable`,
-   exactly as SAC and World Domination do.
-2. **Record the mid-game reshuffle.** `drawFromDeck` recycles the discard pile
-   into a fresh shuffled deck when the deck runs dry
-   (`state.deck = shuffle(state.discard)`), and `refillMarket` can trigger a
-   variable number of draws per command. That's the same shape as SAC's
-   per-player discard loop, so use the same fix: a `SACRandomLog`-style
-   recorder threaded through the helper, capturing a variable-length draw log
-   on the command.
-3. **Thread a viewer through the response converter** — see below. Train Time's
-   `gameStateToModel(gs, userIdNameMap, viewerId)` redacts hands and tickets
-   per viewer, and `IReplayAdapter.toResponseState` has no viewer to give it.
+- **Replay** — from a stored snapshot (see below), gated on `recapAvailable`.
+  Both decks are shuffled at creation and dealt down as play goes on, so
+  nothing about the opening position can be read back off the live state.
+- **RNG** — `TrainTimeDrawCarriageCard.recordedShuffles`. The only randomness
+  once the game is dealt is `drawFromDeck` recycling the discards into a fresh
+  deck when it runs dry, which one command can trigger more than once (a market
+  refill after an Engine wipe), so a `TrainTimeShuffleLog` threads through
+  `drawFromDeck`/`refillMarket` and records the recycles as an ordered list.
+  Ticket draws need nothing: that deck is never reshuffled.
+- **Recap** — one row per turn: a route claimed (with the Long Haul lead
+  call-out), the two halves of a draw folded back together by `postProcess`,
+  a ticket draw as the count that stuck, a pass, and the last lap — which is
+  everybody's clock, so it's the one row with `affectedIds`. **Events are
+  public information only**: a face-up card taken is named, a blind draw and a
+  kept ticket are only ever counts (design doc §10). The tip is the exception —
+  it reads the viewer's own hand, which is why the feed replays per viewer.
+- **Planning** — `canPlan={false}`, **by design**: a hypothetical draw would
+  deal off the real deck and show the player the card at the top of it.
 
-### Viewer-scoped state (a known gap)
+### Viewer-scoped state
 
-`IReplayAdapter.toResponseState(specificGameState, userIdNameMap)` takes no
-viewer, because every game that has an adapter today converts state the same
-way for everybody. A game whose DTO is viewer-scoped — Train Time's hands and
-tickets, Solitaire's face-down cards — can't use that signature as-is: it would
-have to pass `null` and render every snapshot as if no hand were visible.
+`IReplayAdapter.toResponseState(specificGameState, userIdNameMap, viewerId)`
+takes the player the snapshots are being built for, because a game whose DTO is
+viewer-scoped — Train Time's hands and tickets, Solitaire's face-down cards —
+otherwise has to render every snapshot as if no hand were visible. Games whose
+state is the same for everybody ignore the argument.
 
-The information is available where it's needed (both the timeline and recap
-routes authenticate the caller), so the fix is to widen the adapter signature
-to take the viewer's userId and pass it down from `buildTimeline`. Do that as
-part of the first game that needs it rather than working around it per-game.
+`buildTimeline` takes it as a trailing parameter and passes it straight to the
+adapter. Both callers that know who is asking supply it: the timeline route
+passes the authenticated caller, and `buildEventFeed` passes the player the
+recap is for. `buildAllEvents` and `computePerTurnStat` pass `null`, since
+neither is built for anybody in particular. A snapshot therefore only ever
+carries the asking player's own secrets — everybody else stays a card count,
+exactly as in live play.
+
+Recap **events** are a different question and don't get the same latitude: they
+are written once and read by whoever the feed is built for, so a `toEvents`
+must only ever describe what the whole table can already see.
 
 ## Adding recap to a new game
 
 1. Export from the game's `Models.ts`:
    - a `buildInitial<Game>State(...)` that returns the deterministic starting
      `specificGameState` (reuse it in `CreateGame` to avoid drift), and
-   - the `gameStateToModel` response converter.
+   - the `gameStateToModel` response converter — which may take a viewer, if
+     your game redacts per player (see
+     [Viewer-scoped state](#viewer-scoped-state)).
    If the starting state can't be rebuilt deterministically, persist a snapshot
    instead — see [Snapshot-replay games](#snapshot-replay-games).
 2. Register an `IReplayAdapter` in `replay.ts` keyed by the game's
@@ -235,22 +248,23 @@ part of the first game that needs it rather than working around it per-game.
 5. For the "since you were last here" card, add `src/games/<Game>/recap.ts`
    exporting an `IRecapAdapter` (`toEvents`, `summarize`, optional `tip` and
    `postProcess`), import it from `src/utils/games/recap.ts`, and render
-   `TurnRecap` from `useTurnRecap(gameId)` on the board page.
+   `TurnRecapScreen` from `useTurnRecap(gameId)` on the board page (`recap.show`
+   is the whole condition; the page supplies only its call-to-action wording).
    `gameRegistry.test.ts` fails if a `recap.ts` exists but isn't imported by
    the engine — it can't tell you that you *should* have written one, so this
    is a decision to make deliberately (see
    [`new-game.md`](./new-game.md) §7).
 
 During recap the board is read-only: interactive controls are hidden either by
-gating on `nav.isLive` (Smartthink, SAC, World Domination) or by passing a
-sentinel `currentTurn` + no-op submit so no player's controls activate (Dice
-Cities).
+gating on `nav.isLive` (Smartthink, SAC, World Domination, Train Time) or by
+passing a sentinel `currentTurn` + no-op submit so no player's controls
+activate (Dice Cities).
 
 ## Snapshot-replay games
 
-Settlements & Cities and World Domination both replay from a **persisted
-initial-state snapshot** rather than rebuilding their starting state, because
-creation-time randomness is unrecoverable from the live state. Anything that is
+Settlements & Cities, World Domination and Train Time all replay from a
+**persisted initial-state snapshot** rather than rebuilding their starting
+state, because creation-time randomness is unrecoverable from the live state. Anything that is
 shuffled at creation and then *consumed* during play (a deck that shrinks, a
 hand that is dealt out) forces this: the drawn order is lost, so replaying a
 draw from a reconstructed deck would diverge immediately.
@@ -301,7 +315,7 @@ from, with in-play RNG recorded:
 #### Verification
 
 Vitest runs in CI (`npm test`), but there is no checked-in replay-determinism
-test for SAC. Determinism was instead verified with a throwaway
+test for SAC (Train Time's `replay.test.ts`, below, is the model for one). Determinism was instead verified with a throwaway
 synthetic harness that mirrors `buildTimeline` (Execute → CheckGameOver →
 CheckEndTurn), runs a command sequence with seeded RNG, then replays the
 persisted commands from a fresh initial state **with `Math.random` disabled** and
@@ -342,3 +356,43 @@ and made it reinterpret the card arrays as arrays of plain strings — dropping
 `id`/`territoryId` and throwing a `CastError` on real cards.
 `WorldDominationModels.test.ts` is the regression test for that, and asserts the
 snapshot path casts cleanly alongside the live one.
+
+### Train Time
+
+Both of Train Time's decks are shuffled at creation and dealt down as the game
+runs, so it hits the same wall a third time — but it is the first game where
+randomness also fires **mid-game**, and the first whose response is built per
+viewer.
+
+1. `CreateGame` persists the dealt state as `initialSpecificGameState` and
+   `CreateDataResponse` exposes `recapAvailable`, as above.
+   `cloneTrainTimeState` rebuilds `playerStates` in **turn order** rather than
+   `userIdList` order, because that is the order the game was dealt in and the
+   order final scoring ranks players in — a replay that iterated differently
+   could break a tie the other way.
+2. `makeTrainTimeStateSchemaDef()` builds both Mongoose paths, per the
+   World Domination gotcha above.
+3. **The mid-game recycle is recorded.** `drawFromDeck` reshuffles the discard
+   pile when the deck runs dry, and a single command can hit that more than
+   once, so `TrainTimeShuffleLog` (threaded through `drawFromDeck` and
+   `refillMarket`) hands back the recorded recycle on a replay and a fresh
+   shuffle otherwise, keeping them as an ordered list on
+   `TrainTimeDrawCarriageCard.recordedShuffles`. Same shape as `SACRandomLog`,
+   one level down: the recorder sits on the deck helper, so every caller is
+   covered rather than each command remembering to record.
+4. **Snapshots are built for a viewer** — see
+   [Viewer-scoped state](#viewer-scoped-state).
+
+#### Verification
+
+`src/games/TrainTime/replay.test.ts` is the checked-in determinism test the
+earlier snapshot games never got, and is worth copying for the next one. It
+plays a full random game through the real command pipeline, then replays the
+persisted log through `buildTimeline` **with `Math.random` stubbed to throw**,
+and asserts the final snapshot equals the live state — so anything reaching for
+fresh randomness fails the test rather than quietly dealing a different game. It
+also covers both recycle paths (a blind draw and a mid-market-refill) through a
+JSON round-trip of the command, that the viewer's hand is the only one shaped
+in, and that a game with no snapshot is treated as having no recap. As with
+SAC, still **sanity-check recap in the live app** on a real game — nothing here
+has been through Mongo.

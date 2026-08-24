@@ -61,6 +61,8 @@ TrainTimeInvitationSchema.methods.CreateGame = async function(
         `Setup: running order is ${turnOrder.map(u => usernameMap.get(u) ?? u).join(' → ')}`,
     ];
 
+    const specificGameState = buildInitialTrainTimeState(turnOrder);
+
     const gameData: ITrainTimeGameData = {
         gameId: uuidv4() as uuidString,
         gameType,
@@ -77,7 +79,8 @@ TrainTimeInvitationSchema.methods.CreateGame = async function(
         },
         complete: false,
         winner: '',
-        specificGameState: buildInitialTrainTimeState(turnOrder),
+        specificGameState,
+        initialSpecificGameState: cloneTrainTimeState(specificGameState, turnOrder),
     };
     return gameData;
 };
@@ -89,41 +92,121 @@ export var TrainTimeInvitationModel =
 
 export interface ITrainTimeGameData extends IGameData {
     specificGameState: ITrainTimeSpecificGameState;
+    /**
+     * Immutable copy of the dealt starting state, persisted at creation so turn
+     * recap can replay the command log from it. The shuffled carriage and
+     * ticket decks are consumed as the game runs, so there is no reconstructing
+     * them afterwards — games dealt before this existed simply have no recap
+     * (see `recapAvailable`).
+     */
+    initialSpecificGameState?: ITrainTimeSpecificGameState;
 }
 
 export interface ITrainTimeGameDataDocument extends ITrainTimeGameData, IGameDataDocument {}
 
 export interface ITrainTimeGameDataModel extends Model<ITrainTimeGameDataDocument> {}
 
+// ─── Replay support ─────────────────────────────────────────────────────────
+
+/**
+ * The player map however Mongoose handed it back: a real Map on a live
+ * document, a plain object once it has been through JSON.
+ */
+function playerStatesMap(gs: ITrainTimeSpecificGameState): Map<string, ITrainTimePlayerState> {
+    return gs.playerStates instanceof Map
+        ? gs.playerStates
+        : new Map(Object.entries(gs.playerStates as unknown as Record<string, ITrainTimePlayerState>));
+}
+
+/**
+ * Deep copy of a game state, rebuilding the player map in `order` so iteration
+ * matches the original deal — final scoring ranks players by that order, so a
+ * replay that iterated differently could break a tie the other way.
+ */
+export function cloneTrainTimeState(
+    gs: ITrainTimeSpecificGameState,
+    order: string[],
+): ITrainTimeSpecificGameState {
+    const source = playerStatesMap(gs);
+    const playerStates = new Map<string, ITrainTimePlayerState>();
+    for (const userId of order) {
+        const ps = source.get(userId);
+        if (ps) {
+            playerStates.set(userId, {
+                ...ps,
+                hand: [...ps.hand],
+                tickets: [...ps.tickets],
+                pendingTickets: [...ps.pendingTickets],
+            });
+        }
+    }
+
+    return {
+        deck: [...gs.deck],
+        discard: [...gs.discard],
+        market: [...gs.market],
+        ticketDeck: [...gs.ticketDeck],
+        playerStates,
+        routeOwners: [...gs.routeOwners],
+        drawsThisTurn: gs.drawsThisTurn,
+        drawTurnOwner: gs.drawTurnOwner,
+        finalRoundPending: gs.finalRoundPending ? [...gs.finalRoundPending] : null,
+        gameOver: gs.gameOver,
+    };
+}
+
+/**
+ * The starting state the replay engine rewinds to. Train Time deals shuffled
+ * decks that are consumed as it runs, so this can only ever be the stored
+ * snapshot; a game dealt before that snapshot existed has no recap, which the
+ * `recapAvailable` flag tells the client up front.
+ */
+export function buildInitialTrainTimeStateFromGameData(
+    gameData: ITrainTimeGameData,
+): ITrainTimeSpecificGameState {
+    const snapshot = gameData.initialSpecificGameState;
+    if (!snapshot) {
+        throw new Error("Turn recap is unavailable for this game (created before recap support).");
+    }
+    return cloneTrainTimeState(snapshot, gameData.gameState.turnOrder);
+}
+
 // ─── Mongoose schema ────────────────────────────────────────────────────────
+
+// Shared by the live state and the immutable starting snapshot recap replays
+// from, so the two paths can never drift apart.
+function makeTrainTimeStateSchemaDef() {
+    return {
+        deck: [String],
+        discard: [String],
+        market: [String],
+        ticketDeck: [Number],
+        playerStates: {
+            type: Schema.Types.Map,
+            of: {
+                hand: [String],
+                tickets: [Number],
+                pendingTickets: [Number],
+                trains: Number,
+                score: Number,
+                ticketScore: Number,
+                ticketsCompleted: Number,
+                longHaulBonus: Number,
+                routesClaimed: Number,
+            },
+        },
+        routeOwners: Schema.Types.Mixed,
+        drawsThisTurn: Number,
+        drawTurnOwner: String,
+        finalRoundPending: Schema.Types.Mixed,
+        gameOver: Boolean,
+    };
+}
 
 var TrainTimeGameDataSchema = new Schema<ITrainTimeGameDataDocument>(
     {
-        specificGameState: {
-            deck: [String],
-            discard: [String],
-            market: [String],
-            ticketDeck: [Number],
-            playerStates: {
-                type: Schema.Types.Map,
-                of: {
-                    hand: [String],
-                    tickets: [Number],
-                    pendingTickets: [Number],
-                    trains: Number,
-                    score: Number,
-                    ticketScore: Number,
-                    ticketsCompleted: Number,
-                    longHaulBonus: Number,
-                    routesClaimed: Number,
-                },
-            },
-            routeOwners: Schema.Types.Mixed,
-            drawsThisTurn: Number,
-            drawTurnOwner: String,
-            finalRoundPending: Schema.Types.Mixed,
-            gameOver: Boolean,
-        },
+        specificGameState: makeTrainTimeStateSchemaDef(),
+        initialSpecificGameState: makeTrainTimeStateSchemaDef(),
     },
     { discriminatorKey: 'kind' },
 );
@@ -153,6 +236,7 @@ TrainTimeGameDataSchema.methods.CreateDataResponse = async function(): Promise<I
         endReason: doc.endReason,
         forfeitedBy: doc.forfeitedBy,
         specificGameState: gameStateToModel(doc.specificGameState, userIdNameMap, viewerId),
+        recapAvailable: !!doc.initialSpecificGameState,
     };
 };
 
@@ -161,9 +245,7 @@ export function gameStateToModel(
     userIdNameMap: { [key: string]: string },
     viewerId: string | null,
 ): ITrainTimeSpecificGameStateResponse {
-    const playerStatesSource = gs.playerStates instanceof Map
-        ? gs.playerStates
-        : new Map(Object.entries(gs.playerStates as unknown as Record<string, ITrainTimePlayerState>));
+    const playerStatesSource = playerStatesMap(gs);
 
     const playerStates: ITrainTimeSpecificGameStateResponse['playerStates'] = {};
     for (const [userId, ps] of playerStatesSource) {

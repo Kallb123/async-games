@@ -31,8 +31,6 @@ interface TrainTimeActionsProps {
     claimableCount: number;
     /** Fires Action C — draw three tickets and keep at least one. */
     onDrawTickets: () => void;
-    showLog: boolean;
-    onToggleLog: () => void;
     submitCommand: SubmitCommand;
     pendingTarget: string | null;
 }
@@ -45,7 +43,7 @@ interface TrainTimeActionsProps {
  */
 export default function TrainTimeActions({
     gs, myUsername, action, setAction, selectedRouteId, onClaim, claimableCount, onDrawTickets,
-    showLog, onToggleLog, submitCommand, pendingTarget,
+    submitCommand, pendingTarget,
 }: TrainTimeActionsProps) {
     const me = gs.playerStates[myUsername];
     if (!me) return null;
@@ -168,7 +166,7 @@ export default function TrainTimeActions({
                     </button>
                 </div>
 
-                <div className="ag-btn-row" style={{ marginTop: 9, alignItems: 'center' }}>
+                <div className="ag-btn-row" style={{ marginTop: 9 }}>
                     {chosen === 'tickets' ? (
                         <ActionButton
                             className="ag-btn ag-btn--primary ag-btn--block"
@@ -198,14 +196,6 @@ export default function TrainTimeActions({
                             {selectedRoute ? `Claim ${routeName(selectedRoute)} →` : 'Tap a highlighted route'}
                         </button>
                     )}
-                    <button
-                        type="button"
-                        className={`ag-btn ag-btn--ghost ag-tt-side-btn${showLog ? ' ag-btn--dark' : ''}`}
-                        aria-pressed={showLog}
-                        onClick={onToggleLog}
-                    >
-                        📋 Log
-                    </button>
                 </div>
 
                 {nothingToDraw && (

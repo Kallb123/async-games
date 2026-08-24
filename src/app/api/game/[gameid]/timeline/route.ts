@@ -57,7 +57,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
     const userIdNameMap = await userIdListToUserIdNameMap(gameData.userIdList);
 
     try {
-        const timeline = await buildTimeline(gameData, userIdNameMap, plannedCommands);
+        // The requesting player is the viewer, so a game with hidden information
+        // reconstructs their own hand across the timeline — and nobody else's.
+        const timeline = await buildTimeline(gameData, userIdNameMap, plannedCommands, undefined, userId);
         return NextResponse.json({ success: true, ...timeline, userIdNameMap });
     } catch (error) {
         console.error("Failed to build timeline", error);

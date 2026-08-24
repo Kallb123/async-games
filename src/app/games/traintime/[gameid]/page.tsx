@@ -3,7 +3,7 @@ import { use, useMemo, useState } from "react";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { usePathname } from "next/navigation";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
-import type { ITrainTimeGameDataResponse } from "@/games/TrainTime/apiModels";
+import type { ITrainTimeGameDataResponse, ITrainTimeSpecificGameStateResponse } from "@/games/TrainTime/apiModels";
 import {
     ClaimContext,
     LONG_HAUL_BONUS,
@@ -26,11 +26,15 @@ import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import Stat from "@/components/ui/Stat";
+import TurnNavControls from "@/components/games/TurnNavControls";
+import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
+import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
+import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { TrainTimeClaimRoute, TrainTimeDrawTickets, TrainTimeKeepTickets } from "@/utils/apiModels/GameLogic";
 import { TRACK_PALETTE } from "@/games/TrainTime/ui";
 import { playerColour } from "@/utils/ui/playerColours";
@@ -56,9 +60,30 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     const { submitCommand, submitting, pendingTarget } = useSubmitCommand<ITrainTimeGameDataResponse>(gameId, user, setGameData, getGameData);
     const { endGame } = useEndGame(gameId);
 
-    const gs = gameData?.specificGameState;
-    const complete = gameData?.complete ?? false;
-    const isMyTurn = user?.id === gameData?.currentTurn && !complete;
+    // Turn review steps back through the real turns of the match; the board,
+    // the standings and the log all render whichever point is being viewed.
+    const nav = useTurnNavigation<ITrainTimeSpecificGameStateResponse>(gameId, {
+        specificGameState: gameData?.specificGameState,
+        currentTurn: gameData?.currentTurn ?? "",
+        complete: gameData?.complete ?? false,
+        winner: gameData?.winner ?? "",
+        history: gameData?.gameState?.history ?? [],
+    });
+
+    // "Since you were last here": on open, if turns elapsed since our last move,
+    // show the recap intro before the board. Dismissing (or the CTA) reveals it.
+    const recap = useTurnRecap(gameId);
+
+    // Games dealt before the starting snapshot existed can't be replayed, so
+    // they never offer the review controls.
+    const recapAvailable = gameData?.recapAvailable ?? false;
+
+    const gs = nav.displayedState;
+    const complete = nav.displayedComplete;
+    const displayedCurrentTurn = nav.displayedCurrentTurn;
+    // Reviewing a past turn is read-only, so every interactive path hangs off
+    // this rather than off whose turn it is.
+    const isMyTurn = nav.isLive && user?.id === displayedCurrentTurn && !complete;
     const myUsername = currentUsername(user);
     const usernameList = useMemo(() => gameData?.usernameList ?? [], [gameData?.usernameList]);
     const playerCount = usernameList.length;
@@ -66,7 +91,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
 
     // Everything the player picked for this turn resets when the turn moves on
     // or a route goes off the board under them.
-    const turnKey = `${gameData?.currentTurn}:${gs?.routeOwners.filter(Boolean).length}`;
+    const turnKey = `${displayedCurrentTurn}:${gs?.routeOwners.filter(Boolean).length}`;
     const [selectedRouteId, setSelectedRouteId] = useResettingState<number | null>(null, turnKey);
     const [action, setAction] = useResettingState<TrainTimeAction>('draw', turnKey);
     const [claiming, setClaiming] = useResettingState(false, `${turnKey}:${selectedRouteId}`);
@@ -89,9 +114,10 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
         if (!userId || !gs) return userId ?? '';
         return Object.values(gs.playerStates).find(p => p.userId === userId)?.username ?? userId;
     };
-    const currentTurnUsername = playerName(gameData?.currentTurn);
-    const currentUserWon = complete && !!user?.id && user.id === gameData?.winner;
-    const sharedWin = complete && gameData?.winner === '';
+    const currentTurnUsername = playerName(displayedCurrentTurn);
+    const displayedWinner = nav.displayedWinner;
+    const currentUserWon = complete && !!user?.id && user.id === displayedWinner;
+    const sharedWin = complete && displayedWinner === '';
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, playerName(gameData?.forfeitedBy));
 
     const claimRoute = (payment: TrainTimeCardColour[]) => {
@@ -129,7 +155,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
         if (abandoned) {
             subtitle = abandoned.subtitle;
         } else if (complete) {
-            subtitle = sharedWin ? '🤝 Shared win' : currentUserWon ? '🏆 You won!' : `${playerName(gameData?.winner)} won`;
+            subtitle = sharedWin ? '🤝 Shared win' : currentUserWon ? '🏆 You won!' : `${playerName(displayedWinner)} won`;
         } else if (ticketChoice) {
             subtitle = settingUp ? 'Setup · keep your tickets' : 'Destination tickets';
         } else if (claimSheetRoute) {
@@ -186,13 +212,28 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
         };
     });
 
-    const menuOptions: GameOption[] = !complete ? [{
-        key: 'end',
-        label: 'End game',
-        icon: '🏳️',
-        danger: true,
-        onClick: endGame,
-    }] : [];
+    const menuOptions: GameOption[] = [
+        ...(recap.hasRecap ? [{
+            key: 'recap',
+            label: 'Show last recap',
+            icon: '🔁',
+            onClick: recap.reshow,
+        }] : []),
+        {
+            key: 'history',
+            label: 'Turn history',
+            icon: '📜',
+            active: showLog,
+            onClick: () => setShowLog(v => !v),
+        },
+        ...(!complete ? [{
+            key: 'end',
+            label: 'End game',
+            icon: '🏳️',
+            danger: true,
+            onClick: endGame,
+        }] : []),
+    ];
 
     // ── The ticket strip: one bar per ticket, sized by what it's worth ───────
     const myTickets = gs?.myTickets ?? [];
@@ -230,7 +271,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
             player: ps,
             colour,
             isMe,
-            isWinner: !!gameData?.winner && ps.userId === gameData.winner,
+            isWinner: !!displayedWinner && ps.userId === displayedWinner,
         }))
         : [];
 
@@ -242,13 +283,26 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
         else boardTag = '◆ nothing claimable — draw cards';
     }
 
+    // Recap intro: a standalone welcome-back screen shown before the board when
+    // it's our turn and moves happened while we were away.
+    if (recap.show) {
+        return (
+            <TurnRecapScreen
+                recap={recap.recap!}
+                cta="Take your turn →"
+                onDismiss={recap.dismiss}
+                onReact={recap.react}
+            />
+        );
+    }
+
     return (
         <GameShell
             title="Train Time"
             subtitle={subtitle}
             right={claimSheetRoute
                 ? <button type="button" className="ag-game-topbar-btn" aria-label="Close" onClick={() => setClaiming(false)}>✕</button>
-                : gs && menuOptions.length > 0 ? <GameOptionsMenu options={menuOptions} /> : undefined}
+                : gs ? <GameOptionsMenu options={menuOptions} /> : undefined}
             syncing={submitting}
             className="ag-game--traintime"
         >
@@ -291,7 +345,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                     message={abandoned
                         ? abandoned.message
                         : sharedWin ? 'A dead heat — the win is shared. 🤝'
-                        : currentUserWon ? 'You won! 🎉' : `${playerName(gameData?.winner)} built the better network.`}
+                        : currentUserWon ? 'You won! 🎉' : `${playerName(displayedWinner)} built the better network.`}
                     gameId={gameId}
                     gameUrl="traintime"
                     usernameList={usernameList}
@@ -360,15 +414,17 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                             onClaim={() => setClaiming(true)}
                             claimableCount={claimableRoutes.size}
                             onDrawTickets={() => submitCommand(new TrainTimeDrawTickets(), undefined, 'tickets')}
-                            showLog={showLog}
-                            onToggleLog={() => setShowLog(v => !v)}
                             submitCommand={submitCommand}
                             pendingTarget={pendingTarget}
                         />
                     )}
 
+                    {recapAvailable && (
+                        <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} usernames={usernameList} />
+                    )}
+
                     {showLog && (
-                        <MatchHistory entries={gameData?.gameState?.history ?? []} usernames={usernameList} />
+                        <MatchHistory entries={nav.displayedHistory} usernames={usernameList} />
                     )}
                 </>
             )}

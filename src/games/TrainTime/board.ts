@@ -754,16 +754,39 @@ export function buildInitialTrainTimeState(turnOrder: string[]): ITrainTimeSpeci
 }
 
 /**
+ * Recycling the discards into a fresh deck is the only randomness the game
+ * consumes once it has been dealt, so it is the only thing a command has to
+ * record to replay identically (turn recap — see
+ * `docs/turn-recap-and-planning.md`). A log hands back the recorded recycle on
+ * a replay and a fresh shuffle otherwise; one draw can recycle more than once
+ * (a market refill after an Engine wipe), so the recorded shuffles are a list
+ * consumed in order.
+ */
+export class TrainTimeShuffleLog {
+    private next = 0;
+    constructor(readonly shuffles: TrainTimeCardColour[][] = []) {}
+
+    recycle(discard: TrainTimeCardColour[]): TrainTimeCardColour[] {
+        const recorded = this.shuffles[this.next];
+        const deck = recorded ? [...recorded] : shuffle(discard);
+        this.shuffles[this.next++] = [...deck];
+        return deck;
+    }
+}
+
+/**
  * Tops the market back up to five from the deck (reshuffling the discards in
  * when the deck runs dry) and applies the three-Engine wipe rule (§4). Shared
  * by setup and by every draw, so the market can only ever be refilled one way.
+ * `log` is the drawing command's shuffle recorder (see TrainTimeShuffleLog);
+ * setup passes none, because a full deck can't run dry.
  */
-export function refillMarket(state: ITrainTimeSpecificGameState): void {
+export function refillMarket(state: ITrainTimeSpecificGameState, log?: TrainTimeShuffleLog): void {
     // A wipe can deal a market that needs wiping again, so this repeats — but
     // only while there are enough cards left to actually replace five.
     for (let guard = 0; guard < 10; guard++) {
         while (state.market.length < MARKET_SIZE) {
-            const card = drawFromDeck(state);
+            const card = drawFromDeck(state, log);
             if (card === null) break;
             state.market.push(card);
         }
@@ -776,10 +799,13 @@ export function refillMarket(state: ITrainTimeSpecificGameState): void {
  * Takes the top card off the deck, recycling the discard pile into a fresh
  * shuffled deck first if needed (§5). Null when there are no cards left at all.
  */
-export function drawFromDeck(state: ITrainTimeSpecificGameState): TrainTimeCardColour | null {
+export function drawFromDeck(
+    state: ITrainTimeSpecificGameState,
+    log?: TrainTimeShuffleLog,
+): TrainTimeCardColour | null {
     if (state.deck.length === 0) {
         if (state.discard.length === 0) return null;
-        state.deck = shuffle(state.discard);
+        state.deck = log ? log.recycle(state.discard) : shuffle(state.discard);
         state.discard = [];
     }
     return state.deck.pop() ?? null;
