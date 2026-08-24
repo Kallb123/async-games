@@ -476,6 +476,12 @@ Time and Outbreak use. `{ kind: 'endTurn' }` banks up to 4 AP, runs Phase 2 and
 Phase 3 inside the same `Execute`, advances `activeFirefighter`, and returns
 `turnOver: true` only when the next figure has a different owner.
 
+**`endTurn` being the only kind that consumes randomness is load-bearing**, and
+not just tidiness: it is what makes the crew planner of 17.5 possible, since a
+plan that never queues `endTurn` resolves no dice at all. Keep Advance Fire out of
+every other kind, and out of `CheckEndTurn` — which runs during replay too, so a
+fire lit there would burn inside a plan with no command accounting for it.
+
 **Recorded randomness is the hard part of this game.** A single Advance Fire can
 roll many times: the initial d6/d8, a re-roll for an invalid replenish target,
 and one further full resolution per hot spot flare-up, which can chain. The
@@ -499,12 +505,88 @@ is explicit that hidden POI identity is what stops the game being a pure
 logistics optimisation; leaving it in the response hands every player a
 `Ctrl+Shift+I` cheat that deletes a design pillar.
 
-### 17.5 The commits
+### 17.5 Turn recap & planning
+
+`docs/new-game.md` §7 wants this settled before step 1, and 17.4 has already paid
+for most of it: the snapshot, the redaction and `nextRoll`'s recorded-roll cursor
+are all replay decisions. This subsection records the three-column outcome for
+the table in
+[`turn-recap-and-planning.md`](../turn-recap-and-planning.md#per-game-status).
+
+**Replay — yes**, from the `initialSpecificGameState` snapshot of 17.4, with
+`recordedRolls` as the ordered cursor. The field name matters: the command route
+strips every incoming `recorded…` property, because each `Execute` prefers a
+recorded value over rolling fresh and a player could otherwise post their own
+fire. `recordedRolls` is correctly named; something like `rollLog` would not be
+covered.
+
+**Recap — yes.** This game's away-time story is the strongest in the repo — the
+fire advanced once per crewmate since you last looked — and step 2's `nextRoll`
+design is what makes replaying it honest.
+
+**Planning — yes, in two modes**, and unlike Outbreak it costs no schema change
+and no new command class. 17.4 already puts AP on the firefighter
+(`apLeft`/`bankedAp`) and already makes `endTurn` the separate command that runs
+Advance Fire, which is exactly the shape planning needs. The general pattern is
+[in the shared doc](../turn-recap-and-planning.md#planning-what-can-be-planned).
+
+#### Mode 1 — the crew planner (fire frozen)
+
+Queue any `FiresOutAction` for any figure, in any order, and stop short of
+`endTurn`. Because the whole spending half of a turn is deterministic, the plan
+resolves no randomness whatsoever: it answers "can this crew reach the two
+victims in the east wing and still get out", which is the question §14.2's
+quarterback problem is really about, and which no amount of table talk can compute.
+
+Note that `activeFirefighter` (gap 3 in 17.2) makes stepping by *figure* and by
+*player* the same feature here, so the crew planner and solitaire multi-pawn play
+(step 12) share their UI rather than each inventing one.
+
+**Say what it is:** with the fire frozen the plan shows a board that cannot
+occur, because the fire advances once per figure in the real game. It is a reach
+and AP calculator, not a forecast.
+
+#### Mode 2 — one possible fire
+
+Fires Out can do what Outbreak never can: queue `endTurn` too, and roll the fire.
+A fabricated d6/d8 discloses **nothing**, because the dice are memoryless —
+there is no stored ordering for a hypothetical to diverge from, so the planned
+roll is a genuine sample rather than a peek. This is the honest version of the
+"decoy" idea, and it is honest here precisely because the randomness isn't a
+deck.
+
+Two constraints:
+
+* **The POI pool is a deck, not a die.** Replenish draws from the pool shuffled
+  once into `initialSpecificGameState`, so a planned Replenish must draw a decoy
+  from the pool's *remaining composition* (a known count of victims and false
+  alarms) rather than the real next marker. Drawing the real one would hand the
+  player the identity §10's design note exists to hide.
+* **This mode puts client-supplied rolls on a live command class.** Planned rolls
+  are recorded so stepping back and forth doesn't re-roll them, and
+  `resolvedPlannedCommands` round-trips through the browser. The route's
+  `recorded…` strip is what keeps that out of live play; the mode is unsafe
+  without it.
+
+Ship mode 1 first. Mode 2 is more impressive and less useful — one sample of a
+fire is a poor guide to a plan, and the frozen calculator is what players will
+actually reason with.
+
+#### Cross-player planning
+
+The timeline endpoint clamps planned `senderId`s to the caller, so planning a
+crewmate's figure needs the same per-game route opt-in Outbreak describes
+(`outbreak-gdd.md` §21.5). Fires Out qualifies for the same reason: 17.3 already
+requires every crewmate's AP, Specialist and position to be visible to everyone,
+because the app has no chat. Nothing about a planned crewmate turn is hidden
+from the planner in live play either.
+
+### 17.6 The commits
 
 Each step leaves `npm run build`, `npx tsc --noEmit` and `npm test` green and is
 reviewable on its own. From step 5 the game is playable by hand.
 
-**1 — The two shared co-op steps.** `outbreak-gdd.md` §21.5 steps 1 and 7:
+**1 — The two shared co-op steps.** `outbreak-gdd.md` §21.6 steps 1 and 7:
 extract one `finishGame()` and put the `teamwin`/`teamloss` outcome inside it
 (including the `$cond` aggregation in `getPlayerStats` that duplicates
 `outcomeFor()`), and let the cron resolve a timeout by executing the game's own
@@ -609,10 +691,11 @@ eight rows plus the four abilities that aren't AP arithmetic (Imaging remote
 reveal, Paramedic escort, Hazmat on-site disposal, Driver/Operator re-roll).
 
 **11 — Recap, stats, ship.** `recap.ts` plus a replay adapter and
-`useTurnRecap`/`useTurnNavigation`/`TurnNavControls` on the board screen. This
-game's away-time story is unusually strong — the fire advanced once per crewmate
-since you last looked — and step 2's `nextRoll` design is what makes replaying
-it honest. Result stats need all four pieces in `GameResultData.ts`: the schema
+`useTurnRecap`/`useTurnNavigation`/`TurnNavControls` on the board screen, with
+`canPlan={false}` for now. This game's away-time story is unusually strong — the
+fire advanced once per crewmate since you last looked — and step 2's `nextRoll`
+design is what makes replaying it honest. Result stats need all four pieces in
+`GameResultData.ts`: the schema
 def, the `FiresOutGameResult` discriminator, `computeFiresOutResultStats`
 (rescued, lost, damage placed, turns survived, ruleset and tier) and
 `formatFiresOutResultStats` wired into `GAME_RESULT_STATS` — miss the formatter
@@ -631,7 +714,23 @@ first call. Per `docs/new-game.md`'s solo gotcha, the setup screen becomes
 mode-dependent: solo hardcodes `UNLIMITED_TURN_TIMER` and drops both
 `TurnTimerSelect` and `UserInviteList`, in favour of a crew-size picker.
 
-### 17.6 Testing
+**13 — The crew planner.** Mode 1 of 17.5, and cheap by this point: no schema
+change and no new command, because AP already lives on the figure and `endTurn`
+is already separate. `canPlan={!complete}`, planning actions that pick which
+*figure* is acting, the route opt-in for cross-player planning, and one place
+that refuses to queue `endTurn` — that exclusion is the entire safety argument,
+so it wants a comment saying so rather than being spread across the action
+picker. Deliberately after step 12: multi-pawn control and planning by figure are
+the same UI problem, and doing them together avoids solving it twice.
+
+**14 — One possible fire, optional.** Mode 2 of 17.5: `endTurn` becomes
+queueable, planned rolls resolve through `nextRoll` and come back on
+`resolvedPlannedCommands`, and a planned Replenish draws a decoy POI from the
+pool's remaining composition rather than the real next marker. Last because it is
+the least useful of the two modes and the one most likely to be misread as a
+forecast.
+
+### 17.7 Testing
 
 `FiresOutLogic.test.ts` follows `SolitaireLogic.test.ts`'s harness — an
 in-memory `makeGame()`/`cmd()` pair over a plain `IGameData`-shaped object, no

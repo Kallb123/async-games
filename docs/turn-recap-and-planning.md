@@ -90,6 +90,143 @@ Creation-time randomness (e.g. turn-order rolls) is fine as long as its **result
 is already persisted in a stable field (like `gameState.turnOrder`) — the adapter
 seeds the initial state from those persisted fields.
 
+## Planning: what can be planned
+
+Recap is a question about whether a game *can* be replayed. Planning is a
+question about whether a hypothetical turn can be shown to a player without
+telling them something the live game is keeping from them. Three questions
+settle it, and the third is the one worth designing for up front.
+
+**1. Is the randomness memoryless or stateful?** A die is memoryless: nothing
+about the real roll exists anywhere before it is rolled, so a hypothetical roll
+is statistically identical to the real one and discloses nothing. A deck is
+stateful: its order is persisted, finite and consumed, so resolving a
+hypothetical draw reads the exact thing the design is hiding. This is the whole
+of Train Time's original `✖ by design` — "a hypothetical draw would deal off
+the real deck and show the player the card at the top of it".
+
+**2. If it is stateful, is the remaining *multiset* already public?** Contents
+and order are different secrets. A game whose hands and discards are all public
+has already disclosed *what* is left in the deck and is hiding only the order.
+Such a game can safely draw from a **decoy deck** — reshuffled from the correct
+remaining multiset — because a permutation of public information is still public
+information. A game with hidden hands cannot: the decoy would disclose the
+contents. Note that "public" means *public by design*, not merely present in
+today's response; a DTO that over-shares is a bug to fix, not a licence to plan
+against.
+
+**3. Is the step that touches the deck its own command?** This is the
+engineering constraint. If a deck is consumed inside the same `Execute` as a
+deterministic action, planning cannot avoid it. If it has its own command class,
+planning avoids it for free by never queueing that command. That is a **deck
+freeze**, and it is the pattern that unblocks most of the games below.
+
+### Deck freeze
+
+Queue the deterministic part of a turn — across as many players as you like —
+and stop short of the command that would touch the deck. Nothing is redacted,
+nothing is faked, and no recorded randomness is involved, because the only
+command that consumes randomness is the one the planner declines to queue.
+
+What this produces is not a picture of the future. It is an **action-budget and
+reach calculator**: given where everyone stands and what everyone holds, what
+can the table actually accomplish? For a co-op game that is the question players
+argue about, and its answer does not depend on the deck at all.
+
+The caveat has to reach the player, because the natural "improvement" someone
+will later reach for is to resolve the deck. A frozen-deck plan shows a board
+that **cannot occur** — in the real game the deck fires between each player's
+turn. A city that is clean in the plan may be alight by the time the fourth
+player gets there, and a plan that avoids disaster is not a promise that the
+turn will. Label it as a budget calculator, not a forecast.
+
+### Decoy decks
+
+Where question 2 is a yes, planning can go further and resolve a draw from a
+reshuffled copy of the remaining multiset. Two things make this less attractive
+than it sounds:
+
+- **A decoy must reproduce deck *construction*, not just composition.** Outbreak
+  builds its player deck as piles with one epidemic each, so players can infer
+  "an epidemic is due within k draws" from public counts. A uniform reshuffle
+  destroys that and shows epidemics at plausible-but-wrong positions — which is
+  worse than freezing the deck, because it is confidently wrong about the one
+  variable that decides whether a plan survives.
+- **It answers a weaker question.** One sample from a distribution is not a
+  strategy test, and players will over-read it: the plan "worked" when it worked
+  in one future out of forty.
+
+It also puts client-supplied randomness back in play. A decoy's draws have to be
+recorded so stepping back and forth doesn't reshuffle them, and
+`resolvedPlannedCommands` round-trips through the browser — so the command class
+that runs during planning is a class whose recorded fields arrive from a client.
+`stripRecordedRandomness` (above) is what keeps that from reaching live play, and
+it is a prerequisite for any decoy mode rather than an afterthought.
+
+Where the randomness is memoryless the decoy is unambiguously right, because
+there is no real ordering to diverge from: a fabricated d6 *is* the honest
+hypothetical. Fires Out is the clean case.
+
+### Cross-player planning
+
+`POST /api/game/[gameid]/timeline` overwrites every planned command's `senderId`
+with the caller — "for v1 planning we only let a user plan their own moves". The
+replay engine itself has no such limit: `applyCommands` sets `state.currentTurn =
+command.senderId` before every `Execute`, so a planned command from another
+player already makes it that player's turn. Planning a whole table's turns is
+therefore a route change, not an engine change.
+
+It must stay opt-in per game. In a co-op game with open hands, planning a
+teammate's turn discloses nothing and is the entire point. In a competitive game
+it would both leak and mislead. Games opting in declare it alongside their replay
+adapter; the default stays own-moves-only.
+
+### Per-game analysis
+
+| Game | Randomness | Multiset public by design? | Deck step separable? | Planning |
+|---|---|---|---|---|
+| Snakes & Ladders | die only | n/a | n/a | Shipped |
+| Dice Cities | dice only — **no deck exists** | n/a | n/a | Nothing blocks full planning |
+| Smartthink | none — the leak is the rules, not RNG | n/a | n/a | Out, and neither pattern helps |
+| Settlements & Cities | dice + dev-card deck | No (dev cards hidden) | Yes — `SACBuyDevCard` | Deck freeze |
+| World Domination | battle dice + card deck | No (cards face-down) | Yes — the draw sits in `riskEndTurn` | Deck freeze |
+| Train Time | deck draws + mid-game recycle | No (hands viewer-scoped) | Yes — `ClaimRoute`/`PassTurn` are deterministic | Deck freeze |
+| Solitaire | shuffled face-down deal | No | No — drawing *is* the game | Out |
+| Outbreak | both decks + Intensify shuffle | **Yes** (hands and discards public by §2) | By design — see its GDD | Deck freeze (decoy rejected) |
+| Fires Out | d6/d8 + POI pool | Yes (pool composition known) | Yes — `endTurn` | Deck freeze **and** decoy |
+
+Three of the four "deferred" games above were deferred for a reason that no
+longer holds, and one was ruled out for a reason narrower than it looked:
+
+- **Dice Cities** has no deck and no hidden information whatsoever — its only
+  randomness is two dice. The stated blocker was that "a turn is a multi-step
+  sequence, so a planned turn isn't one command", which the machinery retired:
+  planning has always been per *command*, not per turn (`TurnNavControls`
+  renders "Planned move N of M"). It is the cheapest game in the repo to
+  unblock.
+- **Settlements & Cities** was deferred on value, not feasibility. Its dice are
+  memoryless and its only deck lives behind one command, so "given my hand, what
+  can I build, and what does a 9 pay for?" is plannable today.
+- **World Domination** was deferred as "four phases across many commands" —
+  again a per-turn framing. The end-of-turn card draw is the only deck contact
+  and it is reached only through the fortify/end-turn command, so
+  reinforce → attack → occupy is plannable, with battle dice as honest
+  memoryless hypotheticals. "Can I take Asia from here?" is the question the
+  game is made of.
+- **Train Time** should be reclassified from `✖ by design` to deck freeze. The
+  design objection is sound and applies only to *draws*; `TrainTimeClaimRoute`
+  and `TrainTimePassTurn` consume no randomness at all, so "can I claim these
+  three routes with the cards I hold, and in what order?" leaks nothing.
+
+Smartthink and Solitaire stay out, but for sharper reasons than "hidden
+information". Smartthink's leak isn't randomness at all — `SmartthinkSubmitGuess`
+compares against the *real* secret code, so a planned guess returns real
+feedback. Neither pattern touches that: freezing nothing helps, and the only safe
+decoy would score guesses against a fake code, which teaches the player nothing.
+Solitaire's blocker is structural rather than informational — drawing from the
+stock is the game, so a frozen plan is tableau shuffling only, and it has no
+replay adapter and no snapshot to retrofit one onto.
+
 ## Per-game status
 
 Three separate opt-ins, so a game can have one without the others:
@@ -104,12 +241,20 @@ Three separate opt-ins, so a game can have one without the others:
 | Game | Replay | Recap | Planning |
 |---|---|---|---|
 | Snakes & Ladders | ✅ from scratch | ✅ (tip) | ✅ |
-| Dice Cities | ✅ from scratch | ✅ (tip) | ✖ deferred |
+| Dice Cities | ✅ from scratch | ✅ (tip) | 🚧 unblocked, not built |
 | Smartthink | ✅ from scratch | ✖ by design | ✖ by design |
-| Settlements & Cities | ✅ from snapshot | ✅ (tip) | ✖ deferred |
-| World Domination | ✅ from snapshot | ✅ (tip, `postProcess`) | ✖ deferred |
+| Settlements & Cities | ✅ from snapshot | ✅ (tip) | 🚧 deck freeze, not built |
+| World Domination | ✅ from snapshot | ✅ (tip, `postProcess`) | 🚧 deck freeze, not built |
 | Solitaire | ✖ by design | ✖ by design | ✖ by design |
-| Train Time | ✅ from snapshot | ✅ (tip, `postProcess`) | ✖ by design |
+| Train Time | ✅ from snapshot | ✅ (tip, `postProcess`) | 🚧 deck freeze, not built |
+| Outbreak | 🚧 planned (snapshot) | 🚧 planned (tip) | 🚧 planned — crew planner |
+| Fires Out | 🚧 planned (snapshot) | 🚧 planned (tip) | 🚧 planned — two modes |
+
+Outbreak and Fires Out are designed but unbuilt; their rows record the decisions
+their GDDs commit to (`docs/games/outbreak-gdd.md` §21.5,
+`docs/games/fires-out-gdd.md` §17.5). The four 🚧 planning cells above them are
+the [per-game analysis](#per-game-analysis) result: feasible, with the pattern
+named, and nobody has written the UI.
 
 "From scratch" means the adapter rebuilds the starting state from persisted,
 never-changing fields. "From snapshot" means creation-time randomness is
@@ -144,8 +289,12 @@ The pilot for all three features, and still the only game with planning.
   "…took 2🪙 from **you**".
 - **Recap** — the roll (money movement folded in), each establishment bought,
   and each of the four win-condition landmarks unlocked.
-- **Planning** — `canPlan={false}`. A turn is a multi-step sequence (roll,
-  optional re-roll, buy), so a planned "turn" isn't one command.
+- **Planning** — `canPlan={false}`, but nothing blocks it. The original reason
+  (a turn is a multi-step sequence — roll, optional re-roll, buy — so a planned
+  "turn" isn't one command) doesn't hold: planning is per *command*, not per
+  turn. Dice Cities has no deck, no shuffle and no redaction anywhere, so its
+  only randomness is two memoryless dice and a hypothetical roll is as honest as
+  a real one. Cheapest planning in the repo to switch on.
 
 ### Smartthink
 
@@ -154,7 +303,11 @@ The pilot for all three features, and still the only game with planning.
   restored by replaying `SmartthinkSetSecretCode`).
 - **Recap and planning are both intentionally disabled.** Smartthink is a
   deduction game: recapping an opponent's guesses, or testing a hypothetical
-  guess against the real code, would hand out free feedback. It registers no
+  guess against the real code, would hand out free feedback. Neither the deck
+  freeze nor the decoy helps, because the leak isn't randomness at all —
+  `SmartthinkSubmitGuess` scores against the *real* secret, so there is no
+  randomness to freeze, and the only safe decoy would score guesses against a
+  fake code, which teaches the player nothing. It registers no
   `recap.ts` at all, and its board page mounts `useTurnNavigation` with
   `canPlan={false}` and no `useTurnRecap`.
 
@@ -170,8 +323,12 @@ The pilot for all three features, and still the only game with planning.
   the build that caused it). Low-signal chatter (roads, maritime trades,
   end-turn) is skipped. Inherits the `recapAvailable` gate: a game with no
   snapshot throws on replay and `buildEventFeed` treats that as "no recap".
-- **Planning** — deferred; low value in a game whose turns are long sequences
-  of trades and builds.
+- **Planning** — deferred on *value*, not feasibility: turns are long sequences
+  of trades and builds. Feasible as a deck freeze whenever it's wanted — the
+  dice are memoryless and `SACBuyDevCard` is the only command that touches the
+  dev-card deck, so a plan that never buys a dev card resolves nothing hidden.
+  "Given this hand, what can I build, and what does a 9 pay for?" is the shape
+  it would take.
 
 ### World Domination
 
@@ -188,8 +345,14 @@ The pilot for all three features, and still the only game with planning.
   the `WorldDominationOccupyTerritory` that follows it are two commands but one
   logical conquest, and `toEvents` only ever sees one command at a time, so the
   merge happens in the post-pass over the full event list.
-- **Planning** — deferred. A turn spans four phases (reinforce → attack →
-  occupy → fortify) across many commands, same shape of problem as Dice Cities.
+- **Planning** — deferred, and for the same per-turn framing as Dice Cities: a
+  turn spans four phases (reinforce → attack → occupy → fortify) across many
+  commands. As a deck freeze it works, because the only deck contact is the
+  end-of-turn card draw in `riskEndTurn`, reached only through the
+  fortify/end-turn command — so reinforce → attack → occupy is plannable and
+  battle dice are honest memoryless hypotheticals. What a plan can't tell you is
+  which card a conquest would win. A decoy deck is *not* available here: cards
+  are face-down by design, so the remaining multiset isn't public.
 
 ### Solitaire
 
@@ -198,6 +361,9 @@ turns, which is exactly the gap "since you were last here" exists to fill.
 There's no replay adapter, the board page mounts neither `useTurnNavigation`
 nor `useTurnRecap`, and the end-of-game moment is a one-off
 `SolitaireVictoryScreen` instead of a recap card.
+
+Planning is out on top of that, and structurally rather than informationally:
+drawing from the stock *is* the game, so a deck freeze leaves tableau moves only.
 
 If we ever wanted "step back through my own game" review here, it would need
 both of the harder patterns below: a snapshot (the deal is shuffled) *and* a
@@ -228,12 +394,38 @@ is also the game that closed the viewer gap below.
   public information only**: a face-up card taken is named, a blind draw and a
   kept ticket are only ever counts (design doc §10). The tip is the exception —
   it reads the viewer's own hand, which is why the feed replays per viewer.
-- **Planning** — `canPlan={false}`, **by design**: a hypothetical draw would
-  deal off the real deck and show the player the card at the top of it.
+- **Planning** — `canPlan={false}`. The design objection stands and is exact: a
+  hypothetical *draw* would deal off the real deck and show the player the card
+  at the top of it. It only ever applied to draws, though, so this is a deck
+  freeze rather than a flat no — `TrainTimeClaimRoute` and `TrainTimePassTurn`
+  consume no randomness at all, and "can I claim these three routes with the
+  cards I hold, and in what order?" leaks nothing. A decoy is out: hands are
+  viewer-scoped, so the deck's remaining multiset isn't public.
 - **Result charts** — route points and longest run per turn, sampled from the
   same replay. The points line is the race as it ran; the Long Haul line moves
   in jumps as separate stretches of network finally join up, which is why it's
   worth plotting beside the points rather than as a rescaling of them.
+
+### Outbreak and Fires Out (designed, unbuilt)
+
+Both are co-op, both are designed for replay from day one, and both are the
+reason the [planning analysis](#planning-what-can-be-planned) above exists. The
+designs live with the games rather than here — `docs/games/outbreak-gdd.md` §21.5
+and `docs/games/fires-out-gdd.md` §17.5 — but the shape of each is worth knowing
+when reading the table:
+
+- **Outbreak** ships a **crew planner**: queue any player's board actions, in any
+  order, across the whole table, and stop at the command that draws. Its decks
+  make it the one game where a decoy would be leak-free (hands and discards are
+  public by design, so only order is secret) and its GDD records why that was
+  rejected anyway.
+- **Fires Out** gets both modes, because its randomness is two dice rather than a
+  deck order: the same frozen crew planner, plus an optional hypothetical
+  `endTurn` that rolls the fire. A fabricated d6/d8 discloses nothing, which is
+  what Outbreak can never say about a card.
+
+Both need the cross-player opt-in described above; neither is buildable as
+own-moves-only planning, since the whole point is reading the *table's* budget.
 
 ### Viewer-scoped state
 
