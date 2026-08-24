@@ -245,8 +245,10 @@ replay engine, so no new replay-determinism harness is needed.
 that a `recap.ts` which *exists* is imported by the engine — nothing fails when
 a game has none. Adapters are covered by per-game unit tests
 (`DiceCities/recap.test.ts`, `SettlementsAndCities/recap.test.ts`). The
-parity assertion above is still worth adding: Train Time was built without a
-recap adapter, which is exactly what it was meant to catch.
+parity assertion above is still worth adding: Train Time shipped without a
+recap adapter and only got one a release later, which is exactly what it was
+meant to catch — and what it cost is every Train Time game dealt in between,
+which can never have one.
 
 ## 10. New / touched files at a glance
 
