@@ -68,6 +68,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Solitaire stops suggesting pointless King moves",
+                detail: "Sliding a King that's already the base of its column into an empty space changes nothing, so it no longer clutters the move list or gets offered as a hint — and a board with nothing left but that shuffle is now correctly called out as stuck.",
+                game: "solitaire",
+            },
+            {
                 title: "Your hand is actually your hand",
                 detail: "World Domination sent every player's territory cards to everyone, and Settlements & Cities did the same with resource hands and development cards — hidden on screen, but sitting in plain sight for anyone who went looking. Now only you get yours; everyone else sees a count, the way the games always meant it.",
             },
@@ -82,10 +87,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Your lobby takes you into the game",
                 detail: "Waiting on the lobby screen when the last seat fills now drops everyone straight onto the board instead of back at the home screen.",
-            },
-            {
-                title: "Open-seat games get their code",
-                detail: "Setting up a game with open seats and nobody invited no longer fails with an error — you get the code to share straight away.",
             },
         ],
     },

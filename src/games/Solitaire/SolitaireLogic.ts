@@ -14,6 +14,7 @@ import {
     hasHiddenTableauCards,
     isValidSequence,
     SolitaireZoneRef,
+    toLegalMoveState,
 } from "@/games/Solitaire/rules";
 
 // Standard/Microsoft scoring rules (docs/games/solitaire.md §5.1).
@@ -335,8 +336,7 @@ export class SolitaireAutoSolve implements IGameCommand {
         let progressed = false;
         let stagnantMoves = 0;
         for (let i = 0; i < AUTO_SOLVE_MAX_ITERATIONS && foundationCardCount(state.foundations) < 52; i++) {
-            const legalState = { waste: state.waste, foundations: state.foundations, tableau: state.tableau, stockCount: state.stock.length };
-            const moves = getLegalMoves(legalState);
+            const moves = getLegalMoves(toLegalMoveState(state));
             const foundationMove = moves.find((m) => m.destination.zone === 'foundation');
             const chosen = foundationMove
                 ?? (stagnantMoves < AUTO_SOLVE_STAGNATION_LIMIT

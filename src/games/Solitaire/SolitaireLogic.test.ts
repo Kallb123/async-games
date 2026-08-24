@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SolitaireDraw, SolitaireMoveCard, SolitaireUndo, SolitaireAutoSolve, SolitaireGameType } from "./SolitaireLogic";
 import { buildInitialSolitaireState, ISolitaireGameData, ISolitaireGameState } from "./SolitaireModels";
-import { canPlaceOnFoundation, canPlaceOnTableau, foundationCardCount, getLegalMoves, hasAnyLegalMove } from "./rules";
+import { canPlaceOnFoundation, canPlaceOnTableau, foundationCardCount, getLegalMoves, hasAnyLegalMove, toLegalMoveState } from "./rules";
 import { ICard, Suit, SUITS } from "@/utils/games/Cards";
 
 // ─── Minimal in-memory game harness ───────────────────────────────────────────
@@ -296,7 +296,7 @@ describe("full-game simulation", () => {
         for (let turn = 0; turn < 500 && !game.complete; turn++) {
             expect(countAllCards(state)).toBe(52);
 
-            const legal = getLegalMoves({ waste: state.waste, foundations: state.foundations, tableau: state.tableau, stockCount: state.stock.length });
+            const legal = getLegalMoves(toLegalMoveState(state));
             const best = legal.find(m => m.recommended) ?? legal[0];
 
             if (best) {
@@ -311,7 +311,7 @@ describe("full-game simulation", () => {
                 expect(outcome.validMove).toBe(true);
             } else {
                 // Genuinely stuck: no legal move and nothing left to draw/recycle.
-                expect(hasAnyLegalMove({ waste: state.waste, foundations: state.foundations, tableau: state.tableau, stockCount: state.stock.length })).toBe(false);
+                expect(hasAnyLegalMove(toLegalMoveState(state))).toBe(false);
                 break;
             }
 
@@ -333,11 +333,52 @@ describe("getLegalMoves ordering", () => {
         state.waste = [{ rank: 1, suit: 'S', faceUp: true }];
         state.tableau[0] = [{ rank: 2, suit: 'H', faceUp: true }];
 
-        const moves = getLegalMoves({ waste: state.waste, foundations: state.foundations, tableau: state.tableau, stockCount: 0 });
+        const moves = getLegalMoves({ ...toLegalMoveState(state), stockCount: 0 });
 
         expect(moves.length).toBeGreaterThanOrEqual(2);
         expect(moves[0].destination.zone).toBe('foundation');
         expect(moves[0].recommended).toBe(true);
+    });
+});
+
+describe("getLegalMoves and empty columns", () => {
+    it("doesn't offer relocating a King that's already the base of its column into an empty one", () => {
+        const state = baseState();
+        state.tableau[0] = [{ rank: 13, suit: 'S', faceUp: true }, { rank: 12, suit: 'H', faceUp: true }];
+
+        const moves = getLegalMoves(toLegalMoveState(state));
+
+        expect(moves.filter(m => m.destination.zone === 'tableau' && state.tableau[m.destination.column].length === 0)).toEqual([]);
+    });
+
+    it("still offers an empty column to a King that frees a face-down card", () => {
+        const state = baseState();
+        state.tableau[0] = [{ rank: 4, suit: 'D', faceUp: false }, { rank: 13, suit: 'S', faceUp: true }];
+
+        const moves = getLegalMoves(toLegalMoveState(state));
+
+        expect(moves).toHaveLength(6); // one per empty column
+        expect(moves.every(m => m.reason === 'Frees a face-down card')).toBe(true);
+    });
+
+    it("still offers an empty column to a King from the waste", () => {
+        const state = baseState();
+        state.waste = [{ rank: 13, suit: 'S', faceUp: true }];
+
+        const moves = getLegalMoves(toLegalMoveState(state));
+
+        expect(moves).toHaveLength(7);
+        expect(moves.every(m => m.source.zone === 'waste')).toBe(true);
+    });
+
+    it("counts a board that can only shuffle Kings between empty columns as stalemated", () => {
+        const state = baseState();
+        // Nothing to draw, and the only "legal" moves left are relocating
+        // these two already-based Kings into the empty columns.
+        state.tableau[0] = [{ rank: 13, suit: 'S', faceUp: true }];
+        state.tableau[1] = [{ rank: 13, suit: 'H', faceUp: true }];
+
+        expect(hasAnyLegalMove(toLegalMoveState(state))).toBe(false);
     });
 });
 

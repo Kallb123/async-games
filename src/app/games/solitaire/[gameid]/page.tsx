@@ -54,7 +54,7 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
 
     const handleHint = () => {
         if (!state) return;
-        const moves = getLegalMoves({ waste: state.waste, foundations: state.foundations, tableau: state.tableau, stockCount: state.stockCount });
+        const moves = getLegalMoves(state);
         const best = moves.find(m => m.recommended);
         if (best) {
             showToast(`${best.label} — ${best.reason}`, 'info', 'Hint');
@@ -69,7 +69,7 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
     // doesn't re-derive a "final" score every second while it's being read.
     const elapsedSeconds = useElapsedSeconds(state?.startedAt, !complete);
     const foundationCount = state ? foundationCardCount(state.foundations) : 0;
-    const stalemated = !!state && !complete && !hasAnyLegalMove({ waste: state.waste, foundations: state.foundations, tableau: state.tableau, stockCount: state.stockCount });
+    const stalemated = !!state && !complete && !hasAnyLegalMove(state);
     const autoSolveAvailable = !!state && !complete && !hasHiddenTableauCards(state.tableau);
 
     let subtitle: React.ReactNode = 'Loading…';

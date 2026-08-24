@@ -135,7 +135,7 @@ $$\text{Black King} \longrightarrow \text{Red Queen} \longrightarrow \text{Black
 
 
 * **Sequence Movement:** A contiguous, ordered sequence of face-up cards can be moved as a collective unit onto another column if the top card of the sequence forms a valid placement.
-* **Empty Column Rule:** Only a **King** (or a valid sequence starting with a King) can be placed into an empty Tableau column slot.
+* **Empty Column Rule:** Only a **King** (or a valid sequence starting with a King) can be placed into an empty Tableau column slot. Relocating a King that already sits at the *bottom* of its column into an empty slot changes nothing on the board, so the offered-move list (tap-to-move sheet, hint, auto-solve) leaves it out — and it never counts towards escaping a stalemate.
 * **Card Uncovering:** When a move exposes a face-down card at the top of a Tableau column, that card is immediately flipped face-up.
 
 #### 3. Stock & Waste Management
@@ -171,7 +171,7 @@ $$\text{Black King} \longrightarrow \text{Red Queen} \longrightarrow \text{Black
 
 * **Absolute Victory:** All 52 cards reside in the 4 Foundation piles ($13 \times 4$).
 * **Auto-Win State:** Achieved when all 28 Tableau cards are face-up and the Stock/Waste contains no unplayed cards that block sequential progression.
-* **Stalemate / Deadlock:** No further legal moves are available across Stock, Waste, and Tableau, leaving $< 52$ cards in the Foundations.
+* **Stalemate / Deadlock:** No further *progressing* legal moves are available across Stock, Waste, and Tableau, leaving $< 52$ cards in the Foundations. A board whose only remaining option is shuffling a King between empty columns is deadlocked.
 
 ---
 
