@@ -39,6 +39,14 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Turn review, in the game's colours",
+                detail: "Stepping back through a match now happens on a warm dark scrubber with a turn track, and the screen stays in the app's theme instead of running to white below it.",
+            },
+            {
+                title: "The match log reads like a timeline",
+                detail: "Open the log in any game and the moves run down a thread, each dotted in the colour of the player who made it.",
+            },
+            {
                 title: "Zoom in on the World Domination map",
                 detail: "Tap Zoom in to blow the map up and pan around it, so those crowded territories are easy to hit — the same toggle Train Time has.",
                 game: "worlddomination",
@@ -50,14 +58,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "A name, ready before you type it",
                 detail: "Joining as a guest now suggests a random name like JumpingJackal — keep it, tweak it, or tap the dice for another.",
-            },
-            {
-                title: "Guests can explore before signing up",
-                detail: "Set up a game or add friends as a guest — the host button greys out with a straight line to Settings when you're ready to sign up.",
-            },
-            {
-                title: "Keep the account you're already playing on",
-                detail: "Played your first turn as a guest? Add an email and password and it's yours for good — every game and result carries over.",
             },
         ],
     },

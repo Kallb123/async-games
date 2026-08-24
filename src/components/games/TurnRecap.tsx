@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { formatRelativeTime } from '@/utils/ui/time';
 import { useNowToTheMinute } from '@/utils/hooks/useNow';
 import ReactionPicker from '@/components/ui/ReactionPicker';
+import RecapTimeline from '@/components/ui/RecapTimeline';
 
 export interface TurnRecapEvent {
     id: string;
@@ -62,32 +63,20 @@ export default function TurnRecap({ header, summary, events, tip, cta, backHref 
                 <h1 className="ag-recap-headline">{summary.headline}</h1>
                 <p className="ag-recap-subline">{summary.subline}</p>
 
-                <ol className="ag-recap-timeline">
-                    {events.map((event) => {
-                        const when = formatRelativeTime(event.timestamp, now);
-                        const detail = [event.detail, when].filter(Boolean).join(' · ');
-                        return (
-                            <li key={event.id} className="ag-recap-event">
-                                <span className="ag-recap-dot" style={{ background: event.dotColour }} />
-                                <div className="ag-recap-event-card">
-                                    <div className="ag-recap-event-row">
-                                        <div className="ag-recap-event-title">
-                                            {event.title}
-                                            {event.glyph ? ` ${event.glyph}` : ''}
-                                        </div>
-                                        {onReact && (
-                                            <ReactionPicker
-                                                reacted={event.reaction}
-                                                onReact={(reaction) => onReact(event.id, reaction)}
-                                            />
-                                        )}
-                                    </div>
-                                    {detail && <div className="ag-recap-event-detail">{detail}</div>}
-                                </div>
-                            </li>
-                        );
-                    })}
-                </ol>
+                <RecapTimeline
+                    events={events.map((event) => ({
+                        id: event.id,
+                        dotColour: event.dotColour,
+                        title: `${event.title}${event.glyph ? ` ${event.glyph}` : ''}`,
+                        detail: [event.detail, formatRelativeTime(event.timestamp, now)].filter(Boolean).join(' · '),
+                        trailing: onReact ? (
+                            <ReactionPicker
+                                reacted={event.reaction}
+                                onReact={(reaction) => onReact(event.id, reaction)}
+                            />
+                        ) : undefined,
+                    }))}
+                />
 
                 {tip && (
                     <div className="ag-recap-tip">

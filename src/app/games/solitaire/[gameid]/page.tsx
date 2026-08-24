@@ -18,6 +18,7 @@ import { ISolitaireGameDataResponse } from "@/games/Solitaire/apiModels";
 import { SolitaireZoneRef, getLegalMoves, hasAnyLegalMove, hasHiddenTableauCards, foundationCardCount, formatDuration } from "@/games/Solitaire/rules";
 import SolitaireBoard from "@/games/Solitaire/components/SolitaireBoard";
 import SolitaireVictoryScreen from "@/games/Solitaire/components/SolitaireVictoryScreen";
+import MatchHistory from "@/components/games/MatchHistory";
 
 export default function GameSolitaire({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
@@ -161,16 +162,7 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
             {state && complete && <SolitaireVictoryScreen state={state} elapsedSeconds={elapsedSeconds} />}
 
             {showLog && (
-                <div className="ag-log">
-                    <ul className="ag-log-list">
-                        {(gameData?.gameState?.history ?? []).map((h, i) => (
-                            <li key={i} className="ag-log-item">{h}</li>
-                        ))}
-                        {(gameData?.gameState?.history ?? []).length === 0 && (
-                            <li className="ag-log-item">No moves yet.</li>
-                        )}
-                    </ul>
-                </div>
+                <MatchHistory entries={gameData?.gameState?.history ?? []} />
             )}
         </GameShell>
     );

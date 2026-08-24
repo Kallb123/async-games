@@ -28,6 +28,10 @@
 
     --ag-dark: oklch(0.28 0.04 40);
     --ag-on-dark: oklch(0.96 0.01 60);
+    /* Translucent whites for controls painted on `--ag-dark`: a filled surface
+       and the hairline/ring one step up from it. */
+    --ag-veil: rgba(255, 255, 255, 0.08);
+    --ag-veil-line: rgba(255, 255, 255, 0.16);
     --ag-danger: #c0392b;
 
     /* Width of the centred app column. Anything that has to line up with
@@ -45,6 +49,11 @@
     /* Highlight band swept across content that is being refreshed in the
        background — translucent so the rows underneath stay readable. */
     --ag-shimmer: rgba(255, 255, 255, 0.55);
+
+    /* The surface a `.ag-recap-timeline` is standing on. Its dots are haloed in
+       this so they punch through the rail; anywhere the timeline is reused on a
+       different ground (the in-game log, Train Time's panels) re-points it. */
+    --ag-recap-ground: color-mix(in oklch, var(--ag-terracotta) 9%, var(--ag-surface));
 
     color-scheme: light;
 }
@@ -1089,7 +1098,21 @@ button {
  *  it are game-specific. See design section 3.
  * ============================================================= */
 
-.ag-game { display: flex; flex-direction: column; min-height: 100vh; background: var(--ag-surface); }
+/* The shell sits on the app's warm field rather than a flat near-white sheet,
+   so the theme carries all the way to the bottom edge — whatever the board and
+   action panels leave unfilled reads as cream, not a white dead zone. The light
+   wash is sized to one screen rather than the whole document, so it lifts the
+   board at the top and a long page still lands on cream instead of stretching
+   the gradient out into a near-white sheet again. */
+.ag-game {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    background-color: var(--ag-bg);
+    background-image: radial-gradient(circle at 50% 0%, var(--ag-surface), var(--ag-bg) 62%);
+    background-repeat: no-repeat;
+    background-size: 100% 100vh;
+}
 /* The in-game shell is full-bleed: unlike the rest of the app it fills the
    whole screen rather than sitting in the centred mobile column, so no cream
    letterboxing shows around the dark header or below the board/actions. */
@@ -1301,7 +1324,6 @@ button {
 
 /* ---- Your hand ---- */
 .ag-hand {
-    background: var(--ag-surface);
     border-top: 1px solid var(--ag-line);
     padding: 12px 16px 8px;
 }
@@ -1375,7 +1397,10 @@ button {
 }
 
 /* ---- Action sheet (roll prompt / build list) ---- */
-.ag-actionsheet { background: var(--ag-surface); padding: 10px 16px 20px; }
+/* Full-bleed bands inside the shell stay unpainted so the shell's own field
+   shows through them — they read as part of one warm screen rather than white
+   slabs laid over it (their border-tops still divide them). */
+.ag-actionsheet { padding: 10px 16px 20px; }
 .ag-action-hint {
     font: 500 11px/1.4 var(--ag-font);
     color: var(--ag-ink-soft);
@@ -1514,25 +1539,88 @@ button {
     color: var(--ag-terracotta-deep);
 }
 
-/* In-game history / log */
+/* ---- In-game match history ----
+   The design draws the log as a timeline rather than a list of dashes, so it
+   reuses `.ag-recap-*` (rail, player dot, card) at a tighter in-game scale
+   instead of growing a second timeline. It stands on the shell's own field —
+   no white sheet — hence the re-pointed dot halo. */
 .ag-log {
-    background: var(--ag-surface);
-    padding: 4px 16px 20px;
+    --ag-recap-ground: var(--ag-bg);
+    padding: 15px 16px 20px;
 }
-.ag-log-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    max-height: 240px;
-    overflow-y: auto;
+.ag-log .ag-hand-title { margin-bottom: 9px; }
+.ag-log-empty { font: 500 12px var(--ag-font); color: var(--ag-ink-soft); padding: 2px; }
+
+/* ---- Turn review / planning dock ----
+   The scrubber the player steps back through the match with. It's the war-room
+   dock from the design: dark panel, brass transport, and a turn track so the
+   position in the match reads at a glance. */
+.ag-review {
+    margin: 12px 16px;
+    background: var(--ag-dark);
+    color: var(--ag-on-dark);
+    border-radius: 16px;
+    padding: 11px 12px 12px;
+    box-shadow: 0 3px 0 color-mix(in oklch, black 28%, var(--ag-dark));
 }
-.ag-log-item {
-    font: 500 12px/1.45 var(--ag-font);
-    color: var(--ag-ink-soft);
-    padding: 7px 0;
-    border-bottom: 1px dashed var(--ag-line-dashed);
+.ag-review-head { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+.ag-review-title { font: 800 12.5px var(--ag-font); letter-spacing: 0.02em; }
+.ag-review-rule { flex: 1; height: 1px; background: var(--ag-veil-line); }
+.ag-review-pos {
+    font: 700 10px var(--ag-font);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ag-gold);
 }
-.ag-log-item:last-child { border-bottom: none; }
+
+.ag-review-transport { display: flex; gap: 6px; margin-bottom: 10px; }
+.ag-review-btn {
+    flex: 1;
+    padding: 9px 0;
+    border: none;
+    border-radius: 9px;
+    background: var(--ag-veil);
+    box-shadow: inset 0 0 0 1px var(--ag-veil-line);
+    color: var(--ag-on-dark);
+    font: 800 13px var(--ag-font);
+    cursor: pointer;
+}
+.ag-review-btn:hover:not(:disabled) { background: var(--ag-veil-line); }
+.ag-review-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.ag-review-btn--key {
+    background: var(--ag-gold);
+    color: var(--ag-dark);
+    box-shadow: 0 2px 0 color-mix(in oklch, black 22%, var(--ag-gold));
+}
+.ag-review-btn--key:hover:not(:disabled) { background: var(--ag-gold); filter: brightness(1.06); }
+
+/* One tick per point on the timeline: played turns lit, the viewed one brass
+   and tall, anything ahead of it dimmed (hypothetical ones brass-tinted). */
+.ag-review-track { display: flex; align-items: center; gap: 3px; padding: 0 2px 9px; }
+.ag-review-tick { flex: 1 1 0; min-width: 0; height: 6px; border-radius: 2px; background: var(--ag-veil-line); }
+.ag-review-tick--played { background: rgba(255, 255, 255, 0.36); }
+.ag-review-tick--now { height: 12px; background: var(--ag-gold); }
+.ag-review-tick--planned { background: color-mix(in oklch, var(--ag-gold) 45%, transparent); }
+
+.ag-review-now {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    background: var(--ag-veil);
+    border-radius: 11px;
+    padding: 9px 11px;
+}
+.ag-review-swatch { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+.ag-review-now-text { flex: 1; min-width: 0; font: 600 11.5px/1.35 var(--ag-font); }
+.ag-review-now-text b { font-weight: 800; }
+.ag-review-now-when { opacity: 0.6; }
+.ag-review-delta { flex: none; font: 800 10.5px var(--ag-font); color: var(--ag-gold); }
+
+/* The buttons around the dock ride in the shell's usual `.ag-actionsheet` band;
+   only this hint needs a rule of its own. */
+.ag-review-hint { font: 500 11.5px/1.4 var(--ag-font); color: var(--ag-ink-soft); padding: 0 16px; margin-bottom: 8px; }
+.ag-review-error { font: 600 12px var(--ag-font); color: var(--ag-danger); margin-top: 8px; }
+.ag-review .ag-review-error { color: oklch(0.78 0.13 30); }
 
 /* In-game result banner */
 .ag-game-result {
@@ -2062,7 +2150,7 @@ button {
 .ag-st-legend-dot--white { box-shadow: inset 0 0 0 1.5px oklch(0.92 0.02 90); }
 
 /* ---- Peg palette (the "your hand" slot for Smartthink) ---- */
-.ag-st-palette-wrap { background: var(--ag-surface); border-top: 1px solid var(--ag-line); padding: 12px 16px 8px; }
+.ag-st-palette-wrap { border-top: 1px solid var(--ag-line); padding: 12px 16px 8px; }
 .ag-st-palette-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 9px; }
 .ag-st-palette-note { font: 600 10.5px var(--ag-font); color: var(--ag-ink-soft); }
 .ag-st-palette { display: flex; gap: 9px; justify-content: space-between; }
@@ -2174,7 +2262,7 @@ button {
 .ag-dc-city-empty { grid-column: 1 / -1; font: 500 11px var(--ag-font); color: var(--ag-ink-soft); text-align: center; padding: 12px 0; }
 
 /* ---- Coin bank + dice picker (pre-roll footer) ---- */
-.ag-dc-bank { background: var(--ag-surface); border-top: 1px solid var(--ag-line); padding: 12px 16px 18px; }
+.ag-dc-bank { border-top: 1px solid var(--ag-line); padding: 12px 16px 18px; }
 .ag-dc-bank-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
 .ag-dc-coins {
     display: inline-flex;
@@ -2212,7 +2300,6 @@ button {
 .ag-dc-dice-mini { font-size: 16px; line-height: 1; }
 
 /* ---- Post-roll: dice result + market ---- */
-.ag-dc-post { background: var(--ag-surface); }
 .ag-dc-roll {
     display: flex;
     align-items: center;
@@ -2350,7 +2437,7 @@ button {
 .ag-recap-since { font: 500 13px var(--ag-font); opacity: 0.7; margin-top: 2px; }
 
 .ag-recap-body {
-    background: color-mix(in oklch, var(--ag-terracotta) 9%, var(--ag-surface));
+    background: var(--ag-recap-ground);
     padding: 24px 20px 20px;
 }
 .ag-recap-headline {
@@ -2399,7 +2486,7 @@ button {
     flex: 0 0 auto;
     position: relative;
     z-index: 1;
-    box-shadow: 0 0 0 3px color-mix(in oklch, var(--ag-terracotta) 9%, var(--ag-surface));
+    box-shadow: 0 0 0 3px var(--ag-recap-ground);
 }
 .ag-recap-event-card {
     flex: 1;
@@ -2413,6 +2500,21 @@ button {
 .ag-recap-event-detail { font: 500 12.5px/1.4 var(--ag-font); color: var(--ag-ink-soft); margin-top: 3px; }
 
 .ag-recap-event-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+
+/* Tighter scale for the in-game match history (`.ag-log`), where the timeline
+   is a reference strip rather than the whole screen. */
+.ag-recap-timeline--compact { gap: 10px; max-height: 280px; overflow-y: auto; }
+.ag-recap-timeline--compact .ag-recap-event { gap: 11px; }
+.ag-recap-timeline--compact .ag-recap-event::before { left: 5px; top: 16px; bottom: -10px; }
+.ag-recap-timeline--compact .ag-recap-dot { width: 11px; height: 11px; margin-top: 5px; box-shadow: 0 0 0 2px var(--ag-recap-ground); }
+.ag-recap-timeline--compact .ag-recap-event-card {
+    background: var(--ag-surface);
+    border: 1px solid var(--ag-line);
+    border-radius: 13px;
+    padding: 9px 12px;
+    box-shadow: none;
+}
+.ag-recap-timeline--compact .ag-recap-event-title { font: 700 12.5px/1.35 var(--ag-font); }
 
 /* ---- Reaction picker (recap timeline) ---- */
 /* Trigger/sent state reuse .ag-pill-action; the popup shell and text rows
@@ -2512,13 +2614,12 @@ button {
 .ag-game--traintime .ag-btn--primary:hover { color: var(--tt-on-brass); }
 .ag-game--traintime .ag-btn--light { background: var(--tt-panel-2); border-color: var(--tt-line); color: var(--tt-ink); }
 .ag-game--traintime .ag-btn--ghost { border-color: var(--tt-oxblood); color: var(--tt-oxblood); }
-.ag-game--traintime .ag-actionsheet,
-.ag-game--traintime .ag-hand,
-.ag-game--traintime .ag-log { background: var(--tt-panel); }
+.ag-game--traintime .ag-log { --ag-recap-ground: var(--tt-panel); }
 .ag-game--traintime .ag-hand { border-top-color: var(--tt-line); }
 .ag-game--traintime .ag-hand-title,
 .ag-game--traintime .ag-hand-note { color: var(--tt-ink-soft); }
-.ag-game--traintime .ag-log-item { color: var(--tt-ink); border-color: var(--tt-line); }
+.ag-game--traintime .ag-recap-event-card { background: var(--tt-panel-2); border-color: var(--tt-line); }
+.ag-game--traintime .ag-recap-event-title { color: var(--tt-ink); }
 
 /* The objective strip reuses Stat/.ag-stat-row, flipped so the label reads as
    a header above its number the way the design shows it. */

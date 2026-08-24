@@ -23,6 +23,7 @@ import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
+import MatchHistory from "@/components/games/MatchHistory";
 
 const PHASE_LABEL: Record<IWorldDominationSpecificGameStateResponse['phase'], string> = {
     setup: 'Setup',
@@ -315,19 +316,10 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
                         />
                     )}
 
-                    <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} />
+                    <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} usernames={usernameList} />
 
                     {showLog && (
-                        <div className="ag-log">
-                            <ul className="ag-log-list">
-                                {nav.displayedHistory.slice().reverse().map((h, i) => (
-                                    <li key={i} className="ag-log-item">{h}</li>
-                                ))}
-                                {nav.displayedHistory.length === 0 && (
-                                    <li className="ag-log-item">No moves yet.</li>
-                                )}
-                            </ul>
-                        </div>
+                        <MatchHistory entries={nav.displayedHistory} usernames={usernameList} oldestFirst />
                     )}
                 </>
             )}

@@ -20,6 +20,7 @@ import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import type { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
 import { SMARTTHINK_CODE_LENGTH } from "@/games/Smartthink/ui";
 import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
+import MatchHistory from "@/components/games/MatchHistory";
 
 const PLAYER_COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c"];
 const emptyGuess = (): (number | null)[] => Array(SMARTTHINK_CODE_LENGTH).fill(null);
@@ -166,19 +167,10 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
                 />
             )}
 
-            <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} />
+            <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} usernames={usernameList} />
 
             {showLog && (
-                <div className="ag-log">
-                    <ul className="ag-log-list">
-                        {nav.displayedHistory.slice().reverse().map((h, i) => (
-                            <li key={i} className="ag-log-item">{h}</li>
-                        ))}
-                        {nav.displayedHistory.length === 0 && (
-                            <li className="ag-log-item">No moves yet.</li>
-                        )}
-                    </ul>
-                </div>
+                <MatchHistory entries={nav.displayedHistory} usernames={usernameList} oldestFirst />
             )}
         </GameShell>
     );

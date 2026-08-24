@@ -33,6 +33,7 @@ import {
     SACBuildCity,
     SACMoveRobber,
 } from "@/utils/apiModels/GameLogic";
+import MatchHistory from "@/components/games/MatchHistory";
 
 const RESOURCE_ORDER: SAC_Resource[] = ['lumber', 'wool', 'grain', 'brick', 'ore'];
 const RESOURCE_EMOJI: Record<SAC_Resource, string> = {
@@ -446,20 +447,11 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                     )}
 
                     {recapAvailable && (
-                        <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} />
+                        <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} usernames={usernameList} />
                     )}
 
                     {showLog && (
-                        <div className="ag-log">
-                            <ul className="ag-log-list">
-                                {nav.displayedHistory.slice().reverse().map((h, i) => (
-                                    <li key={i} className="ag-log-item">{h}</li>
-                                ))}
-                                {nav.displayedHistory.length === 0 && (
-                                    <li className="ag-log-item">No moves yet.</li>
-                                )}
-                            </ul>
-                        </div>
+                        <MatchHistory entries={nav.displayedHistory} usernames={usernameList} oldestFirst />
                     )}
                 </>
             )}

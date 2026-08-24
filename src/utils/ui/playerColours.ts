@@ -9,3 +9,13 @@ export function playerColour(index: number): string {
     if (index < 0) return PLAYER_COLOURS[0];
     return PLAYER_COLOURS[index % PLAYER_COLOURS.length];
 }
+
+// The colour for a named player, or the neutral ink when the name isn't one of
+// the game's players — a setup line nobody made, an unknown sender. Prefer this
+// over `playerColour(list.indexOf(name))`, which paints an unknown name as
+// player one.
+export const NEUTRAL_PLAYER_COLOUR = "var(--ag-ink-softer)";
+export function playerColourFor(username: string | null | undefined, usernames: string[]): string {
+    const index = username ? usernames.indexOf(username) : -1;
+    return index >= 0 ? playerColour(index) : NEUTRAL_PLAYER_COLOUR;
+}
