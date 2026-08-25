@@ -40,57 +40,74 @@ export function gameNotificationImage(gameTypeUrl: string): string | undefined {
 }
 
 export interface SendPushOptions {
-    /** Optional notification channel this push belongs to. If provided, the push
-     *  will be skipped for any user whose preferences disable it (or who has
-     *  disabled notifications entirely). */
-    channel?: NotificationChannel;
+    /** Which notification channel this push belongs to. The push is skipped for
+     *  any user whose preferences disable that channel, or who has turned
+     *  notifications off entirely. Required — see `sendPushToUsers`. */
+    channel: NotificationChannel;
 }
 
-// Sends a push to every registered device of the given users. Omit `notification`
-// for a silent data-only message (e.g. to refresh client state).
+/**
+ * The notification `tag` the service worker shows this push under. Without one,
+ * every push stacks: a player away for a day comes back to six "Your move in
+ * Train Time" rows for the same game, which is its own reason to turn
+ * notifications off. Tagging by kind *and* by whatever the push is about means
+ * a second "your move" in one game replaces the first, while a nudge in that
+ * game still arrives beside it.
+ */
+function tagFor(data: Record<string, string>): string {
+    const subject = data.gameId ?? data.inviteId ?? data.friendshipId;
+    return [data.event, subject].filter(Boolean).join(':') || 'async-games';
+}
+
+/**
+ * Sends a push to every registered device of the given users.
+ *
+ * Both the notification and the channel are required, and deliberately so: a
+ * data-only message displays nothing on arrival, and iOS punishes an app for
+ * sending those. `usePushEvents` has the full account and what replaced them;
+ * this signature is what stops one being written again.
+ *
+ * Returns how many device tokens it sent to, which is zero when every recipient
+ * has this channel switched off. Only the dev test bench reads it — everything
+ * else sends and moves on.
+ */
 export async function sendPushToUsers(
     users: User[],
     data: Record<string, string>,
-    notification?: PushNotification,
-    options: SendPushOptions = {}
+    notification: PushNotification,
+    options: SendPushOptions
 ) {
     const targets: PushTarget[] = users
-        .filter((user) => {
-            if (!options.channel) {
-                return true;
-            }
-            const prefs = getNotificationPreferences(user);
-            return isChannelEnabled(prefs, options.channel);
-        })
+        .filter((user) => isChannelEnabled(getNotificationPreferences(user), options.channel))
         .flatMap((user) => getDeviceTokens(user)
             .filter((stored) => stored?.token)
             .map((stored) => ({ userId: user.id, token: stored.token })));
     if (!targets.length) {
-        return;
+        return 0;
     }
-    console.log(`Sending ${data.event ?? notification?.title ?? 'push'} to ${targets.length} device token(s)`);
+    console.log(`Sending ${data.event ?? notification.title} to ${targets.length} device token(s)`);
     const messaging = getAdminMessaging();
+    const payload = { ...data, tag: tagFor(data) };
     const response = await messaging.sendEach(targets.map((target) => {
         const message: Message = {
             token: target.token,
-            data
-        };
-        if (notification) {
-            message.notification = {
+            data: payload,
+            notification: {
                 title: notification.title,
                 body: notification.body,
                 imageUrl: notification.imageUrl
-            };
-            if (notification.imageUrl) {
-                message.apns = { fcmOptions: { imageUrl: notification.imageUrl } };
-                message.android = { notification: { imageUrl: notification.imageUrl } };
-                message.webpush = { headers: { image: notification.imageUrl } };
             }
+        };
+        if (notification.imageUrl) {
+            message.apns = { fcmOptions: { imageUrl: notification.imageUrl } };
+            message.android = { notification: { imageUrl: notification.imageUrl } };
         }
         return message;
     }));
 
     await forgetDeadTokens(targets, response);
+
+    return targets.length;
 }
 
 /**

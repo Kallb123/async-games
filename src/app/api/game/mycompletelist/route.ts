@@ -1,21 +1,14 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from "../../../../utils/mongodb/mongodb";
-import { GameResultModel } from '@/utils/mongodb/GameResultData';
-import { userIdListToUsernameMap } from '@/utils/users/clerk';
-import { GAME_META } from '@/utils/ui/games';
-import type { GameEndReason } from '@/utils/apiModels/GameDataApi';
+import { completedGameResults, completedGameUserIds, toCompletedGames } from '@/utils/dashboard';
+import { buildUserDirectory } from '@/utils/users/clerk';
 
-export interface ICompletedGame {
-  gameId: string;
-  url: string;
-  friendlyName: string;
-  winner: string;
-  endReason?: GameEndReason;
-  forfeitedBy?: string;
-  endedAt: string;
-}
-
+/**
+ * Finished games on their own, for the full-history page. The home screen gets
+ * the same list inside /api/dashboard — both build it from the same two
+ * helpers, so the two routes cannot drift.
+ */
 export async function GET(request: NextRequest) {
   console.log(`GET ${request.nextUrl.pathname}`);
 
@@ -26,20 +19,8 @@ export async function GET(request: NextRequest) {
 
   await dbConnect();
 
-  const results = await GameResultModel.find({ playerIds: userId }).sort({ endedAt: -1 }).exec();
+  const results = await completedGameResults(userId);
+  const directory = await buildUserDirectory(completedGameUserIds(results));
 
-  const idsToResolve = [...new Set(results.flatMap(result => [result.winner, result.forfeitedBy]).filter(Boolean))] as string[];
-  const usernameById = await userIdListToUsernameMap(idsToResolve);
-
-  const gameList: ICompletedGame[] = results.map(result => ({
-    gameId: result.gameId,
-    url: result.url,
-    friendlyName: GAME_META[result.url]?.name ?? result.url,
-    winner: result.winner ? (usernameById.get(result.winner) ?? result.winner) : "",
-    endReason: result.endReason,
-    forfeitedBy: result.forfeitedBy ? (usernameById.get(result.forfeitedBy) ?? result.forfeitedBy) : undefined,
-    endedAt: result.endedAt,
-  }));
-
-  return NextResponse.json({success: true, gameList});
+  return NextResponse.json({success: true, gameList: toCompletedGames(results, directory)});
 }

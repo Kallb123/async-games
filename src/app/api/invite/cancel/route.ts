@@ -1,8 +1,7 @@
-import { auth, clerkClient } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { InvitationModel, IInvitationDataDocument } from '@/utils/mongodb/InvitationData';
-import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 
 export async function POST(request: NextRequest) {
   const { inviteId } = await request.json();
@@ -27,16 +26,9 @@ export async function POST(request: NextRequest) {
 
   await InvitationModel.deleteOne({ inviteId }).exec();
 
-  // Refresh the invitees live so a cancelled invite disappears from their
-  // incoming list without a manual reload (silent, data-only push).
-  const inviteeIds = invite.userIdList.map(uid => uid.userId);
-  if (inviteeIds.length) {
-    const { data: invitees } = await (await clerkClient()).users.getUserList({ userId: inviteeIds });
-    await sendPushToUsers(invitees, {
-      event: 'InviteCancelled',
-      inviteId
-    });
-  }
+  // No push: a cancelled invite is not worth interrupting anyone for, and
+  // there is no silent kind to send (see usePushEvents). Their incoming list
+  // picks it up on its next foreground.
 
   return NextResponse.json({ success: true });
 }

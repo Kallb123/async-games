@@ -6,26 +6,21 @@ import { useState } from "react";
 import { opponents } from "@/utils/ui/players";
 import { gamePath } from "@/utils/ui/games";
 import ListSection from "@/components/ui/ListSection";
-import { TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
-import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
+import type { RefreshableState } from "@/utils/hooks/useRefreshableData";
 import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
 import { formatRemainingTimeShort } from "@/utils/games/TurnTimer";
 import { useNowToTheMinute } from "@/utils/hooks/useNow";
 import { useToast } from "@/components/ToastContext";
 
-const THEIR_TURN_EVENTS = ['NewInvite', 'GameStart', ...TURN_ADVANCED_EVENTS];
+interface TheirTurnListProps extends RefreshableState {
+    games: IGameResponse[];
+}
 
-export default function TheirTurnList() {
+export default function TheirTurnList({ games, isLoading, isRefreshing }: TheirTurnListProps) {
     const { user } = useIsAuthorised();
     const { showToast } = useToast();
     const now = useNowToTheMinute();
     const [nudgedGameIds, setNudgedGameIds] = useState(new Set<string>());
-    const { data, isLoading, isRefreshing } = useRefreshableData<{ gameList: IGameResponse[] }>(
-        '/api/game/theirturnlist',
-        THEIR_TURN_EVENTS,
-    );
-
-    const gameList = data?.gameList ?? [];
 
     const handleNudge = (gameId: string, opponentName: string) => {
         setNudgedGameIds(prev => new Set(prev).add(gameId));
@@ -35,6 +30,13 @@ export default function TheirTurnList() {
             body: JSON.stringify({ gameId })
         })
         .then(response => {
+            // A 429 means the nudge went out already (one per game per hour —
+            // see the nudge route). The button stays spent, because retrying is
+            // exactly what the limit is there to stop.
+            if (response.status === 429) {
+                showToast(`You've already nudged ${opponentName} about this game — give them an hour.`, 'success', 'Already nudged');
+                return;
+            }
             if (!response.ok) throw new Error('Failed to send nudge');
             showToast(`Sent a nudge to ${opponentName}.`, 'success', 'Nudge sent');
         })
@@ -56,7 +58,7 @@ export default function TheirTurnList() {
             skeletonAvatar={false}
             hint="Use 👉 to send a nudge to move things along"
         >
-            {gameList.map((game) => {
+            {games.map((game) => {
                 const timeLeft = formatRemainingTimeShort(game.lastTurnTimestamp, game.turnTimer, now);
                 const opponentName = game.currentTurnUsername || opponents(game, user?.username, "them");
                 const alreadyNudged = nudgedGameIds.has(game.gameId);

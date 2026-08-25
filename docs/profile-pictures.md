@@ -47,7 +47,7 @@ Each DTO that already carried a person's name now carries their picture too:
 |---|---|
 | `GET /api/friends` | `IFriendUser.imageUrl` |
 | `GET /api/profile/[userId]` | `IProfileUser.imageUrl` |
-| `GET /api/user/incominginvites`, `/outgoinginvites` | `IInvitationResponse.senderImageUrl` |
+| `GET /api/dashboard`, `/api/lobby/[inviteId]` | `IInvitationResponse.senderImageUrl` |
 | `GET /api/reactions` | `IReceivedReaction.actorImageUrl` |
 
 Routes that already fetched the Clerk user add one field; `/api/reactions` uses

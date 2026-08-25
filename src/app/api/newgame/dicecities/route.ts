@@ -1,6 +1,4 @@
-import { sendPushToUsers, homeNotificationLink } from '@/utils/firebase/pushNotification';
-import { buildGameInviteNotification } from '@/utils/firebase/notificationContent';
-import { readableName } from '@/utils/ui/players';
+import { sendGameInvitePush } from '@/utils/firebase/invitePush';
 import { canHostGame } from '@/utils/users/clerk';
 import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
@@ -60,17 +58,7 @@ export async function POST(request: NextRequest) {
   await invite.save();
 
   // Send notifications
-  await sendPushToUsers(userList, {
-    event: "NewInvite",
-    inviteId: invite.inviteId,
-    link: homeNotificationLink()
-  }, buildGameInviteNotification(readableName(thisUser), invite.gameFriendlyName), {
-    channel: 'gameInvite'
-  });
-  await sendPushToUsers([thisUser], {
-    event: "NewInvite",
-    inviteId: invite.inviteId,
-  });
+  await sendGameInvitePush(userList, thisUser, invite);
 
   return NextResponse.json({success: true});
 }

@@ -46,12 +46,6 @@ export async function startGameFromInvitation(
 
     await invite.deleteOne();
 
-    await sendPushToUsers(userList, {
-        event: 'GameStart',
-        inviteId: invite.inviteId,
-        gameId: gameData.gameId.toString() as uuidString
-    });
-
     // Whoever won the roll for turn order is up immediately, and until now nothing
     // told them so — the first "your move" push only went out once someone had
     // played. Skip it for the player who triggered the game starting: they're
@@ -84,9 +78,8 @@ export interface AcceptSeatResult {
  * acceptance was the last one needed.
  *
  * This is the accept-and-maybe-start sequence /api/invite/accept already
- * ran inline: flip this seat's acceptance, resolve the roster (every
- * invitee plus the sender, for their pushes and dashboards), push
- * InviteAccepted, and call startGameFromInvitation once every seat has
+ * ran inline: flip this seat's acceptance, resolve the roster (every invitee
+ * plus the sender), and call startGameFromInvitation once every seat has
  * accepted. The lobby's join and start-now routes need the identical
  * sequence, so it lives here rather than being copied a second and third
  * time.
@@ -104,9 +97,9 @@ export async function acceptSeat(
     }
 
     const userIdList = invite.userIdList.map(uid => uid.userId);
-    // Notify every invitee *and* the original sender: the sender's outgoing-invite
-    // list / home dashboard needs to react live when their invite is accepted and
-    // when the game finally starts.
+    // Every invitee *and* the original sender, because that is the party
+    // `startGameFromInvitation` needs below — to pick whoever moves first, and
+    // to put the other players' names in their opening push.
     const { data: userList } = await (await clerkClient()).users.getUserList({
         userId: [...userIdList, invite.senderId]
     });
@@ -114,14 +107,6 @@ export async function acceptSeat(
     const allAccepted = invite.userIdList.every(uid => uid.inviteAccepted === true);
     if (!allAccepted) {
         await invite.save();
-    }
-
-    await sendPushToUsers(userList, {
-        event: 'InviteAccepted',
-        inviteId: invite.inviteId
-    });
-
-    if (!allAccepted) {
         return { gameStarted: false };
     }
 

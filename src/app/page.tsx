@@ -7,6 +7,7 @@ import OutgoingInviteList from "@/components/OutgoingInviteList";
 import MyTurnList from "@/components/MyTurnList";
 import TheirTurnList from "@/components/TheirTurnList";
 import MyCompleteList from "@/components/MyCompleteList";
+import { useDashboard } from "@/utils/hooks/useDashboard";
 import Avatar from "@/components/ui/Avatar";
 import Landing from "@/components/Landing";
 import Brand from "@/components/ui/Brand";
@@ -20,6 +21,10 @@ export default function Home() {
   // The one screen anonymous visitors are allowed to stay on: rather than
   // bounce them to /login, show them what the platform is.
   const { user, isLoaded } = useAuthGuard({ allowSignedOut: true });
+  // Above the Landing return so the hook order never changes. It costs a
+  // signed-out visitor nothing: useRefreshableData doesn't fetch until the
+  // viewer is authorised.
+  const { dashboard, isLoading, isRefreshing, refresh } = useDashboard();
 
   if (isLoaded && !user) {
     return <Landing />;
@@ -41,11 +46,11 @@ export default function Home() {
         </div>
       </div>
 
-      <MyTurnList />
-      <IncomingInviteList />
-      <TheirTurnList />
-      <OutgoingInviteList />
-      <MyCompleteList limit={10} />
+      <MyTurnList games={dashboard.myTurn} isLoading={isLoading} isRefreshing={isRefreshing} />
+      <IncomingInviteList invites={dashboard.incoming} isLoading={isLoading} isRefreshing={isRefreshing} onChanged={refresh} />
+      <TheirTurnList games={dashboard.theirTurn} isLoading={isLoading} isRefreshing={isRefreshing} />
+      <OutgoingInviteList invites={dashboard.outgoing} isLoading={isLoading} isRefreshing={isRefreshing} onChanged={refresh} />
+      <MyCompleteList games={dashboard.completed} isLoading={isLoading} isRefreshing={isRefreshing} limit={10} />
 
       <div className="ag-section ag-btn-row" style={{ marginTop: 8 }}>
         <Link href="/newgame" aria-label="New game" className="ag-cta ag-cta--dark">

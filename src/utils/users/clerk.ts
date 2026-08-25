@@ -86,26 +86,62 @@ export async function forEachClerkUser(visit: (user: User) => Promise<void>): Pr
 // (docs/account-less-play.md §5), not something anyone chose to be seen
 // under — their firstName carries the name they actually typed at the
 // lobby's join screen (step 14), so name resolution inverts the usual
-// username-first preference for them. The one place both list-shaped
-// resolvers below reach for a name, so they can't drift apart.
+// username-first preference for them.
 function displayHandle(user: User): string | null {
     return isGuest(user) ? user.firstName : user.username;
 }
 
+// The one place every resolver below turns a looked-up user into a name, so
+// they can't drift apart — including what to show when the lookup found
+// nobody, which is the half that used to get re-pasted.
+function nameOf(user: User | undefined): string {
+    return user ? (displayHandle(user) ?? "No username") : UNKNOWN_PLAYER_NAME;
+}
+
+/**
+ * Every name and picture one screen needs, resolved in a single Clerk call.
+ *
+ * The list resolvers below are per-item: a screen showing eight games and three
+ * invitations used to make twenty-odd round trips to Clerk to render one page,
+ * because each game and each invitation resolved its own players. A directory
+ * is built once from the union of every id on the screen, and the builders read
+ * it instead of asking.
+ */
+export interface UserDirectory {
+    /** Display name for an id. Empty string for no id at all (an unfinished
+     *  game has no winner), UNKNOWN_PLAYER_NAME for one Clerk doesn't know. */
+    name(userId: string | null | undefined): string;
+    /** Their picture, or null if they have never set one (see profileImageUrl). */
+    imageUrl(userId: string): string | null;
+}
+
+export async function buildUserDirectory(userIds: (string | null | undefined)[]): Promise<UserDirectory> {
+    const wanted = [...new Set(userIds.filter((id): id is string => !!id))];
+    const users = await usersById(wanted);
+    const byId = new Map(users.map(user => [user.id, user]));
+
+    return {
+        name(userId) {
+            if (!userId) return "";
+            return nameOf(byId.get(userId));
+        },
+        imageUrl(userId) {
+            const user = byId.get(userId);
+            return user ? profileImageUrl(user) : null;
+        }
+    };
+}
+
 export async function userIdListToUsernameList(userIdList: string[]): Promise<string[]> {
     const users = await usersById(userIdList);
-    return userIdList.map(userId => {
-        const user = users.find(u => u.id === userId);
-        return user ? (displayHandle(user) ?? "No username") : UNKNOWN_PLAYER_NAME;
-    });
+    return userIdList.map(userId => nameOf(users.find(u => u.id === userId)));
 }
 
 export async function userIdListToUsernameMap(userIdList: string[]): Promise<Map<string, string>> {
     const users = await usersById(userIdList);
     const usernameMap: Map<string, string> = new Map;
     userIdList.forEach(userId => {
-        const user = users.find(u => u.id === userId);
-        usernameMap.set(userId, user ? (displayHandle(user) ?? "No username") : UNKNOWN_PLAYER_NAME);
+        usernameMap.set(userId, nameOf(users.find(u => u.id === userId)));
     });
     return usernameMap;
 }

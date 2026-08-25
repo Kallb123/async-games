@@ -1,7 +1,7 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchWithSessionRetry } from "./fetchWithSessionRetry";
-import { usePushEvents } from "./usePushEvents";
+import { usePushEvents, PushEventsOptions } from "./usePushEvents";
 import { useIsAuthorised } from "./useAuthGuard";
 
 /**
@@ -20,10 +20,19 @@ import { useIsAuthorised } from "./useAuthGuard";
  * A failed refresh keeps the last good `data` for the same reason — losing the
  * list because one fetch 500'd is worse than showing slightly stale rows.
  */
-export interface RefreshableData<T> {
-    data: T | null;
+/**
+ * The two loading flags on their own, for a presentational component handed
+ * data someone else fetched. Declared once here rather than per screen: a list
+ * rendered on the dashboard and again on its own full-history page wants the
+ * same pair either way.
+ */
+export interface RefreshableState {
     isLoading: boolean;
     isRefreshing: boolean;
+}
+
+export interface RefreshableData<T> extends RefreshableState {
+    data: T | null;
     /** HTTP status of the last completed attempt (null before one finishes, or on a network error). */
     status: number | null;
     refresh: () => Promise<void>;
@@ -37,10 +46,19 @@ const NO_EVENTS: readonly string[] = [];
  * foreground (see `usePushEvents`). Overlapping refreshes are dropped — a burst
  * of pushes results in one request, not one per push.
  *
+ * Pass `{ pollWhileWatching: true }` for a screen whose whole job is waiting for
+ * something to change while the player sits and looks at it — the lobby filling
+ * up. Nothing pushes for those (see `usePushEvents`) and the tab never leaves,
+ * so `refreshOnVisible` never fires either.
+ *
  * `T` is the whole JSON body; callers pick the field they need, which keeps the
  * hook agnostic about response shapes.
  */
-export function useRefreshableData<T>(url: string, events: readonly string[] = NO_EVENTS): RefreshableData<T> {
+export function useRefreshableData<T>(
+    url: string,
+    events: readonly string[] = NO_EVENTS,
+    options: Pick<PushEventsOptions, 'pollWhileWatching'> = {}
+): RefreshableData<T> {
     const { isAuthorised } = useIsAuthorised();
     const [data, setData] = useState<T | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -105,7 +123,7 @@ export function useRefreshableData<T>(url: string, events: readonly string[] = N
         refresh();
     }, [refresh]);
 
-    usePushEvents(events, refresh, { refreshOnVisible: true });
+    usePushEvents(events, refresh, { refreshOnVisible: true, ...options });
 
     return { data, isLoading, isRefreshing, status, refresh };
 }

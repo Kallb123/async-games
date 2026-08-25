@@ -8,30 +8,26 @@ import GameThumb from "@/components/ui/GameThumb";
 import { accentVar } from "@/utils/ui/colours";
 import Refreshable from "@/components/ui/Refreshable";
 import { SkeletonTurnCards } from "@/components/ui/Skeleton";
-import { TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
-import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
+import type { RefreshableState } from "@/utils/hooks/useRefreshableData";
 import useAnimatedList from "@/utils/hooks/useAnimatedList";
 import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
 import { formatRemainingTimeShort } from "@/utils/games/TurnTimer";
 import { useNowToTheMinute } from "@/utils/hooks/useNow";
 
-const MY_TURN_EVENTS = ['NewInvite', 'GameStart', ...TURN_ADVANCED_EVENTS];
+interface MyTurnListProps extends RefreshableState {
+    games: IGameResponse[];
+}
 
-export default function MyTurnList() {
+export default function MyTurnList({ games, isLoading, isRefreshing }: MyTurnListProps) {
     const { user } = useIsAuthorised();
     const router = useRouter();
     const now = useNowToTheMinute();
-    const { data, isLoading, isRefreshing } = useRefreshableData<{ gameList: IGameResponse[] }>(
-        '/api/game/myturnlist',
-        MY_TURN_EVENTS,
-    );
 
-    const gameList = data?.gameList ?? [];
-    const count = gameList.length;
+    const count = games.length;
 
     // Cards still on screen — a game you have just played stays until it has
     // finished shrinking away.
-    const cards = useAnimatedList(gameList.map((game) => {
+    const cards = useAnimatedList(games.map((game) => {
         const meta = metaForGame({ url: game.url, friendlyName: game.friendlyName });
         const accent = meta ? accentVar(meta.accent) : "var(--ag-terracotta)";
         const timeLeft = formatRemainingTimeShort(game.lastTurnTimestamp, game.turnTimer, now);

@@ -39,6 +39,18 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Your home screen keeps up while you're looking at it",
+                detail: "Invites accepted, seats claimed, a game starting — the lists now update while the screen is open, instead of waiting until you'd been away and come back. It loads quicker too.",
+            },
+            {
+                title: "Say what you want to hear about",
+                detail: "Settings now has a switch for game results — the one kind of notification that used to arrive however you'd set things — and the chat switch that never did anything has gone. Turning notifications off now really does turn all of them off.",
+            },
+            {
+                title: "One notification per game, not a pile of them",
+                detail: "A new notification about a game replaces the last one instead of stacking up behind it, so a week away no longer means a column of the same thing. Tapping one takes you into the app you already have open, rather than opening a second copy of it.",
+            },
+            {
                 title: "The app says the same thing wherever you meet it",
                 detail: "Install Async Games and the splash screen, the install prompt and the browser's own top bar are now the warm cream every screen is, not the slightly-off grey they used to be — and the prompt, a shared link and a search result all describe it the same way instead of three different ways.",
             },
@@ -46,26 +58,20 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Join codes stay alive as long as your game does",
                 detail: "A lobby used to close after an hour whatever game you set up. Now the code lasts as long as one turn of it — up to a week for the slow ones — and the lobby tells you when it runs out.",
             },
-            {
-                title: "Share a game and the link sells it for you",
-                detail: "Drop a join link into a group chat and the preview now shows who's inviting you, how many seats are left, and a card for the game itself — instead of the same plain site link every time.",
-            },
-            {
-                title: "Find your Train Time tickets on the map",
-                detail: "Tap a ticket — while you're choosing which to keep, or in your ticket list — and its two cities light up on the board. Tap it again to put them out.",
-                game: "traintime",
-            },
-            {
-                title: "See how the Train Time race actually ran",
-                detail: "A finished game now charts route points turn by turn, and the Long Haul race beside it — so you can see where the game was won, not just the final total.",
-                game: "traintime",
-            },
         ],
     },
     {
         label: "Bug fixes",
         icon: "🔧",
         items: [
+            {
+                title: "Notifications stop switching themselves off on iPhone",
+                detail: "The app used to send invisible background pings just to keep your open screens up to date. iPhones count those against an app and quietly revoke its notifications after a few — which is why yours kept going dead. They're all gone: screens refresh when you come back to them instead.",
+            },
+            {
+                title: "A nudge is a nudge, not a nagging",
+                detail: "Nudging the same game more than once an hour no longer buzzes the other player's phone again — the button used to come back to life on a page reload.",
+            },
             {
                 title: "Get back to a lobby you opened",
                 detail: "An open game waiting in “Awaiting response” is now a tap away from its lobby, so you can read the code out again or see who has taken a seat — instead of only ever seeing it the once when you made it.",
@@ -79,14 +85,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Solitaire stops suggesting pointless King moves",
                 detail: "Sliding a King that's already the base of its column into an empty space changes nothing, so it no longer clutters the move list or gets offered as a hint — and a board with nothing left but that shuffle is now correctly called out as stuck.",
                 game: "solitaire",
-            },
-            {
-                title: "Your hand is actually your hand",
-                detail: "World Domination sent every player's territory cards to everyone, and Settlements & Cities did the same with resource hands and development cards — hidden on screen, but sitting in plain sight for anyone who went looking. Now only you get yours; everyone else sees a count, the way the games always meant it.",
-            },
-            {
-                title: "Whose turn it is, at a glance",
-                detail: "Every game's scoreboard now marks the player to move with a caret next to their name — it was easy to miss in Train Time and missing altogether in Dice Cities.",
             },
         ],
     },

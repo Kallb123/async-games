@@ -5,7 +5,7 @@ import { ISmartthinkGameDataResponse, ISmartthinkGameStateResponse } from "./api
 import { IGameResponse, uuidString, GameResultStatGroup } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
-import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
+import { UserDirectory, userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
 import { SmartthinkGameType } from "@/utils/apiModels/GameLogic";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 
@@ -240,23 +240,24 @@ var SmartthinkGameDataSchema = new Schema<ISmartthinkGameDataDocument>({
     }
 }, { discriminatorKey: 'kind' });
 
-SmartthinkGameDataSchema.methods.CreateResponse = async function(): Promise<IGameResponse> {
+SmartthinkGameDataSchema.methods.CreateResponse = function(directory: UserDirectory): IGameResponse {
     console.log("CreateResponse: Smartthink game");
 
     const gameDataDocument: ISmartthinkGameData = this as ISmartthinkGameData;
 
-    const usernameList = await userIdListToUsernameList(gameDataDocument.userIdList);
+    // The computer is not a Clerk user, so it is named here rather than looked
+    // up — which is also why it never reaches the directory's Clerk call.
+    const nameFor = (userId: string | undefined) => userId === SMARTTHINK_COMPUTER_ID
+        ? SMARTTHINK_COMPUTER_USERNAME
+        : directory.name(userId);
+
+    const usernameList = gameDataDocument.userIdList.map(userId => directory.name(userId));
     if (gameDataDocument.specificGameState.codeSetterId === SMARTTHINK_COMPUTER_ID) {
         usernameList.push(SMARTTHINK_COMPUTER_USERNAME);
     }
 
-    const winner = gameDataDocument.winner === SMARTTHINK_COMPUTER_ID
-        ? SMARTTHINK_COMPUTER_USERNAME
-        : (await userIdListToUsernameList([gameDataDocument.winner]))[0];
-
-    const currentTurnUsername = gameDataDocument.currentTurn === SMARTTHINK_COMPUTER_ID
-        ? SMARTTHINK_COMPUTER_USERNAME
-        : (await userIdListToUsernameList([gameDataDocument.currentTurn]))[0];
+    const winner = nameFor(gameDataDocument.winner);
+    const currentTurnUsername = nameFor(gameDataDocument.currentTurn);
 
     return {
         gameId: gameDataDocument.gameId,

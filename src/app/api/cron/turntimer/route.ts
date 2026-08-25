@@ -64,7 +64,9 @@ export async function GET(request: NextRequest) {
                     event: 'GameOver',
                     gameId: gameData.gameId,
                     link: gameNotificationLink(gameData.gameType.url, gameData.gameId)
-                }, buildGameLostNotification(gameData, ''));
+                }, buildGameLostNotification(gameData, ''), {
+                    channel: 'gameOver'
+                });
 
                 abandoned++;
                 continue;
