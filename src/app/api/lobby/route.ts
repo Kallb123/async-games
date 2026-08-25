@@ -88,6 +88,7 @@ export async function POST(request: NextRequest) {
             gameFriendlyName: meta.name,
             joinCode: generateJoinCode(),
             expiresAt: new Date(Date.now() + LOBBY_TTL_MS),
+            senderName: readableName(thisUser),
         });
         try {
             await candidate.save();
