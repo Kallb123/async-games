@@ -65,17 +65,19 @@ messaging.onBackgroundMessage((payload) => {
     console.log('[firebase-messaging-sw.js] Received background message ', payload);
 
     const { title, body, image, icon, tag, ...restPayload } = payload.data;
-    // Every push the server sends carries a title and a body — `sendPushToUsers`
-    // requires a notification precisely so this can never return without showing
-    // one. WebKit revokes the push subscription after three that display
-    // nothing, so a push we can't render is worth showing something for.
+    // Always show something. Every push the server sends carries a title and a
+    // body — `sendPushToUsers` requires a notification precisely so this can
+    // never bail without showing one — but a push we somehow can't render is
+    // still worth a generic row, because a push that displays nothing counts
+    // against the app (see usePushEvents).
     const notificationOptions = {
         body: body || 'Something happened in one of your games.',
         icon: image || '/icons/icon-192.png', // the app's own mark, for pushes that carry no game art
         data: restPayload,
         // Replace rather than stack: a week away used to mean a column of "Your
-        // move in Train Time" for the same game. The tag is per kind and per
-        // game (see `tagFor`), so a nudge still arrives beside a turn.
+        // move in Train Time" for the same game. The server sets this per kind
+        // and per game (see `tagFor`), so a nudge still arrives beside a turn;
+        // the fallback is only for a payload that somehow arrives without one.
         tag: tag || 'async-games',
         // ...but still alert for the replacement, otherwise the newer one lands
         // silently and the player never learns their turn came round again.

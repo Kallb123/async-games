@@ -12,12 +12,10 @@ import { ReactionModel } from '@/utils/mongodb/ReactionData';
 // tokens and the notification preferences in its private metadata, so deleting
 // the user there takes all three with it.
 //
-// Games, invitations, results and reactions belong to more than one player. The
-// players left behind are not pushed about any of it: an account going is not
-// worth interrupting them for, and the data-only pushes that used to refresh
-// their screens silently are exactly what costs an iOS player their push
-// subscription. Their lists drop the removed player on the next foreground
-// (see useRefreshableData).
+// Games, invitations, results and reactions belong to more than one player, but
+// the players left behind get no push about any of it: an account going is not
+// worth interrupting them for, and there is no silent kind to send (see
+// usePushEvents). Their lists drop the removed player on the next foreground.
 export async function POST(request: NextRequest) {
     console.log(`POST ${request.nextUrl.pathname}`);
 

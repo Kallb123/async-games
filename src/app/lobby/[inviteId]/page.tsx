@@ -5,7 +5,6 @@ import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useToast } from "@/components/ToastContext";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
-import { INVITE_EVENTS } from "@/utils/hooks/usePushEvents";
 import { IInvitationResponse } from "@/utils/mongodb/InvitationData";
 import { OPEN_SEAT_LABEL } from "@/utils/games/lobby";
 import { buildJoinHref } from "@/utils/games/joinCode";
@@ -41,14 +40,14 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
   // a seat-holder's are the same document, but they arrive in different lists
   // (/api/user/outgoinginvites vs incominginvites), so this screen reads the
   // one it is about directly.
-  // Polled rather than pushed. Everyone on this screen is sitting and watching
-  // it — the seats filling, the last one going and the game starting — and none
-  // of those is worth a notification. A data-only push to refresh the screen
-  // silently is the thing that costs iOS players their push subscription
-  // (see usePushEvents), so this screen asks instead of being told.
+  // Polled, not pushed, and listening for nothing. Everyone on this screen is
+  // sitting and watching it — the seats filling, the last one going, the game
+  // starting — and none of those is worth a notification, so nothing pushes
+  // about them (see usePushEvents). The one invite push left is a brand new
+  // invite, which by definition is about some other lobby than this one.
   const { data, isLoading, isRefreshing, status } = useRefreshableData<{ invite: IInvitationResponse, isHost: boolean }>(
     `/api/lobby/${inviteId}`,
-    INVITE_EVENTS,
+    [],
     { pollWhileWatching: true },
   );
 

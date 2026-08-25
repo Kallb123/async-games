@@ -26,10 +26,9 @@ export async function POST(request: NextRequest) {
 
   await InvitationModel.deleteOne({ inviteId }).exec();
 
-  // The invitees are not pushed. A cancelled invite is not worth interrupting
-  // anyone for, and a data-only push to make their list re-fetch is the thing
-  // that costs iOS players their notifications — their incoming list picks it
-  // up on its next foreground (see useRefreshableData).
+  // No push: a cancelled invite is not worth interrupting anyone for, and
+  // there is no silent kind to send (see usePushEvents). Their incoming list
+  // picks it up on its next foreground.
 
   return NextResponse.json({ success: true });
 }

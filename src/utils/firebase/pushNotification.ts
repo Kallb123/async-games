@@ -47,35 +47,29 @@ export interface SendPushOptions {
 }
 
 /**
- * The id of the thing a push is about, so two pushes about the same thing can
- * replace each other on the device rather than stack up (see `tagFor`). Data
- * payloads carry exactly one of these.
- */
-function subjectId(data: Record<string, string>): string | undefined {
-    return data.gameId ?? data.inviteId ?? data.friendshipId ?? data.eventId;
-}
-
-/**
  * The notification `tag` the service worker shows this push under. Without one,
  * every push stacks: a player away for a day comes back to six "Your move in
  * Train Time" rows for the same game, which is its own reason to turn
- * notifications off. Tagging by kind *and* subject means a second "your move"
- * in one game replaces the first, while a nudge in that game still arrives
- * separately.
+ * notifications off. Tagging by kind *and* by whatever the push is about means
+ * a second "your move" in one game replaces the first, while a nudge in that
+ * game still arrives beside it.
  */
 function tagFor(data: Record<string, string>): string {
-    return [data.event, subjectId(data)].filter(Boolean).join(':') || 'async-games';
+    const subject = data.gameId ?? data.inviteId ?? data.friendshipId;
+    return [data.event, subject].filter(Boolean).join(':') || 'async-games';
 }
 
 /**
  * Sends a push to every registered device of the given users.
  *
- * Both the notification and the channel are required, and deliberately so.
- * A data-only message displays nothing on arrival, and WebKit revokes a push
- * subscription after three of those — so on iOS a handful of them cost a player
- * their notifications entirely. There is no silent-refresh push in this app any
- * more (`usePushEvents` covers that with `refreshOnVisible` and
- * `pollWhileWatching`), and this signature is what keeps it that way.
+ * Both the notification and the channel are required, and deliberately so: a
+ * data-only message displays nothing on arrival, and iOS punishes an app for
+ * sending those. `usePushEvents` has the full account and what replaced them;
+ * this signature is what stops one being written again.
+ *
+ * Returns how many device tokens it sent to, which is zero when every recipient
+ * has this channel switched off. Only the dev test bench reads it — everything
+ * else sends and moves on.
  */
 export async function sendPushToUsers(
     users: User[],
@@ -89,7 +83,7 @@ export async function sendPushToUsers(
             .filter((stored) => stored?.token)
             .map((stored) => ({ userId: user.id, token: stored.token })));
     if (!targets.length) {
-        return;
+        return 0;
     }
     console.log(`Sending ${data.event ?? notification.title} to ${targets.length} device token(s)`);
     const messaging = getAdminMessaging();
@@ -112,6 +106,8 @@ export async function sendPushToUsers(
     }));
 
     await forgetDeadTokens(targets, response);
+
+    return targets.length;
 }
 
 /**

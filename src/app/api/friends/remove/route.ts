@@ -30,10 +30,9 @@ export async function POST(request: NextRequest) {
 
   await FriendshipModel.deleteOne({ friendshipId }).exec();
 
-  // The other party is not pushed. Being declined, cancelled on or unfriended
-  // is not something to buzz someone's phone about, and the data-only push that
-  // used to refresh their profile silently is what gets a push subscription
-  // revoked on iOS — their profile re-fetches on its next foreground instead.
+  // No push: being declined, cancelled on or unfriended is not worth
+  // notifying anyone about, and there is no silent kind to send (see
+  // usePushEvents). Their profile picks it up on its next foreground.
 
   return NextResponse.json({success: true});
 }

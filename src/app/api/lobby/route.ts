@@ -7,8 +7,7 @@ import { canHostGame, usersByUsername } from '@/utils/users/clerk';
 import { GAME_META, partySizeErrorMessage } from '@/utils/ui/games';
 import { OPEN_SEAT_ID, lobbyTtlMs } from '@/utils/games/lobby';
 import { generateJoinCode } from '@/utils/games/joinCode';
-import { sendPushToUsers, homeNotificationLink } from '@/utils/firebase/pushNotification';
-import { buildGameInviteNotification } from '@/utils/firebase/notificationContent';
+import { sendGameInvitePush } from '@/utils/firebase/invitePush';
 import { readableName } from '@/utils/ui/players';
 
 // A lobby's create request is just a game's existing invite payload
@@ -104,13 +103,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (invitedUsers.length > 0) {
-        await sendPushToUsers(invitedUsers, {
-            event: "NewInvite",
-            inviteId: invite.inviteId,
-            link: homeNotificationLink()
-        }, buildGameInviteNotification(readableName(thisUser), invite.gameFriendlyName), {
-            channel: 'gameInvite'
-        });
+        await sendGameInvitePush(invitedUsers, thisUser, invite);
     }
 
     return NextResponse.json({ success: true, inviteId: invite.inviteId, joinCode: invite.joinCode });

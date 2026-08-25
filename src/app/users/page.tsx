@@ -48,9 +48,13 @@ function UsersTestBench() {
 
       if (!response.ok) {
           console.error(response);
+          return;
       }
 
-      console.log("User notified");
+      const { devices } = await response.json();
+      console.log(devices
+        ? `Notified ${userId} on ${devices} device(s)`
+        : `Nothing sent to ${userId} — no registered device, or they have turn notifications off`);
     } catch (error) {
       console.error(error);
     }

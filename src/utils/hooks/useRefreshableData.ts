@@ -39,9 +39,8 @@ const NO_EVENTS: readonly string[] = [];
  *
  * Pass `{ pollWhileWatching: true }` for a screen whose whole job is waiting for
  * something to change while the player sits and looks at it — the lobby filling
- * up. Nothing pushes for those (a push that shows no notification costs an iOS
- * player their subscription, see `usePushEvents`) and the tab never leaves, so
- * `refreshOnVisible` never fires either.
+ * up. Nothing pushes for those (see `usePushEvents`) and the tab never leaves,
+ * so `refreshOnVisible` never fires either.
  *
  * `T` is the whole JSON body; callers pick the field they need, which keeps the
  * hook agnostic about response shapes.
@@ -115,7 +114,7 @@ export function useRefreshableData<T>(
         refresh();
     }, [refresh]);
 
-    usePushEvents(events, refresh, { refreshOnVisible: true, pollWhileWatching: options.pollWhileWatching });
+    usePushEvents(events, refresh, { refreshOnVisible: true, ...options });
 
     return { data, isLoading, isRefreshing, status, refresh };
 }

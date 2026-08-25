@@ -1,5 +1,4 @@
 import { sendPushToUsers } from '@/utils/firebase/pushNotification';
-import { getNotificationPreferences, isChannelEnabled } from '@/utils/firebase/notificationPreferences';
 import { isDevDeployment } from '@/utils/devEnvironment';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
@@ -29,19 +28,16 @@ export async function POST(request: NextRequest) {
   const { userId } = await request.json();
   const user = await (await clerkClient()).users.getUser(userId);
 
-  // A test that silently does nothing teaches you nothing, and this one would:
-  // it goes out on the `yourTurn` channel like any other push, so the recipient's
-  // own preferences can drop it. Say so rather than reporting a success.
-  if (!isChannelEnabled(getNotificationPreferences(user), 'yourTurn')) {
-    return NextResponse.json({ success: false, skipped: 'Recipient has turn notifications switched off' });
-  }
-
-  await sendPushToUsers([user], { event: 'YourTurn' }, {
+  // This goes out on the `yourTurn` channel like any other push, so the
+  // recipient's preferences — or having no device registered — can drop it.
+  // Report the device count rather than a bare success: a test that quietly
+  // does nothing and says "sent" teaches you the wrong thing.
+  const devices = await sendPushToUsers([user], { event: 'YourTurn' }, {
     title: "Test Title",
     body: "Test Body"
   }, {
     channel: 'yourTurn'
   });
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: devices > 0, devices });
 }
