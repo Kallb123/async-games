@@ -68,6 +68,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Solitaire tells you when a deal is dead",
+                detail: "A game you can't win now says so. It used to keep insisting there were moves left as long as a single card sat in the stock — even when nothing left in the pile could go anywhere, however many times you cycled it.",
+                game: "solitaire",
+            },
+            {
                 title: "Solitaire stops suggesting pointless King moves",
                 detail: "Sliding a King that's already the base of its column into an empty space changes nothing, so it no longer clutters the move list or gets offered as a hint — and a board with nothing left but that shuffle is now correctly called out as stuck.",
                 game: "solitaire",
@@ -83,10 +88,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "One seat each, however many devices",
                 detail: "Entering a code you're already in with takes you back to your own seat instead of quietly claiming a second one.",
-            },
-            {
-                title: "Your lobby takes you into the game",
-                detail: "Waiting on the lobby screen when the last seat fills now drops everyone straight onto the board instead of back at the home screen.",
             },
         ],
     },

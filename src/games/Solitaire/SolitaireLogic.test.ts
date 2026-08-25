@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SolitaireDraw, SolitaireMoveCard, SolitaireUndo, SolitaireAutoSolve, SolitaireGameType } from "./SolitaireLogic";
 import { buildInitialSolitaireState, ISolitaireGameData, ISolitaireGameState } from "./SolitaireModels";
-import { canPlaceOnFoundation, canPlaceOnTableau, foundationCardCount, getLegalMoves, hasAnyLegalMove, toLegalMoveState } from "./rules";
+import { canPlaceOnFoundation, canPlaceOnTableau, foundationCardCount, getLegalMoves, isStalemated, toLegalMoveState } from "./rules";
 import { ICard, Suit, SUITS } from "@/utils/games/Cards";
 
 // ─── Minimal in-memory game harness ───────────────────────────────────────────
@@ -311,7 +311,7 @@ describe("full-game simulation", () => {
                 expect(outcome.validMove).toBe(true);
             } else {
                 // Genuinely stuck: no legal move and nothing left to draw/recycle.
-                expect(hasAnyLegalMove(toLegalMoveState(state))).toBe(false);
+                expect(isStalemated(toLegalMoveState(state), state.stock)).toBe(true);
                 break;
             }
 
@@ -378,7 +378,51 @@ describe("getLegalMoves and empty columns", () => {
         state.tableau[0] = [{ rank: 13, suit: 'S', faceUp: true }];
         state.tableau[1] = [{ rank: 13, suit: 'H', faceUp: true }];
 
-        expect(hasAnyLegalMove(toLegalMoveState(state))).toBe(false);
+        expect(isStalemated(toLegalMoveState(state), state.stock)).toBe(true);
+    });
+});
+
+describe("isStalemated", () => {
+    it("calls a board dead when nothing left in the stock or waste fits anywhere", () => {
+        const state = baseState();
+        // Both black 3s are exposed on top of face-down cards, so nothing can
+        // move; the stock holds a red 7 and a black 9, neither of which fits a
+        // black 3, starts a foundation, or is a King for the empty columns.
+        state.tableau[0] = [{ rank: 5, suit: 'S', faceUp: false }, { rank: 3, suit: 'S', faceUp: true }];
+        state.tableau[1] = [{ rank: 9, suit: 'H', faceUp: false }, { rank: 3, suit: 'C', faceUp: true }];
+        state.stock = [{ rank: 7, suit: 'H', faceUp: false }, { rank: 9, suit: 'C', faceUp: false }];
+
+        expect(getLegalMoves(toLegalMoveState(state))).toEqual([]);
+        expect(isStalemated(toLegalMoveState(state), state.stock)).toBe(true);
+    });
+
+    it("isn't fooled by an empty column: a King still buried in the stock keeps the game alive", () => {
+        const state = baseState();
+        state.tableau[0] = [{ rank: 5, suit: 'S', faceUp: false }, { rank: 3, suit: 'S', faceUp: true }];
+        state.stock = [{ rank: 13, suit: 'D', faceUp: false }];
+
+        expect(isStalemated(toLegalMoveState(state), state.stock)).toBe(false);
+    });
+
+    it("keeps the game alive while a card buried in the waste can still go home", () => {
+        const state = baseState();
+        state.foundations.S = foundationRun('S', 1);
+        // Every column is a lone face-up 3♠, so the waste top (6♥) has nowhere
+        // to go and no move exists on the board...
+        state.tableau.forEach((_, i) => { state.tableau[i] = [{ rank: 3, suit: 'S', faceUp: true }]; });
+        // ...but the 2♠ buried under it follows the A♠ home after a recycle.
+        state.waste = [{ rank: 2, suit: 'S', faceUp: true }, { rank: 6, suit: 'H', faceUp: true }];
+
+        expect(getLegalMoves(toLegalMoveState(state))).toEqual([]);
+        expect(isStalemated(toLegalMoveState(state), state.stock)).toBe(false);
+    });
+
+    it("is never stalemated while a move is on the board", () => {
+        const state = baseState();
+        state.tableau[0] = [{ rank: 13, suit: 'S', faceUp: false }, { rank: 2, suit: 'H', faceUp: true }];
+        state.foundations.S = foundationRun('S', 1);
+
+        expect(isStalemated(toLegalMoveState(state), state.stock)).toBe(false);
     });
 });
 

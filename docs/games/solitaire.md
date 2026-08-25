@@ -171,7 +171,7 @@ $$\text{Black King} \longrightarrow \text{Red Queen} \longrightarrow \text{Black
 
 * **Absolute Victory:** All 52 cards reside in the 4 Foundation piles ($13 \times 4$).
 * **Auto-Win State:** Achieved when all 28 Tableau cards are face-up and the Stock/Waste contains no unplayed cards that block sequential progression.
-* **Stalemate / Deadlock:** No further *progressing* legal moves are available across Stock, Waste, and Tableau, leaving $< 52$ cards in the Foundations. A board whose only remaining option is shuffling a King between empty columns is deadlocked.
+* **Stalemate / Deadlock:** No further *progressing* legal moves are available across Stock, Waste, and Tableau, leaving $< 52$ cards in the Foundations. A board whose only remaining option is shuffling a King between empty columns is deadlocked, and so is one where nothing left in the Stock or Waste fits anywhere — cycling the pile cannot change what a card can land on, so a board with no move and no playable draw is dead however long the player keeps drawing. The check needs the face-down Stock, so it is computed server-side and shipped to the client as `stalemated`. Draw-3 leaves some Stock cards unreachable; the check ignores that, so it errs towards calling a hopeless board playable, never the reverse.
 
 ---
 
