@@ -1,24 +1,12 @@
 'use client'
 
 import Image from "next/image";
-import { GameMeta, ThemeAccent } from "@/utils/ui/games";
+import { GameMeta, HEX_VERTICES } from "@/utils/ui/games";
+import { accentVar } from "@/utils/ui/colours";
 
 // Every game icon in /public/art is a square PNG of this size. next/image needs
 // the real intrinsic dimensions to pick a sensible optimised copy.
 export const GAME_ART_SIZE = 128;
-
-const ACCENT_VAR: Record<ThemeAccent, string> = {
-    terracotta: "var(--ag-terracotta)",
-    green: "var(--ag-green)",
-    gold: "var(--ag-gold)",
-    purple: "var(--ag-purple)",
-};
-
-// Named accents resolve to a theme token; anything else (e.g. a hex code)
-// is treated as a raw CSS colour and passed through as-is.
-export function accentVar(accent: GameMeta["accent"]) {
-    return ACCENT_VAR[accent as ThemeAccent] ?? accent;
-}
 
 // A thumb standing in for the `ag-icon-box` at the head of a list row or a
 // top bar. Mirrors that class's box in ag-theme.css, so the two stay the same
@@ -34,7 +22,7 @@ interface GameThumbProps {
 
 // Flat-top hexagon, used instead of the border-radius rounding for games
 // whose theme calls for a hex badge.
-const HEXAGON_CLIP_PATH = "polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)";
+const HEXAGON_CLIP_PATH = `polygon(${HEX_VERTICES.map(([x, y]) => `${x * 100}% ${y * 100}%`).join(", ")})`;
 
 // A small square game icon: real art when available, otherwise a tinted glyph.
 export default function GameThumb({ meta, size = 48, radius = 12 }: GameThumbProps) {

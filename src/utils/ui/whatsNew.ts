@@ -39,6 +39,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Share a game and the link sells it for you",
+                detail: "Drop a join link into a group chat and the preview now shows who's inviting you, how many seats are left, and a card for the game itself — instead of the same plain site link every time.",
+            },
+            {
                 title: "Find your Train Time tickets on the map",
                 detail: "Tap a ticket — while you're choosing which to keep, or in your ticket list — and its two cities light up on the board. Tap it again to put them out.",
                 game: "traintime",
@@ -56,10 +60,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Turn review, in the game's colours",
                 detail: "Stepping back through a match now happens on a warm dark scrubber with a turn track, and the screen stays in the app's theme instead of running to white below it.",
-            },
-            {
-                title: "The match log reads like a timeline",
-                detail: "Open the log in any game and the moves run down a thread, each dotted in the colour of the player who made it.",
             },
         ],
     },

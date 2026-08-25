@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { OPEN_SEAT_CLAIM_FILTER, OPEN_SEAT_ID, isOpenSeat, isSeatedAt, notSeatedFilter, openSeats, pendingSeatFor } from './lobby';
+import { OPEN_SEAT_CLAIM_FILTER, OPEN_SEAT_ID, invitedYouTo, isOpenSeat, isSeatedAt, notSeatedFilter, openSeats, pendingSeatFor, seatsCta, seatsLeftLabel } from './lobby';
 
 describe('isOpenSeat', () => {
     it('is true for the placeholder seat id', () => {
@@ -107,5 +107,28 @@ describe('pendingSeatFor', () => {
 
     it('is undefined for someone with no seat at all — the host included', () => {
         expect(pendingSeatFor(lobby, 'user_host')).toBeUndefined();
+    });
+});
+
+describe('seatsLeftLabel', () => {
+    it('pluralises the seats', () => {
+        expect(seatsLeftLabel(1)).toBe('1 seat left');
+        expect(seatsLeftLabel(3)).toBe('3 seats left');
+    });
+});
+
+describe('seatsCta', () => {
+    it('invites them into the room thats left', () => {
+        expect(seatsCta(2)).toBe('2 seats left — tap to take one');
+    });
+
+    it('stops inviting once there is none', () => {
+        expect(seatsCta(0)).toBe('Every seat in this one is taken');
+    });
+});
+
+describe('invitedYouTo', () => {
+    it('names the host and the game, the one way the app phrases it', () => {
+        expect(invitedYouTo('Dave', 'Train Time')).toBe('Dave invited you to Train Time');
     });
 });

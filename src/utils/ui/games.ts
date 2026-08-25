@@ -103,6 +103,22 @@ export function metaForGame(opts: { url?: string; friendlyName?: string }): Game
     return undefined;
 }
 
+// The flat-top hexagon a `shape: "hexagon"` game's badge is cut to, as
+// fractions of its box. Here beside `shape` itself so the thumb on screen (a
+// CSS `polygon()`) and the share card (an SVG `<polygon>`) cut the same
+// silhouette from the one set of vertices, in whichever notation each needs.
+export const HEX_VERTICES: readonly (readonly [number, number])[] = [
+    [0.25, 0], [0.75, 0], [1, 0.5], [0.75, 1], [0.25, 1], [0, 0.5],
+];
+
+// The share card a link to this game unfurls to, drawn per game by
+// `scripts/generate-icons.mjs` and served straight from `public/`. Here beside
+// `gamePath` so the app (which names it in a page's metadata) and the script
+// (which writes it) agree on the filename without either hard-coding it.
+export function gameShareCard(gameUrl: string): string {
+    return `/icons/og-game-${gameUrl}.png`;
+}
+
 // The in-app path of a game's board — `/games/<url slug>/<gameId>`. Every
 // screen that sends a player to a board (the turn lists, an accepted invite,
 // a lobby whose game has just started) goes through here, and

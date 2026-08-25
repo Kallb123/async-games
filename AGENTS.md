@@ -58,6 +58,13 @@ New games should add their metadata to `src/utils/ui/games.ts` and reuse
 screen rather than rebuilding the form — and add themselves to the "What's
 new" notes (see Working practices below).
 
+They also need a **share card**: the image a link to a game unfurls to in a
+chat app (today a join link, `/join?code=PLUM`). Run `npm run icons` and
+commit the `public/icons/og-game-<slug>.png` it writes. The script draws it
+from the game's own `meta` — name, tagline, accent, art or glyph — so there
+is nothing to design or list, but it needs **Bricolage Grotesque installed as
+a system font** and skips the cards with a warning when it isn't.
+
 ## Design system conventions
 
 - Font is Bricolage Grotesque (`var(--ag-font)`); palette is warm cream +
