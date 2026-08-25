@@ -632,6 +632,9 @@ button {
     color: var(--ag-ink-softer);
     margin-top: 8px;
 }
+/* A hint under something centred — the control it explains sits in the middle
+   of the column, so the copy does too. */
+.ag-hint--center { text-align: center; }
 
 .ag-disabled-hint {
     font: 500 11px/1.4 var(--ag-font);

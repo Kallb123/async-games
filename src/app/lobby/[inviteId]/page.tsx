@@ -9,6 +9,8 @@ import { INVITE_EVENTS } from "@/utils/hooks/usePushEvents";
 import { IInvitationResponse } from "@/utils/mongodb/InvitationData";
 import { OPEN_SEAT_LABEL } from "@/utils/games/lobby";
 import { buildJoinHref } from "@/utils/games/joinCode";
+import { formatRemainingUntil } from "@/utils/games/TurnTimer";
+import { useNowToTheMinute } from "@/utils/hooks/useNow";
 import { metaForGame, partySizeErrorMessage } from "@/utils/ui/games";
 import { shareOrCopyLink } from "@/utils/ui/share";
 import { fetchWithSessionRetry } from "@/utils/hooks/fetchWithSessionRetry";
@@ -31,6 +33,7 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
   useAuthGuard();
   const router = useRouter();
   const { showToast } = useToast();
+  const now = useNowToTheMinute();
   const enterStartedGame = useEnterStartedGame();
   const [starting, setStarting] = useState(false);
 
@@ -98,6 +101,13 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
   const meta = invite ? metaForGame({ friendlyName: invite.gameFriendlyName }) : undefined;
   const seats = invite?.userList ?? [];
   const claimedSeats = seats.filter(name => name !== OPEN_SEAT_LABEL);
+
+  // A code that quietly stopped working is the one thing a host can't explain
+  // to the friend still typing it in, so the deadline is on screen from the
+  // start rather than only in the toast that follows it. How long a lobby gets
+  // depends on the turn timer they chose (see lobbyTtlMs), which is the other
+  // reason to say it rather than leave it to be learned.
+  const expiresIn = invite?.expiresAt ? formatRemainingUntil(invite.expiresAt, now) : null;
 
   // What the card hands over is the code's second form: a link that opens
   // /join with the code already in the box (docs/account-less-play.md §4).
@@ -176,7 +186,8 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
             {invite?.joinCode ?? "····"}
           </div>
         </button>
-        <p className="ag-hint" style={{ textAlign: "center" }}>Sends a link that opens straight onto an open seat — or read the code out.</p>
+        <p className="ag-hint ag-hint--center">Sends a link that opens straight onto an open seat — or read the code out.</p>
+        {expiresIn && <p className="ag-hint ag-hint--center">Works for another {expiresIn}, then the lobby closes.</p>}
       </div>
 
       <ListSection
@@ -232,7 +243,7 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
           </button>
           {startError && meta
             ? <PartySizeHint meta={meta} total={partySize} />
-            : <p className="ag-hint" style={{ textAlign: "center" }}>Begins with everyone who&apos;s here — the empty seats are dropped.</p>}
+            : <p className="ag-hint ag-hint--center">Begins with everyone who&apos;s here — the empty seats are dropped.</p>}
         </div>
       )}
 

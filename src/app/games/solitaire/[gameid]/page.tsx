@@ -130,7 +130,7 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
                     >
                         🪄 Auto-solve
                     </ActionButton>
-                    <p className="ag-hint" style={{ textAlign: 'center' }}>Every card is face-up — the rest can be played out automatically.</p>
+                    <p className="ag-hint ag-hint--center">Every card is face-up — the rest can be played out automatically.</p>
                 </div>
             )}
 

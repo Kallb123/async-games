@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { OPEN_SEAT_CLAIM_FILTER, OPEN_SEAT_ID, invitedYouTo, isOpenSeat, isSeatedAt, notSeatedFilter, openSeats, pendingSeatFor, seatsCta, seatsLeftLabel } from './lobby';
+import { LOBBY_MAX_TTL_MS, LOBBY_MIN_TTL_MS, OPEN_SEAT_CLAIM_FILTER, OPEN_SEAT_ID, invitedYouTo, isOpenSeat, isSeatedAt, lobbyTtlMs, notSeatedFilter, openSeats, pendingSeatFor, seatsCta, seatsLeftLabel } from './lobby';
+import { UNLIMITED_TURN_TIMER } from './TurnTimer';
 
 describe('isOpenSeat', () => {
     it('is true for the placeholder seat id', () => {
@@ -130,5 +131,31 @@ describe('seatsCta', () => {
 describe('invitedYouTo', () => {
     it('names the host and the game, the one way the app phrases it', () => {
         expect(invitedYouTo('Dave', 'Train Time')).toBe('Dave invited you to Train Time');
+    });
+});
+
+describe('lobbyTtlMs', () => {
+    const HOUR_MS = 60 * 60 * 1000;
+
+    it('gives a brisk game the floor rather than its own short timer', () => {
+        expect(lobbyTtlMs('10m')).toBe(LOBBY_MIN_TTL_MS);
+        expect(lobbyTtlMs('30m')).toBe(LOBBY_MIN_TTL_MS);
+        expect(lobbyTtlMs('1h')).toBe(LOBBY_MIN_TTL_MS);
+    });
+
+    it('lasts as long as one turn once that is longer than the floor', () => {
+        expect(lobbyTtlMs('6h')).toBe(6 * HOUR_MS);
+        expect(lobbyTtlMs('3d')).toBe(3 * 24 * HOUR_MS);
+    });
+
+    it('caps an unlimited timer rather than letting the code live forever', () => {
+        expect(lobbyTtlMs(UNLIMITED_TURN_TIMER)).toBe(LOBBY_MAX_TTL_MS);
+    });
+
+    it('never exceeds the ceiling, and never falls below the floor', () => {
+        for (const timer of ['10m', '30m', '1h', '3h', '6h', '12h', '1d', '3d', '7d', UNLIMITED_TURN_TIMER, 'nonsense']) {
+            expect(lobbyTtlMs(timer)).toBeGreaterThanOrEqual(LOBBY_MIN_TTL_MS);
+            expect(lobbyTtlMs(timer)).toBeLessThanOrEqual(LOBBY_MAX_TTL_MS);
+        }
     });
 });

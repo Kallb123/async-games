@@ -265,7 +265,11 @@ Two mechanics follow from open seats being contended:
   is enough; no coordination, no counter.
 - **Expiry:** a TTL index on `expiresAt` reaps abandoned lobbies, which also
   frees the code. This is the mechanism that keeps a 234k space from ever
-  filling.
+  filling. *(Shipped as `lobbyTtlMs`: an hour at minimum, and beyond that as
+  long as one turn of the game being set up, capped at seven days — a host who
+  is happy to wait days for a turn is setting up with friends who aren't all
+  at their phones, and an unlimited turn timer must still not mean an
+  unlimited code.)*
 - **The code dies at game start.** It is a door into a lobby, never a door
   into a running game — otherwise it is a permanent "anyone can join your
   game" URL.

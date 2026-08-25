@@ -1,3 +1,5 @@
+import { pluralize } from "@/utils/ui/text";
+
 export const UNLIMITED_TURN_TIMER = 'unlimited';
 
 const TIMER_MS: Record<string, number> = {
@@ -54,29 +56,57 @@ export function isWarningThreshold(lastTurnTimestamp: string, turnTimer: string)
     return remaining <= warningThresholdMs(turnTimer) && remaining > 0;
 }
 
-// `now` is always supplied so this never reads the wall clock on behalf of a
-// render — see `useNow`. Server-side callers pass their own `Date.now()`.
-function remainingParts(lastTurnTimestamp: string, turnTimer: string, now: number): { days: number, hours: number, minutes: number } | null {
-    if (isUnlimitedTurnTimer(turnTimer)) return null;
-    const total = parseTurnTimerMs(turnTimer);
-    const elapsed = now - new Date(lastTurnTimestamp).getTime();
-    const remainingMs = Math.max(total - elapsed, 0);
+type DurationParts = { days: number, hours: number, minutes: number };
+
+// A span of time as the three units the labels below choose between, never
+// negative. Shared by the remaining-time and elapsed-time readouts so a
+// duration is cut into days/hours/minutes in exactly one place.
+function durationParts(ms: number): DurationParts {
+    const span = Math.max(ms, 0);
 
     return {
-        days: Math.floor(remainingMs / (24 * 60 * 60 * 1000)),
-        hours: Math.floor(remainingMs / (60 * 60 * 1000)),
-        minutes: Math.floor(remainingMs / (60 * 1000)),
+        days: Math.floor(span / (24 * 60 * 60 * 1000)),
+        hours: Math.floor(span / (60 * 60 * 1000)),
+        minutes: Math.floor(span / (60 * 1000)),
     };
+}
+
+// The one "3 hours" / "45 minutes" ladder every long-form duration label in
+// the app reads from — only what a sub-minute span is worth calling differs
+// between them, so that is the argument.
+function coarseLabel(parts: DurationParts, underAMinute: string): string {
+    const { days, hours, minutes } = parts;
+
+    if (days >= 1) return pluralize(days, 'day');
+    if (hours >= 1) return pluralize(hours, 'hour');
+    if (minutes >= 1) return pluralize(minutes, 'minute');
+    return underAMinute;
+}
+
+// `now` is always supplied so this never reads the wall clock on behalf of a
+// render — see `useNow`. Server-side callers pass their own `Date.now()`.
+function remainingParts(lastTurnTimestamp: string, turnTimer: string, now: number): DurationParts | null {
+    if (isUnlimitedTurnTimer(turnTimer)) return null;
+    const deadline = new Date(lastTurnTimestamp).getTime() + parseTurnTimerMs(turnTimer);
+    return durationParts(deadline - now);
 }
 
 export function formatRemainingTime(lastTurnTimestamp: string, turnTimer: string): string {
     const parts = remainingParts(lastTurnTimestamp, turnTimer, Date.now());
     if (!parts) return 'unlimited';
-    const { days, hours, minutes } = parts;
+    return coarseLabel(parts, 'less than a minute');
+}
 
-    if (days >= 1) return `${days} day${days !== 1 ? 's' : ''}`;
-    if (hours >= 1) return `${hours} hour${hours !== 1 ? 's' : ''}`;
-    return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+/**
+ * "3 hours" style label for how long until `deadline` — the same wording as
+ * formatRemainingTime, for a deadline that is already a moment in time rather
+ * than a timer running from a turn (a lobby's `expiresAt`, see `lobbyTtlMs`).
+ * Null before hydration, for the same reason formatRemainingTimeShort is: pass
+ * `useNowToTheMinute()` rather than letting this read the clock.
+ */
+export function formatRemainingUntil(deadline: string, now: number | null): string | null {
+    if (now === null) return null;
+    return coarseLabel(durationParts(new Date(deadline).getTime() - now), 'less than a minute');
 }
 
 /**
@@ -85,15 +115,7 @@ export function formatRemainingTime(lastTurnTimestamp: string, turnTimer: string
  * under a minute reads as "a moment" rather than "0 minutes".
  */
 export function formatElapsedTime(timestamp: string): string {
-    const elapsedMs = Math.max(Date.now() - new Date(timestamp).getTime(), 0);
-
-    const days = Math.floor(elapsedMs / (24 * 60 * 60 * 1000));
-    if (days >= 1) return `${days} day${days !== 1 ? 's' : ''}`;
-    const hours = Math.floor(elapsedMs / (60 * 60 * 1000));
-    if (hours >= 1) return `${hours} hour${hours !== 1 ? 's' : ''}`;
-    const minutes = Math.floor(elapsedMs / (60 * 1000));
-    if (minutes >= 1) return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
-    return 'a moment';
+    return coarseLabel(durationParts(Date.now() - new Date(timestamp).getTime()), 'a moment');
 }
 
 /**

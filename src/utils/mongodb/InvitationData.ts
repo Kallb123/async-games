@@ -23,7 +23,7 @@ export interface IInvitationData {
     // the way gameFriendlyName is rather than resolved from Clerk on demand:
     // the link preview a shared code unfurls to needs it, and an external
     // round trip is the slowest thing on that path. It can only go stale
-    // within the hour the lobby lives, and only if the host renames
+    // within the lifetime of the lobby, and only if the host renames
     // themselves meanwhile. Absent on a lobby opened before this existed —
     // `findLobbyPreview` still falls back to asking Clerk.
     senderName?: string
@@ -73,7 +73,10 @@ export interface IInvitationResponse {
     timestamp: string,
     gameFriendlyName: string,
     // Present only on an open, join-by-code lobby (see IInvitationData.joinCode).
-    joinCode?: string
+    joinCode?: string,
+    // When that lobby's code stops working, as an ISO string — the lobby screen
+    // tells whoever is waiting there how long they have left (see lobbyTtlMs).
+    expiresAt?: string
 }
 
 export interface IInvitationRequest {
