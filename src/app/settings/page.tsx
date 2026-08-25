@@ -16,6 +16,9 @@ import { NotificationChannel, NOTIFICATION_CHANNELS } from "@/utils/firebase/not
 import { requestNotificationPermission, useNotificationPermission } from "@/utils/hooks/useNotificationPermission";
 import useFcmToken from "@/utils/hooks/useFcmToken";
 import { useInstallPrompt } from "@/utils/hooks/useInstallPrompt";
+import { useHydrated } from "@/utils/hooks/useNow";
+import { formatBuildTime } from "@/utils/ui/time";
+import { BUILD_TIME } from "@/utils/buildInfo";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useClerk } from "@clerk/nextjs";
 import { usePathname, useRouter } from "next/navigation";
@@ -36,6 +39,8 @@ export default function Settings() {
     const { showToast } = useToast();
     const { fcmToken } = useFcmToken();
     const installMethod = useInstallPrompt();
+    // Local time, so only the browser can format it — nothing to show until it has.
+    const hydrated = useHydrated();
 
     const [prefs, setPrefs] = useState<NotificationPreferencesState | null>(null);
     const [isSavingPrefs, setIsSavingPrefs] = useState(false);
@@ -234,8 +239,8 @@ export default function Settings() {
             <div className="ag-footer">
                 <DevTools />
                 <LegalLinks />
-                <div style={{ fontSize: '0.875rem', color: 'var(--ag-text-muted)', textAlign: 'center', marginTop: '0.75rem' }}>
-                    v{packageJson.version}
+                <div className="ag-hint ag-hint--center">
+                    v{packageJson.version}{hydrated && BUILD_TIME && ` · built ${formatBuildTime(BUILD_TIME)}`}
                 </div>
             </div>
 

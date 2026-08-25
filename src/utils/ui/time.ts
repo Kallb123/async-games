@@ -28,3 +28,18 @@ export function formatRelativeTime(iso: string, now: number | null): string | nu
 
     return new Date(then).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
+
+// The build stamp beside the version number on Settings: "25 Aug 2026, 14:32",
+// in the reader's own locale and time zone.
+//
+// The server and the browser format this differently — different time zone,
+// different locale — so callers render it only once hydrated (`useHydrated`).
+export function formatBuildTime(iso: string): string {
+    return new Date(iso).toLocaleString(undefined, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+}
