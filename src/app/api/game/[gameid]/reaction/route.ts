@@ -9,6 +9,7 @@ import { buildEventFeed } from '@/utils/games/recap';
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildReactionNotification } from '@/utils/firebase/notificationContent';
 import { isValidReaction } from '@/utils/reactions';
+import { isDuplicateKeyError } from '@/utils/mongodb/duplicateKey';
 
 export interface IGetReactionParams {
     gameid: string;
@@ -75,7 +76,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
         reaction,
         timestamp: (new Date()).toISOString()
     });
-    await reactionDoc.save();
+    try {
+        await reactionDoc.save();
+    } catch (err) {
+        // Two taps landed together and both got past the lookup above; the
+        // unique { gameId, eventId } index caught the second. One reaction per
+        // action either way, so this is the same answer the lookup gives.
+        if (!isDuplicateKeyError(err)) {
+            throw err;
+        }
+        return NextResponse.json({}, { status: 409, statusText: "Already reacted to this action" });
+    }
 
     const { data: userList } = await (await clerkClient()).users.getUserList({ userId: [event.actorId] });
     const recipient = userList.find(u => u.id === event.actorId);

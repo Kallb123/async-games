@@ -5,6 +5,7 @@ import type { uuidString, GameEndReason, GameResultStatGroup, GameResultChart } 
 // alias of their own; a new one doesn't need to — the state type infers the
 // player type.
 import { playerByUserId } from "../apiModels/GameDataApi";
+import { isDuplicateKeyError } from "./duplicateKey";
 import {
     IDiceCitiesGameData,
     IDiceCitiesGameResultStats,
@@ -421,7 +422,7 @@ export async function recordGameResult(
             await GameResultModel.create(base);
         }
     } catch (err: any) {
-        if (err?.code !== 11000) {
+        if (!isDuplicateKeyError(err)) {
             throw err;
         }
     }

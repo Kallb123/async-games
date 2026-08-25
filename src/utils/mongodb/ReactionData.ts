@@ -1,10 +1,10 @@
 import { Document, Model, Schema, model, models } from "mongoose";
 
 // One reaction dropped on a recap action. `eventId` is the recap event's own
-// id (see IGameEvent in utils/games/recap.ts) — unique per game, enforcing
-// the "one reaction per action" rule via a lookup before insert. `recipientId`
-// is the action's original actor, who gets notified. This store is
-// write-and-notify only for now; a later user page will read it back out.
+// id (see IGameEvent in utils/games/recap.ts) — unique per game, which is what
+// the "one reaction per action" rule is enforced on (see the index below).
+// `recipientId` is the action's original actor, who gets notified. This store
+// is write-and-notify only for now; a later user page will read it back out.
 export interface IReactionData {
     reactionId: `${string}-${string}-${string}-${string}-${string}`,
     gameId: string,
@@ -36,4 +36,10 @@ export var ReactionSchema = new Schema<IReactionDataDocument>({
     reaction: String,
     timestamp: String
 });
+// "One reaction per action" was only ever a lookup before an insert, which two
+// taps landing together both pass. This is what actually enforces it — and it
+// is the index the recap route's { gameId, eventId } read wants anyway. The
+// route still does the lookup first, because "you already reacted to this" is
+// a better answer than a duplicate-key error; this catches the pair that race.
+ReactionSchema.index({ gameId: 1, eventId: 1 }, { unique: true });
 export var ReactionModel = models.Reaction || model<IReactionDataDocument, IReactionDataModel>('Reaction', ReactionSchema);
