@@ -2667,7 +2667,9 @@ button {
     color: var(--tt-ink);
     font: inherit;
 }
-button.ag-tt-ticket { cursor: pointer; padding-right: 34px; }
+button.ag-tt-ticket { cursor: pointer; }
+/* Only the keep-or-return choice draws a tick; leave room for it there. */
+.ag-tt-ticket--tick { padding-right: 34px; }
 .ag-tt-ticket--done { border-color: var(--tt-good-line); background: var(--tt-good-tint); }
 .ag-tt-ticket--on { border-color: var(--tt-brass); box-shadow: 0 0 0 2px var(--tt-brass-ring); }
 .ag-tt-ticket-route { display: flex; align-items: center; gap: 8px; }

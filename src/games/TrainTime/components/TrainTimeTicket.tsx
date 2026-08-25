@@ -5,10 +5,13 @@ import { cityName } from '@/games/TrainTime/board';
 
 interface TrainTimeTicketProps {
     ticket: ITrainTimeTicketView;
-    /** Whether it's picked, in the keep-or-return choice. Omit elsewhere. */
+    /** Whether it's picked out — kept in the keep-or-return choice, or the one
+     *  being read against the map in the tickets panel. Omit elsewhere. */
     selected?: boolean;
-    /** Given only where a ticket is choosable — otherwise it renders flat. */
+    /** Given only where a ticket is tappable — otherwise it renders flat. */
     onToggle?: () => void;
+    /** Draw the keep tick. Only the keep-or-return choice keeps anything. */
+    showKeepTick?: boolean;
     /** After scoring, a ticket is worth ±its value rather than "still open". */
     scored?: boolean;
 }
@@ -19,7 +22,7 @@ interface TrainTimeTicketProps {
  * choice, the "your tickets" panel and the end-of-game reveal, so a ticket
  * looks the same everywhere it appears.
  */
-export default function TrainTimeTicket({ ticket, selected, onToggle, scored }: TrainTimeTicketProps) {
+export default function TrainTimeTicket({ ticket, selected, onToggle, showKeepTick, scored }: TrainTimeTicketProps) {
     const status = ticket.complete ? 'Connected' : scored ? 'Missed' : 'Not connected yet';
     // Once the game is scored the value reads as the swing it actually was.
     const value = scored
@@ -28,7 +31,8 @@ export default function TrainTimeTicket({ ticket, selected, onToggle, scored }: 
 
     const className = 'ag-tt-ticket'
         + (ticket.complete ? ' ag-tt-ticket--done' : '')
-        + (selected ? ' ag-tt-ticket--on' : '');
+        + (selected ? ' ag-tt-ticket--on' : '')
+        + (showKeepTick ? ' ag-tt-ticket--tick' : '');
 
     const body = (
         <>
@@ -52,7 +56,7 @@ export default function TrainTimeTicket({ ticket, selected, onToggle, scored }: 
     return (
         <button type="button" className={className} aria-pressed={selected} onClick={onToggle}>
             {body}
-            <span className="ag-tt-ticket-tick">{selected ? '✓' : ''}</span>
+            {showKeepTick && <span className="ag-tt-ticket-tick">{selected ? '✓' : ''}</span>}
         </button>
     );
 }

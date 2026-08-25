@@ -1,5 +1,5 @@
 'use client'
-import React, { useState } from 'react';
+import React from 'react';
 import type { ITrainTimeTicketView } from '@/games/TrainTime/apiModels';
 import TrainTimeTicket from './TrainTimeTicket';
 import ActionButton from '@/components/ui/ActionButton';
@@ -11,6 +11,10 @@ interface TrainTimeTicketSheetProps {
     mustKeep: number;
     /** True for the opening deal, which happens before the player's first action. */
     settingUp: boolean;
+    /** Ids picked so far. Held by the screen, so the map can light up the
+     *  cities of whatever is currently picked. */
+    chosen: number[];
+    onToggle: (ticketId: number) => void;
     onKeep: (ticketIds: number[]) => void;
     pending: boolean;
 }
@@ -20,11 +24,7 @@ interface TrainTimeTicketSheetProps {
  * is the point: a ticket you don't connect is subtracted at the end (§6), so
  * the sheet prices both directions before anything is committed.
  */
-export default function TrainTimeTicketSheet({ tickets, mustKeep, settingUp, onKeep, pending }: TrainTimeTicketSheetProps) {
-    const [chosen, setChosen] = useState<number[]>([]);
-    const toggle = (id: number) =>
-        setChosen(c => (c.includes(id) ? c.filter(x => x !== id) : [...c, id]));
-
+export default function TrainTimeTicketSheet({ tickets, mustKeep, settingUp, chosen, onToggle, onKeep, pending }: TrainTimeTicketSheetProps) {
     const enough = chosen.length >= mustKeep;
     const atStake = tickets.filter(t => chosen.includes(t.id)).reduce((sum, t) => sum + t.points, 0);
 
@@ -47,7 +47,8 @@ export default function TrainTimeTicketSheet({ tickets, mustKeep, settingUp, onK
                             key={ticket.id}
                             ticket={ticket}
                             selected={chosen.includes(ticket.id)}
-                            onToggle={() => toggle(ticket.id)}
+                            onToggle={() => onToggle(ticket.id)}
+                            showKeepTick
                         />
                     ))}
                 </div>
