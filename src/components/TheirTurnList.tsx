@@ -63,11 +63,7 @@ export default function TheirTurnList() {
                 return (
                     <div key={game.gameId} className="ag-list-row">
                         <div style={{ width: 8, height: 8, borderRadius: "50%", background: "oklch(0.7 0.05 60)", flex: "none" }} />
-                        <Link
-                            href={gamePath(game.url, game.gameId)}
-                            className="ag-list-row-main"
-                            style={{ textDecoration: "none", color: "var(--ag-ink)" }}
-                        >
+                        <Link href={gamePath(game.url, game.gameId)} className="ag-list-row-main">
                             <div style={{ font: "600 13px/1.35 var(--ag-font)" }}>
                                 {game.friendlyName} · <span style={{ color: "var(--ag-ink-soft)" }}>{opponentName}&apos;s turn</span>
                             </div>

@@ -67,6 +67,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Get back to a lobby you opened",
+                detail: "An open game waiting in “Awaiting response” is now a tap away from its lobby, so you can read the code out again or see who has taken a seat — instead of only ever seeing it the once when you made it.",
+            },
+            {
                 title: "Solitaire tells you when a deal is dead",
                 detail: "A game you can't win now says so. It used to keep insisting there were moves left as long as a single card sat in the stock — even when nothing left in the pile could go anywhere, however many times you cycled it.",
                 game: "solitaire",
@@ -83,10 +87,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Whose turn it is, at a glance",
                 detail: "Every game's scoreboard now marks the player to move with a caret next to their name — it was easy to miss in Train Time and missing altogether in Dice Cities.",
-            },
-            {
-                title: "One seat each, however many devices",
-                detail: "Entering a code you're already in with takes you back to your own seat instead of quietly claiming a second one.",
             },
         ],
     },

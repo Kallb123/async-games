@@ -15,7 +15,7 @@ import BackLink from "@/components/ui/BackLink";
 import DieFace from "@/components/ui/DieFace";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { JOIN_CODE_LENGTH, normaliseJoinCode, readJoinCode } from "@/utils/games/joinCode";
-import { invitedYouTo, seatsLeftLabel } from "@/utils/games/lobby";
+import { invitedYouTo, lobbyPath, seatsLeftLabel } from "@/utils/games/lobby";
 import { MAX_GUEST_NAME_LENGTH, isValidGuestName, randomGuestName } from "@/utils/games/guestName";
 import { readResumeTicket } from "@/utils/users/resumeLink";
 import { useEnterStartedGame } from "@/utils/hooks/useEnterStartedGame";
@@ -226,7 +226,7 @@ function JoinScreen() {
       ? { title: 'Already In', body: "You're already in this one — here's the lobby." }
       : { title: 'Seat Claimed', body: "You're in! Waiting for the rest of the party." };
     showToast(body, 'success', title);
-    router.push(`/lobby/${result.inviteId}`);
+    router.push(lobbyPath(result.inviteId));
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {

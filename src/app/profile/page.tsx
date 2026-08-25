@@ -244,7 +244,8 @@ export default function Profile() {
                     <div key={friend.friendshipId} className="ag-list-row">
                         <Link
                             href={`/profile/${friend.user.userId}`}
-                            style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, textDecoration: "none", color: "inherit" }}
+                            className="ag-list-row-main"
+                            style={{ display: "flex", alignItems: "center", gap: 12 }}
                         >
                             <Avatar name={friend.user.username} imageUrl={friend.user.imageUrl} size={36} />
                             <div className="ag-list-row-main">
@@ -311,11 +312,7 @@ export default function Profile() {
             {/* Account */}
             <div className="ag-section" style={{ marginTop: 6 }}>
                 <div className="ag-list">
-                    <Link
-                        href="/settings"
-                        className="ag-list-row"
-                        style={{ textDecoration: "none", color: "inherit" }}
-                    >
+                    <Link href="/settings" className="ag-list-row">
                         <span style={{ flex: 1, font: "700 13px var(--ag-font)" }}>Settings</span>
                         <span style={{ color: "var(--ag-ink-soft)" }}>›</span>
                     </Link>
