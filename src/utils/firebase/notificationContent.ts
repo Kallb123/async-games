@@ -5,6 +5,7 @@ import { metaForGame } from '@/utils/ui/games';
 import { formatElapsedTime } from '@/utils/games/TurnTimer';
 import { nameList } from '@/utils/ui/players';
 import { gameNotificationImage, PushNotification } from './pushNotification';
+import { truncate } from '@/utils/ui/text';
 
 // Every piece of user-visible push copy in the app is written here rather than
 // inline in the route that sends it. Three routes can hand a player their turn
@@ -26,17 +27,12 @@ function sentence(text: string): string {
     return `${text.trim().replace(/[.!?]+$/, '')}.`;
 }
 
-function truncate(text: string): string {
-    if (text.length <= MAX_BODY_LENGTH) return text;
-    return `${text.slice(0, MAX_BODY_LENGTH - 1).trimEnd()}…`;
-}
-
 // Every push about a game gets that game's own artwork and a trimmed body, so
 // the builders below only have to decide what to say.
 function gamePush(gameData: IGameData, title: string, body: string): PushNotification {
     return {
         title,
-        body: truncate(body),
+        body: truncate(body, MAX_BODY_LENGTH),
         imageUrl: gameNotificationImage(gameData.gameType.url)
     };
 }
@@ -143,7 +139,7 @@ export function buildGameInviteNotification(senderName: string, friendlyName: st
     const meta = metaForGame({ friendlyName });
     return {
         title: `${senderName} challenged you to ${meta?.name ?? friendlyName}`,
-        body: truncate(meta ? `${sentence(meta.tagline)} Tap to accept and get playing.` : `Tap to accept and get playing.`),
+        body: truncate(meta ? `${sentence(meta.tagline)} Tap to accept and get playing.` : `Tap to accept and get playing.`, MAX_BODY_LENGTH),
         imageUrl: meta ? gameNotificationImage(meta.url) : undefined
     };
 }
@@ -187,7 +183,7 @@ export function buildGameLostNotification(gameData: IGameData, winnerName: strin
 export function buildReactionNotification(actorName: string, reaction: string, eventTitle: string): PushNotification {
     return {
         title: `${actorName} reacted ${reaction}`,
-        body: truncate(`To your move: ${eventTitle}`)
+        body: truncate(`To your move: ${eventTitle}`, MAX_BODY_LENGTH)
     };
 }
 

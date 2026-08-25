@@ -1,4 +1,5 @@
 import { IInvitationData, IUserIdAcceptance } from "@/utils/mongodb/InvitationData";
+import { pluralize } from "@/utils/ui/text";
 
 // The userId every unclaimed seat carries — never a real Clerk id, so
 // isOpenSeat can never mistake a filled seat for one still open. A lobby is
@@ -75,4 +76,30 @@ export function pendingSeatFor(
     claimantId: string
 ): IUserIdAcceptance | undefined {
     return invite.userIdList.find(entry => entry.userId === claimantId && !entry.inviteAccepted);
+}
+
+// The two sentences a lobby is described in, wherever someone is being invited
+// into it: on `/join`'s guest screen, in the link preview a shared join link
+// unfurls to, and on the share card that preview draws. Written once so the
+// three never drift into three different ways of saying the same thing.
+export function seatsLeftLabel(openSeatCount: number): string {
+    return `${pluralize(openSeatCount, 'seat')} left`;
+}
+
+// What a lobby's remaining room is worth saying to someone who hasn't taken a
+// seat yet — the same call to action on the guest screen's link preview and on
+// the card that preview draws, rather than two ternaries drifting apart.
+export function seatsCta(openSeatCount: number): string {
+    return openSeatCount > 0
+        ? `${seatsLeftLabel(openSeatCount)} — tap to take one`
+        : "Every seat in this one is taken";
+}
+
+// Exported apart from the sentence below because the share card sets the two
+// halves at two sizes — the game's name is the big word on it — and would
+// otherwise be spelling the phrase out a second time.
+export const INVITED_YOU_TO = 'invited you to';
+
+export function invitedYouTo(sender: string, gameFriendlyName: string): string {
+    return `${sender} ${INVITED_YOU_TO} ${gameFriendlyName}`;
 }

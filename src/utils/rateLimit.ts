@@ -1,15 +1,18 @@
-import { NextRequest } from "next/server";
 import { RateLimitModel } from "@/utils/mongodb/RateLimitData";
 
 // Vercel (and any proxy in front of it) sets x-forwarded-for; this Next
 // version's NextRequest carries no IP of its own. The first entry is the
 // client — everything after it is proxies the request passed through.
-export function clientIp(request: NextRequest): string {
-    const forwardedFor = request.headers.get('x-forwarded-for');
+//
+// Takes the headers rather than the request, so a page's `generateMetadata`
+// (which is handed `headers()` from next/headers, never a NextRequest) can
+// throttle on the same key a route handler does.
+export function clientIp(headers: Pick<Headers, 'get'>): string {
+    const forwardedFor = headers.get('x-forwarded-for');
     if (forwardedFor) {
         return forwardedFor.split(',')[0].trim();
     }
-    return request.headers.get('x-real-ip') ?? 'unknown';
+    return headers.get('x-real-ip') ?? 'unknown';
 }
 
 // A fixed-window per-key counter (see RateLimitData): allow up to `limit`

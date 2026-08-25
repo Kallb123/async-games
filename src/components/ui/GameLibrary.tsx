@@ -4,7 +4,8 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { GAME_META, COMING_SOON, GAME_CATEGORIES, GameCategory, GameMeta } from "@/utils/ui/games";
-import GameThumb, { accentVar, GAME_ART_SIZE } from "@/components/ui/GameThumb";
+import GameThumb, { GAME_ART_SIZE } from "@/components/ui/GameThumb";
+import { accentVar } from "@/utils/ui/colours";
 
 const FILTERS: ("All" | GameCategory)[] = ["All", ...GAME_CATEGORIES];
 

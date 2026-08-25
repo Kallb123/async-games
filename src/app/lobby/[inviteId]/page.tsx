@@ -107,10 +107,13 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
   // that's already here rather than a second button beside it. The code stays
   // on screen, large, for whoever is sitting opposite and typing it.
   const handleShare = async () => {
-    const joinCode = invite?.joinCode;
-    if (!joinCode) return;
+    if (!invite?.joinCode) return;
+    const { joinCode } = invite;
     const url = `${window.location.origin}${buildJoinHref(joinCode)}`;
-    const result = await shareOrCopyLink(url, `Join my game — the code is ${joinCode}.`);
+    // Names the game in the shared message too: where a chat app renders the
+    // link preview the card says it, but a plain-text paste is all some of
+    // them show.
+    const result = await shareOrCopyLink(url, `Join my ${invite.gameFriendlyName} game — the code is ${joinCode}.`);
     if (result === 'copied') showToast('Link copied!', 'success');
     if (result === 'failed') showToast('Could not copy — share the code instead.', 'danger');
   };

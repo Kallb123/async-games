@@ -43,3 +43,15 @@ export function buildJoinHref(joinCode: string): string {
 export function readJoinCode(searchParams: URLSearchParams): string {
     return normaliseJoinCode(searchParams.get(JOIN_CODE_PARAM) ?? '');
 }
+
+/**
+ * The same code, off the plain object a server page is handed instead of a
+ * `URLSearchParams` (`/join`'s `generateMetadata`). Here rather than at the
+ * call site so the param name stays owned by this file whichever shape the
+ * reader is holding. A repeated `?code=` arrives as an array — a link that
+ * ambiguous opens no lobby.
+ */
+export function readJoinCodeParam(searchParams: Record<string, string | string[] | undefined>): string {
+    const value = searchParams[JOIN_CODE_PARAM];
+    return normaliseJoinCode(typeof value === 'string' ? value : '');
+}

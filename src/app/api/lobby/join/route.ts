@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
 
     await dbConnect();
 
-    if (!(await consumeRateLimit('lobby-join', clientIp(request), JOIN_RATE_LIMIT, JOIN_RATE_WINDOW_MS))) {
+    if (!(await consumeRateLimit('lobby-join', clientIp(request.headers), JOIN_RATE_LIMIT, JOIN_RATE_WINDOW_MS))) {
         return NextResponse.json({}, { status: 429, statusText: "Too many attempts — try again shortly." });
     }
 

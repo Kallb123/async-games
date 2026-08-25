@@ -5,17 +5,13 @@ import { getDeviceTokens, removeDevices } from './deviceTokens';
 import { deadTokensByUser, PushTarget } from './revokedTokens';
 import { getNotificationPreferences, isChannelEnabled, NotificationChannel } from './notificationPreferences';
 import { gamePath, metaForGame } from '@/utils/ui/games';
+import { APP_BASE_URL } from '@/utils/app';
 
 export interface PushNotification {
     title: string;
     body?: string;
     imageUrl?: string;
 }
-
-// Origin used to build links in push notifications. Override with the
-// APP_URL env var per deployment (e.g. a staging environment); falls back to
-// production so nothing breaks where it isn't set.
-const APP_BASE_URL = process.env.APP_URL ?? 'https://asyncgames.com';
 
 // Absolute URL the service worker opens (`firebase-messaging-sw.js`'s
 // `notificationclick` handler reads `data.link`) when a notification is

@@ -1,24 +1,12 @@
 'use client'
 
 import Image from "next/image";
-import { GameMeta, ThemeAccent } from "@/utils/ui/games";
+import { GameMeta } from "@/utils/ui/games";
+import { accentVar } from "@/utils/ui/colours";
 
 // Every game icon in /public/art is a square PNG of this size. next/image needs
 // the real intrinsic dimensions to pick a sensible optimised copy.
 export const GAME_ART_SIZE = 128;
-
-const ACCENT_VAR: Record<ThemeAccent, string> = {
-    terracotta: "var(--ag-terracotta)",
-    green: "var(--ag-green)",
-    gold: "var(--ag-gold)",
-    purple: "var(--ag-purple)",
-};
-
-// Named accents resolve to a theme token; anything else (e.g. a hex code)
-// is treated as a raw CSS colour and passed through as-is.
-export function accentVar(accent: GameMeta["accent"]) {
-    return ACCENT_VAR[accent as ThemeAccent] ?? accent;
-}
 
 // A thumb standing in for the `ag-icon-box` at the head of a list row or a
 // top bar. Mirrors that class's box in ag-theme.css, so the two stay the same
