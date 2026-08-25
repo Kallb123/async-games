@@ -64,7 +64,7 @@ export default function GameSetupLayout({ meta, children, actionLabel, actionDis
                             </OfferCard>
                         </div>
                     ) : footnote && (
-                        <p className="ag-hint" style={{ textAlign: "center" }}>{footnote}</p>
+                        <p className="ag-hint ag-hint--center">{footnote}</p>
                     )}
                 </div>
             </form>

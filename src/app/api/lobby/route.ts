@@ -5,7 +5,7 @@ import { dbConnect, invitationModelFor } from '@/utils/mongodb/mongodb';
 import { IInvitationDataDocument, IUserIdAcceptance, IInvitationRequest } from '@/utils/mongodb/InvitationData';
 import { canHostGame, usersByUsername } from '@/utils/users/clerk';
 import { GAME_META, partySizeErrorMessage } from '@/utils/ui/games';
-import { OPEN_SEAT_ID, LOBBY_TTL_MS } from '@/utils/games/lobby';
+import { OPEN_SEAT_ID, lobbyTtlMs } from '@/utils/games/lobby';
 import { generateJoinCode } from '@/utils/games/joinCode';
 import { sendPushToUsers, homeNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildGameInviteNotification } from '@/utils/firebase/notificationContent';
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
             gameType,
             gameFriendlyName: meta.name,
             joinCode: generateJoinCode(),
-            expiresAt: new Date(Date.now() + LOBBY_TTL_MS),
+            expiresAt: new Date(Date.now() + lobbyTtlMs(turnTimer)),
             senderName: readableName(thisUser),
         });
         try {

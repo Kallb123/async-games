@@ -1,4 +1,5 @@
 import { IInvitationData, IUserIdAcceptance } from "@/utils/mongodb/InvitationData";
+import { isUnlimitedTurnTimer, parseTurnTimerMs } from "@/utils/games/TurnTimer";
 import { pluralize } from "@/utils/ui/text";
 
 // The userId every unclaimed seat carries — never a real Clerk id, so
@@ -17,7 +18,26 @@ export const OPEN_SEAT_LABEL = "Open seat";
 // `expiresAt` index on InvitationSchema, and docs/account-less-play.md §4) —
 // long enough for a host's friends to type in a code, short enough that a
 // code nobody used stops working and frees itself back into the pool.
-export const LOBBY_TTL_MS = 60 * 60 * 1000;
+//
+// The floor is what every lobby gets, however brisk the game: a host who
+// picks a 10-minute turn timer still needs more than 10 minutes for a friend
+// to find the code. The ceiling is what keeps §4's bound on a lobby's
+// lifetime real — the TTL is the only thing stopping a ~234k code space from
+// filling, and the only thing keeping a shared join link from becoming a
+// permanent "anyone can join your game" URL.
+export const LOBBY_MIN_TTL_MS = 60 * 60 * 1000;
+export const LOBBY_MAX_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+// A lobby lives at least an hour, and beyond that for as long as one turn of
+// the game it is setting up: someone happy to wait three days for a turn is
+// setting up with friends who aren't all at their phones, and an hour-old
+// code that stopped working is the same dead end for them as a skipped turn.
+// An unlimited turn timer means "no deadline anywhere", which the lobby can
+// only honour as far as the ceiling above.
+export function lobbyTtlMs(turnTimer: string): number {
+    const turn = isUnlimitedTurnTimer(turnTimer) ? LOBBY_MAX_TTL_MS : parseTurnTimerMs(turnTimer);
+    return Math.min(Math.max(LOBBY_MIN_TTL_MS, turn), LOBBY_MAX_TTL_MS);
+}
 
 export function isOpenSeat(entry: IUserIdAcceptance): boolean {
     return entry.userId === OPEN_SEAT_ID;

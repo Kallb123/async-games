@@ -29,6 +29,7 @@ export async function invitationToResponse(invite: IInvitationDataDocument): Pro
         senderImageUrl: profileImageUrl(senderUser),
         userList,
         gameFriendlyName: invite.gameFriendlyName,
-        joinCode: invite.joinCode
+        joinCode: invite.joinCode,
+        expiresAt: invite.expiresAt?.toISOString()
     };
 }

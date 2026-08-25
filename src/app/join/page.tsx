@@ -94,8 +94,8 @@ export async function generateMetadata({ searchParams }: JoinPageProps): Promise
     return {
         title,
         description,
-        // A live lobby is gone within the hour and its code goes back in the
-        // pool, so there is nothing here worth a search engine keeping.
+        // A live lobby is temporary — it expires and its code goes back in
+        // the pool — so there is nothing here worth a search engine keeping.
         robots: { index: false },
         openGraph: { type: "website", siteName: APP_NAME, title, description, images: [image] },
         twitter: { card: "summary_large_image", title, description, images: [image.url] },

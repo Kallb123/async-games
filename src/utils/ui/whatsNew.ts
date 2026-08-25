@@ -39,6 +39,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Join codes stay alive as long as your game does",
+                detail: "A lobby used to close after an hour whatever game you set up. Now the code lasts as long as one turn of it — up to a week for the slow ones — and the lobby tells you when it runs out.",
+            },
+            {
                 title: "Share a game and the link sells it for you",
                 detail: "Drop a join link into a group chat and the preview now shows who's inviting you, how many seats are left, and a card for the game itself — instead of the same plain site link every time.",
             },
@@ -56,10 +60,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Train Time remembers what you missed",
                 detail: "Open a Train Time game and you get the same welcome-back recap the other games have — every route claimed while you were away, plus a nudge at what your hand can pay for. You can step back through the whole match too, and the log has moved to the ⋯ menu so it's there on anyone's turn.",
                 game: "traintime",
-            },
-            {
-                title: "Turn review, in the game's colours",
-                detail: "Stepping back through a match now happens on a warm dark scrubber with a turn track, and the screen stays in the app's theme instead of running to white below it.",
             },
         ],
     },
