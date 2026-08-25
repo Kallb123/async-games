@@ -1,5 +1,6 @@
 import { dbConnect } from "@/utils/mongodb/mongodb";
 import { RateLimitModel } from "@/utils/mongodb/RateLimitData";
+import { isDuplicateKeyError } from "@/utils/mongodb/duplicateKey";
 
 // Vercel (and any proxy in front of it) sets x-forwarded-for; this Next
 // version's NextRequest carries no IP of its own. The first entry is the
@@ -45,7 +46,7 @@ export async function consumeRateLimit(
         // unique index on `key` — the same duplicate-key retry the join
         // code generator already uses (src/app/api/lobby/route.ts), not a
         // real failure.
-        if (err?.code !== 11000) {
+        if (!isDuplicateKeyError(err)) {
             throw err;
         }
         const doc = await RateLimitModel.findOneAndUpdate({ key }, { $inc: { count: 1 } }, { new: true }).exec();

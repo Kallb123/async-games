@@ -6,6 +6,7 @@ import { FriendshipModel, IFriendshipDataDocument } from '@/utils/mongodb/Friend
 import { sendPushToUsers, profileNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildFriendInviteNotification } from '@/utils/firebase/notificationContent';
 import { readableName } from '@/utils/ui/players';
+import { isDuplicateKeyError } from '@/utils/mongodb/duplicateKey';
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
@@ -54,7 +55,18 @@ export async function POST(request: NextRequest) {
     accepted: false,
     timestamp: (new Date()).toISOString()
   });
-  await friendship.save();
+  try {
+    await friendship.save();
+  } catch (err) {
+    // The two of them asked each other at the same moment, so both requests
+    // got past the lookup above and the unique index on the pair caught this
+    // one (see FriendshipSchema). The other request's invite is the real one —
+    // same answer as if this request had simply been the slower of the two.
+    if (!isDuplicateKeyError(err)) {
+      throw err;
+    }
+    return NextResponse.json({}, {status: 409, statusText: "A friend request already exists with this user"});
+  }
 
   await sendPushToUsers([recipient], {
     event: "FriendInvite",

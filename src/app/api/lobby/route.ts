@@ -7,6 +7,7 @@ import { canHostGame, usersByUsername } from '@/utils/users/clerk';
 import { GAME_META, partySizeErrorMessage } from '@/utils/ui/games';
 import { OPEN_SEAT_ID, lobbyTtlMs } from '@/utils/games/lobby';
 import { generateJoinCode } from '@/utils/games/joinCode';
+import { isDuplicateKeyError } from '@/utils/mongodb/duplicateKey';
 import { sendGameInvitePush } from '@/utils/firebase/invitePush';
 import { readableName } from '@/utils/ui/players';
 
@@ -96,7 +97,7 @@ export async function POST(request: NextRequest) {
             // The partial unique index on joinCode throws this on a
             // collision — no coordination, no counter, just try again with a
             // fresh code (docs/account-less-play.md §4).
-            if (err?.code !== 11000 || attempt >= MAX_JOIN_CODE_ATTEMPTS - 1) {
+            if (!isDuplicateKeyError(err) || attempt >= MAX_JOIN_CODE_ATTEMPTS - 1) {
                 throw err;
             }
         }

@@ -65,6 +65,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Everyone accepting at once no longer strands the game",
+                detail: "If two of you accepted the same invite in the same moment, the game sometimes never started — the invite just sat there with everybody in it. It starts now, whoever taps last. A double-tapped accept can't deal you two copies of the same game any more either.",
+            },
+            {
                 title: "Notifications stop switching themselves off on iPhone",
                 detail: "The app used to send invisible background pings just to keep your open screens up to date. iPhones count those against an app and quietly revoke its notifications after a few — which is why yours kept going dead. They're all gone: screens refresh when you come back to them instead.",
             },
@@ -79,11 +83,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Solitaire tells you when a deal is dead",
                 detail: "A game you can't win now says so. It used to keep insisting there were moves left as long as a single card sat in the stock — even when nothing left in the pile could go anywhere, however many times you cycled it.",
-                game: "solitaire",
-            },
-            {
-                title: "Solitaire stops suggesting pointless King moves",
-                detail: "Sliding a King that's already the base of its column into an empty space changes nothing, so it no longer clutters the move list or gets offered as a hint — and a board with nothing left but that shuffle is now correctly called out as stuck.",
                 game: "solitaire",
             },
         ],
