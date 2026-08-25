@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import JoinForm from "./JoinForm";
-import { APP_NAME, OG_IMAGE } from "@/utils/app";
+import { APP_NAME, OG_IMAGE, shareImage } from "@/utils/app";
 import { gameShareCard } from "@/utils/ui/games";
 import { readJoinCodeParam } from "@/utils/games/joinCode";
 import { invitedYouTo, seatsCta } from "@/utils/games/lobby";
@@ -84,12 +84,10 @@ export async function generateMetadata({ searchParams }: JoinPageProps): Promise
     // `public/` — what changes per lobby (who, the code, the seats) is in the
     // title and description above, so there is nothing here to render per
     // request. A game with no card yet falls back to the site's.
-    const image = {
-        url: lobby.meta ? gameShareCard(lobby.meta.url) : OG_IMAGE,
-        width: 1200,
-        height: 630,
-        alt: `${title} — join code ${joinCode}.`,
-    };
+    const image = shareImage(
+        lobby.meta ? gameShareCard(lobby.meta.url) : OG_IMAGE,
+        `${title} — join code ${joinCode}.`,
+    );
 
     return {
         title,
@@ -98,7 +96,7 @@ export async function generateMetadata({ searchParams }: JoinPageProps): Promise
         // the pool — so there is nothing here worth a search engine keeping.
         robots: { index: false },
         openGraph: { type: "website", siteName: APP_NAME, title, description, images: [image] },
-        twitter: { card: "summary_large_image", title, description, images: [image.url] },
+        twitter: { card: "summary_large_image", title, description, images: [image] },
     };
 }
 

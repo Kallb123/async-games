@@ -39,6 +39,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "The app says the same thing wherever you meet it",
+                detail: "Install Async Games and the splash screen, the install prompt and the browser's own top bar are now the warm cream every screen is, not the slightly-off grey they used to be — and the prompt, a shared link and a search result all describe it the same way instead of three different ways.",
+            },
+            {
                 title: "Join codes stay alive as long as your game does",
                 detail: "A lobby used to close after an hour whatever game you set up. Now the code lasts as long as one turn of it — up to a week for the slow ones — and the lobby tells you when it runs out.",
             },
@@ -54,11 +58,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "See how the Train Time race actually ran",
                 detail: "A finished game now charts route points turn by turn, and the Long Haul race beside it — so you can see where the game was won, not just the final total.",
-                game: "traintime",
-            },
-            {
-                title: "Train Time remembers what you missed",
-                detail: "Open a Train Time game and you get the same welcome-back recap the other games have — every route claimed while you were away, plus a nudge at what your hand can pay for. You can step back through the whole match too, and the log has moved to the ⋯ menu so it's there on anyone's turn.",
                 game: "traintime",
             },
         ],

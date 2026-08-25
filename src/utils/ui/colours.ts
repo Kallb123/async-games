@@ -10,8 +10,15 @@ import { GameMeta, ThemeAccent } from "@/utils/ui/games";
 // icons and the share cards. That script runs through `tsx` precisely so it
 // can import these rather than keep a second copy — don't give it one.
 
-/** The dark colourway the share cards and the landing hero are painted on. */
+/**
+ * The dark colourway the share cards and the landing hero are painted on, plus
+ * the cream field the app itself sits on — the browser paints its own chrome
+ * and an installed app's splash screen in that one, and neither can read the
+ * stylesheet either.
+ */
 export const SRGB = {
+    /** `--ag-bg`. */
+    bg: "#f6e8de",
     brown: "#3a221a",
     brownLift: "#492a1f",
     cream: "#f7f0eb",
