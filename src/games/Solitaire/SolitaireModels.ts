@@ -9,7 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { SolitaireGameType } from "@/utils/apiModels/GameLogic";
 import { UNLIMITED_TURN_TIMER } from "@/utils/games/TurnTimer";
 import { ICard, Suit, buildStandardDeck, shuffleDeck } from "@/utils/games/Cards";
-import { computeFinalScore, foundationCardCount, formatDuration } from "./rules";
+import { computeFinalScore, foundationCardCount, formatDuration, isStalemated, toLegalMoveState } from "./rules";
 
 export type SolitaireDrawMode = 'DRAW_1' | 'DRAW_3';
 
@@ -200,7 +200,8 @@ export function gameStateToModel(gameState: ISolitaireGameState): ISolitaireGame
         cardsToFoundationCount: gameState.cardsToFoundationCount,
         foundationToTableauCount: gameState.foundationToTableauCount,
         startedAt: gameState.startedAt,
-        canUndo: gameState.undoStack.length > 0
+        canUndo: gameState.undoStack.length > 0,
+        stalemated: isStalemated(toLegalMoveState(gameState), gameState.stock)
     };
 }
 

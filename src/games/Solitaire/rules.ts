@@ -21,7 +21,7 @@ export interface ISolitaireLegalMoveState {
 // The server's board keeps the whole stock pile while the client's DTO only
 // carries a count, so this is the one projection that differs between them —
 // `ISolitaireGameStateResponse` already satisfies ISolitaireLegalMoveState and
-// can be passed straight to getLegalMoves/hasAnyLegalMove.
+// can be passed straight to getLegalMoves.
 export function toLegalMoveState(state: { waste: ICard[]; foundations: Record<Suit, ICard[]>; tableau: ICard[][]; stock: ICard[] }): ISolitaireLegalMoveState {
     return { waste: state.waste, foundations: state.foundations, tableau: state.tableau, stockCount: state.stock.length };
 }
@@ -123,9 +123,9 @@ export function getLegalMoves(state: ISolitaireLegalMoveState): ISolitaireLegalM
                 // A King-headed run that already sits at the bottom of its
                 // column has nothing underneath it to free, so shifting the
                 // whole column into an empty one leaves an identical board:
-                // it's not a move worth offering, and — because
-                // hasAnyLegalMove counts these — it must not be what stops a
-                // dead board from reading as stuck.
+                // it's not a move worth offering, and — because isStalemated
+                // counts these — it must not be what stops a dead board from
+                // reading as stuck.
                 if (!destTop && index === 0) return;
                 const reason = willExposeHiddenCard(column, count) ? "Frees a face-down card" : `From column ${from + 1}`;
                 push({ zone: "tableau", column: from }, count, { zone: "tableau", column: to }, tableauLabel(to, destTop), reason);
@@ -163,8 +163,27 @@ export function getLegalMoves(state: ISolitaireLegalMoveState): ISolitaireLegalM
     return moves;
 }
 
-export function hasAnyLegalMove(state: ISolitaireLegalMoveState): boolean {
-    return getLegalMoves(state).length > 0 || canDraw(state.stockCount, state.waste.length);
+// Whether `card` has anywhere at all to go on the current board — home to its
+// foundation, onto a tableau top, or (as a King) into an empty column.
+// Deliberately ignores `faceUp`: it's asked of face-down stock cards too.
+function canPlaceAnywhere(card: ICard, state: ISolitaireLegalMoveState): boolean {
+    if (card.suit != null && canPlaceOnFoundation(card, state.foundations[card.suit])) return true;
+    return state.tableau.some((column) => canPlaceOnTableau(card, column[column.length - 1]));
+}
+
+// Whether the board is dead: no legal move, and nothing left in the stock or
+// waste that could ever be played however long the player keeps drawing and
+// recycling. With no board move available the tableau can't change, and a
+// recycle only re-orders cards without changing what they can land on — so if
+// none of them fits anywhere now, none of them ever will.
+//
+// Needs the face-down stock, which the client's DTO doesn't carry, so it's
+// computed server-side and shipped as `stalemated` (the same trick `canUndo`
+// uses for the undo stack). Draw-3 makes some stock cards unreachable, which
+// this ignores: it can call a hopeless board playable, never the reverse.
+export function isStalemated(state: ISolitaireLegalMoveState, stock: ICard[]): boolean {
+    if (getLegalMoves(state).length > 0) return false;
+    return ![...stock, ...state.waste].some((card) => canPlaceAnywhere(card, state));
 }
 
 // Total cards currently home across all four foundations (0-52) — the win

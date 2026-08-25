@@ -15,7 +15,7 @@ import { useElapsedSeconds } from "@/utils/hooks/useElapsedSeconds";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useToast } from "@/components/ToastContext";
 import { ISolitaireGameDataResponse } from "@/games/Solitaire/apiModels";
-import { SolitaireZoneRef, getLegalMoves, hasAnyLegalMove, hasHiddenTableauCards, foundationCardCount, formatDuration } from "@/games/Solitaire/rules";
+import { SolitaireZoneRef, getLegalMoves, hasHiddenTableauCards, foundationCardCount, formatDuration } from "@/games/Solitaire/rules";
 import SolitaireBoard from "@/games/Solitaire/components/SolitaireBoard";
 import SolitaireVictoryScreen from "@/games/Solitaire/components/SolitaireVictoryScreen";
 import MatchHistory from "@/components/games/MatchHistory";
@@ -69,7 +69,7 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
     // doesn't re-derive a "final" score every second while it's being read.
     const elapsedSeconds = useElapsedSeconds(state?.startedAt, !complete);
     const foundationCount = state ? foundationCardCount(state.foundations) : 0;
-    const stalemated = !!state && !complete && !hasAnyLegalMove(state);
+    const stalemated = !!state && !complete && state.stalemated;
     const autoSolveAvailable = !!state && !complete && !hasHiddenTableauCards(state.tableau);
 
     let subtitle: React.ReactNode = 'Loading…';

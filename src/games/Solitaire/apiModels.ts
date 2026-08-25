@@ -16,7 +16,9 @@ export interface ISolitaireGameStateResponse {
     cardsToFoundationCount: number,
     foundationToTableauCount: number,
     startedAt: string,
-    canUndo: boolean
+    canUndo: boolean,
+    /** Derived server-side: the board is dead, nothing left to draw can help. */
+    stalemated: boolean
 }
 
 export interface ISolitaireGameDataResponse extends IGameDataResponse {
