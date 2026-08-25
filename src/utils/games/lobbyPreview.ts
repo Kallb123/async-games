@@ -12,10 +12,10 @@ import { consumeRateLimit } from '@/utils/rateLimit';
 // is left — and nothing more, so a wrong guess at a code learns only "a lobby
 // exists or it doesn't".
 //
-// Three readers share this one lookup: `GET /api/lobby/code/<CODE>` (the guest
-// screen's live preview), `/join`'s `generateMetadata` (what a shared link
-// unfurls to in a chat app) and `/api/og/join/<CODE>` (the card that preview
-// shows). One read, so the three can never describe the same lobby differently.
+// Two readers share this one lookup: `GET /api/lobby/code/<CODE>` (the guest
+// screen's live preview) and `/join`'s `generateMetadata` (what a shared link
+// unfurls to in a chat app). One read, so the two can never describe the same
+// lobby differently.
 export interface LobbyPreview {
     /** The code as stored, however the caller happened to spell it. */
     joinCode: string;
@@ -31,12 +31,6 @@ export interface LobbyPreview {
 // looking is throttled per IP on the same terms.
 const PREVIEW_RATE_LIMIT = 30;
 const PREVIEW_RATE_WINDOW_MS = 10 * 60 * 1000;
-
-// The counters the two ways of looking are throttled on. Named here so the
-// three call sites can't fall out of step over a string literal — the page's
-// metadata and the share card it points at are one unfurl and share a budget.
-export const LOBBY_PREVIEW_SCOPE = 'lobby-preview';
-export const LOBBY_UNFURL_SCOPE = 'lobby-unfurl';
 
 /**
  * Whether this IP may look up another lobby. `scope` keeps each way of asking

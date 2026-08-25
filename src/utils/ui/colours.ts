@@ -2,13 +2,13 @@ import { GameMeta, ThemeAccent } from "@/utils/ui/games";
 
 // The theme's colours, in the two forms the app has to hand them to a
 // renderer. The browser resolves `ag-theme.css`'s custom properties itself,
-// but anything drawing outside the DOM — the share card
-// `/api/og/join/<code>` rasterises — has no stylesheet behind it and can't
+// but anything drawing outside the DOM has no stylesheet behind it and can't
 // resolve an `oklch()` token, so it needs the sRGB value of the same colour.
 // Both forms live here so they can't drift apart.
 //
-// `scripts/generate-icons.mjs` carries its own copy of these hexes, and is the
-// one exception: it is a plain Node script that can't import TypeScript.
+// The sRGB half is read by `scripts/generate-icons.mjs`, which draws the app
+// icons and the share cards. That script runs through `tsx` precisely so it
+// can import these rather than keep a second copy — don't give it one.
 
 /** The dark colourway the share cards and the landing hero are painted on. */
 export const SRGB = {

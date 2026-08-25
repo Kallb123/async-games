@@ -40,7 +40,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "Share a game and the link sells it for you",
-                detail: "Drop a join link into a group chat and the preview now shows who's inviting you, which game, the code and how many seats are left — on a card in that game's own colours, instead of the same plain site link every time.",
+                detail: "Drop a join link into a group chat and the preview now shows who's inviting you, how many seats are left, and a card for the game itself — instead of the same plain site link every time.",
             },
             {
                 title: "Find your Train Time tickets on the map",

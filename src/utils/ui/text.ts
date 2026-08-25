@@ -14,9 +14,9 @@ export function signed(value: number): string {
 /**
  * `text` cut to `max` characters, ellipsis included in the count — the one way
  * the app shortens copy whose length it doesn't control. Shared by push bodies
- * (`notificationContent.ts`) and the join share card, which cut for different
- * reasons (an OS notification's wrap, a fixed-size drawing) but cut the same
- * way.
+ * (`notificationContent.ts`) and the game share cards
+ * `scripts/generate-icons.mjs` draws, which cut for different reasons (an OS
+ * notification's wrap, a fixed-size drawing) but cut the same way.
  */
 export function truncate(text: string, max: number): string {
     if (text.length <= max) return text;

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { LOBBY_PREVIEW_SCOPE, allowLobbyPreview, findLobbyPreview } from '@/utils/games/lobbyPreview';
+import { allowLobbyPreview, findLobbyPreview } from '@/utils/games/lobbyPreview';
 import { normaliseJoinCode } from '@/utils/games/joinCode';
 import { clientIp } from '@/utils/rateLimit';
 
@@ -20,7 +20,7 @@ export interface ILobbyPreviewResponse {
 export async function GET(request: NextRequest, { params }: { params: Promise<{ code: string }> }) {
     console.log(`GET ${request.nextUrl.pathname}`);
 
-    if (!(await allowLobbyPreview(LOBBY_PREVIEW_SCOPE, clientIp(request.headers)))) {
+    if (!(await allowLobbyPreview('lobby-preview', clientIp(request.headers)))) {
         return NextResponse.json({}, { status: 429, statusText: "Too many attempts — try again shortly." });
     }
 

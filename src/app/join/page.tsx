@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import JoinForm from "./JoinForm";
-import { APP_NAME } from "@/utils/app";
+import { APP_NAME, OG_IMAGE } from "@/utils/app";
+import { gameShareCard } from "@/utils/ui/games";
 import { readJoinCodeParam } from "@/utils/games/joinCode";
 import { invitedYouTo, seatsCta } from "@/utils/games/lobby";
-import { LOBBY_UNFURL_SCOPE, allowLobbyPreview, findLobbyPreview } from "@/utils/games/lobbyPreview";
+import { allowLobbyPreview, findLobbyPreview } from "@/utils/games/lobbyPreview";
 import { clientIp } from "@/utils/rateLimit";
 
 // What a join link looks like when it lands in a chat rather than a browser.
@@ -37,15 +38,19 @@ export async function generateMetadata({ searchParams }: JoinPageProps): Promise
     // Same throttle as every other public look at a lobby, on its own counter
     // (see lobbyPreview.ts) — a crawler that has run out of budget gets the
     // generic card, which is invisible to the player either way.
-    if (!(await allowLobbyPreview(LOBBY_UNFURL_SCOPE, clientIp(await headers())))) return GENERIC;
+    if (!(await allowLobbyPreview('lobby-unfurl', clientIp(await headers())))) return GENERIC;
 
     const lobby = await findLobbyPreview(joinCode);
     if (!lobby) return GENERIC;
 
     const title = invitedYouTo(lobby.sender, lobby.gameFriendlyName);
     const description = [`${seatsCta(lobby.openSeatCount)}.`, lobby.meta?.tagline].filter(Boolean).join(' ');
+    // The game's own card, drawn once by `npm run icons` and served from
+    // `public/` — what changes per lobby (who, the code, the seats) is in the
+    // title and description above, so there is nothing here to render per
+    // request. A game with no card yet falls back to the site's.
     const image = {
-        url: `/api/og/join/${joinCode}`,
+        url: lobby.meta ? gameShareCard(lobby.meta.url) : OG_IMAGE,
         width: 1200,
         height: 630,
         alt: `${title} — join code ${joinCode}.`,

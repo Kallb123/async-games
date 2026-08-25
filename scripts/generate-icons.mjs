@@ -2,34 +2,45 @@
 // die" mark. Four pips at 12, 3, 6 and 9 — a die face and a clock face at once
 // — with the brass pip marking the seat in play.
 //
-// Run with `node scripts/generate-icons.mjs`. `sharp` comes in with Next's
-// install, so there's nothing extra to add to package.json; the OG image needs
+// Also draws the share cards a link to the site unfurls to: one generic card,
+// plus one per game, so a shared join link previews as the game it opens
+// rather than as the site (see `/join`'s generateMetadata). Those read each
+// game's own `meta` through `GAME_META`, so a new game gets a card by adding
+// itself to the library and re-running this — nothing here lists the games.
+//
+// Run with `npm run icons`. It goes through `tsx` rather than bare node only
+// so this file can import that TypeScript metadata (and the theme's colours)
+// instead of keeping a second copy of either. `sharp` comes in with Next's
+// install, so there is nothing extra to add to package.json; the cards need
 // Bricolage Grotesque installed as a system font (see WORDMARK_FONT below) and
-// is skipped with a warning when it isn't.
+// are skipped with a warning when it isn't.
 //
 // `public/icons/icon.svg` is the scalable master this writes, and it is what
 // `src/components/ui/Brand.tsx` puts on screen — so the mark is defined here
 // and nowhere else.
 
 import { execFileSync } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
+
+import { GAME_META, HEX_VERTICES, gameShareCard } from '../src/utils/ui/games.ts';
+import { SRGB, accentHex } from '../src/utils/ui/colours.ts';
+import { truncate } from '../src/utils/ui/text.ts';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC_ICONS = path.join(ROOT, 'public', 'icons');
 const APP = path.join(ROOT, 'src', 'app');
 
 // The `--ag-*` theme tokens, resolved to sRGB hex: SVG rasterisers don't
-// understand the oklch() the stylesheet is written in.
+// understand the oklch() the stylesheet is written in. `SRGB` and `accentHex`
+// in `src/utils/ui/colours.ts` are where those live — this only adds the brass
+// the mark's live pip is picked out in, which nothing on screen uses.
 const COLOURS = {
-    terracotta: '#b74b21',
+    ...SRGB,
+    terracotta: accentHex('terracotta'),
     brass: '#f7c28f',
-    cream: '#f7f0eb',
-    brown: '#3a221a',
-    brownLift: '#492a1f',
-    inkSoft: '#c8b3a6',
 };
 
 // Everything is a fraction of the box, so the mark redraws cleanly at any size.
@@ -107,21 +118,116 @@ function ico(images) {
     return Buffer.concat([header, ...entries, ...images.map((image) => image.data)]);
 }
 
-// The landing hero, rendered as a share card: the mark and wordmark over the
-// dark colourway, with the lifted die shape bleeding off the top right.
 const WORDMARK_FONT = 'Bricolage Grotesque';
+// A game with no art of its own is drawn as its glyph, and most of those are
+// emoji — a family librsvg only has if the system does.
+const EMOJI_FONT = 'Noto Color Emoji';
 
+// Every share card stands on the same ground: the dark colourway with the
+// lifted die shape bleeding off the top right. One wrapper, so moving that
+// shape moves it on all of them.
+const CARD_W = 1200;
+const CARD_H = 630;
+
+function shareCard(inner) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${CARD_W}" height="${CARD_H}" viewBox="0 0 ${CARD_W} ${CARD_H}">
+  <rect width="${CARD_W}" height="${CARD_H}" fill="${COLOURS.brown}"/>
+  <rect x="900" y="-120" width="440" height="440" rx="119" fill="${COLOURS.brownLift}" transform="rotate(12 1120 100)"/>
+  ${inner}
+</svg>`;
+}
+
+// The landing hero as a share card — what a link to anything but a specific
+// game unfurls to.
 function ogImageSvg() {
     const mark = clockDieSvg({ size: 76 });
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <rect width="1200" height="630" fill="${COLOURS.brown}"/>
-  <rect x="900" y="-120" width="440" height="440" rx="119" fill="${COLOURS.brownLift}" transform="rotate(12 1120 100)"/>
-  <g transform="translate(88 76)">${mark}</g>
+    return shareCard(`<g transform="translate(88 76)">${mark}</g>
   <text x="184" y="129" font-family="${WORDMARK_FONT}" font-weight="800" font-size="42" letter-spacing="-1.4" fill="${COLOURS.cream}">Async Games</text>
   <text x="88" y="332" font-family="${WORDMARK_FONT}" font-weight="800" font-size="82" letter-spacing="-2.9" fill="${COLOURS.cream}">Board games,</text>
   <text x="88" y="420" font-family="${WORDMARK_FONT}" font-weight="800" font-size="82" letter-spacing="-2.9" fill="${COLOURS.cream}">one turn at a time.</text>
-  <text x="88" y="504" font-family="${WORDMARK_FONT}" font-weight="800" font-size="26" fill="${COLOURS.inkSoft}">Play with friends across timezones. Take your turn when you have five minutes.</text>
-</svg>`;
+  <text x="88" y="504" font-family="${WORDMARK_FONT}" font-weight="800" font-size="26" fill="${COLOURS.inkSoft}">Play with friends across timezones. Take your turn when you have five minutes.</text>`);
+}
+
+// One share card per game, for a link that opens that game — today a join link
+// (`/join?code=PLUM`), whose title and description carry the parts that change
+// per lobby (who invited you, the code, seats left). The card only has to say
+// *which game*, and that is a fixed set, so these are drawn once here rather
+// than rendered per request.
+
+// SVG has no auto-wrap, so the card does its own: a name long enough to run
+// off the edge is cut, and a tagline is broken across at most two lines. Both
+// limits are character counts measured against the widths this layout holds at
+// the sizes below.
+const MAX_NAME = 24;
+const TAGLINE_LINE = 58;
+const TAGLINE_LINES = 2;
+const TAGLINE_LEADING = 36;
+
+// Greedy line breaking on whitespace, at most `maxLines` of `maxChars`; the
+// last line is cut if the text still doesn't fit. A word longer than a line
+// gets its own line and is cut there rather than looping forever.
+function wrap(text, maxChars, maxLines) {
+    const lines = [''];
+    for (const word of text.split(/\s+/)) {
+        const line = lines[lines.length - 1];
+        const candidate = line ? `${line} ${word}` : word;
+        if (candidate.length <= maxChars || !line) {
+            lines[lines.length - 1] = candidate;
+        } else if (lines.length < maxLines) {
+            lines.push(word);
+        } else {
+            lines[lines.length - 1] = candidate;
+            break;
+        }
+    }
+    return lines.map((line) => truncate(line, maxChars));
+}
+
+// XML, so a game whose name or tagline contains an ampersand ("Settlements &
+// Cities") doesn't produce a document the rasteriser refuses.
+const xml = (text) => text.replace(/[&<>]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[char]);
+
+// The plate the game's art (or its glyph) sits on, mirroring GameThumb: a
+// rounded square, or a flat-top hexagon for the games whose theme calls for
+// one. Same 200-unit box either way, so the text beside it never moves.
+const PLATE = 200;
+// The text column starts clear of the plate, so resizing the plate moves the
+// text with it rather than leaving the two overlapping.
+const TEXT_X = 88 + PLATE + 44;
+
+function plateShape(meta, fill) {
+    return meta.shape === 'hexagon'
+        ? `<polygon points="${HEX_VERTICES.map(([x, y]) => `${x * PLATE},${y * PLATE}`).join(' ')}" fill="${fill}"/>`
+        : `<rect width="${PLATE}" height="${PLATE}" rx="44" fill="${fill}"/>`;
+}
+
+async function gameShareCardSvg(meta) {
+    const accent = accentHex(meta.accent);
+    const tagline = wrap(meta.tagline, TAGLINE_LINE, TAGLINE_LINES);
+    const mark = clockDieSvg({ size: 56 });
+    const glyph = meta.glyph ?? '';
+    // A lettered glyph ("1→100", "S?") is set in the heavy weight the rest of
+    // the card is; an emoji is not. Asked for weight 800 fontconfig synthesises
+    // one, and the emboldening closes the fine gaps in a detailed glyph — 🌍
+    // comes out a featureless disc with its continents filled in.
+    const glyphWeight = /\p{Extended_Pictographic}/u.test(glyph) ? 400 : 800;
+    // Real art where the game has some; its glyph on the accent plate where it
+    // doesn't — the same two cases, in the same order, that GameThumb draws.
+    const art = meta.art
+        ? `<image href="data:image/png;base64,${(await readFile(path.join(ROOT, 'public', meta.art))).toString('base64')}" x="0" y="0" width="${PLATE}" height="${PLATE}" clip-path="url(#plate)"/>`
+        : `<text x="${PLATE / 2}" y="${PLATE / 2}" font-family="${WORDMARK_FONT}, ${EMOJI_FONT}" font-weight="${glyphWeight}" font-size="64" fill="${COLOURS.cream}" text-anchor="middle" dominant-baseline="central">${xml(glyph)}</text>`;
+
+    return shareCard(`<defs><clipPath id="plate">${plateShape(meta, 'none')}</clipPath></defs>
+  <rect width="24" height="${CARD_H}" fill="${accent}"/>
+  <g transform="translate(88 64)">${mark}</g>
+  <text x="160" y="102" font-family="${WORDMARK_FONT}" font-weight="800" font-size="30" letter-spacing="-1" fill="${COLOURS.inkSoft}">Async Games</text>
+  <g transform="translate(88 232)">
+    ${plateShape(meta, accent)}
+    ${art}
+  </g>
+  <text x="${TEXT_X}" y="322" font-family="${WORDMARK_FONT}" font-weight="800" font-size="76" letter-spacing="-2.6" fill="${COLOURS.cream}">${xml(truncate(meta.name, MAX_NAME))}</text>
+  <text x="${TEXT_X}" y="378" font-family="${WORDMARK_FONT}" font-weight="400" font-size="29" fill="${COLOURS.inkSoft}">${tagline.map((line, i) => `<tspan x="${TEXT_X}" dy="${i ? TAGLINE_LEADING : 0}">${xml(line)}</tspan>`).join('')}</text>
+  <text x="${TEXT_X}" y="${378 + tagline.length * TAGLINE_LEADING + 22}" font-family="${WORDMARK_FONT}" font-weight="800" font-size="29" letter-spacing="0.4" fill="${accent}">${xml(meta.players)} · one turn at a time</text>`);
 }
 
 function hasWordmarkFont() {
@@ -178,8 +284,13 @@ async function main() {
 
     if (hasWordmarkFont()) {
         await write(path.join(PUBLIC_ICONS, 'og-image.png'), await png(ogImageSvg()));
+        // One per game in the library, from that game's own metadata — no list
+        // of games here to fall behind the one in `GAME_META`.
+        for (const meta of Object.values(GAME_META)) {
+            await write(path.join(ROOT, 'public', gameShareCard(meta.url)), await png(await gameShareCardSvg(meta)));
+        }
     } else {
-        console.warn(`skipped og-image.png — install the "${WORDMARK_FONT}" system font and re-run`);
+        console.warn(`skipped the share cards — install the "${WORDMARK_FONT}" system font and re-run`);
     }
 }
 

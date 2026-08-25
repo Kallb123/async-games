@@ -95,11 +95,6 @@ export function seatsCta(openSeatCount: number): string {
         : "Every seat in this one is taken";
 }
 
-// Exported apart from the sentence below because the share card sets the two
-// halves at two sizes — the game's name is the big word on it — and would
-// otherwise be spelling the phrase out a second time.
-export const INVITED_YOU_TO = 'invited you to';
-
 export function invitedYouTo(sender: string, gameFriendlyName: string): string {
-    return `${sender} ${INVITED_YOU_TO} ${gameFriendlyName}`;
+    return `${sender} invited you to ${gameFriendlyName}`;
 }

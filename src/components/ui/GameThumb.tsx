@@ -1,7 +1,7 @@
 'use client'
 
 import Image from "next/image";
-import { GameMeta } from "@/utils/ui/games";
+import { GameMeta, HEX_VERTICES } from "@/utils/ui/games";
 import { accentVar } from "@/utils/ui/colours";
 
 // Every game icon in /public/art is a square PNG of this size. next/image needs
@@ -22,7 +22,7 @@ interface GameThumbProps {
 
 // Flat-top hexagon, used instead of the border-radius rounding for games
 // whose theme calls for a hex badge.
-const HEXAGON_CLIP_PATH = "polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)";
+const HEXAGON_CLIP_PATH = `polygon(${HEX_VERTICES.map(([x, y]) => `${x * 100}% ${y * 100}%`).join(", ")})`;
 
 // A small square game icon: real art when available, otherwise a tinted glyph.
 export default function GameThumb({ meta, size = 48, radius = 12 }: GameThumbProps) {
