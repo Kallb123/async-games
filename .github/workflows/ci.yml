@@ -13,8 +13,12 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  typecheck:
-    name: TypeScript
+  # One job rather than four: each of the four ran its own checkout, Node
+  # setup and npm ci, and that duplicated setup cost more billed minutes than
+  # the four parallel jobs saved in wall-clock time. Ordered cheapest first so
+  # a failure short-circuits before the expensive build.
+  checks:
+    name: Checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,43 +27,18 @@ jobs:
           node-version: '24'
           cache: 'npm'
       - run: npm ci --prefer-offline --no-audit --fund=false
-      - run: npx tsc --noEmit
 
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: 'npm'
-      - run: npm ci --prefer-offline --no-audit --fund=false
-      - run: npm run lint
+      - name: Type check
+        run: npx tsc --noEmit
 
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: 'npm'
-      - run: npm ci --prefer-offline --no-audit --fund=false
-      - run: npm test
+      - name: Lint
+        run: npm run lint
 
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: 'npm'
-      - run: npm ci --prefer-offline --no-audit --fund=false
-      - run: npx next build
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npx next build
         env:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
