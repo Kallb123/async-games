@@ -20,10 +20,19 @@ import { useIsAuthorised } from "./useAuthGuard";
  * A failed refresh keeps the last good `data` for the same reason — losing the
  * list because one fetch 500'd is worse than showing slightly stale rows.
  */
-export interface RefreshableData<T> {
-    data: T | null;
+/**
+ * The two loading flags on their own, for a presentational component handed
+ * data someone else fetched. Declared once here rather than per screen: a list
+ * rendered on the dashboard and again on its own full-history page wants the
+ * same pair either way.
+ */
+export interface RefreshableState {
     isLoading: boolean;
     isRefreshing: boolean;
+}
+
+export interface RefreshableData<T> extends RefreshableState {
+    data: T | null;
     /** HTTP status of the last completed attempt (null before one finishes, or on a network error). */
     status: number | null;
     refresh: () => Promise<void>;

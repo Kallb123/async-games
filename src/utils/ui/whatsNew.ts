@@ -39,6 +39,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Your home screen keeps up while you're looking at it",
+                detail: "Invites accepted, seats claimed, a game starting — the lists now update while the screen is open, instead of waiting until you'd been away and come back. It loads quicker too.",
+            },
+            {
                 title: "Say what you want to hear about",
                 detail: "Settings now has a switch for game results — the one kind of notification that used to arrive however you'd set things — and the chat switch that never did anything has gone. Turning notifications off now really does turn all of them off.",
             },
@@ -53,10 +57,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Join codes stay alive as long as your game does",
                 detail: "A lobby used to close after an hour whatever game you set up. Now the code lasts as long as one turn of it — up to a week for the slow ones — and the lobby tells you when it runs out.",
-            },
-            {
-                title: "Share a game and the link sells it for you",
-                detail: "Drop a join link into a group chat and the preview now shows who's inviting you, how many seats are left, and a card for the game itself — instead of the same plain site link every time.",
             },
         ],
     },

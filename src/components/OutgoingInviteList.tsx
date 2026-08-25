@@ -5,16 +5,15 @@ import moment from 'moment';
 import Link from "next/link";
 import ListSection from "@/components/ui/ListSection";
 import { lobbyPath } from "@/utils/games/lobby";
-import { INVITE_EVENTS } from "@/utils/hooks/usePushEvents";
-import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
+import type { RefreshableState } from "@/utils/hooks/useRefreshableData";
 
-export default function OutgoingInviteList() {
-    const { data, isLoading, isRefreshing, refresh } = useRefreshableData<{ inviteList: IInvitationResponse[] }>(
-        '/api/user/outgoinginvites',
-        INVITE_EVENTS,
-    );
+interface OutgoingInviteListProps extends RefreshableState {
+    invites: IInvitationResponse[];
+    /** Re-reads the dashboard after this list changes something. */
+    onChanged: () => void;
+}
 
-    const inviteList = data?.inviteList ?? [];
+export default function OutgoingInviteList({ invites, isLoading, isRefreshing, onChanged }: OutgoingInviteListProps) {
 
     const handleCancel = async (inviteId: `${string}-${string}-${string}-${string}-${string}`) => {
         fetch('/api/invite/cancel', {
@@ -26,7 +25,7 @@ export default function OutgoingInviteList() {
             if (!response.ok) throw new Error('Failed to cancel invite');
             return response.json();
         })
-        .then(() => refresh())
+        .then(() => onChanged())
         .catch(error => console.error('Failed to cancel invite', error));
     }
 
@@ -37,7 +36,7 @@ export default function OutgoingInviteList() {
             isRefreshing={isRefreshing}
             skeletonAvatar={false}
         >
-            {inviteList.map((invite) => {
+            {invites.map((invite) => {
                 const summary = (
                     <>
                         <div style={{ font: "600 13px/1.35 var(--ag-font)" }}>

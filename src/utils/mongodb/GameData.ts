@@ -1,6 +1,6 @@
 import { Document, Model, Schema, model, models } from "mongoose";
 import { GameEndReason, IGameDataResponse, IGameResponse, uuidString } from "../apiModels/GameDataApi";
-import { userIdListToUsernameList } from "../users/clerk";
+import { UserDirectory, userIdListToUsernameList } from "../users/clerk";
 import { IGameCommand, IGameType } from "../apiModels/GameLogic";
 
 export interface IGameState {
@@ -57,7 +57,11 @@ export interface IGameData {
 
 export interface IGameDataDocument extends IGameData, Document {
     // Instance methods
-    CreateResponse: () => Promise<IGameResponse>;
+    //
+    // Synchronous, and given every name it needs up front: a list of games
+    // resolves its players in one Clerk call and hands the result to each game
+    // (see UserDirectory), rather than every game fetching its own.
+    CreateResponse: (directory: UserDirectory) => IGameResponse;
     // `viewerId` is the signed-in player the response is being built for.
     //
     // A game's response is not the same for everybody: hands, tickets and dev
@@ -112,12 +116,12 @@ export var GameDataSchema = new Schema<IGameDataDocument> ({
     endReason: String,
     forfeitedBy: String
 }, {discriminatorKey: 'kind', optimisticConcurrency: true});
-GameDataSchema.methods.CreateResponse = async function(): Promise<IGameResponse> {
+GameDataSchema.methods.CreateResponse = function(directory: UserDirectory): IGameResponse {
     console.log("CreateResponse: Generic game");
 
     const gameDataDocument: IGameData = this as IGameData;
 
-    const usernameList = await userIdListToUsernameList(gameDataDocument.userIdList);
+    const usernameList = gameDataDocument.userIdList.map(userId => directory.name(userId));
     const currentTurnIndex = gameDataDocument.userIdList.indexOf(gameDataDocument.currentTurn);
 
     return {
@@ -131,10 +135,12 @@ GameDataSchema.methods.CreateResponse = async function(): Promise<IGameResponse>
         lastTurnTimestamp: gameDataDocument.lastTurnTimestamp,
         url: gameDataDocument.gameType.url,
         complete: gameDataDocument.complete,
-        winner: (await userIdListToUsernameList([gameDataDocument.winner]))[0],
+        // Empty until somebody wins, rather than "Unknown player": a game still
+        // being played has no winner to name.
+        winner: directory.name(gameDataDocument.winner),
         endReason: gameDataDocument.endReason,
         forfeitedBy: gameDataDocument.forfeitedBy
-            ? (await userIdListToUsernameList([gameDataDocument.forfeitedBy]))[0]
+            ? directory.name(gameDataDocument.forfeitedBy)
             : undefined
     }
 };

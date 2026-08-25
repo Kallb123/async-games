@@ -53,11 +53,15 @@ export const FRIEND_EVENTS = ['FriendInvite', 'FriendAccepted'] as const;
 export const COMPLETED_GAME_EVENTS = ['GameOver'] as const;
 
 /**
- * What the home dashboard's two turn lists watch: a game arriving (an invite
- * they can act on) and the turn moving. Shared because both lists want exactly
- * the same set — a game leaving one of them is a game joining the other.
+ * Everything that changes the home screen: an invite arriving, the turn moving,
+ * a game finishing. One set because the dashboard is now one read — see
+ * `buildDashboard` for why its five lists are no longer five subscriptions.
  */
-export const TURN_LIST_EVENTS = [...INVITE_EVENTS, ...TURN_ADVANCED_EVENTS] as const;
+export const DASHBOARD_EVENTS = [
+    ...INVITE_EVENTS,
+    ...TURN_ADVANCED_EVENTS,
+    ...COMPLETED_GAME_EVENTS
+] as const;
 
 export interface PushEventsOptions {
     /**

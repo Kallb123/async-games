@@ -1,4 +1,5 @@
 import type { IGameType } from "./gameCommand";
+import type { IInvitationResponse } from "@/utils/mongodb/InvitationData";
 
 export type uuidString = `${string}-${string}-${string}-${string}-${string}`;
 
@@ -102,4 +103,26 @@ export interface IGameDataResponse {
     winner: string,
     endReason?: GameEndReason,
     forfeitedBy?: string
+}
+
+// A game in a player's history. Built from a GameResult rather than a live
+// game, so it carries the outcome and nothing about how it was played.
+export interface ICompletedGame {
+    gameId: string;
+    url: string;
+    friendlyName: string;
+    winner: string;
+    endReason?: GameEndReason;
+    forfeitedBy?: string;
+    endedAt: string;
+}
+
+// The whole home screen in one response — see `buildDashboard` for why its five
+// lists are served together rather than fetched one per component.
+export interface IDashboardResponse {
+    myTurn: IGameResponse[];
+    theirTurn: IGameResponse[];
+    incoming: IInvitationResponse[];
+    outgoing: IInvitationResponse[];
+    completed: ICompletedGame[];
 }

@@ -7,19 +7,18 @@ import Avatar from "@/components/ui/Avatar";
 import ListSection from "@/components/ui/ListSection";
 import ThumbBadge from "@/components/ui/ThumbBadge";
 import { metaForGame } from "@/utils/ui/games";
-import { INVITE_EVENTS } from "@/utils/hooks/usePushEvents";
-import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { useEnterStartedGame } from "@/utils/hooks/useEnterStartedGame";
+import type { RefreshableState } from "@/utils/hooks/useRefreshableData";
 
-export default function IncomingInviteList() {
+interface IncomingInviteListProps extends RefreshableState {
+    invites: IInvitationResponse[];
+    /** Re-reads the dashboard after this list changes something. */
+    onChanged: () => void;
+}
+
+export default function IncomingInviteList({ invites, isLoading, isRefreshing, onChanged }: IncomingInviteListProps) {
     const { showToast } = useToast();
     const enterStartedGame = useEnterStartedGame();
-    const { data, isLoading, isRefreshing, refresh } = useRefreshableData<{ inviteList: IInvitationResponse[] }>(
-        '/api/user/incominginvites',
-        INVITE_EVENTS,
-    );
-
-    const inviteList = data?.inviteList ?? [];
 
     const handleAccept = (inviteId: `${string}-${string}-${string}-${string}-${string}`) => {
         fetch('/api/invite/accept', {
@@ -36,7 +35,7 @@ export default function IncomingInviteList() {
                 enterStartedGame(data.gameUrl, data.gameId);
             } else {
                 showToast('Invite accepted! Waiting for other players to accept.', 'success', 'Invite Accepted');
-                refresh();
+                onChanged();
             }
         })
         .catch(() => showToast('Failed to accept the invite. Please try again.', 'danger'));
@@ -49,7 +48,7 @@ export default function IncomingInviteList() {
             isLoading={isLoading}
             isRefreshing={isRefreshing}
         >
-            {inviteList.map((invite) => {
+            {invites.map((invite) => {
                 const meta = metaForGame({ friendlyName: invite.gameFriendlyName });
                 return (
                     <div key={invite.inviteId} className="ag-list-row">

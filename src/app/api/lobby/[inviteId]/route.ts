@@ -2,7 +2,8 @@ import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { IInvitationDataDocument, InvitationModel } from '@/utils/mongodb/InvitationData';
-import { invitationToResponse } from '@/utils/games/invitationResponse';
+import { invitationToResponse, invitationUserIds } from '@/utils/games/invitationResponse';
+import { buildUserDirectory } from '@/utils/users/clerk';
 
 export interface ILobbyParams {
     inviteId: string
@@ -12,12 +13,11 @@ export interface ILobbyParams {
  * One lobby, for anyone with a seat at it — the host who created it and every
  * player who has claimed a seat since. Both wait on the same screen, and it
  * only ever cares about this one invitation, so it reads it here rather than
- * fetching the whole of /api/user/outgoinginvites (host) or
- * /api/user/incominginvites (seat-holder) and picking one out: which list it
- * would be in depends on who is looking.
+ * fetching the whole dashboard and picking one out: which of its two invite
+ * lists this lobby would be in depends on who is looking.
  *
- * The response body is `invitationToResponse`'s, exactly as the invite lists
- * serve it, so the screen renders the same shape either way. `isHost`
+ * The response body is `invitationToResponse`'s, exactly as the dashboard's
+ * invite lists serve it, so the screen renders the same shape either way. `isHost`
  * distinguishes the two viewers, since the response deliberately carries the
  * sender's username rather than their id.
  */
@@ -48,9 +48,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IL
         return NextResponse.json({}, { status: 404, statusText: "Lobby not found" });
     }
 
+    const directory = await buildUserDirectory(invitationUserIds(invite));
+
     return NextResponse.json({
         success: true,
-        invite: await invitationToResponse(invite),
+        invite: invitationToResponse(invite, directory),
         isHost: invite.senderId === userId,
     });
 }

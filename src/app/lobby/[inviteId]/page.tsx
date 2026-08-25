@@ -37,9 +37,9 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
   const [starting, setStarting] = useState(false);
 
   // One lobby, whichever seat the viewer holds — the host's own invitation and
-  // a seat-holder's are the same document, but they arrive in different lists
-  // (/api/user/outgoinginvites vs incominginvites), so this screen reads the
-  // one it is about directly.
+  // a seat-holder's are the same document, but they arrive in different halves
+  // of the dashboard's two invite lists, so this screen reads the one it is
+  // about directly.
   // Polled, not pushed, and listening for nothing. Everyone on this screen is
   // sitting and watching it — the seats filling, the last one going, the game
   // starting — and none of those is worth a notification, so nothing pushes

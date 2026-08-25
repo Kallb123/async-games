@@ -6,24 +6,21 @@ import { useState } from "react";
 import { opponents } from "@/utils/ui/players";
 import { gamePath } from "@/utils/ui/games";
 import ListSection from "@/components/ui/ListSection";
-import { TURN_LIST_EVENTS } from "@/utils/hooks/usePushEvents";
-import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
+import type { RefreshableState } from "@/utils/hooks/useRefreshableData";
 import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
 import { formatRemainingTimeShort } from "@/utils/games/TurnTimer";
 import { useNowToTheMinute } from "@/utils/hooks/useNow";
 import { useToast } from "@/components/ToastContext";
 
-export default function TheirTurnList() {
+interface TheirTurnListProps extends RefreshableState {
+    games: IGameResponse[];
+}
+
+export default function TheirTurnList({ games, isLoading, isRefreshing }: TheirTurnListProps) {
     const { user } = useIsAuthorised();
     const { showToast } = useToast();
     const now = useNowToTheMinute();
     const [nudgedGameIds, setNudgedGameIds] = useState(new Set<string>());
-    const { data, isLoading, isRefreshing } = useRefreshableData<{ gameList: IGameResponse[] }>(
-        '/api/game/theirturnlist',
-        TURN_LIST_EVENTS,
-    );
-
-    const gameList = data?.gameList ?? [];
 
     const handleNudge = (gameId: string, opponentName: string) => {
         setNudgedGameIds(prev => new Set(prev).add(gameId));
@@ -61,7 +58,7 @@ export default function TheirTurnList() {
             skeletonAvatar={false}
             hint="Use 👉 to send a nudge to move things along"
         >
-            {gameList.map((game) => {
+            {games.map((game) => {
                 const timeLeft = formatRemainingTimeShort(game.lastTurnTimestamp, game.turnTimer, now);
                 const opponentName = game.currentTurnUsername || opponents(game, user?.username, "them");
                 const alreadyNudged = nudgedGameIds.has(game.gameId);
