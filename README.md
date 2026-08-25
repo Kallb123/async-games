@@ -78,7 +78,9 @@ That rewrites every shipped image of the mark:
 The share card is the only asset that needs anything extra: it sets the
 wordmark in Bricolage Grotesque, so that font must be installed as a system
 font or the script skips it with a warning and leaves the existing card in
-place.
+place. Its words and its size come from `src/utils/app.ts` — the same
+constants the page's own description and `og:image` dimensions are built from,
+so the picture and the text a chat app sets beside it always agree.
 
 On screen, use the `Brand` component (`src/components/ui/Brand.tsx`) — the mark
 and wordmark locked up together — anywhere a top bar names the app. Screens

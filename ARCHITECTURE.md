@@ -546,8 +546,14 @@ game — is documented fully in
 
 ## 11. Frontend structure & design system
 
-The app is a **mobile-first PWA** (`public/manifest.json`, PWA meta in the root
-layout) rendered inside a centred `.ag-app` column.
+The app is a **mobile-first PWA** rendered inside a centred `.ag-app` column.
+Everything that names, describes, colours or illustrates it — the page `<head>`,
+the Open Graph and Twitter cards a shared link unfurls to, and the web app
+manifest — is declared through Next's Metadata API in `src/app/layout.tsx` and
+`src/app/manifest.ts`, and reads its copy and colours from `src/utils/app.ts`
+and `src/utils/ui/colours.ts`. No screen renders a `<head>` of its own, and
+there is no static `public/manifest.json`: a second copy of the app's name,
+description or theme colour is exactly what those two files exist to prevent.
 
 - **Screens** live under `src/app/**/page.tsx` and are mostly client components
   (`'use client'`) that fetch from the API and render. A typical game page (e.g.

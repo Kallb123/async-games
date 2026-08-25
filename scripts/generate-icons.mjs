@@ -25,6 +25,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 
+import { APP_CADENCE, APP_STRAPLINE, APP_TAGLINE_LINES, SHARE_CARD_SIZE } from '../src/utils/app.ts';
 import { GAME_META, HEX_VERTICES, gameShareCard } from '../src/utils/ui/games.ts';
 import { SRGB, accentHex } from '../src/utils/ui/colours.ts';
 import { truncate } from '../src/utils/ui/text.ts';
@@ -123,12 +124,14 @@ const WORDMARK_FONT = 'Bricolage Grotesque';
 // emoji — a family librsvg only has if the system does.
 const EMOJI_FONT = 'Noto Color Emoji';
 
+// The box every unfurl expects, from the same constant the metadata declares
+// it with — a card drawn to one size and announced at another gets letterboxed
+// or cropped by whichever chat app is rendering it.
+const { width: CARD_W, height: CARD_H } = SHARE_CARD_SIZE;
+
 // Every share card stands on the same ground: the dark colourway with the
 // lifted die shape bleeding off the top right. One wrapper, so moving that
 // shape moves it on all of them.
-const CARD_W = 1200;
-const CARD_H = 630;
-
 function shareCard(inner) {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${CARD_W}" height="${CARD_H}" viewBox="0 0 ${CARD_W} ${CARD_H}">
   <rect width="${CARD_W}" height="${CARD_H}" fill="${COLOURS.brown}"/>
@@ -137,15 +140,25 @@ function shareCard(inner) {
 </svg>`;
 }
 
+// A block of text as stacked lines sharing one `<text>`: the first sits on its
+// element's own baseline, each one after it drops by `leading`. Both cards set
+// a wrapped line of copy this way.
+const tspans = (lines, x, leading) =>
+    lines.map((line, i) => `<tspan x="${x}" dy="${i ? leading : 0}">${xml(line)}</tspan>`).join('');
+
+// Baseline-to-baseline for the hero's 82px display type.
+const HERO_LEADING = 88;
+
 // The landing hero as a share card — what a link to anything but a specific
-// game unfurls to.
+// game unfurls to. Its words are `APP_TAGLINE_LINES` and `APP_STRAPLINE`, the
+// same two the page's own description is built from, so the card and the text
+// a chat app sets beside it can't end up selling the app differently.
 function ogImageSvg() {
     const mark = clockDieSvg({ size: 76 });
     return shareCard(`<g transform="translate(88 76)">${mark}</g>
   <text x="184" y="129" font-family="${WORDMARK_FONT}" font-weight="800" font-size="42" letter-spacing="-1.4" fill="${COLOURS.cream}">Async Games</text>
-  <text x="88" y="332" font-family="${WORDMARK_FONT}" font-weight="800" font-size="82" letter-spacing="-2.9" fill="${COLOURS.cream}">Board games,</text>
-  <text x="88" y="420" font-family="${WORDMARK_FONT}" font-weight="800" font-size="82" letter-spacing="-2.9" fill="${COLOURS.cream}">one turn at a time.</text>
-  <text x="88" y="504" font-family="${WORDMARK_FONT}" font-weight="800" font-size="26" fill="${COLOURS.inkSoft}">Play with friends across timezones. Take your turn when you have five minutes.</text>`);
+  <text x="88" y="332" font-family="${WORDMARK_FONT}" font-weight="800" font-size="82" letter-spacing="-2.9" fill="${COLOURS.cream}">${tspans(APP_TAGLINE_LINES, 88, HERO_LEADING)}</text>
+  <text x="88" y="504" font-family="${WORDMARK_FONT}" font-weight="800" font-size="26" fill="${COLOURS.inkSoft}">${xml(APP_STRAPLINE)}</text>`);
 }
 
 // One share card per game, for a link that opens that game — today a join link
@@ -226,8 +239,8 @@ async function gameShareCardSvg(meta) {
     ${art}
   </g>
   <text x="${TEXT_X}" y="322" font-family="${WORDMARK_FONT}" font-weight="800" font-size="76" letter-spacing="-2.6" fill="${COLOURS.cream}">${xml(truncate(meta.name, MAX_NAME))}</text>
-  <text x="${TEXT_X}" y="378" font-family="${WORDMARK_FONT}" font-weight="400" font-size="29" fill="${COLOURS.inkSoft}">${tagline.map((line, i) => `<tspan x="${TEXT_X}" dy="${i ? TAGLINE_LEADING : 0}">${xml(line)}</tspan>`).join('')}</text>
-  <text x="${TEXT_X}" y="${378 + tagline.length * TAGLINE_LEADING + 22}" font-family="${WORDMARK_FONT}" font-weight="800" font-size="29" letter-spacing="0.4" fill="${accent}">${xml(meta.players)} · one turn at a time</text>`);
+  <text x="${TEXT_X}" y="378" font-family="${WORDMARK_FONT}" font-weight="400" font-size="29" fill="${COLOURS.inkSoft}">${tspans(tagline, TEXT_X, TAGLINE_LEADING)}</text>
+  <text x="${TEXT_X}" y="${378 + tagline.length * TAGLINE_LEADING + 22}" font-family="${WORDMARK_FONT}" font-weight="800" font-size="29" letter-spacing="0.4" fill="${accent}">${xml(meta.players)} · ${xml(APP_CADENCE)}</text>`);
 }
 
 function hasWordmarkFont() {
