@@ -2,45 +2,64 @@
 import { useEffect, useRef } from 'react';
 
 /**
- * Push events (re-dispatched onto `window` by `FcmTokenComp`) that mean the
- * active turn has moved on and any turn-aware screen should re-fetch.
+ * Every event below is dispatched by `FcmTokenComp` from a push that *also*
+ * showed the player a notification, and that is not a coincidence.
+ *
+ * A push with no notification attached displays nothing on arrival, and WebKit
+ * revokes a push subscription after three of those — so a handful of silent
+ * refresh pushes cost an iOS player their notifications entirely. This app used
+ * to send seven kinds (`TurnTaken`, `TurnExpired`, `GameStart`,
+ * `InviteAccepted`, `InviteCancelled`, `FriendRemoved`, and a `NewInvite` back
+ * at the sender's own devices); every one of them is gone, and
+ * `sendPushToUsers` now requires a notification so no more can be added.
+ *
+ * What they covered is covered without push: `refreshOnVisible` for a tab
+ * coming back, and `pollWhileWatching` for a screen somebody is sitting on
+ * waiting for something to change.
+ */
+
+/**
+ * Push events that mean the active turn has moved on and any turn-aware screen
+ * should re-fetch.
  *
  * Just `YourTurn` — it is now this player's turn, sent by `/api/game/command`,
  * `/api/game/taketurn`, `/api/cron/turntimer` when the timer advances the turn,
- * and `/api/invite/accept` to whoever moves first in a game that has just
+ * and `startGameFromInvitation` to whoever moves first in a game that has just
  * started.
- *
- * There were once two more, `TurnTaken` and `TurnExpired`, sent to every player
- * with no notification attached purely to drive this refetch. WebKit revokes a
- * push subscription after three pushes that display nothing, so on iOS they
- * cost players their notifications entirely within a few turns. They are gone;
- * what they covered is now covered without push — `refreshOnVisible` for a tab
- * coming back, and `pollWhileWatching` for a board being watched live.
  */
 export const TURN_ADVANCED_EVENTS = ['YourTurn'] as const;
 
 /**
- * Push events that change which game invitations a player can see — a new invite
- * arriving, someone accepting, the sender cancelling, or the game finally
- * starting once everyone's in. Any invite-aware screen (the home dashboard's
- * incoming/outgoing invite lists) should re-fetch when one fires.
+ * Push events that change which game invitations a player can see. Just
+ * `NewInvite`: an invite arriving is the only one of these worth a notification,
+ * and so the only one still sent. A cancelled invite, an accepted seat and a
+ * started game all reach the screen through `refreshOnVisible` (and, on the
+ * lobby, `pollWhileWatching`) instead.
  */
-export const INVITE_EVENTS = ['NewInvite', 'InviteAccepted', 'InviteCancelled', 'GameStart'] as const;
+export const INVITE_EVENTS = ['NewInvite'] as const;
 
 /**
  * Push events that change a player's friends / friend-requests — a request
- * arriving, being accepted, or a friendship/request being removed (decline,
- * cancel, or unfriend). The profile screen re-fetches when one fires.
+ * arriving, or being accepted. A removal (decline, cancel, unfriend) sends no
+ * push: it isn't worth a notification, so the profile picks it up on its next
+ * foreground.
  */
-export const FRIEND_EVENTS = ['FriendInvite', 'FriendAccepted', 'FriendRemoved'] as const;
+export const FRIEND_EVENTS = ['FriendInvite', 'FriendAccepted'] as const;
 
 /**
- * Push events that move a game into a player's finished list — currently just
- * `GameOver`, sent to every player when a game ends.
+ * Push events that move a game into a player's finished list — just `GameOver`,
+ * sent to every player when a game ends.
  */
 export const COMPLETED_GAME_EVENTS = ['GameOver'] as const;
 
-interface PushEventsOptions {
+/**
+ * What the home dashboard's two turn lists watch: a game arriving (an invite
+ * they can act on) and the turn moving. Shared because both lists want exactly
+ * the same set — a game leaving one of them is a game joining the other.
+ */
+export const TURN_LIST_EVENTS = [...INVITE_EVENTS, ...TURN_ADVANCED_EVENTS] as const;
+
+export interface PushEventsOptions {
     /**
      * Also re-run `handler` whenever the tab returns to the foreground. FCM only
      * fires `onMessage` (and therefore re-dispatches these window events) while

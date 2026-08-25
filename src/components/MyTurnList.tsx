@@ -8,14 +8,12 @@ import GameThumb from "@/components/ui/GameThumb";
 import { accentVar } from "@/utils/ui/colours";
 import Refreshable from "@/components/ui/Refreshable";
 import { SkeletonTurnCards } from "@/components/ui/Skeleton";
-import { TURN_ADVANCED_EVENTS } from "@/utils/hooks/usePushEvents";
+import { TURN_LIST_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import useAnimatedList from "@/utils/hooks/useAnimatedList";
 import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
 import { formatRemainingTimeShort } from "@/utils/games/TurnTimer";
 import { useNowToTheMinute } from "@/utils/hooks/useNow";
-
-const MY_TURN_EVENTS = ['NewInvite', 'GameStart', ...TURN_ADVANCED_EVENTS];
 
 export default function MyTurnList() {
     const { user } = useIsAuthorised();
@@ -23,7 +21,7 @@ export default function MyTurnList() {
     const now = useNowToTheMinute();
     const { data, isLoading, isRefreshing } = useRefreshableData<{ gameList: IGameResponse[] }>(
         '/api/game/myturnlist',
-        MY_TURN_EVENTS,
+        TURN_LIST_EVENTS,
     );
 
     const gameList = data?.gameList ?? [];

@@ -112,10 +112,6 @@ export async function POST(request: NextRequest) {
             channel: 'gameInvite'
         });
     }
-    await sendPushToUsers([thisUser], {
-        event: "NewInvite",
-        inviteId: invite.inviteId,
-    });
 
     return NextResponse.json({ success: true, inviteId: invite.inviteId, joinCode: invite.joinCode });
 }

@@ -1,7 +1,7 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchWithSessionRetry } from "./fetchWithSessionRetry";
-import { usePushEvents } from "./usePushEvents";
+import { usePushEvents, PushEventsOptions } from "./usePushEvents";
 import { useIsAuthorised } from "./useAuthGuard";
 
 /**
@@ -37,10 +37,20 @@ const NO_EVENTS: readonly string[] = [];
  * foreground (see `usePushEvents`). Overlapping refreshes are dropped — a burst
  * of pushes results in one request, not one per push.
  *
+ * Pass `{ pollWhileWatching: true }` for a screen whose whole job is waiting for
+ * something to change while the player sits and looks at it — the lobby filling
+ * up. Nothing pushes for those (a push that shows no notification costs an iOS
+ * player their subscription, see `usePushEvents`) and the tab never leaves, so
+ * `refreshOnVisible` never fires either.
+ *
  * `T` is the whole JSON body; callers pick the field they need, which keeps the
  * hook agnostic about response shapes.
  */
-export function useRefreshableData<T>(url: string, events: readonly string[] = NO_EVENTS): RefreshableData<T> {
+export function useRefreshableData<T>(
+    url: string,
+    events: readonly string[] = NO_EVENTS,
+    options: Pick<PushEventsOptions, 'pollWhileWatching'> = {}
+): RefreshableData<T> {
     const { isAuthorised } = useIsAuthorised();
     const [data, setData] = useState<T | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -105,7 +115,7 @@ export function useRefreshableData<T>(url: string, events: readonly string[] = N
         refresh();
     }, [refresh]);
 
-    usePushEvents(events, refresh, { refreshOnVisible: true });
+    usePushEvents(events, refresh, { refreshOnVisible: true, pollWhileWatching: options.pollWhileWatching });
 
     return { data, isLoading, isRefreshing, status, refresh };
 }

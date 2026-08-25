@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
             gameId: commandRequest.gameId,
             link: gameNotificationLink(gameData.gameType.url, commandRequest.gameId)
           }, buildGameWonNotification(gameData, losers.map(u => readableName(u))), {
-            channel: 'yourTurn'
+            channel: 'gameOver'
           });
         }
 
@@ -161,7 +161,9 @@ export async function POST(request: NextRequest) {
           event: 'GameOver',
           gameId: commandRequest.gameId,
           link: gameNotificationLink(gameData.gameType.url, commandRequest.gameId)
-        }, buildGameLostNotification(gameData, winnerUser ? readableName(winnerUser) : ''));
+        }, buildGameLostNotification(gameData, winnerUser ? readableName(winnerUser) : ''), {
+          channel: 'gameOver'
+        });
       } catch (error) {
         console.error(`Post-response game-over work failed for game ${gameData.gameId}`, error);
       }

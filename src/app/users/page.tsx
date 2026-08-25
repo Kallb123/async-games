@@ -3,7 +3,8 @@ import CurrentUserInfo from "@/components/CurrentUserInfo";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
-import { usePathname } from 'next/navigation';
+import { usePathname, notFound } from 'next/navigation';
+import { isDevDeployment } from "@/utils/devEnvironment";
 
 interface PublicUser {
   id: string;
@@ -12,7 +13,21 @@ interface PublicUser {
   lastName: string | null;
 }
 
+// The push test bench: every player, tap one to fire a test notification at
+// their devices. Dev deployments only — /api/notifyuser answers 404 off one, so
+// in production this is a page of buttons that cannot work, and it was never
+// linked from anywhere.
+//
+// The gate is its own component so the bench's hooks stay unconditional: this
+// one throws before any of them run, rather than skipping half of them.
 export default function Users() {
+  if (!isDevDeployment) {
+    notFound();
+  }
+  return <UsersTestBench />;
+}
+
+function UsersTestBench() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
   useAuthGuard();

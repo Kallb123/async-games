@@ -41,9 +41,15 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
   // a seat-holder's are the same document, but they arrive in different lists
   // (/api/user/outgoinginvites vs incominginvites), so this screen reads the
   // one it is about directly.
+  // Polled rather than pushed. Everyone on this screen is sitting and watching
+  // it — the seats filling, the last one going and the game starting — and none
+  // of those is worth a notification. A data-only push to refresh the screen
+  // silently is the thing that costs iOS players their push subscription
+  // (see usePushEvents), so this screen asks instead of being told.
   const { data, isLoading, isRefreshing, status } = useRefreshableData<{ invite: IInvitationResponse, isHost: boolean }>(
     `/api/lobby/${inviteId}`,
     INVITE_EVENTS,
+    { pollWhileWatching: true },
   );
 
   const invite = data?.invite;

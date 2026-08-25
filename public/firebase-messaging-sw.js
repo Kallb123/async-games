@@ -64,23 +64,57 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
     console.log('[firebase-messaging-sw.js] Received background message ', payload);
 
-    const { title, body, image, icon, ...restPayload } = payload.data;
-    if (!title || !body) {
-        return;
-    }
+    const { title, body, image, icon, tag, ...restPayload } = payload.data;
+    // Every push the server sends carries a title and a body — `sendPushToUsers`
+    // requires a notification precisely so this can never return without showing
+    // one. WebKit revokes the push subscription after three that display
+    // nothing, so a push we can't render is worth showing something for.
     const notificationOptions = {
-        body,
+        body: body || 'Something happened in one of your games.',
         icon: image || '/icons/icon-192.png', // the app's own mark, for pushes that carry no game art
         data: restPayload,
+        // Replace rather than stack: a week away used to mean a column of "Your
+        // move in Train Time" for the same game. The tag is per kind and per
+        // game (see `tagFor`), so a nudge still arrives beside a turn.
+        tag: tag || 'async-games',
+        // ...but still alert for the replacement, otherwise the newer one lands
+        // silently and the player never learns their turn came round again.
+        renotify: true,
     };
-    return self.registration.showNotification(title, notificationOptions);
+    return self.registration.showNotification(title || 'Async Games', notificationOptions);
 });
 
 self.addEventListener('notificationclick', (event) => {
-    if (event?.notification?.data && event?.notification?.data?.link) {
-        self.clients.openWindow(event.notification.data.link);
-    }
-
     // close notification after click
     event.notification.close();
+
+    const link = event.notification?.data?.link;
+    if (!link) {
+        return;
+    }
+
+    // Inside waitUntil, or the worker can be killed before the window opens and
+    // the tap does nothing at all.
+    //
+    // Reuse a window already on the app rather than opening a second one: an
+    // openWindow every time means a fresh copy of an installed PWA on every
+    // notification tapped. `navigate` is the part that can fail — this worker
+    // is registered at Firebase's own scope, so the app's windows are not
+    // controlled by it and some browsers refuse the call — hence the fallback
+    // to opening the link outright rather than leaving the player on whatever
+    // screen the focused window happened to be showing.
+    event.waitUntil((async () => {
+        const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        const existing = clientList.find((client) => new URL(client.url).origin === new URL(link).origin);
+        if (existing) {
+            try {
+                await existing.focus();
+                await existing.navigate(link);
+                return;
+            } catch (error) {
+                console.log('[firebase-messaging-sw.js] Could not steer the open window, opening a new one', error);
+            }
+        }
+        await self.clients.openWindow(link);
+    })());
 });

@@ -67,10 +67,6 @@ export async function POST(request: NextRequest) {
   }, buildGameInviteNotification(readableName(thisUser), invite.gameFriendlyName), {
     channel: 'gameInvite'
   });
-  await sendPushToUsers([thisUser], {
-    event: "NewInvite",
-    inviteId: invite.inviteId,
-  });
 
   return NextResponse.json({success: true});
 }
