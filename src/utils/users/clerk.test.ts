@@ -31,8 +31,33 @@ describe('Clerk user lookups', () => {
 
     it('still resolves a list that has names in it', async () => {
         const users = await usersByUsername(['someoneelse']);
-        expect(getUserList).toHaveBeenCalledWith({ username: ['someoneelse'] });
+        expect(getUserList).toHaveBeenCalledWith({ username: ['someoneelse'], limit: 100 });
         expect(users.map(u => u.id)).toEqual(['user_someone_else']);
+    });
+
+    it('always tells Clerk how many users it wants', async () => {
+        // Clerk's GET /users answers with ten when nothing says otherwise —
+        // a default, not a cap — so an unlimited filtered lookup silently
+        // resolved the first ten ids and left the rest unresolved.
+        await usersById(['user_a', 'user_b']);
+        expect(getUserList).toHaveBeenCalledWith({ userId: ['user_a', 'user_b'], limit: 100 });
+    });
+
+    it('pages a lookup bigger than one Clerk page', async () => {
+        const ids = Array.from({ length: 250 }, (_, i) => `user_${i}`);
+        getUserList.mockImplementation(async ({ userId }: { userId: string[] }) => ({
+            data: userId.map((id: string) => ({ id, username: id })),
+        }));
+
+        const users = await usersById(ids);
+
+        expect(getUserList).toHaveBeenCalledTimes(3);
+        expect(users.map(u => u.id)).toEqual(ids);
+        // Every chunk asks for a page, and no chunk is bigger than one.
+        for (const [{ userId, limit }] of getUserList.mock.calls) {
+            expect(limit).toBe(100);
+            expect(userId.length).toBeLessThanOrEqual(100);
+        }
     });
 
     it('leaves an empty seat list empty rather than naming strangers', async () => {

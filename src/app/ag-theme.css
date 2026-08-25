@@ -176,6 +176,16 @@ button {
     margin: 6px 0 0;
 }
 
+/* The error digest under a hero subtitle — Next's handle on a production
+   error whose message has been stripped. Monospaced because it is a token to
+   be read back, not prose. */
+.ag-digest {
+    font: 500 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--ag-ink-softer);
+    margin: 10px 0 0;
+    word-break: break-all;
+}
+
 /* ---- Sections ---- */
 .ag-section { padding: 20px 20px 0; }
 

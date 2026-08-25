@@ -161,6 +161,27 @@ GameDataSchema.methods.CreateDataResponse = async function(_viewerId: string | n
         forfeitedBy: gameDataDocument.forfeitedBy
     }
 };
+// GameData carried no indexes at all, while every other collection in the app
+// declares its own — so the query on every single turn (findOne by gameId) was
+// a collection scan, and so were the dashboard's, the lobby's and the timer
+// cron's.
+//
+// gameId is unique as well as indexed: it is the app's handle on a game
+// everywhere — routes, push links, GameResult — and nothing had ever stopped
+// two documents sharing one.
+GameDataSchema.index({ gameId: 1 }, { unique: true });
+// The dashboard's "my live games", and the lobby-join guard's "is this player
+// already in a game?". userIdList leads because it is the selective half.
+GameDataSchema.index({ userIdList: 1, complete: 1 });
+// The turntimer cron's sweep: live games, oldest turn first. Ordered to match
+// how it queries — equality on complete, then the range and sort on
+// lastTurnTimestamp — so one index serves the filter and the sort together.
+GameDataSchema.index({ complete: 1, lastTurnTimestamp: 1 });
+// The only link back from a game to the lobby it started from, polled by a
+// host still sitting on their lobby screen (GET /api/lobby/[inviteId]/game).
+// Sparse: a game started from a direct invite has no inviteId.
+GameDataSchema.index({ inviteId: 1 }, { sparse: true });
+
 export var GameDataModel = models.GameData || model<IGameDataDocument, IGameDataModel>('GameData', GameDataSchema);
 
 // Saves the document, reporting false (instead of throwing) on a VersionError.

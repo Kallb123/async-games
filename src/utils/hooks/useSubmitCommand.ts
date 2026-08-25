@@ -1,9 +1,13 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { IGameCommand } from "@/utils/apiModels/GameLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
 import { isGuest } from "@/utils/ui/players";
 import { recordGuestMoved } from "@/utils/hooks/useGuestMoved";
+
+// A command is a write, so it gets longer than a read before being given up
+// on — but it still gets one. See the `signal` below.
+const COMMAND_TIMEOUT_MS = 30000;
 
 interface SubmittingUser {
     id: string;
@@ -47,17 +51,26 @@ export function useSubmitCommand<T>(
 ) {
     const [submitting, setSubmitting] = useState(false);
     const [pendingTarget, setPendingTarget] = useState<string | null>(null);
+    // The guard is a ref, not the state flag beside it. `setSubmitting(true)`
+    // doesn't take effect until React re-renders, so two calls dispatched in
+    // the same tick — a double-tap the browser delivers as one batch, a board
+    // that fires from both a click and a key handler — both read `submitting`
+    // as false and both send. That is precisely the race the rest of this hook
+    // exists to prevent. The state flag stays, because that is what the UI
+    // renders from; the ref is what decides.
+    const inFlightRef = useRef(false);
 
     const submitCommand = useCallback<SubmitCommand>(async (
         command: IGameCommand,
         callback?: (r: ICommandResponse) => void,
         target?: string,
     ) => {
-        if (submitting) return;
+        if (inFlightRef.current) return;
         if (!user) {
             console.error("Unable to send command whilst not logged in");
             return;
         }
+        inFlightRef.current = true;
         command.gameId = gameId;
         command.senderId = user.id;
         command.senderUsername = user.username || user.firstName || user.id;
@@ -68,6 +81,10 @@ export function useSubmitCommand<T>(
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(command),
+                // Without a deadline a stalled connection never settles, and
+                // the `finally` below never runs — the board would stay locked
+                // behind its own in-flight guard until the player reloaded.
+                signal: AbortSignal.timeout(COMMAND_TIMEOUT_MS),
             });
             const data: ICommandResponse | null = res.ok ? await res.json() : null;
             if (!data?.gameData) {
@@ -86,10 +103,11 @@ export function useSubmitCommand<T>(
             console.error('submitCommand failed', err);
             await getGameData();
         } finally {
+            inFlightRef.current = false;
             setSubmitting(false);
             setPendingTarget(null);
         }
-    }, [submitting, user, gameId, setGameData, getGameData]);
+    }, [user, gameId, setGameData, getGameData]);
 
     return { submitCommand, submitting, pendingTarget };
 }

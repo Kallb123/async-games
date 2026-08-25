@@ -1,6 +1,7 @@
 import TimedToken from '@/utils/firebase/TimedToken';
 import { deviceIdForToken, parseUserAgent, pruneStaleTokens, toRegisteredDevice } from '@/utils/firebase/deviceInfo';
-import { getDeviceTokens, removeDevices, saveDeviceTokens } from '@/utils/firebase/deviceTokens';
+import { getDeviceTokens, registerDevice, removeDevices } from '@/utils/firebase/deviceTokens';
+import { readJsonBody } from '@/utils/api/requestBody';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -33,8 +34,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
-  const { token } = await request.json();
-  if (!token) {
+  const { token } = await readJsonBody(request);
+  if (!token || typeof token !== 'string') {
     return NextResponse.json({}, {status: 401, statusText: "Missing token from request body"});
   }
 
@@ -43,20 +44,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
   }
 
-  const now = (new Date()).toISOString();
-  const device = parseUserAgent(request.headers.get('user-agent'));
   // Registering is also the natural moment to forget this user's dead devices.
-  const tokens = pruneStaleTokens(getDeviceTokens(user));
-  const existing = tokens.find((val) => val.token === token);
-  if (existing) {
-    // Keep the original registration time; refresh what we know about the device.
-    existing.lastSeen = now;
-    existing.device = device;
-  } else {
-    tokens.push({ token, timestamp: now, lastSeen: now, device });
-  }
-
-  await saveDeviceTokens(user, tokens);
+  await registerDevice(user.id, token, parseUserAgent(request.headers.get('user-agent')), (new Date()).toISOString());
 
   return NextResponse.json({success: true});
 }
@@ -64,8 +53,8 @@ export async function POST(request: NextRequest) {
 /** Unregisters one device so it stops receiving pushes. */
 export async function DELETE(request: NextRequest) {
   console.log(`DELETE ${request.nextUrl.pathname}`);
-  const { id } = await request.json();
-  if (!id) {
+  const { id } = await readJsonBody(request);
+  if (!id || typeof id !== 'string') {
     return NextResponse.json({}, { status: 400, statusText: "Missing device id from request body" });
   }
 

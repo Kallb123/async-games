@@ -82,10 +82,44 @@ export const STALE_DEVICE_DAYS = 90;
  */
 export function pruneStaleTokens(tokens: TimedToken[], now: number = Date.now()): TimedToken[] {
     const cutoff = now - STALE_DEVICE_DAYS * 24 * 60 * 60 * 1000;
-    return tokens.filter((stored) => {
+    const live = tokens.filter((stored) => {
         const lastSeen = new Date(stored.lastSeen ?? stored.timestamp).getTime();
         return Number.isNaN(lastSeen) || lastSeen >= cutoff;
     });
+    return capDevices(live);
+}
+
+// The most devices one account may have registered at once.
+//
+// The list lives in Clerk private metadata, which is capped at 8KB for the
+// whole object. A registration is a ~160-character FCM token plus its device
+// description, so somewhere north of thirty of them the metadata write starts
+// failing — and it fails on the *write*, so the symptom is not "your oldest
+// phone stopped getting pushes" but "this device can never register at all",
+// for good. Ninety days is a long time to accumulate: a browser in private
+// mode mints a fresh token every session.
+//
+// Twenty is far more devices than anyone plays on and far short of the ceiling.
+export const MAX_DEVICES_PER_USER = 20;
+
+/**
+ * Keeps the MAX_DEVICES_PER_USER most recently seen registrations.
+ *
+ * Least-recently-seen goes first because `lastSeen` is refreshed on every
+ * visit, so the ones this drops are the ones nothing has come from in the
+ * longest — and if one of them was a real phone, its next visit re-registers
+ * it. Entries with an unreadable date sort as oldest but are only ever dropped
+ * if the list is over the cap anyway.
+ */
+function capDevices(tokens: TimedToken[]): TimedToken[] {
+    if (tokens.length <= MAX_DEVICES_PER_USER) {
+        return tokens;
+    }
+    const seenAt = (stored: TimedToken) => {
+        const at = new Date(stored.lastSeen ?? stored.timestamp).getTime();
+        return Number.isNaN(at) ? 0 : at;
+    };
+    return [...tokens].sort((a, b) => seenAt(b) - seenAt(a)).slice(0, MAX_DEVICES_PER_USER);
 }
 
 /** Strips the raw token off a stored registration for display. */

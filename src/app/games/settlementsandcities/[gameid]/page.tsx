@@ -117,7 +117,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
 
     // While a placement is in flight the board goes quiet — the only thing left
     // lit is the pending spot, wearing the piece it's about to become.
-    if (gs && isMyTurn && !gameData.complete && !submitting) {
+    if (gs && isMyTurn && !gameData?.complete && !submitting) {
         const vertices = gs.vertices;
         const edges = gs.edges;
 

@@ -1,3 +1,4 @@
+import { readJsonBody } from '@/utils/api/requestBody';
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({}, { status: 400, statusText: "Not signed in" });
     }
 
-    const { inviteId }: ILobbyStartRequest = await request.json();
+    const { inviteId } = await readJsonBody<ILobbyStartRequest>(request);
     if (!inviteId) {
         return NextResponse.json({}, { status: 400, statusText: "Missing inviteId" });
     }

@@ -1,13 +1,35 @@
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
+import { clientIp, consumeRateLimit } from '@/utils/rateLimit';
+import { readJsonBody } from '@/utils/api/requestBody';
+import { timingSafeStringEqual } from '@/utils/secrets';
+
+// The invite gate is the app's front door, and the only endpoint where
+// guessing pays: one shared password, and a correct guess unlocks an account
+// permanently. Ten attempts an hour, counted per account *and* per IP — per
+// account alone would let someone with a pile of signups spread the guessing
+// out, and per IP alone would rate-limit a household off one bad try.
+const UNLOCK_LIMIT = 10;
+const UNLOCK_WINDOW_MS = 60 * 60 * 1000;
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
-  const { password } = await request.json();
+  const { password } = await readJsonBody(request);
   const { userId } = await auth();
 
   if (!userId) {
     return NextResponse.json({error: "You're not signed in."}, {status: 400, statusText: "Not signed in"});
+  }
+
+  const withinLimit = await Promise.all([
+    consumeRateLimit('unlock-user', userId, UNLOCK_LIMIT, UNLOCK_WINDOW_MS),
+    consumeRateLimit('unlock-ip', clientIp(request.headers), UNLOCK_LIMIT, UNLOCK_WINDOW_MS),
+  ]);
+  if (withinLimit.includes(false)) {
+    return NextResponse.json(
+      {error: "Too many attempts. Please try again later."},
+      {status: 429, statusText: "Too many attempts"},
+    );
   }
 
   const setUnlocked = async (unlocked: boolean) => {
@@ -28,7 +50,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (password !== accessPassword) {
+  if (typeof password !== 'string' || !timingSafeStringEqual(password, accessPassword)) {
     await setUnlocked(false);
     return NextResponse.json({error: "Incorrect password. Please try again."}, {status: 400, statusText: "Incorrect password"});
   }

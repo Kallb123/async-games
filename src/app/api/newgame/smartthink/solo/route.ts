@@ -1,30 +1,21 @@
-import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireGameHost } from '@/utils/api/gameSetupRequest';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { CreateSmartthinkSoloGameData, SmartthinkGameDataModel } from '@/games/Smartthink/SmartthinkModels';
-import { canHostGame } from '@/utils/users/clerk';
+import { readableName } from '@/utils/ui/players';
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
 
-  const { userId } = await auth();
-  if (!userId) {
-    return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
+  const setup = await requireGameHost();
+  if ('error' in setup) {
+    return setup.error;
   }
-  const thisUser = await currentUser();
-  if (!thisUser) {
-    return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
-  }
-  // Every lobby needs a real, registered host — see canHostGame's own
-  // comment (docs/account-less-play.md §8).
-  if (!canHostGame(thisUser)) {
-    return NextResponse.json({}, {status: 403, statusText: "Account not unlocked"});
-  }
+  const { userId, host } = setup;
 
   await dbConnect();
 
-  const username = thisUser.username || thisUser.firstName || userId;
-  const gameData = CreateSmartthinkSoloGameData(userId, username, '1d');
+  const gameData = CreateSmartthinkSoloGameData(userId, readableName(host, userId), '1d');
 
   const gameDataM = new SmartthinkGameDataModel(gameData);
   await gameDataM.save();

@@ -1,4 +1,15 @@
-import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
+import { usersByUsername } from '@/utils/users/clerk';
+import { consumeRateLimit } from '@/utils/rateLimit';
+import { readJsonBody } from '@/utils/api/requestBody';
+
+// This route answers "does this username exist?" precisely — 404 for no, and a
+// friend request for yes — which makes it a username oracle for anyone willing
+// to work through a word list. Per account rather than per IP: the caller is
+// always signed in, so the account is the thing worth limiting, and a shared
+// network shouldn't be able to spend someone else's allowance.
+const FRIEND_INVITE_LIMIT = 30;
+const FRIEND_INVITE_WINDOW_MS = 60 * 60 * 1000;
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { dbConnect } from '@/utils/mongodb/mongodb';
@@ -20,12 +31,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
   }
 
-  const { username } = await request.json();
+  const { username } = await readJsonBody(request);
   if (!username || typeof username !== 'string') {
     return NextResponse.json({}, {status: 400, statusText: "No username provided"});
   }
 
-  const { data: users } = await (await clerkClient()).users.getUserList({username: [username]});
+  if (!(await consumeRateLimit('friend-invite', userId, FRIEND_INVITE_LIMIT, FRIEND_INVITE_WINDOW_MS))) {
+    return NextResponse.json({}, {status: 429, statusText: "Too many requests, please try again later"});
+  }
+
+  const users = await usersByUsername([username]);
   const recipient = users.find(user => user.username?.toLowerCase() === username.toLowerCase());
   if (!recipient) {
     return NextResponse.json({}, {status: 404, statusText: "User not found"});

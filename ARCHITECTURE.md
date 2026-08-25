@@ -364,12 +364,12 @@ the loosely-typed `commandHistory` and `gameType` documents executable again.
 Because the decorator runs on **module load**, a game's rule module must actually
 be imported for its classes to register — the barrel's `export *` lines do that,
 and importing anything from `GameLogic.ts` therefore populates the whole registry.
-A class that is defined but never wired in (its module missing from the barrel, or
-its class missing from the command route's `registration` array) can't be
-rehydrated, and would silently fail to replay or execute. That invariant is guarded
-by a test — `src/utils/apiModels/games/serializableRegistry.test.ts` scans the
-source for every `@serializable` class and asserts each one is registered after
-importing the barrel and referenced by the command route (see §13).
+A class that is defined but never wired in (its module missing from the barrel)
+can't be rehydrated, and would silently fail to replay or execute. That invariant
+is guarded by a test — `src/utils/apiModels/games/serializableRegistry.test.ts`
+scans the source for every `@serializable` class and asserts each one is
+registered after importing the barrel, and that it is assigned to a game in
+`src/utils/games/gameCommands.ts` (see §13).
 
 ### The command pipeline (`POST /api/game/command`)
 
@@ -395,9 +395,17 @@ regardless of game:
 13. return { outcome, gameData: CreateDataResponse() }
 ```
 
-The route imports and instantiates every command/game-type class once (the
-`registration` array) purely to ensure the `@serializable` registry is populated
-before deserialising the incoming body.
+The route checks the deserialised command against `COMMANDS_BY_GAME_TYPE` in
+`src/utils/games/gameCommands.ts` before executing it: every `Execute` casts the
+game to its own shape on its first line, so a command from another game would
+reach those rules holding state they were never written for.
+
+(The route used to build a 50-item `registration` array of every command and
+game-type instance on each request, to force the `@serializable` decorators to
+run. That was never necessary — the decorator runs when its *module* loads, and
+importing the `GameLogic` barrel above had already registered all of them.
+`gameCommands.ts` records what the array didn't: which game each command
+belongs to.)
 
 > **The engine is game-agnostic.** The command route, the replay engine, and the
 > cron job never branch on game type — they call `Execute` / `CheckEndTurn` /
@@ -621,8 +629,9 @@ in one new folder, `src/games/<Game>/`. Roughly:
    importable from the usual `@/utils/apiModels/GameLogic` path.
 3. **Register** the discriminator keys/models in
    `src/utils/mongodb/mongodb.ts` (the typed unions enforce this at compile time),
-   and add the new command/type instances to the `registration` array in
-   `src/app/api/game/command/route.ts`.
+   and add the game's entry — its game-type `className` as the key, its command
+   `className`s as the list — to `COMMANDS_BY_GAME_TYPE` in
+   `src/utils/games/gameCommands.ts`.
 4. **Wire invite creation** — a `POST /api/newgame/<game>` route. Acceptance
    needs nothing: `startGameFromInvitation()` finds the game's model in
    `GAME_DATA_MODELS`, which step 3 already filled in.
@@ -650,7 +659,7 @@ runtime:
 |---|---|---|
 | `src/utils/apiModels/GameLogic.ts` | `export * from "@/games/<Game>/<Game>Logic";` | `src/games/gameRegistry.test.ts` ("wires every game's rules module into the GameLogic barrel"); the classes it exports are additionally checked by `serializableRegistry.test.ts` |
 | `src/utils/mongodb/mongodb.ts` | the discriminator key in both union types, and the model in both records (`GAME_DATA_MODELS` and `INVITATION_MODELS`) | TypeScript (the typed `Record`s are a compile-time exhaustiveness check) **and** `src/games/gameRegistry.test.ts` ("registers every game's Mongoose discriminator models") |
-| `src/app/api/game/command/route.ts` | every command/game-type instance in the `registration` array | `serializableRegistry.test.ts` ("wires every command/game-type class into the command route's registration array") |
+| `src/utils/games/gameCommands.ts` | the game type's `className` as a key, its command `className`s as the list | `serializableRegistry.test.ts` ("assigns every command and game type to a game in the command registry") |
 | `src/utils/ui/games.ts` | import the game's `meta.ts` and add it to `GAME_META` | `src/games/gameRegistry.test.ts` ("wires every game's metadata into GAME_META") |
 
 `src/games/gameRegistry.test.ts` discovers games the same way
@@ -739,6 +748,7 @@ one-liner fails with a message naming the exact file and line to add.
 - [`docs/account-less-play.md`](./docs/account-less-play.md) — plan for Jackbox-style join-by-code lobbies and guest players: what the five identity choke points cost, and the commit-by-commit build order.
 - [`docs/games/`](./docs/games/) — per-game rules notes (Smartthink, Settlements & Cities).
 - [`docs/environments.md`](./docs/environments.md) — the dev/production split (Clerk instances, databases, env vars) and how to take Clerk to production.
+- [`docs/robustness-review.md`](./docs/robustness-review.md) — a sweep for the ways the app breaks under conditions the happy path never tries, with every finding recorded against its fix status (including the two deliberately left).
 - [`docs/email-theme.md`](./docs/email-theme.md) — the design system restated for email (hex palette, type, table-based components), for styling Clerk's transactional emails.
 - [`docs/deployment.png`](./docs/deployment.png) — deployment diagram.
 - [`README.md`](./README.md) — getting started, env vars, and cron setup.

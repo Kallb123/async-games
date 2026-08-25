@@ -1,8 +1,7 @@
-import { sendGameInvitePush } from '@/utils/firebase/invitePush';
-import { canHostGame } from '@/utils/users/clerk';
-import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
+import { readGameSetupRequest, seatsFor } from '@/utils/api/gameSetupRequest';
+import { sendGameInvitePush } from '@/utils/firebase/invitePush';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { SettlementsAndCitiesInvitationModel, SettlementsAndCitiesInvitationRequest } from '@/games/SettlementsAndCities/SettlementsAndCitiesModels';
 import { IInvitationDataDocument } from '@/utils/mongodb/InvitationData';
@@ -10,39 +9,21 @@ import { normaliseExpansions, validateExpansions } from '@/games/SettlementsAndC
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
-  const sacInvitation: SettlementsAndCitiesInvitationRequest = await request.json();
 
-  const { userId } = await auth();
-  if (!userId) {
-    return NextResponse.json({}, { status: 400, statusText: 'Not signed in' });
+  const setup = await readGameSetupRequest<SettlementsAndCitiesInvitationRequest>(request);
+  if ('error' in setup) {
+    return setup.error;
   }
-  const thisUser = await currentUser();
-  if (!thisUser) {
-    return NextResponse.json({}, { status: 400, statusText: 'Not signed in' });
-  }
-  // Every lobby needs a real, registered host — see canHostGame's own
-  // comment (docs/account-less-play.md §8).
-  if (!canHostGame(thisUser)) {
-    return NextResponse.json({}, { status: 403, statusText: 'Account not unlocked' });
-  }
+  const { body, userId, host, invitees, turnTimer } = setup;
 
-  const { data: userList } = await (await clerkClient()).users.getUserList({
-    username: sacInvitation.userList,
-  });
-
-  if (userList.length !== sacInvitation.userList.length) {
-    return NextResponse.json({}, { status: 404, statusText: 'User not found' });
-  }
-
-  if (userList.length === 0) {
+  if (invitees.length === 0) {
     return NextResponse.json({}, { status: 404, statusText: 'User not found' });
   }
 
   // Validate the chosen expansions and the resulting player count (invitees +
   // the sender) against the compatibility matrix and player-count rules (§8).
-  const expansions = normaliseExpansions(sacInvitation.expansions);
-  const playerCount = userList.length + 1;
-  const validation = validateExpansions(expansions, playerCount);
+  const expansions = normaliseExpansions(body.expansions);
+  const validation = validateExpansions(expansions, invitees.length + 1);
   if (!validation.ok) {
     return NextResponse.json(
       { errors: validation.errors },
@@ -55,8 +36,8 @@ export async function POST(request: NextRequest) {
   const invite: IInvitationDataDocument = new SettlementsAndCitiesInvitationModel({
     inviteId: randomUUID(),
     senderId: userId,
-    userIdList: userList.map(user => ({ userId: user.id, inviteAccepted: false })),
-    turnTimer: sacInvitation.turnTimer,
+    userIdList: seatsFor(invitees),
+    turnTimer,
     timestamp: new Date().toISOString(),
     gameType: 'SettlementsAndCities',
     gameFriendlyName: 'Settlements and Cities',
@@ -65,7 +46,7 @@ export async function POST(request: NextRequest) {
 
   await invite.save();
 
-  await sendGameInvitePush(userList, thisUser, invite);
+  await sendGameInvitePush(invitees, host, invite);
 
   return NextResponse.json({ success: true });
 }

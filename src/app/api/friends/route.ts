@@ -1,4 +1,5 @@
-import { auth, clerkClient } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
+import { usersById } from '@/utils/users/clerk';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { FriendshipModel, IFriendshipDataDocument, IFriendRequestResponse, IFriendsResponse, IFriendUser } from '@/utils/mongodb/FriendshipData';
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
 
   const userMap: Map<string, IFriendUser> = new Map;
   if (otherUserIds.length) {
-    const { data: users } = await (await clerkClient()).users.getUserList({userId: otherUserIds, limit: 500});
+    const users = await usersById(otherUserIds);
     users.forEach(user => {
       userMap.set(user.id, {
         userId: user.id,

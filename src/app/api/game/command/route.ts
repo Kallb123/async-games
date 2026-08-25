@@ -1,19 +1,16 @@
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildGameLostNotification, buildGameWonNotification, buildYourTurnNotification } from '@/utils/firebase/notificationContent';
-import { userListToUserIdNameMap } from '@/utils/users/clerk';
+import { userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
 import { readableName } from '@/utils/ui/players';
-import { auth, clerkClient } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { DiceCitiesRequestRadioTowerReroll, ICommandOutcome, IGameCommand, IGameType, SmartthinkGameType, SmartthinkSetSecretCode, SmartthinkSubmitGuess, SnakesAndLaddersGameType, SnakesAndLaddersRequestDiceRoll, stripRecordedRandomness } from '@/utils/apiModels/GameLogic';
-import { GameDataModel, IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
+import { ICommandOutcome, IGameCommand, IGameType, stripRecordedRandomness } from '@/utils/apiModels/GameLogic';
+import { trySave } from '@/utils/mongodb/GameData';
+import { requireLiveGame } from '@/utils/games/liveGame';
+import { isCommandForGameType } from '@/utils/games/gameCommands';
 import { recordGameResult } from '@/utils/mongodb/GameResultData';
 import { unclaimedGuestsOf } from '@/utils/users/guest';
-import { DiceCitiesGameType, DiceCitiesRequestBusinessCenterOpponentSelection, DiceCitiesRequestBusinessCenterOwnSelection, DiceCitiesRequestCardPurchase, DiceCitiesRequestDiceRoll, DiceCitiesRequestPassTurn, DiceCitiesRequestTvStationSelection, DiceCitiesRequestUnlockAmusementPark, DiceCitiesRequestUnlockRadioTower, DiceCitiesRequestUnlockShoppingMall, DiceCitiesRequestUnlockTrainStation } from '@/utils/apiModels/GameLogic';
-import { SettlementsAndCitiesGameType, SACPlaceSettlementSetup, SACPlaceRoadSetup, SACPlayKnight, SACRollDice, SACMoveRobber, SACBuildRoad, SACBuildSettlement, SACBuildCity, SACBuyDevCard, SACPlayRoadBuilding, SACPlayYearOfPlenty, SACPlayMonopoly, SACMaritimeTrade, SACEndTurn } from '@/utils/apiModels/GameLogic';
-import { WorldDominationGameType, WorldDominationDeployArmies, WorldDominationCashInCards, WorldDominationAttack, WorldDominationOccupyTerritory, WorldDominationEndAttackPhase, WorldDominationFortify, WorldDominationSkipFortify } from '@/utils/apiModels/GameLogic';
-import { SolitaireGameType, SolitaireDraw, SolitaireMoveCard, SolitaireUndo, SolitaireAutoSolve } from '@/utils/apiModels/GameLogic';
-import { TrainTimeGameType, TrainTimeDrawCarriageCard, TrainTimeClaimRoute, TrainTimeDrawTickets, TrainTimeKeepTickets, TrainTimePassTurn } from '@/utils/apiModels/GameLogic';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
 import { IGameDataResponse } from '@/utils/apiModels/GameDataApi';
 
@@ -22,73 +19,52 @@ export interface ICommandResponse {
   gameData: IGameDataResponse
 }
 
+/**
+ * The command a request body carried, or null if it carried anything else.
+ *
+ * `deserializeJSON` throws on a body that isn't JSON, and quietly hands back a
+ * plain object for JSON whose `className` isn't a registered command — which
+ * then throws on the first method call instead. Both are the same 400, so both
+ * are answered here rather than becoming a 500 from inside the handler.
+ */
+function readCommand(body: string): IGameCommand | null {
+  let parsed: unknown;
+  try {
+    parsed = deserializeJSON(body);
+  } catch {
+    return null;
+  }
+  const command = parsed as IGameCommand | null;
+  if (!command || typeof command.Execute !== 'function' || typeof command.myString !== 'function') {
+    return null;
+  }
+  return command;
+}
+
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
-  const commandRequest: IGameCommand = deserializeJSON(await request.text());
-  var registration = [
-    new DiceCitiesRequestDiceRoll(),
-    new DiceCitiesRequestCardPurchase(),
-    new DiceCitiesRequestPassTurn(),
-    new DiceCitiesRequestUnlockTrainStation(),
-    new DiceCitiesRequestUnlockShoppingMall(),
-    new DiceCitiesRequestUnlockAmusementPark(),
-    new DiceCitiesRequestUnlockRadioTower(),
-    new DiceCitiesRequestTvStationSelection(),
-    new DiceCitiesRequestBusinessCenterOwnSelection(),
-    new DiceCitiesRequestBusinessCenterOpponentSelection(),
-    new DiceCitiesRequestRadioTowerReroll(),
-    new DiceCitiesGameType(),
-    new SmartthinkSetSecretCode(),
-    new SmartthinkSubmitGuess(),
-    new SmartthinkGameType(),
-    new SnakesAndLaddersRequestDiceRoll(),
-    new SnakesAndLaddersGameType(),
-    new SACPlaceSettlementSetup(),
-    new SACPlaceRoadSetup(),
-    new SACPlayKnight(),
-    new SACRollDice(),
-    new SACMoveRobber(),
-    new SACBuildRoad(),
-    new SACBuildSettlement(),
-    new SACBuildCity(),
-    new SACBuyDevCard(),
-    new SACPlayRoadBuilding(),
-    new SACPlayYearOfPlenty(),
-    new SACPlayMonopoly(),
-    new SACMaritimeTrade(),
-    new SACEndTurn(),
-    new SettlementsAndCitiesGameType(),
-    new WorldDominationDeployArmies(),
-    new WorldDominationCashInCards(),
-    new WorldDominationAttack(),
-    new WorldDominationOccupyTerritory(),
-    new WorldDominationEndAttackPhase(),
-    new WorldDominationFortify(),
-    new WorldDominationSkipFortify(),
-    new WorldDominationGameType(),
-    new SolitaireDraw(),
-    new SolitaireMoveCard(),
-    new SolitaireUndo(),
-    new SolitaireAutoSolve(),
-    new SolitaireGameType(),
-    new TrainTimeDrawCarriageCard(),
-    new TrainTimeClaimRoute(),
-    new TrainTimeDrawTickets(),
-    new TrainTimeKeepTickets(),
-    new TrainTimePassTurn(),
-    new TrainTimeGameType(),
-  ];
-  // console.log(commandRequest);
-  console.log(commandRequest.myString());
-
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
   }
 
+  // Authentication first, and every read of the body after it. Deserialising
+  // ran ahead of `auth()` before, so a body that wasn't JSON — or was JSON but
+  // not a registered command, leaving a plain object with no `myString` —
+  // threw before anyone had proved who they were: an unauthenticated 500 on a
+  // POST of `{}`.
+  const commandRequest: IGameCommand | null = readCommand(await request.text());
+  if (!commandRequest) {
+    return NextResponse.json({}, {status: 400, statusText: "Not a valid command"});
+  }
+  console.log(commandRequest.myString());
+
   await dbConnect();
-  const gameData: IGameDataDocument = await GameDataModel.findOne({gameId: commandRequest.gameId}).exec();
-//   console.log(gameData);
+  const found = await requireLiveGame(commandRequest.gameId);
+  if ('error' in found) {
+    return found.error;
+  }
+  const gameData = found.game;
 
   if (userId !== gameData.currentTurn) {
     return NextResponse.json({}, {status: 400, statusText: "Not your turn in this game"});
@@ -96,6 +72,15 @@ export async function POST(request: NextRequest) {
 
   if (userId !== commandRequest.senderId) {
     return NextResponse.json({}, {status: 400, statusText: "Can't request for someone else"});
+  }
+
+  // A command only runs against the game that owns it — see gameCommands.ts.
+  // Every Execute casts the game to its own shape on the first line, so a
+  // command from another game reaches those rules holding state they were
+  // never written for.
+  if (!isCommandForGameType(gameData.gameType.className, commandRequest.className)) {
+    console.warn(`POST ${request.nextUrl.pathname} 400: ${commandRequest.className} is not a ${gameData.gameType.className} command`);
+    return NextResponse.json({}, {status: 400, statusText: "Not a command for this game"});
   }
 
   // The client supplies the move, never the randomness it consumes. Recorded
@@ -137,9 +122,7 @@ export async function POST(request: NextRequest) {
     // recordGameResult is idempotent on gameId, so a retried request is a no-op.
     after(async () => {
       try {
-        const { data: userList } = await (await clerkClient()).users.getUserList({
-          userId: gameData.userIdList
-        });
+        const userList = await usersById(gameData.userIdList);
 
         const { unclaimedPlayerIds, guestNames } = unclaimedGuestsOf(userList);
         await recordGameResult(gameData, unclaimedPlayerIds, guestNames);
@@ -200,9 +183,7 @@ export async function POST(request: NextRequest) {
   // turned into an error.
   after(async () => {
     try {
-      const { data: userList } = await (await clerkClient()).users.getUserList({
-        userId: gameData.userIdList
-      });
+      const userList = await usersById(gameData.userIdList);
       const turnUser = userList.find(u => u.id === gameData.currentTurn);
 
       if (!turnUser) {

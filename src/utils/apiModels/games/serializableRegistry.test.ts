@@ -13,6 +13,7 @@ import { walkFiles } from "@/utils/testing/walkFiles";
 // command route / replay engine would silently fail to reconstruct them. The
 // type checker can't catch that (it's a runtime registration), so we assert it.
 import { registeredClassNames } from "../Serialisable";
+import { allRegisteredCommandClassNames, registeredGameTypeClassNames } from "@/utils/games/gameCommands";
 import "../GameLogic";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -64,20 +65,32 @@ describe("serialisable registry", () => {
         expect(dupes, `Duplicate @serializable class names: ${dupes.join(", ")}`).toEqual([]);
     });
 
-    it("wires every command/game-type class into the command route's registration array", () => {
-        // ARCHITECTURE.md §6: the command route instantiates every command and
-        // game-type class once so the registry is populated before an incoming
-        // body is deserialised. A new class that isn't added there can't be
-        // executed. Scan that file and assert each discovered class appears.
-        const routeFile = path.join(srcRoot, "app/api/game/command/route.ts");
-        const routeSource = readFileSync(routeFile, "utf8");
-        const missing = declared.filter(({ name }) => !new RegExp(`\\b${name}\\b`).test(routeSource));
+    it("assigns every command and game type to a game in the command registry", () => {
+        // Replaces the old "is it named in the command route's registration
+        // array?" check. That array listed every class without saying which
+        // game each belonged to; COMMANDS_BY_GAME_TYPE says exactly that, and
+        // the command route refuses a command a game doesn't claim. A class
+        // missing here is a command nobody can run.
+        const gameTypes = new Set(registeredGameTypeClassNames());
+        const commands = allRegisteredCommandClassNames();
+        const commandSet = new Set(commands);
+
+        const missing = declared.filter(({ name }) => !gameTypes.has(name) && !commandSet.has(name));
         expect(
             missing,
-            `These @serializable classes are not referenced in ` +
-                `src/app/api/game/command/route.ts (add them to the imports and ` +
-                `the \`registration\` array):\n` +
+            `These @serializable classes are in no game's entry in ` +
+                `src/utils/games/gameCommands.ts. A game type belongs as a key, ` +
+                `a command in its game's list:\n` +
                 missing.map((m) => `  - ${m.name} (${m.file})`).join("\n"),
         ).toEqual([]);
+
+        // A command listed under two games would let either game run it.
+        const dupes = commands.filter((name, i) => commands.indexOf(name) !== i);
+        expect(dupes, `Commands listed under more than one game: ${dupes.join(", ")}`).toEqual([]);
+
+        // And nothing listed that no longer exists.
+        const declaredNames = new Set(declared.map(({ name }) => name));
+        const unknown = [...gameTypes, ...commands].filter((name) => !declaredNames.has(name));
+        expect(unknown, `Listed in gameCommands.ts but not a @serializable class: ${unknown.join(", ")}`).toEqual([]);
     });
 });

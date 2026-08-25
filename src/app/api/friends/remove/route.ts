@@ -1,3 +1,4 @@
+import { readJsonBody } from '@/utils/api/requestBody';
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
@@ -13,7 +14,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
   }
 
-  const { friendshipId } = await request.json();
+  const { friendshipId } = await readJsonBody(request);
   if (!friendshipId) {
     return NextResponse.json({}, {status: 400, statusText: "No friendshipId provided"});
   }

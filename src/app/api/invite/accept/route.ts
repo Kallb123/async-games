@@ -1,3 +1,4 @@
+import { readJsonBody } from '@/utils/api/requestBody';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
@@ -12,7 +13,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
   }
 
-  const { inviteId } = await request.json();
+  const { inviteId } = await readJsonBody(request);
 
   await dbConnect();
   const inviteData: IInvitationDataDocument = await InvitationModel.findOne({inviteId}).exec();

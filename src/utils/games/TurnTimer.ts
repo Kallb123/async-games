@@ -31,6 +31,49 @@ export function isUnlimitedTurnTimer(turnTimer: string): boolean {
     return turnTimer === UNLIMITED_TURN_TIMER;
 }
 
+/**
+ * The turn timers a game may be created with, in the order they are offered,
+ * each with the label the player sees.
+ *
+ * The one ladder. `TurnTimerSelect` kept a second copy of it purely for the
+ * labels, which meant the dropdown and the timers the server understands were
+ * two hand-written lists that agreed by luck — and once the server started
+ * rejecting timers it doesn't know (isValidTurnTimer below), a drifted option
+ * would have been a dropdown entry that 400s on submit.
+ */
+export const TURN_TIMER_OPTIONS: { value: string, label: string }[] = [
+    { value: '10m', label: '10 min' },
+    { value: '30m', label: '30 min' },
+    { value: '1h', label: '1 hour' },
+    { value: '3h', label: '3 hours' },
+    { value: '6h', label: '6 hours' },
+    { value: '12h', label: '12 hours' },
+    { value: '1d', label: '1 day' },
+    { value: '3d', label: '3 days' },
+    { value: '7d', label: '7 days' },
+    { value: UNLIMITED_TURN_TIMER, label: 'Unlimited' },
+];
+
+/** Every turn timer a game may be created with — what the select offers, and
+ *  the only values isValidTurnTimer below accepts. */
+export const TURN_TIMER_VALUES: string[] = TURN_TIMER_OPTIONS.map(option => option.value);
+
+/**
+ * Whether `turnTimer` is one this app knows how to count.
+ *
+ * Server-side validation, and it matters more than it looks. `parseTurnTimerMs`
+ * answers 0 for anything it doesn't recognise, and `isExpired` compares elapsed
+ * time against that — so a game created with a turn timer of "2h" (plausible,
+ * not on the list) has every turn expire the moment the timer cron next runs,
+ * and is abandoned outright after MAX_CONSECUTIVE_MISSED_TURNS of them. The
+ * value came straight off the request body into the document, so the only thing
+ * that had ever stopped it was the client sending one of the options its own
+ * dropdown offered.
+ */
+export function isValidTurnTimer(turnTimer: unknown): turnTimer is string {
+    return typeof turnTimer === 'string' && TURN_TIMER_VALUES.includes(turnTimer);
+}
+
 export function parseTurnTimerMs(turnTimer: string): number {
     return TIMER_MS[turnTimer] ?? 0;
 }
@@ -39,6 +82,20 @@ export function warningThresholdMs(turnTimer: string): number {
     const total = parseTurnTimerMs(turnTimer);
     return Math.max(total * WARNING_RATIO, WARNING_MIN_MS);
 }
+
+/**
+ * The shortest time that can pass after a turn starts before *any* timer has
+ * something to say about it — the smallest gap, across every timer, between a
+ * turn starting and its warning threshold. Five minutes today: the 10-minute
+ * timer's warning floor.
+ *
+ * The turntimer cron uses it to skip games it would only decide to leave
+ * alone. Derived rather than written down so it can't drift from the ladder
+ * above: adding a timer shorter than 10 minutes moves it on its own.
+ */
+export const SHORTEST_ACTIONABLE_ELAPSED_MS: number = Math.min(
+    ...Object.keys(TIMER_MS).map(timer => parseTurnTimerMs(timer) - warningThresholdMs(timer))
+);
 
 export function isExpired(lastTurnTimestamp: string, turnTimer: string): boolean {
     // Unlimited timers never expire, so the cron notifier must never skip their turn.

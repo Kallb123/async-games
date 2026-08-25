@@ -39,6 +39,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "A screen that breaks now offers you a way out",
+                detail: "If something goes wrong drawing a page, you get a proper Async Games screen with a “try again” button and a way back to your games — instead of a blank page with an error on it and nothing to tap.",
+            },
+            {
                 title: "Your home screen keeps up while you're looking at it",
                 detail: "Invites accepted, seats claimed, a game starting — the lists now update while the screen is open, instead of waiting until you'd been away and come back. It loads quicker too.",
             },
@@ -54,10 +58,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "The app says the same thing wherever you meet it",
                 detail: "Install Async Games and the splash screen, the install prompt and the browser's own top bar are now the warm cream every screen is, not the slightly-off grey they used to be — and the prompt, a shared link and a search result all describe it the same way instead of three different ways.",
             },
-            {
-                title: "Join codes stay alive as long as your game does",
-                detail: "A lobby used to close after an hour whatever game you set up. Now the code lasts as long as one turn of it — up to a week for the slow ones — and the lobby tells you when it runs out.",
-            },
         ],
     },
     {
@@ -65,25 +65,24 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Everyone gets called by their name",
+                detail: "Once you'd played with more than a handful of people, your home screen started calling some of them “Unknown player” — most often on your finished games. Everybody's name comes through now, however long you've been playing.",
+            },
+            {
+                title: "Ending a game really ends it",
+                detail: "If somebody ended a game while it was your turn, you could carry on playing it — and the finished game would end up disagreeing with itself about who won. It's properly over for everyone now.",
+            },
+            {
+                title: "A stuck move no longer freezes the board",
+                detail: "If your move never reached us — a dropped signal, a tunnel — the board used to stay locked with nothing to tap until you reloaded the page. It now gives up on the move and shows you where the game actually is.",
+            },
+            {
                 title: "Everyone accepting at once no longer strands the game",
                 detail: "If two of you accepted the same invite in the same moment, the game sometimes never started — the invite just sat there with everybody in it. It starts now, whoever taps last. A double-tapped accept can't deal you two copies of the same game any more either.",
             },
             {
                 title: "Notifications stop switching themselves off on iPhone",
                 detail: "The app used to send invisible background pings just to keep your open screens up to date. iPhones count those against an app and quietly revoke its notifications after a few — which is why yours kept going dead. They're all gone: screens refresh when you come back to them instead.",
-            },
-            {
-                title: "A nudge is a nudge, not a nagging",
-                detail: "Nudging the same game more than once an hour no longer buzzes the other player's phone again — the button used to come back to life on a page reload.",
-            },
-            {
-                title: "Get back to a lobby you opened",
-                detail: "An open game waiting in “Awaiting response” is now a tap away from its lobby, so you can read the code out again or see who has taken a seat — instead of only ever seeing it the once when you made it.",
-            },
-            {
-                title: "Solitaire tells you when a deal is dead",
-                detail: "A game you can't win now says so. It used to keep insisting there were moves left as long as a single card sat in the stock — even when nothing left in the pile could go anywhere, however many times you cycled it.",
-                game: "solitaire",
             },
         ],
     },

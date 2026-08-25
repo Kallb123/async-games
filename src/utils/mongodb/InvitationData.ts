@@ -60,6 +60,15 @@ InvitationSchema.index({ joinCode: 1 }, { unique: true, partialFilterExpression:
 // Reaps abandoned lobbies once their code expires, which also frees the code.
 // Documents without expiresAt are left alone.
 InvitationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+// The invitation's own id: how the lobby screen, the accept/cancel routes and
+// startGameFromInvitation's consuming delete all reach one. Unique because
+// it is a v4 UUID minted per invitation and everything downstream treats it
+// as identifying exactly one.
+InvitationSchema.index({ inviteId: 1 }, { unique: true });
+// The dashboard's incoming and outgoing invite lists, which read both halves
+// in one $or — so both halves get an index.
+InvitationSchema.index({ senderId: 1 });
+InvitationSchema.index({ "userIdList.userId": 1 });
 InvitationSchema.methods.CreateGame = async function(invite: IInvitationData, userIdList: string[]) {
     console.log("CreateGame: Generic game");
 };

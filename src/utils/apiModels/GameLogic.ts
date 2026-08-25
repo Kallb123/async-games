@@ -9,10 +9,10 @@
 // Re-exporting each game module here is also what registers its @serializable
 // classes (the decorator runs on module load). Any file importing from this
 // barrel therefore gets a fully-populated deserialisation registry. When you
-// add a new game, add its rules module's export line below AND wire its
-// command/game-type classes into the `registration` array in
-// src/app/api/game/command/route.ts. The serializable-registry test
-// (games/__tests__) guards both.
+// add a new game, add its rules module's export line below AND give it an
+// entry in COMMANDS_BY_GAME_TYPE in src/utils/games/gameCommands.ts — the
+// command route only runs a command against the game that claims it. The
+// serializable-registry test (games/__tests__) guards both.
 export * from "./gameCommand";
 export * from "@/games/DiceCities/DiceCitiesLogic";
 export * from "@/games/Smartthink/SmartthinkLogic";

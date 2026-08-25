@@ -1,10 +1,11 @@
+import { readJsonBody } from '@/utils/api/requestBody';
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { InvitationModel, IInvitationDataDocument } from '@/utils/mongodb/InvitationData';
 
 export async function POST(request: NextRequest) {
-  const { inviteId } = await request.json();
+  const { inviteId } = await readJsonBody(request);
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ success: false, message: 'Not signed in' }, { status: 400 });

@@ -1,4 +1,6 @@
-import { auth, clerkClient } from '@clerk/nextjs/server';
+import { readJsonBody } from '@/utils/api/requestBody';
+import { auth } from '@clerk/nextjs/server';
+import { usersById } from '@/utils/users/clerk';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, trySave } from '@/utils/mongodb/GameData';
@@ -6,7 +8,7 @@ import { recordGameResult } from '@/utils/mongodb/GameResultData';
 import { unclaimedGuestsOf } from '@/utils/users/guest';
 
 export async function POST(request: NextRequest) {
-  const { gameId } = await request.json();
+  const { gameId } = await readJsonBody(request);
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ success: false, message: 'Not signed in' }, { status: 400 });
@@ -33,6 +35,11 @@ export async function POST(request: NextRequest) {
   gameData.complete = true;
   gameData.winner = "";
   gameData.endReason = "ended";
+  // Nobody's turn any more. A won game clears this in CheckGameOver and the
+  // turntimer cron clears it when it abandons one; ending a game by hand left
+  // it pointing at whoever was mid-turn, who could then keep playing a game
+  // that had already written its GameResult (see requireLiveGame).
+  gameData.currentTurn = "";
   if (!(await trySave(gameData))) {
     return NextResponse.json({ success: false, message: 'Game state changed, please try again' }, { status: 409 });
   }
@@ -42,9 +49,7 @@ export async function POST(request: NextRequest) {
   // idempotent on gameId, so a retried request is a no-op.
   after(async () => {
     try {
-      const { data: userList } = await (await clerkClient()).users.getUserList({
-        userId: gameData.userIdList
-      });
+      const userList = await usersById(gameData.userIdList);
 
       const { unclaimedPlayerIds, guestNames } = unclaimedGuestsOf(userList);
       await recordGameResult(gameData, unclaimedPlayerIds, guestNames);

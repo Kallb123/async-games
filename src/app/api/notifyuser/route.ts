@@ -1,3 +1,4 @@
+import { readJsonBody } from '@/utils/api/requestBody';
 import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 import { isDevDeployment } from '@/utils/devEnvironment';
 import { auth, clerkClient } from '@clerk/nextjs/server';
@@ -25,7 +26,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, { status: 400, statusText: "Not signed in" });
   }
 
-  const { userId } = await request.json();
+  const { userId } = await readJsonBody(request);
+  if (typeof userId !== 'string' || !userId) {
+    return NextResponse.json({}, { status: 400, statusText: "Missing userId" });
+  }
   const user = await (await clerkClient()).users.getUser(userId);
 
   // This goes out on the `yourTurn` channel like any other push, so the

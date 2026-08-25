@@ -1,10 +1,12 @@
+import { readJsonBody } from '@/utils/api/requestBody';
+import { requireLiveGame } from '@/utils/games/liveGame';
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildNudgeNotification } from '@/utils/firebase/notificationContent';
 import { readableName } from '@/utils/ui/players';
-import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
+import { usersById } from '@/utils/users/clerk';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { consumeRateLimit } from '@/utils/rateLimit';
 
 // One nudge per game per clock hour — consumeRateLimit's windows are fixed, so
@@ -29,23 +31,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
   }
 
-  const { gameId } = await request.json();
-  if (!gameId) {
-    return NextResponse.json({}, {status: 400, statusText: "Missing gameId"});
-  }
+  const { gameId } = await readJsonBody(request);
 
   await dbConnect();
-  const gameData: IGameDataDocument = await GameDataModel.findOne({gameId}).exec();
-  if (!gameData) {
-    return NextResponse.json({}, {status: 404, statusText: "Game not found"});
+  const found = await requireLiveGame(gameId);
+  if ('error' in found) {
+    return found.error;
   }
+  const gameData = found.game;
 
   if (!gameData.userIdList.includes(userId)) {
     return NextResponse.json({}, {status: 403, statusText: "Not a player in this game"});
-  }
-
-  if (gameData.complete) {
-    return NextResponse.json({}, {status: 400, statusText: "Game is already complete"});
   }
 
   if (gameData.currentTurn === userId) {
@@ -58,9 +54,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, {status: 429, statusText: "You've already nudged this game recently"});
   }
 
-  const { data: userList } = await (await clerkClient()).users.getUserList({
-    userId: [gameData.currentTurn]
-  });
+  const userList = await usersById([gameData.currentTurn]);
   const turnUser = userList.find(u => u.id === gameData.currentTurn);
   if (!turnUser) {
     return NextResponse.json({}, {status: 400, statusText: "Current turn user not found"});
@@ -68,8 +62,8 @@ export async function POST(request: NextRequest) {
 
   await sendPushToUsers([turnUser], {
     event: 'TurnNudge',
-    gameId,
-    link: gameNotificationLink(gameData.gameType.url, gameId)
+    gameId: gameData.gameId,
+    link: gameNotificationLink(gameData.gameType.url, gameData.gameId)
   }, buildNudgeNotification(readableName(thisUser), gameData), {
     channel: 'turnNudge'
   });

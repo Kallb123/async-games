@@ -24,7 +24,14 @@ import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
  * network error) redirects home.
  */
 export function useGameData<T extends IGameDataResponse>(gameId: string) {
-    const [gameData, setGameData] = useState({} as T);
+    // Null until the first response lands, rather than `{} as T`. The cast was
+    // a lie the compiler then enforced everywhere downstream: every screen
+    // reads `gameData.specificGameState.…` on its very first render, when the
+    // object is empty, and the type said that was safe. Every board already
+    // optional-chains its way around it — this makes the type agree with the
+    // code, so a new screen that forgets is a compile error rather than a
+    // blank board and a thrown render.
+    const [gameData, setGameData] = useState<T | null>(null);
     const { isAuthorised, user } = useIsAuthorised();
     const router = useRouter();
     const mountedRef = useRef(true);
@@ -43,8 +50,18 @@ export function useGameData<T extends IGameDataResponse>(gameId: string) {
             return;
         }
 
-        const data = await res.json();
-        if (data && mountedRef.current) setGameData(data.gameData);
+        // Guarded for the same reason useRefreshableData guards its own parse:
+        // a 200 that isn't JSON (a proxy's error page, a truncated body) throws
+        // here, and this runs inside an effect with nothing to catch it.
+        // Keeping the last good state beats blanking the board.
+        let data: { gameData?: T } | null = null;
+        try {
+            data = await res.json();
+        } catch (error) {
+            console.error(`Failed to parse game ${gameId}`, error);
+            return;
+        }
+        if (data?.gameData && mountedRef.current) setGameData(data.gameData);
     }, [gameId, router]);
 
     useEffect(() => {
