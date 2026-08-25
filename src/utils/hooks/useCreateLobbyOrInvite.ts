@@ -5,6 +5,7 @@ import { useToast } from "@/components/ToastContext";
 import type { IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import type { ILobbyRequest } from "@/app/api/lobby/route";
 import { partySizeErrorMessage, type GameMeta } from "@/utils/ui/games";
+import { lobbyPath } from "@/utils/games/lobby";
 
 interface CreateLobbyOrInviteOptions {
     /** The game's presentation metadata — supplies the party-size bounds. */
@@ -83,7 +84,7 @@ export function useCreateLobbyOrInvite({ meta, gameType, invitePath, invitedCoun
                     throw new Error('Failed to create lobby');
                 }
                 const { inviteId } = await response.json();
-                router.push(`/lobby/${inviteId}`);
+                router.push(lobbyPath(inviteId));
             } else {
                 const response = await fetch(invitePath, {
                     method: 'POST',

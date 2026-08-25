@@ -317,6 +317,13 @@ button {
     color: inherit;
 }
 
+/* And the same for an <a>: a whole row, or just a row's main block, that
+   navigates keeps the row's own type rather than the browser's link styling. */
+a.ag-list-row, a.ag-list-row-main {
+    text-decoration: none;
+    color: inherit;
+}
+
 .ag-list-row-main { flex: 1; min-width: 0; }
 
 .ag-list-row-title {

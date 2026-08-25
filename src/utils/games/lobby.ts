@@ -39,6 +39,14 @@ export function lobbyTtlMs(turnTimer: string): number {
     return Math.min(Math.max(LOBBY_MIN_TTL_MS, turn), LOBBY_MAX_TTL_MS);
 }
 
+// Where a lobby lives. Everyone who has a seat at one ends up here — the host
+// the moment they open it, a code-holder the moment they claim a seat, and the
+// host again from the invite still sitting in "Awaiting response" — so the one
+// route the three of them share is written once.
+export function lobbyPath(inviteId: string): string {
+    return `/lobby/${inviteId}`;
+}
+
 export function isOpenSeat(entry: IUserIdAcceptance): boolean {
     return entry.userId === OPEN_SEAT_ID;
 }
