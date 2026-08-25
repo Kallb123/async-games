@@ -5,7 +5,7 @@ import { APP_NAME, OG_IMAGE } from "@/utils/app";
 import { gameShareCard } from "@/utils/ui/games";
 import { readJoinCodeParam } from "@/utils/games/joinCode";
 import { invitedYouTo, seatsCta } from "@/utils/games/lobby";
-import { allowLobbyPreview, findLobbyPreview } from "@/utils/games/lobbyPreview";
+import { LobbyPreview, allowLobbyPreview, findLobbyPreview } from "@/utils/games/lobbyPreview";
 import { clientIp } from "@/utils/rateLimit";
 
 // What a join link looks like when it lands in a chat rather than a browser.
@@ -27,6 +27,46 @@ const GENERIC: Metadata = {
     description: "Got a code from a friend? Take your seat and play a turn whenever you have five minutes.",
 };
 
+// Nothing here is allowed to fail the page or hold it up. The screen below
+// renders the same whether this lookup answers or not, so a database that is
+// down or slow costs the link its card and nothing else.
+//
+// The first version let the lookup throw, and took the whole page down with it
+// — a 500, and no preview at all, which is the opposite of what a preview is
+// for. What made it throw was the throttle querying Mongo before anything had
+// connected, and that is fixed at its source in `rateLimit.ts`.
+//
+// The budget is not belt-and-braces on top of that fix. An unreachable Mongo
+// doesn't fail fast: `dbConnect` sits in the driver's server-selection timeout
+// (30s by default), which is longer than the crawler waits, longer than a
+// person waits, and longer than the function is allowed to live. Measured, not
+// assumed — without this the same request hangs for 30s instead of answering
+// in 2.5 with the generic card.
+const PREVIEW_BUDGET_MS = 2500;
+
+async function previewFor(joinCode: string): Promise<LobbyPreview | null> {
+    // Failures are logged and turned into "no preview" on the lookup itself,
+    // so a race the timeout wins can't swallow one — or leave the rejection
+    // of the promise it abandoned unhandled.
+    const lookup = (async () => {
+        if (!(await allowLobbyPreview('lobby-unfurl', clientIp(await headers())))) return null;
+        return await findLobbyPreview(joinCode);
+    })().catch((error: unknown) => {
+        console.error(error);
+        return null;
+    });
+
+    // Cleared however the race ends, so a lookup that answers straight away
+    // doesn't leave a timer behind on every request this page serves.
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const expired = new Promise<null>(resolve => { timeout = setTimeout(() => resolve(null), PREVIEW_BUDGET_MS); });
+    try {
+        return await Promise.race([lookup, expired]);
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
 interface JoinPageProps {
     searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
@@ -35,12 +75,7 @@ export async function generateMetadata({ searchParams }: JoinPageProps): Promise
     const joinCode = readJoinCodeParam(await searchParams);
     if (!joinCode) return GENERIC;
 
-    // Same throttle as every other public look at a lobby, on its own counter
-    // (see lobbyPreview.ts) — a crawler that has run out of budget gets the
-    // generic card, which is invisible to the player either way.
-    if (!(await allowLobbyPreview('lobby-unfurl', clientIp(await headers())))) return GENERIC;
-
-    const lobby = await findLobbyPreview(joinCode);
+    const lobby = await previewFor(joinCode);
     if (!lobby) return GENERIC;
 
     const title = invitedYouTo(lobby.sender, lobby.gameFriendlyName);

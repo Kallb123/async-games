@@ -51,11 +51,16 @@ export async function findLobbyPreview(code: string): Promise<LobbyPreview | nul
     const lobby = await InvitationModel.findOne({ joinCode, expiresAt: { $gt: new Date() } }).exec();
     if (!lobby) return null;
 
-    const sender = await (await clerkClient()).users.getUser(lobby.senderId);
+    // The host's name is stored on the lobby (see IInvitationData.senderName),
+    // so the common path answers from the one document already read. Only a
+    // lobby opened before that field existed pays the external round trip,
+    // and none can outlive the hour.
+    const sender = lobby.senderName
+        ?? readableName(await (await clerkClient()).users.getUser(lobby.senderId));
 
     return {
         joinCode,
-        sender: readableName(sender),
+        sender,
         gameFriendlyName: lobby.gameFriendlyName,
         openSeatCount: openSeats(lobby).length,
         meta: metaForGame({ url: lobby.gameType.toLowerCase(), friendlyName: lobby.gameFriendlyName }),

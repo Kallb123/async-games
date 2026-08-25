@@ -18,7 +18,15 @@ export interface IInvitationData {
     // ISO-string timestamps above) because the TTL index below only expires
     // Date-typed fields.
     joinCode?: string,
-    expiresAt?: Date
+    expiresAt?: Date,
+    // The host's display name as it read when they opened the lobby, stored
+    // the way gameFriendlyName is rather than resolved from Clerk on demand:
+    // the link preview a shared code unfurls to needs it, and an external
+    // round trip is the slowest thing on that path. It can only go stale
+    // within the hour the lobby lives, and only if the host renames
+    // themselves meanwhile. Absent on a lobby opened before this existed —
+    // `findLobbyPreview` still falls back to asking Clerk.
+    senderName?: string
 }
 
 export interface IInvitationDataDocument extends IInvitationData, Document {
@@ -42,7 +50,8 @@ export var InvitationSchema = new Schema<IInvitationDataDocument> ({
     gameType: String,
     gameFriendlyName: String,
     joinCode: String,
-    expiresAt: Date
+    expiresAt: Date,
+    senderName: String
 }, {discriminatorKey: 'kind'});
 // Codes are only unique among *live* lobbies, so the index only applies to
 // documents that actually have one - a finished/expired invitation can reuse

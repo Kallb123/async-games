@@ -1,3 +1,4 @@
+import { dbConnect } from "@/utils/mongodb/mongodb";
 import { RateLimitModel } from "@/utils/mongodb/RateLimitData";
 
 // Vercel (and any proxy in front of it) sets x-forwarded-for; this Next
@@ -25,6 +26,14 @@ export async function consumeRateLimit(
     limit: number,
     windowMs: number
 ): Promise<boolean> {
+    // This is usually the first thing a request does, so it can be the first
+    // thing on a cold instance to touch Mongo — and a query issued before
+    // anything has connected doesn't fail, it sits in mongoose's buffer for
+    // ten seconds and then throws. Every caller used to rely on some earlier
+    // request having connected; the crawler fetching a shared link is exactly
+    // the case where none has.
+    await dbConnect();
+
     const windowStart = Math.floor(Date.now() / windowMs) * windowMs;
     const key = `${scope}:${identifier}:${windowStart}`;
     const update = { $inc: { count: 1 }, $setOnInsert: { expiresAt: new Date(windowStart + windowMs) } };
