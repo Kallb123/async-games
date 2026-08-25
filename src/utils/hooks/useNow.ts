@@ -57,3 +57,15 @@ export function useNow(running: boolean = true): number | null {
 export function useNowToTheMinute(): number | null {
     return useSyncExternalStore<number | null>(subscribe, minuteSnapshot, noSnapshot);
 }
+
+/**
+ * False on the server and through the first client render, true once hydrated.
+ *
+ * For readouts that only the browser can format honestly — a local-time stamp,
+ * anything reading the reader's locale or time zone — where the server's answer
+ * would differ from the browser's and break the hydration comparison. It joins
+ * no ticker, so it settles once and never re-renders again.
+ */
+export function useHydrated(): boolean {
+    return useSyncExternalStore<boolean>(subscribeNever, () => true, () => false);
+}

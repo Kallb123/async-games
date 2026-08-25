@@ -1,6 +1,15 @@
+// Stamped into the bundle when the build runs, so the Settings footer can say
+// which build a player is looking at alongside the version number. Read through
+// `src/utils/buildInfo.ts`; `next dev` re-reads it every time the dev server
+// restarts.
+const buildTime = new Date().toISOString();
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   swcMinify: false,
+  env: {
+    NEXT_PUBLIC_BUILD_TIME: buildTime,
+  },
   productionBrowserSourceMaps: true,
   images: {
     // Profile pictures Clerk holds for a user (today: the avatar their SSO
