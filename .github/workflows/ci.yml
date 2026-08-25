@@ -6,53 +6,59 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Superseded branch runs are cancelled; main always runs to completion so
+  # every commit on it keeps a finished CI status.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   typecheck:
     name: TypeScript
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: 'npm'
-      - run: npm ci
+      - run: npm ci --prefer-offline --no-audit --fund=false
       - run: npx tsc --noEmit
 
   lint:
     name: Lint
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: 'npm'
-      - run: npm ci
+      - run: npm ci --prefer-offline --no-audit --fund=false
       - run: npm run lint
 
   test:
     name: Test
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: 'npm'
-      - run: npm ci
+      - run: npm ci --prefer-offline --no-audit --fund=false
       - run: npm test
 
   build:
     name: Build
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: 'npm'
-      - run: npm ci
+      - run: npm ci --prefer-offline --no-audit --fund=false
       - run: npx next build
         env:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
