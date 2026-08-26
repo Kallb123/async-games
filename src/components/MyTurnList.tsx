@@ -6,8 +6,9 @@ import { gamePath, metaForGame } from "@/utils/ui/games";
 import { opponents } from "@/utils/ui/players";
 import GameThumb from "@/components/ui/GameThumb";
 import { accentVar } from "@/utils/ui/colours";
+import CollapsingSection from "@/components/ui/CollapsingSection";
 import Refreshable from "@/components/ui/Refreshable";
-import { SkeletonTurnCards } from "@/components/ui/Skeleton";
+import { SkeletonTurnCard } from "@/components/ui/Skeleton";
 import type { RefreshableState } from "@/utils/hooks/useRefreshableData";
 import useAnimatedList from "@/utils/hooks/useAnimatedList";
 import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
@@ -26,7 +27,9 @@ export default function MyTurnList({ games, isLoading, isRefreshing }: MyTurnLis
     const count = games.length;
 
     // Cards still on screen — a game you have just played stays until it has
-    // finished shrinking away.
+    // finished shrinking away, and the two placeholder cards shown while the
+    // dashboard loads hand over to the real ones without moving anything that
+    // has a card to become.
     const cards = useAnimatedList(games.map((game) => {
         const meta = metaForGame({ url: game.url, friendlyName: game.friendlyName });
         const accent = meta ? accentVar(meta.accent) : "var(--ag-terracotta)";
@@ -56,7 +59,7 @@ export default function MyTurnList({ games, isLoading, isRefreshing }: MyTurnLis
                 {timeLeft && <div className="ag-turn-card-badge">{timeLeft}</div>}
             </div>
         );
-    }), isLoading);
+    }), { isLoading, placeholder: { node: <SkeletonTurnCard />, count: 2 } });
 
     return (
         <>
@@ -71,12 +74,10 @@ export default function MyTurnList({ games, isLoading, isRefreshing }: MyTurnLis
                 </p>
             </div>
 
-            {isLoading && <SkeletonTurnCards count={2} />}
-
-            {!isLoading && cards.length > 0 && (
-                <div className="ag-section">
+            {cards.length > 0 && (
+                <CollapsingSection collapsed={!isLoading && count === 0} isLoading={isLoading}>
                     <Refreshable className="ag-stack" isRefreshing={isRefreshing}>{cards}</Refreshable>
-                </div>
+                </CollapsingSection>
             )}
         </>
     );

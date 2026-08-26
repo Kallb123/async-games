@@ -1,24 +1,58 @@
 'use client'
 
-import { Children, isValidElement, ReactElement, ReactNode, useEffect, useRef, useState } from "react";
+import { Children, Fragment, isValidElement, ReactElement, ReactNode, useEffect, useRef, useState } from "react";
+import Collapse from "@/components/ui/Collapse";
 
 /** Must match the `.ag-anim-item` transition in `ag-theme.css`. */
 const ANIM_MS = 450;
 
-/** A row on screen: the one that is still in `children`, or one on its way out. */
-type Slot = { key: string; node: ReactElement };
+/** A row on screen: one still in `children`, one on its way out, or a
+ *  placeholder standing in for a row that hasn't loaded yet. */
+type Slot = { key: string; node: ReactElement; placeholder: boolean };
+
+export interface AnimatedListOptions {
+    /** True until the first response lands — see `useRefreshableData`. */
+    isLoading?: boolean;
+    /** The row to stand in with while loading, and how many of it — a `count` of
+     *  0 for a list that shows nothing at all until it has loaded. */
+    placeholder?: { node: ReactNode; count: number };
+}
+
+/** Where every row ends up when `next` replaces `prev`. */
+export interface ListPlan {
+    /** Every key still on screen, in render order: those in `next`, plus those still leaving. */
+    order: string[];
+    /** Placeholders an arriving row has taken the place of — dropped this render, unanimated. */
+    replaced: Set<string>;
+    /** Arrivals with no placeholder to take over, which grow in from nothing. */
+    entering: string[];
+}
 
 /**
- * Keeps keys that have left `next` in the slot they held in `prev`, so a row on
- * its way out stays where it was instead of jumping to the end of the list.
+ * Pairs the placeholders leaving with the rows arriving, in order, so the
+ * hand-over from skeleton to real data animates only the *difference* between
+ * the two counts: two rows landing on two placeholders moves nothing, three
+ * rows grows the third in, one row collapses the spare placeholder, and a
+ * response with nothing in it collapses both rather than blinking them away.
+ *
+ * Anything with no counterpart animates as usual, and keys that have left keep
+ * the slot they held in `prev`, so a row on its way out stays where it was
+ * instead of jumping to the end of the list.
  */
-function mergeKeys(prev: string[], next: string[]): string[] {
+export function planList(prev: readonly { key: string; placeholder: boolean }[], next: readonly string[]): ListPlan {
     const live = new Set(next);
-    const merged = [...next];
-    prev.forEach((key, i) => {
-        if (!live.has(key)) merged.splice(Math.min(i, merged.length), 0, key);
+    const held = new Set(prev.map(slot => slot.key));
+    const arrivals = next.filter(key => !held.has(key));
+    const spare = prev.filter(slot => slot.placeholder && !live.has(slot.key));
+    const swapped = Math.min(spare.length, arrivals.length);
+    const replaced = new Set(spare.slice(0, swapped).map(slot => slot.key));
+
+    const order = [...next];
+    prev.forEach((slot, i) => {
+        if (live.has(slot.key) || replaced.has(slot.key)) return;
+        order.splice(Math.min(i, order.length), 0, slot.key);
     });
-    return merged;
+    return { order, replaced, entering: arrivals.slice(swapped) };
 }
 
 /**
@@ -29,33 +63,41 @@ function mergeKeys(prev: string[], next: string[]): string[] {
  * its length counts rows still animating out, so a caller can keep its section
  * on screen until the last one has gone.
  *
- * Pass `isLoading` so the skeleton's handover to real content is not mistaken
- * for a change to the list: whatever is there when loading finishes appears
- * without animating, and everything after that animates — including the first
- * row to land in a list that loaded empty.
+ * Pass the skeleton as `placeholder` rather than rendering it yourself: it then
+ * takes part in the same animation, and `planList` above turns the hand-over
+ * into the smallest movement that gets from N placeholders to M rows.
  */
-export default function useAnimatedList(children: ReactNode, isLoading = false): ReactNode[] {
-    const live = Children.toArray(children).filter(isValidElement) as ReactElement[];
+export default function useAnimatedList(children: ReactNode, options: AnimatedListOptions = {}): ReactNode[] {
+    const { isLoading = false, placeholder } = options;
+    const shown = isLoading && placeholder
+        ? Array.from({ length: placeholder.count }, (_, i) => <Fragment key={`placeholder-${i}`}>{placeholder.node}</Fragment>)
+        : children;
+    const live = Children.toArray(shown).filter(isValidElement) as ReactElement[];
     const liveNodes = new Map(live.map(child => [String(child.key), child]));
     const liveKeys = [...liveNodes.keys()];
 
-    const [slots, setSlots] = useState<Slot[]>(() => live.map(child => ({ key: String(child.key), node: child })));
+    const [slots, setSlots] = useState<Slot[]>(() => live.map(child => ({ key: String(child.key), node: child, placeholder: isLoading })));
     const [entering, setEntering] = useState<string[]>([]);
     // False until the list has finished loading once — an empty list that has
     // settled is still settled, so its first row counts as an arrival.
     const [hasSettled, setHasSettled] = useState(false);
     const exitTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
-    const order = mergeKeys(slots.map(slot => slot.key), liveKeys);
-    if (order.length !== slots.length || order.some((key, i) => key !== slots[i].key)) {
+    const plan = planList(slots, liveKeys);
+    if (plan.order.length !== slots.length || plan.order.some((key, i) => key !== slots[i].key)) {
         // A row that has just left is no longer in `children`, so it carries on
         // rendering from the node the last change captured.
-        const departed = new Map(slots.map(slot => [slot.key, slot.node]));
-        setSlots(order.map(key => ({ key, node: liveNodes.get(key) ?? departed.get(key)! })));
+        const held = new Map(slots.map(slot => [slot.key, slot]));
+        setSlots(plan.order.map(key => {
+            const was = held.get(key);
+            return { key, node: liveNodes.get(key) ?? was!.node, placeholder: was ? was.placeholder : isLoading };
+        }));
         // Arrivals have to be marked in the same render they first mount in —
-        // the `--enter` class is what gives them a collapsed starting style.
-        const arrived = hasSettled ? liveKeys.filter(key => !departed.has(key)) : [];
-        if (arrived.length > 0) setEntering(previous => [...previous, ...arrived]);
+        // the `--enter` class is what gives them a collapsed starting style. A
+        // first load with no placeholders lands whole instead: nothing was on
+        // screen for those rows to grow out of.
+        const grown = hasSettled || plan.replaced.size > 0 ? plan.entering : [];
+        if (grown.length > 0) setEntering(current => [...current, ...grown]);
     }
     if (!hasSettled && !isLoading) {
         setHasSettled(true);
@@ -92,13 +134,9 @@ export default function useAnimatedList(children: ReactNode, isLoading = false):
         return () => timers.forEach(timer => clearTimeout(timer));
     }, []);
 
-    return slots.map(({ key, node }) => {
-        const isLeaving = !liveNodes.has(key);
-        const phase = isLeaving ? " ag-anim-item--exit" : entering.includes(key) ? " ag-anim-item--enter" : "";
-        return (
-            <div key={key} className={`ag-anim-item${phase}`}>
-                <div className="ag-anim-item-inner">{liveNodes.get(key) ?? node}</div>
-            </div>
-        );
-    });
+    return slots.map(({ key, node }) => (
+        <Collapse key={key} phase={!liveNodes.has(key) ? "exit" : entering.includes(key) ? "enter" : undefined}>
+            {liveNodes.get(key) ?? node}
+        </Collapse>
+    ));
 }
