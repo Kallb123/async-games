@@ -83,20 +83,6 @@ export function warningThresholdMs(turnTimer: string): number {
     return Math.max(total * WARNING_RATIO, WARNING_MIN_MS);
 }
 
-/**
- * The shortest time that can pass after a turn starts before *any* timer has
- * something to say about it — the smallest gap, across every timer, between a
- * turn starting and its warning threshold. Five minutes today: the 10-minute
- * timer's warning floor.
- *
- * The turntimer cron uses it to skip games it would only decide to leave
- * alone. Derived rather than written down so it can't drift from the ladder
- * above: adding a timer shorter than 10 minutes moves it on its own.
- */
-export const SHORTEST_ACTIONABLE_ELAPSED_MS: number = Math.min(
-    ...Object.keys(TIMER_MS).map(timer => parseTurnTimerMs(timer) - warningThresholdMs(timer))
-);
-
 export function isExpired(lastTurnTimestamp: string, turnTimer: string): boolean {
     // Unlimited timers never expire, so the cron notifier must never skip their turn.
     if (isUnlimitedTurnTimer(turnTimer)) return false;
@@ -111,6 +97,72 @@ export function isWarningThreshold(lastTurnTimestamp: string, turnTimer: string)
     const elapsed = Date.now() - new Date(lastTurnTimestamp).getTime();
     const remaining = total - elapsed;
     return remaining <= warningThresholdMs(turnTimer) && remaining > 0;
+}
+
+/**
+ * How long a turn has to have been running before *this* timer has anything to
+ * say about it: its warning threshold, which always falls before its expiry.
+ * Eight minutes for the 10-minute timer, six days for the 7-day one.
+ */
+function actionableElapsedMs(turnTimer: string): number {
+    return parseTurnTimerMs(turnTimer) - warningThresholdMs(turnTimer);
+}
+
+/** The turn-timer fields a sweep decision reads — see `needsSweeping`. */
+export interface ITurnTimerState {
+    turnTimer: string,
+    lastTurnTimestamp: string,
+    timerWarningNotificationSent: boolean,
+}
+
+/**
+ * Whether the turn-timer cron has anything to do for this game: the turn has
+ * run out, or it is close enough to be worth the one warning per turn.
+ *
+ * One predicate, so the cron can ask it twice and get the same answer — of the
+ * few fields its candidate read projects, and again of the whole document it
+ * loads off the back of that. See `sweepGame` for why it asks twice.
+ */
+export function needsSweeping({ turnTimer, lastTurnTimestamp, timerWarningNotificationSent }: ITurnTimerState): boolean {
+    return isExpired(lastTurnTimestamp, turnTimer)
+        || (isWarningThreshold(lastTurnTimestamp, turnTimer) && !timerWarningNotificationSent);
+}
+
+/** One `$or` branch of `actionableTurnFilter`: one timer, and the turns old
+ *  enough for it to have something to say. */
+export interface ActionableTurnBranch {
+    turnTimer: string,
+    lastTurnTimestamp: { $lte: string },
+}
+
+/**
+ * The Mongo filter for the only games a sweep could act on: for each timer on
+ * the ladder, the turns that have been running long enough for that timer to
+ * warn or expire.
+ *
+ * Per-timer, rather than the one cutoff across all of them this replaced —
+ * where the shortest timer set the cutoff for every timer, so a 7-day game
+ * whose turn started six minutes ago was still read in full, every tick, to be
+ * put straight back. Unlimited games are excluded by construction: they aren't
+ * on the ladder because they never expire and never warn.
+ *
+ * `lastTurnTimestamp` is an ISO-8601 string rather than a Date, and this
+ * compares it as one: every writer produces it with `toISOString()`, which is
+ * fixed-width and UTC, so lexicographic order is chronological order.
+ *
+ * Derived from the ladder rather than written down, so it can't drift from the
+ * predicates it has to agree with — `TurnTimer.test.ts` holds it to never
+ * leaving out a game `needsSweeping` would have said yes to.
+ */
+export function actionableTurnFilter(): { $or: ActionableTurnBranch[] } {
+    const now = Date.now();
+
+    return {
+        $or: Object.keys(TIMER_MS).map(turnTimer => ({
+            turnTimer,
+            lastTurnTimestamp: { $lte: new Date(now - actionableElapsedMs(turnTimer)).toISOString() },
+        })),
+    };
 }
 
 type DurationParts = { days: number, hours: number, minutes: number };

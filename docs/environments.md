@@ -25,10 +25,10 @@ Point two Clerk instances at one database and:
   that seat instead of a real one.
 - `/api/users` only lists current-instance users, so old games reference people
   the invite picker can't show.
-- `/api/cron/turntimer` runs `GameDataModel.find({ complete: false })` over
-  **every** unfinished game in the database. The nightly production run will
-  expire, force-forfeit (`endReason: "abandoned"`) and record results for games
-  created against the dev instance.
+- `/api/cron/turntimer` sweeps **every** unfinished game in the database whose
+  turn timer has anything to say about it, whichever instance created it. The
+  nightly production run will expire, force-forfeit (`endReason: "abandoned"`)
+  and record results for games created against the dev instance.
 - `npm run dev` locally takes turns in live games.
 
 ## The split

@@ -1,14 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+    ActionableTurnBranch,
+    ITurnTimerState,
     MAX_CONSECUTIVE_MISSED_TURNS,
-    SHORTEST_ACTIONABLE_ELAPSED_MS,
     TURN_TIMER_OPTIONS,
     TURN_TIMER_VALUES,
+    UNLIMITED_TURN_TIMER,
+    actionableTurnFilter,
     formatRemainingUntil,
     hasAbandonedGame,
     isExpired,
     isValidTurnTimer,
-    isWarningThreshold,
+    needsSweeping,
+    parseTurnTimerMs,
+    warningThresholdMs,
 } from './TurnTimer';
 
 describe('hasAbandonedGame', () => {
@@ -83,14 +88,97 @@ describe('isValidTurnTimer', () => {
     });
 });
 
-describe('SHORTEST_ACTIONABLE_ELAPSED_MS', () => {
-    it('is short enough that no timer has anything to say before it', () => {
-        // The turntimer cron skips games whose turn started more recently than
-        // this, so it must be under every timer's expiry *and* its warning.
-        const justUnder = new Date(Date.now() - SHORTEST_ACTIONABLE_ELAPSED_MS + 1000).toISOString();
-        for (const timer of TURN_TIMER_VALUES) {
-            expect(isExpired(justUnder, timer), `${timer} expired too early`).toBe(false);
-            expect(isWarningThreshold(justUnder, timer), `${timer} warned too early`).toBe(false);
+// A game whose current turn started `elapsedMs` ago — the only thing either of
+// the two suites below varies, so they share the one builder.
+const game = (turnTimer: string, elapsedMs: number, warned = false): ITurnTimerState => ({
+    turnTimer,
+    lastTurnTimestamp: new Date(Date.now() - elapsedMs).toISOString(),
+    timerWarningNotificationSent: warned,
+});
+
+// The ladder without the unlimited timer: the timers that actually count, and
+// so the only ones with a boundary to sit on.
+const COUNTED_TIMERS = TURN_TIMER_VALUES.filter(timer => timer !== UNLIMITED_TURN_TIMER);
+
+describe('needsSweeping', () => {
+    it('has nothing to do for a turn that has only just started', () => {
+        expect(needsSweeping(game('1h', 60 * 1000))).toBe(false);
+    });
+
+    it('warns once and then leaves the turn alone until it expires', () => {
+        // The 1-hour timer warns with 12 minutes left (its 20% ratio).
+        expect(needsSweeping(game('1h', 50 * 60 * 1000))).toBe(true);
+        expect(needsSweeping(game('1h', 50 * 60 * 1000, true))).toBe(false);
+    });
+
+    it('acts on an expired turn even once the warning has been sent', () => {
+        expect(needsSweeping(game('1h', 61 * 60 * 1000, true))).toBe(true);
+    });
+
+    it('has nothing to do for an unlimited timer, however long the turn runs', () => {
+        expect(needsSweeping(game(UNLIMITED_TURN_TIMER, 30 * 24 * 60 * 60 * 1000))).toBe(false);
+    });
+});
+
+describe('actionableTurnFilter', () => {
+    // The cron's candidate read hands this to Mongo; this is the same
+    // comparison Mongo would make of it — one $or branch per timer, each an
+    // equality on turnTimer and an upper bound on lastTurnTimestamp.
+    const matches = (branches: ActionableTurnBranch[], game: ITurnTimerState): boolean =>
+        branches.some(branch =>
+            branch.turnTimer === game.turnTimer
+            && game.lastTurnTimestamp <= branch.lastTurnTimestamp.$lte);
+
+
+    // The clock is frozen because the cases below sit exactly on the timers'
+    // boundaries: the filter's bounds and needsSweeping each read the clock
+    // for themselves, so on a live clock a game right on a boundary answers
+    // one way to the first and the other way to the second. In the cron that
+    // costs a game one tick's wait; here it would make the assertions a
+    // coin toss.
+    beforeEach(() => vi.useFakeTimers({ now: new Date('2026-08-25T12:00:00.000Z') }));
+    afterEach(() => vi.useRealTimers());
+
+    it('asks for every timer on the ladder, and never for an unlimited game', () => {
+        const asked = actionableTurnFilter().$or.map(branch => branch.turnTimer);
+        expect(asked.sort()).toEqual([...COUNTED_TIMERS].sort());
+    });
+
+    it('never leaves out a game the sweep would have acted on', () => {
+        // The whole point of the filter: it may be looser than needsSweeping —
+        // that only costs a candidate the loop then skips — but it must never
+        // be tighter, or a game that needed warning or expiring is never read.
+        const branches = actionableTurnFilter().$or;
+
+        for (const turnTimer of TURN_TIMER_VALUES) {
+            const total = parseTurnTimerMs(turnTimer);
+            const warning = warningThresholdMs(turnTimer);
+            const elapsedCases = [
+                0, 1000, total - warning - 1000, total - warning, total - warning + 1000,
+                total - 1000, total, total + 1000, total * 3,
+            ];
+
+            for (const elapsedMs of elapsedCases) {
+                for (const warned of [false, true]) {
+                    const candidate = game(turnTimer, elapsedMs, warned);
+                    if (needsSweeping(candidate)) {
+                        expect(matches(branches, candidate), `${turnTimer} at ${elapsedMs}ms was left out`).toBe(true);
+                    }
+                }
+            }
+        }
+    });
+
+    it('leaves out a turn too young for its own timer to have anything to say', () => {
+        // What the per-timer bounds buy over the one cutoff this replaced: a
+        // 7-day game whose turn started an hour ago is no longer even read,
+        // where before it was read in full every tick.
+        const branches = actionableTurnFilter().$or;
+
+        for (const turnTimer of COUNTED_TIMERS) {
+            const tooYoung = game(turnTimer, parseTurnTimerMs(turnTimer) - warningThresholdMs(turnTimer) - 1000);
+            expect(needsSweeping(tooYoung), `${turnTimer} was actionable too early`).toBe(false);
+            expect(matches(branches, tooYoung), `${turnTimer} was read too early`).toBe(false);
         }
     });
 });

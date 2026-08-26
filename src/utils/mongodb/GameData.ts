@@ -2,6 +2,7 @@ import { Document, Model, Schema, model, models } from "mongoose";
 import { GameEndReason, IGameDataResponse, IGameResponse, uuidString } from "../apiModels/GameDataApi";
 import { UserDirectory, userIdListToUsernameList } from "../users/clerk";
 import { IGameCommand, IGameType } from "../apiModels/GameLogic";
+import { actionableTurnFilter } from "../games/TurnTimer";
 
 export interface IGameState {
     turnOrder: string[],
@@ -173,16 +174,70 @@ GameDataSchema.index({ gameId: 1 }, { unique: true });
 // The dashboard's "my live games", and the lobby-join guard's "is this player
 // already in a game?". userIdList leads because it is the selective half.
 GameDataSchema.index({ userIdList: 1, complete: 1 });
-// The turntimer cron's sweep: live games, oldest turn first. Ordered to match
-// how it queries — equality on complete, then the range and sort on
-// lastTurnTimestamp — so one index serves the filter and the sort together.
-GameDataSchema.index({ complete: 1, lastTurnTimestamp: 1 });
+// The turntimer cron's sweep: live games on a given timer, oldest turn first.
+// Ordered to match how it queries (see actionableTurnFilter) — equality on
+// complete and on turnTimer, then the range and sort on lastTurnTimestamp — so
+// one index serves each of the filter's per-timer branches and the sort across
+// them together.
+GameDataSchema.index({ complete: 1, turnTimer: 1, lastTurnTimestamp: 1 });
 // The only link back from a game to the lobby it started from, polled by a
 // host still sitting on their lobby screen (GET /api/lobby/[inviteId]/game).
 // Sparse: a game started from a direct invite has no inviteId.
 GameDataSchema.index({ inviteId: 1 }, { sparse: true });
 
 export var GameDataModel = models.GameData || model<IGameDataDocument, IGameDataModel>('GameData', GameDataSchema);
+
+/**
+ * The fields the turn-timer sweep's decision reads (`needsSweeping`) plus the id
+ * to load the game by if it turns out there is something to do.
+ *
+ * One list, in one place: the projection is built from it and the type is
+ * derived from it. Written twice, dropping a name from the projection would
+ * still type-check, and `needsSweeping` would read `undefined` and quietly
+ * decide every game was fine.
+ */
+const SWEEP_CANDIDATE_FIELDS = [
+    'gameId', 'turnTimer', 'lastTurnTimestamp', 'timerWarningNotificationSent',
+] as const;
+
+/** A live game as the turn-timer sweep first sees it. */
+export type ISweepCandidate = Pick<IGameData, typeof SWEEP_CANDIDATE_FIELDS[number]>;
+
+/**
+ * How many candidates one run will read.
+ *
+ * A cron run has a request deadline, so reading more games than it could ever
+ * get through is time spent not sweeping. Nothing is lost by stopping: the read
+ * is oldest-turn-first and every game the sweep acts on stops being a candidate
+ * (an expired turn moves `lastTurnTimestamp`, a warning sets
+ * `timerWarningNotificationSent`, an abandoned game sets `complete`), so the
+ * next run's own query resumes where this one stopped with no cursor to keep.
+ */
+export const SWEEP_CANDIDATE_LIMIT = 500;
+
+/**
+ * The turn-timer sweep's candidate read: the live games a run could act on,
+ * oldest turn first, projected down to the fields above.
+ *
+ * The sweep used to read whole documents — `commandHistory`, every game's own
+ * state and all — for every live game, to put nearly all of them straight back:
+ * on any given tick most games have nothing due. The full document is now
+ * fetched by `gameId` (the unique index above) only for the games that turn out
+ * to need acting on.
+ *
+ * `lean()` skips schema defaults, so `timerWarningNotificationSent` reads as
+ * undefined on a game written before that field existed rather than as false.
+ * `needsSweeping` only asks whether it is falsy, so those are the same answer —
+ * but anything added to the projection has to want the raw value.
+ */
+export function findSweepCandidates(): Promise<ISweepCandidate[]> {
+    return GameDataModel.find({ complete: false, ...actionableTurnFilter() })
+        .select(`${SWEEP_CANDIDATE_FIELDS.join(' ')} -_id`)
+        .sort({ lastTurnTimestamp: 1 })
+        .limit(SWEEP_CANDIDATE_LIMIT)
+        .lean<ISweepCandidate[]>()
+        .exec();
+}
 
 // Saves the document, reporting false (instead of throwing) on a VersionError.
 // Two requests against the same game can race past a currentTurn/state check
