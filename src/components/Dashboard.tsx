@@ -38,7 +38,9 @@ export default function Dashboard() {
     return <Landing />;
   }
 
-  const displayName = user?.firstName || user?.username || "there";
+  // No fallback name: until Clerk hands us the user, the badge in the top bar
+  // shows a silhouette rather than an initial taken from a placeholder word.
+  const displayName = user?.firstName || user?.username || null;
 
   return (
     <main>

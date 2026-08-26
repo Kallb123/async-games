@@ -65,6 +65,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Your badge no longer flashes a stranger's initial",
+                detail: "For a moment before your profile loaded, the little circle on the home page and your profile showed a “T” or a “Y” — the first letter of the words standing in for your name. You now get a plain silhouette until your real initials or photo are ready.",
+            },
+            {
                 title: "The back arrow sits in the middle of its button",
                 detail: "The little round back arrow at the top of the library, your profile, settings and every other screen was leaning down and to one side of its circle. It's centred now.",
             },
@@ -79,10 +83,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "The home page stops flashing the wrong screen at you",
                 detail: "Arriving at Async Games without being signed in used to show you an empty version of somebody's games list, loading, before throwing it away and showing you the welcome page. You now land on the right screen first time.",
-            },
-            {
-                title: "Everyone gets called by their name",
-                detail: "Once you'd played with more than a handful of people, your home screen started calling some of them “Unknown player” — most often on your finished games. Everybody's name comes through now, however long you've been playing.",
             },
         ],
     },

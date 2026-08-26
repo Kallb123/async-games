@@ -115,7 +115,9 @@ export default function Profile() {
     }
 
     const fullName = [user?.firstName, user?.lastName].filter(name => name).join(" ");
-    const ownDisplayName = user?.firstName || user?.username || "You";
+    // Null while Clerk is still loading you, so the header sits as a
+    // placeholder instead of showing "Y" for a stand-in "You".
+    const ownDisplayName = user ? (user.firstName || user.username || "You") : null;
     const guest = !!user && isGuest(user);
 
     const handleSignOut = () => {
