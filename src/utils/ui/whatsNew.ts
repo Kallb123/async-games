@@ -65,6 +65,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "A join link opens on the invitation, not a blank page",
+                detail: "Tapping a friend's join link used to leave you looking at an empty page while the app worked out who you were. It now opens straight onto their invitation — the code already filled in, a name picked for you, ready to take your seat.",
+            },
+            {
                 title: "The banner at the bottom stops sitting on your content",
                 detail: "The “install the app” and “turn on notifications” strips used to cover the last thing on the page — the bottom of a list, or the button you were reaching for. Pages now leave room for whichever one is showing, and give the space back the moment you wave it away.",
             },
@@ -79,10 +83,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Friend requests stop springing out at you",
                 detail: "Opening your profile used to make the requests you'd sent slide into place as though they had just arrived that second. They're simply there now — the sliding is saved for a request that actually turns up while you're looking.",
-            },
-            {
-                title: "Everyone accepting at once no longer strands the game",
-                detail: "If two of you accepted the same invite in the same moment, the game sometimes never started — the invite just sat there with everybody in it. It starts now, whoever taps last. A double-tapped accept can't deal you two copies of the same game any more either.",
             },
         ],
     },

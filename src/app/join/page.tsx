@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { auth } from "@clerk/nextjs/server";
 import JoinForm from "./JoinForm";
 import { APP_NAME, OG_IMAGE, shareImage } from "@/utils/app";
 import { gameShareCard } from "@/utils/ui/games";
 import { readJoinCodeParam } from "@/utils/games/joinCode";
+import { DiceRoll } from "@/utils/games/DiceRoll";
+import { randomGuestName } from "@/utils/games/guestName";
 import { invitedYouTo, seatsCta } from "@/utils/games/lobby";
 import { LobbyPreview, allowLobbyPreview, findLobbyPreview } from "@/utils/games/lobbyPreview";
 import { clientIp } from "@/utils/rateLimit";
@@ -100,6 +103,32 @@ export async function generateMetadata({ searchParams }: JoinPageProps): Promise
     };
 }
 
-export default function Join() {
-    return <JoinForm />;
+/**
+ * Who the join screen is for, decided here rather than in the browser.
+ *
+ * /join is two screens — the guest lockup for a visitor with no account, the
+ * code box for a player who has one — and the browser can't tell them apart
+ * until Clerk has loaded. Deciding it in the client meant the screen rendered
+ * nothing at all until then: a blank page, on the one route in the app that
+ * strangers arrive at cold from a link in a chat app. The session cookie the
+ * middleware has already read says which screen it is, so the first paint can
+ * be that screen — server-rendered, rather than an empty shell waiting on
+ * JavaScript.
+ *
+ * `auth()` makes the route dynamic, which `generateMetadata` above already
+ * did: reading the search params and looking the lobby up is not something
+ * that can be done ahead of the request either.
+ *
+ * `JoinForm` still corrects itself from Clerk once it loads, for the session
+ * the cookie claims and the browser then rejects.
+ *
+ * The guest form's random starting name and die face are drawn here for the
+ * same reason: what the server renders and what the browser renders on its
+ * first pass have to be the same name, and `Math.random()` called on both
+ * ends is not.
+ */
+export default async function Join() {
+    const { userId } = await auth();
+
+    return <JoinForm initiallySignedIn={!!userId} initialName={randomGuestName()} initialDie={DiceRoll(6)} />;
 }

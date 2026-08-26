@@ -562,15 +562,26 @@ game — is documented fully in
   same `GameLibrary` browser the signed-in library uses, pointed at sign-up —
   instead of a bounce to `/login`. Locked-out accounts still go to
   `/unlockaccess`.
-- **Which home screen you get is decided on the server.** `/` is the one screen
-  whose *audience* is settled before it renders — the same server-page-wraps-
-  client-component shape `/join` uses: it reads the session with `await auth()`
-  and renders either `components/Dashboard.tsx` or `components/Landing.tsx`. The browser
-  can't tell those apart until Clerk has loaded, so deciding it in the client
-  meant a visitor with no account watched the dashboard's skeletons load and
-  then be replaced by the landing page. `Dashboard` still mounts
-  `useAuthGuard({ allowSignedOut: true })` and falls back to `Landing` itself,
-  for the session the cookie claims and Clerk then rejects in the browser.
+- **Which screen a two-audience route shows is decided on the server.** `/` and
+  `/join` are the two screens with something to show a visitor who has no
+  account, and so the two whose *audience* has to be settled before they
+  render. Each is a server page that reads the session with `await auth()` and
+  hands the answer to the client component below it: `/` renders either
+  `components/Dashboard.tsx` or `components/Landing.tsx`, and `/join` passes
+  `initiallySignedIn` into `JoinForm`, whose guest lockup and signed-in code
+  box share one component and most of their state. The browser can't tell the
+  two audiences apart until Clerk has loaded, and deciding it there meant each
+  screen showed the wrong thing until it had: `/` flashed the dashboard's
+  skeletons at a visitor with no account before replacing them with the
+  landing page, and `/join` — the one route strangers arrive at cold, from a
+  link in a chat app — rendered nothing at all. Both screens still mount
+  `useAuthGuard({ allowSignedOut: true })` and correct themselves from Clerk,
+  for the session the cookie claims and the browser then rejects. `auth()`
+  makes a route dynamic, which is what buys the right first paint; `/join`
+  already was, for the lobby lookup its `generateMetadata` does. Whatever the
+  guest form starts out holding — its random Adjective+Animal name, the die
+  face beside it — is drawn on the server and passed down too, because server
+  HTML and the browser's first render have to agree on it.
 - User records themselves live in **Clerk**, not MongoDB. The app only stores
   Clerk `userId`s and resolves display names on demand.
 
