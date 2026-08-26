@@ -12,6 +12,7 @@ interface ListSectionProps {
     isLoading: boolean;
     /** A later refetch — rows stay put and shimmer instead. */
     isRefreshing?: boolean;
+    /** `0` for a list that is usually empty: no skeleton, no section, until it has loaded. */
     skeletonRows?: number;
     /** Skeleton rows lead with an avatar circle; false gives the small status dot. */
     skeletonAvatar?: boolean;
@@ -50,6 +51,14 @@ export default function ListSection({
     // removed and are shrinking away, so the section outlives its last row.
     const rows = useAnimatedList(children, isLoading);
 
+    // A list that is usually empty (the profile's friend requests) opts out of
+    // the skeleton with `skeletonRows={0}`: two placeholder rows for requests
+    // that probably aren't there read as a promise the response then breaks.
+    // The hook still gets the real `isLoading`, so whatever lands is a handover
+    // and appears without animating — only later arrivals grow in.
+    if (isLoading && skeletonRows === 0) {
+        return null;
+    }
     if (!isLoading && rows.length === 0 && !empty) {
         return null;
     }
