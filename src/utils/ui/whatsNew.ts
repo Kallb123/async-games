@@ -65,6 +65,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "The back arrow sits in the middle of its button",
+                detail: "The little round back arrow at the top of the library, your profile, settings and every other screen was leaning down and to one side of its circle. It's centred now.",
+            },
+            {
                 title: "A join link opens on the invitation, not a blank page",
                 detail: "Tapping a friend's join link used to leave you looking at an empty page while the app worked out who you were. It now opens straight onto their invitation — the code already filled in, a name picked for you, ready to take your seat.",
             },
@@ -79,10 +83,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Everyone gets called by their name",
                 detail: "Once you'd played with more than a handful of people, your home screen started calling some of them “Unknown player” — most often on your finished games. Everybody's name comes through now, however long you've been playing.",
-            },
-            {
-                title: "Friend requests stop springing out at you",
-                detail: "Opening your profile used to make the requests you'd sent slide into place as though they had just arrived that second. They're simply there now — the sliding is saved for a request that actually turns up while you're looking.",
             },
         ],
     },

@@ -1,3 +1,4 @@
+import BackArrow from "@/components/ui/BackArrow";
 import Dice from "@/components/ui/Dice";
 import { ISnakesAndLaddersDiceRollOutcome } from "@/utils/apiModels/GameLogic";
 import { useEffect, useState } from "react";
@@ -93,7 +94,7 @@ export default function SnakesAndLaddersRollResult({ result, onDismiss }: { resu
     return (
         <div className="ag-sl-roll">
             <div className="ag-game-topbar">
-                <button className="ag-game-topbar-btn" onClick={onDismiss} aria-label="Close">←</button>
+                <button className="ag-game-topbar-btn" onClick={onDismiss} aria-label="Close"><BackArrow /></button>
                 <div className="ag-game-topbar-main">
                     <div className="ag-game-topbar-title">Snakes &amp; Ladders</div>
                     <div className="ag-game-topbar-sub">{rolling ? 'Rolling the die…' : `You rolled a ${roll}`}</div>

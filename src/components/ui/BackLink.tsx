@@ -1,4 +1,5 @@
 import Link from "next/link";
+import BackArrow from "@/components/ui/BackArrow";
 
 interface BackLinkProps {
     href: string;
@@ -8,6 +9,8 @@ interface BackLinkProps {
 // The circular back arrow that sits at the start of every ag-topbar title.
 export default function BackLink({ href, label }: BackLinkProps) {
     return (
-        <Link href={href} className="ag-back" aria-label={label}>←</Link>
+        <Link href={href} className="ag-back" aria-label={label}>
+            <BackArrow />
+        </Link>
     );
 }
