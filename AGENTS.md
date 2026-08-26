@@ -90,10 +90,32 @@ a system font** and skips the cards with a warning when it isn't.
   both must pass. If you touch the game engine (`src/utils/apiModels/`), also run
   `npm test` — the serializable-registry test guards that every game's rules
   module stays wired into the `GameLogic` barrel.
-- After writing or changing UI, components, hooks, or game code, review it
-  with the **`caveman`** agent before committing. It guards the component-reuse
-  rule above — flagging duplicated markup, copy-pasted logic, and bespoke code
-  that an existing component/hook/helper/`ag-*` class already provides. It only
-  reports findings (never edits); apply the fixes yourself. Humans can also
-  invoke its skills directly: `caveman-review` (full checklist) and
-  `spot-duplication` (prove a block duplicates something that already exists).
+- **Review with the crew before committing** (see below). At minimum, run
+  `caveman` over any UI, component, hook or game change.
+
+## The review crew
+
+Five reviewer agents live in `.claude/agents/`, each guarding one concern with
+its own checklist skill in `.claude/skills/`. They **only report findings and
+never edit** — apply the fixes yourself. Humans can invoke any skill directly
+by name instead of going through the agent.
+
+| Agent | Guards | Run it after | Skills |
+|---|---|---|---|
+| **`caveman`** 🪨 | simplicity and reuse — the component-reuse rule above | UI, components, hooks, game code | `caveman-review`, `spot-duplication` |
+| **`locksmith`** 🔐 | security — auth, membership checks, forged input, secrets, rate limits | any API route, auth/identity change, `process.env` read, command-pipeline change | `locksmith-review` |
+| **`croupier`** 🃏 | hidden information — what the server sends each player | response builders, DTOs, `specificGameState`, command outcomes, replay adapters, push copy | `croupier-review`, `trace-hidden-state` |
+| **`gremlin`** 👹 | robustness — how it behaves when things go wrong | routes, saves, cron sweeps, data-fetching hooks, anything looping over players/games/devices | `gremlin-review` |
+| **`rulebook`** 📖 | conventions and wiring — placement, registries, upkeep | adding a game, moving code between folders, changing shared metadata, anything player-visible | `rulebook-review` |
+
+The concerns are deliberately separate, and each agent hands work outside its
+own to the right one by name rather than half-reviewing it. Two boundaries are
+worth remembering:
+
+- A client **sending** a field it shouldn't control is the locksmith's; the
+  server **sending back** something a player shouldn't see is the croupier's.
+- The rulebook defers to the caveman on anything that is really duplication.
+
+A change usually needs one or two of them, not all five — pick by what you
+touched. Anything touching `src/app/api/**` is worth both a `locksmith` and a
+`gremlin` pass; a new game wants `rulebook` and `croupier`.
