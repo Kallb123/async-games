@@ -557,11 +557,20 @@ game — is documented fully in
   `redirect_url`, so signing in returns them to it — a shared join link keeps
   its code rather than dropping them on the home page. `/unlockaccess` posts an `ACCESS_PASSWORD` to `/api/unlock` to flip
   the flag — an optional invite-only gate.
-- **The public landing page** is the one exception to the first redirect: `/`
-  mounts `useAuthGuard({ allowSignedOut: true })`, so a visitor with no account
-  gets `components/Landing.tsx` — the pitch, plus the same `GameLibrary` browser
-  the signed-in library uses, pointed at sign-up — instead of a bounce to
-  `/login`. Locked-out accounts still go to `/unlockaccess`.
+- **The public landing page** is the one exception to the first redirect: a
+  visitor with no account gets `components/Landing.tsx` — the pitch, plus the
+  same `GameLibrary` browser the signed-in library uses, pointed at sign-up —
+  instead of a bounce to `/login`. Locked-out accounts still go to
+  `/unlockaccess`.
+- **Which home screen you get is decided on the server.** `/` is the one screen
+  whose *audience* is settled before it renders — the same server-page-wraps-
+  client-component shape `/join` uses: it reads the session with `await auth()`
+  and renders either `components/Dashboard.tsx` or `components/Landing.tsx`. The browser
+  can't tell those apart until Clerk has loaded, so deciding it in the client
+  meant a visitor with no account watched the dashboard's skeletons load and
+  then be replaced by the landing page. `Dashboard` still mounts
+  `useAuthGuard({ allowSignedOut: true })` and falls back to `Landing` itself,
+  for the session the cookie claims and Clerk then rejects in the browser.
 - User records themselves live in **Clerk**, not MongoDB. The app only stores
   Clerk `userId`s and resolves display names on demand.
 
