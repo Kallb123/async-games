@@ -814,6 +814,39 @@ up: `userIdListToUsernameList`/`Map` and `readableName`/`currentUsername` all
 gained the one `publicMetadata.guest` branch that prefers `firstName` for a
 guest, rather than a second name field threaded through every response DTO.
 
+That choke point only holds if nothing reads `user.username` around it, and
+plenty did. `IGameCommand.senderUsername` was the worst of them: **the client
+stamped it**, in two places that each spelled the preference order out inline
+(`useSubmitCommand`, and the planning path a game screen owns itself), and
+`Execute` interpolates it straight into `gameState.history` — prose every
+opponent reads, and the body of their "your turn" push for a game with no
+recap adapter. So a guest was named in the shared history by the random
+account id `createGuest()` minted, and any player could have named themselves
+anything at all in front of the others.
+
+The client no longer names itself. `/api/game/command` resolves the sender
+from the authenticated caller before `Execute` runs, the planning route
+already overrode `senderId`, and `buildTimeline` re-resolves `senderUsername`
+from `userIdNameMap` as it replays — so a recap or a stepped-back turn reads
+today's name even for a game played before this landed. Two directions matter
+in that ordering: a Clerk failure must degrade the *name*, never the turn
+(`senderName` falls back to the last name the game recorded for them), and a
+swept guest — whose Clerk account §8 deletes a week after their last game —
+must keep the name on their moves rather than becoming "Unknown player" in
+the recap of the game they played, which is why replay treats the placeholder
+as a miss rather than a name.
+
+On the read side, `clerk.ts`'s `nameOf` now delegates to `readableName`
+rather than re-declaring the preference order, so the `usernameList` the
+server builds and the `currentUsername` a screen compares against it can't
+disagree. `toUserDto` is the one Clerk-user-to-client projection behind both
+the profile and friends payloads, and it carries `publicMetadata.guest` for
+exactly this reason: a guest's username tells a screen nothing, so "is this a
+guest?" has to travel with the rest.
+
+**A guest's name is only ever resolved from their id — never read off a field
+the client filled in.**
+
 This is the app's first public write endpoint, so per-IP rate limiting lands
 here too — a small Mongo-backed fixed-window counter (`src/utils/rateLimit.ts`),
 since a serverless deployment has no shared memory to keep an in-process one

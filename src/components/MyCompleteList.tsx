@@ -6,7 +6,7 @@ import Link from "next/link";
 import ListSection from "@/components/ui/ListSection";
 import type { RefreshableState } from "@/utils/hooks/useRefreshableData";
 import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
-import { abandonedGameCopy } from "@/utils/ui/players";
+import { abandonedGameCopy, currentUsername } from "@/utils/ui/players";
 
 interface MyCompleteListProps extends RefreshableState {
     games: ICompletedGame[];
@@ -17,6 +17,8 @@ interface MyCompleteListProps extends RefreshableState {
 export default function MyCompleteList({ games, isLoading, isRefreshing, limit }: MyCompleteListProps) {
     const { user } = useIsAuthorised();
     const router = useRouter();
+
+    const myUsername = currentUsername(user);
 
     const visibleGames = limit ? games.slice(0, limit) : games;
 
@@ -32,7 +34,7 @@ export default function MyCompleteList({ games, isLoading, isRefreshing, limit }
                 : undefined}
         >
             {visibleGames.map((game) => {
-                const iWon = game.winner && game.winner === user?.username;
+                const iWon = game.winner && game.winner === myUsername;
                 return (
                     <button
                         key={game.gameId}

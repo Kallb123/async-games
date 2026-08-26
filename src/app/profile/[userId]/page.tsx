@@ -11,6 +11,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from "react";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
+import { profileHeading } from "@/utils/ui/players";
 
 interface IProfileResponse {
     success: boolean;
@@ -40,10 +41,9 @@ export default function FriendProfile({ params }: { params: Promise<{ userId: st
     const gameStats = data?.byGame ?? [];
     const forbidden = status === 403;
 
-    const fullName = profileUser ? [profileUser.firstName, profileUser.lastName].filter(name => name).join(" ") : "";
-    // Null until their profile arrives — the header shows placeholders rather
-    // than an ellipsis standing in for a name.
-    const friendDisplayName = profileUser ? (profileUser.firstName || profileUser.username || "Player") : null;
+    // Null name until their profile arrives — the header shows placeholders
+    // rather than an ellipsis standing in for a name.
+    const heading = profileHeading(profileUser, "Player");
 
     return (
         <main>
@@ -63,7 +63,7 @@ export default function FriendProfile({ params }: { params: Promise<{ userId: st
                 : (
                     <>
                         {/* Identity */}
-                        <ProfileIdentity name={friendDisplayName} username={profileUser?.username} imageUrl={profileUser?.imageUrl} fullName={fullName} />
+                        <ProfileIdentity {...heading} imageUrl={profileUser?.imageUrl} />
 
                         {/* Recent form */}
                         <RecentFormSection matches={recentMatches} isLoading={isLoading} isRefreshing={isRefreshing} highlightShared />

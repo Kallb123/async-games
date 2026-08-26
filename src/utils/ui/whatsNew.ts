@@ -65,6 +65,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "The name a guest picks is the name everyone sees",
+                detail: "Take a seat as a guest and the name you typed now follows you everywhere — the move you just made, the recap of what you missed, stepping back through the turns, your profile, the reaction you send someone and the “you won” line. They used to show the jumble of letters your account was filed under instead.",
+            },
+            {
                 title: "Your badge no longer flashes a stranger's initial",
                 detail: "For a moment before your profile loaded, the little circle on the home page and your profile showed a “T” or a “Y” — the first letter of the words standing in for your name. You now get a plain silhouette until your real initials or photo are ready.",
             },
@@ -79,10 +83,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "The banner at the bottom stops sitting on your content",
                 detail: "The “install the app” and “turn on notifications” strips used to cover the last thing on the page — the bottom of a list, or the button you were reaching for. Pages now leave room for whichever one is showing, and give the space back the moment you wave it away.",
-            },
-            {
-                title: "The home page stops flashing the wrong screen at you",
-                detail: "Arriving at Async Games without being signed in used to show you an empty version of somebody's games list, loading, before throwing it away and showing you the welcome page. You now land on the right screen first time.",
             },
         ],
     },

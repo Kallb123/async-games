@@ -117,20 +117,19 @@ export async function forEachClerkUser(visit: (user: User) => Promise<void>): Pr
     return scanned;
 }
 
-// A guest's Clerk username is the random account id createGuest() minted
-// (docs/account-less-play.md §5), not something anyone chose to be seen
-// under — their firstName carries the name they actually typed at the
-// lobby's join screen (step 14), so name resolution inverts the usual
-// username-first preference for them.
-function displayHandle(user: User): string | null {
-    return isGuest(user) ? user.firstName : user.username;
-}
+// Shown for a user Clerk still has but who has no name of any kind to show.
+export const NO_NAME_PLAYER_NAME = "No username";
 
 // The one place every resolver below turns a looked-up user into a name, so
 // they can't drift apart — including what to show when the lookup found
-// nobody, which is the half that used to get re-pasted.
+// nobody, which is the half that used to get re-pasted. `readableName` owns
+// the preference order itself (including inverting it for a guest, whose
+// Clerk username is the random account id createGuest() minted rather than
+// anything they chose), so the server and the client resolve the same user to
+// the same string — which matters, because a screen compares the name it
+// resolves for you against the usernameList this builds.
 function nameOf(user: User | undefined): string {
-    return user ? (displayHandle(user) ?? "No username") : UNKNOWN_PLAYER_NAME;
+    return user ? readableName(user, NO_NAME_PLAYER_NAME) : UNKNOWN_PLAYER_NAME;
 }
 
 /**
@@ -195,7 +194,7 @@ export async function userIdListToUserIdNameMap(userIdList: string[]): Promise<{
 // user list already, so this saves a second round trip to Clerk.
 export function userListToUserIdNameMap(users: User[]): { [key: string]: string } {
     const userIdNameMap: { [key: string]: string } = {};
-    users.forEach(user => { userIdNameMap[user.id] = readableName(user, "No username"); });
+    users.forEach(user => { userIdNameMap[user.id] = nameOf(user); });
     return userIdNameMap;
 }
 
@@ -205,6 +204,36 @@ export function userListToUserIdNameMap(users: User[]): { [key: string]: string 
 export async function userIdListToImageMap(userIdList: string[]): Promise<Map<string, string | null>> {
     const users = await usersById(userIdList);
     return new Map(users.map(user => [user.id, profileImageUrl(user)]));
+}
+
+/** A user as a screen receives one: enough to name them and picture them. */
+export interface UserDto {
+    userId: string;
+    username: string | null;
+    firstName: string | null;
+    lastName: string | null;
+    imageUrl: string | null;
+    // Mirrors Clerk's own shape, so the DTO satisfies NamedUser and a screen
+    // resolves a name from it through the same players.ts helpers it uses on
+    // a Clerk user. A guest's username is the random account id createGuest()
+    // minted, so "is this a guest?" is not something a screen can work out
+    // from the rest of the fields.
+    publicMetadata: { guest: boolean };
+}
+
+// The one Clerk-user-to-client projection, so a screen naming a player from
+// one route's payload can't get a different answer from another's — the
+// friends list and the profile screen were two copies, and only one of them
+// knew about guests.
+export function toUserDto(user: User): UserDto {
+    return {
+        userId: user.id,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        imageUrl: profileImageUrl(user),
+        publicMetadata: { guest: isGuest(user) },
+    };
 }
 
 export async function usernameListToUserIdList(usernameList: string[]): Promise<string[]> {

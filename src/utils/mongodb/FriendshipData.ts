@@ -1,4 +1,5 @@
 import { Document, Model, Schema, model, models } from "mongoose";
+import { UserDto } from '@/utils/users/clerk';
 
 export interface IFriendshipData {
     friendshipId: `${string}-${string}-${string}-${string}-${string}`,
@@ -70,12 +71,7 @@ export async function areFriends(userIdA: string, userIdB: string): Promise<bool
     return !!friendship;
 }
 
-export interface IFriendUser {
-    userId: string,
-    username: string | null,
-    firstName: string | null,
-    lastName: string | null,
-    imageUrl: string | null,
+export interface IFriendUser extends UserDto {
     lastActionTimestamp: string | null
 }
 

@@ -72,7 +72,6 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
         }
         command.gameId = gameId;
         command.senderId = user.id;
-        command.senderUsername = user.username || user.firstName || user.id;
         const result = await nav.planMove(command);
         const roll = (result?.resolvedCommand as { recordedRoll?: number } | undefined)?.recordedRoll;
         const outcome: ISnakesAndLaddersDiceRollOutcome = {

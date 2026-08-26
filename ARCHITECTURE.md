@@ -315,7 +315,7 @@ interface IGameCommand {
     timestamp: string;
     gameId: uuidString;
     senderId: string;        // who played it
-    senderUsername: string;
+    senderUsername: string;  // stamped by the server from senderId, never by the client
     readonly className: string;
 
     myString(): string;                                   // human summary (for history/logs)

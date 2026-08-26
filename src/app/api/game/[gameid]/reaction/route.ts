@@ -11,6 +11,7 @@ import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNoti
 import { buildReactionNotification } from '@/utils/firebase/notificationContent';
 import { isValidReaction } from '@/utils/reactions';
 import { isDuplicateKeyError } from '@/utils/mongodb/duplicateKey';
+import { readableName } from '@/utils/ui/players';
 
 export interface IGetReactionParams {
     gameid: string;
@@ -72,7 +73,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
         eventId,
         commandId: event.commandId,
         actorId: userId,
-        actorUsername: thisUser.username || thisUser.firstName || userId,
+        // The name is frozen onto the reaction here — it is pushed to the
+        // player reacted to and rendered back on their profile — so it goes
+        // through the same resolver everything else that names a player does.
+        // Spelled out inline, it had no guest branch, and a guest reacting was
+        // stored and pushed as their random account username.
+        actorUsername: readableName(thisUser, userId),
         recipientId: event.actorId,
         reaction,
         timestamp: (new Date()).toISOString()

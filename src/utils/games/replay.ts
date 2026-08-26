@@ -1,4 +1,5 @@
 import { IGameData } from "../mongodb/GameData";
+import { UNKNOWN_PLAYER_NAME } from "../users/clerk";
 import { IGameCommand, IGameType, ICommandOutcome } from "../apiModels/GameLogic";
 import { deserializeJSON } from "../apiModels/Serialisable";
 import { buildInitialSnakesAndLaddersState, gameStateToModel as snakesAndLaddersStateToModel, ISnakesAndLaddersGameData } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
@@ -269,6 +270,24 @@ export async function buildTimeline(
     ): Promise<boolean> => {
         for (const raw of rawCommands) {
             const command: IGameCommand = deserializeJSON(JSON.stringify(raw));
+            // senderUsername is the name recorded on the command when it was
+            // played, and it is what every history line and recap event this
+            // replay produces reads. Prefer today's resolved name, so a name
+            // that has since changed — or a guest's random account username,
+            // stamped by a client that predates the server doing it — isn't
+            // read back verbatim forever.
+            //
+            // Not `?? recorded`: userIdListToUserIdNameMap has an entry for
+            // every id it was given, holding UNKNOWN_PLAYER_NAME for one Clerk
+            // can't resolve, so the key is always present. A guest swept seven
+            // days after their last game (GUEST_SWEEP_DAYS) is exactly that
+            // case, and the name their moves carry is the only one left — the
+            // recap of a game they played should still say "Dave", not
+            // "Unknown player".
+            const resolved = userIdNameMap[command.senderId];
+            if (resolved && resolved !== UNKNOWN_PLAYER_NAME) {
+                command.senderUsername = resolved;
+            }
             // Every command was executed on its sender's turn.
             state.currentTurn = command.senderId;
             const outcome = await command.Execute(state);

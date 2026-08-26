@@ -3,15 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { areFriends } from '@/utils/mongodb/FriendshipData';
 import { getPlayerStats } from '@/utils/mongodb/GameResultData';
-import { profileImageUrl } from '@/utils/ui/avatar';
+import { UserDto, toUserDto } from '@/utils/users/clerk';
 
-export interface IProfileUser {
-    userId: string;
-    username: string | null;
-    firstName: string | null;
-    lastName: string | null;
-    imageUrl: string | null;
-}
+export type IProfileUser = UserDto;
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
     console.log(`GET ${request.nextUrl.pathname}`);
@@ -31,13 +25,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const clerkUser = await (await clerkClient()).users.getUser(profileUserId);
 
-    const profileUser: IProfileUser = {
-        userId: clerkUser.id,
-        username: clerkUser.username,
-        firstName: clerkUser.firstName,
-        lastName: clerkUser.lastName,
-        imageUrl: profileImageUrl(clerkUser),
-    };
+    const profileUser: IProfileUser = toUserDto(clerkUser);
 
     const { recent, byGame } = await getPlayerStats(profileUserId, userId);
 

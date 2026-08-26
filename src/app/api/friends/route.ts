@@ -1,5 +1,5 @@
 import { auth } from '@clerk/nextjs/server';
-import { usersById } from '@/utils/users/clerk';
+import { toUserDto, usersById } from '@/utils/users/clerk';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { FriendshipModel, IFriendshipDataDocument, IFriendRequestResponse, IFriendsResponse, IFriendUser } from '@/utils/mongodb/FriendshipData';
@@ -46,11 +46,7 @@ export async function GET(request: NextRequest) {
     const users = await usersById(otherUserIds);
     users.forEach(user => {
       userMap.set(user.id, {
-        userId: user.id,
-        username: user.username,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        imageUrl: profileImageUrl(user),
+        ...toUserDto(user),
         lastActionTimestamp: lastActionByUserId.get(user.id) ?? null
       });
     });
