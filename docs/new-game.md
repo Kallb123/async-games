@@ -194,7 +194,11 @@ initialSpecificGameState: clone<Game>State(specificGameState, turnOrder),
 
 plus a second Mongoose path using the *same* sub-schema factory, and
 `recapAvailable: !!doc.initialSpecificGameState` on the response so games
-created before the field simply don't offer recap. Settlements & Cities,
+created before the field simply don't offer recap. Build your
+`clone<Game>State` on `clonePlayerStates` (`src/utils/games/mongoMaps.ts`),
+passing a per-player clone that **names every field** — a Mongoose subdocument
+keeps its fields behind getters, so `{ ...ps }` silently copies none of them and
+your replayed players start with `undefined` everywhere. Settlements & Cities,
 World Domination and Train Time are the reference implementations — and
 Train Time is the cautionary tale, retrofitted a release late, so every game
 already dealt by then has no recap and never will. **Do this at creation

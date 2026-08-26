@@ -525,6 +525,16 @@ shuffled at creation and then *consumed* during play (a deck that shrinks, a
 hand that is dealt out) forces this: the drawn order is lost, so replaying a
 draw from a reconstructed deck would diverge immediately.
 
+All three read that snapshot's player map back through `clonePlayerStates`
+(`src/utils/games/mongoMaps.ts`), which copes with the two ways Mongo hands
+it over — a real `Map` on a live document, a plain object once it has been
+through JSON — and rebuilds it in the order the game supplies (`userIdList`, or
+Train Time's `turnOrder`), since replay iterates it to deal, discard and break
+ties. Each game supplies its own per-player clone, and
+that clone must **name every field**: a subdocument keeps its fields behind
+getters, so `{ ...ps }` copies none of them. Train Time shipped exactly that
+bug — every score in a reviewed turn read `NaN` until #338.
+
 ### Settlements & Cities
 
 SAC could not use the reconstruct-from-scratch approach the earlier games use,

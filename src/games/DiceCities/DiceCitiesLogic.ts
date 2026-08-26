@@ -5,6 +5,7 @@ import type { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
 import { deserializeJSON, serializable } from "@/utils/apiModels/Serialisable";
 import { DiceRoll } from "@/utils/games/DiceRoll";
+import { mongoMap } from "@/utils/games/mongoMaps";
 import { DiceCitiesCardIds, DiceCitiesCards } from "@/games/DiceCities/cards";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 
@@ -133,7 +134,7 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
     Undo (gameData: IGameData) {
         const dcGameData: IDiceCitiesGameData = gameData as IDiceCitiesGameData;
 
-        toChangeMap(this.moneyChanges).forEach((moneyChange, userId) => {
+        mongoMap(this.moneyChanges).forEach((moneyChange, userId) => {
             const playerState = dcGameData.specificGameState.playerStates.get(userId);
             if (!playerState) {
                 return;
@@ -146,7 +147,7 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
         // supply still adds up once the roll is discarded.
         dcGameData.specificGameState.bankMoney -= this.bankChange;
 
-        toChangeMap(this.coinsEarnedChanges).forEach((coinsEarnedChange, userId) => {
+        mongoMap(this.coinsEarnedChanges).forEach((coinsEarnedChange, userId) => {
             const playerState = dcGameData.specificGameState.playerStates.get(userId);
             if (!playerState) {
                 return;
@@ -949,12 +950,6 @@ function removeCardFromPlayerState(cardId: uuidString, playerState: IDiceCitiesP
         cardOwned.amount--;
         return;
     }
-}
-
-// Money/coins-earned deltas recorded on a command come back from Mongo as plain
-// objects rather than Maps, so normalise either shape before reading them.
-function toChangeMap(changes: Map<string, number>): Map<string, number> {
-    return changes instanceof Map ? changes : new Map(Object.entries(changes));
 }
 
 // Coins a player spends on a card go back into the bank - the coin supply is

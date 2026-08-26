@@ -12,6 +12,7 @@ import {
 import { pluralize } from "@/utils/ui/text";
 import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
 import { shuffle } from "@/utils/games/shuffle";
+import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
 import { TrainTimeGameType } from "@/utils/apiModels/GameLogic";
 import {
     ITrainTimeGameDataResponse,
@@ -114,16 +115,6 @@ export interface ITrainTimeGameDataModel extends Model<ITrainTimeGameDataDocumen
 // ─── Replay support ─────────────────────────────────────────────────────────
 
 /**
- * The player map however Mongoose handed it back: a real Map on a live
- * document, a plain object once it has been through JSON.
- */
-function playerStatesMap(gs: ITrainTimeSpecificGameState): Map<string, ITrainTimePlayerState> {
-    return gs.playerStates instanceof Map
-        ? gs.playerStates
-        : new Map(Object.entries(gs.playerStates as unknown as Record<string, ITrainTimePlayerState>));
-}
-
-/**
  * One player's state as plain data. Every field is named rather than spread:
  * the snapshot recap replays from comes back from Mongo as a subdocument, whose
  * fields live behind getters and so are missed entirely by `{ ...ps }` — which
@@ -153,21 +144,12 @@ export function cloneTrainTimeState(
     gs: ITrainTimeSpecificGameState,
     order: string[],
 ): ITrainTimeSpecificGameState {
-    const source = playerStatesMap(gs);
-    const playerStates = new Map<string, ITrainTimePlayerState>();
-    for (const userId of order) {
-        const ps = source.get(userId);
-        if (ps) {
-            playerStates.set(userId, clonePlayerState(ps));
-        }
-    }
-
     return {
         deck: [...gs.deck],
         discard: [...gs.discard],
         market: [...gs.market],
         ticketDeck: [...gs.ticketDeck],
-        playerStates,
+        playerStates: clonePlayerStates(gs.playerStates, order, clonePlayerState),
         routeOwners: [...gs.routeOwners],
         drawsThisTurn: gs.drawsThisTurn,
         drawTurnOwner: gs.drawTurnOwner,
@@ -260,7 +242,7 @@ export function gameStateToModel(
     userIdNameMap: { [key: string]: string },
     viewerId: string | null,
 ): ITrainTimeSpecificGameStateResponse {
-    const playerStatesSource = playerStatesMap(gs);
+    const playerStatesSource = mongoMap(gs.playerStates);
 
     const playerStates: ITrainTimeSpecificGameStateResponse['playerStates'] = {};
     for (const [userId, ps] of playerStatesSource) {

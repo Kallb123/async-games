@@ -9,6 +9,7 @@ import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users
 import { WorldDominationGameType } from "@/utils/apiModels/GameLogic";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { shuffle } from "@/utils/games/shuffle";
+import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
 import {
     TERRITORIES,
     TERRITORY_COUNT,
@@ -123,29 +124,19 @@ function clonePlayerState(ps: IWorldDominationPlayerState): IWorldDominationPlay
     };
 }
 
-// Deep-clones a World Domination game state into independent plain objects, rebuilding
-// playerStates as a fresh Map in `userIdList` order — mirrors SAC's
-// cloneSACState (see SettlementsAndCitiesModels.ts) for the same reason: the
-// board (here, the shuffled territory deal + card deck) is randomised at
-// creation and can't be reconstructed later, so turn recap replays from a
-// persisted snapshot instead.
+// Deep-clones a World Domination game state into independent plain objects,
+// rebuilding the player map in `userIdList` order (see clonePlayerStates) —
+// mirrors SAC's cloneSACState (see SettlementsAndCitiesModels.ts) for the same
+// reason: the board (here, the shuffled territory deal + card deck) is
+// randomised at creation and can't be reconstructed later, so turn recap
+// replays from a persisted snapshot instead.
 export function cloneWorldDominationState(
     gs: IWorldDominationSpecificGameState,
     userIdList: string[],
 ): IWorldDominationSpecificGameState {
-    const source: Map<string, IWorldDominationPlayerState> = gs.playerStates instanceof Map
-        ? gs.playerStates
-        : new Map(Object.entries(gs.playerStates as unknown as Record<string, IWorldDominationPlayerState>));
-
-    const playerStates = new Map<string, IWorldDominationPlayerState>();
-    for (const userId of userIdList) {
-        const ps = source.get(userId);
-        if (ps) playerStates.set(userId, clonePlayerState(ps));
-    }
-
     return {
         territories: gs.territories.map((t): IWorldDominationTerritory => ({ owner: t.owner, armies: t.armies })),
-        playerStates,
+        playerStates: clonePlayerStates(gs.playerStates, userIdList, clonePlayerState),
         phase: gs.phase,
         reinforcementsRemaining: gs.reinforcementsRemaining,
         pendingOccupation: gs.pendingOccupation ? { ...gs.pendingOccupation } : null,
@@ -323,9 +314,7 @@ export function gameStateToResponse(
     viewerId: string | null,
 ): IWorldDominationSpecificGameStateResponse {
     const playerStates: IWorldDominationSpecificGameStateResponse['playerStates'] = {};
-    const playerStatesSource = gs.playerStates instanceof Map
-        ? gs.playerStates
-        : new Map(Object.entries(gs.playerStates as unknown as Record<string, IWorldDominationPlayerState>));
+    const playerStatesSource = mongoMap(gs.playerStates);
 
     for (const [userId, ps] of playerStatesSource) {
         const username = userIdNameMap[userId];
