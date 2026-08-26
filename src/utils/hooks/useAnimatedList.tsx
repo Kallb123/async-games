@@ -15,9 +15,6 @@ export interface AnimatedListOptions {
     placeholder?: { node: ReactNode; count: number };
 }
 
-/** Nothing arriving, nothing leaving. */
-const SETTLED: ReadonlyMap<string, number> = new Map();
-
 /** Where every row ends up when `next` replaces `prev`. */
 export interface ListPlan {
     /** Every key still on screen, in render order: those in `next`, plus those still leaving. */
@@ -82,10 +79,11 @@ export default function useAnimatedList(children: ReactNode, options: AnimatedLi
     const [slots, setSlots] = useState<Slot[]>(() => live.map(child => ({ key: String(child.key), node: child, placeholder: isLoading })));
     const [entering, setEntering] = useState<string[]>([]);
     // Rows that took a placeholder's place, and the height it was standing at,
-    // so each transitions to its own height instead of snapping to it.
-    const [handover, setHandover] = useState<ReadonlyMap<string, number>>(SETTLED);
-    // What the standing placeholders measure — see the `onMeasure` below.
-    const placeholderHeight = useRef(0);
+    // so each transitions to its own height instead of snapping to it. Both are
+    // state rather than a measurement read back mid-render: the height has to be
+    // in hand *before* the render that mounts those rows.
+    const [handedOver, setHandedOver] = useState<string[]>([]);
+    const [placeholderHeight, setPlaceholderHeight] = useState(0);
     // False until the list has finished loading once — an empty list that has
     // settled is still settled, so its first row counts as an arrival.
     const [hasSettled, setHasSettled] = useState(false);
@@ -109,8 +107,8 @@ export default function useAnimatedList(children: ReactNode, options: AnimatedLi
         // Same story for the rows that did have a placeholder to take over: they
         // have to be handed its height in the render they mount in, before the
         // browser has painted them at their own.
-        if (plan.handovers.size > 0 && placeholderHeight.current > 0) {
-            setHandover(new Map([...plan.handovers.values()].map(key => [key, placeholderHeight.current])));
+        if (plan.handovers.size > 0 && placeholderHeight > 0) {
+            setHandedOver([...plan.handovers.values()]);
         }
     }
     if (!hasSettled && !isLoading) {
@@ -139,13 +137,13 @@ export default function useAnimatedList(children: ReactNode, options: AnimatedLi
     // the wrapper clipping shadows and focus rings for good, and would hand a
     // stale height to a key that leaves and comes back.
     useEffect(() => {
-        if (entering.length === 0 && handover.size === 0) return;
+        if (entering.length === 0 && handedOver.length === 0) return;
         const timer = setTimeout(() => {
             setEntering([]);
-            setHandover(SETTLED);
+            setHandedOver([]);
         }, ANIM_MS);
         return () => clearTimeout(timer);
-    }, [entering, handover]);
+    }, [entering, handedOver]);
 
     useEffect(() => {
         const timers = exitTimers.current;
@@ -158,12 +156,12 @@ export default function useAnimatedList(children: ReactNode, options: AnimatedLi
             <Collapse
                 key={key}
                 phase={leaving ? "exit" : entering.includes(key) ? "enter" : undefined}
-                from={handover.get(key)}
+                from={handedOver.includes(key) ? placeholderHeight : undefined}
                 // One placeholder, still standing at its full height, is all
                 // there is to measure: they are all the same node, and one on
                 // its way out is already collapsing to nothing. Measuring costs
                 // a layout, so only the first slot is asked.
-                onMeasure={i === 0 && isPlaceholder && !leaving ? height => { placeholderHeight.current = height; } : undefined}
+                onMeasure={i === 0 && isPlaceholder && !leaving ? setPlaceholderHeight : undefined}
             >
                 {liveNodes.get(key) ?? node}
             </Collapse>
