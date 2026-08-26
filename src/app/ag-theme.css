@@ -214,6 +214,29 @@ button {
     margin: 0;
 }
 
+/* ---- Disclosure ----
+   A block that opens and closes, built on a native `<details>` so being closed
+   by default costs no state and no JS. The `<summary>` wears `.ag-section
+   ag-section-head` like any other section heading — this only strips the
+   browser's own marker and turns the chevron on the right as it opens. */
+.ag-disclosure > summary {
+    list-style: none;
+    cursor: pointer;
+}
+.ag-disclosure > summary::-webkit-details-marker { display: none; }
+
+.ag-disclosure-chevron {
+    flex: none;
+    font: 800 18px/1 var(--ag-font);
+    color: var(--ag-ink-soft);
+    transition: transform 180ms ease;
+}
+.ag-disclosure[open] > summary .ag-disclosure-chevron { transform: rotate(90deg); }
+
+@media (prefers-reduced-motion: reduce) {
+    .ag-disclosure-chevron { transition: none; }
+}
+
 .ag-section-action {
     font: 800 12px var(--ag-font);
     color: var(--ag-terracotta);
