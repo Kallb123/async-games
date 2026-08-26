@@ -80,11 +80,13 @@ export default function ListSection({
         return null;
     }
     return (
-        <CollapsingSection collapsed={isEmpty && !empty} isLoading={isLoading}>
-            <div className="ag-section-head">
-                <h2 className="ag-section-label">{label}{showCount && rowCount ? ` · ${rowCount}` : ""}</h2>
-                {action}
-            </div>
+        <CollapsingSection
+            label={label}
+            count={showCount ? rowCount : undefined}
+            action={action}
+            collapsed={isEmpty && !empty}
+            isLoading={isLoading}
+        >
             {beforeList}
             {rows.length > 0 && (
                 <Refreshable className="ag-list" isRefreshing={isRefreshing}>{rows}</Refreshable>

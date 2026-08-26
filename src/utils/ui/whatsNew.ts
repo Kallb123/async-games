@@ -40,7 +40,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "Lists settle instead of jumping",
-                detail: "When your games finish loading, the placeholder rows hand over to the real ones in place — a spare one shrinks away, an extra one grows in, and a list with nothing in it closes up gently rather than snapping shut under your thumb.",
+                detail: "When your games finish loading, the placeholder rows hand over to the real ones in place — a spare one shrinks away, an extra one grows in, and a list with nothing in it closes up gently rather than snapping shut under your thumb. Your profile's recent form settles the same way now.",
             },
             {
                 title: "What's new folds away",

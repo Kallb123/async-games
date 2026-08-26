@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import Skeleton from "@/components/ui/Skeleton";
+import { SkeletonChips } from "@/components/ui/Skeleton";
+import CollapsingSection from "@/components/ui/CollapsingSection";
 import Refreshable from "@/components/ui/Refreshable";
 import MatchResultPopup from "@/components/ui/MatchResultPopup";
 import ThumbBadge from "@/components/ui/ThumbBadge";
+import useAnimatedList from "@/utils/hooks/useAnimatedList";
 import { GAME_META } from "@/utils/ui/games";
 import type { IRecentMatch, MatchOutcome } from "@/app/api/stats/route";
 import moment from 'moment';
@@ -29,43 +31,55 @@ interface RecentFormSectionProps {
 // opens a popup with that match's game-specific stats.
 export default function RecentFormSection({ matches, isLoading, isRefreshing = false, highlightShared = false, viewAllHref }: RecentFormSectionProps) {
     const [selected, setSelected] = useState<IRecentMatch | null>(null);
+    const isEmpty = !isLoading && matches.length === 0;
+
+    // The chips are one block rather than a list of rows, so they go to
+    // `useAnimatedList` as a single node: a chip is 26px wide on a line that
+    // wraps, and collapsing its height would leave a hole in that line instead
+    // of closing it up. The whole row animates as one — the placeholder chips
+    // hand over to the real ones in place, and a profile with nothing to show
+    // collapses them rather than blinking them away.
+    const chips = useAnimatedList(
+        matches.length > 0
+            ? (
+                <Refreshable className="ag-chips" isRefreshing={isRefreshing}>
+                    {matches.map(match => {
+                        const meta = GAME_META[match.url];
+                        const shared = highlightShared && match.sharedWithViewer;
+                        return (
+                            <button
+                                key={match.gameId}
+                                type="button"
+                                className={`ag-result-chip${shared ? " ag-result-chip--shared" : ""}`}
+                                title={`${meta?.name ?? match.url} · ${moment(match.endedAt).fromNow()}${shared ? " · you played too" : ""}`}
+                                onClick={() => setSelected(match)}
+                            >
+                                <span className={`ag-result-dot ag-result-dot--${match.outcome}`}>
+                                    {OUTCOME_LABEL[match.outcome]}
+                                </span>
+                                {meta && <ThumbBadge meta={meta} size={14} radius={4} className="ag-result-chip-icon" />}
+                            </button>
+                        );
+                    })}
+                </Refreshable>
+            )
+            : null,
+        { isLoading, placeholder: { node: <SkeletonChips />, count: 1 } },
+    );
+    // Grows in where the chips were, on the same animation, the way a
+    // `ListSection`'s `empty` message does — so the two cross over rather than
+    // swapping in one jump. The section itself never collapses: it always has
+    // this to say instead.
+    const emptyMessage = useAnimatedList(isEmpty ? <div className="ag-empty">No finished games yet.</div> : null);
 
     return (
-        <div className="ag-section">
-            <div className="ag-section-head">
-                <h2 className="ag-section-label">Recent form</h2>
-                {viewAllHref && <Link href={viewAllHref} className="ag-section-action">See all</Link>}
-            </div>
-            {isLoading
-                ? (
-                    <div className="ag-chips">
-                        {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} width={26} height={26} radius="50%" />)}
-                    </div>
-                )
-                : matches.length === 0
-                ? <div className="ag-empty">No finished games yet.</div>
-                : (
-                    <Refreshable className="ag-chips" isRefreshing={isRefreshing}>
-                        {matches.map(match => {
-                            const meta = GAME_META[match.url];
-                            const shared = highlightShared && match.sharedWithViewer;
-                            return (
-                                <button
-                                    key={match.gameId}
-                                    type="button"
-                                    className={`ag-result-chip${shared ? " ag-result-chip--shared" : ""}`}
-                                    title={`${meta?.name ?? match.url} · ${moment(match.endedAt).fromNow()}${shared ? " · you played too" : ""}`}
-                                    onClick={() => setSelected(match)}
-                                >
-                                    <span className={`ag-result-dot ag-result-dot--${match.outcome}`}>
-                                        {OUTCOME_LABEL[match.outcome]}
-                                    </span>
-                                    {meta && <ThumbBadge meta={meta} size={14} radius={4} className="ag-result-chip-icon" />}
-                                </button>
-                            );
-                        })}
-                    </Refreshable>
-                )}
+        <CollapsingSection
+            label="Recent form"
+            isLoading={isLoading}
+            action={viewAllHref ? <Link href={viewAllHref} className="ag-section-action">See all</Link> : undefined}
+        >
+            {chips}
+            {emptyMessage}
 
             {highlightShared && matches.some(match => match.sharedWithViewer) && (
                 <p className="ag-hint">
@@ -80,6 +94,6 @@ export default function RecentFormSection({ matches, isLoading, isRefreshing = f
                     onClose={() => setSelected(null)}
                 />
             )}
-        </div>
+        </CollapsingSection>
     );
 }
