@@ -617,7 +617,11 @@ description or theme colour is exactly what those two files exist to prevent.
 - **Reusable pieces** (this is the most important contribution rule — see
   `AGENTS.md`):
   - `src/components/ui/` — presentational primitives (`Brand`, `Avatar`,
-    `GameThumb`, `TurnTimerSelect`, `GameSetupLayout`, `GameLibrary`).
+    `GameThumb`, `TurnTimerSelect`, `GameSetupLayout`, `GameLibrary`), and the
+    section family every screen is laid out with: `Section` (the padded box and
+    its heading), `CollapsingSection` (one that grows and shrinks) and
+    `ListSection` (one holding an animated `ag-list`, its `SkeletonRow`
+    placeholders and its empty message).
   - `src/utils/ui/` — pure helpers: `games.ts` (per-game metadata: name, art,
     accent, players), `avatar.ts`, `players.ts`.
   - `src/utils/hooks/` — shared stateful logic (`usePlayerList`, the invite

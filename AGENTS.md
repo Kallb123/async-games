@@ -46,7 +46,10 @@ out. A second copy is the signal to extract the first one.
   `Brand` (the mark + wordmark lockup every top bar that names the app uses),
   `Avatar`, `GameThumb`, `TurnTimerSelect`, `GameSetupLayout`, `GameLibrary`
   (the filter-chips + featured + grid game browser, shared by `/newgame` and
-  the public landing page).
+  the public landing page). Every heading-and-body block on a page is a
+  `Section`; `CollapsingSection` adds the animation for one that comes and
+  goes, and `ListSection` adds the `ag-list`, its skeletons and its empty
+  message. Never hand-roll an `ag-section-head` again.
 - `src/utils/ui/` — pure presentation helpers: `games.ts` (per-game metadata:
   name, art, accent, players), `avatar.ts` (deterministic avatar colours),
   `players.ts` (opponent summaries).

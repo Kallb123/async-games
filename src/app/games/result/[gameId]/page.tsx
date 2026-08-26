@@ -1,11 +1,13 @@
 'use client'
 
 import { use } from "react";
-import GameThumb from "@/components/ui/GameThumb";
+import GameThumb, { ROW_THUMB_RADIUS, ROW_THUMB_SIZE } from "@/components/ui/GameThumb";
 import BackLink from "@/components/ui/BackLink";
-import GameResultStats from "@/components/ui/GameResultStats";
+import ListRow from "@/components/ui/ListRow";
+import ListSection from "@/components/ui/ListSection";
+import Section from "@/components/ui/Section";
+import { gameResultStatRows } from "@/components/ui/GameResultStats";
 import LineChart from "@/components/ui/LineChart";
-import { SkeletonList } from "@/components/ui/Skeleton";
 import { useGameResult } from "@/utils/hooks/useGameResult";
 import { GAME_META } from "@/utils/ui/games";
 import { abandonedGameCopy } from "@/utils/ui/players";
@@ -16,6 +18,9 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
     const { gameId } = use(params);
     const { result, isLoading, error } = useGameResult(gameId);
     const meta = result ? GAME_META[result.url] : undefined;
+    // A result that never arrived has nothing to lay out — the one state that
+    // isn't the page in some stage of filling in.
+    const failed = !isLoading && !result;
 
     return (
         <main>
@@ -26,56 +31,48 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
                 </div>
             </div>
 
-            {isLoading
-                ? <SkeletonList rows={3} avatar={false} />
-                : (error || !result)
-                ? (
-                    <div className="ag-section">
-                        <div className="ag-empty">{error ?? "Couldn't load this game's result."}</div>
-                    </div>
-                )
-                : (
-                    <>
-                        <div className="ag-section">
-                            <div className="ag-list">
-                                <div className="ag-list-row">
-                                    {meta
-                                        ? <GameThumb meta={meta} size={44} radius={12} />
-                                        : <div style={{ width: 44, height: 44, flex: "none" }} />}
-                                    <div className="ag-list-row-main">
-                                        <div className="ag-list-row-title">{meta?.name ?? result.url}</div>
-                                        <div className="ag-list-row-sub">
-                                            {result.winner
-                                                ? `${result.winner} won`
-                                                : result.endReason === 'abandoned'
-                                                    ? abandonedGameCopy(result.forfeitedBy).short
-                                                    : "Draw"} · {moment(result.endedAt).fromNow()} · {pluralize(result.totalTurns, 'turn')}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+            {failed ? (
+                <Section>
+                    <div className="ag-empty">{error ?? "Couldn't load this game's result."}</div>
+                </Section>
+            ) : (<>
+                {/* Both sections are the shape they will be once the result lands —
+                    one summary row, then the stats — so the placeholders hand over
+                    in place instead of a generic list of rows blinking out for a
+                    different page. The charts are the one thing we can't stand in
+                    for: how many there are, and how tall, is the game's business. */}
+                <ListSection isLoading={isLoading} skeletonRows={1} skeletonIcon="thumb">
+                    {result && (
+                        <ListRow
+                            key={result.url}
+                            icon={meta ? <GameThumb meta={meta} size={ROW_THUMB_SIZE} radius={ROW_THUMB_RADIUS} /> : undefined}
+                            title={meta?.name ?? result.url}
+                            sub={<>
+                                {result.winner
+                                    ? `${result.winner} won`
+                                    : result.endReason === 'abandoned'
+                                        ? abandonedGameCopy(result.forfeitedBy).short
+                                        : "Draw"} · {moment(result.endedAt).fromNow()} · {pluralize(result.totalTurns, 'turn')}
+                            </>}
+                        />
+                    )}
+                </ListSection>
 
-                        <div className="ag-section">
-                            <div className="ag-section-head">
-                                <h2 className="ag-section-label">Stats</h2>
-                            </div>
-                            {result.stats.length > 0
-                                ? <GameResultStats groups={result.stats} />
-                                : <div className="ag-empty">No extra stats recorded for this game.</div>}
-                        </div>
+                <ListSection
+                    label="Stats"
+                    isLoading={isLoading}
+                    skeletonIcon="none"
+                    empty={<div className="ag-empty">No extra stats recorded for this game.</div>}
+                >
+                    {result ? gameResultStatRows(result.stats) : null}
+                </ListSection>
 
-                        {result.charts.map(chart => (
-                            <div className="ag-section" key={chart.title}>
-                                <div className="ag-section-head">
-                                    <h2 className="ag-section-label">{chart.title}</h2>
-                                </div>
-                                <LineChart chart={chart} players={result.players} />
-                            </div>
-                        ))}
-                    </>
-                )}
-
+                {result?.charts.map(chart => (
+                    <Section label={chart.title} key={chart.title}>
+                        <LineChart chart={chart} players={result.players} />
+                    </Section>
+                ))}
+            </>)}
         </main>
     );
 }

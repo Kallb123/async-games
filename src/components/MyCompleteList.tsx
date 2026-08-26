@@ -26,7 +26,7 @@ export default function MyCompleteList({ games, isLoading, isRefreshing, limit }
             isLoading={isLoading}
             isRefreshing={isRefreshing}
             skeletonRows={4}
-            skeletonAvatar={false}
+            skeletonIcon="dot"
             action={limit && games.length > limit
                 ? <Link href="/games/completed" className="ag-section-action">See all</Link>
                 : undefined}

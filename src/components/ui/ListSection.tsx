@@ -3,11 +3,11 @@
 import { Children } from "react";
 import CollapsingSection from "@/components/ui/CollapsingSection";
 import Refreshable from "@/components/ui/Refreshable";
-import { SkeletonRow } from "@/components/ui/Skeleton";
+import { SkeletonRow, type SkeletonRowIcon } from "@/components/ui/Skeleton";
 import useAnimatedList from "@/utils/hooks/useAnimatedList";
 
 interface ListSectionProps {
-    label: string;
+    label?: string;
     /** Appends the number of rows to the label as `· N` once there are any. */
     showCount?: boolean;
     /** First load only — the one case that gets a skeleton. */
@@ -16,8 +16,8 @@ interface ListSectionProps {
     isRefreshing?: boolean;
     /** `0` for a list that is usually empty: no skeleton, no section, until it has loaded. */
     skeletonRows?: number;
-    /** Skeleton rows lead with an avatar circle; false gives the small status dot. */
-    skeletonAvatar?: boolean;
+    /** What the skeleton rows lead with — match the real rows they stand in for. */
+    skeletonIcon?: SkeletonRowIcon;
     /** Control rendered on the right of the section heading. */
     action?: React.ReactNode;
     /** Rendered between the heading and the list (e.g. an inline form). */
@@ -42,7 +42,7 @@ export default function ListSection({
     isLoading,
     isRefreshing = false,
     skeletonRows = 2,
-    skeletonAvatar = true,
+    skeletonIcon = "avatar",
     action,
     beforeList,
     empty,
@@ -57,7 +57,7 @@ export default function ListSection({
     // just becomes it, and only the surplus on either side grows or collapses.
     const rows = useAnimatedList(children, {
         isLoading,
-        placeholder: { node: <SkeletonRow avatar={skeletonAvatar} />, count: skeletonRows },
+        placeholder: { node: <SkeletonRow icon={skeletonIcon} />, count: skeletonRows },
     });
     const rowCount = Children.toArray(children).length;
     const isEmpty = !isLoading && rowCount === 0;

@@ -55,7 +55,7 @@ export default function TheirTurnList({ games, isLoading, isRefreshing }: TheirT
             label="Waiting on others"
             isLoading={isLoading}
             isRefreshing={isRefreshing}
-            skeletonAvatar={false}
+            skeletonIcon="dot"
             hint="Use 👉 to send a nudge to move things along"
         >
             {games.map((game) => {

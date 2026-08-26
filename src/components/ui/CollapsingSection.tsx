@@ -2,17 +2,17 @@
 
 import { ReactNode } from "react";
 import Collapse from "@/components/ui/Collapse";
+import Section from "@/components/ui/Section";
 
 /**
- * The `ag-section` every loading-aware section is built from: the heading and
- * its action, the busy flag, and a box that shrinks away when it has nothing
- * left to show instead of dropping its heading and its padding in one step
- * once the last row has gone — which shunts everything below it up the page.
+ * A `Section` that shrinks away when it has nothing left to show, instead of
+ * dropping its heading and its padding in one step once the last row has gone
+ * — which shunts everything below it up the page.
  *
  * Only the body differs between the sections that use it: `ListSection` puts
  * an animated `ag-list` in it, `RecentFormSection` its row of result chips,
  * the home page's "your move" its stack of cards. Everything round that body
- * is decided here once.
+ * is decided here and in `Section` once.
  */
 export default function CollapsingSection({ label, count, action, collapsed = false, isLoading, children }: {
     /** Heading text. Omit for a section that titles itself, like the home page's "your move". */
@@ -32,15 +32,9 @@ export default function CollapsingSection({ label, count, action, collapsed = fa
 }) {
     return (
         <Collapse phase={collapsed ? "exit" : undefined}>
-            <div className="ag-section" aria-busy={isLoading || undefined}>
-                {label && (
-                    <div className="ag-section-head">
-                        <h2 className="ag-section-label">{label}{count ? ` · ${count}` : ""}</h2>
-                        {action}
-                    </div>
-                )}
+            <Section label={label} count={count} action={action} isLoading={isLoading}>
                 {children}
-            </div>
+            </Section>
         </Collapse>
     );
 }
