@@ -65,6 +65,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Friend requests stop springing out at you",
+                detail: "Opening your profile used to make the requests you'd sent slide into place as though they had just arrived that second. They're simply there now — the sliding is saved for a request that actually turns up while you're looking.",
+            },
+            {
                 title: "Everyone accepting at once no longer strands the game",
                 detail: "If two of you accepted the same invite in the same moment, the game sometimes never started — the invite just sat there with everybody in it. It starts now, whoever taps last. A double-tapped accept can't deal you two copies of the same game any more either.",
             },
@@ -79,11 +83,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Get back to a lobby you opened",
                 detail: "An open game waiting in “Awaiting response” is now a tap away from its lobby, so you can read the code out again or see who has taken a seat — instead of only ever seeing it the once when you made it.",
-            },
-            {
-                title: "Solitaire tells you when a deal is dead",
-                detail: "A game you can't win now says so. It used to keep insisting there were moves left as long as a single card sat in the stock — even when nothing left in the pile could go anywhere, however many times you cycled it.",
-                game: "solitaire",
             },
         ],
     },

@@ -274,8 +274,9 @@ export default function Profile() {
             <ListSection
                 label="Friend requests"
                 showCount
-                isLoading={false}
+                isLoading={friendsData.isLoading}
                 isRefreshing={friendsData.isRefreshing}
+                skeletonRows={0}
             >
                 {incomingRequests.map((request) => (
                     <div key={request.friendshipId} className="ag-list-row">
@@ -294,8 +295,9 @@ export default function Profile() {
             <ListSection
                 label="Sent requests"
                 showCount
-                isLoading={false}
+                isLoading={friendsData.isLoading}
                 isRefreshing={friendsData.isRefreshing}
+                skeletonRows={0}
             >
                 {outgoingRequests.map((request) => (
                     <div key={request.friendshipId} className="ag-list-row">
