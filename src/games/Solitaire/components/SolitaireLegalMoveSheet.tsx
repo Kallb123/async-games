@@ -3,6 +3,7 @@ import { Modal } from 'react-bootstrap';
 import PlayingCard from '@/components/ui/PlayingCard';
 import { ICard, rankLabel, suitSymbol } from '@/utils/games/Cards';
 import { ISolitaireLegalMove } from '@/games/Solitaire/rules';
+import { useCloseRequest } from '@/utils/hooks/useCloseRequest';
 
 interface SolitaireLegalMoveSheetProps {
     card: ICard;
@@ -16,6 +17,8 @@ interface SolitaireLegalMoveSheetProps {
 // Modal/ag-modal pattern already used for in-game pickers elsewhere
 // (SettlementsAndCitiesActions' trade modal).
 export default function SolitaireLegalMoveSheet({ card, moves, onChoose, onCancel }: SolitaireLegalMoveSheetProps) {
+    useCloseRequest(true, onCancel);
+
     const cardLabel = card.rank && card.suit ? `${rankLabel(card.rank)}${suitSymbol(card.suit)}` : 'card';
 
     return (

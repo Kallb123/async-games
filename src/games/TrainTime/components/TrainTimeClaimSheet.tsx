@@ -12,6 +12,7 @@ import {
 } from '@/games/TrainTime/board';
 import { CARD_LABEL, TRACK_PALETTE, cardFaceStyle } from '@/games/TrainTime/ui';
 import ActionButton from '@/components/ui/ActionButton';
+import { useCloseRequest } from '@/utils/hooks/useCloseRequest';
 import { pluralize } from '@/utils/ui/text';
 
 interface TrainTimeClaimSheetProps {
@@ -54,6 +55,10 @@ function explain(option: PaymentOption, route: TrainTimeRouteDef, hand: TrainTim
  * screen rather than a button.
  */
 export default function TrainTimeClaimSheet({ route, hand, me, runAfterClaim, onClaim, onBack, pending }: TrainTimeClaimSheetProps) {
+    // Mounted only while the sheet is up, so a close request here always
+    // means "back to the map" rather than out of the game.
+    useCloseRequest(true, onBack);
+
     const options = paymentOptions(route, hand);
     const payable = options.filter(o => o.shortfall === 0);
     // Near-misses are worth showing — "one more black" is the whole reason to

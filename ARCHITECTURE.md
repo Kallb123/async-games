@@ -631,6 +631,16 @@ description or theme colour is exactly what those two files exist to prevent.
   `formatRemainingTimeShort` — which render no label for a `null` now.
   `useNowToTheMinute` is the same clock at minute resolution, so lists of
   "14h ago"/"1h left" labels don't re-render every second.
+- **Closing an overlay.** The app is installed `display: "standalone"`, so a
+  player has no browser back button and the Android back gesture is their only
+  "back". `useCloseRequest` (`src/utils/hooks/useCloseRequest.ts`) answers that
+  gesture — and Escape on a keyboard — through the platform's `CloseWatcher`,
+  so back closes the sheet, modal or menu on top instead of leaving the game
+  screen. Anything that renders over a screen wires it up: the shared
+  `useDismissablePopup` does it for every anchored popup, and a full-screen
+  sheet or Bootstrap modal calls it directly with its own dismiss handler. Never
+  park a `history.pushState` entry to catch `popstate` for this — it desyncs
+  Next's router from the top bar's own back arrow.
 - **Game metadata** (`src/utils/ui/games.ts`) is the single source of truth for a
   game's name, slug, art, accent colour, and player count across the library,
   home cards, and setup headers.
