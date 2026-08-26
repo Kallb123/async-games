@@ -326,6 +326,7 @@ describe("Action B — claiming a route", () => {
     it("pays the cards, lays the trains and scores immediately", async () => {
         const { game, route } = setupClaim();
         const before = totalCards(game.specificGameState);
+        const discardBefore = game.specificGameState.discard.length;
 
         const outcome = await play(game, claim(route.id, Array(4).fill('blue')));
         expect(outcome).toEqual({ validMove: true, turnOver: true });
@@ -336,7 +337,7 @@ describe("Action B — claiming a route", () => {
         expect(me.score).toBe(7);
         expect(me.routesClaimed).toBe(1);
         expect(game.specificGameState.routeOwners[route.id]).toBe("u1");
-        expect(game.specificGameState.discard.length).toBe(4);
+        expect(game.specificGameState.discard.length).toBe(discardBefore + 4);
         expect(totalCards(game.specificGameState)).toBe(before);
         expect(game.currentTurn).toBe("u2");
     });
