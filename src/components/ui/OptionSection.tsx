@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import Section from "@/components/ui/Section";
 
 interface OptionSectionProps {
     label: string;
@@ -13,12 +14,9 @@ interface OptionSectionProps {
  */
 export default function OptionSection({ label, children, footer }: OptionSectionProps) {
     return (
-        <div className="ag-section">
-            <div className="ag-section-head">
-                <h2 className="ag-section-label">{label}</h2>
-            </div>
+        <Section label={label}>
             <div className="ag-card ag-option-card">{children}</div>
             {footer}
-        </div>
+        </Section>
     );
 }

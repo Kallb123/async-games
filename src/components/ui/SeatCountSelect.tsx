@@ -1,5 +1,7 @@
 'use client'
 
+import Section from "@/components/ui/Section";
+
 interface SeatCountSelectProps {
     value: number;
     onChange: (value: number) => void;
@@ -21,10 +23,7 @@ export default function SeatCountSelect({ value, onChange, max }: SeatCountSelec
     const bound = Math.max(max, 0);
 
     return (
-        <div className="ag-section" style={{ padding: "20px 20px 0" }}>
-            <div className="ag-section-head">
-                <h2 className="ag-section-label">Open seats</h2>
-            </div>
+        <Section label="Open seats">
             <select
                 className="ag-select"
                 value={value}
@@ -41,6 +40,6 @@ export default function SeatCountSelect({ value, onChange, max }: SeatCountSelec
                     ? "Only the people you invite above can join."
                     : `Anyone with the code can grab ${value === 1 ? "the open seat" : `one of the ${value} open seats`} once the game is created.`}
             </p>
-        </div>
+        </Section>
     );
 }

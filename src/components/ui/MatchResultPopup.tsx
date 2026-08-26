@@ -4,6 +4,7 @@ import { Modal } from 'react-bootstrap';
 import Link from 'next/link';
 import moment from 'moment';
 import GameResultStats from "@/components/ui/GameResultStats";
+import Skeleton, { SkeletonRow } from "@/components/ui/Skeleton";
 import { useGameResult } from "@/utils/hooks/useGameResult";
 import { useCloseRequest } from "@/utils/hooks/useCloseRequest";
 import { GAME_META } from "@/utils/ui/games";
@@ -33,7 +34,18 @@ export default function MatchResultPopup({ gameId, outcome, onClose }: MatchResu
             </Modal.Header>
             <Modal.Body>
                 {isLoading || !result
-                    ? <div className="ag-empty">Loading…</div>
+                    ? (
+                        <>
+                            {/* The shape the body is about to be — a date line
+                                over a couple of stat rows — so the popup fills
+                                in rather than swapping one thing for another. */}
+                            <Skeleton width="55%" height={12} style={{ marginBottom: 10 }} />
+                            <div className="ag-list" aria-busy="true">
+                                <SkeletonRow icon="none" />
+                                <SkeletonRow icon="none" />
+                            </div>
+                        </>
+                    )
                     : (
                         <>
                             <div className="ag-list-row-sub" style={{ marginBottom: 10 }}>

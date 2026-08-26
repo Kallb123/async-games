@@ -3,6 +3,7 @@ import { IFriendRequestResponse } from '@/utils/mongodb/FriendshipData';
 import { useUser } from '@clerk/nextjs';
 import { useEffect, useState } from 'react';
 import Avatar from '@/components/ui/Avatar';
+import Section from '@/components/ui/Section';
 import { profileImageUrl } from '@/utils/ui/avatar';
 
 interface UserInviteProps {
@@ -50,10 +51,7 @@ export default function UserInviteList({ userList, setItem }: UserInviteProps) {
     const pictureFor = (username: string) => friends.find(f => f.user.username === username)?.user.imageUrl ?? null;
 
     return (
-        <div className="ag-section">
-            <div className="ag-section-head">
-                <h2 className="ag-section-label">Who&apos;s playing</h2>
-            </div>
+        <Section label="Who's playing">
 
             <div className="ag-chips">
                 <span className="ag-person-chip ag-person-chip--you">
@@ -98,6 +96,6 @@ export default function UserInviteList({ userList, setItem }: UserInviteProps) {
                     ))}
                 </div>
             )}
-        </div>
+        </Section>
     );
 }

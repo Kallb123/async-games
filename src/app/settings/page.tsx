@@ -5,6 +5,7 @@ import ActionButton from "@/components/ui/ActionButton";
 import { useToast } from "@/components/ToastContext";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import BackLink from "@/components/ui/BackLink";
+import Section from "@/components/ui/Section";
 import LegalLinks from "@/components/ui/LegalLinks";
 import DevTools from "@/components/DevTools";
 import NotificationDeviceList from "@/components/NotificationDeviceList";
@@ -135,11 +136,7 @@ export default function Settings() {
             </div>
 
             {/* Notifications */}
-            <div className="ag-section">
-                <div className="ag-section-head">
-                    <h2 className="ag-section-label">Notifications</h2>
-                </div>
-
+            <Section label="Notifications">
                 {/* The same offer the bottom banner makes, for anyone who
                     dismissed it. Hidden in a browser that cannot receive push. */}
                 {(permission === 'default' || permission === 'denied') && (
@@ -178,7 +175,7 @@ export default function Settings() {
                         ))}
                     </div>
                 )}
-            </div>
+            </Section>
 
             <NotificationDeviceList currentToken={fcmToken} />
 
@@ -186,12 +183,9 @@ export default function Settings() {
                 it. Hidden once the app is installed, or in a browser that
                 cannot install it. */}
             {installMethod !== 'none' && (
-                <div className="ag-section">
-                    <div className="ag-section-head">
-                        <h2 className="ag-section-label">App</h2>
-                    </div>
+                <Section label="App">
                     <InstallOffer method={installMethod} />
-                </div>
+                </Section>
             )}
 
             {/* A guest playing under a Clerk user they haven't claimed yet
@@ -200,24 +194,18 @@ export default function Settings() {
                 takes. The bottom banner links here once they've taken their
                 first turn; this is the one place the form itself lives. */}
             {user && isGuest(user) && (
-                <div className="ag-section">
-                    <div className="ag-section-head">
-                        <h2 className="ag-section-label">Save your account</h2>
-                    </div>
+                <Section label="Save your account">
                     <div className="ag-callout" style={{ marginBottom: 12 }}>
                         You&apos;re playing as a guest. Add an email and password and
                         everything you&apos;ve played — games, results, turn history —
                         stays yours, under the same account.
                     </div>
                     <ClaimAccountForm />
-                </div>
+                </Section>
             )}
 
             {/* Account */}
-            <div className="ag-section">
-                <div className="ag-section-head">
-                    <h2 className="ag-section-label">Account</h2>
-                </div>
+            <Section label="Account">
                 <div className="ag-stack">
                     <div className="ag-callout">
                         Deleting your account is permanent. Your games — finished and in
@@ -234,7 +222,7 @@ export default function Settings() {
                         Delete account
                     </ActionButton>
                 </div>
-            </div>
+            </Section>
 
             <div className="ag-footer">
                 <DevTools />

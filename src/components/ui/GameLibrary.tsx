@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { GAME_META, COMING_SOON, GAME_CATEGORIES, GameCategory, GameMeta } from "@/utils/ui/games";
 import GameThumb, { GAME_ART_SIZE } from "@/components/ui/GameThumb";
+import Section from "@/components/ui/Section";
 import { accentVar } from "@/utils/ui/colours";
 
 const FILTERS: ("All" | GameCategory)[] = ["All", ...GAME_CATEGORIES];
@@ -41,12 +42,7 @@ export default function GameLibrary({ hrefFor, featuredCta = "Start a game", lab
 
     return (
         <>
-            <div className="ag-section">
-                {label && (
-                    <div className="ag-section-head">
-                        <h2 className="ag-section-label">{label}</h2>
-                    </div>
-                )}
+            <Section label={label}>
                 <div className="ag-chips">
                     {FILTERS.map(f => (
                         <button
@@ -59,7 +55,7 @@ export default function GameLibrary({ hrefFor, featuredCta = "Start a game", lab
                         </button>
                     ))}
                 </div>
-            </div>
+            </Section>
 
             {featuredVisible && (
                 <div className="ag-section">

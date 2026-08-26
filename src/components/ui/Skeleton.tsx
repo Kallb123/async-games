@@ -1,4 +1,7 @@
+'use client'
+
 import { CSSProperties } from "react";
+import { ROW_THUMB_RADIUS, ROW_THUMB_SIZE } from "@/components/ui/GameThumb";
 
 type SkeletonProps = {
     width?: number | string;
@@ -23,32 +26,29 @@ export default function Skeleton({ width, height = 12, radius = 6, className, st
     );
 }
 
-/** One placeholder row shaped like `.ag-list-row` (optional avatar + two text lines). */
-export function SkeletonRow({ avatar = true }: { avatar?: boolean }) {
+/**
+ * What a placeholder row leads with, matching the real rows it stands in for:
+ * a person's `Avatar`, a `GameThumb`, the small status dot a turn list uses,
+ * or nothing at all for a row that is all text.
+ */
+export type SkeletonRowIcon = "avatar" | "thumb" | "dot" | "none";
+
+const ROW_ICON: Record<SkeletonRowIcon, { size: number; radius: number | string } | null> = {
+    avatar: { size: 36, radius: "50%" },
+    thumb: { size: ROW_THUMB_SIZE, radius: ROW_THUMB_RADIUS },
+    dot: { size: 8, radius: "50%" },
+    none: null,
+};
+
+/** One placeholder row shaped like `.ag-list-row` (a leading icon + two text lines). */
+export function SkeletonRow({ icon = "avatar" }: { icon?: SkeletonRowIcon }) {
+    const box = ROW_ICON[icon];
     return (
         <div className="ag-list-row" aria-hidden>
-            {avatar
-                ? <Skeleton width={36} height={36} radius="50%" style={{ flex: "none" }} />
-                : <Skeleton width={8} height={8} radius="50%" style={{ flex: "none" }} />}
+            {box && <Skeleton width={box.size} height={box.size} radius={box.radius} style={{ flex: "none" }} />}
             <div className="ag-list-row-main">
                 <Skeleton width="55%" height={12} />
                 <Skeleton width="35%" height={10} style={{ marginTop: 6 }} />
-            </div>
-        </div>
-    );
-}
-
-/** A grouped-list section of placeholder rows, with an optional placeholder heading. */
-export function SkeletonList({ rows = 3, avatar = true, label = false }: { rows?: number; avatar?: boolean; label?: boolean }) {
-    return (
-        <div className="ag-section" aria-busy="true">
-            {label && (
-                <div className="ag-section-head">
-                    <Skeleton width={120} height={13} />
-                </div>
-            )}
-            <div className="ag-list">
-                {Array.from({ length: rows }).map((_, i) => <SkeletonRow key={i} avatar={avatar} />)}
             </div>
         </div>
     );

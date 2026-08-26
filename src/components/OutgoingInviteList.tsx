@@ -34,7 +34,7 @@ export default function OutgoingInviteList({ invites, isLoading, isRefreshing, o
             label="Awaiting response"
             isLoading={isLoading}
             isRefreshing={isRefreshing}
-            skeletonAvatar={false}
+            skeletonIcon="dot"
         >
             {invites.map((invite) => {
                 const summary = (

@@ -1,5 +1,6 @@
 'use client'
 
+import Section from "@/components/ui/Section";
 import { TURN_TIMER_OPTIONS, isUnlimitedTurnTimer } from "@/utils/games/TurnTimer";
 
 interface TurnTimerSelectProps {
@@ -9,10 +10,7 @@ interface TurnTimerSelectProps {
 
 export default function TurnTimerSelect({ value, onChange }: TurnTimerSelectProps) {
     return (
-        <div className="ag-section" style={{ padding: "20px 20px 0" }}>
-            <div className="ag-section-head">
-                <h2 className="ag-section-label">Turn timer</h2>
-            </div>
+        <Section label="Turn timer">
             <select
                 className="ag-select"
                 value={value}
@@ -29,6 +27,6 @@ export default function TurnTimerSelect({ value, onChange }: TurnTimerSelectProp
                     ? "Turns never expire — players can take as long as they like."
                     : "If time runs out the turn is skipped. We'll nudge everyone before that happens."}
             </p>
-        </div>
+        </Section>
     );
 }
