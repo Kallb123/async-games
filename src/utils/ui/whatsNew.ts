@@ -65,6 +65,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Train Time's scores read properly when you look back",
+                detail: "Stepping back through a Train Time match showed every score, train count and route tally as “NaN”. Reviewing a turn now shows the standings exactly as they stood at the time — and the points and longest-run graphs on a finished match are filled in again.",
+                game: "traintime",
+            },
+            {
                 title: "The name a guest picks is the name everyone sees",
                 detail: "Take a seat as a guest and the name you typed now follows you everywhere — the move you just made, the recap of what you missed, stepping back through the turns, your profile, the reaction you send someone and the “you won” line. They used to show the jumble of letters your account was filed under instead.",
             },
@@ -79,10 +84,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "A join link opens on the invitation, not a blank page",
                 detail: "Tapping a friend's join link used to leave you looking at an empty page while the app worked out who you were. It now opens straight onto their invitation — the code already filled in, a name picked for you, ready to take your seat.",
-            },
-            {
-                title: "The banner at the bottom stops sitting on your content",
-                detail: "The “install the app” and “turn on notifications” strips used to cover the last thing on the page — the bottom of a list, or the button you were reaching for. Pages now leave room for whichever one is showing, and give the space back the moment you wave it away.",
             },
         ],
     },

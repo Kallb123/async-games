@@ -124,6 +124,27 @@ function playerStatesMap(gs: ITrainTimeSpecificGameState): Map<string, ITrainTim
 }
 
 /**
+ * One player's state as plain data. Every field is named rather than spread:
+ * the snapshot recap replays from comes back from Mongo as a subdocument, whose
+ * fields live behind getters and so are missed entirely by `{ ...ps }` — which
+ * left every score, train count and route tally `undefined`, and every total on
+ * a reviewed turn NaN.
+ */
+function clonePlayerState(ps: ITrainTimePlayerState): ITrainTimePlayerState {
+    return {
+        hand: [...ps.hand],
+        tickets: [...ps.tickets],
+        pendingTickets: [...ps.pendingTickets],
+        trains: ps.trains,
+        score: ps.score,
+        ticketScore: ps.ticketScore,
+        ticketsCompleted: ps.ticketsCompleted,
+        longHaulBonus: ps.longHaulBonus,
+        routesClaimed: ps.routesClaimed,
+    };
+}
+
+/**
  * Deep copy of a game state, rebuilding the player map in `order` so iteration
  * matches the original deal — final scoring ranks players by that order, so a
  * replay that iterated differently could break a tie the other way.
@@ -137,12 +158,7 @@ export function cloneTrainTimeState(
     for (const userId of order) {
         const ps = source.get(userId);
         if (ps) {
-            playerStates.set(userId, {
-                ...ps,
-                hand: [...ps.hand],
-                tickets: [...ps.tickets],
-                pendingTickets: [...ps.pendingTickets],
-            });
+            playerStates.set(userId, clonePlayerState(ps));
         }
     }
 

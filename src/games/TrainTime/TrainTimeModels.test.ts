@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
     TrainTimeGameDataModel,
+    buildInitialTrainTimeStateFromGameData,
     computeTrainTimeResultStats,
     formatTrainTimeCharts,
+    gameStateToModel,
     type ITrainTimeGameData,
     type ITrainTimeGameResultStats,
 } from "./TrainTimeModels";
 import { TrainTimeGameResultModel } from "@/utils/mongodb/GameResultData";
-import { ROUTE_COUNT, TRAINS_PER_PLAYER, buildInitialTrainTimeState } from "./board";
+import { ROUTE_COUNT, TRAINS_PER_PLAYER, buildInitialTrainTimeState, totalScore } from "./board";
 
 const NAMES = new Map([["u1", "Alice"], ["u2", "Bob"]]);
 
@@ -56,6 +58,29 @@ describe("Train Time Mongoose schema", () => {
             expect(alice.pendingTickets).toEqual(state.playerStates.get("u1")!.pendingTickets);
             expect(alice.trains).toBe(TRAINS_PER_PLAYER);
         }
+    });
+
+    // Turn review replays from that snapshot, and it arrives as a Mongoose
+    // subdocument whose fields sit behind getters — a spread copies none of
+    // them. That made every number in a reviewed turn undefined, so the
+    // standings read NaN. Clone by name, and check the numbers survive the
+    // round trip the review screen actually takes.
+    it("replays from the stored snapshot with every score intact", () => {
+        const state = buildInitialTrainTimeState(["u1", "u2"]);
+        state.playerStates.get("u1")!.score = 7;
+        state.playerStates.get("u1")!.routesClaimed = 1;
+        state.playerStates.get("u1")!.trains = TRAINS_PER_PLAYER - 4;
+
+        const doc = gameDoc(state);
+        const replayed = buildInitialTrainTimeStateFromGameData(doc as unknown as ITrainTimeGameData);
+        const alice = replayed.playerStates.get("u1")!;
+        expect(alice).toEqual(state.playerStates.get("u1"));
+
+        const response = gameStateToModel(replayed, Object.fromEntries(NAMES), "u1");
+        const ps = response.playerStates.Alice;
+        expect(totalScore(ps)).toBe(7);
+        expect(ps.trains).toBe(TRAINS_PER_PLAYER - 4);
+        expect(ps.routesClaimed).toBe(1);
     });
 
     it("casts the per-turn chart series on the result document", () => {
