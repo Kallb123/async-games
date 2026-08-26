@@ -1,6 +1,7 @@
 'use client'
 import React from 'react';
 import Link from 'next/link';
+import BackArrow from '@/components/ui/BackArrow';
 import { formatRelativeTime } from '@/utils/ui/time';
 import { useNowToTheMinute } from '@/utils/hooks/useNow';
 import ReactionPicker from '@/components/ui/ReactionPicker';
@@ -51,7 +52,7 @@ export default function TurnRecap({ header, summary, events, tip, cta, backHref 
                     href={backHref}
                     aria-label="Back"
                 >
-                    {header.glyph ?? '←'}
+                    {header.glyph ?? <BackArrow />}
                 </Link>
                 <div className="ag-recap-head-main">
                     <div className="ag-recap-game">{header.name}</div>
