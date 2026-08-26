@@ -26,7 +26,7 @@ For the component-reuse rules you must follow while building the UI, see
    editor. Prefer a small number of generic, parameterized commands (e.g.
    Solitaire's one `SolitaireMoveCard { source, destination, count }` covering
    every zone-to-zone transition) over one class per near-identical move —
-   fewer classes to wire into the registration array, less duplicated
+   fewer classes to wire into the command registry, less duplicated
    validation logic.
 4. **Decide your recap story now, not later.** Turn recap and the
    "since you were last here" card are opt-in *features*, but they are not an
@@ -139,7 +139,7 @@ rather than the game breaking silently at runtime.
 | `src/utils/apiModels/GameLogic.ts` | `export * from "@/games/<Game>/<Game>Logic";` |
 | `src/utils/ui/games.ts` | import the `meta.ts`, add it to `GAME_META` |
 | `src/utils/mongodb/mongodb.ts` | the discriminator key in both union types, and the model in both records (`GAME_DATA_MODELS` and `INVITATION_MODELS`) |
-| `src/app/api/game/command/route.ts` | every command/game-type instance in the `registration` array |
+| `src/utils/games/gameCommands.ts` | the game type's `className` as a key, its command `className`s as the list |
 | `src/utils/mongodb/GameResultData.ts` | *(only if you added `compute<Game>ResultStats`)* the discriminator + wire it into `GAME_RESULT_STATS`, with a `charts` entry if you added per-turn series |
 
 ### 7. Turn recap & planning

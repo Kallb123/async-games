@@ -1,3 +1,4 @@
+import { readJsonBody } from '@/utils/api/requestBody';
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     const { userId } = await auth();
 
-    const { joinCode: typedCode, name }: ILobbyJoinRequest = await request.json();
+    const { joinCode: typedCode, name } = await readJsonBody<ILobbyJoinRequest>(request);
     if (!typedCode) {
         return NextResponse.json({}, { status: 400, statusText: "Missing join code" });
     }

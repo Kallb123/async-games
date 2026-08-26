@@ -1,33 +1,30 @@
-import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
+import { currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
-import { redirect } from 'next/navigation';
-import { isUnlockedUser } from '@/utils/users/clerk';
+import { forEachClerkUser, isUnlockedUser } from '@/utils/users/clerk';
 
 export async function GET(request: NextRequest) {
   console.log(`GET ${request.nextUrl.pathname}`);
-  // Get the userId from auth() -- if null, the user is not signed in
-  const { userId } = await auth();
- 
-  if (userId) {
-    // Query DB for user specific information or display assets only to signed in users 
-  }
- 
-  // Get the Backend API User object when you need access to the user's information
+
   const thisUser = await currentUser();
-  // Use `user` to render user details or create UI elements
+  // A JSON endpoint answers with a status, not a redirect: this used to
+  // `redirect('/')`, which reaches a fetching client as a 307 to an HTML page
+  // and gets parsed as JSON.
   if (!isUnlockedUser(thisUser)) {
-    redirect('/')
+    return NextResponse.json({}, { status: 403, statusText: "Account not unlocked" });
   }
 
-  const { data: users } = await (await clerkClient()).users.getUserList();
-  const publicUsers = users.map((user) => {
-    return {
+  // Every user, a page at a time. A bare `getUserList()` answers with Clerk's
+  // default ten, so the picker this feeds only ever offered the ten users who
+  // happened to come back first.
+  const users: { id: string, username: string | null, firstName: string | null, lastName: string | null }[] = [];
+  await forEachClerkUser(async user => {
+    users.push({
       id: user.id,
       username: user.username,
       firstName: user.firstName,
       lastName: user.lastName
-    }
-  })
+    });
+  });
 
-  return NextResponse.json({success: true, users: publicUsers});
+  return NextResponse.json({success: true, users});
 }

@@ -31,8 +31,15 @@ const MEMBERSHIP_GATES = [
     /findOne\(\s*\{[^}]*userIdList:\s*(?:auth\w*\.)?userId/,
 ];
 
+// Both ways a route gets hold of one game: its own query, or the shared
+// requireLiveGame() guard (which does the same findOne, plus "does it exist"
+// and "is it still being played"). A route using the helper still has to
+// establish membership itself — the helper knows nothing about the caller.
 const singleGameRoutes = walkFiles(apiRoot, (name) => name === "route.ts")
-    .filter((file) => readFileSync(file, "utf8").includes("GameDataModel.findOne"))
+    .filter((file) => {
+        const source = readFileSync(file, "utf8");
+        return source.includes("GameDataModel.findOne") || source.includes("requireLiveGame(");
+    })
     .map((file) => path.relative(apiRoot, file));
 
 describe("routes that fetch one game", () => {

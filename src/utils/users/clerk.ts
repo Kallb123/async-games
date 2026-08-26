@@ -30,25 +30,50 @@ export function canHostGame(user: User | null | undefined): boolean {
     return !!user && !isGuest(user) && isUnlockedUser(user);
 }
 
-// Clerk treats an empty filter as *no* filter: `getUserList({ username: [] })`
-// hands back the whole instance rather than nothing. Every lookup below goes
-// through these two so "nobody to look up" is answered here instead of coming
-// back as somebody else's users — a lobby of nothing but open seats asked for
-// zero usernames and got the entire user list, which then failed its
-// "did every name resolve?" check and 404'd the host's own lobby.
-export async function usersByUsername(usernameList: string[]): Promise<User[]> {
-    if (usernameList.length === 0) return [];
-    const { data } = await (await clerkClient()).users.getUserList({username: usernameList});
-    return data;
-}
-
-export async function usersById(userIdList: string[]): Promise<User[]> {
-    if (userIdList.length === 0) return [];
-    const { data } = await (await clerkClient()).users.getUserList({userId: userIdList});
-    return data;
-}
-
 const CLERK_USER_PAGE_SIZE = 100;
+
+// Clerk's `GET /users` answers with ten users when nothing asks for more —
+// a *default*, not a cap, and the one that bites is the filtered lookup:
+// `getUserList({ userId: [...30 ids] })` looks like "fetch these thirty" and
+// returns the first ten of them. Everything downstream then resolves the
+// other twenty to UNKNOWN_PLAYER_NAME, so a dashboard busy enough to name
+// more than ten people started calling most of them "Unknown player".
+//
+// So every filtered lookup goes out a page at a time with an explicit limit,
+// and asks for as many pages as the filter has entries. Chunking rather than
+// one big limit because the filter travels in the query string: a few hundred
+// ids in one URL is the other way this falls over.
+async function usersByFilter(
+    values: string[],
+    filter: (chunk: string[]) => { userId: string[] } | { username: string[] }
+): Promise<User[]> {
+    // Clerk treats an empty filter as *no* filter — `getUserList({ username: [] })`
+    // hands back the whole instance rather than nothing. Answered here, once,
+    // rather than coming back as somebody else's users: a lobby of nothing but
+    // open seats asked for zero usernames, got the entire user list, and failed
+    // its "did every name resolve?" check by 404ing the host's own lobby.
+    if (values.length === 0) return [];
+
+    const client = await clerkClient();
+    const chunks: string[][] = [];
+    for (let i = 0; i < values.length; i += CLERK_USER_PAGE_SIZE) {
+        chunks.push(values.slice(i, i + CLERK_USER_PAGE_SIZE));
+    }
+
+    const pages = await Promise.all(chunks.map(chunk =>
+        client.users.getUserList({ ...filter(chunk), limit: CLERK_USER_PAGE_SIZE })
+    ));
+    return pages.flatMap(page => page.data);
+}
+
+export function usersByUsername(usernameList: string[]): Promise<User[]> {
+    return usersByFilter(usernameList, username => ({ username }));
+}
+
+export function usersById(userIdList: string[]): Promise<User[]> {
+    return usersByFilter(userIdList, userId => ({ userId }));
+}
+
 // Belt and braces against a paging bug turning into an unbounded loop.
 const CLERK_USER_MAX_PAGES = 100;
 
@@ -56,6 +81,12 @@ const CLERK_USER_MAX_PAGES = 100;
 // behind every `/api/cron/*` sweep that has to look at the whole instance
 // rather than a known id list (staledevices, staleguests). Returns how many
 // users it visited, which every caller reports back as its own `scanned`.
+//
+// A `visit` that throws is logged and skipped rather than ending the sweep.
+// These run over every user in the instance, so without this one user whose
+// Clerk write 429s or whose metadata is malformed stops every user after them
+// from being swept at all — and a user who fails consistently starves the tail
+// of the list forever, since the next run walks the same order.
 export async function forEachClerkUser(visit: (user: User) => Promise<void>): Promise<number> {
     const client = await clerkClient();
     let scanned = 0;
@@ -71,7 +102,11 @@ export async function forEachClerkUser(visit: (user: User) => Promise<void>): Pr
         scanned += users.length;
 
         for (const user of users) {
-            await visit(user);
+            try {
+                await visit(user);
+            } catch (error) {
+                console.error(`Sweep failed for user ${user.id}`, error);
+            }
         }
 
         if (users.length < CLERK_USER_PAGE_SIZE) {

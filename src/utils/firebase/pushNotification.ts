@@ -67,9 +67,10 @@ function tagFor(data: Record<string, string>): string {
  * sending those. `usePushEvents` has the full account and what replaced them;
  * this signature is what stops one being written again.
  *
- * Returns how many device tokens it sent to, which is zero when every recipient
- * has this channel switched off. Only the dev test bench reads it — everything
- * else sends and moves on.
+ * Returns how many devices it reached — zero when every recipient has this
+ * channel switched off, and zero when the send itself failed, which it reports
+ * rather than throws (see the try below). Only the dev test bench reads it —
+ * everything else sends and moves on.
  */
 export async function sendPushToUsers(
     users: User[],
@@ -86,28 +87,46 @@ export async function sendPushToUsers(
         return 0;
     }
     console.log(`Sending ${data.event ?? notification.title} to ${targets.length} device token(s)`);
-    const messaging = getAdminMessaging();
     const payload = { ...data, tag: tagFor(data) };
-    const response = await messaging.sendEach(targets.map((target) => {
-        const message: Message = {
-            token: target.token,
-            data: payload,
-            notification: {
-                title: notification.title,
-                body: notification.body,
-                imageUrl: notification.imageUrl
+
+    // Sending never throws at its caller. A push is something that happens
+    // *because* of a turn, an invite or a game ending — never something those
+    // are waiting on — so an FCM outage, a bad service-account credential or a
+    // network blip must not turn a write that already landed into a failure
+    // the player sees. It did: the opening push in startGameFromInvitation and
+    // the invite push in every /api/newgame route are both awaited after their
+    // document is saved, so a Firebase wobble answered "couldn't start your
+    // game" for a game that had started, and the retry made a second invite.
+    // The turntimer cron had it worse still — one failed send ended the sweep.
+    //
+    // Reports how many devices it actually reached, so a caller that cares
+    // (the dev test bench) can tell "sent to nobody" from "sent".
+    try {
+        const messaging = getAdminMessaging();
+        const response = await messaging.sendEach(targets.map((target) => {
+            const message: Message = {
+                token: target.token,
+                data: payload,
+                notification: {
+                    title: notification.title,
+                    body: notification.body,
+                    imageUrl: notification.imageUrl
+                }
+            };
+            if (notification.imageUrl) {
+                message.apns = { fcmOptions: { imageUrl: notification.imageUrl } };
+                message.android = { notification: { imageUrl: notification.imageUrl } };
             }
-        };
-        if (notification.imageUrl) {
-            message.apns = { fcmOptions: { imageUrl: notification.imageUrl } };
-            message.android = { notification: { imageUrl: notification.imageUrl } };
-        }
-        return message;
-    }));
+            return message;
+        }));
 
-    await forgetDeadTokens(targets, response);
+        await forgetDeadTokens(targets, response);
 
-    return targets.length;
+        return targets.length - response.failureCount;
+    } catch (error) {
+        console.error(`Failed to send ${data.event ?? notification.title} to ${targets.length} device token(s)`, error);
+        return 0;
+    }
 }
 
 /**

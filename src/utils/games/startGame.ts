@@ -1,7 +1,7 @@
-import { User, clerkClient } from '@clerk/nextjs/server';
+import { User } from '@clerk/nextjs/server';
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildYourTurnNotification } from '@/utils/firebase/notificationContent';
-import { userListToUserIdNameMap } from '@/utils/users/clerk';
+import { userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
 import mongoose from 'mongoose';
 import { IInvitationDataDocument, InvitationModel } from '@/utils/mongodb/InvitationData';
 import { GameDataModel, IGameData, IGameDataDocument } from '@/utils/mongodb/GameData';
@@ -147,9 +147,7 @@ export async function acceptSeat(
     // Every invitee *and* the original sender, because that is the party
     // `startGameFromInvitation` needs below — to pick whoever moves first, and
     // to put the other players' names in their opening push.
-    const { data: userList } = await (await clerkClient()).users.getUserList({
-        userId: [...userIdList, current.senderId]
-    });
+    const userList = await usersById([...userIdList, current.senderId]);
 
     const allAccepted = current.userIdList.every(uid => uid.inviteAccepted === true);
     if (!allAccepted) {

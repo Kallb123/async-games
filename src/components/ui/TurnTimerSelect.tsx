@@ -1,19 +1,6 @@
 'use client'
 
-import { UNLIMITED_TURN_TIMER, isUnlimitedTurnTimer } from "@/utils/games/TurnTimer";
-
-const OPTIONS: { value: string; label: string }[] = [
-    { value: "10m", label: "10 min" },
-    { value: "30m", label: "30 min" },
-    { value: "1h", label: "1 hour" },
-    { value: "3h", label: "3 hours" },
-    { value: "6h", label: "6 hours" },
-    { value: "12h", label: "12 hours" },
-    { value: "1d", label: "1 day" },
-    { value: "3d", label: "3 days" },
-    { value: "7d", label: "7 days" },
-    { value: UNLIMITED_TURN_TIMER, label: "Unlimited" },
-];
+import { TURN_TIMER_OPTIONS, isUnlimitedTurnTimer } from "@/utils/games/TurnTimer";
 
 interface TurnTimerSelectProps {
     value: string;
@@ -31,7 +18,7 @@ export default function TurnTimerSelect({ value, onChange }: TurnTimerSelectProp
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
             >
-                {OPTIONS.map(opt => (
+                {TURN_TIMER_OPTIONS.map(opt => (
                     <option key={opt.value} value={opt.value}>
                         {opt.label}
                     </option>

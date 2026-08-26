@@ -1,3 +1,4 @@
+import { readJsonBody, readUsernameList } from '@/utils/api/requestBody';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
@@ -6,6 +7,7 @@ import { IInvitationDataDocument, IUserIdAcceptance, IInvitationRequest } from '
 import { canHostGame, usersByUsername } from '@/utils/users/clerk';
 import { GAME_META, partySizeErrorMessage } from '@/utils/ui/games';
 import { OPEN_SEAT_ID, lobbyTtlMs } from '@/utils/games/lobby';
+import { isValidTurnTimer } from '@/utils/games/TurnTimer';
 import { generateJoinCode } from '@/utils/games/joinCode';
 import { isDuplicateKeyError } from '@/utils/mongodb/duplicateKey';
 import { sendGameInvitePush } from '@/utils/firebase/invitePush';
@@ -41,16 +43,34 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({}, { status: 403, statusText: "Account not unlocked" });
     }
 
-    const { gameType, turnTimer, userList: usernames, seatCount, ...gameSettings }: ILobbyRequest = await request.json();
+    const { gameType, turnTimer, userList, seatCount, ...gameSettings } = await readJsonBody<ILobbyRequest>(request);
 
+    // `gameType` was read off the body and used unchecked — `.toLowerCase()`
+    // on a body that sent a number for it threw before the "unsupported game"
+    // answer below could be given.
+    if (typeof gameType !== 'string') {
+        return NextResponse.json({}, { status: 400, statusText: "Unsupported game" });
+    }
     const invitationModel = invitationModelFor(gameType);
     const meta = GAME_META[gameType.toLowerCase()];
     if (!invitationModel || !meta) {
         return NextResponse.json({}, { status: 400, statusText: "Unsupported game" });
     }
 
-    if (!Number.isInteger(seatCount) || seatCount < 0) {
+    if (typeof seatCount !== 'number' || !Number.isInteger(seatCount) || seatCount < 0) {
         return NextResponse.json({}, { status: 400, statusText: "Invalid seat count" });
+    }
+
+    const usernames = readUsernameList(userList);
+    if (!usernames) {
+        return NextResponse.json({}, { status: 400, statusText: "Invalid player list" });
+    }
+
+    // A turn timer the app can't count is a game that expires on the timer
+    // cron's first pass, and a lobby whose TTL is the one-hour floor rather
+    // than the lifetime the host chose — see isValidTurnTimer.
+    if (!isValidTurnTimer(turnTimer)) {
+        return NextResponse.json({}, { status: 400, statusText: "Unknown turn timer" });
     }
 
     // Via usersByUsername, so an open-seat-only lobby (nobody named) looks up

@@ -1,10 +1,11 @@
-import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
+import { readJsonBody } from '@/utils/api/requestBody';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { ReactionModel, IReactionDataDocument } from '@/utils/mongodb/ReactionData';
-import { userIdListToUserIdNameMap } from '@/utils/users/clerk';
+import { userIdListToUserIdNameMap, usersById } from '@/utils/users/clerk';
 import { buildEventFeed } from '@/utils/games/recap';
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildReactionNotification } from '@/utils/firebase/notificationContent';
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
         return NextResponse.json({}, { status: 400, statusText: "Not signed in" });
     }
 
-    const { eventId, reaction } = await request.json();
+    const { eventId, reaction } = await readJsonBody(request);
     if (!eventId || typeof eventId !== 'string') {
         return NextResponse.json({}, { status: 400, statusText: "Missing eventId" });
     }
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
         return NextResponse.json({}, { status: 409, statusText: "Already reacted to this action" });
     }
 
-    const { data: userList } = await (await clerkClient()).users.getUserList({ userId: [event.actorId] });
+    const userList = await usersById([event.actorId]);
     const recipient = userList.find(u => u.id === event.actorId);
     if (recipient) {
         await sendPushToUsers([recipient], {

@@ -1,47 +1,48 @@
-import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
+import { requireGameHost } from '@/utils/api/gameSetupRequest';
+import { readJsonBody } from '@/utils/api/requestBody';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { SolitaireInvitationModel, SolitaireInvitationRequest } from '@/games/Solitaire/SolitaireModels';
-import { UNLIMITED_TURN_TIMER } from '@/utils/games/TurnTimer';
 import { IInvitationDataDocument } from '@/utils/mongodb/InvitationData';
-import { canHostGame } from '@/utils/users/clerk';
+import { UNLIMITED_TURN_TIMER } from '@/utils/games/TurnTimer';
 
-// Solitaire is solo, so there's nobody to invite: userIdList is always empty,
-// which makes /api/invite/accept's "has everyone accepted?" check vacuously
-// true the moment it's called. The setup page creates this invite then
-// immediately calls the existing accept endpoint to complete game creation -
-// no special-casing of that generic route beyond the one game-start branch
-// every game needs anyway.
+/**
+ * Solitaire is solo, so there is nobody to invite and no turn timer to choose
+ * — the invitation exists only because starting a game goes through one, and
+ * it is consumed immediately. No `readGameSetupRequest` for that reason: there
+ * is no invitee list or timer for it to validate. It still needs a host.
+ */
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
-  const solitaireRequest: SolitaireInvitationRequest = await request.json();
 
-  const { userId } = await auth();
-  if (!userId) {
-    return NextResponse.json({}, { status: 400, statusText: "Not signed in" });
+  const solitaireRequest = await readJsonBody<SolitaireInvitationRequest>(request);
+
+  const setup = await requireGameHost();
+  if ('error' in setup) {
+    return setup.error;
   }
-  const thisUser = await currentUser();
-  if (!thisUser) {
-    return NextResponse.json({}, { status: 400, statusText: "Not signed in" });
-  }
-  // Every lobby needs a real, registered host — see canHostGame's own
-  // comment (docs/account-less-play.md §8).
-  if (!canHostGame(thisUser)) {
-    return NextResponse.json({}, { status: 403, statusText: "Account not unlocked" });
+
+  // The one setting this game takes, checked rather than trusted — it came off
+  // the request body and went straight into the document, and the deal reads
+  // it back as `drawMode === 'DRAW_3' ? … : …`, so anything else silently
+  // dealt a Draw-1 game while the record claimed something meaningless.
+  const { drawMode } = solitaireRequest;
+  if (drawMode !== 'DRAW_1' && drawMode !== 'DRAW_3') {
+    return NextResponse.json({}, { status: 400, statusText: "Unknown draw mode" });
   }
 
   await dbConnect();
 
   const invite: IInvitationDataDocument = new SolitaireInvitationModel({
     inviteId: randomUUID(),
-    senderId: userId,
+    senderId: setup.userId,
     userIdList: [],
     turnTimer: UNLIMITED_TURN_TIMER,
     timestamp: (new Date()).toISOString(),
     gameType: 'Solitaire',
     gameFriendlyName: 'Solitaire',
-    drawMode: solitaireRequest.drawMode,
+    drawMode,
   });
 
   await invite.save();

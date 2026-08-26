@@ -1,10 +1,12 @@
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildYourTurnNotification } from '@/utils/firebase/notificationContent';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { auth, clerkClient } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
 import { after, NextRequest, NextResponse } from 'next/server';
-import { GameDataModel, IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
-import { userListToUserIdNameMap } from '@/utils/users/clerk';
+import { trySave } from '@/utils/mongodb/GameData';
+import { userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
+import { requireLiveGame } from '@/utils/games/liveGame';
+import { readJsonBody } from '@/utils/api/requestBody';
 
 export async function POST(request: NextRequest) {
   console.log(`${request.method} ${request.nextUrl.pathname}`);
@@ -14,10 +16,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, {status: 400, statusText: "Not signed in"});
   }
   
-  const { gameId } = await request.json();
+  const { gameId } = await readJsonBody(request);
 
   await dbConnect();
-  const gameData: IGameDataDocument = await GameDataModel.findOne({gameId}).exec();
+  const found = await requireLiveGame(gameId);
+  if ('error' in found) {
+    return found.error;
+  }
+  const gameData = found.game;
 
   if (gameData.currentTurn !== authResponse.userId) {
     return NextResponse.json({}, {status: 401, statusText: "Not your turn"});
@@ -47,9 +53,7 @@ export async function POST(request: NextRequest) {
   // swallowed rather than an error.
   after(async () => {
     try {
-      const { data: userList } = await (await clerkClient()).users.getUserList({
-        userId: gameData.userIdList
-      });
+      const userList = await usersById(gameData.userIdList);
       const turnUser = userList.find(u => u.id === gameData.currentTurn);
 
       if (!turnUser) {
@@ -59,8 +63,8 @@ export async function POST(request: NextRequest) {
 
       await sendPushToUsers([turnUser], {
         event: 'YourTurn',
-        gameId,
-        link: gameNotificationLink(gameData.gameType.url, gameId)
+        gameId: gameData.gameId,
+        link: gameNotificationLink(gameData.gameType.url, gameData.gameId)
       }, await buildYourTurnNotification(gameData, turnUser.id, userListToUserIdNameMap(userList)), {
         channel: 'yourTurn'
       });

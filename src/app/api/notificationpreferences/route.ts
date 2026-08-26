@@ -1,3 +1,4 @@
+import { readJsonBody } from '@/utils/api/requestBody';
 import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { ALL_NOTIFICATION_CHANNELS, buildDefaultNotificationPreferences, getNotificationPreferences, NotificationChannel, NotificationPreferences } from '@/utils/firebase/notificationPreferences';
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({}, { status: 400, statusText: 'Not signed in' });
     }
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const currentUserData = await currentUser();
     if (!currentUserData) {
         return NextResponse.json({}, { status: 400, statusText: 'Not signed in' });
@@ -34,10 +35,13 @@ export async function POST(request: NextRequest) {
         channels: { ...current.channels }
     };
 
-    if (body.channels && typeof body.channels === 'object') {
+    const requestedChannels = body.channels;
+    if (requestedChannels && typeof requestedChannels === 'object' && !Array.isArray(requestedChannels)) {
+        const requested = requestedChannels as Record<string, unknown>;
         for (const channel of ALL_NOTIFICATION_CHANNELS) {
-            if (typeof body.channels[channel] === 'boolean') {
-                next.channels[channel] = body.channels[channel];
+            const value = requested[channel];
+            if (typeof value === 'boolean') {
+                next.channels[channel] = value;
             }
         }
     }

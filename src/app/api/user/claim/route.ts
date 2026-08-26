@@ -3,6 +3,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameResultModel } from '@/utils/mongodb/GameResultData';
 import { isGuestPlaceholderEmail } from '@/utils/users/guest';
+import { clientIp, consumeRateLimit } from '@/utils/rateLimit';
+import { readJsonBody } from '@/utils/api/requestBody';
+
+// Claiming takes an email and a password and writes both to a Clerk account,
+// so it is a credential endpoint on an unauthenticated-ish principal (a guest
+// nobody vouched for). Enough attempts for a guest to fix a rejected password
+// a few times over, not enough to hammer Clerk's own rate limits or walk a
+// list of emails to find which are already registered.
+const CLAIM_LIMIT = 10;
+const CLAIM_WINDOW_MS = 60 * 60 * 1000;
 
 interface IClaimRequest {
     email: string;
@@ -35,7 +45,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "You're not signed in." }, { status: 400 });
     }
 
-    const { email, password }: IClaimRequest = await request.json();
+    if (!(await consumeRateLimit('user-claim', clientIp(request.headers), CLAIM_LIMIT, CLAIM_WINDOW_MS))) {
+        return NextResponse.json({ error: 'Too many attempts. Please try again later.' }, { status: 429 });
+    }
+
+    const { email, password } = await readJsonBody<IClaimRequest>(request);
     if (typeof email !== 'string' || !email.trim() || typeof password !== 'string' || !password) {
         return NextResponse.json({ error: 'Enter an email and a password.' }, { status: 400 });
     }
