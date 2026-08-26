@@ -82,6 +82,35 @@ button {
     -webkit-user-select: none;
 }
 
+/* ---- Page transitions ----
+   Opts same-origin document navigations into a view transition, which is what a
+   browser animates a back/forward gesture with: it holds the outgoing page on
+   screen, paints the incoming one behind it, and cross-fades between the two
+   rather than flashing cream while the next document paints. On Android the
+   gesture is previewed with that transition — swipe part-way, let go, and it
+   runs backwards, so a half-committed back doesn't blink.
+
+   Worth knowing what this covers: navigations that swap the *document* —
+   arriving from a join link or a notification, the sign-in hand-off, a reload,
+   and back or forward across any of those. Moving between the app's own screens
+   goes through Next's router without ever leaving the document, so this rule
+   doesn't touch it.
+
+   The root cross-fade is deliberately left as the browser's own. A slide would
+   need to know which way the navigation went, which a document can only learn
+   from JS in `pageswap`/`pagereveal` — not worth a script to fade a page. */
+@view-transition { navigation: auto; }
+
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation-duration: 180ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    ::view-transition-old(root),
+    ::view-transition-new(root) { animation: none; }
+}
+
 .ag-app {
     max-width: var(--ag-app-width);
     margin: 0 auto;
