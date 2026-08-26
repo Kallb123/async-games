@@ -59,7 +59,7 @@ export default function MyTurnList({ games, isLoading, isRefreshing }: MyTurnLis
                 {timeLeft && <div className="ag-turn-card-badge">{timeLeft}</div>}
             </div>
         );
-    }), { isLoading, placeholder: { node: <SkeletonTurnCard />, count: 2 } });
+    }), { isLoading, placeholder: { node: <SkeletonTurnCard />, count: 1 } });
 
     return (
         <>
