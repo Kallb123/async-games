@@ -631,6 +631,17 @@ description or theme colour is exactly what those two files exist to prevent.
   `formatRemainingTimeShort` — which render no label for a `null` now.
   `useNowToTheMinute` is the same clock at minute resolution, so lists of
   "14h ago"/"1h left" labels don't re-render every second.
+- **Page transitions.** `ag-theme.css` opts the app into cross-document view
+  transitions (`@view-transition { navigation: auto; }`), which is what a
+  browser animates a back/forward gesture with — and on Android, what it
+  previews the gesture with. It only applies to navigations that swap the
+  document: a join link, a notification, the sign-in hand-off, a reload, and
+  back or forward across those. Screen-to-screen moves go through Next's
+  router without leaving the document, so they are untouched by it; animating
+  those would mean React's experimental `ViewTransition`, which is a separate
+  decision. The root cross-fade is left as the browser's own — a directional
+  slide would need `pageswap`/`pagereveal` scripting to know which way the
+  navigation went.
 - **Closing an overlay.** The app is installed `display: "standalone"`, so a
   player has no browser back button and the Android back gesture is their only
   "back". `useCloseRequest` (`src/utils/hooks/useCloseRequest.ts`) answers that

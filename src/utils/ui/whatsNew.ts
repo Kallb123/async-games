@@ -39,6 +39,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Screens fade in instead of flashing",
+                detail: "Opening a friend's join link, signing in, or tapping a notification used to blink the page white on the way in. Those now cross-fade — and swiping back out of one follows the same fade rather than snapping.",
+            },
+            {
                 title: "Swiping back closes what's open",
                 detail: "The back gesture used to walk you out of the game whenever a sheet or menu was open. It now closes whatever is on top — the claim sheet, a trade, the options menu — and only leaves the screen once there's nothing left to close.",
             },
@@ -53,10 +57,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "A screen that breaks now offers you a way out",
                 detail: "If something goes wrong drawing a page, you get a proper Async Games screen with a “try again” button and a way back to your games — instead of a blank page with an error on it and nothing to tap.",
-            },
-            {
-                title: "Your home screen keeps up while you're looking at it",
-                detail: "Invites accepted, seats claimed, a game starting — the lists now update while the screen is open, instead of waiting until you'd been away and come back. It loads quicker too.",
             },
         ],
     },
