@@ -18,17 +18,23 @@ const apiRoot = path.resolve(here, "../../../app/api");
 // Discovered by walking the tree rather than listed by hand, so a route added
 // tomorrow is covered without anyone remembering to add it here.
 
-// The three ways a route legitimately establishes membership:
+// The four ways a route legitimately establishes it may touch the game it
+// fetched:
 //
-//  - the explicit check the sibling routes use;
+//  - the explicit membership check the sibling routes use;
 //  - a stronger gate on it being the caller's turn, which can only be true of
 //    a player (command and taketurn);
 //  - scoping the query itself to the caller's games, so a non-player's fetch
-//    comes back empty (the lobby's "what game did we become?" lookup).
+//    comes back empty (the lobby's "what game did we become?" lookup);
+//  - proving the caller is the scheduler rather than a player at all, which is
+//    the turn-timer cron: it acts on games nobody asked it about, on behalf of
+//    no user, and isAuthorisedCron is the only thing that may let it (see
+//    finding 11 in docs/robustness-review.md — that check used to fail open).
 const MEMBERSHIP_GATES = [
     /userIdList\.includes\(\s*(?:auth\w*\.)?userId\s*\)/,
     /currentTurn\s*!==?=\s*(?:auth\w*\.)?userId|(?:auth\w*\.)?userId\s*!==?=\s*\w*\.currentTurn/,
     /findOne\(\s*\{[^}]*userIdList:\s*(?:auth\w*\.)?userId/,
+    /isAuthorisedCron\(/,
 ];
 
 // Both ways a route gets hold of one game: its own query, or the shared

@@ -423,12 +423,25 @@ current time as an argument instead of reading the clock — see §11 on `useNow
 enforcement job. It:
 
 - authenticates via `Authorization: Bearer $CRON_SECRET`,
-- loads all `complete: false` games, and for each:
+- reads its **candidates** — live games whose turn has been running long enough
+  for their own timer to have something to say (`actionableTurnFilter` builds one
+  `$or` branch per timer), oldest turn first, projected down to the four fields
+  the decision needs rather than whole documents (`findSweepCandidates`);
+- asks `needsSweeping` of each candidate, and only for the ones that answer yes
+  loads the whole game by `gameId` and **asks again** — the player may have taken
+  their turn between the two reads — then:
   - if the turn is **expired**, advances `currentTurn`, resets the timer and
-    sends a `YourTurn` push to the new player;
-  - else if within the **warning window** and not yet warned, sends a
-    `TurnExpiringSoon` push and sets `timerWarningNotificationSent`.
-- returns `{ processed, expired, warned }`.
+    sends a `YourTurn` push to the new player (or abandons the game once that
+    player has missed `MAX_CONSECUTIVE_MISSED_TURNS` in a row);
+  - else sends a `TurnExpiringSoon` push and sets
+    `timerWarningNotificationSent`.
+- sweeps each game inside its own `try`, so one Clerk or FCM failure costs that
+  game rather than the rest of the run;
+- stops itself before the request deadline rather than being cut off mid-game,
+  and returns `{ processed, expired, warned, abandoned, skipped, failed,
+  unswept, capped }` — the last two saying what it didn't get to. Candidates
+  come oldest-first and every game it acts on stops being one, so the next run
+  resumes where this one stopped with no cursor to keep.
 
 **Why external cron:** Vercel Hobby limits crons to once/day, so `vercel.json`
 registers only a daily backstop (`0 0 * * *`). For sub-day timers, an external

@@ -12,8 +12,8 @@ pushes that were costing iOS players their notifications (#303) — and picks up
 where those left off. Every finding below is recorded with its status, whether
 it was fixed here or deliberately left.
 
-**Status key:** ✅ fixed in this change · ⚠️ partially fixed · ❌ not fixed,
-with the reason and what it would take.
+**Status key:** ✅ fixed · ❌ not fixed, with the reason and what it would
+take.
 
 ---
 
@@ -28,7 +28,7 @@ with the reason and what it would take.
 | 5 | Nothing checked a command belonged to the game it targeted | High | ✅ |
 | 6 | One bad game or user aborted an entire cron sweep | High | ✅ |
 | 7 | Post-commit push failures surfaced as request failures | Medium | ✅ |
-| 8 | The turn-timer sweep loaded every live game | Medium | ⚠️ |
+| 8 | The turn-timer sweep loaded every live game | Medium | ✅ |
 | 9 | `GameData` had no indexes at all | High | ✅ |
 | 10 | No rate limit on the credential and enumeration endpoints | Medium | ✅ |
 | 11 | `isAuthorisedCron` failed *open* on a missing secret | High | ✅ |
@@ -211,38 +211,98 @@ is what the one caller that reads it (the dev test bench) actually wants.
 
 *File:* `src/utils/firebase/pushNotification.ts`.
 
-### 8. The turn-timer sweep loaded every live game ⚠️
+### 8. The turn-timer sweep loaded every live game ✅
 
 `GameDataModel.find({ complete: false })` pulled every active game — full
 `commandHistory` and all — into memory, serially, with no ordering. On a
 platform with a request deadline that is one timeout away from being silently
 truncated partway through, with no record of where it got to.
 
-**Partially fixed.** The query is now narrowed by two exact exclusions:
+The first pass at this narrowed the query to games a run could plausibly act on
+and sorted them oldest-turn-first, and left the rest — whole documents, serial,
+no deadline — as a follow-up. This is that follow-up, and it closes the finding.
 
-- games on an unlimited timer, which never expire and never warn (both
-  predicates answer false on sight) yet were being loaded in full every tick;
-- games whose turn started more recently than `SHORTEST_ACTIONABLE_ELAPSED_MS`
-  — five minutes, derived from the ladder rather than written down — which is
-  too recent for any timer to have anything to say.
+**Fixed**, in three parts.
 
-`lastTurnTimestamp` is an ISO-8601 string rather than a `Date`, and the filter
-compares it as one: every writer produces it with `toISOString()`, which is
-fixed-width and UTC, so lexicographic order is chronological order. Results are
-sorted oldest-turn-first, so a run that doesn't finish has spent its time on the
-games that were furthest overdue.
+**The query asks per timer rather than once for all of them.** A single cutoff
+across the whole ladder is only ever as tight as the *shortest* timer allows —
+five minutes — so a 7-day game whose turn started six minutes ago was still
+read, in full, every tick, to be put straight back. `actionableTurnFilter` now
+builds one `$or` branch per timer, each bounding `lastTurnTimestamp` by that
+timer's own warning threshold (total minus warning: eight minutes for the
+10-minute timer, six days for the 7-day one). Unlimited games are excluded by
+construction rather than by an exclusion clause — they aren't on the ladder,
+because they never expire and never warn.
 
-**What's left:** the sweep still loads whole documents, `commandHistory`
-included, when it needs about six fields; and it is still serial with no
-resumption. Projecting the read would mean `trySave` and `recordGameResult` no
-longer having a full document to work with, which is a real refactor rather than
-a `.select()`. Worth doing when the collection is big enough to justify it —
-the index in finding 9 is what makes the current shape affordable until then.
+It is still derived from `TIMER_MS` rather than written down, and still compares
+`lastTurnTimestamp` as the ISO-8601 string it is (every writer produces it with
+`toISOString()`, which is fixed-width and UTC, so lexicographic order is
+chronological order).
 
-*Files:* `src/app/api/cron/turntimer/route.ts`, `src/utils/games/TurnTimer.ts`.
-*Tests:* `TurnTimer.test.ts` proves the cutoff is under every timer's expiry
-*and* every timer's warning, so the filter can't skip a game that needed acting
-on.
+**The read is projected, and the whole document is fetched only when there is
+something to do.** `findSweepCandidates` reads four fields per game — `gameId`,
+`turnTimer`, `lastTurnTimestamp`, `timerWarningNotificationSent` — `lean()`,
+oldest turn first. On any given tick most candidates have nothing due, and those
+now cost four fields instead of a whole game's `commandHistory` and state.
+
+What made this a refactor rather than a `.select()` is that the *actions* do
+need a full document — `trySave`'s optimistic concurrency, `recordGameResult`'s
+`commandHistory`, the recap engine's replay for the push copy. So the decision
+was separated from the action: one predicate, `needsSweeping`, asked twice.
+Once against the projected candidate, to decide whether the document is worth
+loading; then again against the document once loaded.
+
+The second ask is not belt and braces. The two reads are separate queries, and
+in between them the player whose turn it is may have taken it — which moves
+`lastTurnTimestamp` and `currentTurn` on. Acting on the candidate's answer would
+rotate the turn away from somebody who had just played, and `trySave` would not
+catch it: the document in hand is the fresh one, so its version matches. The
+decision has to be made against the last thing read.
+
+That second read goes through `requireLiveGame` — the guard from finding 2 —
+rather than its own `findOne`. This route mutates games, which is exactly what
+that guard is for, and it already answers all three of "was an id given", "does
+it exist" and "is it still live". It answers in `NextResponse`s and the cron has
+no caller to send one to, so the refusal is dropped and the game left for the
+next run.
+
+**The run knows about the deadline.** `maxDuration = 60`, a `SWEEP_BUDGET_MS` of
+50 seconds checked before each game is acted on, and a `SWEEP_CANDIDATE_LIMIT`
+of 500 on the read itself. A run that runs out stops between games rather than
+being cut off inside one, logs how many it left, and reports `unswept` (and
+`capped`, if the read itself hit the limit) in its response — so a truncated run
+now says so instead of looking identical to a complete one.
+
+That is also the resumption story, and it needs no cursor: candidates come
+oldest-turn-first, and every game the sweep acts on stops being a candidate
+(an expired turn moves `lastTurnTimestamp`, a warning sets
+`timerWarningNotificationSent`, an abandoned game sets `complete`). So the next
+run's own query picks up where this one stopped.
+
+The index from finding 9 changed shape to match: `{ complete: 1, turnTimer: 1,
+lastTurnTimestamp: 1 }`, which serves each of the filter's per-timer branches
+(equality, equality, range) and the sort across them.
+
+The candidate projection and the `ISweepCandidate` type are both derived from
+one `SWEEP_CANDIDATE_FIELDS` list. Written twice, dropping a name from the
+projection would still type-check, `needsSweeping` would read `undefined`, and
+the sweep would quietly decide every game was fine — a failure with no symptom
+`tsc` or a test could see.
+
+*Files:* `src/app/api/cron/turntimer/route.ts`, `src/utils/games/TurnTimer.ts`,
+`src/utils/mongodb/GameData.ts`.
+*Tests:* `TurnTimer.test.ts` holds the filter to never leaving out a game
+`needsSweeping` would have acted on — swept across every timer and every
+boundary either of them cares about, on a frozen clock — and to still leaving
+out a turn too young for its own timer, which is what the per-timer bounds buy.
+`needsSweeping` is covered directly.
+
+`gameRouteAccess.test.ts` had to be told about this route: the cron now calls
+`GameDataModel.findOne`, so the structural guard that walks every route
+fetching one game started demanding a membership check from it. Being the
+scheduler rather than a player is the fourth legitimate answer to that
+question, and `isAuthorisedCron` is what proves it (finding 11 is why that is
+worth something).
 
 ---
 
@@ -265,7 +325,7 @@ cron tick, and by `inviteId` on every lobby poll. All collection scans.
 |---|---|---|
 | `GameData` | `{ gameId: 1 }` unique | every turn, every board load |
 | `GameData` | `{ userIdList: 1, complete: 1 }` | the dashboard's live games |
-| `GameData` | `{ complete: 1, lastTurnTimestamp: 1 }` | the timer cron's filter *and* its sort |
+| `GameData` | `{ complete: 1, turnTimer: 1, lastTurnTimestamp: 1 }` | the timer cron's filter *and* its sort |
 | `GameData` | `{ inviteId: 1 }` sparse | the lobby's "what game did we become?" |
 | `InvitationData` | `{ inviteId: 1 }` unique | lobby screen, accept, cancel, consume |
 | `InvitationData` | `{ senderId: 1 }` | outgoing invites |
@@ -566,6 +626,26 @@ same change, three identical lines apiece.
 
 **Fixed.** One `timingSafeStringEqual` in `src/utils/secrets.ts`, used by both.
 
+### The review of finding 8's follow-up
+
+The `caveman` pass over the finding-8 work above found the same class of thing,
+and all of it is applied: the projection's field list written out twice with
+nothing holding the two copies together (now one derived list, as above); the
+cron re-implementing `requireLiveGame`'s three checks by hand (now calls it);
+`maxDuration` and the sweep's budget as two independent numbers that had to
+agree (the budget is derived from it, and the ten seconds of headroom is now
+visible rather than implied); `findSweepCandidates` taking a filter and a limit
+that only ever had one value each, with the prose justifying the limit in a
+different file from the limit (it takes neither now, and owns both); the same
+paragraph about resumption restated in four places, and the ask-twice rationale
+in three; and `processed` counted from the candidate list when the tally it
+sits next to already sums to it.
+
+It also asked whether this belongs in the "What's new" notes. It doesn't: at
+this collection's size the old sweep never actually ran out of time, so there is
+no player-visible change to report — AGENTS.md keeps refactors out of those
+notes.
+
 The same review also caught `ErrorScreen` nesting a second `.ag-app` column
 inside the root layout's (fixed — finding 14), the `readJsonBody` cast repeated
 at eleven call sites (fixed — the helper is generic now), `nudge` hand-rolling
@@ -579,5 +659,5 @@ finding 20).
 
 - `npx tsc --noEmit` — clean
 - `npm run lint` — clean
-- `npm test` — 431 passing across 38 files (was 406 across 33)
+- `npm test` — 438 passing across 38 files (was 406 across 33)
 - `npm run build` — succeeds

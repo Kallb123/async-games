@@ -1,11 +1,12 @@
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildGameLostNotification, buildTurnExpiringNotification, buildYourTurnNotification } from '@/utils/firebase/notificationContent';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { GameDataModel, IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
+import { IGameDataDocument, ISweepCandidate, SWEEP_CANDIDATE_LIMIT, findSweepCandidates, trySave } from '@/utils/mongodb/GameData';
 import { recordGameResult } from '@/utils/mongodb/GameResultData';
 import { unclaimedGuestsOf } from '@/utils/users/guest';
 import { NextRequest, NextResponse } from 'next/server';
-import { hasAbandonedGame, isExpired, isWarningThreshold, formatRemainingTime, SHORTEST_ACTIONABLE_ELAPSED_MS, UNLIMITED_TURN_TIMER } from '@/utils/games/TurnTimer';
+import { formatRemainingTime, hasAbandonedGame, isExpired, needsSweeping } from '@/utils/games/TurnTimer';
+import { requireLiveGame } from '@/utils/games/liveGame';
 import { isAuthorisedCron } from '@/utils/cronAuth';
 import { userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
 import { readableName } from '@/utils/ui/players';
@@ -103,9 +104,27 @@ async function warnTurnExpiring(gameData: IGameDataDocument): Promise<SweepOutco
     return 'warned';
 }
 
-/** The whole decision for one game: has this turn run out, is the player gone,
- *  or is it just close enough to be worth a warning? */
-async function sweepGame(gameData: IGameDataDocument): Promise<SweepOutcome> {
+/**
+ * One game's sweep, for a candidate the projected read said was worth a closer
+ * look: load the whole game, ask again, and act — has this turn run out, is the
+ * player gone, or is it just close enough to be worth a warning?
+ *
+ * `trySave` is not what makes asking again safe; it is why asking again is
+ * necessary. The player whose turn it is may have taken it between the two
+ * reads, and the document here is the fresh one — so its version matches, the
+ * save goes through, and the turn is rotated away from somebody who had just
+ * played. The decision has to be made against the last thing read.
+ */
+async function sweepGame(gameId: string): Promise<SweepOutcome> {
+    // The same guard the mutating routes use, because this route mutates too.
+    // It answers a refusal as a NextResponse, and the cron has no caller to send
+    // one to, so a game that has gone away or finished is simply left.
+    const found = await requireLiveGame(gameId);
+    if ('error' in found) return 'skipped';
+
+    const gameData: IGameDataDocument = found.game;
+    if (!needsSweeping(gameData)) return 'skipped';
+
     const { lastTurnTimestamp, turnTimer, currentTurn } = gameData;
 
     if (isExpired(lastTurnTimestamp, turnTimer)) {
@@ -118,12 +137,21 @@ async function sweepGame(gameData: IGameDataDocument): Promise<SweepOutcome> {
             : passTurnOn(gameData, currentTurn);
     }
 
-    if (isWarningThreshold(lastTurnTimestamp, turnTimer) && !gameData.timerWarningNotificationSent) {
-        return warnTurnExpiring(gameData);
-    }
-
-    return 'skipped';
+    // needsSweeping said yes and the turn hasn't run out, so the only thing
+    // left it could have been saying yes to is the warning.
+    return warnTurnExpiring(gameData);
 }
+
+// A sweep is a serial walk over games, each one a save, a Clerk lookup and a
+// push, so it needs more than the platform's default few seconds.
+export const maxDuration = 60;
+
+// The run's own deadline, ten seconds short of the platform's. A cron run is a
+// request like any other, and this one used to have no idea it was up against
+// one: it worked through every live game until it was cut off, part-way through
+// a game, with nothing in the response or the log to say how far it got. The
+// headroom is what lets it stop between games and report what it left instead.
+const SWEEP_BUDGET_MS = (maxDuration - 10) * 1000;
 
 export async function GET(request: NextRequest) {
     console.log(`GET ${request.nextUrl.pathname}`);
@@ -134,56 +162,54 @@ export async function GET(request: NextRequest) {
 
     await dbConnect();
 
-    // Only the games this run could actually act on, rather than every live
-    // game in the database. Two exclusions, both exact rather than heuristic:
-    //
-    //  - an unlimited timer never expires and never warns (isExpired and
-    //    isWarningThreshold both answer false on sight), so those games were
-    //    being loaded in full every five minutes to be looked at and dropped;
-    //  - a turn that started less than SHORTEST_ACTIONABLE_ELAPSED_MS ago is
-    //    too young for any timer on the ladder to have anything to say.
-    //
-    // lastTurnTimestamp is an ISO-8601 string rather than a Date, and this
-    // compares it as one: every writer produces it with toISOString(), which
-    // is fixed-width and UTC, so lexicographic order is chronological order.
-    //
-    // Oldest turn first, so a run that doesn't finish — this is a serial sweep
-    // on a platform with a request deadline — has spent its time on the games
-    // that were furthest overdue rather than wherever the collection scan
-    // happened to start. The rest are still there on the next tick.
-    const cutoff = new Date(Date.now() - SHORTEST_ACTIONABLE_ELAPSED_MS).toISOString();
-    const activeGames: IGameDataDocument[] = await GameDataModel.find({
-        complete: false,
-        turnTimer: { $ne: UNLIMITED_TURN_TIMER },
-        lastTurnTimestamp: { $lte: cutoff },
-    }).sort({ lastTurnTimestamp: 1 }).exec();
-
-    if (!activeGames.length) {
-        return NextResponse.json({ processed: 0 });
-    }
+    const deadline = Date.now() + SWEEP_BUDGET_MS;
+    const candidates: ISweepCandidate[] = await findSweepCandidates();
 
     const tally: Record<SweepOutcome, number> = { expired: 0, abandoned: 0, warned: 0, skipped: 0 };
     let failed = 0;
+    let unswept = 0;
 
     // Each game is swept on its own. Without this, one game's Clerk lookup or
     // FCM send throwing ended the whole run — every game after it in the list
     // went unswept until the next tick, and a game that reliably threw starved
     // everything behind it indefinitely. A game that fails is logged and
     // skipped; the next tick retries it.
-    for (const gameData of activeGames) {
+    for (const [index, candidate] of candidates.entries()) {
+        // The query narrowed to games that could need something; this asks
+        // whether they do, before spending a read on a whole document.
+        if (!needsSweeping(candidate)) {
+            tally.skipped++;
+            continue;
+        }
+
+        if (Date.now() >= deadline) {
+            unswept = candidates.length - index;
+            console.warn(`Turn-timer sweep ran out of time with ${unswept} game(s) left to look at`);
+            break;
+        }
+
         try {
-            tally[await sweepGame(gameData)]++;
+            tally[await sweepGame(candidate.gameId)]++;
         } catch (error) {
             failed++;
-            console.error(`Turn-timer sweep failed for game ${gameData.gameId}`, error);
+            console.error(`Turn-timer sweep failed for game ${candidate.gameId}`, error);
         }
     }
 
     return NextResponse.json({
-        processed: activeGames.length,
+        // Every candidate this run reached is counted exactly once, either in
+        // the tally or as a failure.
+        processed: Object.values(tally).reduce((sum, count) => sum + count, 0) + failed,
         expired: tally.expired,
         warned: tally.warned,
         abandoned: tally.abandoned,
+        skipped: tally.skipped,
         failed,
+        // What this run didn't get to: games it had read but ran out of time
+        // for, and whether the read itself was capped (so there were more
+        // candidates than it even asked for). Either being set is the signal
+        // that the collection has outgrown a serial sweep on one request.
+        unswept,
+        capped: candidates.length === SWEEP_CANDIDATE_LIMIT,
     });
 }
