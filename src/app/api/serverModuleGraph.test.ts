@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
-import { walkFiles } from '@/utils/testing/walkFiles';
+import { apiRouteFiles } from '@/utils/testing/apiRoutes';
 
 // A `'use client'` module is a *client reference* in the server graph: importing
 // a function out of one from a route handler hands you a proxy that throws
@@ -52,7 +52,7 @@ function reachableFrom(entry: string): Map<string, string[]> {
 }
 
 describe('API route handlers', () => {
-    const routes = walkFiles(join(SRC, 'app', 'api'), name => /^route\.tsx?$/.test(name));
+    const routes = apiRouteFiles();
 
     it('finds the route handlers to check', () => {
         expect(routes.length).toBeGreaterThan(10);

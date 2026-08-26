@@ -43,7 +43,7 @@ take.
 | 20 | The command route rebuilt a dead 50-item array per request | Low | ✅ |
 | 21 | Request bodies were parsed unguarded across 19 routes | Medium | ✅ |
 | 22 | `/api/dev/*` wipes were unauthenticated on preview | Low | ✅ |
-| 23 | No integration tests over route handlers | Medium | ❌ |
+| 23 | No integration tests over route handlers | Medium | ✅ |
 | 24 | Seven copies of the game-setup prologue | Medium | ✅ |
 | 25 | Two copies of the constant-time compare | Low | ✅ |
 
@@ -570,24 +570,61 @@ that follows one wipes the dev database, and so does anyone the link reaches.
 **Fixed.** Signed-in required on top of the dev gate. Not a permission — a
 pulse.
 
-### 23. No integration tests over route handlers ❌
+### 23. No integration tests over route handlers ✅
 
 The existing test files cover the pure logic well. Every finding in this document
 lived in the layer that has none: route handlers, Mongo queries, Clerk calls.
 
-**Not fixed.** This change adds unit tests for each new pure helper
-(`readJsonBody`, `readUsernameList`, `isCommandForGameType`, `isValidTurnTimer`,
-`isAuthorisedCron`, the device cap, the deserialiser guard, the Clerk paging)
-and extends the two structural guards, taking the suite from 406 tests to 431.
-But it does not stand up `mongodb-memory-server` and a Clerk stub to exercise
-the handlers end to end.
+The change that fixed the findings above added unit tests for each new pure
+helper (`readJsonBody`, `readUsernameList`, `isCommandForGameType`,
+`isValidTurnTimer`, `isAuthorisedCron`, the device cap, the deserialiser guard,
+the Clerk paging) and extended the two structural guards — but nothing called a
+handler.
 
-That is the right next investment and it is deliberately a separate change: it
-is a test-infrastructure project rather than a fix, and folding it into this one
-would have made a large diff much larger without making any of the fixes above
-more likely to be correct. The findings most worth covering once it exists are
-2, 4, 5 and 21 — all of them "what does this route do when handed something it
-didn't expect".
+**Fixed.** `src/utils/testing/apiRoute.ts` stands in for the three things a
+handler reaches for that a unit test can't have — Clerk, the database
+connection, and Next's request scope — and nothing else. What a test exercises
+is therefore the real handler, the real `NextRequest`/`NextResponse`, the real
+turn rules and command registry, the real Mongoose documents (casting, schema
+defaults, Maps, discriminator methods) and the real deserialiser. Post-response
+work (`after`) is captured rather than dropped, so what a route does *after* it
+answers — recording a result, notifying the next player — is assertable too.
+
+Two files use it, and between them they cover the four findings this document
+named as the ones most worth covering:
+
+- `src/app/api/game/gameRoutes.test.ts` — 22 tests over the three routes that
+  change a game (`taketurn`, `command`, `end`). A finished game refuses a move
+  and a turn (2); a bogus game id is a 404 and an unauthenticated `POST {}` is a
+  400 rather than either being a 500 (4); a Solitaire command aimed at a Snakes
+  & Ladders game is refused with the game left untouched (5); a body that isn't
+  JSON is a 400 and nothing is written (21). Alongside them the happy paths that
+  say those refusals mean something: a roll moves a player, appends to
+  `commandHistory`, passes the turn and notifies the next player; a winning move
+  ends the game and records the result once; two racing requests produce one 200
+  and one 409; ending a game by hand stops the player who was mid-turn from
+  playing on.
+- `src/app/api/malformedBody.test.ts` — the same question asked of every route
+  rather than three: hand every route that takes a body one that isn't JSON, and
+  none of them may fail. It walks `src/app/api` rather than listing them — 47
+  route files, 28 of which answer a body method today — so a route added
+  tomorrow is covered without anyone remembering to add it. Then the half a
+  signed-out sweep can't reach: every game-setup route refusing a body with no
+  player list, which is the field that actually broke. Those are found by the
+  prologue they share rather than by their paths, because a game can be solo
+  without saying so in its URL.
+
+The mutation check for all of it: reverting any one of findings 2, 4, 5 and 21
+turns the suite red on exactly the tests written for it.
+
+**Still not covered.** The queries and the indexes. The store the harness reads
+a game out of and writes it back into is a `Map` with the version check the
+schema's `optimisticConcurrency` gives it, not a Mongo — a filter it doesn't
+understand throws rather than quietly answering nothing. So these tests say
+nothing about whether `actionableTurnFilter` selects the right games or whether
+the indexes in finding 9 are the ones the sweep uses. That wants
+`mongodb-memory-server`, and it is a separate change again: worth having, and
+not a prerequisite for the handler logic that was going untested today.
 
 ---
 
@@ -646,6 +683,33 @@ this collection's size the old sweep never actually ran out of time, so there is
 no player-visible change to report — AGENTS.md keeps refactors out of those
 notes.
 
+### The review of finding 23's tests
+
+The `caveman` pass over the integration tests found the same class of thing
+again, and all of it is applied. The api-route walk had become the third copy of
+itself — the api root spelled three different ways across
+`malformedBody.test.ts`, `serverModuleGraph.test.ts` and
+`gameRouteAccess.test.ts`, the route-file matcher spelled twice as a regex and
+once as an equality check (so one of the three silently skipped a `route.tsx`
+the others caught), and "read each route's source and filter by a regex" written
+twice. Which is exactly what `walkFiles.ts` had already been extracted for, one
+level up, so `src/utils/testing/apiRoutes.ts` is now the one copy and all three
+tests read from it.
+
+It also caught the Snakes & Ladders fixture re-typed in full so that one player
+could start on a different square (the seed helper takes the squares now), the
+same `gameState.commandHistory` cast written out four times next to a helper
+already doing that job for the neighbouring field, the "why afterStub is its own
+module" comment copy-pasted into both test files when the module itself explains
+it, Ann invented twice, and two pieces of stub fidelity nothing reads
+(`totalCount`, and a `then` on the fake query when every caller uses `.exec()`).
+
+It explicitly said *not* to extract the three `importActual`-and-spread stub
+factories or the per-file `vi.mock` lines: the first would need worse generics
+than the duplication costs, and the second is vitest-mandated per-file
+boilerplate — a `setupFiles` entry is the answer if a third route-test file ever
+appears, not a hoisting trick.
+
 The same review also caught `ErrorScreen` nesting a second `.ag-app` column
 inside the root layout's (fixed — finding 14), the `readJsonBody` cast repeated
 at eleven call sites (fixed — the helper is generic now), `nudge` hand-rolling
@@ -659,5 +723,6 @@ finding 20).
 
 - `npx tsc --noEmit` — clean
 - `npm run lint` — clean
-- `npm test` — 438 passing across 38 files (was 406 across 33)
+- `npm test` — 515 passing across 40 files (was 438 across 38, and 406 across 33
+  before this review)
 - `npm run build` — succeeds
