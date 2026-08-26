@@ -562,9 +562,10 @@ game — is documented fully in
   same `GameLibrary` browser the signed-in library uses, pointed at sign-up —
   instead of a bounce to `/login`. Locked-out accounts still go to
   `/unlockaccess`.
-- **Which home screen you get is decided on the server.** `/` is the app's one
-  server component screen: it reads the session with `await auth()` and renders
-  either `components/Dashboard.tsx` or `components/Landing.tsx`. The browser
+- **Which home screen you get is decided on the server.** `/` is the one screen
+  whose *audience* is settled before it renders — the same server-page-wraps-
+  client-component shape `/join` uses: it reads the session with `await auth()`
+  and renders either `components/Dashboard.tsx` or `components/Landing.tsx`. The browser
   can't tell those apart until Clerk has loaded, so deciding it in the client
   meant a visitor with no account watched the dashboard's skeletons load and
   then be replaced by the landing page. `Dashboard` still mounts

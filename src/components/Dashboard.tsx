@@ -1,7 +1,6 @@
 'use client'
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
-import { usePathname } from "next/navigation";
 import IncomingInviteList from "@/components/IncomingInvitesList";
 import OutgoingInviteList from "@/components/OutgoingInviteList";
 import MyTurnList from "@/components/MyTurnList";
@@ -28,8 +27,7 @@ import { profileImageUrl } from "@/utils/ui/avatar";
  * beats bouncing them to /login from their own home screen.
  */
 export default function Dashboard() {
-  const pathName = usePathname();
-  console.log(`GET ${pathName}`);
+  console.log("GET /");
   const { user, isLoaded } = useAuthGuard({ allowSignedOut: true });
   // Above the Landing return so the hook order never changes. It costs a
   // signed-out visitor nothing: useRefreshableData doesn't fetch until the
