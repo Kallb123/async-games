@@ -5,7 +5,7 @@ import { ReactNode, useLayoutEffect, useRef } from "react";
 /** Growing in from nothing, or shrinking away to nothing. */
 export type CollapsePhase = "enter" | "exit";
 
-/** Must match the `.ag-anim-item` transitions in `ag-theme.css`. */
+/** Must match `--ag-anim-ms` in `ag-theme.css`. */
 export const ANIM_MS = 450;
 
 /** Set while `Collapse` is driving its own height — see `handover` below. */
@@ -57,7 +57,6 @@ export default function Collapse({ phase, from, onMeasure, children }: CollapseP
     useLayoutEffect(() => {
         const el = box.current;
         if (!el || !from) return;
-        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
         const to = el.offsetHeight;
         if (to === from) return;
         el.style.height = `${from}px`;
@@ -68,6 +67,10 @@ export default function Collapse({ phase, from, onMeasure, children }: CollapseP
             el.classList.remove(RESIZE_CLASS);
             el.style.height = "";
         };
+        // `Collapse` ends its own animation rather than waiting for a caller to
+        // stop passing `from`: an inline height left behind would pin the box at
+        // a size its content has outgrown. Cleanup covers the other order —
+        // `from` changing, or the box going away, mid-move.
         const timer = setTimeout(settle, ANIM_MS);
         return () => {
             clearTimeout(timer);

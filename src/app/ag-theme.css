@@ -19,6 +19,9 @@
     --ag-row-divider: 1.5px dashed var(--ag-line-dashed);
     /* Space between the cards of an `.ag-stack`. */
     --ag-stack-gap: 12px;
+    /* How long a row takes to grow in, shrink away or move between two
+       natural heights. `ANIM_MS` in `Collapse.tsx` mirrors this. */
+    --ag-anim-ms: 450ms;
 
     --ag-terracotta: oklch(0.55 0.15 40);
     --ag-terracotta-deep: oklch(0.45 0.14 40);
@@ -1120,7 +1123,7 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-anim-item {
     display: grid;
     grid-template-rows: 1fr;
-    transition: grid-template-rows 450ms ease, opacity 320ms ease, height var(--ag-anim-height, 0s) ease;
+    transition: grid-template-rows var(--ag-anim-ms) ease, opacity 320ms ease, height var(--ag-anim-height, 0s) ease;
 }
 
 .ag-anim-item-inner { min-height: 0; }
@@ -1132,7 +1135,7 @@ a.ag-list-row, a.ag-list-row-main {
 /* Set by `Collapse` for as long as it is moving the box between two natural
    heights — whatever of the new content doesn't fit yet is hidden rather than
    spilling over the row below. */
-.ag-anim-item--resize { --ag-anim-height: 450ms; }
+.ag-anim-item--resize { --ag-anim-height: var(--ag-anim-ms); }
 
 /* Arrivals start collapsed and are transitioned open from there. Browsers
    without @starting-style just show the row straight away. */

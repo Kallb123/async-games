@@ -84,8 +84,7 @@ export default function useAnimatedList(children: ReactNode, options: AnimatedLi
     // Rows that took a placeholder's place, and the height it was standing at,
     // so each transitions to its own height instead of snapping to it.
     const [handover, setHandover] = useState<ReadonlyMap<string, number>>(SETTLED);
-    // What a placeholder measures. Every placeholder in a list is the same node,
-    // so one height covers all of them.
+    // What the standing placeholders measure — see the `onMeasure` below.
     const placeholderHeight = useRef(0);
     // False until the list has finished loading once — an empty list that has
     // settled is still settled, so its first row counts as an arrival.
@@ -153,17 +152,18 @@ export default function useAnimatedList(children: ReactNode, options: AnimatedLi
         return () => timers.forEach(timer => clearTimeout(timer));
     }, []);
 
-    return slots.map(({ key, node, placeholder: isPlaceholder }) => {
+    return slots.map(({ key, node, placeholder: isPlaceholder }, i) => {
         const leaving = !liveNodes.has(key);
         return (
             <Collapse
                 key={key}
                 phase={leaving ? "exit" : entering.includes(key) ? "enter" : undefined}
                 from={handover.get(key)}
-                // Only a placeholder still standing at its full height: one on
-                // its way out is already collapsing, and the height it measures
-                // no longer means anything to the row that follows it.
-                onMeasure={isPlaceholder && !leaving ? height => { placeholderHeight.current = height; } : undefined}
+                // One placeholder, still standing at its full height, is all
+                // there is to measure: they are all the same node, and one on
+                // its way out is already collapsing to nothing. Measuring costs
+                // a layout, so only the first slot is asked.
+                onMeasure={i === 0 && isPlaceholder && !leaving ? height => { placeholderHeight.current = height; } : undefined}
             >
                 {liveNodes.get(key) ?? node}
             </Collapse>
