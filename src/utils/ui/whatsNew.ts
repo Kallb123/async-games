@@ -69,6 +69,14 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 detail: "Once you'd played with more than a handful of people, your home screen started calling some of them “Unknown player” — most often on your finished games. Everybody's name comes through now, however long you've been playing.",
             },
             {
+                title: "Friend requests stop springing out at you",
+                detail: "Opening your profile used to make the requests you'd sent slide into place as though they had just arrived that second. They're simply there now — the sliding is saved for a request that actually turns up while you're looking.",
+            },
+            {
+                title: "Everyone accepting at once no longer strands the game",
+                detail: "If two of you accepted the same invite in the same moment, the game sometimes never started — the invite just sat there with everybody in it. It starts now, whoever taps last. A double-tapped accept can't deal you two copies of the same game any more either.",
+            },
+            {
                 title: "Ending a game really ends it",
                 detail: "If somebody ended a game while it was your turn, you could carry on playing it — and the finished game would end up disagreeing with itself about who won. It's properly over for everyone now.",
             },
@@ -79,10 +87,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Everyone accepting at once no longer strands the game",
                 detail: "If two of you accepted the same invite in the same moment, the game sometimes never started — the invite just sat there with everybody in it. It starts now, whoever taps last. A double-tapped accept can't deal you two copies of the same game any more either.",
-            },
-            {
-                title: "Notifications stop switching themselves off on iPhone",
-                detail: "The app used to send invisible background pings just to keep your open screens up to date. iPhones count those against an app and quietly revoke its notifications after a few — which is why yours kept going dead. They're all gone: screens refresh when you come back to them instead.",
             },
         ],
     },
