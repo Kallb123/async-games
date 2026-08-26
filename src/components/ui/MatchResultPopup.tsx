@@ -5,6 +5,7 @@ import Link from 'next/link';
 import moment from 'moment';
 import GameResultStats from "@/components/ui/GameResultStats";
 import { useGameResult } from "@/utils/hooks/useGameResult";
+import { useCloseRequest } from "@/utils/hooks/useCloseRequest";
 import { GAME_META } from "@/utils/ui/games";
 import { pluralize } from "@/utils/ui/text";
 import type { MatchOutcome } from "@/app/api/stats/route";
@@ -22,6 +23,7 @@ interface MatchResultPopupProps {
 // page for the rest.
 export default function MatchResultPopup({ gameId, outcome, onClose }: MatchResultPopupProps) {
     const { result, isLoading } = useGameResult(gameId);
+    useCloseRequest(true, onClose);
     const meta = result ? GAME_META[result.url] : undefined;
 
     return (

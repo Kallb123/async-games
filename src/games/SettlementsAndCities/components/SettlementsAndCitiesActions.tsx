@@ -10,6 +10,7 @@ import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
 import ActionButton from '@/components/ui/ActionButton';
 import PendingTag from '@/components/ui/PendingTag';
 import { useToast } from '@/components/ToastContext';
+import { useCloseRequest } from '@/utils/hooks/useCloseRequest';
 import {
     SACRollDice,
     SACEndTurn,
@@ -82,6 +83,12 @@ export default function SettlementsAndCitiesActions({
     const [tradeOffer, setTradeOffer] = useState<SAC_Resource>('lumber');
     const [tradeWant, setTradeWant] = useState<SAC_Resource>('wool');
     const { showToast } = useToast();
+
+    // Back (or Escape) closes whichever modal is up rather than walking out of
+    // the game — the same close request the shared popups answer.
+    useCloseRequest(showYopModal, () => setShowYopModal(false));
+    useCloseRequest(showMonopolyModal, () => setShowMonopolyModal(false));
+    useCloseRequest(showTradeModal, () => setShowTradeModal(false));
 
     const myState = gs.playerStates[myUsername];
     const myDevCards = gs.playerDevCards?.[myUsername];
