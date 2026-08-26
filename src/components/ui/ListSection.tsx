@@ -1,5 +1,7 @@
 'use client'
 
+import { Children } from "react";
+import CollapsingSection from "@/components/ui/CollapsingSection";
 import Refreshable from "@/components/ui/Refreshable";
 import { SkeletonRow } from "@/components/ui/Skeleton";
 import useAnimatedList from "@/utils/hooks/useAnimatedList";
@@ -47,9 +49,24 @@ export default function ListSection({
     hint,
     children,
 }: ListSectionProps) {
-    // Rows the list still has on screen — which includes any that have been
-    // removed and are shrinking away, so the section outlives its last row.
-    const rows = useAnimatedList(children, isLoading);
+    // Rows the list still has on screen: the real ones, the skeletons standing
+    // in for them while they load, and any that have been removed and are
+    // shrinking away — so the section outlives its last row. Handing the
+    // skeletons to the hook rather than rendering them separately is what makes
+    // the hand-over move as little as it can: a skeleton with a row to become
+    // just becomes it, and only the surplus on either side grows or collapses.
+    const rows = useAnimatedList(children, {
+        isLoading,
+        placeholder: { node: <SkeletonRow avatar={skeletonAvatar} />, count: skeletonRows },
+    });
+    const rowCount = Children.toArray(children).length;
+    const isEmpty = !isLoading && rowCount === 0;
+    // The `empty` message goes through the same animation, so it grows in while
+    // the rows it replaces are still collapsing — and collapses itself when a
+    // row finally turns up — instead of the two swapping in one jump. A lone
+    // node takes its slot key from its position, and it is never loading:
+    // whatever the list is doing, the message is either wanted or it isn't.
+    const emptyMessage = useAnimatedList(isEmpty ? empty : null);
 
     // A list that is usually empty (the profile's friend requests) opts out of
     // the skeleton with `skeletonRows={0}`: two placeholder rows for requests
@@ -59,30 +76,21 @@ export default function ListSection({
     if (isLoading && skeletonRows === 0) {
         return null;
     }
-    if (!isLoading && rows.length === 0 && !empty) {
+    if (isEmpty && rows.length === 0 && emptyMessage.length === 0) {
         return null;
     }
     return (
-        <div className="ag-section">
+        <CollapsingSection collapsed={isEmpty && !empty} isLoading={isLoading}>
             <div className="ag-section-head">
-                <h2 className="ag-section-label">{label}{showCount && rows.length ? ` · ${rows.length}` : ""}</h2>
+                <h2 className="ag-section-label">{label}{showCount && rowCount ? ` · ${rowCount}` : ""}</h2>
                 {action}
             </div>
             {beforeList}
-            {isLoading
-                ? (
-                    <div className="ag-list" aria-busy="true">
-                        {Array.from({ length: skeletonRows }).map((_, i) => <SkeletonRow key={i} avatar={skeletonAvatar} />)}
-                    </div>
-                )
-                : rows.length === 0
-                ? empty
-                : (
-                    <>
-                        <Refreshable className="ag-list" isRefreshing={isRefreshing}>{rows}</Refreshable>
-                        {hint && <p className="ag-hint">{hint}</p>}
-                    </>
-                )}
-        </div>
+            {rows.length > 0 && (
+                <Refreshable className="ag-list" isRefreshing={isRefreshing}>{rows}</Refreshable>
+            )}
+            {emptyMessage}
+            {hint && rows.length > 0 && <p className="ag-hint">{hint}</p>}
+        </CollapsingSection>
     );
 }

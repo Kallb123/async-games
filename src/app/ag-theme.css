@@ -1104,11 +1104,12 @@ a.ag-list-row, a.ag-list-row-main {
 }
 
 /* ---- Rows growing in and shrinking out ----
-   `useAnimatedList` wraps every row in one of these so it can animate its own
-   height: the wrapper is a single-row grid whose track runs 0fr → 1fr, the one
-   way to transition to a height the content decides. Clipping and the collapsed
-   start only apply while a row is arriving or leaving, so a settled row sits in
-   a plain grid box that can't cut off a shadow or a focus ring. */
+   The `Collapse` component wraps a row — or a whole section — in one of these
+   so it can animate its own height: the wrapper is a single-row grid whose
+   track runs 0fr → 1fr, the one way to transition to a height the content
+   decides. Clipping and the collapsed start only apply while it is arriving or
+   leaving, so a settled row sits in a plain grid box that can't cut off a
+   shadow or a focus ring. */
 .ag-anim-item {
     display: grid;
     grid-template-rows: 1fr;
@@ -1133,9 +1134,11 @@ a.ag-list-row, a.ag-list-row-main {
 }
 
 /* A wrapped row is an only child, so `.ag-list-row:last-child` matches every
-   one of them — the wrapper has to decide which divider to drop instead. */
-.ag-anim-item .ag-list-row { border-bottom: var(--ag-row-divider); }
-.ag-anim-item:last-child .ag-list-row { border-bottom: none; }
+   one of them — the wrapper has to decide which divider to drop instead. Both
+   rules stay inside the list card: the wrapper round a whole section is not the
+   one that decides where a row's divider goes. */
+.ag-list .ag-anim-item .ag-list-row { border-bottom: var(--ag-row-divider); }
+.ag-list .ag-anim-item:last-child .ag-list-row { border-bottom: none; }
 
 /* Stack spacing has to shrink along with the row, so it moves inside the
    animating box instead of staying a flex gap that would outlive it. */

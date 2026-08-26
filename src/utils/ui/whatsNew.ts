@@ -39,6 +39,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Lists settle instead of jumping",
+                detail: "When your games finish loading, the placeholder rows hand over to the real ones in place — a spare one shrinks away, an extra one grows in, and a list with nothing in it closes up gently rather than snapping shut under your thumb.",
+            },
+            {
                 title: "What's new folds away",
                 detail: "These notes now start folded up at the bottom of the home page, so your games have the screen to themselves — tap the heading whenever you want to see what has changed.",
             },
@@ -53,10 +57,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Say what you want to hear about",
                 detail: "Settings now has a switch for game results — the one kind of notification that used to arrive however you'd set things — and the chat switch that never did anything has gone. Turning notifications off now really does turn all of them off.",
-            },
-            {
-                title: "One notification per game, not a pile of them",
-                detail: "A new notification about a game replaces the last one instead of stacking up behind it, so a week away no longer means a column of the same thing. Tapping one takes you into the app you already have open, rather than opening a second copy of it.",
             },
         ],
     },

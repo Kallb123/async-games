@@ -54,24 +54,18 @@ export function SkeletonList({ rows = 3, avatar = true, label = false }: { rows?
     );
 }
 
-/** Placeholder cards shaped like the "your move" turn cards on the homepage. */
-export function SkeletonTurnCards({ count = 2 }: { count?: number }) {
+/** One placeholder card shaped like a "your move" turn card on the homepage. */
+export function SkeletonTurnCard() {
     return (
-        <div className="ag-section" aria-busy="true">
-            <div className="ag-stack">
-                {Array.from({ length: count }).map((_, i) => (
-                    <div key={i} className="ag-turn-card ag-skeleton-card">
-                        <div className="ag-turn-card-head">
-                            <Skeleton width={52} height={52} radius={12} style={{ flex: "none" }} />
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                                <Skeleton width="60%" height={18} />
-                                <Skeleton width="40%" height={12} style={{ marginTop: 8 }} />
-                            </div>
-                        </div>
-                        <Skeleton width="100%" height={44} radius={12} style={{ marginTop: 14 }} />
-                    </div>
-                ))}
+        <div className="ag-turn-card ag-skeleton-card">
+            <div className="ag-turn-card-head">
+                <Skeleton width={52} height={52} radius={12} style={{ flex: "none" }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    <Skeleton width="60%" height={18} />
+                    <Skeleton width="40%" height={12} style={{ marginTop: 8 }} />
+                </div>
             </div>
+            <Skeleton width="100%" height={44} radius={12} style={{ marginTop: 14 }} />
         </div>
     );
 }
