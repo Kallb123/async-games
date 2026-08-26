@@ -39,6 +39,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Rows grow into the space they need",
+                detail: "A placeholder row can only guess how tall the real thing will be, so when your games arrived the list used to snap to its real size and shunt everything under your thumb. Each row now slides from the placeholder's height to its own — up or down — so the page settles instead of hopping.",
+            },
+            {
                 title: "A game's result fills in where it will sit",
                 detail: "Opening a finished game used to flash a stack of placeholder rows and then throw the whole page away for a different one. The summary and the stats now load into the shape they'll take — and the little match pop-up on your profile fills in the same way instead of saying “Loading…”.",
             },
@@ -53,10 +57,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "What's new folds away",
                 detail: "These notes now start folded up at the bottom of the home page, so your games have the screen to themselves — tap the heading whenever you want to see what has changed.",
-            },
-            {
-                title: "A screen that breaks now offers you a way out",
-                detail: "If something goes wrong drawing a page, you get a proper Async Games screen with a “try again” button and a way back to your games — instead of a blank page with an error on it and nothing to tap.",
             },
         ],
     },
