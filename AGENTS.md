@@ -89,10 +89,15 @@ a system font** and skips the cards with a warning when it isn't.
   in the player's language, and drop the oldest line once a group runs past
   five. Internal-only work (refactors, docs, CI, dependency bumps) does not
   belong there.
-- Before committing UI changes, run `npm run build` and `npx tsc --noEmit`;
-  both must pass. If you touch the game engine (`src/utils/apiModels/`), also run
-  `npm test` — the serializable-registry test guards that every game's rules
-  module stays wired into the `GameLogic` barrel.
+- Before committing UI changes, run `npm run build`, `npx tsc --noEmit` and
+  `npm run lint`; all three must pass. If you touch the game engine
+  (`src/utils/apiModels/`), also run `npm test` — the serializable-registry test
+  guards that every game's rules module stays wired into the `GameLogic` barrel.
+  CI runs all four on every push, and `lint` runs with `--max-warnings 0`, so a
+  single warning fails it. Don't skip the linter because a change "only touches
+  presentation": the React Compiler rules it enforces (`react-hooks/refs` and
+  friends) catch real mistakes that the type checker and the build both let
+  through.
 - **Review with the crew before committing** (see below). At minimum, run
   `caveman` over any UI, component, hook or game change.
 

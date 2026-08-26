@@ -110,8 +110,10 @@ stop. Do not manufacture findings.
 ## Step 4 — Verify the gate (when Bash available)
 
 A simpler diff must still build. If you changed code and Bash is available, note
-whether `npx tsc --noEmit` and `npm run build` pass; if the game engine
-(`src/utils/apiModels/`) was touched, `npm test` too. Report failures as facts,
+whether `npx tsc --noEmit`, `npm run lint` and `npm run build` pass; if the game
+engine (`src/utils/apiModels/`) was touched, `npm test` too. All four are CI
+gates, and the linter is the one that catches a hook rule the other three
+don't. Report failures as facts,
 not caveman jokes.
 
 ## Caveman does NOT
