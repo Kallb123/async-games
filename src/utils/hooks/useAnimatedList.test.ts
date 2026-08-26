@@ -11,7 +11,9 @@ describe("planList", () => {
         const plan = planList(placeholders(2), ["a", "b"]);
 
         expect(plan.order).toEqual(["a", "b"]);
-        expect([...plan.replaced]).toEqual(["placeholder-0", "placeholder-1"]);
+        // Each row is told which placeholder it took over, so it can transition
+        // from the height that placeholder was standing at.
+        expect([...plan.handovers]).toEqual([["placeholder-0", "a"], ["placeholder-1", "b"]]);
         expect(plan.entering).toEqual([]);
     });
 
@@ -27,7 +29,7 @@ describe("planList", () => {
 
         // The spare stays where it was, below the row that took the first slot.
         expect(plan.order).toEqual(["a", "placeholder-1"]);
-        expect([...plan.replaced]).toEqual(["placeholder-0"]);
+        expect([...plan.handovers]).toEqual([["placeholder-0", "a"]]);
         expect(plan.entering).toEqual([]);
     });
 
@@ -35,7 +37,7 @@ describe("planList", () => {
         const plan = planList(placeholders(2), []);
 
         expect(plan.order).toEqual(["placeholder-0", "placeholder-1"]);
-        expect(plan.replaced.size).toBe(0);
+        expect(plan.handovers.size).toBe(0);
     });
 
     it("keeps a departing row in the slot it held", () => {

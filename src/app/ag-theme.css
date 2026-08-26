@@ -19,6 +19,9 @@
     --ag-row-divider: 1.5px dashed var(--ag-line-dashed);
     /* Space between the cards of an `.ag-stack`. */
     --ag-stack-gap: 12px;
+    /* How long a row takes to grow in, shrink away or move between two
+       natural heights. `ANIM_MS` in `Collapse.tsx` mirrors this. */
+    --ag-anim-ms: 450ms;
 
     --ag-terracotta: oklch(0.55 0.15 40);
     --ag-terracotta-deep: oklch(0.45 0.14 40);
@@ -1109,17 +1112,30 @@ a.ag-list-row, a.ag-list-row-main {
    track runs 0fr → 1fr, the one way to transition to a height the content
    decides. Clipping and the collapsed start only apply while it is arriving or
    leaving, so a settled row sits in a plain grid box that can't cut off a
-   shadow or a focus ring. */
+   shadow or a focus ring.
+
+   A hand-over is the one case the grid track can't cover: swapping a
+   placeholder for a real row of a different height changes nothing the track
+   can interpolate, so `Collapse` measures the two and drives `height` from one
+   to the other. That only animates while `--ag-anim-height` gives it a
+   duration, which keeps a plain content reflow snapping the way it always
+   has. */
 .ag-anim-item {
     display: grid;
     grid-template-rows: 1fr;
-    transition: grid-template-rows 450ms ease, opacity 320ms ease;
+    transition: grid-template-rows var(--ag-anim-ms) ease, opacity 320ms ease, height var(--ag-anim-height, 0s) ease;
 }
 
 .ag-anim-item-inner { min-height: 0; }
 
 .ag-anim-item--enter > .ag-anim-item-inner,
-.ag-anim-item--exit > .ag-anim-item-inner { overflow: hidden; }
+.ag-anim-item--exit > .ag-anim-item-inner,
+.ag-anim-item--resize > .ag-anim-item-inner { overflow: hidden; }
+
+/* Set by `Collapse` for as long as it is moving the box between two natural
+   heights — whatever of the new content doesn't fit yet is hidden rather than
+   spilling over the row below. */
+.ag-anim-item--resize { --ag-anim-height: var(--ag-anim-ms); }
 
 /* Arrivals start collapsed and are transitioned open from there. Browsers
    without @starting-style just show the row straight away. */

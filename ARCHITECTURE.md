@@ -740,10 +740,11 @@ one-liner fails with a message naming the exact file and line to add.
   [`docs/environments.md`](./docs/environments.md) has the full variable split
   and the Clerk production cut-over.
 - **CI** (`.github/workflows/ci.yml`): on push/PR to `main`, runs
-  `npx tsc --noEmit` (type check), `npm test` (Vitest), and `npx next build`. All
-  must pass before merge. Locally, run `npm run build`, `npx tsc --noEmit`, and
-  `npm test` before committing — the type checker, build, and test suite are the
-  safety net.
+  `npx tsc --noEmit` (type check), `npm run lint` (ESLint, `--max-warnings 0`),
+  `npm test` (Vitest), and `npx next build`. All must pass before merge.
+  Locally, run `npm run build`, `npx tsc --noEmit`, `npm run lint` and
+  `npm test` before committing — the type checker, linter, build, and test
+  suite are the safety net.
 - **Tests** run on [Vitest](https://vitest.dev) (`npm test`). Most of them are
   plain unit tests over the pure logic — game rules, recaps, replay, the turn
   timer, the request-body helpers. Two other kinds are worth knowing about:
