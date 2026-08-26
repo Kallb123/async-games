@@ -65,6 +65,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "The home page stops flashing the wrong screen at you",
+                detail: "Arriving at Async Games without being signed in used to show you an empty version of somebody's games list, loading, before throwing it away and showing you the welcome page. You now land on the right screen first time.",
+            },
+            {
                 title: "Everyone gets called by their name",
                 detail: "Once you'd played with more than a handful of people, your home screen started calling some of them “Unknown player” — most often on your finished games. Everybody's name comes through now, however long you've been playing.",
             },
@@ -79,14 +83,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Ending a game really ends it",
                 detail: "If somebody ended a game while it was your turn, you could carry on playing it — and the finished game would end up disagreeing with itself about who won. It's properly over for everyone now.",
-            },
-            {
-                title: "A stuck move no longer freezes the board",
-                detail: "If your move never reached us — a dropped signal, a tunnel — the board used to stay locked with nothing to tap until you reloaded the page. It now gives up on the move and shows you where the game actually is.",
-            },
-            {
-                title: "Everyone accepting at once no longer strands the game",
-                detail: "If two of you accepted the same invite in the same moment, the game sometimes never started — the invite just sat there with everybody in it. It starts now, whoever taps last. A double-tapped accept can't deal you two copies of the same game any more either.",
             },
         ],
     },

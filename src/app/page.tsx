@@ -1,73 +1,21 @@
-'use client'
-import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
-import { FcmTokenComp } from "@/components/FirebaseForeground";
-import { usePathname } from "next/navigation";
-import IncomingInviteList from "@/components/IncomingInvitesList";
-import OutgoingInviteList from "@/components/OutgoingInviteList";
-import MyTurnList from "@/components/MyTurnList";
-import TheirTurnList from "@/components/TheirTurnList";
-import MyCompleteList from "@/components/MyCompleteList";
-import { useDashboard } from "@/utils/hooks/useDashboard";
-import Avatar from "@/components/ui/Avatar";
+import { auth } from "@clerk/nextjs/server";
+import Dashboard from "@/components/Dashboard";
 import Landing from "@/components/Landing";
-import Brand from "@/components/ui/Brand";
-import WhatsNew from "@/components/ui/WhatsNew";
-import Link from "next/link";
-import { profileImageUrl } from "@/utils/ui/avatar";
 
-export default function Home() {
-  const pathName = usePathname();
-  console.log(`GET ${pathName}`);
-  // The one screen anonymous visitors are allowed to stay on: rather than
-  // bounce them to /login, show them what the platform is.
-  const { user, isLoaded } = useAuthGuard({ allowSignedOut: true });
-  // Above the Landing return so the hook order never changes. It costs a
-  // signed-out visitor nothing: useRefreshableData doesn't fetch until the
-  // viewer is authorised.
-  const { dashboard, isLoading, isRefreshing, refresh } = useDashboard();
+/**
+ * Home is two screens — the dashboard for a player, the public landing page
+ * for everyone else — and the browser can't tell which it is until Clerk has
+ * loaded. Deciding it here, from the session cookie the middleware has already
+ * read, means neither screen flashes the other first: a visitor with no
+ * account used to watch the dashboard's skeletons load and then get replaced
+ * by the landing page.
+ *
+ * `auth()` makes this route dynamic, which is what lets the first paint be the
+ * right screen — including its server-rendered content, rather than an empty
+ * shell waiting on JavaScript.
+ */
+export default async function Home() {
+  const { userId } = await auth();
 
-  if (isLoaded && !user) {
-    return <Landing />;
-  }
-
-  const displayName = user?.firstName || user?.username || "there";
-
-  return (
-    <main>
-      <FcmTokenComp />
-
-      <div className="ag-topbar">
-        <Brand />
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", justifyContent: "center" }}>
-          <Link href="/newgame" aria-label="New game" style={{ borderRadius: "50%", background: "var(--ag-green)", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center" }}>+</Link>
-          <Link href="/profile" aria-label="Your profile">
-            <Avatar name={displayName} imageUrl={profileImageUrl(user)} size={40} ring="var(--ag-terracotta)" />
-          </Link>
-        </div>
-      </div>
-
-      <MyTurnList games={dashboard.myTurn} isLoading={isLoading} isRefreshing={isRefreshing} />
-      <IncomingInviteList invites={dashboard.incoming} isLoading={isLoading} isRefreshing={isRefreshing} onChanged={refresh} />
-      <TheirTurnList games={dashboard.theirTurn} isLoading={isLoading} isRefreshing={isRefreshing} />
-      <OutgoingInviteList invites={dashboard.outgoing} isLoading={isLoading} isRefreshing={isRefreshing} onChanged={refresh} />
-      <MyCompleteList games={dashboard.completed} isLoading={isLoading} isRefreshing={isRefreshing} limit={10} />
-
-      <div className="ag-section ag-btn-row" style={{ marginTop: 8 }}>
-        <Link href="/newgame" aria-label="New game" className="ag-cta ag-cta--dark">
-          <div className="ag-cta-main">
-            <div className="ag-cta-title">New game</div>
-            <div className="ag-cta-sub">Pick from the library</div>
-          </div>
-        </Link>
-        <Link href="/profile" aria-label="Your profile" className="ag-cta" style={{ border: "2px solid var(--ag-dark)", color: "var(--ag-ink)" }}>
-          <div className="ag-cta-main">
-            <div className="ag-cta-title">Friends</div>
-            <div className="ag-cta-sub">Challenge someone</div>
-          </div>
-        </Link>
-      </div>
-
-      <WhatsNew />
-    </main>
-  );
+  return userId ? <Dashboard /> : <Landing />;
 }
