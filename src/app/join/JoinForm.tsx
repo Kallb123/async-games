@@ -94,14 +94,34 @@ interface JoinResult {
     resumeUrl?: string;
 }
 
+interface JoinScreenProps {
+  /**
+   * Whether the request that asked for this page carried a session, as
+   * `page.tsx` read it off the cookie. Stands in for Clerk until Clerk has
+   * loaded in the browser, so the first paint is one of the two screens
+   * below rather than nothing.
+   */
+  initiallySignedIn: boolean;
+  /** The guest form's starting name and die face — drawn on the server so
+   *  the browser's first render agrees with the HTML it's hydrating. */
+  initialName: string;
+  initialDie: number;
+}
+
 // A code-holder with an account, landing here from a link or by typing the
 // URL. A guest with no account belongs on this same route, but goes through
 // its own signed-out lockup (AuthScreen) below — the join link isn't a
 // convenience for them, it's the whole flow.
-function JoinScreen() {
+function JoinScreen({ initiallySignedIn, initialName, initialDie }: JoinScreenProps) {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
   const { user, isLoaded } = useAuthGuard({ allowSignedOut: true });
+  // Which of the two screens this is. Clerk is the authority the moment it
+  // can speak; until then it's whatever the server read off the session
+  // cookie. They disagree only when the browser rejects a session the server
+  // saw (signed out elsewhere, expired, revoked), and the screen corrects
+  // itself when Clerk lands.
+  const signedIn = isLoaded ? !!user : initiallySignedIn;
   const { signIn, setActive } = useSignIn();
   const router = useRouter();
   const { showToast } = useToast();
@@ -120,9 +140,9 @@ function JoinScreen() {
   // The ref tracks every name this reroll sequence has already offered, so
   // mashing the dice doesn't hand back the same name twice in a row — it's
   // not render state, nothing on screen depends on the history itself.
-  const [name, setName] = useState(() => randomGuestName());
-  const offeredNamesRef = useRef<string[]>([name]);
-  const [nameDie, setNameDie] = useState(() => DiceRoll(6));
+  const [name, setName] = useState(initialName);
+  const offeredNamesRef = useRef<string[]>([initialName]);
+  const [nameDie, setNameDie] = useState(initialDie);
   const rerollName = () => {
     const next = randomGuestName(offeredNamesRef.current);
     offeredNamesRef.current = [...offeredNamesRef.current, next];
@@ -181,7 +201,7 @@ function JoinScreen() {
   // signed-out screen below — fetched as soon as a complete code is on
   // screen, whether it arrived by link or by typing.
   useEffect(() => {
-    if (user) return;
+    if (signedIn) return;
     const joinCode = normaliseJoinCode(code);
     if (joinCode.length !== JOIN_CODE_LENGTH) return;
     let cancelled = false;
@@ -190,7 +210,7 @@ function JoinScreen() {
       .then(data => { if (!cancelled) setFetchedPreview({ joinCode, preview: data }); })
       .catch(() => { if (!cancelled) setFetchedPreview({ joinCode, preview: null }); });
     return () => { cancelled = true; };
-  }, [code, user]);
+  }, [code, signedIn]);
 
   const preview = fetchedPreview?.joinCode === normaliseJoinCode(code) ? fetchedPreview.preview : null;
 
@@ -282,7 +302,10 @@ function JoinScreen() {
     }
   };
 
-  if (!isLoaded || (resuming && !user)) {
+  // A resume link is the one arrival with no screen to show: it carries no
+  // session for the server to have read, and the ticket below is about to
+  // mint one, so neither screen is the right answer until it has.
+  if (resuming && !user) {
     return null;
   }
 
@@ -304,7 +327,7 @@ function JoinScreen() {
     );
   }
 
-  if (!user) {
+  if (!signedIn) {
     const title = preview ? "You're invited!" : (linkedCode ? "You've been invited" : "Got a code?");
     const subtitle = preview
       ? `${invitedYouTo(preview.sender, preview.gameFriendlyName)} — ${seatsLeftLabel(preview.openSeatCount)}.`
@@ -379,10 +402,10 @@ function JoinScreen() {
 
 // useSearchParams needs a Suspense boundary to be read during rendering, the
 // same wrapper every `newgame` setup screen uses to read a rematch link.
-export default function JoinForm() {
+export default function JoinForm(props: JoinScreenProps) {
   return (
     <Suspense fallback={null}>
-      <JoinScreen />
+      <JoinScreen {...props} />
     </Suspense>
   );
 }
