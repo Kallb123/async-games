@@ -24,10 +24,14 @@ export function avatarColor(seed: string | null | undefined): { bg: string; fg: 
     return PALETTE[hash(seed) % PALETTE.length];
 }
 
+// The letters for someone's badge — empty when we have no name to work from,
+// which is the signal for `Avatar` to draw the silhouette instead. A name we
+// haven't loaded yet is nobody in particular, and a letter from a placeholder
+// like "there" or "You" reads as a real person's initial.
 export function initials(name: string | null | undefined): string {
-    if (!name) return "?";
+    if (!name) return "";
     const parts = name.trim().split(/\s+/).filter(Boolean);
-    if (parts.length === 0) return "?";
+    if (parts.length === 0) return "";
     if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
     return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }

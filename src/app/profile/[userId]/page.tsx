@@ -41,7 +41,9 @@ export default function FriendProfile({ params }: { params: Promise<{ userId: st
     const forbidden = status === 403;
 
     const fullName = profileUser ? [profileUser.firstName, profileUser.lastName].filter(name => name).join(" ") : "";
-    const friendDisplayName = profileUser?.firstName || profileUser?.username || (isLoading ? "…" : "");
+    // Null until their profile arrives — the header shows placeholders rather
+    // than an ellipsis standing in for a name.
+    const friendDisplayName = profileUser ? (profileUser.firstName || profileUser.username || "Player") : null;
 
     return (
         <main>

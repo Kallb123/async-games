@@ -2,9 +2,11 @@
 
 import { ReactNode } from "react";
 import Avatar from "@/components/ui/Avatar";
+import Skeleton from "@/components/ui/Skeleton";
 
 interface ProfileIdentityProps {
-    name: string;
+    /** Null until we know whose profile this is — the header then shows placeholders. */
+    name: string | null | undefined;
     username: string | null | undefined;
     imageUrl?: string | null;
     fullName?: string;
@@ -19,6 +21,8 @@ interface ProfileIdentityProps {
 // Avatar + display name + "@username · Full Name" header. Shared by a
 // player's own profile and a friend's read-only profile; only your own
 // passes the editing props, so a friend's avatar stays a plain badge.
+// With no name yet the whole header is a placeholder — silhouette badge and
+// skeleton lines — rather than a stand-in word and its initial.
 export default function ProfileIdentity({
     name, username, imageUrl, fullName, onAvatarClick, avatarBusy, action,
 }: ProfileIdentityProps) {
@@ -43,11 +47,22 @@ export default function ProfileIdentity({
                     </button>
                 )
                 : avatar}
-            <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ font: "800 24px/1.1 var(--ag-font)", color: "var(--ag-ink)" }}>{name}</div>
-                <div style={{ font: "500 12px var(--ag-font)", color: "var(--ag-ink-soft)" }}>
-                    {username ? `@${username}` : "No username"}{fullName ? ` · ${fullName}` : ""}
-                </div>
+            <div style={{ flex: 1, minWidth: 0 }} aria-busy={!name || undefined}>
+                {name
+                    ? (
+                        <>
+                            <div style={{ font: "800 24px/1.1 var(--ag-font)", color: "var(--ag-ink)" }}>{name}</div>
+                            <div style={{ font: "500 12px var(--ag-font)", color: "var(--ag-ink-soft)" }}>
+                                {username ? `@${username}` : "No username"}{fullName ? ` · ${fullName}` : ""}
+                            </div>
+                        </>
+                    )
+                    : (
+                        <>
+                            <Skeleton width={150} height={20} />
+                            <Skeleton width={100} height={11} style={{ marginTop: 8 }} />
+                        </>
+                    )}
                 {action && <div style={{ marginTop: 6 }}>{action}</div>}
             </div>
         </div>
