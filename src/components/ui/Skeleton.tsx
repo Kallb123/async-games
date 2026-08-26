@@ -69,3 +69,12 @@ export function SkeletonTurnCard() {
         </div>
     );
 }
+
+/** A placeholder row of "recent form" result chips, shaped like `.ag-result-chip`. */
+export function SkeletonChips({ count = 10 }: { count?: number }) {
+    return (
+        <div className="ag-chips" aria-hidden>
+            {Array.from({ length: count }).map((_, i) => <Skeleton key={i} width={26} height={26} radius="50%" />)}
+        </div>
+    );
+}
