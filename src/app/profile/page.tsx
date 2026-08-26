@@ -16,7 +16,7 @@ import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { useNowToTheMinute } from "@/utils/hooks/useNow";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useProfilePicture } from "@/utils/hooks/useProfilePicture";
-import { displayName, isGuest } from "@/utils/ui/players";
+import { displayName, isGuest, profileHeading } from "@/utils/ui/players";
 import { profileImageUrl } from "@/utils/ui/avatar";
 import type { IGameStats, IRecentMatch } from "@/app/api/stats/route";
 import type { IReceivedReaction } from "@/app/api/reactions/route";
@@ -114,11 +114,10 @@ export default function Profile() {
         .catch(() => showToast('Something went wrong. Please try again.', 'danger'));
     }
 
-    const fullName = [user?.firstName, user?.lastName].filter(name => name).join(" ");
-    // Null while Clerk is still loading you, so the header sits as a
-    // placeholder instead of showing "Y" for a stand-in "You".
-    const ownDisplayName = user ? (user.firstName || user.username || "You") : null;
     const guest = !!user && isGuest(user);
+    // Null name while Clerk is still loading you, so the header sits as a
+    // placeholder instead of showing "Y" for a stand-in "You".
+    const heading = profileHeading(user, "You");
 
     const handleSignOut = () => {
         if (guest && !window.confirm("Sign out? There's no way back into a guest account — you'll lose your games and history for good.")) return;
@@ -136,10 +135,8 @@ export default function Profile() {
 
             {/* Identity — your own avatar is the way in to changing your picture */}
             <ProfileIdentity
-                name={ownDisplayName}
-                username={user?.username}
+                {...heading}
                 imageUrl={profileImageUrl(user)}
-                fullName={fullName}
                 onAvatarClick={picture.openPicker}
                 avatarBusy={picture.isSaving}
                 action={picture.hasPicture && (

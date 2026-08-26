@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import Avatar from '@/components/ui/Avatar';
 import Section from '@/components/ui/Section';
 import { profileImageUrl } from '@/utils/ui/avatar';
+import { personalName } from '@/utils/ui/players';
 
 interface UserInviteProps {
     userList: string[],
@@ -55,7 +56,7 @@ export default function UserInviteList({ userList, setItem }: UserInviteProps) {
 
             <div className="ag-chips">
                 <span className="ag-person-chip ag-person-chip--you">
-                    <Avatar name={user?.firstName || user?.username || "You"} imageUrl={profileImageUrl(user)} size={28} />
+                    <Avatar name={personalName(user, "You")} imageUrl={profileImageUrl(user)} size={28} />
                     You
                 </span>
                 {added.map(username => (

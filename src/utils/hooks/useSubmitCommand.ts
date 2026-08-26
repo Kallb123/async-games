@@ -2,18 +2,15 @@ import { useCallback, useRef, useState } from "react";
 import type { IGameCommand } from "@/utils/apiModels/GameLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
-import { isGuest } from "@/utils/ui/players";
+import { isGuest, type NamedUser } from "@/utils/ui/players";
 import { recordGuestMoved } from "@/utils/hooks/useGuestMoved";
 
 // A command is a write, so it gets longer than a read before being given up
 // on — but it still gets one. See the `signal` below.
 const COMMAND_TIMEOUT_MS = 30000;
 
-interface SubmittingUser {
+interface SubmittingUser extends NamedUser {
     id: string;
-    username?: string | null;
-    firstName?: string | null;
-    publicMetadata?: { guest?: boolean };
 }
 
 /**
@@ -73,7 +70,9 @@ export function useSubmitCommand<T>(
         inFlightRef.current = true;
         command.gameId = gameId;
         command.senderId = user.id;
-        command.senderUsername = user.username || user.firstName || user.id;
+        // No `senderUsername`: the route resolves the sender's name from the
+        // authenticated caller before Execute runs, so naming ourselves here
+        // would only be a value the server throws away.
         setSubmitting(true);
         setPendingTarget(target ?? null);
         try {

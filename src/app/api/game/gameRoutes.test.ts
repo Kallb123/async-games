@@ -26,8 +26,8 @@ vi.mock('@/utils/games/DiceRoll', () => ({ DiceRoll: () => 3, DiceRollRequest: a
 
 import { runAfterCallbacks } from '@/utils/testing/afterStub';
 import {
-    ANN, BOB, jsonPost, rawPost, resetApiRouteStubs, seedGame, sentPushes, signIn, storedGame,
-    stubClerkUsers
+    ANN, BOB, jsonPost, rawPost, resetApiRouteStubs, seedGame, sentPushes, signIn, signInUnresolvable,
+    storedGame, stubClerkUsers
 } from '@/utils/testing/apiRoute';
 import { POST as command } from './command/route';
 import { POST as end } from './end/route';
@@ -209,6 +209,64 @@ describe('POST /api/game/command', () => {
         const response = await command(jsonPost('/api/game/command', diceRoll({ recordedRoll: 6 })));
 
         expect((await response.json()).outcome.roll).toBe(3);
+    });
+
+    it('names the mover itself, whatever name the request brought with it', async () => {
+        signIn(ANN);
+        seedSnakesAndLadders();
+
+        // The history line every opponent reads is written from this field, so
+        // a client that got to fill it in could put any text it liked in front
+        // of another player.
+        await command(jsonPost('/api/game/command', diceRoll({
+            senderUsername: 'Async Games security — verify at evil.example'
+        })));
+
+        const saved = storedGame('game_1')!;
+        const history = (saved.gameState as { history: string[] }).history;
+        expect(history.join('\n')).not.toContain('evil.example');
+        expect(history[0]).toContain('ann');
+        expect((commandHistory(saved)[0] as { senderUsername: string }).senderUsername).toBe('ann');
+    });
+
+    it('names a guest by the name they typed, not their account username', async () => {
+        // A guest's Clerk username is the random account id createGuest()
+        // minted; the name they chose at the join screen is their firstName.
+        const guest = { id: 'user_guest', username: 'guest_3f2ab9c14d', firstName: 'Dave', publicMetadata: { guest: true } };
+        signIn(guest);
+        stubClerkUsers(BOB);
+        seedSnakesAndLadders({ userIdList: [guest.id, BOB.id], currentTurn: guest.id, gameState: { turnOrder: [guest.id, BOB.id], history: [], commandHistory: [] } },
+            { [guest.id]: 10, [BOB.id]: 20 });
+
+        await command(jsonPost('/api/game/command', diceRoll({ senderId: guest.id })));
+
+        const history = (storedGame('game_1')!.gameState as { history: string[] }).history;
+        expect(history[0]).toContain('Dave');
+        expect(history.join('\n')).not.toContain('guest_3f2ab9c14d');
+    });
+
+    it('plays the turn even when Clerk cannot name the player', async () => {
+        signIn(ANN);
+        seedSnakesAndLadders({
+            gameState: {
+                turnOrder: [ANN.id, BOB.id],
+                history: ['ann rolled a 4'],
+                // Their own last move carries the name this game knows them by.
+                commandHistory: [{ ...diceRoll(), id: '00000000-0000-0000-0000-000000000000' }]
+            }
+        });
+        // Same player, but Clerk is now unreachable for them.
+        signInUnresolvable(ANN.id);
+
+        const response = await command(jsonPost('/api/game/command', diceRoll()));
+
+        // The move is what the request was for; the name is not worth losing it.
+        expect(response.status).toBe(200);
+        const saved = storedGame('game_1')!;
+        expect(positions(saved)[ANN.id].position).toBe(13);
+        const history = (saved.gameState as { history: string[] }).history;
+        expect(history[0]).toContain('ann');
+        expect(history[0]).not.toContain('Unknown player');
     });
 
     it('refuses a game that has finished', async () => {

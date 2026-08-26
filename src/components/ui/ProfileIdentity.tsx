@@ -3,13 +3,13 @@
 import { ReactNode } from "react";
 import Avatar from "@/components/ui/Avatar";
 import Skeleton from "@/components/ui/Skeleton";
+import type { ProfileHeading } from "@/utils/ui/players";
 
-interface ProfileIdentityProps {
-    /** Null until we know whose profile this is — the header then shows placeholders. */
-    name: string | null | undefined;
-    username: string | null | undefined;
+// The name/handle/subtitle half comes straight from `profileHeading`, so the
+// two screens that show a profile spread one value in rather than deriving
+// four props apiece — and a guest reads the same on both.
+interface ProfileIdentityProps extends ProfileHeading {
     imageUrl?: string | null;
-    fullName?: string;
     /** When set, the avatar becomes the button that starts the picture flow. */
     onAvatarClick?: () => void;
     /** Shows a spinner over the avatar while the new picture is saving. */
@@ -18,13 +18,13 @@ interface ProfileIdentityProps {
     action?: ReactNode;
 }
 
-// Avatar + display name + "@username · Full Name" header. Shared by a
+// Avatar + display name + "@handle · Full Name" header. Shared by a
 // player's own profile and a friend's read-only profile; only your own
 // passes the editing props, so a friend's avatar stays a plain badge.
 // With no name yet the whole header is a placeholder — silhouette badge and
 // skeleton lines — rather than a stand-in word and its initial.
 export default function ProfileIdentity({
-    name, username, imageUrl, fullName, onAvatarClick, avatarBusy, action,
+    name, handle, noHandleLabel = "No username", imageUrl, fullName, onAvatarClick, avatarBusy, action,
 }: ProfileIdentityProps) {
     const avatar = <Avatar name={name} imageUrl={imageUrl} size={64} ring="var(--ag-terracotta)" />;
 
@@ -53,7 +53,7 @@ export default function ProfileIdentity({
                         <>
                             <div style={{ font: "800 24px/1.1 var(--ag-font)", color: "var(--ag-ink)" }}>{name}</div>
                             <div style={{ font: "500 12px var(--ag-font)", color: "var(--ag-ink-soft)" }}>
-                                {username ? `@${username}` : "No username"}{fullName ? ` · ${fullName}` : ""}
+                                {handle ? `@${handle}` : noHandleLabel}{fullName ? ` · ${fullName}` : ""}
                             </div>
                         </>
                     )

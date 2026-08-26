@@ -110,6 +110,15 @@ export function signIn(user: Partial<User> & { id: string }) {
     signedInUserId = user.id;
 }
 
+/**
+ * Signed in, but Clerk can't resolve them — an outage, a rate limit, or an
+ * account deleted mid-session. Routes that name the caller have to cope with
+ * this rather than fail the write they were actually asked to do.
+ */
+export function signInUnresolvable(userId: string) {
+    signedInUserId = userId;
+}
+
 /** Users Clerk can resolve, without signing any of them in. */
 export function stubClerkUsers(...users: (Partial<User> & { id: string })[]) {
     for (const user of users) {

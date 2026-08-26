@@ -13,6 +13,7 @@ import Brand from "@/components/ui/Brand";
 import WhatsNew from "@/components/ui/WhatsNew";
 import Link from "next/link";
 import { profileImageUrl } from "@/utils/ui/avatar";
+import { personalName } from "@/utils/ui/players";
 
 /**
  * The signed-in home screen. `app/page.tsx` decides on the server who gets
@@ -40,7 +41,7 @@ export default function Dashboard() {
 
   // No fallback name: until Clerk hands us the user, the badge in the top bar
   // shows a silhouette rather than an initial taken from a placeholder word.
-  const displayName = user?.firstName || user?.username || null;
+  const displayName = personalName(user);
 
   return (
     <main>

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildTimeline, computePerTurnStat } from "@/utils/games/replay";
+import { UNKNOWN_PLAYER_NAME } from "@/utils/users/clerk";
 import { buildEventFeed } from "@/utils/games/recap";
 import { deserializeJSON } from "@/utils/apiModels/Serialisable";
 import {
@@ -187,6 +188,45 @@ describe("Train Time replay", () => {
         expect(timeline.snapshots.length).toBe(game.gameState.commandHistory.length + 1);
         expect(timeline.snapshots[timeline.currentIndex].specificGameState)
             .toEqual(gameStateToModel(game.specificGameState, userIdNameMap, "u1"));
+    });
+
+    it("names the mover from today's resolved names, not the name frozen on the command", async () => {
+        const game = await playWholeGame(6);
+        // What a guest's client used to stamp on every command it sent: their
+        // random Clerk account username, not the name they typed at the join
+        // screen. It is in the database of every game they have already played.
+        game.gameState.commandHistory.forEach((command) => {
+            (command as IGameCommand).senderUsername = "guest_3f2ab9c14d";
+        });
+
+        const timeline = await buildTimeline(game, { ...NAMES }, [], undefined, "u1");
+        const played = timeline.snapshots.map((snapshot) => snapshot.command).filter((c) => c !== null);
+
+        expect(played.length).toBeGreaterThan(0);
+        expect(played.every((c) => c!.senderUsername === NAMES[c!.senderId as keyof typeof NAMES])).toBe(true);
+        // And the prose replay regenerates says the same, since it is written
+        // from the command as Execute sees it.
+        const history = timeline.snapshots[timeline.currentIndex].history.join("\n");
+        expect(history).not.toContain("guest_3f2ab9c14d");
+        expect(history).toContain("Alice");
+    });
+
+    it("keeps a swept player's recorded name rather than calling them Unknown", async () => {
+        const game = await playWholeGame(6);
+        // A guest's Clerk account is deleted a week after their last game
+        // (GUEST_SWEEP_DAYS), so the directory has no name left for them —
+        // userIdListToUserIdNameMap fills that entry with the placeholder. The
+        // name their own moves carry is then the only one anybody has.
+        const swept = { ...NAMES, u1: UNKNOWN_PLAYER_NAME };
+
+        const timeline = await buildTimeline(game, swept, [], undefined, "u2");
+        const theirs = timeline.snapshots
+            .map((snapshot) => snapshot.command)
+            .filter((command) => command?.senderId === "u1");
+
+        expect(theirs.length).toBeGreaterThan(0);
+        expect(theirs.every((command) => command!.senderUsername === "Alice")).toBe(true);
+        expect(timeline.snapshots[timeline.currentIndex].history.join("\n")).not.toContain(UNKNOWN_PLAYER_NAME);
     });
 
     it("shapes in the viewer's own hand and nobody else's", async () => {

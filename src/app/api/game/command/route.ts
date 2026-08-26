@@ -1,12 +1,12 @@
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildGameLostNotification, buildGameWonNotification, buildYourTurnNotification } from '@/utils/firebase/notificationContent';
-import { userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
+import { UNKNOWN_PLAYER_NAME, buildUserDirectory, userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
 import { readableName } from '@/utils/ui/players';
 import { auth } from '@clerk/nextjs/server';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { ICommandOutcome, IGameCommand, IGameType, stripRecordedRandomness } from '@/utils/apiModels/GameLogic';
-import { trySave } from '@/utils/mongodb/GameData';
+import { IGameData, trySave } from '@/utils/mongodb/GameData';
 import { requireLiveGame } from '@/utils/games/liveGame';
 import { isCommandForGameType } from '@/utils/games/gameCommands';
 import { recordGameResult } from '@/utils/mongodb/GameResultData';
@@ -39,6 +39,42 @@ function readCommand(body: string): IGameCommand | null {
     return null;
   }
   return command;
+}
+
+/**
+ * The name to write into this game's history for the player taking their turn.
+ *
+ * A display name is worth a Clerk lookup; it is not worth the turn. Clerk
+ * rate-limiting or timing out here would 500 the request *before* Execute and
+ * trySave, so the move would be lost rather than merely misnamed — and an
+ * unresolvable id would freeze "Unknown player rolled a 6" into prose the live
+ * board never regenerates. Both degrade to the last name this game recorded
+ * for them instead. Nothing is stuck with a degraded name for long: every
+ * replayed view (recap, timeline, planning) re-resolves it from today's
+ * directory, and their next turn tries Clerk again.
+ */
+async function senderName(gameData: IGameData, userId: string): Promise<string> {
+  try {
+    const name = (await buildUserDirectory([userId])).name(userId);
+    if (name && name !== UNKNOWN_PLAYER_NAME) {
+      return name;
+    }
+  } catch (error) {
+    console.error(`Failed to resolve a name for ${userId}; falling back to their last recorded one`, error);
+  }
+  return lastRecordedName(gameData, userId) ?? "Someone";
+}
+
+/** The name this game last recorded for a player, from their own last move. */
+function lastRecordedName(gameData: IGameData, userId: string): string | undefined {
+  const history = gameData.gameState.commandHistory ?? [];
+  for (let i = history.length - 1; i >= 0; i--) {
+    const command = history[i] as { senderId?: string, senderUsername?: string } | null;
+    if (command?.senderId === userId && command.senderUsername) {
+      return command.senderUsername;
+    }
+  }
+  return undefined;
 }
 
 export async function POST(request: NextRequest) {
@@ -88,6 +124,16 @@ export async function POST(request: NextRequest) {
   // rolling fresh, so a request that arrived carrying one would be choosing its
   // own dice. Replay (buildTimeline) still honours them; a live request can't.
   stripRecordedRandomness(commandRequest);
+
+  // The client supplies the move, never the name on it. `senderUsername` is
+  // the name Execute writes into `gameState.history` — prose every opponent
+  // reads on the board, and the body of their "your turn" push for a game
+  // with no recap adapter — so a client that named itself could put any text
+  // it liked in front of another player, and a guest's client named them by
+  // the random account id createGuest() minted rather than the name they
+  // typed. Resolved here from the authenticated caller instead, the same way
+  // the game's usernameList resolves them.
+  commandRequest.senderUsername = await senderName(gameData, userId);
 
   const commandOutcome = await commandRequest.Execute(gameData);
   if (!commandOutcome.validMove) {
