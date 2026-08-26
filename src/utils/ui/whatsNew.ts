@@ -39,6 +39,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "What's new folds away",
+                detail: "These notes now start folded up at the bottom of the home page, so your games have the screen to themselves — tap the heading whenever you want to see what has changed.",
+            },
+            {
                 title: "A screen that breaks now offers you a way out",
                 detail: "If something goes wrong drawing a page, you get a proper Async Games screen with a “try again” button and a way back to your games — instead of a blank page with an error on it and nothing to tap.",
             },
@@ -53,10 +57,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "One notification per game, not a pile of them",
                 detail: "A new notification about a game replaces the last one instead of stacking up behind it, so a week away no longer means a column of the same thing. Tapping one takes you into the app you already have open, rather than opening a second copy of it.",
-            },
-            {
-                title: "The app says the same thing wherever you meet it",
-                detail: "Install Async Games and the splash screen, the install prompt and the browser's own top bar are now the warm cream every screen is, not the slightly-off grey they used to be — and the prompt, a shared link and a search result all describe it the same way instead of three different ways.",
             },
         ],
     },
