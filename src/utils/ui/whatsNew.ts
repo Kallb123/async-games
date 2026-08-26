@@ -65,6 +65,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "The banner at the bottom stops sitting on your content",
+                detail: "The “install the app” and “turn on notifications” strips used to cover the last thing on the page — the bottom of a list, or the button you were reaching for. Pages now leave room for whichever one is showing, and give the space back the moment you wave it away.",
+            },
+            {
                 title: "The home page stops flashing the wrong screen at you",
                 detail: "Arriving at Async Games without being signed in used to show you an empty version of somebody's games list, loading, before throwing it away and showing you the welcome page. You now land on the right screen first time.",
             },
@@ -79,10 +83,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Everyone accepting at once no longer strands the game",
                 detail: "If two of you accepted the same invite in the same moment, the game sometimes never started — the invite just sat there with everybody in it. It starts now, whoever taps last. A double-tapped accept can't deal you two copies of the same game any more either.",
-            },
-            {
-                title: "Ending a game really ends it",
-                detail: "If somebody ended a game while it was your turn, you could carry on playing it — and the finished game would end up disagreeing with itself about who won. It's properly over for everyone now.",
             },
         ],
     },

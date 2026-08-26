@@ -39,6 +39,14 @@
        reads it from here rather than repeating the number. */
     --ag-app-width: 480px;
 
+    /* How much room the fixed bottom banner is taking up, or 0px when no offer
+       is showing. `useBannerHeight` measures the banner and writes this onto
+       the document root; everything that ends at the bottom of the screen —
+       the app column, the in-game shell, the sticky setup action — leaves this
+       much clear so the banner floats over empty space rather than over
+       content. */
+    --ag-banner-height: 0px;
+
     --ag-font: var(--ag-font-bricolage), system-ui, -apple-system, sans-serif;
     /* The warm tint the shadows below are mixed from. Kept as a colour of its
        own so code that needs the tint rather than a ready-made shadow can have
@@ -79,7 +87,7 @@ button {
     margin: 0 auto;
     min-height: 90vh;
     background: var(--ag-bg);
-    padding: 0 0 40px;
+    padding: 0 0 calc(40px + var(--ag-banner-height));
     font-family: var(--ag-font);
     color: var(--ag-ink);
     position: relative;
@@ -791,9 +799,12 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-banner-dismiss:hover { opacity: 1; }
 
 /* ---- Sticky action footer (setup) ---- */
+/* Sits above the bottom banner rather than under it — a sticky footer parks
+   itself at the bottom of the viewport, which is exactly where the banner is
+   floating. */
 .ag-sticky-action {
     position: sticky;
-    bottom: 0;
+    bottom: var(--ag-banner-height);
     padding: 16px 20px 22px;
     background: linear-gradient(to top, var(--ag-bg) 68%, transparent);
 }
@@ -1150,7 +1161,7 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-game {
     display: flex;
     flex-direction: column;
-    min-height: 100vh;
+    min-height: calc(100vh - var(--ag-banner-height));
     background-color: var(--ag-bg);
     background-image: radial-gradient(circle at 50% 0%, var(--ag-surface), var(--ag-bg) 62%);
     background-repeat: no-repeat;
@@ -1161,7 +1172,8 @@ a.ag-list-row, a.ag-list-row-main {
    letterboxing shows around the dark header or below the board/actions. */
 .ag-app:has(.ag-game) {
     max-width: none;
-    padding-bottom: 0;
+    /* No 40px tail here, but the banner still needs its room. */
+    padding-bottom: var(--ag-banner-height);
 }
 
 /* ---- Dark top bar ---- */
