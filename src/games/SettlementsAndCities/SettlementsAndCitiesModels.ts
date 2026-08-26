@@ -9,6 +9,7 @@ import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users
 import { SettlementsAndCitiesGameType } from "@/utils/apiModels/GameLogic";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { shuffle } from "@/utils/games/shuffle";
+import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
 import {
     generateBoard,
     createInitialPlayerState,
@@ -111,31 +112,19 @@ function clonePlayerState(ps: ISACPlayerState): ISACPlayerState {
     };
 }
 
-// Deep-clones a SAC game state into independent plain objects. playerStates is
-// rebuilt as a fresh Map in `userIdList` order so replay iteration (e.g. the
-// 7-roll discard loop) matches the original creation order. Accepts a state
-// whose playerStates is either a Map (in-memory) or a plain object (as read
-// back from Mongo after storage).
+// Deep-clones a SAC game state into independent plain objects. The player map
+// is rebuilt in `userIdList` order (see clonePlayerStates) so replay iteration
+// — the 7-roll discard loop above all — matches the original creation order.
 export function cloneSACState(
     gs: ISACSpecificGameState,
     userIdList: string[],
 ): ISACSpecificGameState {
-    const source: Map<string, ISACPlayerState> = gs.playerStates instanceof Map
-        ? gs.playerStates
-        : new Map(Object.entries(gs.playerStates as unknown as Record<string, ISACPlayerState>));
-
-    const playerStates = new Map<string, ISACPlayerState>();
-    for (const userId of userIdList) {
-        const ps = source.get(userId);
-        if (ps) playerStates.set(userId, clonePlayerState(ps));
-    }
-
     return {
         hexes: gs.hexes.map((h): ISACHex => ({ terrain: h.terrain, numberToken: h.numberToken })),
         vertices: gs.vertices.map((v): ISACVertex => ({ building: v.building, owner: v.owner })),
         edges: gs.edges.map((e): ISACEdge => ({ hasRoad: e.hasRoad, owner: e.owner })),
         harbors: gs.harbors.map((h): ISACHarbor => ({ type: h.type, vertices: [h.vertices[0], h.vertices[1]] })),
-        playerStates,
+        playerStates: clonePlayerStates(gs.playerStates, userIdList, clonePlayerState),
         robberHexIndex: gs.robberHexIndex,
         phase: gs.phase,
         setupStep: gs.setupStep,
@@ -431,7 +420,7 @@ export function gameStateToResponse(
     const playerDevCards: ISACSpecificGameStateResponse['playerDevCards'] = {};
     const playerNewDevCards: ISACSpecificGameStateResponse['playerNewDevCards'] = {};
 
-    for (const [userId, ps] of gs.playerStates) {
+    for (const [userId, ps] of mongoMap(gs.playerStates)) {
         const username = userIdNameMap[userId];
         playerStates[username] = {
             userId,
@@ -577,7 +566,7 @@ export function computeSettlementsAndCitiesResultStats(
 ): ISACGameResultStats {
     const gs = gameData.specificGameState;
     const playerStats = new Map<string, ISACPlayerResultStats>();
-    for (const [userId, ps] of gs.playerStates) {
+    for (const [userId, ps] of mongoMap(gs.playerStates)) {
         const settlements = gs.vertices.filter(v => v.owner === userId && v.building === 'settlement').length;
         const cities = gs.vertices.filter(v => v.owner === userId && v.building === 'city').length;
         const roads = gs.edges.filter(e => e.owner === userId && e.hasRoad).length;
