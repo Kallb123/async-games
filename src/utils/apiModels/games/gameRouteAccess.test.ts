@@ -1,12 +1,8 @@
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { walkFiles } from "@/utils/testing/walkFiles";
-
-const here = path.dirname(fileURLToPath(import.meta.url));
-const apiRoot = path.resolve(here, "../../../app/api");
+import { API_ROOT, apiRoutesMatchingSource } from "@/utils/testing/apiRoutes";
 
 // Every route that pulls one specific game out of Mongo has to establish that
 // the caller is actually in it. GET /api/game/[gameid] — the route that returns
@@ -41,12 +37,8 @@ const MEMBERSHIP_GATES = [
 // requireLiveGame() guard (which does the same findOne, plus "does it exist"
 // and "is it still being played"). A route using the helper still has to
 // establish membership itself — the helper knows nothing about the caller.
-const singleGameRoutes = walkFiles(apiRoot, (name) => name === "route.ts")
-    .filter((file) => {
-        const source = readFileSync(file, "utf8");
-        return source.includes("GameDataModel.findOne") || source.includes("requireLiveGame(");
-    })
-    .map((file) => path.relative(apiRoot, file));
+const singleGameRoutes = apiRoutesMatchingSource(/GameDataModel\.findOne|requireLiveGame\(/)
+    .map((file) => path.relative(API_ROOT, file));
 
 describe("routes that fetch one game", () => {
     it("finds the routes to check", () => {
@@ -57,7 +49,7 @@ describe("routes that fetch one game", () => {
     });
 
     it.each(singleGameRoutes)("%s establishes the caller is in the game", (relativePath) => {
-        const source = readFileSync(path.join(apiRoot, relativePath), "utf8");
+        const source = readFileSync(path.join(API_ROOT, relativePath), "utf8");
 
         const gated = MEMBERSHIP_GATES.some((pattern) => pattern.test(source));
         expect(gated, `${relativePath} fetches a game without establishing membership`).toBe(true);

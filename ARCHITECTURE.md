@@ -710,22 +710,37 @@ one-liner fails with a message naming the exact file and line to add.
   must pass before merge. Locally, run `npm run build`, `npx tsc --noEmit`, and
   `npm test` before committing — the type checker, build, and test suite are the
   safety net.
-- **Tests** run on [Vitest](https://vitest.dev) (`npm test`). The suite is
-  deliberately small, and both tests in it work the same way — scan the source
-  for what should exist per game, then assert every shared file that should
-  reference it does — so a new game is checked automatically with no
-  hand-maintained list to keep in sync:
-  - `src/utils/apiModels/games/serializableRegistry.test.ts` guards the
-    serialisation registry (§6) — it scans the source for every `@serializable`
-    class and asserts each is registered when the `GameLogic` barrel is imported
-    and wired into the command route, so a game whose rules module is never
-    imported fails CI instead of breaking at runtime.
-  - `src/games/gameRegistry.test.ts` guards the other one-line registrations a
-    new game needs outside its own folder (§12): the `GameLogic` barrel export,
-    `mongodb.ts`'s discriminator models, the invite-accept route's game-start
-    branch, and `games.ts`'s `GAME_META` entry. It discovers games by scanning
-    `src/games/` for folders with a `meta.ts`, so a new game folder missing any
-    of these fails CI with a message naming the exact file to edit.
+- **Tests** run on [Vitest](https://vitest.dev) (`npm test`). Most of them are
+  plain unit tests over the pure logic — game rules, recaps, replay, the turn
+  timer, the request-body helpers. Two other kinds are worth knowing about:
+  - **Route-handler integration tests** call a handler with a real
+    `NextRequest` and assert the response and what got written. Everything above
+    the database is the real thing — the handler, the turn rules, the command
+    registry, the Mongoose documents, the deserialiser — with Clerk, the
+    connection, the push transport and Next's `after` scope stood in for by
+    `src/utils/testing/apiRoute.ts` (`afterStub.ts` holds the `after` capture,
+    which has to be a separate module — see the note in it). Start from
+    `src/app/api/game/gameRoutes.test.ts`. §23 of
+    [`docs/robustness-review.md`](./docs/robustness-review.md) says what they
+    cover and, as importantly, what they don't.
+  - **Structural guards** scan the source for what should exist per game, then
+    assert every shared file that should reference it does — so a new game is
+    checked automatically with no hand-maintained list to keep in sync:
+    - `src/utils/apiModels/games/serializableRegistry.test.ts` guards the
+      serialisation registry (§6) — it scans the source for every `@serializable`
+      class and asserts each is registered when the `GameLogic` barrel is imported
+      and wired into the command route, so a game whose rules module is never
+      imported fails CI instead of breaking at runtime.
+    - `src/games/gameRegistry.test.ts` guards the other one-line registrations a
+      new game needs outside its own folder (§12): the `GameLogic` barrel export,
+      `mongodb.ts`'s discriminator models, the invite-accept route's game-start
+      branch, and `games.ts`'s `GAME_META` entry. It discovers games by scanning
+      `src/games/` for folders with a `meta.ts`, so a new game folder missing any
+      of these fails CI with a message naming the exact file to edit.
+    - `src/app/api/serverModuleGraph.test.ts` walks what each route handler
+      imports at runtime and fails on a `'use client'` module in the chain, and
+      `src/app/api/malformedBody.test.ts` hands every route that takes a body one
+      that isn't JSON and fails on anything that 500s.
 
 ## 14. Data flow at a glance
 
