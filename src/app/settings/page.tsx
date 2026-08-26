@@ -49,6 +49,10 @@ export default function Settings() {
     // Shared with the bottom banner, so granting from either updates both.
     const permission = useNotificationPermission();
     const hasPrefPermission = permission === 'granted';
+    // First load only. Preferences default to everything on, so the channel
+    // rows are shown loading rather than withheld — the list that lands is
+    // almost always the one the placeholders promised.
+    const isLoadingPrefs = hasPrefPermission && !prefs;
 
     const refreshPreferences = useCallback(() => {
         fetch('/api/notificationpreferences')
@@ -151,6 +155,7 @@ export default function Settings() {
                             on={prefs?.enabled ?? false}
                             onToggle={toggleMaster}
                             disabled={isSavingPrefs}
+                            loading={isLoadingPrefs}
                             ariaLabel="Toggle all notifications"
                         />
                     </div>
@@ -160,16 +165,17 @@ export default function Settings() {
                     <p id="notifications-paused-hint" className="ag-disabled-hint">Notifications are paused. Channel settings will take effect again once you turn notifications back on.</p>
                 )}
 
-                {hasPrefPermission && prefs?.enabled && (
+                {hasPrefPermission && (!prefs || prefs.enabled) && (
                     <div className="ag-list" style={{ marginTop: 12 }}>
                         {NOTIFICATION_CHANNELS.map((channel) => (
                             <OptionToggleRow
                                 key={channel.key}
                                 title={channel.label}
                                 description={channel.description}
-                                on={prefs.channels[channel.key]}
+                                on={prefs?.channels[channel.key] ?? false}
                                 onToggle={() => toggleChannel(channel.key)}
                                 disabled={isSavingPrefs}
+                                loading={isLoadingPrefs}
                                 ariaLabel={`Toggle ${channel.label} notifications`}
                             />
                         ))}
