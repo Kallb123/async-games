@@ -10,7 +10,7 @@ import { gameResultStatRows } from "@/components/ui/GameResultStats";
 import LineChart from "@/components/ui/LineChart";
 import { useGameResult } from "@/utils/hooks/useGameResult";
 import { GAME_META } from "@/utils/ui/games";
-import { abandonedGameCopy } from "@/utils/ui/players";
+import { finishedGameCopy } from "@/utils/ui/players";
 import { pluralize } from "@/utils/ui/text";
 import moment from 'moment';
 
@@ -48,11 +48,7 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
                             icon={meta ? <GameThumb meta={meta} size={ROW_THUMB_SIZE} radius={ROW_THUMB_RADIUS} /> : undefined}
                             title={meta?.name ?? result.url}
                             sub={<>
-                                {result.winner
-                                    ? `${result.winner} won`
-                                    : result.endReason === 'abandoned'
-                                        ? abandonedGameCopy(result.forfeitedBy).short
-                                        : "Draw"} · {moment(result.endedAt).fromNow()} · {pluralize(result.totalTurns, 'turn')}
+                                {finishedGameCopy(result) ?? "Draw"} · {moment(result.endedAt).fromNow()} · {pluralize(result.totalTurns, 'turn')}
                             </>}
                         />
                     )}

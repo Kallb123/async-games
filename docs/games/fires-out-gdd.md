@@ -589,8 +589,9 @@ reviewable on its own. From step 5 the game is playable by hand.
 **1 — The two shared co-op steps.** `outbreak-gdd.md` §21.6 steps 1 and 7:
 extract one `finishGame()` and put the `teamwin`/`teamloss` outcome inside it
 (including the `$cond` aggregation in `getPlayerStats` that duplicates
-`outcomeFor()`), and let the cron resolve a timeout by executing the game's own
-pass command through a per-game registry. If Outbreak got there first, skip the
+`outcomeFor()`) — **this half has landed**, as
+`src/utils/games/finishGame.ts` — and let the cron resolve a timeout by
+executing the game's own pass command through a per-game registry. If Outbreak got there first, skip the
 engine work — but Fires Out still registers its own timeout command,
 `FiresOutAction { kind: 'endTurn' }`, which it can only do once step 4 exists.
 Worth folding in while here: `turnOrder.findIndex(to => to === currentTurn)`

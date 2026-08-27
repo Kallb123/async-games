@@ -6,7 +6,7 @@ import Link from "next/link";
 import ListSection from "@/components/ui/ListSection";
 import type { RefreshableState } from "@/utils/hooks/useRefreshableData";
 import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
-import { abandonedGameCopy, currentUsername } from "@/utils/ui/players";
+import { currentUsername, finishedGameCopy } from "@/utils/ui/players";
 
 interface MyCompleteListProps extends RefreshableState {
     games: ICompletedGame[];
@@ -34,7 +34,9 @@ export default function MyCompleteList({ games, isLoading, isRefreshing, limit }
                 : undefined}
         >
             {visibleGames.map((game) => {
-                const iWon = game.winner && game.winner === myUsername;
+                // A co-op table wins together, so every player at one gets the
+                // trophy — there is no winner id to match yourself against.
+                const iWon = game.endReason === 'teamwin' || (game.winner && game.winner === myUsername);
                 return (
                     <button
                         key={game.gameId}
@@ -44,9 +46,7 @@ export default function MyCompleteList({ games, isLoading, isRefreshing, limit }
                     >
                         <div style={{ font: "600 13px/1.35 var(--ag-font)", flex: 1, minWidth: 0 }}>
                             {game.friendlyName} — <strong style={{ fontWeight: 800, color: iWon ? "var(--ag-green)" : "var(--ag-ink)" }}>
-                                {game.winner
-                                    ? `${game.winner} won`
-                                    : game.endReason === 'abandoned' ? abandonedGameCopy(game.forfeitedBy).short : "complete"}
+                                {finishedGameCopy(game) ?? "complete"}
                             </strong>
                         </div>
                         {iWon ? <span style={{ fontSize: 15 }}>🏆</span> : null}

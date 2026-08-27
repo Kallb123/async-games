@@ -335,14 +335,36 @@ export interface IPlayerStats {
     byGame: IGameStats[];
 }
 
+/** The fields of a finished game that decide what it was worth to a player. */
+export interface IMatchResult {
+    winner: string;
+    endReason?: GameEndReason;
+    forfeitedBy?: string;
+}
+
+// What one finished game was, for one player.
+//
+// A co-op table shares its result: 'teamwin' and 'teamloss' say the whole
+// roster won or lost, so they answer for every player before `winner` — which
+// is empty for a co-op game — gets a look in, and a team defeat would otherwise
+// read as a draw.
+//
 // `forfeitedBy` singles out the player whose inactivity abandoned the game
 // (see GameEndReason 'abandoned') — they take a loss rather than the draw
 // everyone else in that game gets, since we don't know who'd have won among
 // the players who were still there.
-function outcomeFor(winner: string, forfeitedBy: string | undefined, userId: string): MatchOutcome {
-    if (winner === userId) return "win";
-    if (forfeitedBy === userId) return "loss";
-    if (winner === "") return "draw";
+//
+// This is the *only* place the rule lives. getPlayerStats below counts wins,
+// losses and draws by folding through this function rather than re-encoding it
+// as Mongo `$cond` branches, which is what it used to do: two copies of the
+// rule, so a co-op table would have had the right chip in "recent form" and a
+// silently wrong W/L/D on every profile.
+export function outcomeFor(result: IMatchResult, userId: string): MatchOutcome {
+    if (result.endReason === 'teamwin') return "win";
+    if (result.endReason === 'teamloss') return "loss";
+    if (result.winner === userId) return "win";
+    if (result.forfeitedBy === userId) return "loss";
+    if (result.winner === "") return "draw";
     return "loss";
 }
 
@@ -362,28 +384,38 @@ export async function getPlayerStats(userId: string, viewerId: string): Promise<
         gameId: result.gameId,
         url: result.url,
         endedAt: result.endedAt,
-        outcome: outcomeFor(result.winner, result.forfeitedBy, userId),
+        outcome: outcomeFor(result, userId),
         sharedWithViewer: result.playerIds.includes(viewerId),
     }));
 
-    const byGameAgg: { _id: string, wins: number, losses: number, draws: number, total: number }[] = await GameResultModel.aggregate([
+    // Mongo counts how many of this player's games ended each distinct way; the
+    // rule for what each of those endings was *worth to them* is applied here,
+    // by the one outcomeFor above. The grouping key is the handful of fields
+    // that rule reads, so the pipeline still returns a tally (one row per game
+    // per way it ended) rather than a document per match, however many they
+    // have played.
+    const byEndingAgg: { _id: IMatchResult & { url: string }, total: number }[] = await GameResultModel.aggregate([
         { $match: { playerIds: userId, ...RESULT_COUNTS_FILTER } },
         { $group: {
-            _id: '$url',
+            _id: { url: '$url', winner: '$winner', endReason: '$endReason', forfeitedBy: '$forfeitedBy' },
             total: { $sum: 1 },
-            wins: { $sum: { $cond: [{ $eq: ['$winner', userId] }, 1, 0] } },
-            draws: { $sum: { $cond: [{ $and: [{ $eq: ['$winner', ''] }, { $ne: ['$forfeitedBy', userId] }] }, 1, 0] } },
-            losses: { $sum: { $cond: [{ $or: [
-                { $and: [{ $ne: ['$winner', userId] }, { $ne: ['$winner', ''] }] },
-                { $eq: ['$forfeitedBy', userId] },
-            ] }, 1, 0] } },
         } },
-        { $sort: { total: -1 } },
     ]);
 
-    const byGame: IGameStats[] = byGameAgg.map(({ _id, wins, losses, draws, total }) => ({
-        url: _id, wins, losses, draws, total,
-    }));
+    const statsByUrl = new Map<string, IGameStats>();
+    for (const { _id, total } of byEndingAgg) {
+        const stats = statsByUrl.get(_id.url)
+            ?? { url: _id.url, wins: 0, losses: 0, draws: 0, total: 0 };
+        const outcome = outcomeFor(_id, userId);
+        if (outcome === "win") stats.wins += total;
+        else if (outcome === "loss") stats.losses += total;
+        else stats.draws += total;
+        stats.total += total;
+        statsByUrl.set(_id.url, stats);
+    }
+
+    // Most-played game first, as the pipeline's own $sort used to leave it.
+    const byGame: IGameStats[] = [...statsByUrl.values()].sort((a, b) => b.total - a.total);
 
     return { recent, byGame };
 }

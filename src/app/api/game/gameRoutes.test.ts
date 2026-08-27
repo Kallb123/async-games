@@ -365,6 +365,12 @@ describe('POST /api/game/end', () => {
 
         await runAfterCallbacks();
         expect(recordGameResult).toHaveBeenCalledTimes(1);
+        // Ending a game by hand goes out to the table now, like every other
+        // ending: it used to be silent, leaving everyone else waiting on a game
+        // that was already over.
+        expect(sentPushes).toHaveLength(1);
+        expect([...sentPushes[0].userIds].sort()).toEqual([ANN.id, BOB.id].sort());
+        expect(sentPushes[0].options?.channel).toBe('gameOver');
     });
 
     it('records one result however many times it is asked', async () => {

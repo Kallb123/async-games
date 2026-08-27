@@ -1,4 +1,4 @@
-import { IGameResponse } from "@/utils/apiModels/GameDataApi";
+import { GameEndReason, IGameResponse } from "@/utils/apiModels/GameDataApi";
 
 // "Alice", "Alice & Bob", "Alice & 2 others" — the one way the app names a
 // group of players, wherever it has to fit them into a line of text.
@@ -138,6 +138,33 @@ export function abandonedGameCopy(forfeitedName?: string): { subtitle: string; s
         short: forfeitedName ? `Ended — ${forfeitedName} went quiet` : "Ended — no winner",
         message: `${who} missed too many turns in a row, so the game has ended with no winner.`,
     };
+}
+
+/** How a finished game ended, with every id already resolved to a name. */
+export interface FinishedGameOutcome {
+    /** The winner's display name — "" for every ending nobody won outright. */
+    winner: string;
+    endReason?: GameEndReason;
+    /** The display name of whoever went quiet, for an abandoned game. */
+    forfeitedBy?: string;
+}
+
+// The short line naming how a finished game ended: the "Finished" list on the
+// home page and the result page's summary row both need one, and both worked
+// it out from `winner` and `endReason` themselves — so neither could say
+// anything about a co-op table, whose empty winner they'd have read as a draw.
+//
+// Null when there is nothing to say beyond "nobody won", which the two screens
+// word differently: "complete" in a list of many games, "Draw" on the page
+// about one.
+export function finishedGameCopy(game: FinishedGameOutcome): string | null {
+    // A co-op table's result belongs to all of them, and reads the same to
+    // everyone — including a friend looking at a game they weren't part of.
+    if (game.endReason === 'teamwin') return "The team won";
+    if (game.endReason === 'teamloss') return "The team lost";
+    if (game.winner) return `${game.winner} won`;
+    if (game.endReason === 'abandoned') return abandonedGameCopy(game.forfeitedBy).short;
+    return null;
 }
 
 // Every game board page needs the same check before rendering its own

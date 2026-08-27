@@ -8,7 +8,18 @@ export type uuidString = `${string}-${string}-${string}-${string}-${string}`;
 // (`POST /api/game/end`) and a game the turntimer cron abandoned because a
 // player stopped taking their turns. Optional so older records (written
 // before this field existed) fall back to inferring from `winner`.
-export type GameEndReason = 'win' | 'ended' | 'abandoned';
+//
+// 'teamwin' and 'teamloss' are the co-op pair: the whole table wins or the
+// whole table loses, which a single `winner` id cannot say. A co-op result
+// records an empty `winner` plus one of these two, so nothing downstream has
+// to guess — read together, `winner` and `endReason` answer "how did this end?"
+// for every player at once (see finishGame and outcomeFor).
+export type GameEndReason = 'win' | 'ended' | 'abandoned' | 'teamwin' | 'teamloss';
+
+/** Games where every player shares one outcome, rather than one of them winning. */
+export function isTeamEndReason(endReason: GameEndReason | undefined): boolean {
+    return endReason === 'teamwin' || endReason === 'teamloss';
+}
 
 export interface IGameResponse {
     gameId: uuidString,

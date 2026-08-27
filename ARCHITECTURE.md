@@ -268,6 +268,8 @@ interface IGameResultData {
     url: string;         // gameData.gameType.url, e.g. "dicecities"
     playerIds: string[]; // gameData.userIdList
     winner: string;      // gameData.winner; "" means draw / no winner
+    endReason?: GameEndReason; // how it ended, when "" alone doesn't say
+    forfeitedBy?: string;      // who went quiet, for an abandoned game
     endedAt: string;     // ISO, when the record was written
 }
 ```
@@ -278,12 +280,24 @@ Key properties:
   `recordGameResult(gameData)`, and never updated afterwards. Because it's a
   separate collection from `GameData`, match history/stats survive deletion of
   the underlying game.
-- **Written once, from every place a game currently becomes `complete`:**
-  the command pipeline's game-over branch (§6, step 8) and the manual
-  surrender endpoint (`POST /api/game/end`). It is *not* yet written from the
-  turn-timer cron job (§7) — that job only advances an expired turn today and
-  has no branch that marks a game complete, so there's nothing to hook into
-  until a forfeit-on-timeout feature exists.
+- **Written once, from the one place a game becomes `complete`:**
+  `finishGame()` in `src/utils/games/finishGame.ts`. Three callers finish games
+  — the command pipeline's game-over branch (§6, step 8), the manual surrender
+  endpoint (`POST /api/game/end`) and the turn-timer cron's abandon path (§7) —
+  and each used to carry its own copy of the sequence (mark complete, clear the
+  turn, save, record the result, resolve the roster, fan out the `GameOver`
+  pushes). `finishGame` saves the game and hands back an `announce()` for the
+  rest, so a route can flush its response before spending a Clerk lookup and a
+  fan-out of pushes on it.
+- **`endReason` says what `winner` can't.** `'win'` names a winner; `'ended'`
+  and `'abandoned'` are the two no-winner endings; `'teamwin'` and `'teamloss'`
+  are the co-op pair, where the whole roster shares one result and `winner` is
+  empty. A game's `CheckGameOver` may set `endReason` itself (that is how a
+  co-op game reports a defeat); the command route only fills in `'win'` for a
+  game that said nothing. `outcomeFor()` in `GameResultData.ts` is the single
+  place that turns those fields into a player's win/loss/draw — both "recent
+  form" and the per-game totals on a profile fold through it, rather than the
+  totals re-encoding the rule as a Mongo `$cond`.
 - **Idempotent on `gameId`.** The schema has a unique index on `gameId`;
   `recordGameResult` swallows the resulting duplicate-key error, so calling it
   twice for the same game (e.g. a retried request) is a no-op rather than a
@@ -339,7 +353,8 @@ Examples: `SnakesAndLaddersRequestDiceRoll`, `DiceCitiesRequestCardPurchase`,
 interface IGameType {
     gameType: string; friendlyName: string; url: string; readonly className: string;
     CheckEndTurn(gameData, commandOutcome): void;   // decide/advance whose turn is next
-    CheckGameOver(gameData): boolean;               // set complete/winner if finished
+    CheckGameOver(gameData): boolean;               // set complete/winner (and, for a co-op
+                                                    // game, endReason) if finished
 }
 ```
 
@@ -431,8 +446,9 @@ enforcement job. It:
   loads the whole game by `gameId` and **asks again** — the player may have taken
   their turn between the two reads — then:
   - if the turn is **expired**, advances `currentTurn`, resets the timer and
-    sends a `YourTurn` push to the new player (or abandons the game once that
-    player has missed `MAX_CONSECUTIVE_MISSED_TURNS` in a row);
+    sends a `YourTurn` push to the new player (or, once that player has missed
+    `MAX_CONSECUTIVE_MISSED_TURNS` in a row, abandons the game through the
+    shared `finishGame()` — §5 — which records the result and tells the table);
   - else sends a `TurnExpiringSoon` push and sets
     `timerWarningNotificationSent`.
 - sweeps each game inside its own `try`, so one Clerk or FCM failure costs that

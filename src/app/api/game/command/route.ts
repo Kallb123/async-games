@@ -1,7 +1,6 @@
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
-import { buildGameLostNotification, buildGameWonNotification, buildYourTurnNotification } from '@/utils/firebase/notificationContent';
+import { buildYourTurnNotification } from '@/utils/firebase/notificationContent';
 import { UNKNOWN_PLAYER_NAME, buildUserDirectory, userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
-import { readableName } from '@/utils/ui/players';
 import { auth } from '@clerk/nextjs/server';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
@@ -9,8 +8,7 @@ import { ICommandOutcome, IGameCommand, IGameType, stripRecordedRandomness } fro
 import { IGameData, trySave } from '@/utils/mongodb/GameData';
 import { requireLiveGame } from '@/utils/games/liveGame';
 import { isCommandForGameType } from '@/utils/games/gameCommands';
-import { recordGameResult } from '@/utils/mongodb/GameResultData';
-import { unclaimedGuestsOf } from '@/utils/users/guest';
+import { finishGame } from '@/utils/games/finishGame';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
 import { IGameDataResponse } from '@/utils/apiModels/GameDataApi';
 
@@ -152,8 +150,15 @@ export async function POST(request: NextRequest) {
   // Checks whether the turn should be progressed and actions it if so
   const gameType: IGameType = deserializeJSON(JSON.stringify(gameData.gameType));
   if (gameType.CheckGameOver(gameData)) {
-    gameData.endReason = "win";
-    if (!(await trySave(gameData))) {
+    // How it ended is the game's to say: a co-op game records 'teamwin' or
+    // 'teamloss' on the way through CheckGameOver, and this branch used to
+    // overwrite whatever it had said with "win" — filing a defeat as a victory.
+    // A game that says nothing ended the ordinary way, with a winner.
+    const finished = await finishGame(gameData, {
+      winner: gameData.winner,
+      endReason: gameData.endReason ?? "win",
+    });
+    if (!finished.saved) {
       return NextResponse.json({}, {status: 409, statusText: "Game state changed, please refresh and try again"});
     }
 
@@ -165,34 +170,9 @@ export async function POST(request: NextRequest) {
     // Recording the match result and telling everyone the game is over doesn't
     // change what this player sees, so it runs after the response has flushed
     // rather than making them wait on a Clerk lookup and a fan-out of pushes.
-    // recordGameResult is idempotent on gameId, so a retried request is a no-op.
     after(async () => {
       try {
-        const userList = await usersById(gameData.userIdList);
-
-        const { unclaimedPlayerIds, guestNames } = unclaimedGuestsOf(userList);
-        await recordGameResult(gameData, unclaimedPlayerIds, guestNames);
-
-        const winnerUser = userList.find(u => u.id === gameData.winner);
-        const losers = userList.filter(u => u.id !== gameData.winner);
-
-        if (winnerUser) {
-          await sendPushToUsers([winnerUser], {
-            event: 'GameOver',
-            gameId: commandRequest.gameId,
-            link: gameNotificationLink(gameData.gameType.url, commandRequest.gameId)
-          }, buildGameWonNotification(gameData, losers.map(u => readableName(u))), {
-            channel: 'gameOver'
-          });
-        }
-
-        await sendPushToUsers(losers, {
-          event: 'GameOver',
-          gameId: commandRequest.gameId,
-          link: gameNotificationLink(gameData.gameType.url, commandRequest.gameId)
-        }, buildGameLostNotification(gameData, winnerUser ? readableName(winnerUser) : ''), {
-          channel: 'gameOver'
-        });
+        await finished.announce();
       } catch (error) {
         console.error(`Post-response game-over work failed for game ${gameData.gameId}`, error);
       }
