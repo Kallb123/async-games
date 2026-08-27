@@ -145,8 +145,15 @@ test('invite a player, start a game, and take a turn each', async ({ browser }) 
   await two.waitForURL(/\/games\/snakesandladders\/.+/);
 
   // Player one follows the same game directly, the way a push notification
-  // link would take them there.
+  // link would take them there. Unlike player two's arrival just above (a
+  // client-side route push from an already-hydrated app), this is a hard
+  // navigation — a full page load that has to boot Clerk's client SDK from
+  // scratch. A real person wouldn't act within milliseconds of that, but
+  // Playwright does: the last two runs both hit "Unable to send command
+  // whilst not logged in" clicking Roll here, so wait for Clerk to actually
+  // finish loading before touching the page at all.
   await one.goto(new URL(two.url()).pathname);
+  await clerkUserId(one);
 
   await expect(one.getByText('Snakes & Ladders')).toBeVisible();
   await expect(two.getByText('Snakes & Ladders')).toBeVisible();
