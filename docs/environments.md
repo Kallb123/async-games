@@ -88,12 +88,16 @@ Two standing password-auth users live in the dev Clerk instance for this
 (email verification is off there, so no inbox is needed) —
 `e2e/auth.setup.ts` signs them in once per run via
 [Clerk Testing Tokens](https://clerk.com/docs/testing/overview)
-(`@clerk/testing/playwright`) and saves their session, so specs start already
-authenticated. Provision them by hand in the Clerk dashboard and set:
+(`@clerk/testing/playwright`), unlocks them through `/api/unlock` (the same
+invite-gate a real signup goes through — see `ACCESS_PASSWORD` below and
+`useAuthGuard`/`/unlockaccess`), and saves their session, so specs start
+already authenticated *and* past the gate. Provision the two users by hand in
+the Clerk dashboard and set:
 
 | Secret | |
 |---|---|
 | `E2E_MONGODB_URI` | the `asyncgames-e2e` connection string |
+| `ACCESS_PASSWORD` | same value as the dev deployment's — only needed if that deployment has the gate configured at all |
 | `E2E_PLAYER_ONE_EMAIL` / `E2E_PLAYER_ONE_PASSWORD` | first test user |
 | `E2E_PLAYER_TWO_EMAIL` / `E2E_PLAYER_TWO_PASSWORD` | second test user (for a multiplayer spec) |
 

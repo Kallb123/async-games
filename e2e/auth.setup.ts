@@ -35,6 +35,22 @@ for (const user of USERS) {
       page,
       signInParams: { strategy: 'password', identifier: user.email, password: user.password },
     });
+
+    // A freshly signed-in Clerk user isn't `publicMetadata.unlocked` yet —
+    // useAuthGuard (src/utils/hooks/useAuthGuard.ts) sends anyone who isn't
+    // to /unlockaccess before they can reach any other authenticated screen,
+    // same as a real signup would hit. Unlock through the real endpoint
+    // rather than presetting the Clerk user's metadata by hand, so this
+    // keeps working however the gate itself changes.
+    if (process.env.ACCESS_PASSWORD) {
+      const unlock = await page.request.post('/api/unlock', {
+        data: { password: process.env.ACCESS_PASSWORD },
+      });
+      if (!unlock.ok()) {
+        throw new Error(`Failed to unlock ${user.storageState}: ${unlock.status()} ${await unlock.text()}`);
+      }
+    }
+
     await page.goto('/');
     await page.context().storageState({ path: user.storageState });
   });
