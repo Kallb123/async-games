@@ -3,6 +3,7 @@ name: Build Android APK
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 # Wraps the already-deployed production site (capacitor.config.ts) rather than
 # bundling a static export, so this workflow never runs `next build` — it only
@@ -61,7 +62,15 @@ jobs:
         if: always()
         run: rm -f android/app/release.keystore
 
+      - name: Upload APK to the action run
+        uses: actions/upload-artifact@v4
+        with:
+          name: async-games-${{ github.event.release.tag_name || github.sha }}.apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+
       - name: Attach APK to release
+        if: github.event_name == 'release'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
