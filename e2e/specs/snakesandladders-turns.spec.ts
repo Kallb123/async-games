@@ -51,6 +51,20 @@ async function findCurrentPlayer(pageA: Page, pageB: Page): Promise<{ current: P
     : { current: pageB, waiting: pageA };
 }
 
+// Clicks the roll button and confirms the server actually accepted the move,
+// rather than clicking and silently waiting on a result screen that never
+// comes: useSubmitCommand swallows a non-2xx /api/game/command response (it
+// just resyncs via getGameData()), so a rejected roll would otherwise show up
+// as this test hanging on the next step with no clue why.
+async function roll(page: Page): Promise<void> {
+  const commandResponse = page.waitForResponse((res) => res.url().includes('/api/game/command'));
+  await rollButton(page).click();
+  const response = await commandResponse;
+  if (!response.ok()) {
+    throw new Error(`Roll command rejected: ${response.status()} ${await response.text()}`);
+  }
+}
+
 test('invite a player, start a game, and take a turn each', async ({ browser }) => {
   // Two browser contexts, several full page loads and a round trip through
   // Mongo on every step add up to more than Playwright's default 30s test
@@ -107,7 +121,7 @@ test('invite a player, start a game, and take a turn each', async ({ browser }) 
   const { current: first, waiting: second } = await findCurrentPlayer(one, two);
   await expect(rollButton(second)).not.toBeVisible();
 
-  await rollButton(first).click();
+  await roll(first);
   await first.getByRole('button', { name: /End turn/ }).click();
 
   // The turn passed to the other player.
@@ -115,7 +129,7 @@ test('invite a player, start a game, and take a turn each', async ({ browser }) 
   await expect(rollButton(second)).toBeVisible();
   await expect(rollButton(first)).not.toBeVisible();
 
-  await rollButton(second).click();
+  await roll(second);
   await second.getByRole('button', { name: /End turn/ }).click();
 
   // ...and back again — both players have now each taken a live turn.
