@@ -65,6 +65,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "The logo on a join link takes you home",
+                detail: "Landing on a friend's join screen with nothing filled in used to be a dead end — there was no way back except the browser's own back button. Tapping the logo at the top now takes you home.",
+            },
+            {
                 title: "Train Time's scores read properly when you look back",
                 detail: "Stepping back through a Train Time match showed every score, train count and route tally as “NaN”. Reviewing a turn now shows the standings exactly as they stood at the time — and the points and longest-run graphs on a finished match are filled in again.",
                 game: "traintime",
@@ -80,10 +84,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "The back arrow sits in the middle of its button",
                 detail: "The little round back arrow at the top of the library, your profile, settings and every other screen was leaning down and to one side of its circle. It's centred now.",
-            },
-            {
-                title: "A join link opens on the invitation, not a blank page",
-                detail: "Tapping a friend's join link used to leave you looking at an empty page while the app worked out who you were. It now opens straight onto their invitation — the code already filled in, a name picked for you, ready to take your seat.",
             },
         ],
     },
