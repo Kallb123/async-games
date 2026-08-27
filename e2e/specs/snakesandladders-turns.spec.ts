@@ -55,11 +55,22 @@ async function findCurrentPlayer(pageA: Page, pageB: Page): Promise<{ current: P
 // rather than clicking and silently waiting on a result screen that never
 // comes: useSubmitCommand swallows a non-2xx /api/game/command response (it
 // just resyncs via getGameData()), so a rejected roll would otherwise show up
-// as this test hanging on the next step with no clue why.
+// as this test hanging on the next step with no clue why. Also races a
+// `requestfailed` listener against the response: the app's own client-side
+// fetch aborts after 30s (COMMAND_TIMEOUT_MS in useSubmitCommand.ts) with no
+// response ever arriving, which a bare waitForResponse can't tell apart from
+// "still working" until this whole test's own timeout gives up on it.
 async function roll(page: Page): Promise<void> {
-  const commandResponse = page.waitForResponse((res) => res.url().includes('/api/game/command'));
+  const commandResponse = page.waitForResponse((res) => res.url().includes('/api/game/command'), { timeout: 60_000 });
+  const requestFailed = new Promise<never>((_, reject) => {
+    page.on('requestfailed', (req) => {
+      if (req.url().includes('/api/game/command')) {
+        reject(new Error(`Roll command request failed: ${req.failure()?.errorText ?? 'unknown error'}`));
+      }
+    });
+  });
   await rollButton(page).click();
-  const response = await commandResponse;
+  const response = await Promise.race([commandResponse, requestFailed]);
   if (!response.ok()) {
     throw new Error(`Roll command rejected: ${response.status()} ${await response.text()}`);
   }
