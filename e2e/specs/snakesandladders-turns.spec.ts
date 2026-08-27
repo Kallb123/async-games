@@ -21,6 +21,11 @@ function rollButton(page: Page) {
   return page.getByRole('button', { name: /Roll the die/ });
 }
 
+// The Clerk user id the page is signed in as, once Clerk has hydrated.
+async function clerkUserId(page: Page): Promise<string | undefined> {
+  return page.evaluate(() => (window as unknown as { Clerk?: { user?: { id?: string } } }).Clerk?.user?.id);
+}
+
 // Turn order is decided by a roll-off (SnakesAndLaddersModels.ts), so either
 // player can go first. Whichever page shows the roll button first is "up".
 async function findCurrentPlayer(pageA: Page, pageB: Page): Promise<{ current: Page; waiting: Page }> {
@@ -49,6 +54,20 @@ test('invite a player, start a game, and take a turn each', async ({ browser }) 
   const twoContext = await browser.newContext({ storageState: 'playwright/.auth/player-two.json' });
   const one = await oneContext.newPage();
   const two = await twoContext.newPage();
+
+  // Fail fast, with a clear reason, rather than a confusing hang later: this
+  // whole spec only makes sense played against two distinct accounts, and a
+  // shared currentTurn would otherwise make both players' boards agree
+  // they're each up, indistinguishably from a genuine one-current-player bug.
+  await one.goto('/');
+  await two.goto('/');
+  const [oneId, twoId] = await Promise.all([clerkUserId(one), clerkUserId(two)]);
+  if (!oneId || !twoId || oneId === twoId) {
+    throw new Error(
+      `Expected two distinct signed-in players; got player-one=${oneId ?? 'unknown'} and player-two=${twoId ?? 'unknown'}. ` +
+      'Check that E2E_PLAYER_TWO_EMAIL/PASSWORD and E2E_PLAYER_TWO_USERNAME really name a second Clerk account, distinct from player one.'
+    );
+  }
 
   // Player one sets up Snakes & Ladders and invites player two by username.
   await one.goto('/newgame/snakesandladders');
