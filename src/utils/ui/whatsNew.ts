@@ -65,6 +65,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "The Android app carries our own icon and launch screen",
+                detail: "Installing the Android app used to show a generic blue placeholder icon and a flash of plain white before the game loaded. It now shows our own mark, on both the icon and the launch screen.",
+            },
+            {
                 title: "The logo on a join link takes you home",
                 detail: "Landing on a friend's join screen with nothing filled in used to be a dead end — there was no way back except the browser's own back button. Tapping the logo at the top now takes you home.",
             },
@@ -80,10 +84,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Your badge no longer flashes a stranger's initial",
                 detail: "For a moment before your profile loaded, the little circle on the home page and your profile showed a “T” or a “Y” — the first letter of the words standing in for your name. You now get a plain silhouette until your real initials or photo are ready.",
-            },
-            {
-                title: "The back arrow sits in the middle of its button",
-                detail: "The little round back arrow at the top of the library, your profile, settings and every other screen was leaning down and to one side of its circle. It's centred now.",
             },
         ],
     },

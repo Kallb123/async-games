@@ -65,7 +65,7 @@ const tierFor = (size) => TIERS.find((tier) => size >= tier.min);
  * the platform's own crop. `bleed` squares off the corners for the same reason
  * — those platforms round the icon themselves.
  */
-function clockDieSvg({ size, scale = 1, bleed = false, tier = tierFor(size) }) {
+function clockDieSvg({ size, scale = 1, bleed = false, background = true, tier = tierFor(size) }) {
     // Percentages of odd sizes produce coordinates like 419.84000000000003;
     // two decimals is finer than any renderer can tell apart at these sizes.
     const n = (value) => Number(value.toFixed(2));
@@ -78,8 +78,11 @@ function clockDieSvg({ size, scale = 1, bleed = false, tier = tierFor(size) }) {
 
     const pip = (cx, cy, fill) => `<circle cx="${cx}" cy="${cy}" r="${pipR}" fill="${fill}"/>`;
 
+    // `background: false` leaves the canvas transparent instead of painting the
+    // terracotta plate — for a layer, like an Android adaptive icon's
+    // foreground, that is composited over a plate someone else already drew.
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-  <rect width="${size}" height="${size}" rx="${bleed ? 0 : n(size * tier.radius)}" fill="${COLOURS.terracotta}"/>
+  ${background ? `<rect width="${size}" height="${size}" rx="${bleed ? 0 : n(size * tier.radius)}" fill="${COLOURS.terracotta}"/>` : ''}
   ${pip(centre, edge, COLOURS.cream)}
   ${pip(n(size - edge), centre, COLOURS.cream)}
   ${pip(centre, n(size - edge), COLOURS.cream)}
@@ -243,6 +246,96 @@ async function gameShareCardSvg(meta) {
   <text x="${TEXT_X}" y="${378 + tagline.length * TAGLINE_LEADING + 22}" font-family="${WORDMARK_FONT}" font-weight="800" font-size="29" letter-spacing="0.4" fill="${accent}">${xml(meta.players)} · ${xml(APP_CADENCE)}</text>`);
 }
 
+// The Capacitor Android shell (`cap add android`) scaffolds its launcher icon
+// and splash screen from a generic template — a blue "X" mark on white. These
+// draw the same clock-die mark and cream field over those placeholders, at
+// the density buckets Android's own tooling would have generated them at.
+const ANDROID_RES = path.join(ROOT, 'android', 'app', 'src', 'main', 'res');
+const DENSITIES = { mdpi: 1, hdpi: 1.5, xhdpi: 2, xxhdpi: 3, xxxhdpi: 4 };
+
+// Pre-adaptive-icon launcher size (API < 26): the mark, flattened straight to
+// a PNG, with no separate layers to composite.
+const LEGACY_ICON_DP = 48;
+// Adaptive icon canvas: a 108dp square of which only the inner 66dp "safe
+// zone" survives whichever mask (circle, squircle, rounded square, ...) the
+// launcher crops it with.
+const ADAPTIVE_DP = 108;
+const ADAPTIVE_SAFE_SCALE = 66 / 108;
+
+// The circular crop `ic_launcher_round.png` needs — older launchers that ask
+// for the round variant don't apply their own mask the way an adaptive icon
+// does.
+async function circleCrop(png_, size) {
+    const mask = Buffer.from(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="#fff"/></svg>`,
+    );
+    return sharp(png_).composite([{ input: mask, blend: 'dest-in' }]).png().toBuffer();
+}
+
+async function writeAndroidIcons(write) {
+    for (const [density, scale] of Object.entries(DENSITIES)) {
+        const dir = path.join(ANDROID_RES, `mipmap-${density}`);
+
+        const legacySize = Math.round(LEGACY_ICON_DP * scale);
+        const legacyPng = await png(clockDieSvg({ size: legacySize }));
+        await write(path.join(dir, 'ic_launcher.png'), legacyPng);
+        await write(path.join(dir, 'ic_launcher_round.png'), await circleCrop(legacyPng, legacySize));
+
+        const adaptiveSize = Math.round(ADAPTIVE_DP * scale);
+        await write(
+            path.join(dir, 'ic_launcher_foreground.png'),
+            await png(clockDieSvg({ size: adaptiveSize, scale: ADAPTIVE_SAFE_SCALE, background: false })),
+        );
+    }
+
+    // The adaptive icon's background layer is a flat colour, not a drawable —
+    // `mipmap-anydpi-v26/ic_launcher.xml` points straight at this resource.
+    await write(
+        path.join(ANDROID_RES, 'values', 'ic_launcher_background.xml'),
+        `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">${COLOURS.terracotta}</color>\n</resources>\n`,
+    );
+}
+
+// The launch screen a cold start shows before the WebView has anything to
+// paint: the same field colour the PWA manifest holds its splash on
+// (`background_color`, `SRGB.bg`), with the mark centred — so native and
+// installed-PWA launches land on the same colour instead of one flashing
+// something the other doesn't.
+const SPLASH_SIZES = [
+    ['port-mdpi', 320, 480],
+    ['port-hdpi', 480, 800],
+    ['port-xhdpi', 720, 1280],
+    ['port-xxhdpi', 960, 1600],
+    ['port-xxxhdpi', 1280, 1920],
+    ['land-mdpi', 480, 320],
+    ['land-hdpi', 800, 480],
+    ['land-xhdpi', 1280, 720],
+    ['land-xxhdpi', 1600, 960],
+    ['land-xxxhdpi', 1920, 1280],
+];
+
+function splashSvg(width, height) {
+    const markSize = Math.round(Math.min(width, height) * 0.32);
+    const mark = clockDieSvg({ size: markSize });
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <rect width="${width}" height="${height}" fill="${COLOURS.bg}"/>
+  <g transform="translate(${(width - markSize) / 2} ${(height - markSize) / 2})">${mark}</g>
+</svg>`;
+}
+
+async function writeAndroidSplash(write) {
+    let fallback;
+    for (const [bucket, width, height] of SPLASH_SIZES) {
+        const data = await png(splashSvg(width, height));
+        await write(path.join(ANDROID_RES, `drawable-${bucket}`, 'splash.png'), data);
+        if (bucket === 'land-mdpi') fallback = data;
+    }
+    // The density-less `drawable/splash.png` is what a bucket-less config
+    // (or a very old device) falls back to; Capacitor's own scaffold sets it
+    // to the same image as `drawable-land-mdpi`.
+    await write(path.join(ANDROID_RES, 'drawable', 'splash.png'), fallback);
+}
+
 function hasWordmarkFont() {
     // librsvg silently falls back to some default face for a family it doesn't
     // have, so ask fontconfig first rather than shipping a card set in the
@@ -294,6 +387,11 @@ async function main() {
         path.join(PUBLIC_ICONS, 'mstile-150.png'),
         await png(clockDieSvg({ size: 150, scale: 0.8, bleed: true })),
     );
+
+    // The native Android shell — replaces the placeholder launcher icon and
+    // splash screen `cap add android` scaffolds in.
+    await writeAndroidIcons(write);
+    await writeAndroidSplash(write);
 
     if (hasWordmarkFont()) {
         await write(path.join(PUBLIC_ICONS, 'og-image.png'), await png(ogImageSvg()));
