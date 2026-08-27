@@ -39,6 +39,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Tapping back to your games starts right away",
+                detail: "Heading home used to leave the tap looking like it hadn't registered for a moment while the page worked out what to show you. It now shows straight away and fills in as it's ready, so nothing feels stuck.",
+            },
+            {
                 title: "Rows grow into the space they need",
                 detail: "A placeholder row can only guess how tall the real thing will be, so when your games arrived the list used to snap to its real size and shunt everything under your thumb. Each row now slides from the placeholder's height to its own — up or down — so the page settles instead of hopping.",
             },
@@ -53,10 +57,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Lists settle instead of jumping",
                 detail: "When your games finish loading, the placeholder rows hand over to the real ones in place — a spare one shrinks away, an extra one grows in, and a list with nothing in it closes up gently rather than snapping shut under your thumb. Your profile's recent form settles the same way now.",
-            },
-            {
-                title: "What's new folds away",
-                detail: "These notes now start folded up at the bottom of the home page, so your games have the screen to themselves — tap the heading whenever you want to see what has changed.",
             },
         ],
     },

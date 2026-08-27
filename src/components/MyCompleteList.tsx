@@ -23,6 +23,8 @@ export default function MyCompleteList({ games, isLoading, isRefreshing, limit }
     const visibleGames = limit ? games.slice(0, limit) : games;
 
     return (
+        // Shape mirrored (label, icon, row count) in app/loading.tsx's homepage
+        // skeleton — keep the two in sync if this changes.
         <ListSection
             label="Finished"
             isLoading={isLoading}

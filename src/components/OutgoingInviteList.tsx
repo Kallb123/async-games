@@ -30,6 +30,8 @@ export default function OutgoingInviteList({ invites, isLoading, isRefreshing, o
     }
 
     return (
+        // Shape mirrored (label, icon, row count) in app/loading.tsx's homepage
+        // skeleton — keep the two in sync if this changes.
         <ListSection
             label="Awaiting response"
             isLoading={isLoading}

@@ -52,6 +52,8 @@ export default function TheirTurnList({ games, isLoading, isRefreshing }: TheirT
     }
 
     return (
+        // Shape mirrored (label, icon, row count) in app/loading.tsx's homepage
+        // skeleton — keep the two in sync if this changes.
         <ListSection
             label="Waiting on others"
             isLoading={isLoading}

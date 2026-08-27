@@ -49,7 +49,7 @@ export default function Dashboard() {
 
       <div className="ag-topbar">
         <Brand />
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", justifyContent: "center" }}>
+        <div className="ag-topbar-actions">
           <Link href="/newgame" aria-label="New game" style={{ borderRadius: "50%", background: "var(--ag-green)", width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center" }}>+</Link>
           <Link href="/profile" aria-label="Your profile">
             <Avatar name={displayName} imageUrl={profileImageUrl(user)} size={40} ring="var(--ag-terracotta)" />
