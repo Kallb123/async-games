@@ -153,7 +153,6 @@ export function canDiscoverCure(state: IOutbreakCureEligibility): boolean {
 // ─── Loss checks (§4.2) ─────────────────────────────────────────────────────
 
 export const OUTBREAK_LOSS_THRESHOLD = 8;
-export const CUBE_SUPPLY_PER_COLOR = 24;
 
 /** Outbreak cascade loss: the outbreak marker has reached the threshold. */
 export function isOutbreakCascadeLoss(outbreakCount: number): boolean {

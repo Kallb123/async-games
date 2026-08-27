@@ -1,6 +1,7 @@
 // Static board data + pure helpers for World Domination: the 42-territory / 6-continent
 // world map, its adjacency graph, and the rules maths (reinforcement counts,
 // card-set values, connectivity) from docs/games/worlddomination.md.
+import { buildSymmetricAdjacency, isAdjacentIn } from "@/utils/games/adjacencyGraph";
 
 export type WorldDominationPhase = 'setup' | 'reinforce' | 'attack' | 'fortify';
 
@@ -99,9 +100,6 @@ export const TERRITORIES: WorldDominationTerritoryDef[] = TERRITORY_DEFS.map((t,
 
 export const TERRITORY_COUNT = TERRITORIES.length; // 42
 
-const NAME_TO_ID: Record<string, number> = {};
-TERRITORIES.forEach(t => { NAME_TO_ID[t.name] = t.id; });
-
 // One-directional adjacency as transcribed from docs/games/worlddomination.md §8. Built
 // into a symmetric graph below (a name pair only needs to appear once).
 const RAW_ADJACENCY: Record<string, string[]> = {
@@ -149,24 +147,11 @@ const RAW_ADJACENCY: Record<string, string[]> = {
     'Eastern Australia': ['New Guinea', 'Western Australia'],
 };
 
-function buildAdjacency(): number[][] {
-    const adj: Set<number>[] = TERRITORIES.map(() => new Set<number>());
-    for (const [fromName, toNames] of Object.entries(RAW_ADJACENCY)) {
-        const fromId = NAME_TO_ID[fromName];
-        for (const toName of toNames) {
-            const toId = NAME_TO_ID[toName];
-            adj[fromId].add(toId);
-            adj[toId].add(fromId); // symmetric closure — guards against one-directional gaps
-        }
-    }
-    return adj.map(s => [...s].sort((a, b) => a - b));
-}
-
 /** ADJACENCY[territoryId] = sorted array of directly-connected territory ids. */
-export const ADJACENCY: number[][] = buildAdjacency();
+export const ADJACENCY: number[][] = buildSymmetricAdjacency(TERRITORIES.map(t => t.name), RAW_ADJACENCY);
 
 export function isAdjacent(a: number, b: number): boolean {
-    return ADJACENCY[a]?.includes(b) ?? false;
+    return isAdjacentIn(ADJACENCY, a, b);
 }
 
 export function territoryIdsForContinent(continentId: WorldDominationContinentId): number[] {

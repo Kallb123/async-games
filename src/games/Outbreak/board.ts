@@ -1,9 +1,11 @@
 // Static board data for Outbreak: the 48-city / 4-colour world map and its
 // adjacency graph, from docs/games/outbreak-gdd.md §5.1. Same shape as
 // WorldDomination/board.ts — a flat list of positioned nodes, a one-directional
-// adjacency transcription closed into a symmetric graph, and a schematic
-// viewBox for the map SVG. No server-only imports: rules.ts (and, via it, the
-// client action picker) depends on this module staying isomorphic.
+// adjacency transcription closed into a symmetric graph (via the shared
+// adjacencyGraph helper both games use), and a schematic viewBox for the map
+// SVG. No server-only imports: rules.ts (and, via it, the client action
+// picker) depends on this module staying isomorphic.
+import { buildSymmetricAdjacency, isAdjacentIn } from "@/utils/games/adjacencyGraph";
 
 export type OutbreakDiseaseColor = 'blue' | 'yellow' | 'black' | 'red';
 
@@ -96,9 +98,6 @@ export const CITIES: OutbreakCityDef[] = CITY_DEFS.map((c, id) => ({ ...c, id })
 
 export const CITY_COUNT = CITIES.length; // 48
 
-const NAME_TO_ID: Record<string, number> = {};
-CITIES.forEach(c => { NAME_TO_ID[c.name] = c.id; });
-
 // One-directional adjacency as transcribed from docs/games/outbreak-gdd.md §5.1
 // (the printed travel routes, not geographic proximity). Built into a
 // symmetric graph below (a name pair only needs to appear once).
@@ -156,24 +155,11 @@ const RAW_ADJACENCY: Record<string, string[]> = {
     'Sydney': ['Jakarta', 'Manila', 'Los Angeles'],
 };
 
-function buildAdjacency(): number[][] {
-    const adj: Set<number>[] = CITIES.map(() => new Set<number>());
-    for (const [fromName, toNames] of Object.entries(RAW_ADJACENCY)) {
-        const fromId = NAME_TO_ID[fromName];
-        for (const toName of toNames) {
-            const toId = NAME_TO_ID[toName];
-            adj[fromId].add(toId);
-            adj[toId].add(fromId); // symmetric closure — guards against one-directional gaps
-        }
-    }
-    return adj.map(s => [...s].sort((a, b) => a - b));
-}
-
 /** ADJACENCY[cityId] = sorted array of directly-connected city ids. */
-export const ADJACENCY: number[][] = buildAdjacency();
+export const ADJACENCY: number[][] = buildSymmetricAdjacency(CITIES.map(c => c.name), RAW_ADJACENCY);
 
 export function isAdjacent(a: number, b: number): boolean {
-    return ADJACENCY[a]?.includes(b) ?? false;
+    return isAdjacentIn(ADJACENCY, a, b);
 }
 
 export function cityIdsForColor(color: OutbreakDiseaseColor): number[] {
