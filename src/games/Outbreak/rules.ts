@@ -75,6 +75,9 @@ export type OutbreakBoardCubes = OutbreakCubeCounts[];
 
 export const CUBES_PER_CITY_LIMIT = 3;
 
+/** Cubes in supply per colour at setup (§5, §15). */
+export const CUBES_PER_COLOR = 24;
+
 export function emptyCubeCounts(): OutbreakCubeCounts {
     return { blue: 0, yellow: 0, black: 0, red: 0 };
 }

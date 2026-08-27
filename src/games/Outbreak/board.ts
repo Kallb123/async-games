@@ -167,3 +167,38 @@ export function cityIdsForColor(color: OutbreakDiseaseColor): number[] {
 }
 
 export const BOARD_VIEWBOX = { width: 800, height: 460 };
+
+// §6 steps 4-5: the first research station, and every pawn's starting city.
+export const ATLANTA_CITY_ID = CITIES.find(c => c.name === 'Atlanta')!.id;
+
+// §1: 2-4 disease specialists, co-op.
+export const MIN_PLAYERS = 2;
+export const MAX_PLAYERS = 4;
+
+// ─── Difficulty (§13) ───────────────────────────────────────────────────────
+
+export type OutbreakDifficulty = 'introductory' | 'standard' | 'heroic';
+
+export interface OutbreakDifficultyDef {
+    id: OutbreakDifficulty;
+    label: string;
+    /** Epidemic cards shuffled into the player deck at setup (§6 step 7). */
+    epidemics: number;
+    description: string;
+}
+
+export const DIFFICULTIES: OutbreakDifficultyDef[] = [
+    { id: 'introductory', label: 'Introductory', epidemics: 4, description: 'Slower rate escalation, more time between Intensify steps.' },
+    { id: 'standard', label: 'Standard', epidemics: 5, description: 'The intended baseline experience.' },
+    { id: 'heroic', label: 'Heroic', epidemics: 6, description: 'The infection rate climbs fast and Intensify steps come relentlessly.' },
+];
+
+// ─── Shared state vocabulary ────────────────────────────────────────────────
+// Here (rather than in OutbreakModels.ts) so apiModels.ts can import it
+// without a cycle — the same reason WorldDominationPhase lives in
+// WorldDomination/board.ts.
+
+/** A disease's cure marker (§8.4, §8.3). */
+export type OutbreakCureState = 'none' | 'cured' | 'eradicated';
+
+export type OutbreakPhase = 'actions' | 'discard' | 'forecast';

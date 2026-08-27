@@ -37,6 +37,9 @@ export default function GameLibrary({ hrefFor, featuredCta = "Start a game", lab
 
     const otherGames = Object.values(GAME_META)
         .filter(g => g.url !== FEATURED.url)
+        // A game mid-build (meta.available: false) has no working command
+        // surface yet — starting one would create a game nobody can play.
+        .filter(g => g.available)
         .filter(g => filter === "All" || g.categories.includes(filter));
     const featuredVisible = filter === "All" || FEATURED.categories.includes(filter);
 

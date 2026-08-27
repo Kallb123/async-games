@@ -10,7 +10,7 @@
 // The canonical, ordered list of game categories. This is the single source
 // of truth — the library's filter chips and the GameCategory type both derive
 // from it, so adding a category here surfaces it everywhere.
-export const GAME_CATEGORIES = ["Dice", "Strategy", "Word", "Puzzle", "Cards", "Solo"] as const;
+export const GAME_CATEGORIES = ["Dice", "Strategy", "Word", "Puzzle", "Cards", "Solo", "Co-op"] as const;
 
 export type GameCategory = (typeof GAME_CATEGORIES)[number];
 
@@ -46,6 +46,7 @@ import { meta as snakesAndLaddersMeta } from "@/games/SnakesAndLadders/meta";
 import { meta as worldDominationMeta } from "@/games/WorldDomination/meta";
 import { meta as solitaireMeta } from "@/games/Solitaire/meta";
 import { meta as trainTimeMeta } from "@/games/TrainTime/meta";
+import { meta as outbreakMeta } from "@/games/Outbreak/meta";
 
 export const GAME_META: Record<string, GameMeta> = {
     dicecities: diceCitiesMeta,
@@ -55,6 +56,7 @@ export const GAME_META: Record<string, GameMeta> = {
     worlddomination: worldDominationMeta,
     solitaire: solitaireMeta,
     traintime: trainTimeMeta,
+    outbreak: outbreakMeta,
 };
 
 // Games that don't have an implementation yet but are teased in the library.
@@ -92,6 +94,7 @@ const NAME_TO_URL: Record<string, string> = {
     "world domination": "worlddomination",
     "solitaire": "solitaire",
     "train time": "traintime",
+    "outbreak": "outbreak",
 };
 
 export function metaForGame(opts: { url?: string; friendlyName?: string }): GameMeta | undefined {

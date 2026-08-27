@@ -86,6 +86,12 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
         "TrainTimeKeepTickets",
         "TrainTimePassTurn",
     ],
+    // No commands yet — OutbreakGameType exists ahead of them so
+    // OutbreakInvitationModel.CreateGame has a game type to construct
+    // (OutbreakModels.ts). docs/games/outbreak-gdd.md §21.6 steps 4, 6 and 10
+    // add OutbreakAction, OutbreakEndTurn, OutbreakDiscard and
+    // OutbreakPlayEvent here as they land.
+    OutbreakGameType: [],
 };
 
 /** The game types this map knows, for the test that guards it. */
