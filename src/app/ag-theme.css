@@ -118,6 +118,15 @@ button {
     min-width: 0;
 }
 
+/* The "new game" + avatar circles on the right of the dashboard's topbar,
+   and the skeleton pair standing in for them in app/loading.tsx. */
+.ag-topbar-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: center;
+}
+
 .ag-wordmark {
     font: 800 22px/1 var(--ag-font);
     letter-spacing: -0.02em;
