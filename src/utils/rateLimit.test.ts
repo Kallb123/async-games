@@ -4,21 +4,17 @@ const dbConnect = vi.hoisted(() => vi.fn());
 const findOneAndUpdate = vi.hoisted(() => vi.fn((_filter: { key: string }) => ({
     exec: async () => ({ count: 1 }),
 })));
-const findOne = vi.hoisted(() => vi.fn((_filter: { key: string }) => ({
-    exec: async (): Promise<{ count: number } | null> => null,
-})));
 
 vi.mock('@/utils/mongodb/mongodb', () => ({ dbConnect }));
-vi.mock('@/utils/mongodb/RateLimitData', () => ({ RateLimitModel: { findOneAndUpdate, findOne } }));
+vi.mock('@/utils/mongodb/RateLimitData', () => ({ RateLimitModel: { findOneAndUpdate } }));
 
 // Safe as a plain import: vitest hoists the vi.mock calls above it.
-import { clientIp, consumeRateLimit, peekRateLimit } from './rateLimit';
+import { clientIp, consumeRateLimit } from './rateLimit';
 
 describe('consumeRateLimit', () => {
     beforeEach(() => {
         dbConnect.mockClear();
         findOneAndUpdate.mockClear();
-        findOne.mockClear();
     });
 
     // The regression this guards: the throttle is usually a request's first
@@ -47,47 +43,6 @@ describe('consumeRateLimit', () => {
         const [{ key }] = findOneAndUpdate.mock.calls[0];
 
         expect(key).toMatch(/^lobby-unfurl:1\.2\.3\.4:\d+$/);
-    });
-});
-
-describe('peekRateLimit', () => {
-    beforeEach(() => {
-        dbConnect.mockClear();
-        findOne.mockClear();
-        findOneAndUpdate.mockClear();
-    });
-
-    // The regression this exists to prevent: a caller (the unlock route) that
-    // wants to gate on the limit without charging it for an outcome that
-    // shouldn't count — this must never write, only read.
-    it('does not increment the counter', async () => {
-        await peekRateLimit('scope', '1.2.3.4', 5, 1000);
-
-        expect(findOneAndUpdate).not.toHaveBeenCalled();
-        expect(findOne).toHaveBeenCalledOnce();
-    });
-
-    it('allows a bucket with no document yet', async () => {
-        expect(await peekRateLimit('scope', '1.2.3.4', 5, 1000)).toBe(true);
-    });
-
-    it('allows a count still under the limit', async () => {
-        findOne.mockReturnValueOnce({ exec: async () => ({ count: 4 }) });
-
-        expect(await peekRateLimit('scope', '1.2.3.4', 5, 1000)).toBe(true);
-    });
-
-    it('refuses a count already at the limit', async () => {
-        findOne.mockReturnValueOnce({ exec: async () => ({ count: 5 }) });
-
-        expect(await peekRateLimit('scope', '1.2.3.4', 5, 1000)).toBe(false);
-    });
-
-    it('reads the same key consumeRateLimit would write', async () => {
-        await peekRateLimit('unlock-user', 'user_123', 10, 1000);
-        const [{ key }] = findOne.mock.calls[0];
-
-        expect(key).toMatch(/^unlock-user:user_123:\d+$/);
     });
 });
 

@@ -1,6 +1,6 @@
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
-import { clientIp, consumeRateLimit, peekRateLimit } from '@/utils/rateLimit';
+import { clientIp, consumeRateLimit } from '@/utils/rateLimit';
 import { readJsonBody } from '@/utils/api/requestBody';
 import { timingSafeStringEqual } from '@/utils/secrets';
 
@@ -19,22 +19,6 @@ export async function POST(request: NextRequest) {
 
   if (!userId) {
     return NextResponse.json({error: "You're not signed in."}, {status: 400, statusText: "Not signed in"});
-  }
-
-  const ip = clientIp(request.headers);
-  // Only a wrong guess should spend the budget — the limit is here to slow
-  // down guessing, not to punish a legitimate unlock, so this peeks (reads,
-  // doesn't charge) and the actual consumeRateLimit call happens only in the
-  // wrong-password branch below.
-  const withinLimit = await Promise.all([
-    peekRateLimit('unlock-user', userId, UNLOCK_LIMIT, UNLOCK_WINDOW_MS),
-    peekRateLimit('unlock-ip', ip, UNLOCK_LIMIT, UNLOCK_WINDOW_MS),
-  ]);
-  if (withinLimit.includes(false)) {
-    return NextResponse.json(
-      {error: "Too many attempts. Please try again later."},
-      {status: 429, statusText: "Too many attempts"},
-    );
   }
 
   const setUnlocked = async (unlocked: boolean) => {
@@ -56,10 +40,22 @@ export async function POST(request: NextRequest) {
   }
 
   if (typeof password !== 'string' || !timingSafeStringEqual(password, accessPassword)) {
-    await Promise.all([
+    // Only a wrong guess spends the budget — a correct unlock below never
+    // calls consumeRateLimit at all. Gated on its own atomic increment-and-
+    // check, not a separate read first: two guesses racing each other both
+    // still land on a count consumeRateLimit itself computed, so neither can
+    // slip through on a stale read the other's write already overtook.
+    const withinLimit = await Promise.all([
       consumeRateLimit('unlock-user', userId, UNLOCK_LIMIT, UNLOCK_WINDOW_MS),
-      consumeRateLimit('unlock-ip', ip, UNLOCK_LIMIT, UNLOCK_WINDOW_MS),
+      consumeRateLimit('unlock-ip', clientIp(request.headers), UNLOCK_LIMIT, UNLOCK_WINDOW_MS),
     ]);
+    if (withinLimit.includes(false)) {
+      return NextResponse.json(
+        {error: "Too many attempts. Please try again later."},
+        {status: 429, statusText: "Too many attempts"},
+      );
+    }
+
     await setUnlocked(false);
     return NextResponse.json({error: "Incorrect password. Please try again."}, {status: 400, statusText: "Incorrect password"});
   }
