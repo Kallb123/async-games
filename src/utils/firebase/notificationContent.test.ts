@@ -15,6 +15,7 @@ import {
     buildGameWonNotification,
     buildNudgeNotification,
     buildReactionNotification,
+    buildTeamResultNotification,
     buildTurnExpiringNotification,
     buildYourTurnNotification,
 } from './notificationContent';
@@ -162,6 +163,18 @@ describe('other push copy', () => {
         const drawn = buildGameLostNotification(game(), '');
         expect(drawn.title).toBe('Snakes and Ladders is over');
         expect(drawn.body).toContain('no winner');
+    });
+
+    it('tells a co-op table it won together', () => {
+        const won = buildTeamResultNotification(game({ gameState: { turnOrder: [], history: [], commandHistory: new Array(34) } } as Partial<IGameData>), true);
+        expect(won.title).toBe('🏆 Your team won Snakes and Ladders!');
+        expect(won.body).toBe('You pulled it off together in 34 moves. Another run?');
+    });
+
+    it('tells a co-op table it lost together, naming nobody', () => {
+        const lost = buildTeamResultNotification(game({ gameState: { turnOrder: [], history: [], commandHistory: new Array(34) } } as Partial<IGameData>), false);
+        expect(lost.title).toBe('Your team lost Snakes and Ladders');
+        expect(lost.body).toBe('It got away from you after 34 moves. Try again?');
     });
 
     it('says how long a nudger has been waiting', () => {

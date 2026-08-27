@@ -179,6 +179,21 @@ export function buildGameLostNotification(gameData: IGameData, winnerName: strin
     );
 }
 
+/**
+ * Sent to every player at a co-op table, which wins and loses as one (see
+ * GameEndReason 'teamwin'/'teamloss'). There is no opponent to name and nobody
+ * to congratulate individually, so the moves the table took together are the
+ * measure — the same one the win and loss copy above uses.
+ */
+export function buildTeamResultNotification(gameData: IGameData, won: boolean): PushNotification {
+    const friendlyName = gameData.gameType.friendlyName;
+    const moves = movesPlayed(gameData);
+
+    return won
+        ? gamePush(gameData, `🏆 Your team won ${friendlyName}!`, `You pulled it off together in ${moves} moves. Another run?`)
+        : gamePush(gameData, `Your team lost ${friendlyName}`, `It got away from you after ${moves} moves. Try again?`);
+}
+
 /** Someone reacted to one of your moves in the recap feed. */
 export function buildReactionNotification(actorName: string, reaction: string, eventTitle: string): PushNotification {
     return {

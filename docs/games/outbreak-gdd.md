@@ -667,8 +667,9 @@ places already end a game and each has its own copy of the same sequence — set
 `complete`/`winner`/`endReason`, `trySave`, `recordGameResult`, look up the
 roster through Clerk, fan out `GameOver` pushes: the command route's game-over
 branch, the cron's abandon path, and (partially) `/api/game/end`. Extract one
-`finishGame(gameData, { winner, endReason, forfeitedBy })` next to
-`recordGameResult` and port all three onto it, then add the co-op case *inside*
+`finishGame(gameData, { winner, endReason, forfeitedBy })` into
+`src/utils/games/` — alongside `startGame.ts`, since it orchestrates Clerk and
+pushes rather than being a data module — and port all three onto it, then add the co-op case *inside*
 that one function rather than as a fourth copy:
 
 * `'teamwin' | 'teamloss'` join `GameEndReason`; a co-op result records
@@ -684,6 +685,17 @@ that one function rather than as a fourth copy:
   single place.
 
 Fires Out (`fires-out-gdd.md`) is co-op too and inherits all of this.
+
+*Landed.* `src/utils/games/finishGame.ts` is that one function — it saves the
+finished game and hands back an `announce()` for the result record and the
+`GameOver` pushes, so the command route and `/api/game/end` can still flush
+their response first while the cron simply awaits it. `'teamwin'`/`'teamloss'`
+are on `GameEndReason`, `CheckGameOver` owns the reason (the command route only
+fills in `"win"` for a game that named none), a co-op table gets one shared push
+(`buildTeamResultNotification`), and `getPlayerStats` now groups by the fields
+`outcomeFor()` reads and folds them through it, so the rule has one home. The
+finished-game copy the home page and the result page share
+(`finishedGameCopy` in `utils/ui/players.ts`) reads a team result too.
 
 **2 — Board data and pure rules.** `src/games/Outbreak/board.ts`: the 48 cities,
 their colours, the adjacency edge list, and schematic `x`/`y` for the map SVG —

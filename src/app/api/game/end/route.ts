@@ -1,11 +1,9 @@
 import { readJsonBody } from '@/utils/api/requestBody';
 import { auth } from '@clerk/nextjs/server';
-import { usersById } from '@/utils/users/clerk';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { GameDataModel, trySave } from '@/utils/mongodb/GameData';
-import { recordGameResult } from '@/utils/mongodb/GameResultData';
-import { unclaimedGuestsOf } from '@/utils/users/guest';
+import { GameDataModel } from '@/utils/mongodb/GameData';
+import { finishGame } from '@/utils/games/finishGame';
 
 export async function POST(request: NextRequest) {
   const { gameId } = await readJsonBody(request);
@@ -32,31 +30,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, message: 'Game already ended' });
   }
 
-  gameData.complete = true;
-  gameData.winner = "";
-  gameData.endReason = "ended";
-  // Nobody's turn any more. A won game clears this in CheckGameOver and the
-  // turntimer cron clears it when it abandons one; ending a game by hand left
-  // it pointing at whoever was mid-turn, who could then keep playing a game
-  // that had already written its GameResult (see requireLiveGame).
-  gameData.currentTurn = "";
-  if (!(await trySave(gameData))) {
+  // Ending a game by hand goes through the same finish path as winning one or
+  // having it abandoned — which is also what now tells the other players it is
+  // over. Before, a surrender was silent: everyone else kept waiting on a game
+  // that had already written its result.
+  const finished = await finishGame(gameData, { endReason: "ended" });
+  if (!finished.saved) {
     return NextResponse.json({ success: false, message: 'Game state changed, please try again' }, { status: 409 });
   }
 
-  // Recording the match result is a stats read-model write nothing in this
-  // response depends on, so it runs after the response has flushed. It's
-  // idempotent on gameId, so a retried request is a no-op.
-  after(async () => {
-    try {
-      const userList = await usersById(gameData.userIdList);
-
-      const { unclaimedPlayerIds, guestNames } = unclaimedGuestsOf(userList);
-      await recordGameResult(gameData, unclaimedPlayerIds, guestNames);
-    } catch (error) {
-      console.error(`Post-response result recording failed for game ${gameData.gameId}`, error);
-    }
-  });
+  // Recording the match result and telling the table is a stats write and a
+  // fan-out of pushes, neither of which this response depends on, so both run
+  // after it has flushed.
+  after(finished.announce);
 
   return NextResponse.json({ success: true });
 }

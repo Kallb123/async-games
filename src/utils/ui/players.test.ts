@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { currentUsername, displayName, fullName, personalName, profileHeading, readableName } from './players';
+import { currentUsername, displayName, finishedGameCopy, fullName, personalName, profileHeading, readableName } from './players';
 
 describe('readableName', () => {
     it('prefers a real player\'s username', () => {
@@ -160,5 +160,26 @@ describe('profileHeading', () => {
             noHandleLabel: undefined,
             fullName: '',
         });
+    });
+});
+
+describe('finishedGameCopy', () => {
+    it('names the winner of a game somebody won', () => {
+        expect(finishedGameCopy({ winner: 'Priya', endReason: 'win' })).toBe('Priya won');
+    });
+
+    it('says a co-op table won or lost together, without naming anyone', () => {
+        expect(finishedGameCopy({ winner: '', endReason: 'teamwin' })).toBe('The team won');
+        expect(finishedGameCopy({ winner: '', endReason: 'teamloss' })).toBe('The team lost');
+    });
+
+    it('reuses the abandoned-game wording for a game nobody stayed for', () => {
+        expect(finishedGameCopy({ winner: '', endReason: 'abandoned', forfeitedBy: 'Priya' }))
+            .toBe('Ended — Priya went quiet');
+    });
+
+    it('has nothing to add to a game that simply ended', () => {
+        // The two screens word "nobody won" differently, so this is theirs to fill in.
+        expect(finishedGameCopy({ winner: '', endReason: 'ended' })).toBeNull();
     });
 });
