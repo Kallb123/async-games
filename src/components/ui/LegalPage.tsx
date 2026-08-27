@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import BackLink from "@/components/ui/BackLink";
 import Brand from "@/components/ui/Brand";
 import LegalLinks from "@/components/ui/LegalLinks";
 import { LEGAL_UPDATED, LegalHref } from "@/utils/ui/legal";
@@ -28,12 +27,10 @@ export default function LegalPage({
         <main>
             {/* The app's own name, not the document's — the hero below already
                 names the document, and a visitor who landed here from a search
-                result needs to know whose policy they're reading. */}
+                result needs to know whose policy they're reading. Brand links
+                home on its own, so this is also the way back. */}
             <div className="ag-topbar">
-                <div className="ag-topbar-title">
-                    <BackLink href="/" label="Back home" />
-                    <Brand />
-                </div>
+                <Brand />
             </div>
 
             <div className="ag-hero">
