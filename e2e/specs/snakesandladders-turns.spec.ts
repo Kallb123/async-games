@@ -21,9 +21,22 @@ function rollButton(page: Page) {
   return page.getByRole('button', { name: /Roll the die/ });
 }
 
-// The Clerk user id the page is signed in as, once Clerk has hydrated.
+// The Clerk user id the page is signed in as. Clerk's JS hydrates
+// asynchronously after the page itself has loaded, so this polls for
+// `window.Clerk.user.id` rather than reading it once — a page that just
+// navigated hasn't necessarily had time to hydrate yet, and reading too
+// early would misreport a slower page as signed in as nobody.
 async function clerkUserId(page: Page): Promise<string | undefined> {
-  return page.evaluate(() => (window as unknown as { Clerk?: { user?: { id?: string } } }).Clerk?.user?.id);
+  try {
+    const handle = await page.waitForFunction(
+      () => (window as unknown as { Clerk?: { user?: { id?: string } } }).Clerk?.user?.id,
+      undefined,
+      { timeout: 15_000 }
+    );
+    return (await handle.jsonValue()) as string | undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 // Turn order is decided by a roll-off (SnakesAndLaddersModels.ts), so either
@@ -59,8 +72,7 @@ test('invite a player, start a game, and take a turn each', async ({ browser }) 
   // whole spec only makes sense played against two distinct accounts, and a
   // shared currentTurn would otherwise make both players' boards agree
   // they're each up, indistinguishably from a genuine one-current-player bug.
-  await one.goto('/');
-  await two.goto('/');
+  await Promise.all([one.goto('/'), two.goto('/')]);
   const [oneId, twoId] = await Promise.all([clerkUserId(one), clerkUserId(two)]);
   if (!oneId || !twoId || oneId === twoId) {
     throw new Error(
