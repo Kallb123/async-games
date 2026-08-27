@@ -13,6 +13,26 @@ interface CloseWatcherLike {
 
 type CloseWatcherConstructor = new () => CloseWatcherLike;
 
+// Every currently-active close handler, most recently registered last — the
+// same "topmost wins" order `CloseWatcher` itself uses. Capacitor's native
+// back button is handled outside the WebView (see useCapacitorBackButton), so
+// it never reaches `CloseWatcher` at all; this is what lets it close a sheet
+// or menu instead of navigating, by asking this stack rather than the platform.
+const activeCloseHandlers: (() => void)[] = [];
+
+/**
+ * Close the topmost thing registered via `useCloseRequest`, if anything is
+ * active. Returns whether it found one to close. Only `useCapacitorBackButton`
+ * calls this — everywhere else (Escape, `CloseWatcher`) the platform already
+ * delivers the close request straight into the WebView.
+ */
+export function closeTopmostRequest(): boolean {
+    const close = activeCloseHandlers.at(-1);
+    if (!close) return false;
+    close();
+    return true;
+}
+
 /**
  * Close the topmost thing on screen when the platform asks for it — Escape on a
  * keyboard, the **Android back gesture** in the installed app.
@@ -56,6 +76,12 @@ export function useCloseRequest(active: boolean, onClose: () => void) {
         if (!active) return;
 
         const close = () => handler.current();
+        activeCloseHandlers.push(close);
+        const unregister = () => {
+            const index = activeCloseHandlers.lastIndexOf(close);
+            if (index !== -1) activeCloseHandlers.splice(index, 1);
+        };
+
         const CloseWatcherCtor = (window as unknown as { CloseWatcher?: CloseWatcherConstructor }).CloseWatcher;
 
         if (CloseWatcherCtor) {
@@ -63,13 +89,13 @@ export function useCloseRequest(active: boolean, onClose: () => void) {
             // would close two layers at once if both were registered.
             const watcher = new CloseWatcherCtor();
             watcher.onclose = close;
-            return () => watcher.destroy();
+            return () => { watcher.destroy(); unregister(); };
         }
 
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') close();
         };
         document.addEventListener('keydown', onKeyDown);
-        return () => document.removeEventListener('keydown', onKeyDown);
+        return () => { document.removeEventListener('keydown', onKeyDown); unregister(); };
     }, [active]);
 }
