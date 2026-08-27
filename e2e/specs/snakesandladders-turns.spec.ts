@@ -158,6 +158,19 @@ test('invite a player, start a game, and take a turn each', async ({ browser }) 
   await expect(one.getByText('Snakes & Ladders')).toBeVisible();
   await expect(two.getByText('Snakes & Ladders')).toBeVisible();
 
+  // Ground truth from the server itself, logged before trusting the UI any
+  // further: the last run had both players' roll buttons stably visible at
+  // once (14 straight polls over 5s), which — since currentTurn is a single
+  // shared field — should be impossible for two genuinely distinct accounts
+  // unless something server-side is actually wrong, not just a client race.
+  const gameApiPath = `/api/game/${new URL(two.url()).pathname.split('/').pop()}`;
+  const [oneView, twoView] = await Promise.all([
+    one.request.get(gameApiPath).then((r) => r.json()),
+    two.request.get(gameApiPath).then((r) => r.json()),
+  ]);
+  console.log(`[diagnostic] player-one (${oneId}) sees currentTurn=${oneView?.gameData?.currentTurn}`);
+  console.log(`[diagnostic] player-two (${twoId}) sees currentTurn=${twoView?.gameData?.currentTurn}`);
+
   // Whoever won the roll-off takes the first turn.
   const { current: first, waiting: second } = await findCurrentPlayer(one, two);
   await expect(rollButton(second)).not.toBeVisible();
