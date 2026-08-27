@@ -124,13 +124,21 @@ export default function TrainTimeActions({
                             : <span className="ag-hand-note">{pluralize(claimableCount, 'route')} claimable</span>}
                 </div>
                 <div className="ag-tt-hand">
-                    {HAND_ORDER.filter(colour => hand.includes(colour)).map(colour => (
-                        <span key={colour} className="ag-tt-hand-card" style={cardFaceStyle(colour)}>
-                            {colour === 'engine'
-                                ? `◆${hand.filter(c => c === colour).length}`
-                                : `${CARD_LABEL[colour]} ×${hand.filter(c => c === colour).length}`}
-                        </span>
-                    ))}
+                    {HAND_ORDER.filter(colour => hand.includes(colour)).map(colour => {
+                        const count = hand.filter(c => c === colour).length;
+                        return (
+                            <div key={colour} className="ag-tt-hand-stack">
+                                {Array.from({ length: count }, (_, i) => {
+                                    const isTop = i === count - 1;
+                                    return (
+                                        <div key={i} className="ag-tt-hand-card" style={cardFaceStyle(colour)}>
+                                            {isTop && (colour === 'engine' ? `◆${count}` : `${CARD_LABEL[colour]} ×${count}`)}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        );
+                    })}
                     {hand.length === 0 && <span className="ag-hand-note">No cards yet — draw two.</span>}
                 </div>
             </div>
