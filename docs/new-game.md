@@ -91,7 +91,8 @@ handful of one-line additions to shared files in the last step.
 
 - One `@serializable class <Game>GameType implements IGameType`:
   `CheckEndTurn` (advance `currentTurn`, or a no-op for solo games) and
-  `CheckGameOver` (set `complete`/`winner` when finished).
+  `CheckGameOver` (set `complete`/`winner` — and, for a co-op game, an
+  `endReason` of `'teamwin'`/`'teamloss'` — when finished).
 - One `@serializable` class per command, `implements IGameCommand`. Each
   `Execute` validates against current state, returns
   `{ validMove: false }` and mutates nothing if illegal, or mutates

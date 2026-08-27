@@ -1,9 +1,8 @@
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
-import { buildGameLostNotification, buildTurnExpiringNotification, buildYourTurnNotification } from '@/utils/firebase/notificationContent';
+import { buildTurnExpiringNotification, buildYourTurnNotification } from '@/utils/firebase/notificationContent';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { IGameDataDocument, ISweepCandidate, SWEEP_CANDIDATE_LIMIT, findSweepCandidates, trySave } from '@/utils/mongodb/GameData';
-import { recordGameResult } from '@/utils/mongodb/GameResultData';
-import { unclaimedGuestsOf } from '@/utils/users/guest';
+import { finishGame } from '@/utils/games/finishGame';
 import { NextRequest, NextResponse } from 'next/server';
 import { formatRemainingTime, hasAbandonedGame, isExpired, needsSweeping } from '@/utils/games/TurnTimer';
 import { requireLiveGame } from '@/utils/games/liveGame';
@@ -27,27 +26,16 @@ type SweepOutcome = 'expired' | 'abandoned' | 'warned' | 'skipped';
  * game ends for everyone rather than continuing without them.
  */
 async function abandonGame(gameData: IGameDataDocument, missingPlayerId: string): Promise<SweepOutcome> {
-    gameData.complete = true;
-    gameData.winner = "";
-    gameData.endReason = "abandoned";
-    gameData.forfeitedBy = missingPlayerId;
-    gameData.currentTurn = "";
     // A player may have taken their turn concurrently with this cron run —
-    // leave this game rather than clobber their move with a stale expiry.
-    if (!(await trySave(gameData))) return 'skipped';
+    // finishGame leaves their move alone rather than clobbering it with a stale
+    // expiry, and says so by refusing to save.
+    const finished = await finishGame(gameData, { endReason: "abandoned", forfeitedBy: missingPlayerId });
+    if (!finished.saved) return 'skipped';
 
-    const userList = await usersById(gameData.userIdList);
-
-    const { unclaimedPlayerIds, guestNames } = unclaimedGuestsOf(userList);
-    await recordGameResult(gameData, unclaimedPlayerIds, guestNames);
-
-    await sendPushToUsers(userList, {
-        event: 'GameOver',
-        gameId: gameData.gameId,
-        link: gameNotificationLink(gameData.gameType.url, gameData.gameId)
-    }, buildGameLostNotification(gameData, ''), {
-        channel: 'gameOver'
-    });
+    // No response to flush here, so the cron waits on the result record and the
+    // pushes rather than handing them to `after`. It logs its own failures, so
+    // a game this run did abandon is never counted as one that failed.
+    await finished.announce();
 
     return 'abandoned';
 }
