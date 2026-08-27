@@ -1,0 +1,70 @@
+name: Build Android APK
+
+on:
+  release:
+    types: [published]
+
+# Wraps the already-deployed production site (capacitor.config.ts) rather than
+# bundling a static export, so this workflow never runs `next build` — it only
+# needs the native Android project that `npx cap sync` keeps up to date with
+# the web app's Capacitor plugins.
+jobs:
+  build:
+    name: Build & sign release APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - run: npm ci --prefer-offline --no-audit --fund=false
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Sync native Android project
+        run: npx cap sync android
+
+      - name: Verify signing secrets are configured
+        run: |
+          missing=()
+          [ -z "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ] && missing+=(ANDROID_KEYSTORE_BASE64)
+          [ -z "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" ] && missing+=(ANDROID_KEYSTORE_PASSWORD)
+          [ -z "${{ secrets.ANDROID_KEY_ALIAS }}" ] && missing+=(ANDROID_KEY_ALIAS)
+          [ -z "${{ secrets.ANDROID_KEY_PASSWORD }}" ] && missing+=(ANDROID_KEY_PASSWORD)
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "Missing repo secrets: ${missing[*]}"
+            echo "Generate a keystore (keytool -genkeypair -v -keystore release.keystore -alias async-games -keyalg RSA -keysize 2048 -validity 10000), base64-encode it, and add these under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      - name: Decode signing keystore
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
+
+      - name: Build signed release APK
+        working-directory: android
+        run: |
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=$(pwd)/app/release.keystore \
+            -Pandroid.injected.signing.store.password="${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+            -Pandroid.injected.signing.key.alias="${{ secrets.ANDROID_KEY_ALIAS }}" \
+            -Pandroid.injected.signing.key.password="${{ secrets.ANDROID_KEY_PASSWORD }}"
+
+      - name: Remove keystore
+        if: always()
+        run: rm -f android/app/release.keystore
+
+      - name: Attach APK to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          mv "$apk" "async-games-${{ github.event.release.tag_name }}.apk"
+          gh release upload "${{ github.event.release.tag_name }}" "async-games-${{ github.event.release.tag_name }}.apk" --clobber --repo "${{ github.repository }}"
