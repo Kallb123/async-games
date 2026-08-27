@@ -39,6 +39,17 @@ async function clerkUserId(page: Page): Promise<string | undefined> {
   }
 }
 
+// page.reload() is a full page load just like a fresh navigation — Clerk has
+// to boot its client SDK again from nothing. The first version of this test
+// only waited for that after the very first hard navigation and hit "Unable
+// to send command whilst not logged in" on a *later* reload instead: whoever
+// is waiting for the turn to come back gets reloaded mid-test to pick up the
+// opponent's move, and needs the same wait every time, not just once.
+async function reloadAndSettle(page: Page): Promise<void> {
+  await page.reload();
+  await clerkUserId(page);
+}
+
 // Turn order is decided by a roll-off (SnakesAndLaddersModels.ts), so either
 // player can go first. Whichever page shows the roll button first is "up".
 async function findCurrentPlayer(pageA: Page, pageB: Page): Promise<{ current: Page; waiting: Page }> {
@@ -179,7 +190,7 @@ test('invite a player, start a game, and take a turn each', async ({ browser }) 
   await first.getByRole('button', { name: /End turn/ }).click();
 
   // The turn passed to the other player.
-  await second.reload();
+  await reloadAndSettle(second);
   await expect(rollButton(second)).toBeVisible();
   await expect(rollButton(first)).not.toBeVisible();
 
@@ -187,7 +198,7 @@ test('invite a player, start a game, and take a turn each', async ({ browser }) 
   await second.getByRole('button', { name: /End turn/ }).click();
 
   // ...and back again — both players have now each taken a live turn.
-  await first.reload();
+  await reloadAndSettle(first);
   await expect(rollButton(first)).toBeVisible();
 
   await oneContext.close();
