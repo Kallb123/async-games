@@ -1,6 +1,6 @@
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
-import { clientIp, consumeRateLimit } from '@/utils/rateLimit';
+import { clientIp, consumeRateLimit, peekRateLimit } from '@/utils/rateLimit';
 import { readJsonBody } from '@/utils/api/requestBody';
 import { timingSafeStringEqual } from '@/utils/secrets';
 
@@ -21,9 +21,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({error: "You're not signed in."}, {status: 400, statusText: "Not signed in"});
   }
 
+  const ip = clientIp(request.headers);
+  // Only a wrong guess should spend the budget — the limit is here to slow
+  // down guessing, not to punish a legitimate unlock, so this peeks (reads,
+  // doesn't charge) and the actual consumeRateLimit call happens only in the
+  // wrong-password branch below.
   const withinLimit = await Promise.all([
-    consumeRateLimit('unlock-user', userId, UNLOCK_LIMIT, UNLOCK_WINDOW_MS),
-    consumeRateLimit('unlock-ip', clientIp(request.headers), UNLOCK_LIMIT, UNLOCK_WINDOW_MS),
+    peekRateLimit('unlock-user', userId, UNLOCK_LIMIT, UNLOCK_WINDOW_MS),
+    peekRateLimit('unlock-ip', ip, UNLOCK_LIMIT, UNLOCK_WINDOW_MS),
   ]);
   if (withinLimit.includes(false)) {
     return NextResponse.json(
@@ -51,6 +56,10 @@ export async function POST(request: NextRequest) {
   }
 
   if (typeof password !== 'string' || !timingSafeStringEqual(password, accessPassword)) {
+    await Promise.all([
+      consumeRateLimit('unlock-user', userId, UNLOCK_LIMIT, UNLOCK_WINDOW_MS),
+      consumeRateLimit('unlock-ip', ip, UNLOCK_LIMIT, UNLOCK_WINDOW_MS),
+    ]);
     await setUnlocked(false);
     return NextResponse.json({error: "Incorrect password. Please try again."}, {status: 400, statusText: "Incorrect password"});
   }
