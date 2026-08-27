@@ -170,13 +170,7 @@ export async function POST(request: NextRequest) {
     // Recording the match result and telling everyone the game is over doesn't
     // change what this player sees, so it runs after the response has flushed
     // rather than making them wait on a Clerk lookup and a fan-out of pushes.
-    after(async () => {
-      try {
-        await finished.announce();
-      } catch (error) {
-        console.error(`Post-response game-over work failed for game ${gameData.gameId}`, error);
-      }
-    });
+    after(finished.announce);
 
     return NextResponse.json(response, {status: 200});
   }

@@ -15,33 +15,9 @@ vi.mock('@/utils/mongodb/mongodb', async () => (await import('@/utils/testing/ap
 vi.mock('@/utils/firebase/pushNotification', async () => (await import('@/utils/testing/apiRoute')).pushNotificationStub());
 vi.mock('@/utils/mongodb/GameResultData', () => ({ recordGameResult }));
 
-import { ANN, BOB, resetApiRouteStubs, seedGame, sentPushes, storedGame, stubClerkUsers } from '@/utils/testing/apiRoute';
+import { ANN, BOB, resetApiRouteStubs, seedSnakesAndLadders, sentPushes, storedGame, stubClerkUsers } from '@/utils/testing/apiRoute';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { finishGame } from './finishGame';
-
-/** A game in progress, for Ann and Bob, that something is about to finish. */
-function seedLiveGame() {
-    seedGame({
-        gameId: 'game_1',
-        gameType: {
-            gameId: 'gametype_1', gameType: 'SnakesAndLadders', friendlyName: 'Snakes and Ladders',
-            icon: '', url: 'snakesandladders', className: 'SnakesAndLaddersGameType'
-        },
-        kind: 'SnakesAndLaddersGameData',
-        userIdList: [ANN.id, BOB.id],
-        turnTimer: '1 day',
-        currentTurn: ANN.id,
-        lastTurnTimestamp: '2026-01-01T00:00:00.000Z',
-        gameState: { turnOrder: [ANN.id, BOB.id], history: [], commandHistory: [] },
-        complete: false,
-        winner: '',
-        specificGameState: {
-            playerPositions: { [ANN.id]: { position: 10, laddersClimbed: 0, snakesHit: 0 } },
-            hasRolled: false,
-            reRollOnSix: false
-        },
-    });
-}
 
 /** The game as a route would hold it: a fresh document out of the store. */
 async function liveGame(): Promise<IGameDataDocument> {
@@ -54,7 +30,7 @@ beforeEach(async () => {
     await resetApiRouteStubs();
     recordGameResult.mockReset();
     stubClerkUsers(ANN, BOB);
-    seedLiveGame();
+    seedSnakesAndLadders();
 });
 
 describe('finishGame', () => {
@@ -107,6 +83,18 @@ describe('finishGame', () => {
         expect(saved.forfeitedBy).toBe(BOB.id);
         // No winner to congratulate, so the same "it's over" goes to everyone.
         expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id, BOB.id]]);
+    });
+
+    it('still tells the table when the result record cannot be written', async () => {
+        // The game is already saved and unplayable by this point, so a wobble
+        // on the stats write must not swallow the pushes as well — the table
+        // would be left waiting on a turn that is never coming.
+        recordGameResult.mockRejectedValueOnce(new Error('Mongo said no'));
+
+        const finished = await finishGame(await liveGame(), { winner: ANN.id, endReason: 'win' });
+        await expect(finished.announce()).resolves.toBeUndefined();
+
+        expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id], [BOB.id]]);
     });
 
     it('leaves the game alone when somebody moved while it was finishing', async () => {

@@ -39,4 +39,10 @@ describe('outcomeFor', () => {
         expect(outcomeFor({ winner: ANN }, BOB)).toBe('loss');
         expect(outcomeFor({ winner: '' }, ANN)).toBe('draw');
     });
+
+    it('reads a record with no winner field at all the way it reads an empty one', () => {
+        // `winner` has no schema default, so an old record may carry none —
+        // which means nobody won it, not that everybody lost it.
+        expect(outcomeFor({}, ANN)).toBe('draw');
+    });
 });

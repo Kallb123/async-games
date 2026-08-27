@@ -26,42 +26,12 @@ vi.mock('@/utils/games/DiceRoll', () => ({ DiceRoll: () => 3, DiceRollRequest: a
 
 import { runAfterCallbacks } from '@/utils/testing/afterStub';
 import {
-    ANN, BOB, jsonPost, rawPost, resetApiRouteStubs, seedGame, sentPushes, signIn, signInUnresolvable,
-    storedGame, stubClerkUsers
+    ANN, BOB, jsonPost, rawPost, resetApiRouteStubs, seedSnakesAndLadders, sentPushes, signIn,
+    signInUnresolvable, SQUARES, storedGame, stubClerkUsers
 } from '@/utils/testing/apiRoute';
 import { POST as command } from './command/route';
 import { POST as end } from './end/route';
 import { POST as takeTurn } from './taketurn/route';
-
-/** Where the two players start, unless a test cares. */
-const SQUARES = { [ANN.id]: 10, [BOB.id]: 20 };
-
-/** A Snakes & Ladders game part-way through, with Ann to play. */
-function seedSnakesAndLadders(overrides: Record<string, unknown> = {}, squares: Record<string, number> = SQUARES) {
-    seedGame({
-        gameId: 'game_1',
-        gameType: {
-            gameId: 'gametype_1', gameType: 'SnakesAndLadders', friendlyName: 'Snakes and Ladders',
-            icon: '', url: 'snakesandladders', className: 'SnakesAndLaddersGameType'
-        },
-        kind: 'SnakesAndLaddersGameData',
-        userIdList: [ANN.id, BOB.id],
-        turnTimer: '1 day',
-        currentTurn: ANN.id,
-        lastTurnTimestamp: '2026-01-01T00:00:00.000Z',
-        timerWarningNotificationSent: true,
-        gameState: { turnOrder: [ANN.id, BOB.id], history: [], commandHistory: [] },
-        complete: false,
-        winner: '',
-        specificGameState: {
-            playerPositions: Object.fromEntries(Object.entries(squares)
-                .map(([userId, position]) => [userId, { position, laddersClimbed: 0, snakesHit: 0 }])),
-            hasRolled: false,
-            reRollOnSix: false
-        },
-        ...overrides
-    });
-}
 
 /** Where each player stands, as the stored game holds it. */
 function positions(saved: Record<string, unknown>): Record<string, { position: number }> {

@@ -1,3 +1,4 @@
+import { User } from '@clerk/nextjs/server';
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildGameLostNotification, buildGameWonNotification, buildTeamResultNotification } from '@/utils/firebase/notificationContent';
 import { readableName } from '@/utils/ui/players';
@@ -5,7 +6,7 @@ import { usersById } from '@/utils/users/clerk';
 import { unclaimedGuestsOf } from '@/utils/users/guest';
 import { IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
 import { recordGameResult } from '@/utils/mongodb/GameResultData';
-import { GameEndReason, isTeamEndReason } from '@/utils/apiModels/GameDataApi';
+import { GameEndReason } from '@/utils/apiModels/GameDataApi';
 
 /**
  * How a game finished, as the caller that finished it knows it.
@@ -32,10 +33,12 @@ export interface GameEnding {
 export interface FinishedGame {
     saved: boolean;
     /**
-     * Records the match result and tells every player the game is over. Safe to
-     * run after the response has flushed (`after(...)`) — it touches nothing the
-     * response carries, and `recordGameResult` is idempotent on gameId, so a
-     * retried request writes one record.
+     * Records the match result and tells every player the game is over.
+     *
+     * Hand it straight to `after(...)`: it touches nothing the response
+     * carries, it never throws (each half logs its own failure — see
+     * announceGameOver), and `recordGameResult` is idempotent on gameId, so a
+     * retried request still writes one record.
      */
     announce: () => Promise<void>;
 }
@@ -78,13 +81,36 @@ export async function finishGame(gameData: IGameDataDocument, ending: GameEnding
     return { saved: true, announce: () => announceGameOver(gameData) };
 }
 
-/** The result record and the "game over" pushes, once the game itself is safely saved. */
+/**
+ * The result record and the "game over" pushes, once the game itself is safely
+ * saved. Neither can fail the other, and neither reaches the caller: the game
+ * is already finished by the time this runs, so the worst either failure may
+ * cost is a stats record or a notification — never the ending itself.
+ */
 async function announceGameOver(gameData: IGameDataDocument): Promise<void> {
-    const userList = await usersById(gameData.userIdList);
+    let userList: User[];
+    try {
+        userList = await usersById(gameData.userIdList);
+    } catch (error) {
+        // Without the roster there is no way to tell a guest's exhibition match
+        // from a counted one, and nobody to address a push to, so a Clerk
+        // outage costs both halves. The game itself is saved either way.
+        console.error(`Couldn't resolve the roster to finish game ${gameData.gameId}`, error);
+        return;
+    }
 
-    const { unclaimedPlayerIds, guestNames } = unclaimedGuestsOf(userList);
-    await recordGameResult(gameData, unclaimedPlayerIds, guestNames);
+    // Its own try: a wobble on the read-model write must not swallow the pushes
+    // as well, or the table would be left waiting on a turn that is never
+    // coming — which is the thing this whole path exists to prevent.
+    try {
+        const { unclaimedPlayerIds, guestNames } = unclaimedGuestsOf(userList);
+        await recordGameResult(gameData, unclaimedPlayerIds, guestNames);
+    } catch (error) {
+        console.error(`Couldn't record the result of game ${gameData.gameId}`, error);
+    }
 
+    // sendPushToUsers reports a failed send rather than throwing (see its own
+    // comment), so the fan-out below needs no try of its own.
     const push = {
         event: 'GameOver',
         gameId: gameData.gameId,
@@ -94,7 +120,7 @@ async function announceGameOver(gameData: IGameDataDocument): Promise<void> {
     // A co-op table shares one ending, so everybody gets the same push. Split
     // into a winner and some losers, they'd each be told the opposite of what
     // happened to the others at a table that only has one result.
-    if (isTeamEndReason(gameData.endReason)) {
+    if (gameData.endReason === 'teamwin' || gameData.endReason === 'teamloss') {
         await sendPushToUsers(userList, push,
             buildTeamResultNotification(gameData, gameData.endReason === 'teamwin'),
             { channel: 'gameOver' });

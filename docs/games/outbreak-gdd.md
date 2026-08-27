@@ -667,8 +667,9 @@ places already end a game and each has its own copy of the same sequence — set
 `complete`/`winner`/`endReason`, `trySave`, `recordGameResult`, look up the
 roster through Clerk, fan out `GameOver` pushes: the command route's game-over
 branch, the cron's abandon path, and (partially) `/api/game/end`. Extract one
-`finishGame(gameData, { winner, endReason, forfeitedBy })` next to
-`recordGameResult` and port all three onto it, then add the co-op case *inside*
+`finishGame(gameData, { winner, endReason, forfeitedBy })` into
+`src/utils/games/` — alongside `startGame.ts`, since it orchestrates Clerk and
+pushes rather than being a data module — and port all three onto it, then add the co-op case *inside*
 that one function rather than as a fourth copy:
 
 * `'teamwin' | 'teamloss'` join `GameEndReason`; a co-op result records

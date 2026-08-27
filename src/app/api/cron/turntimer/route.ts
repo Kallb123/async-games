@@ -33,7 +33,8 @@ async function abandonGame(gameData: IGameDataDocument, missingPlayerId: string)
     if (!finished.saved) return 'skipped';
 
     // No response to flush here, so the cron waits on the result record and the
-    // pushes rather than handing them to `after`.
+    // pushes rather than handing them to `after`. It logs its own failures, so
+    // a game this run did abandon is never counted as one that failed.
     await finished.announce();
 
     return 'abandoned';

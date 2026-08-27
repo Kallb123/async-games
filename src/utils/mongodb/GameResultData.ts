@@ -337,7 +337,9 @@ export interface IPlayerStats {
 
 /** The fields of a finished game that decide what it was worth to a player. */
 export interface IMatchResult {
-    winner: string;
+    // Optional because a record written before this field had a default may
+    // carry no winner at all, which means the same as "" — nobody won it.
+    winner?: string;
     endReason?: GameEndReason;
     forfeitedBy?: string;
 }
@@ -364,9 +366,15 @@ export function outcomeFor(result: IMatchResult, userId: string): MatchOutcome {
     if (result.endReason === 'teamloss') return "loss";
     if (result.winner === userId) return "win";
     if (result.forfeitedBy === userId) return "loss";
-    if (result.winner === "") return "draw";
+    if (!result.winner) return "draw";
     return "loss";
 }
+
+// Stands in for "a player who isn't the one we're counting for" in the
+// grouping key below. Any non-empty string that can't be a Clerk user id does
+// — outcomeFor only ever asks whether the winner is this player, and whether
+// there was one at all.
+const SOMEBODY_ELSE = 'somebody else';
 
 // Recent match history + per-game W/L/D for one player, read from the
 // GameResult store. Shared by the current user's own stats endpoint and by
@@ -390,14 +398,31 @@ export async function getPlayerStats(userId: string, viewerId: string): Promise<
 
     // Mongo counts how many of this player's games ended each distinct way; the
     // rule for what each of those endings was *worth to them* is applied here,
-    // by the one outcomeFor above. The grouping key is the handful of fields
-    // that rule reads, so the pipeline still returns a tally (one row per game
-    // per way it ended) rather than a document per match, however many they
-    // have played.
+    // by the one outcomeFor above.
+    //
+    // The key is reduced to the *answers* outcomeFor needs rather than the raw
+    // fields, because `winner` and `forfeitedBy` are user ids: keyed on those,
+    // a player who mostly meets new opponents gets a group per match and the
+    // pipeline degenerates into shipping their whole history. Each is collapsed
+    // to "me", "nobody" or "somebody else" first, which leaves the key bounded
+    // by games × endings however long they have been playing — and means no
+    // other player's id leaves the database for a tally that never shows one.
     const byEndingAgg: { _id: IMatchResult & { url: string }, total: number }[] = await GameResultModel.aggregate([
         { $match: { playerIds: userId, ...RESULT_COUNTS_FILTER } },
         { $group: {
-            _id: { url: '$url', winner: '$winner', endReason: '$endReason', forfeitedBy: '$forfeitedBy' },
+            _id: {
+                url: '$url',
+                winner: { $switch: { branches: [
+                    { case: { $eq: ['$winner', userId] }, then: userId },
+                    // Missing as well as empty: `$eq` against null matches a
+                    // field that isn't there, which is a record from before
+                    // `winner` was always written.
+                    { case: { $eq: ['$winner', null] }, then: '' },
+                    { case: { $eq: ['$winner', ''] }, then: '' },
+                ], default: SOMEBODY_ELSE } },
+                endReason: '$endReason',
+                forfeitedBy: { $cond: [{ $eq: ['$forfeitedBy', userId] }, userId, null] },
+            },
             total: { $sum: 1 },
         } },
     ]);

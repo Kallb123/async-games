@@ -42,13 +42,7 @@ export async function POST(request: NextRequest) {
   // Recording the match result and telling the table is a stats write and a
   // fan-out of pushes, neither of which this response depends on, so both run
   // after it has flushed.
-  after(async () => {
-    try {
-      await finished.announce();
-    } catch (error) {
-      console.error(`Post-response game-over work failed for game ${gameData.gameId}`, error);
-    }
-  });
+  after(finished.announce);
 
   return NextResponse.json({ success: true });
 }

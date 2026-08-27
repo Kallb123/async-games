@@ -1,4 +1,4 @@
-import { GameEndReason, IGameResponse } from "@/utils/apiModels/GameDataApi";
+import { ICompletedGame, IGameResponse } from "@/utils/apiModels/GameDataApi";
 
 // "Alice", "Alice & Bob", "Alice & 2 others" — the one way the app names a
 // group of players, wherever it has to fit them into a line of text.
@@ -140,14 +140,10 @@ export function abandonedGameCopy(forfeitedName?: string): { subtitle: string; s
     };
 }
 
-/** How a finished game ended, with every id already resolved to a name. */
-export interface FinishedGameOutcome {
-    /** The winner's display name — "" for every ending nobody won outright. */
-    winner: string;
-    endReason?: GameEndReason;
-    /** The display name of whoever went quiet, for an abandoned game. */
-    forfeitedBy?: string;
-}
+// How a finished game ended, with every id already resolved to a name. Taken
+// off the DTO both callers pass in, rather than restated, so it can't drift
+// from what a finished game actually carries.
+export type FinishedGameOutcome = Pick<ICompletedGame, 'winner' | 'endReason' | 'forfeitedBy'>;
 
 // The short line naming how a finished game ended: the "Finished" list on the
 // home page and the result page's summary row both need one, and both worked

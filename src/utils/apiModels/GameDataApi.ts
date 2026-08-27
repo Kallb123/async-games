@@ -16,11 +16,6 @@ export type uuidString = `${string}-${string}-${string}-${string}-${string}`;
 // for every player at once (see finishGame and outcomeFor).
 export type GameEndReason = 'win' | 'ended' | 'abandoned' | 'teamwin' | 'teamloss';
 
-/** Games where every player shares one outcome, rather than one of them winning. */
-export function isTeamEndReason(endReason: GameEndReason | undefined): boolean {
-    return endReason === 'teamwin' || endReason === 'teamloss';
-}
-
 export interface IGameResponse {
     gameId: uuidString,
     gameType: string,
