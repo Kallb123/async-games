@@ -74,6 +74,8 @@ That rewrites every shipped image of the mark:
 | `public/icons/maskable-512.png` | Android adaptive icon |
 | `public/icons/mstile-150.png` | Windows tile (`public/icons/browserconfig.xml`) |
 | `public/icons/og-image.png` | `og:image` / `twitter:image` share card |
+| `android/app/src/main/res/mipmap-*/ic_launcher*.png`, `values/ic_launcher_background.xml` | the Capacitor Android app's launcher icon (legacy + adaptive, every density) |
+| `android/app/src/main/res/drawable{,-port,-land}-*/splash.png` | the Android app's launch screen |
 
 The share card is the only asset that needs anything extra: it sets the
 wordmark in Bricolage Grotesque, so that font must be installed as a system
