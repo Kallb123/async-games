@@ -194,6 +194,14 @@ test('invite a player, start a game, and take a turn each', async ({ browser }) 
   await expect(rollButton(second)).toBeVisible();
   await expect(rollButton(first)).not.toBeVisible();
 
+  // The second roll has hung silently twice now (no response, no
+  // requestfailed, no console error) — the click DOM-wise succeeds but
+  // nothing happens, which is exactly what SnakesAndLaddersPlayerActions'
+  // own `if (!hasRolled) onRoll?.()` guard would do if hasRolled were
+  // unexpectedly already true. Ground truth before the click, not after.
+  const secondView = await second.request.get(gameApiPath).then((r) => r.json());
+  console.log(`[diagnostic] before second roll: hasRolled=${secondView?.gameData?.specificGameState?.hasRolled} currentTurn=${secondView?.gameData?.currentTurn}`);
+
   await roll(second);
   await second.getByRole('button', { name: /End turn/ }).click();
 
