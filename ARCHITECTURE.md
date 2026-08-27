@@ -611,9 +611,10 @@ description or theme colour is exactly what those two files exist to prevent.
 - **Brand mark.** The "clock die" — four pips at 12, 3, 6 and 9, the brass one
   marking the seat in play. `scripts/generate-icons.mjs` (`npm run icons`) is
   the only place it is drawn: it emits the favicon, the iOS icon, the PWA and
-  tile icons, the share card, and `public/icons/icon.svg`, which is the copy
-  `Brand` puts on screen. Edit the mark there and re-run the script rather
-  than hand-editing any of the assets.
+  tile icons, the share card, `public/icons/icon.svg` (the copy `Brand` puts on
+  screen), and the Capacitor Android app's launcher icon and launch screen
+  under `android/app/src/main/res/`. Edit the mark there and re-run the script
+  rather than hand-editing any of the assets.
 - **Reusable pieces** (this is the most important contribution rule — see
   `AGENTS.md`):
   - `src/components/ui/` — presentational primitives (`Brand`, `Avatar`,
