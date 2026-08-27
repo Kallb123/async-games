@@ -72,6 +72,17 @@ async function findCurrentPlayer(pageA: Page, pageB: Page): Promise<{ current: P
 // response ever arriving, which a bare waitForResponse can't tell apart from
 // "still working" until this whole test's own timeout gives up on it.
 async function roll(page: Page): Promise<void> {
+  const button = rollButton(page);
+  // hasRolled/currentTurn were confirmed correct server-side right before the
+  // second roll and it still silently did nothing — no request, no error.
+  // The only other silent no-op in useSubmitCommand is its in-flight guard
+  // (`if (inFlightRef.current) return;`), which the button's own pending/
+  // disabled state (ActionButton's `ag-btn--pending` class, ag-btn's
+  // `disabled`) would reflect. Logged here, at the actual click boundary,
+  // rather than guessed at again.
+  const [isDisabled, className] = await Promise.all([button.isDisabled(), button.getAttribute('class')]);
+  console.log(`[diagnostic] roll button before click: disabled=${isDisabled} class=${className}`);
+
   const commandResponse = page.waitForResponse((res) => res.url().includes('/api/game/command'), { timeout: 60_000 });
   const requestFailed = new Promise<never>((_, reject) => {
     page.on('requestfailed', (req) => {
@@ -80,7 +91,7 @@ async function roll(page: Page): Promise<void> {
       }
     });
   });
-  await rollButton(page).click();
+  await button.click();
   const response = await Promise.race([commandResponse, requestFailed]);
   if (!response.ok()) {
     throw new Error(`Roll command rejected: ${response.status()} ${await response.text()}`);
