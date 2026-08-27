@@ -127,7 +127,7 @@ export default function TrainTimeActions({
                     {HAND_ORDER.filter(colour => hand.includes(colour)).map(colour => {
                         const count = hand.filter(c => c === colour).length;
                         return (
-                            <div key={colour} className="ag-tt-hand-stack">
+                            <div key={colour} className="ag-tt-hand-stack ag-cascade">
                                 {Array.from({ length: count }, (_, i) => {
                                     const isTop = i === count - 1;
                                     return (

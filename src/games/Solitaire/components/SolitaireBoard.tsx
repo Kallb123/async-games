@@ -100,13 +100,13 @@ export default function SolitaireBoard({ state, disabled = false, onDraw, onMove
 
             <div className="ag-solitaire-tableau">
                 {state.tableau.map((column, colIndex) => (
-                    <div key={colIndex} className="ag-solitaire-column">
+                    <div key={colIndex} className="ag-cascade">
                         {column.length === 0 && <PlayingCard />}
                         {column.map((card, cardIndex) => {
                             const count = column.length - cardIndex;
                             const isSelected = selection?.source.zone === 'tableau' && selection.source.column === colIndex && selection.count === count;
                             return (
-                                <div key={cardIndex} className="ag-solitaire-stackcard">
+                                <div key={cardIndex}>
                                     <PlayingCard
                                         card={card}
                                         onClick={card.faceUp ? () => select({ zone: 'tableau', column: colIndex }, count, card) : undefined}
