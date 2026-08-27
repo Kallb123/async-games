@@ -28,7 +28,7 @@ export default function AuthScreen({
                 <h1 className="ag-hero-title">{title}</h1>
                 <p className="ag-hero-sub">{subtitle}</p>
             </div>
-            <div className="ag-section" style={{ display: "flex", justifyContent: "center" }}>
+            <div className="ag-section ag-section--center">
                 {children}
             </div>
         </main>
