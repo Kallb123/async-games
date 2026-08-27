@@ -34,6 +34,12 @@ async function findCurrentPlayer(pageA: Page, pageB: Page): Promise<{ current: P
 }
 
 test('invite a player, start a game, and take a turn each', async ({ browser }) => {
+  // Two browser contexts, several full page loads and a round trip through
+  // Mongo on every step add up to more than Playwright's default 30s test
+  // timeout, which solitaire-smoke.spec.ts's single-page, single-request path
+  // never has to worry about.
+  test.setTimeout(90_000);
+
   const playerTwoUsername = process.env.E2E_PLAYER_TWO_USERNAME;
   if (!playerTwoUsername) {
     throw new Error('Missing E2E_PLAYER_TWO_USERNAME — set it to player two\'s Clerk username.');
