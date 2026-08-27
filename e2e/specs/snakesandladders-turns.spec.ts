@@ -76,6 +76,20 @@ async function roll(page: Page): Promise<void> {
   }
 }
 
+// Prints a page's console.error output and uncaught exceptions to this
+// process's own stdout (Playwright's reporter doesn't forward these), tagged
+// so a failure can tell which of the two players it came from.
+function logBrowserErrors(page: Page, label: string): void {
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') {
+      console.log(`[${label} console.error] ${msg.text()}`);
+    }
+  });
+  page.on('pageerror', (err) => {
+    console.log(`[${label} pageerror] ${err.message}`);
+  });
+}
+
 test('invite a player, start a game, and take a turn each', async ({ browser }) => {
   // Two browser contexts, several full page loads and a round trip through
   // Mongo on every step add up to more than Playwright's default 30s test
@@ -92,6 +106,15 @@ test('invite a player, start a game, and take a turn each', async ({ browser }) 
   const twoContext = await browser.newContext({ storageState: 'playwright/.auth/player-two.json' });
   const one = await oneContext.newPage();
   const two = await twoContext.newPage();
+
+  // The last run showed no network activity at all for the roll click within
+  // 60s — no response, no requestfailed — which points at the click never
+  // reaching handleRoll's fetch in the first place, not a slow server. A
+  // client-side exception there would do exactly that (and print to the
+  // console) with nothing visible in the UI. Surfaced into this test's own
+  // stdout, since Playwright doesn't forward page console/errors by default.
+  logBrowserErrors(one, 'player-one');
+  logBrowserErrors(two, 'player-two');
 
   // Fail fast, with a clear reason, rather than a confusing hang later: this
   // whole spec only makes sense played against two distinct accounts, and a
