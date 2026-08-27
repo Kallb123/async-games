@@ -302,16 +302,16 @@ async function writeAndroidIcons(write) {
 // installed-PWA launches land on the same colour instead of one flashing
 // something the other doesn't.
 const SPLASH_SIZES = [
-    ['port-mdpi', 320, 480],
-    ['port-hdpi', 480, 800],
-    ['port-xhdpi', 720, 1280],
-    ['port-xxhdpi', 960, 1600],
-    ['port-xxxhdpi', 1280, 1920],
-    ['land-mdpi', 480, 320],
-    ['land-hdpi', 800, 480],
-    ['land-xhdpi', 1280, 720],
-    ['land-xxhdpi', 1600, 960],
-    ['land-xxxhdpi', 1920, 1280],
+    { bucket: 'port-mdpi', width: 320, height: 480 },
+    { bucket: 'port-hdpi', width: 480, height: 800 },
+    { bucket: 'port-xhdpi', width: 720, height: 1280 },
+    { bucket: 'port-xxhdpi', width: 960, height: 1600 },
+    { bucket: 'port-xxxhdpi', width: 1280, height: 1920 },
+    { bucket: 'land-mdpi', width: 480, height: 320 },
+    { bucket: 'land-hdpi', width: 800, height: 480 },
+    { bucket: 'land-xhdpi', width: 1280, height: 720 },
+    { bucket: 'land-xxhdpi', width: 1600, height: 960 },
+    { bucket: 'land-xxxhdpi', width: 1920, height: 1280 },
 ];
 
 function splashSvg(width, height) {
@@ -325,7 +325,7 @@ function splashSvg(width, height) {
 
 async function writeAndroidSplash(write) {
     let fallback;
-    for (const [bucket, width, height] of SPLASH_SIZES) {
+    for (const { bucket, width, height } of SPLASH_SIZES) {
         const data = await png(splashSvg(width, height));
         await write(path.join(ANDROID_RES, `drawable-${bucket}`, 'splash.png'), data);
         if (bucket === 'land-mdpi') fallback = data;
