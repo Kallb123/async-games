@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint --max-warnings 0",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "icons": "tsx scripts/generate-icons.mjs",
     "version:bump": "node scripts/bump-version.mjs"
   },
@@ -33,6 +34,8 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",
+    "@clerk/testing": "^2.2.30",
+    "@playwright/test": "^1.62.1",
     "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
