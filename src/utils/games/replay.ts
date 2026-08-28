@@ -2,6 +2,8 @@ import { IGameData } from "../mongodb/GameData";
 import { UNKNOWN_PLAYER_NAME } from "../users/clerk";
 import { IGameCommand, IGameType, ICommandOutcome } from "../apiModels/GameLogic";
 import { deserializeJSON } from "../apiModels/Serialisable";
+import { runCommand } from "./commandPipeline";
+import { createAdapterRegistry } from "./adapterRegistry";
 import { buildInitialSnakesAndLaddersState, gameStateToModel as snakesAndLaddersStateToModel, ISnakesAndLaddersGameData } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
 import { buildInitialDiceCitiesState, gameStateToModel as diceCitiesStateToModel } from "@/games/DiceCities/DiceCitiesModels";
 import { buildInitialSmartthinkState, gameStateToModel as smartthinkStateToModel } from "@/games/Smartthink/SmartthinkModels";
@@ -85,12 +87,12 @@ export interface IReplayAdapter {
     plannableCommands: string[];
 }
 
-const adapters: Record<string, IReplayAdapter> = {};
+const adapters = createAdapterRegistry<IReplayAdapter>();
 export function registerReplayAdapter(adapter: IReplayAdapter) {
-    adapters[adapter.className] = adapter;
+    adapters.register(adapter);
 }
 export function getReplayAdapter(className: string): IReplayAdapter | undefined {
-    return adapters[className];
+    return adapters.get(className);
 }
 
 // The command classNames a game will run as part of a planned turn — the
@@ -290,26 +292,13 @@ export async function buildTimeline(
             }
             // Every command was executed on its sender's turn.
             state.currentTurn = command.senderId;
-            const outcome = await command.Execute(state);
+            const { outcome, gameOver } = await runCommand(state, gameType, command);
             if (!outcome.validMove) {
                 continue;
             }
-            state.gameState.commandHistory.push(command);
             if (resolvedOut) {
                 resolvedOut.push(command);
             }
-            if (gameType.CheckGameOver(state)) {
-                snapshot(command, planned);
-                onStep?.({
-                    prev: snapshots[snapshots.length - 2],
-                    next: snapshots[snapshots.length - 1],
-                    command,
-                    outcome,
-                    planned,
-                });
-                return true;
-            }
-            gameType.CheckEndTurn(state, outcome);
             snapshot(command, planned);
             onStep?.({
                 prev: snapshots[snapshots.length - 2],
@@ -318,6 +307,9 @@ export async function buildTimeline(
                 outcome,
                 planned,
             });
+            if (gameOver) {
+                return true;
+            }
         }
         return false;
     };
