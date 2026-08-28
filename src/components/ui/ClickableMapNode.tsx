@@ -34,7 +34,7 @@ export default function ClickableMapNode({ x, y, radius, isValid = false, isSele
         <g onClick={() => clickable && onClick?.()} style={{ cursor: clickable ? 'pointer' : 'default' }}>
             <title>{title}</title>
             {isHighlighted && (
-                <circle cx={x} cy={y} r={radius + 6.5} fill="none" stroke="var(--ag-purple)" strokeWidth={2.5} strokeDasharray="3 2" />
+                <circle cx={x} cy={y} r={radius + 6.5} fill="none" stroke="var(--ag-green)" strokeWidth={2.5} strokeDasharray="3 2" />
             )}
             {isValid && (
                 <circle cx={x} cy={y} r={radius + 4.5} fill="none" stroke="var(--ag-gold)" strokeWidth={2.5} />

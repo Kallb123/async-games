@@ -1462,8 +1462,8 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-hand-card--tappable { cursor: pointer; }
 .ag-hand-card--tappable:active { filter: brightness(0.96); }
 .ag-hand-card--highlighted {
-    border-color: var(--ag-purple);
-    box-shadow: 0 0 0 1.5px var(--ag-purple);
+    border-color: var(--ag-green);
+    box-shadow: 0 0 0 1.5px var(--ag-green);
 }
 
 /* Dev-card chips shown under the resource hand */
