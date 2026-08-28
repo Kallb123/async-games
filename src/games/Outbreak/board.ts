@@ -30,68 +30,77 @@ export interface OutbreakCityDef {
     id: number;
     name: string;
     color: OutbreakDiseaseColor;
-    /** Schematic (not geographic) board position for the SVG map, 0-800 x 0-480. */
+    /** Schematic (not geographic) board position for the SVG map, 0-800 x 0-460. */
     x: number;
     y: number;
 }
 
 // City list — order and colour grouping follow docs/games/outbreak-gdd.md §5.1
-// (48 cities, 12 per colour). x/y are schematic placeholders roughly tracking
-// real-world geography, laid out to keep same-colour clusters visually
-// contiguous; they aren't calibrated to any map art yet.
+// (48 cities, 12 per colour). x/y are calibrated to the node centres actually
+// drawn in public/art/outbreak/board.png (the SVG's viewBox and the art's
+// preserveAspectRatio="xMidYMid slice" crop are both accounted for), not just
+// roughly-geographic placeholders — see the note on Miami and Riyadh below,
+// the two cities the art doesn't draw at all.
 const CITY_DEFS: Omit<OutbreakCityDef, 'id'>[] = [
     // Blue — North America & Europe (0-11)
-    { name: 'San Francisco', color: 'blue', x: 60, y: 130 },
-    { name: 'Chicago', color: 'blue', x: 150, y: 105 },
-    { name: 'Atlanta', color: 'blue', x: 175, y: 155 },
-    { name: 'Montreal', color: 'blue', x: 205, y: 90 },
-    { name: 'New York', color: 'blue', x: 230, y: 120 },
-    { name: 'Washington', color: 'blue', x: 210, y: 150 },
-    { name: 'London', color: 'blue', x: 400, y: 90 },
-    { name: 'Madrid', color: 'blue', x: 375, y: 150 },
-    { name: 'Paris', color: 'blue', x: 420, y: 110 },
-    { name: 'Essen', color: 'blue', x: 440, y: 75 },
-    { name: 'Milan', color: 'blue', x: 460, y: 120 },
-    { name: 'St. Petersburg', color: 'blue', x: 500, y: 55 },
+    { name: 'San Francisco', color: 'blue', x: 61, y: 141 },
+    { name: 'Chicago', color: 'blue', x: 134, y: 115 },
+    { name: 'Atlanta', color: 'blue', x: 179, y: 199 },
+    { name: 'Montreal', color: 'blue', x: 197, y: 115 },
+    { name: 'New York', color: 'blue', x: 208, y: 153 },
+    { name: 'Washington', color: 'blue', x: 147, y: 157 },
+    { name: 'London', color: 'blue', x: 329, y: 83 },
+    { name: 'Madrid', color: 'blue', x: 311, y: 148 },
+    { name: 'Paris', color: 'blue', x: 362, y: 115 },
+    { name: 'Essen', color: 'blue', x: 371, y: 79 },
+    { name: 'Milan', color: 'blue', x: 416, y: 135 },
+    { name: 'St. Petersburg', color: 'blue', x: 433, y: 70 },
     // Yellow — South America & Africa (12-23)
-    { name: 'Los Angeles', color: 'yellow', x: 90, y: 175 },
-    { name: 'Mexico City', color: 'yellow', x: 145, y: 195 },
-    { name: 'Miami', color: 'yellow', x: 195, y: 185 },
-    { name: 'Bogota', color: 'yellow', x: 205, y: 235 },
-    { name: 'Lima', color: 'yellow', x: 190, y: 300 },
-    { name: 'Santiago', color: 'yellow', x: 190, y: 380 },
-    { name: 'Buenos Aires', color: 'yellow', x: 250, y: 360 },
-    { name: 'Sao Paulo', color: 'yellow', x: 280, y: 300 },
-    { name: 'Lagos', color: 'yellow', x: 350, y: 320 },
-    { name: 'Kinshasa', color: 'yellow', x: 380, y: 370 },
-    { name: 'Khartoum', color: 'yellow', x: 440, y: 320 },
-    { name: 'Johannesburg', color: 'yellow', x: 420, y: 420 },
+    { name: 'Los Angeles', color: 'yellow', x: 80, y: 192 },
+    { name: 'Mexico City', color: 'yellow', x: 123, y: 210 },
+    // The art has no Miami node at all — Atlanta connects straight to Bogotá
+    // in board.png instead of routing through it. x/y here are interpolated
+    // from its neighbours (Atlanta, Washington, Mexico City, Bogotá) rather
+    // than read off the art, and will need correcting if the art ever adds it.
+    { name: 'Miami', color: 'yellow', x: 195, y: 225 },
+    { name: 'Bogota', color: 'yellow', x: 175, y: 251 },
+    { name: 'Lima', color: 'yellow', x: 167, y: 315 },
+    { name: 'Santiago', color: 'yellow', x: 179, y: 370 },
+    { name: 'Buenos Aires', color: 'yellow', x: 227, y: 356 },
+    { name: 'Sao Paulo', color: 'yellow', x: 260, y: 315 },
+    { name: 'Lagos', color: 'yellow', x: 390, y: 291 },
+    { name: 'Kinshasa', color: 'yellow', x: 360, y: 243 },
+    { name: 'Khartoum', color: 'yellow', x: 424, y: 239 },
+    { name: 'Johannesburg', color: 'yellow', x: 424, y: 342 },
     // Black — Middle East & Central/South Asia (24-35)
-    { name: 'Algiers', color: 'black', x: 400, y: 220 },
-    { name: 'Cairo', color: 'black', x: 460, y: 240 },
-    { name: 'Istanbul', color: 'black', x: 470, y: 160 },
-    { name: 'Moscow', color: 'black', x: 540, y: 85 },
-    { name: 'Baghdad', color: 'black', x: 500, y: 210 },
-    { name: 'Tehran', color: 'black', x: 540, y: 175 },
-    { name: 'Riyadh', color: 'black', x: 490, y: 265 },
-    { name: 'Karachi', color: 'black', x: 560, y: 220 },
-    { name: 'Delhi', color: 'black', x: 600, y: 215 },
-    { name: 'Mumbai', color: 'black', x: 570, y: 260 },
-    { name: 'Chennai', color: 'black', x: 600, y: 290 },
-    { name: 'Kolkata', color: 'black', x: 630, y: 235 },
+    { name: 'Algiers', color: 'black', x: 375, y: 169 },
+    { name: 'Cairo', color: 'black', x: 410, y: 187 },
+    { name: 'Istanbul', color: 'black', x: 456, y: 163 },
+    { name: 'Moscow', color: 'black', x: 467, y: 102 },
+    { name: 'Baghdad', color: 'black', x: 463, y: 218 },
+    { name: 'Tehran', color: 'black', x: 499, y: 128 },
+    // Same gap as Miami above: the art has no Riyadh node either — Baghdad
+    // connects straight to Karachi/Khartoum instead. Interpolated from Cairo,
+    // Baghdad and Karachi, not read off the art.
+    { name: 'Riyadh', color: 'black', x: 460, y: 250 },
+    { name: 'Karachi', color: 'black', x: 513, y: 188 },
+    { name: 'Delhi', color: 'black', x: 597, y: 180 },
+    { name: 'Mumbai', color: 'black', x: 522, y: 225 },
+    { name: 'Chennai', color: 'black', x: 558, y: 256 },
+    { name: 'Kolkata', color: 'black', x: 547, y: 167 },
     // Red — East/Southeast Asia & Oceania (36-47)
-    { name: 'Beijing', color: 'red', x: 650, y: 100 },
-    { name: 'Seoul', color: 'red', x: 700, y: 110 },
-    { name: 'Tokyo', color: 'red', x: 745, y: 130 },
-    { name: 'Shanghai', color: 'red', x: 680, y: 150 },
-    { name: 'Hong Kong', color: 'red', x: 680, y: 200 },
-    { name: 'Taipei', color: 'red', x: 715, y: 190 },
-    { name: 'Osaka', color: 'red', x: 745, y: 170 },
-    { name: 'Bangkok', color: 'red', x: 650, y: 260 },
-    { name: 'Ho Chi Minh City', color: 'red', x: 670, y: 295 },
-    { name: 'Manila', color: 'red', x: 725, y: 250 },
-    { name: 'Jakarta', color: 'red', x: 670, y: 345 },
-    { name: 'Sydney', color: 'red', x: 745, y: 420 },
+    { name: 'Beijing', color: 'red', x: 630, y: 121 },
+    { name: 'Seoul', color: 'red', x: 679, y: 119 },
+    { name: 'Tokyo', color: 'red', x: 723, y: 141 },
+    { name: 'Shanghai', color: 'red', x: 632, y: 159 },
+    { name: 'Hong Kong', color: 'red', x: 633, y: 203 },
+    { name: 'Taipei', color: 'red', x: 682, y: 193 },
+    { name: 'Osaka', color: 'red', x: 724, y: 182 },
+    { name: 'Bangkok', color: 'red', x: 603, y: 228 },
+    { name: 'Ho Chi Minh City', color: 'red', x: 638, y: 262 },
+    { name: 'Manila', color: 'red', x: 692, y: 255 },
+    { name: 'Jakarta', color: 'red', x: 596, y: 296 },
+    { name: 'Sydney', color: 'red', x: 729, y: 356 },
 ];
 
 export const CITIES: OutbreakCityDef[] = CITY_DEFS.map((c, id) => ({ ...c, id }));
