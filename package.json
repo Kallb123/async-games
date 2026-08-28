@@ -1,6 +1,6 @@
 {
   "name": "async-games",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "private": true,
   "engines": {
     "node": "24.x"
@@ -19,6 +19,7 @@
     "@capacitor/android": "^8.5.0",
     "@capacitor/app": "^8.1.1",
     "@capacitor/core": "^8.5.0",
+    "@capacitor/splash-screen": "^8.0.2",
     "@clerk/nextjs": "^7",
     "bootstrap": "^5",
     "firebase": "^12",
