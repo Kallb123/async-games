@@ -176,6 +176,44 @@ export function seedGame(game: Record<string, unknown> & { gameId: string }) {
     games.set(game.gameId, asStored({ __v: 0, _id: new mongoose.Types.ObjectId().toString(), ...game }));
 }
 
+/** Where the two players start in the game below, unless a test cares. */
+export const SQUARES = { [ANN.id]: 10, [BOB.id]: 20 };
+
+/**
+ * A Snakes & Ladders game part-way through, with Ann to play — the stand-in
+ * for "a live game" wherever a test needs one and doesn't care which game it
+ * is. It's the simplest game in the app: one command, no hidden state, and a
+ * win is a player past square 100.
+ */
+export function seedSnakesAndLadders(
+    overrides: Record<string, unknown> = {},
+    squares: Record<string, number> = SQUARES
+) {
+    seedGame({
+        gameId: 'game_1',
+        gameType: {
+            gameId: 'gametype_1', gameType: 'SnakesAndLadders', friendlyName: 'Snakes and Ladders',
+            icon: '', url: 'snakesandladders', className: 'SnakesAndLaddersGameType'
+        },
+        kind: 'SnakesAndLaddersGameData',
+        userIdList: [ANN.id, BOB.id],
+        turnTimer: '1 day',
+        currentTurn: ANN.id,
+        lastTurnTimestamp: '2026-01-01T00:00:00.000Z',
+        timerWarningNotificationSent: true,
+        gameState: { turnOrder: [ANN.id, BOB.id], history: [], commandHistory: [] },
+        complete: false,
+        winner: '',
+        specificGameState: {
+            playerPositions: Object.fromEntries(Object.entries(squares)
+                .map(([userId, position]) => [userId, { position, laddersClimbed: 0, snakesHit: 0 }])),
+            hasRolled: false,
+            reRollOnSix: false
+        },
+        ...overrides
+    });
+}
+
 /** The game as the store now holds it — what a later request would read. */
 export function storedGame(gameId: string): StoredGame | undefined {
     return games.get(gameId);

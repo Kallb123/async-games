@@ -1432,6 +1432,59 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-hand-emoji { font-size: 17px; line-height: 1.1; }
 .ag-hand-count { font: 800 13px var(--ag-font); }
 
+/* A hand made of named cards (a city or event card, not a fixed set of
+   counted resources) can run longer than one row, so it wraps rather than
+   squeezing every card down to fit one line — the per-player hand panel and
+   the infection discard pile of §21.6 step 11, not the fixed 5-resource row
+   above, which still wants its cards splitting one line evenly. */
+.ag-hand-cards--wrap { flex-wrap: wrap; }
+
+/* A named card tile within a wrapping hand, sized to its label rather than
+   splitting the row evenly. */
+.ag-hand-card--named {
+    flex: 0 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 9px;
+    max-width: 130px;
+}
+.ag-hand-card-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.ag-hand-card-name {
+    font: 700 10.5px var(--ag-font);
+    color: var(--ag-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* A named card whose city can be ringed on the board — tap to look it up. */
+.ag-hand-card--tappable { cursor: pointer; }
+.ag-hand-card--tappable:active { filter: brightness(0.96); }
+.ag-hand-card--highlighted {
+    border-color: var(--ag-danger);
+    box-shadow: 0 0 0 1.5px var(--ag-danger);
+    --ag-pulse-min: 0.55;
+    animation: ag-pulse 1s ease-in-out infinite;
+}
+
+/* The ring ClickableMapNode draws around a card-highlighted city, and the
+   city's own node pulsing in sync with it so the whole marker reads as one
+   selected unit — not just a ring around an otherwise static dot
+   (--ag-pulse-min is deliberately shallower than the skeleton's so neither
+   ever fully fades). */
+.ag-map-highlight-ring, .ag-map-node-pulse {
+    animation: ag-pulse 1s ease-in-out infinite;
+    transform-box: fill-box;
+    transform-origin: center;
+}
+.ag-map-highlight-ring { --ag-pulse-min: 0.3; }
+.ag-map-node-pulse { --ag-pulse-min: 0.4; }
+
+@media (prefers-reduced-motion: reduce) {
+    .ag-hand-card--highlighted, .ag-map-highlight-ring, .ag-map-node-pulse { animation: none; }
+}
+
 /* Dev-card chips shown under the resource hand */
 .ag-hand-devs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .ag-devchip {
@@ -3180,3 +3233,40 @@ button.ag-tt-ticket { cursor: pointer; }
     .ag-btn--pending > .ag-btn-body { visibility: hidden; }
     .ag-spinner { border-top-color: currentColor; opacity: 0.6; }
 }
+
+/* ==========================================================================
+   Outbreak — biocontainment control room over the crimson accent from meta.ts
+   ==========================================================================
+   Same deal as Train Time: scoped to .ag-game--outbreak, re-tinting the
+   shared chrome (top bar, scoreboard, stat row, buttons, board sea) rather
+   than growing private copies of it. */
+.ag-game--outbreak {
+    --ob-navy: oklch(0.28 0.05 250);
+    --ob-navy-2: oklch(0.34 0.05 250);
+    --ob-crimson: #c0392b;
+    --ob-crimson-deep: #922a1f;
+}
+.ag-game--outbreak .ag-game-topbar { background: var(--ob-navy); }
+.ag-game--outbreak .ag-scorestrip { background: var(--ob-navy-2); }
+.ag-game--outbreak .ag-score-pill--me {
+    background: var(--ob-crimson);
+    color: var(--ag-on-dark);
+    box-shadow: 0 0 0 2px oklch(0.6 0.15 25);
+}
+.ag-game--outbreak .ag-btn--primary {
+    background: var(--ob-crimson);
+    color: var(--ag-on-dark);
+    box-shadow: 0 3px 0 var(--ob-crimson-deep);
+}
+.ag-game--outbreak .ag-stat-row { background: var(--ob-navy-2); padding: 0 12px 10px; }
+.ag-game--outbreak .ag-stat { background: var(--ag-surface); border-radius: 9px; }
+
+/* ---- The board: the map's own dark ocean, not the default sky-blue sea ---- */
+.ag-game--outbreak .ag-board-area {
+    background: radial-gradient(circle at 50% 30%, var(--ob-navy-2), var(--ob-navy));
+}
+.ag-outbreak-frame {
+    background: var(--ob-navy);
+    box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.35), 0 4px 0 oklch(0.22 0.045 250);
+}
+.ag-game--outbreak .ag-board-tag { background: var(--ob-crimson); }

@@ -2,6 +2,8 @@ import { IGameData } from "../mongodb/GameData";
 import { UNKNOWN_PLAYER_NAME } from "../users/clerk";
 import { IGameCommand, IGameType, ICommandOutcome } from "../apiModels/GameLogic";
 import { deserializeJSON } from "../apiModels/Serialisable";
+import { runCommand } from "./commandPipeline";
+import { createAdapterRegistry } from "./adapterRegistry";
 import { buildInitialSnakesAndLaddersState, gameStateToModel as snakesAndLaddersStateToModel, ISnakesAndLaddersGameData } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
 import { buildInitialDiceCitiesState, gameStateToModel as diceCitiesStateToModel } from "@/games/DiceCities/DiceCitiesModels";
 import { buildInitialSmartthinkState, gameStateToModel as smartthinkStateToModel } from "@/games/Smartthink/SmartthinkModels";
@@ -9,6 +11,7 @@ import { buildInitialSettlementsAndCitiesState, gameStateToResponse as settlemen
 import { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import { buildInitialWorldDominationState, gameStateToResponse as worldDominationStateToModel, IWorldDominationGameData } from "@/games/WorldDomination/WorldDominationModels";
 import { buildInitialTrainTimeStateFromGameData, gameStateToModel as trainTimeStateToModel, ITrainTimeGameData } from "@/games/TrainTime/TrainTimeModels";
+import { buildInitialOutbreakStateFromGameData, gameStateToModel as outbreakStateToModel, IOutbreakGameData } from "@/games/Outbreak/OutbreakModels";
 // Side-effect import: evaluating GameLogic registers every @serializable command
 // class so deserializeJSON can rehydrate them during replay.
 import "../apiModels/GameLogic";
@@ -85,12 +88,12 @@ export interface IReplayAdapter {
     plannableCommands: string[];
 }
 
-const adapters: Record<string, IReplayAdapter> = {};
+const adapters = createAdapterRegistry<IReplayAdapter>();
 export function registerReplayAdapter(adapter: IReplayAdapter) {
-    adapters[adapter.className] = adapter;
+    adapters.register(adapter);
 }
 export function getReplayAdapter(className: string): IReplayAdapter | undefined {
-    return adapters[className];
+    return adapters.get(className);
 }
 
 // The command classNames a game will run as part of a planned turn — the
@@ -175,6 +178,17 @@ registerReplayAdapter({
     // draw commands are the obvious exclusions, but ClaimRoute and PassTurn can
     // *end the game* through finishTurn, and this game's DTO reveals every
     // player's tickets once gs.gameOver is set.
+    plannableCommands: [],
+});
+
+registerReplayAdapter({
+    className: "OutbreakGameType",
+    buildInitialSpecificGameState: (gameData) => buildInitialOutbreakStateFromGameData(gameData as IOutbreakGameData),
+    toResponseState: (specificGameState, userIdNameMap, viewerId) =>
+        outbreakStateToModel(specificGameState as never, userIdNameMap, viewerId),
+    // The crew planner is §21.6 step 13, not this one — deck freeze is
+    // feasible (only OutbreakEndTurn touches a deck) but no planning UI
+    // exists yet, so this stays empty until that step turns it on.
     plannableCommands: [],
 });
 
@@ -290,26 +304,13 @@ export async function buildTimeline(
             }
             // Every command was executed on its sender's turn.
             state.currentTurn = command.senderId;
-            const outcome = await command.Execute(state);
+            const { outcome, gameOver } = await runCommand(state, gameType, command);
             if (!outcome.validMove) {
                 continue;
             }
-            state.gameState.commandHistory.push(command);
             if (resolvedOut) {
                 resolvedOut.push(command);
             }
-            if (gameType.CheckGameOver(state)) {
-                snapshot(command, planned);
-                onStep?.({
-                    prev: snapshots[snapshots.length - 2],
-                    next: snapshots[snapshots.length - 1],
-                    command,
-                    outcome,
-                    planned,
-                });
-                return true;
-            }
-            gameType.CheckEndTurn(state, outcome);
             snapshot(command, planned);
             onStep?.({
                 prev: snapshots[snapshots.length - 2],
@@ -318,6 +319,9 @@ export async function buildTimeline(
                 outcome,
                 planned,
             });
+            if (gameOver) {
+                return true;
+            }
         }
         return false;
     };

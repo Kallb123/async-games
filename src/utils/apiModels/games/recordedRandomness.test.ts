@@ -74,23 +74,26 @@ describe("stripRecordedRandomness", () => {
 });
 
 // A source-scan guard rather than an assertion about one game: the command
-// route is the only client-facing Execute call site, so if a refactor drops the
-// strip, every game's recorded RNG becomes client-suppliable at once and no
-// per-game test would notice.
+// route is the only client-facing entry to runCommand (src/utils/games/
+// commandPipeline.ts), which is what actually calls Execute — shared with
+// buildTimeline() and the turn-timer cron's resolveStalledTurn, neither of
+// which is client-facing and so neither of which strips. So if a refactor
+// drops the strip before that call, every game's recorded RNG becomes
+// client-suppliable at once and no per-game test would notice.
 describe("the command route", () => {
     const routeSource = readFileSync(
         path.join(srcRoot, "app/api/game/command/route.ts"),
         "utf8",
     );
 
-    it("strips recorded randomness before executing a command", () => {
+    it("strips recorded randomness before running the command", () => {
         // Anchored to the start of a line so a commented-out call doesn't
         // satisfy the guard.
         const strip = /^[ \t]*stripRecordedRandomness\(commandRequest\);/m.exec(routeSource);
-        const execute = /^[ \t]*(?:const .*= )?await commandRequest\.Execute\(/m.exec(routeSource);
+        const run = /^[ \t]*(?:const .*= )?await runCommand\(/m.exec(routeSource);
 
         expect(strip).not.toBeNull();
-        expect(execute).not.toBeNull();
-        expect(strip!.index).toBeLessThan(execute!.index);
+        expect(run).not.toBeNull();
+        expect(strip!.index).toBeLessThan(run!.index);
     });
 });

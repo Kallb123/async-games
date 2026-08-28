@@ -1,11 +1,13 @@
 import { IGameData } from "../mongodb/GameData";
 import { IGameCommand, ICommandOutcome } from "../apiModels/GameLogic";
 import { buildTimeline, ITimeline, ITurnSnapshot, IReplayStep } from "./replay";
+import { createAdapterRegistry } from "./adapterRegistry";
 import { snakesAndLaddersRecapAdapter } from "@/games/SnakesAndLadders/recap";
 import { diceCitiesRecapAdapter } from "@/games/DiceCities/recap";
 import { settlementsAndCitiesRecapAdapter } from "@/games/SettlementsAndCities/recap";
 import { worldDominationRecapAdapter } from "@/games/WorldDomination/recap";
 import { trainTimeRecapAdapter } from "@/games/TrainTime/recap";
+import { outbreakRecapAdapter } from "@/games/Outbreak/recap";
 
 // A single "here's what happened" entry in a since-you-were-last-here recap.
 // Games synthesise these from replayed turns via an IRecapAdapter; the generic
@@ -65,15 +67,15 @@ export interface IRecapAdapter {
     postProcess?(events: IGameEvent[]): IGameEvent[];
 }
 
-const adapters: Record<string, IRecapAdapter> = {};
+const adapters = createAdapterRegistry<IRecapAdapter>();
 export function registerRecapAdapter(adapter: IRecapAdapter) {
-    adapters[adapter.className] = adapter;
+    adapters.register(adapter);
 }
 export function getRecapAdapter(className: string): IRecapAdapter | undefined {
-    return adapters[className];
+    return adapters.get(className);
 }
 export function hasRecapAdapter(className: string): boolean {
-    return className in adapters;
+    return adapters.has(className);
 }
 
 export interface IEventFeed {
@@ -202,3 +204,4 @@ registerRecapAdapter(diceCitiesRecapAdapter);
 registerRecapAdapter(settlementsAndCitiesRecapAdapter);
 registerRecapAdapter(worldDominationRecapAdapter);
 registerRecapAdapter(trainTimeRecapAdapter);
+registerRecapAdapter(outbreakRecapAdapter);
