@@ -67,32 +67,35 @@ const MOVE_VERB: Record<OutbreakMoveType, string> = {
     shuttleFlight: 'took a shuttle',
 };
 
-// Medic (§11, §16): every cured colour with cubes still in `ps`'s current
-// city clears there automatically — on arrival (called from applyMove,
-// applyDispatcherRelocate and applyOpsExpertFlight, whoever ends up moving
-// her) or from a stationary sweep after a cure resolves (applyCure,
-// applyPlacementResult). Mutates gs directly, the same way every other
-// Execute-side helper in this file does — rules.ts only decides *which*
-// colours qualify (medicAutoClearColors).
-function medicClearCubes(gs: IOutbreakSpecificGameState, cityId: number, colors: OutbreakDiseaseColor[]): void {
-    const city = gs.cities[cityId];
-    for (const color of colors) {
-        const removed = city.cubes[color];
-        city.cubes[color] = 0;
-        gs.cubesLeft[color] += removed;
-        if (gs.cures[color] === 'cured' && gs.cubesLeft[color] === CUBES_PER_COLOR) {
-            gs.cures[color] = 'eradicated';
-        }
+// Removes `count` cubes of `color` from `cityId`, restocks the supply, and
+// runs the eradication check (§8.3) that both Treat Disease and the Medic's
+// automatic clearing share — the one place that decrements a city's cubes.
+function removeCubes(gs: IOutbreakSpecificGameState, cityId: number, color: OutbreakDiseaseColor, count: number): void {
+    gs.cities[cityId].cubes[color] -= count;
+    gs.cubesLeft[color] += count;
+    if (gs.cures[color] === 'cured' && gs.cubesLeft[color] === CUBES_PER_COLOR) {
+        gs.cures[color] = 'eradicated';
     }
 }
 
 // On entry: checks every colour cured at `ps`'s (new) city at once, since a
 // single move can walk her into a city carrying more than one cured colour.
+// Called from applyMove, applyDispatcherRelocate and applyOpsExpertFlight,
+// whoever ends up moving her — rules.ts only decides *which* colours qualify
+// (medicAutoClearColors).
 function applyMedicAutoClearOnEntry(gs: IOutbreakSpecificGameState, ps: IOutbreakPlayerState): string | null {
     const colors = medicAutoClearColors(ps.role, gs.cities[ps.city].cubes, gs.cures);
     if (colors.length === 0) return null;
-    medicClearCubes(gs, ps.city, colors);
+    for (const color of colors) removeCubes(gs, ps.city, color, gs.cities[ps.city].cubes[color]);
     return `the Medic automatically clears ${colors.map(c => DISEASE_COLOR_DEFS[c].name).join(', ')} from ${CITIES[ps.city].name}`;
+}
+
+// Appends applyMedicAutoClearOnEntry's note to `base`, if any — the common
+// tail of every command that can move her pawn (applyMove,
+// applyDispatcherRelocate, applyOpsExpertFlight).
+function withMedicNote(gs: IOutbreakSpecificGameState, ps: IOutbreakPlayerState, base: string): string {
+    const medicNote = applyMedicAutoClearOnEntry(gs, ps);
+    return medicNote ? `${base} — ${medicNote}` : base;
 }
 
 // Stationary sweep: `color` just became cured (applyCure) or was just placed
@@ -103,7 +106,7 @@ function applyMedicAutoClearForColor(gs: IOutbreakSpecificGameState, color: Outb
     const notes: string[] = [];
     for (const ps of gs.players.values()) {
         if (medicAutoClearColors(ps.role, gs.cities[ps.city].cubes, gs.cures).includes(color)) {
-            medicClearCubes(gs, ps.city, [color]);
+            removeCubes(gs, ps.city, color, gs.cities[ps.city].cubes[color]);
             notes.push(`the Medic automatically clears ${DISEASE_COLOR_DEFS[color].name} from ${CITIES[ps.city].name}`);
         }
     }
@@ -112,12 +115,14 @@ function applyMedicAutoClearForColor(gs: IOutbreakSpecificGameState, color: Outb
 
 // Quarantine Specialist (§11, §16): at most one player holds this role, so
 // her current city (or null if nobody does) is all placeCubeOrOutbreak and
-// placeEpidemicCubesOrOutbreak need to know.
-function quarantineSpecialistCityOf(gs: IOutbreakSpecificGameState): number | null {
+// placeEpidemicCubesOrOutbreak need to know. Returns the predicate directly,
+// since both of resolveInfectPhase and resolveEpidemic want the same wrapping.
+function quarantinePredicate(gs: IOutbreakSpecificGameState): (cityId: number) => boolean {
+    let city: number | null = null;
     for (const ps of gs.players.values()) {
-        if (ps.role === 'quarantineSpecialist') return ps.city;
+        if (ps.role === 'quarantineSpecialist') { city = ps.city; break; }
     }
-    return null;
+    return cityId => isProtectedByQuarantine(city, cityId);
 }
 
 // Drive/Ferry, Direct Flight, Charter Flight and Shuttle Flight (§8.1) all
@@ -149,9 +154,7 @@ function applyMove(
     movingPs.city = destination;
 
     const verb = actingPs === movingPs ? MOVE_VERB[moveType] : `dispatched a teammate's pawn (${MOVE_VERB[moveType]})`;
-    const base = `${verb} from ${fromName} to ${CITIES[destination].name}`;
-    const medicNote = applyMedicAutoClearOnEntry(gs, movingPs);
-    return medicNote ? `${base} — ${medicNote}` : base;
+    return withMedicNote(gs, movingPs, `${verb} from ${fromName} to ${CITIES[destination].name}`);
 }
 
 // Dispatcher (§11), second half: move any pawn — including her own — to a
@@ -172,9 +175,7 @@ function applyDispatcherRelocate(
 
     const fromName = CITIES[target.city].name;
     target.city = destination;
-    const base = `dispatched a teammate's pawn from ${fromName} to ${CITIES[destination].name}`;
-    const medicNote = applyMedicAutoClearOnEntry(gs, target);
-    return medicNote ? `${base} — ${medicNote}` : base;
+    return withMedicNote(gs, target, `dispatched a teammate's pawn from ${fromName} to ${CITIES[destination].name}`);
 }
 
 // Operations Expert (§11), second half: once per turn, fly from a research
@@ -198,9 +199,7 @@ function applyOpsExpertFlight(
     ps.city = destination;
     ps.opsExpertFlightUsed = true;
 
-    const base = `flew from the research station in ${fromName} to ${CITIES[destination].name}`;
-    const medicNote = applyMedicAutoClearOnEntry(gs, ps);
-    return medicNote ? `${base} — ${medicNote}` : base;
+    return withMedicNote(gs, ps, `flew from the research station in ${fromName} to ${CITIES[destination].name}`);
 }
 
 // Build a Research Station (§8.2, §11 Operations Expert): discard the card
@@ -242,11 +241,7 @@ function applyTreatDisease(gs: IOutbreakSpecificGameState, ps: IOutbreakPlayerSt
 
     const cured = gs.cures[color] !== 'none';
     const removed = treatDiseaseRemovalCount(cured, present, ps.role);
-    city.cubes[color] -= removed;
-    gs.cubesLeft[color] += removed;
-    if (gs.cures[color] === 'cured' && gs.cubesLeft[color] === CUBES_PER_COLOR) {
-        gs.cures[color] = 'eradicated';
-    }
+    removeCubes(gs, ps.city, color, removed);
 
     const colorName = DISEASE_COLOR_DEFS[color].name;
     if (cured) return `cleared the last of ${colorName} from ${CITIES[ps.city].name}`;
@@ -555,8 +550,7 @@ function resolveInfectPhase(outbreakData: IOutbreakGameData): void {
     const gs = outbreakData.specificGameState;
     const rate = infectionRateFor(gs.infectionRateIndex);
     // Quarantine Specialist (§11, §16): computed once — nobody moves mid-phase.
-    const quarantineCity = quarantineSpecialistCityOf(gs);
-    const isProtected = (cityId: number) => isProtectedByQuarantine(quarantineCity, cityId);
+    const isProtected = quarantinePredicate(gs);
 
     for (let i = 0; i < rate; i++) {
         // Intensify (§9.1 step 3) recycles the infection discard back onto
@@ -626,8 +620,7 @@ function resolveEpidemic(outbreakData: IOutbreakGameData, recordedOrder: number[
         } else {
             // Quarantine Specialist (§11, §16): her protection covers an
             // epidemic's Infect step exactly as it does ordinary infection.
-            const quarantineCity = quarantineSpecialistCityOf(gs);
-            const isProtected = (id: number) => isProtectedByQuarantine(quarantineCity, id);
+            const isProtected = quarantinePredicate(gs);
             const cubes = gs.cities.map(c => c.cubes);
             const result = placeEpidemicCubesOrOutbreak(cubes, cityId, color, gs.cubesLeft, isProtected);
             const gameEnded = applyPlacementResult(
