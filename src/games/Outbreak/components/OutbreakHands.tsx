@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { IOutbreakPlayerStateResponse } from '@/games/Outbreak/apiModels';
-import { roleDef } from '@/games/Outbreak/board';
+import { roleDef, type OutbreakRoleDef } from '@/games/Outbreak/board';
 import OutbreakCardChip from './OutbreakCardChip';
+import OutbreakRoleInfoPopup from './OutbreakRoleInfoPopup';
 
 interface OutbreakHandsProps {
     playerStates: { [username: string]: IOutbreakPlayerStateResponse };
@@ -21,8 +22,11 @@ interface OutbreakHandsProps {
  * "your hand" — looped, since a co-op table needs every hand at once.
  */
 export default function OutbreakHands({ playerStates, usernameList, myUsername, onCardTap, highlightedCityId = null }: OutbreakHandsProps) {
+    const [infoRole, setInfoRole] = useState<OutbreakRoleDef | null>(null);
+
     return (
         <>
+            {infoRole && <OutbreakRoleInfoPopup role={infoRole} onClose={() => setInfoRole(null)} />}
             {usernameList.map(username => {
                 const ps = playerStates[username];
                 if (!ps) return null;
@@ -36,7 +40,15 @@ export default function OutbreakHands({ playerStates, usernameList, myUsername, 
                             <span className="ag-hand-title">
                                 {isMe ? 'Your hand' : `${username}’s hand`} · {cardCount} card{cardCount !== 1 ? 's' : ''}
                             </span>
-                            {role && <span className="ag-hand-note">{role.name}</span>}
+                            {role && (
+                                <button
+                                    type="button"
+                                    className="ag-hand-note ag-link-muted"
+                                    onClick={() => setInfoRole(role)}
+                                >
+                                    {role.name} ⓘ
+                                </button>
+                            )}
                         </div>
                         <div className="ag-hand-cards ag-hand-cards--wrap">
                             {cardCount === 0
