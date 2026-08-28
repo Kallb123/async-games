@@ -2,7 +2,8 @@ import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { v4 as uuidv4 } from 'uuid';
-import { uuidString } from "@/utils/apiModels/GameDataApi";
+import { GameResultStatGroup, uuidString } from "@/utils/apiModels/GameDataApi";
+import { pluralize } from "@/utils/ui/text";
 import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
 import { OutbreakGameType } from "@/utils/apiModels/GameLogic";
 import { shuffle } from "@/utils/games/shuffle";
@@ -15,6 +16,7 @@ import {
     ATLANTA_CITY_ID,
     CITIES,
     CITY_COUNT,
+    DIFFICULTIES,
     DISEASE_COLORS,
     epidemicCountFor,
     EVENT_CARD_IDS,
@@ -302,6 +304,16 @@ export function buildInitialOutbreakState(turnOrder: string[], difficulty: Outbr
     };
 }
 
+// Rebuilds the deterministic starting specificGameState for turn recap
+// (§21.5, §21.6 step 12): the deal, the initial infection and the role deal
+// are all randomised at creation, so — like World Domination and Train
+// Time — replay clones the persisted initialSpecificGameState snapshot
+// rather than re-deriving it, via cloneOutbreakState above. Rebuilds the
+// player map in `gameState.turnOrder` order, the same order it was dealt in.
+export function buildInitialOutbreakStateFromGameData(gameData: IOutbreakGameData): IOutbreakSpecificGameState {
+    return cloneOutbreakState(gameData.initialSpecificGameState, gameData.gameState.turnOrder);
+}
+
 // ─── Game data interfaces ───────────────────────────────────────────────────
 
 export interface IOutbreakGameData extends IGameData {
@@ -432,3 +444,45 @@ export function gameStateToModel(
 export var OutbreakGameDataModel =
     models.OutbreakGameData ||
     GameDataModel.discriminator<IOutbreakGameDataDocument, IOutbreakGameDataModel>('OutbreakGameData', OutbreakGameDataSchema);
+
+// ─── Result stats (§21.6 step 12) ───────────────────────────────────────────
+// A co-op table shares one result, so this is one game-wide stat group (no
+// per-player breakdown) — the same shape Solitaire uses for its own solo
+// summary. Wired into GAME_RESULT_STATS in src/utils/mongodb/GameResultData.ts.
+
+export interface IOutbreakGameResultStats {
+    curesDiscovered: number;
+    outbreaks: number;
+    turnsLasted: number;
+    difficulty: OutbreakDifficulty;
+}
+
+export const outbreakGameResultStatsSchemaDef = {
+    curesDiscovered: Number,
+    outbreaks: Number,
+    turnsLasted: Number,
+    difficulty: String,
+};
+
+export function computeOutbreakResultStats(gameData: IOutbreakGameData): IOutbreakGameResultStats {
+    const gs = gameData.specificGameState;
+    return {
+        curesDiscovered: DISEASE_COLORS.filter(color => gs.cures[color] !== 'none').length,
+        outbreaks: gs.outbreaks,
+        // OutbreakEndTurn is the only command that ends a turn (§21.4) — every
+        // other command in commandHistory is a mid-turn action, discard or
+        // event, so this counts real turns rather than raw command volume.
+        turnsLasted: gameData.gameState.commandHistory.filter(c => c.className === 'OutbreakEndTurn').length,
+        difficulty: gs.difficulty,
+    };
+}
+
+export function formatOutbreakResultStats(stats: IOutbreakGameResultStats): GameResultStatGroup[] {
+    const difficultyLabel = DIFFICULTIES.find(d => d.id === stats.difficulty)?.label ?? stats.difficulty;
+    return [{
+        lines: [
+            `${pluralize(stats.curesDiscovered, 'disease')} cured of 4 · ${difficultyLabel}`,
+            `${pluralize(stats.outbreaks, 'outbreak')} survived (of 8) · ${pluralize(stats.turnsLasted, 'turn')}`,
+        ],
+    }];
+}

@@ -456,7 +456,7 @@ absence).
 
 ### 21.3 Deviations from this document
 
-Async play forces four, all of which should be recorded in a "Deviations"
+Async play forces five, all of which should be recorded in a "Deviations"
 subsection of this document as they land:
 
 * **Event cards are playable only on your own turn**, at any point in your
@@ -477,6 +477,13 @@ subsection of this document as they land:
 * **A player who drops out ends the game for everybody**, as in every other game
   here — the cron's abandon path already does this, and co-op gives it a cleaner
   reading than usual: the team lost.
+* **A turn timed out mid-Forecast (§12) resolves with the identity order** —
+  the six revealed cards go back exactly as drawn, rather than the cron
+  inventing the reorder a present player would have chosen. §21.6 step 7's
+  turn-timeout adapter already forfeits open actions and forces a draw/discard
+  on a stalled turn; a pending Forecast is just a fourth stalled phase for it
+  to resolve, the same way it resolves the others — mechanically, not
+  strategically.
 
 ### 21.4 State and command surface
 
@@ -1036,6 +1043,52 @@ empty array and the result page renders nothing, silently, with no test failing.
 `GameResultStats` and `GameStatsList` then display it for free. Finally flip
 `meta.available` to true, add the "What's new" line to
 `src/utils/ui/whatsNew.ts`, and fold the deviations of 21.3 into this document.
+
+*Landed.* `src/games/Outbreak/recap.ts` exports `outbreakRecapAdapter`,
+registered in `src/utils/games/recap.ts` alongside the other games'. Per §3,
+`toEvents` leans on the board getting worse rather than a blow-by-blow of
+every action: `OutbreakEndTurn` is read as a *diff* between snapshots
+(`recordedIntensifyOrders.length` for how many epidemics resolved, the
+`outbreaks` delta for chain reactions, the total-cubes delta for ordinary
+infection) rather than re-parsed from history text, the same diff-reading
+approach World Domination's recap already uses for its battles. Cures and
+research stations are the team's side of the story; the five event cards each
+get their own row since §12 already frames them as five different pressure
+releases; movement, Share Knowledge, Treat Disease, passing and discarding are
+this game's equivalent of a Catan road — too granular to earn one. A generic
+`next.complete && !prev.complete` check closes the loop for either ending,
+whichever command caused it, reusing the human-authored history line
+`endInTeamLoss` already writes rather than re-deriving the loss reason a
+second time. `tip` checks every uncured colour for a hand that already pays
+for its cure before falling back to the board's worst hotspot.
+
+Replay needed one new export: `buildInitialOutbreakStateFromGameData` in
+`OutbreakModels.ts`, following the World Domination/Train Time snapshot
+pattern of §21.5 — the deal, initial infection and role deal are randomised at
+creation, so replay clones `initialSpecificGameState` (via the existing
+`cloneOutbreakState`) rather than re-deriving it. Registered in `replay.ts`
+with `plannableCommands: []`, deck freeze being feasible but step 13's job.
+
+Result stats are the four pieces `GameResultData.ts` needs, all added to
+`OutbreakModels.ts` alongside the other games' equivalents:
+`IOutbreakGameResultStats`/`outbreakGameResultStatsSchemaDef`,
+`computeOutbreakResultStats` (cures discovered by filtering `cures` for
+anything but `'none'`, the final `outbreaks` count, turns lasted by counting
+`OutbreakEndTurn` in `commandHistory` — the one command that ends a turn,
+per §21.4 — rather than raw command volume, and `difficulty`), and
+`formatOutbreakResultStats`. One game-wide stat group with no `username`, the
+same shape Solitaire's solo summary uses, since a co-op table shares its
+result. Wired into `GAME_RESULT_STATS` under the `Outbreak` key;
+`gameRegistry.test.ts` already guards both this wiring and the recap import.
+
+The board screen picked up `useTurnRecap` + `TurnRecapScreen`, gated on
+`recap.show` before the normal board render — the same shape Train Time and
+World Domination use — plus a "Show last recap" row in the options menu when
+`recap.hasRecap`. `meta.available` is `true`, `GameLibrary` now lists
+Outbreak for real, and `src/utils/ui/whatsNew.ts` has its "New games" line.
+§21.3 above picked up a fifth deviation (the Forecast turn-timeout resolving
+with the identity order) found while reviewing steps 7 and 10 for this
+write-up.
 
 **13 — The crew planner.** Last deliberately: it is the most novel thing here and
 the easiest to cut, and the game ships complete without it. Three pieces, per
