@@ -5,6 +5,9 @@ interface OutbreakInfectionDiscardProps {
     /** In draw order, oldest first — §14.2's most-read pile, so it deserves a
      *  panel of its own rather than being folded into the log. */
     infectionDiscard: number[];
+    /** Tapping a card rings that city on the board. */
+    onCardTap?: (cityId: number) => void;
+    highlightedCityId?: number | null;
 }
 
 /**
@@ -14,7 +17,7 @@ interface OutbreakInfectionDiscardProps {
  * pile — the strongest public signal for where the next wave lands. Most
  * recently infected first, matching the log's newest-first convention.
  */
-export default function OutbreakInfectionDiscard({ infectionDiscard }: OutbreakInfectionDiscardProps) {
+export default function OutbreakInfectionDiscard({ infectionDiscard, onCardTap, highlightedCityId = null }: OutbreakInfectionDiscardProps) {
     const cards = [...infectionDiscard].reverse();
 
     return (
@@ -26,7 +29,14 @@ export default function OutbreakInfectionDiscard({ infectionDiscard }: OutbreakI
             <div className="ag-hand-cards ag-hand-cards--wrap">
                 {cards.length === 0
                     ? <span className="ag-hand-note">Empty.</span>
-                    : cards.map((cityId, i) => <OutbreakCardChip key={`${cityId}-${i}`} cardId={cityId} />)}
+                    : cards.map((cityId, i) => (
+                        <OutbreakCardChip
+                            key={`${cityId}-${i}`}
+                            cardId={cityId}
+                            onTap={onCardTap}
+                            highlighted={cityId === highlightedCityId}
+                        />
+                    ))}
             </div>
         </div>
     );
