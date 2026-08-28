@@ -6,7 +6,7 @@ import { ReactNode, useLayoutEffect, useRef } from "react";
 export type CollapsePhase = "enter" | "exit";
 
 /** Must match `--ag-anim-ms` in `ag-theme.css`. */
-export const ANIM_MS = 450;
+export const ANIM_MS = 300;
 
 /** Set while `Collapse` is driving its own height — see `handover` below. */
 const RESIZE_CLASS = "ag-anim-item--resize";
