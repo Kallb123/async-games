@@ -18,6 +18,7 @@ import {
     CUBES_PER_COLOR,
     HAND_LIMIT,
     INFECTION_RATE_TRACK,
+    IOutbreakChainResult,
     OutbreakMoveType,
     canDiscoverCure,
     cureCardsRequired,
@@ -327,12 +328,49 @@ function endInTeamLoss(outbreakData: IOutbreakGameData, reason: string): void {
     outbreakData.gameState.history.unshift(`The team loses — ${reason}.`);
 }
 
-// Phase 3 (§10): draw infection cards equal to the current rate (fixed at 2
-// until epidemics land in §21.6 step 8), placing 1 cube per card and
-// resolving outbreaks and chains. Stops the instant a §4.2 loss condition
-// fires (cube exhaustion or the outbreak marker reaching 8) rather than
-// finishing the remaining draws (§16). Returns early — before placing
-// anything — if the game already ended in the draw/discard step above it.
+// Writes a resolved cube placement back onto game state — cities, cubesLeft,
+// the outbreak counter — logs the outcome, and ends the game in the matching
+// §4.2 loss if this placement triggered one (cube exhaustion or the outbreak
+// marker reaching its threshold). Shared by the ordinary infect phase and an
+// epidemic's own Infect step (§9.1 step 2), which differ only in how the card
+// is drawn and how many cubes `result` placed — the write-back and the two
+// loss checks are otherwise identical, so drift between them stays impossible
+// rather than merely unlikely. Returns true when a loss ended the game, so
+// the caller stops resolving further draws.
+function applyPlacementResult(
+    outbreakData: IOutbreakGameData,
+    color: OutbreakDiseaseColor,
+    result: IOutbreakChainResult,
+    describeInfected: () => string,
+    describeOutbreak: (spreadToNames: string) => string,
+): boolean {
+    const gs = outbreakData.specificGameState;
+    gs.cities.forEach((c, id) => { c.cubes = result.cubes[id]; });
+    if (result.cubesLeft) gs.cubesLeft = result.cubesLeft;
+    gs.outbreaks += result.outbreaks;
+
+    outbreakData.gameState.history.unshift(
+        result.outbreaks > 0
+            ? describeOutbreak(result.outbrokenCities.map(id => CITIES[id].name).join(', '))
+            : describeInfected(),
+    );
+
+    if (result.cubeExhausted) {
+        endInTeamLoss(outbreakData, `no ${DISEASE_COLOR_DEFS[color].name} cubes remain in supply`);
+        return true;
+    }
+    if (isOutbreakCascadeLoss(gs.outbreaks)) {
+        endInTeamLoss(outbreakData, `the outbreak marker reached ${gs.outbreaks}`);
+        return true;
+    }
+    return false;
+}
+
+// Phase 3 (§10): draw infection cards equal to the current rate, placing 1
+// cube per card and resolving outbreaks and chains. Stops the instant a
+// §4.2 loss condition fires rather than finishing the remaining draws
+// (§16). Returns early — before placing anything — if the game already
+// ended in the draw/discard step above it.
 function resolveInfectPhase(outbreakData: IOutbreakGameData): void {
     if (outbreakData.complete) return;
     const gs = outbreakData.specificGameState;
@@ -356,24 +394,12 @@ function resolveInfectPhase(outbreakData: IOutbreakGameData): void {
 
         const cubes = gs.cities.map(c => c.cubes);
         const result = placeCubeOrOutbreak(cubes, cityId, color, new Set(), gs.cubesLeft);
-        gs.cities.forEach((c, id) => { c.cubes = result.cubes[id]; });
-        if (result.cubesLeft) gs.cubesLeft = result.cubesLeft;
-        gs.outbreaks += result.outbreaks;
-
-        outbreakData.gameState.history.unshift(
-            result.outbreaks > 0
-                ? `outbreak in ${CITIES[cityId].name}! It spreads to ${result.outbrokenCities.map(id => CITIES[id].name).join(', ')}`
-                : `infected ${CITIES[cityId].name} with ${DISEASE_COLOR_DEFS[color].name}`,
+        const gameEnded = applyPlacementResult(
+            outbreakData, color, result,
+            () => `infected ${CITIES[cityId].name} with ${DISEASE_COLOR_DEFS[color].name}`,
+            spreadToNames => `outbreak in ${CITIES[cityId].name}! It spreads to ${spreadToNames}`,
         );
-
-        if (result.cubeExhausted) {
-            endInTeamLoss(outbreakData, `no ${DISEASE_COLOR_DEFS[color].name} cubes remain in supply`);
-            return;
-        }
-        if (isOutbreakCascadeLoss(gs.outbreaks)) {
-            endInTeamLoss(outbreakData, `the outbreak marker reached ${gs.outbreaks}`);
-            return;
-        }
+        if (gameEnded) return;
     }
 }
 
@@ -409,24 +435,12 @@ function resolveEpidemic(outbreakData: IOutbreakGameData, recordedOrder: number[
     } else {
         const cubes = gs.cities.map(c => c.cubes);
         const result = placeEpidemicCubesOrOutbreak(cubes, cityId, color, gs.cubesLeft);
-        gs.cities.forEach((c, id) => { c.cubes = result.cubes[id]; });
-        if (result.cubesLeft) gs.cubesLeft = result.cubesLeft;
-        gs.outbreaks += result.outbreaks;
-
-        outbreakData.gameState.history.unshift(
-            result.outbreaks > 0
-                ? `Epidemic saturates ${CITIES[cityId].name} — it outbreaks and spreads to ${result.outbrokenCities.map(id => CITIES[id].name).join(', ')}`
-                : `Epidemic infects ${CITIES[cityId].name} with 3 cubes of ${DISEASE_COLOR_DEFS[color].name}`,
+        const gameEnded = applyPlacementResult(
+            outbreakData, color, result,
+            () => `Epidemic infects ${CITIES[cityId].name} with 3 cubes of ${DISEASE_COLOR_DEFS[color].name}`,
+            spreadToNames => `Epidemic saturates ${CITIES[cityId].name} — it outbreaks and spreads to ${spreadToNames}`,
         );
-
-        if (result.cubeExhausted) {
-            endInTeamLoss(outbreakData, `no ${DISEASE_COLOR_DEFS[color].name} cubes remain in supply`);
-            return null;
-        }
-        if (isOutbreakCascadeLoss(gs.outbreaks)) {
-            endInTeamLoss(outbreakData, `the outbreak marker reached ${gs.outbreaks}`);
-            return null;
-        }
+        if (gameEnded) return null;
     }
 
     // 3 — INTENSIFY (§9.1 step 3, §14.2): shuffle the infection discard pile
