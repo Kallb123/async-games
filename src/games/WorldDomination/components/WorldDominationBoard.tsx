@@ -3,6 +3,7 @@ import React from 'react';
 import BoardZoom from '@/components/ui/BoardZoom';
 import type { IWorldDominationTerritoryResponse } from '@/games/WorldDomination/apiModels';
 import { TERRITORIES, ADJACENCY, CONTINENT_ORDER, CONTINENTS, continentLabelAnchor, BOARD_VIEWBOX } from '@/games/WorldDomination/board';
+import { edgeListFrom } from '@/utils/games/adjacencyGraph';
 
 interface WorldDominationBoardProps {
     territories: IWorldDominationTerritoryResponse[];
@@ -17,20 +18,7 @@ interface WorldDominationBoardProps {
     placementPrompt?: string | null;
 }
 
-// Dedupe the adjacency graph into one edge per pair for line-drawing.
-const EDGE_LIST: [number, number][] = (() => {
-    const seen = new Set<string>();
-    const edges: [number, number][] = [];
-    ADJACENCY.forEach((neighbours, from) => {
-        neighbours.forEach(to => {
-            const key = from < to ? `${from}-${to}` : `${to}-${from}`;
-            if (seen.has(key)) return;
-            seen.add(key);
-            edges.push([from, to]);
-        });
-    });
-    return edges;
-})();
+const EDGE_LIST = edgeListFrom(ADJACENCY);
 
 export default function WorldDominationBoard({
     territories,

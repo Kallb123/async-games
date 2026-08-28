@@ -158,6 +158,24 @@ export function canDiscoverCure(state: IOutbreakCureEligibility): boolean {
     return state.atResearchStation && state.handColorCount >= cureCardsRequired(state.isScientist);
 }
 
+// ─── Board helpers shared with the client (§21.6 step 5) ───────────────────
+
+/** City ids that currently have a research station, in id order. */
+export function stationCityIds(cities: { station: boolean }[]): number[] {
+    const ids: number[] = [];
+    cities.forEach((c, id) => { if (c.station) ids.push(id); });
+    return ids;
+}
+
+// The infection rate track (§9.1 step 1): index 0 is the starting rate. Not
+// yet advanced by anything — epidemics land in §21.6 step 8 — but the board
+// screen reads it now to show the current rate rather than a hard-coded 2.
+export const INFECTION_RATE_TRACK = [2, 2, 2, 3, 3, 4, 4];
+
+export function infectionRateFor(infectionRateIndex: number): number {
+    return INFECTION_RATE_TRACK[infectionRateIndex] ?? INFECTION_RATE_TRACK[INFECTION_RATE_TRACK.length - 1];
+}
+
 // ─── Loss checks (§4.2) ─────────────────────────────────────────────────────
 
 export const OUTBREAK_LOSS_THRESHOLD = 8;
