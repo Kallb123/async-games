@@ -16,7 +16,9 @@ import {
     isCityCardId,
     OutbreakDiseaseColor,
 } from "@/games/Outbreak/board";
+import type { IOutbreakInfectionLogEntry } from "@/games/Outbreak/rules";
 import { canDiscoverCure, infectionRateFor } from "@/games/Outbreak/rules";
+import { cityList, outbreakCascadeSteps } from "@/games/Outbreak/narration";
 import { pluralize } from "@/utils/ui/text";
 
 // §3's whole emotional arc is the board getting worse while the team fights
@@ -54,6 +56,30 @@ function totalCubes(gs: IOutbreakSpecificGameStateResponse): number {
 
 function curedEverything(gs: IOutbreakSpecificGameStateResponse): boolean {
     return DISEASE_COLORS.every(color => gs.cures[color] !== 'none');
+}
+
+// One outbreak log entry as a phrase that names where it landed. A lone burst
+// reads "Lagos overflowed onto Kinshasa and Khartoum"; a chain reaction walks
+// city by city — "Lagos cascaded: Lagos → Kinshasa; Kinshasa → Johannesburg" —
+// reusing the same cascade spine the end-of-turn screen prints (narration.ts).
+function describeOutbreakEntry(entry: IOutbreakInfectionLogEntry): string {
+    const origin = CITIES[entry.cityId!].name;
+    const chain = entry.outbreakChain ?? [];
+    if (chain.length > 1) {
+        return `${origin} cascaded: ${outbreakCascadeSteps(chain)}`;
+    }
+    const infected = chain[0]?.infected ?? [];
+    return infected.length > 0 ? `${origin} overflowed onto ${cityList(infected)}` : `${origin} outbroke`;
+}
+
+// The cities a non-outbreak infect phase put cubes on, with a "×n" when the
+// same city was hit more than once — so "the board got worse" says where.
+function describePlacements(entries: IOutbreakInfectionLogEntry[]): string {
+    const counts = new Map<number, number>();
+    for (const e of entries) counts.set(e.cityId!, (counts.get(e.cityId!) ?? 0) + 1);
+    return [...counts.entries()]
+        .map(([cityId, n]) => (n > 1 ? `${CITIES[cityId].name} (×${n})` : CITIES[cityId].name))
+        .join(', ');
 }
 
 /**
@@ -102,46 +128,6 @@ function toEvents(
                     type: OB_STATION,
                     glyph: '🏥',
                     title: cityName ? `${name} built a research station in ${cityName}` : `${name} built a research station`,
-                });
-            }
-            break;
-        }
-
-        // ── The board deteriorating (§3, §7 phases 2-3) ───────────────────
-        case "OutbreakEndTurn": {
-            const cmd = command as unknown as { recordedIntensifyOrders?: number[][] };
-            const epidemics = cmd.recordedIntensifyOrders?.length ?? 0;
-            const outbreaksDelta = nextState.outbreaks - prevState.outbreaks;
-            const cubesDelta = totalCubes(nextState) - totalCubes(prevState);
-
-            if (epidemics > 0) {
-                events.push({
-                    ...base,
-                    id: `${command.id}:epidemic`,
-                    type: OB_EPIDEMIC,
-                    glyph: '📈',
-                    title: epidemics > 1
-                        ? `Epidemic! Twice — the infection rate jumps to ${infectionRateFor(nextState.infectionRateIndex)}`
-                        : `Epidemic! The infection rate rises to ${infectionRateFor(nextState.infectionRateIndex)}`,
-                    detail: 'the infection discard pile is reshuffled onto the deck',
-                });
-            }
-            if (outbreaksDelta > 0) {
-                events.push({
-                    ...base,
-                    id: `${command.id}:outbreak`,
-                    type: OB_OUTBREAK,
-                    glyph: '💥',
-                    title: `${pluralize(outbreaksDelta, 'outbreak')} — the marker is now ${nextState.outbreaks}/8`,
-                    detail: cubesDelta > 0 ? `${pluralize(cubesDelta, 'cube')} hit the board this turn` : undefined,
-                });
-            } else if (cubesDelta > 0) {
-                events.push({
-                    ...base,
-                    id: `${command.id}:infect`,
-                    type: OB_INFECT,
-                    glyph: '🦠',
-                    title: `The board got worse — ${pluralize(cubesDelta, 'new cube')} placed`,
                 });
             }
             break;
@@ -226,18 +212,65 @@ function toEvents(
             break;
     }
 
+    // ── The board deteriorating (§3, §7 phases 2-3) ───────────────────────
+    // Narrated from the infection log rather than a before/after cube count.
+    // The log is the only record of *where* each draw landed, so this is what
+    // lets the recap name the cities an outbreak overflowed onto and walk a
+    // cascade burst by burst — a plain cube delta can only say "the board got
+    // worse". Read on every command class, not just OutbreakEndTurn, since a
+    // hand-limit OutbreakDiscard or an OutbreakPlayEvent can be the command
+    // that finishes the draw phase and runs Phase 3; every other command has no
+    // `infectionLog`, so this structurally no-ops for them.
+    const log = (outcome as IOutbreakInfectionPhaseOutcome).infectionLog ?? [];
+
+    const epidemics = log.filter(e => e.kind === 'epidemic').length;
+    if (epidemics > 0) {
+        events.push({
+            ...base,
+            id: `${command.id}:epidemic`,
+            type: OB_EPIDEMIC,
+            glyph: '📈',
+            title: epidemics > 1
+                ? `Epidemic! Twice — the infection rate jumps to ${infectionRateFor(nextState.infectionRateIndex)}`
+                : `Epidemic! The infection rate rises to ${infectionRateFor(nextState.infectionRateIndex)}`,
+            detail: 'the infection discard pile is reshuffled onto the deck',
+        });
+    }
+
+    const outbreaks = log.filter(e => e.outcome === 'outbreak');
+    if (outbreaks.length > 0) {
+        // The marker climbs once per city that overflowed — a single card can
+        // set off a whole cascade of them — so count the total from the marker
+        // itself, and let the detail spell out where each one spread.
+        const bursts = nextState.outbreaks - prevState.outbreaks;
+        events.push({
+            ...base,
+            id: `${command.id}:outbreak`,
+            type: OB_OUTBREAK,
+            glyph: '💥',
+            title: `${pluralize(bursts, 'outbreak')} — the marker is now ${nextState.outbreaks}/8`,
+            detail: outbreaks.map(describeOutbreakEntry).join(' · '),
+        });
+    } else {
+        const placed = log.filter(e => e.outcome === 'placed');
+        if (placed.length > 0) {
+            const cubesDelta = totalCubes(nextState) - totalCubes(prevState);
+            events.push({
+                ...base,
+                id: `${command.id}:infect`,
+                type: OB_INFECT,
+                glyph: '🦠',
+                title: `The board got worse — ${pluralize(cubesDelta, 'new cube')} placed`,
+                detail: describePlacements(placed),
+            });
+        }
+    }
+
     // ── The Quarantine Specialist quietly earning her keep ────────────────
-    // Not folded into the OutbreakEndTurn case above: a card she contains
-    // places no cube and triggers no outbreak, so the before/after cube and
-    // outbreak counts that case reads can't tell a contained draw apart from
-    // nothing having been drawn at all — the infection log on the command's
-    // own outcome (IOutbreakInfectionPhaseOutcome) is the only place that
-    // recorded it happened. Checked on every command class, not just
-    // OutbreakEndTurn, since OutbreakDiscard and OutbreakPlayEvent can also
-    // be the one that finishes the draw phase and runs Phase 3 — reading
-    // `outcome` rather than `command` structurally no-ops for every other
-    // command, which never has an `infectionLog`.
-    const contained = (outcome as IOutbreakInfectionPhaseOutcome).infectionLog?.filter(e => e.outcome === 'contained') ?? [];
+    // A card she contains places no cube and triggers no outbreak, so a
+    // before/after cube count can't tell it apart from nothing having been
+    // drawn at all — the infection log is the only place that records it.
+    const contained = log.filter(e => e.outcome === 'contained');
     if (contained.length > 0) {
         events.push({
             ...base,
