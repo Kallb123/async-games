@@ -83,6 +83,15 @@ export default function OutbreakBoard({ cities, playerStates, usernameList, vali
                             >
                                 <circle cx={def.x} cy={def.y} r={NODE_RADIUS} fill={colorHex} stroke="#fff" strokeWidth={1.3} />
 
+                                <text
+                                    x={def.x + NODE_RADIUS + 3} y={def.y + 2.5}
+                                    fontSize={6} fontWeight={700}
+                                    fill="#fff" stroke="rgba(0,0,0,0.6)" strokeWidth={2.5} paintOrder="stroke"
+                                    pointerEvents="none"
+                                >
+                                    {def.name}
+                                </text>
+
                                 {state.station && (
                                     <rect
                                         x={def.x + 2} y={def.y - NODE_RADIUS - 7}
