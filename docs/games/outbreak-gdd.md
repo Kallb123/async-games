@@ -707,6 +707,14 @@ modules are server-free so the client can import them for the action picker
 symmetric, every colour has 12 cities, the graph is connected, and a hand-built
 cluster produces the chain reaction §10.1 describes.
 
+*Landed.* `board.ts` and `rules.ts` are in, with `board.test.ts` and
+`rules.test.ts` covering the cases above. Caveman review caught that
+`board.ts`'s adjacency builder was a near copy of `WorldDomination/board.ts`'s,
+so the symmetric-adjacency-from-edge-list logic was extracted into
+`src/utils/games/adjacencyGraph.ts` (`buildSymmetricAdjacency` +
+`isAdjacentIn`), generic over any node-name list, and both boards now delegate
+to it instead of hand-keeping two copies in sync.
+
 **3 — Setup and wiring.** `OutbreakModels.ts` (both discriminators,
 `buildInitialOutbreakState`, `gameStateToModel` with the redaction above),
 `apiModels.ts`, `meta.ts` with `available: false`,
@@ -723,6 +731,19 @@ in steps 4 and 10 rather than finished here. `gameRegistry.test.ts` and
 `serializableRegistry.test.ts` name anything missed. At the end of this step a
 game can be created and its opening board — 9 infected cities, 18 cubes, a
 station in Atlanta — inspected in the API response.
+
+*Landed.* Both discriminators, `buildInitialOutbreakState` and
+`gameStateToModel` are in `OutbreakModels.ts`, with `apiModels.ts`, `meta.ts`
+(`available: false`) and `POST /api/newgame/outbreak` alongside them, plus the
+difficulty-aware setup screen at `/newgame/outbreak`. `OutbreakGameType` in
+`OutbreakLogic.ts` is a deliberate stub — no commands yet, that's step 4 — but
+the game is wired into every shared registry (`GameLogic` barrel, `GAME_META`,
+`mongodb.ts` discriminators, `gameCommands.ts`), `GAME_CATEGORIES` has `Co-op`,
+and the opening board (9 infected cities, 18 cubes, a station in Atlanta) is
+real and inspectable via the API. This step also fixed `GameLibrary.tsx` to
+actually read `meta.available`, which had been declared but never wired to
+anything — without it, an in-progress game would show up as a fully clickable,
+startable card in the library.
 
 **4 — The action phase.** `OutbreakLogic.ts` with `OutbreakAction` and
 `OutbreakGameType`: four actions, all eight action kinds, `CheckEndTurn`
