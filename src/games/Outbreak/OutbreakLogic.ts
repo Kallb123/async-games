@@ -8,6 +8,7 @@ import {
     CITIES,
     DISEASE_COLORS,
     DISEASE_COLOR_DEFS,
+    EPIDEMIC_CARD_ID,
     MAX_RESEARCH_STATIONS,
     OutbreakDiseaseColor,
 } from "@/games/Outbreak/board";
@@ -16,6 +17,8 @@ import {
     CARDS_DRAWN_PER_TURN,
     CUBES_PER_COLOR,
     HAND_LIMIT,
+    INFECTION_RATE_TRACK,
+    IOutbreakChainResult,
     OutbreakMoveType,
     canDiscoverCure,
     cureCardsRequired,
@@ -24,8 +27,10 @@ import {
     isOutbreakCascadeLoss,
     isPlayerDeckEmptyLoss,
     placeCubeOrOutbreak,
+    placeEpidemicCubesOrOutbreak,
     stationCityIds,
 } from "@/games/Outbreak/rules";
+import { shuffle } from "@/utils/games/shuffle";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  OUTBREAK
@@ -323,23 +328,60 @@ function endInTeamLoss(outbreakData: IOutbreakGameData, reason: string): void {
     outbreakData.gameState.history.unshift(`The team loses — ${reason}.`);
 }
 
-// Phase 3 (§10): draw infection cards equal to the current rate (fixed at 2
-// until epidemics land in §21.6 step 8), placing 1 cube per card and
-// resolving outbreaks and chains. Stops the instant a §4.2 loss condition
-// fires (cube exhaustion or the outbreak marker reaching 8) rather than
-// finishing the remaining draws (§16). Returns early — before placing
-// anything — if the game already ended in the draw/discard step above it.
+// Writes a resolved cube placement back onto game state — cities, cubesLeft,
+// the outbreak counter — logs the outcome, and ends the game in the matching
+// §4.2 loss if this placement triggered one (cube exhaustion or the outbreak
+// marker reaching its threshold). Shared by the ordinary infect phase and an
+// epidemic's own Infect step (§9.1 step 2), which differ only in how the card
+// is drawn and how many cubes `result` placed — the write-back and the two
+// loss checks are otherwise identical, so drift between them stays impossible
+// rather than merely unlikely. Returns true when a loss ended the game, so
+// the caller stops resolving further draws.
+function applyPlacementResult(
+    outbreakData: IOutbreakGameData,
+    color: OutbreakDiseaseColor,
+    result: IOutbreakChainResult,
+    describeInfected: () => string,
+    describeOutbreak: (spreadToNames: string) => string,
+): boolean {
+    const gs = outbreakData.specificGameState;
+    gs.cities.forEach((c, id) => { c.cubes = result.cubes[id]; });
+    if (result.cubesLeft) gs.cubesLeft = result.cubesLeft;
+    gs.outbreaks += result.outbreaks;
+
+    outbreakData.gameState.history.unshift(
+        result.outbreaks > 0
+            ? describeOutbreak(result.outbrokenCities.map(id => CITIES[id].name).join(', '))
+            : describeInfected(),
+    );
+
+    if (result.cubeExhausted) {
+        endInTeamLoss(outbreakData, `no ${DISEASE_COLOR_DEFS[color].name} cubes remain in supply`);
+        return true;
+    }
+    if (isOutbreakCascadeLoss(gs.outbreaks)) {
+        endInTeamLoss(outbreakData, `the outbreak marker reached ${gs.outbreaks}`);
+        return true;
+    }
+    return false;
+}
+
+// Phase 3 (§10): draw infection cards equal to the current rate, placing 1
+// cube per card and resolving outbreaks and chains. Stops the instant a
+// §4.2 loss condition fires rather than finishing the remaining draws
+// (§16). Returns early — before placing anything — if the game already
+// ended in the draw/discard step above it.
 function resolveInfectPhase(outbreakData: IOutbreakGameData): void {
     if (outbreakData.complete) return;
     const gs = outbreakData.specificGameState;
     const rate = infectionRateFor(gs.infectionRateIndex);
 
     for (let i = 0; i < rate; i++) {
-        // Nothing recycles the infection discard into the deck until
-        // Intensify lands (§21.6 step 8) — a long enough game could in
-        // principle run it dry. Rather than invent unrecorded randomness to
-        // paper over that, the infect phase simply has fewer cards to draw
-        // that turn.
+        // Intensify (§9.1 step 3) recycles the infection discard back onto
+        // the deck each time an epidemic is drawn, but a long enough run
+        // between epidemics could still exhaust it. Rather than invent
+        // unrecorded randomness to paper over that, the infect phase simply
+        // has fewer cards to draw that turn.
         if (gs.infectionDeck.length === 0) break;
 
         const cityId = gs.infectionDeck.shift()!;
@@ -352,25 +394,72 @@ function resolveInfectPhase(outbreakData: IOutbreakGameData): void {
 
         const cubes = gs.cities.map(c => c.cubes);
         const result = placeCubeOrOutbreak(cubes, cityId, color, new Set(), gs.cubesLeft);
-        gs.cities.forEach((c, id) => { c.cubes = result.cubes[id]; });
-        if (result.cubesLeft) gs.cubesLeft = result.cubesLeft;
-        gs.outbreaks += result.outbreaks;
-
-        outbreakData.gameState.history.unshift(
-            result.outbreaks > 0
-                ? `outbreak in ${CITIES[cityId].name}! It spreads to ${result.outbrokenCities.map(id => CITIES[id].name).join(', ')}`
-                : `infected ${CITIES[cityId].name} with ${DISEASE_COLOR_DEFS[color].name}`,
+        const gameEnded = applyPlacementResult(
+            outbreakData, color, result,
+            () => `infected ${CITIES[cityId].name} with ${DISEASE_COLOR_DEFS[color].name}`,
+            spreadToNames => `outbreak in ${CITIES[cityId].name}! It spreads to ${spreadToNames}`,
         );
+        if (gameEnded) return;
+    }
+}
 
-        if (result.cubeExhausted) {
-            endInTeamLoss(outbreakData, `no ${DISEASE_COLOR_DEFS[color].name} cubes remain in supply`);
-            return;
-        }
-        if (isOutbreakCascadeLoss(gs.outbreaks)) {
-            endInTeamLoss(outbreakData, `the outbreak marker reached ${gs.outbreaks}`);
-            return;
+// Resolves one epidemic card fully and immediately (§9.1) — Increase, then
+// Infect, then Intensify — before the draw loop that found it moves on. A
+// §4.2 loss discovered during Infect (outbreak cascade or cube exhaustion)
+// ends the epidemic there; per §16 the outbreak marker can reach 8
+// mid-epidemic, and Intensify never runs once the team has already lost.
+//
+// `recordedOrder` reuses a previously recorded Intensify shuffle when
+// replaying a command that already ran once live; omitted, a fresh shuffle
+// is rolled and returned so the caller can record it — this is the only
+// mid-game randomness anywhere in Outbreak (see
+// OutbreakEndTurn.recordedIntensifyOrders). Returns null when the epidemic
+// ended in a loss before reaching Intensify, so the caller has nothing to
+// record.
+function resolveEpidemic(outbreakData: IOutbreakGameData, recordedOrder: number[] | undefined): number[] | null {
+    const gs = outbreakData.specificGameState;
+
+    // 1 — INCREASE: advance the infection rate track one space (§9.1 step 1).
+    gs.infectionRateIndex = Math.min(gs.infectionRateIndex + 1, INFECTION_RATE_TRACK.length - 1);
+    outbreakData.gameState.history.unshift(`Epidemic! The infection rate rises to ${infectionRateFor(gs.infectionRateIndex)}`);
+
+    // 2 — INFECT: draw the *bottom* infection card, placing 3 cubes on the
+    // named city in one shot — or triggering an outbreak if it's already
+    // sitting at the 3-cube cap (§9.1 step 2). Guarded the same way
+    // resolveInfectPhase's ordinary draw is: the deck and discard pile
+    // between them always hold every infection card between them, so this
+    // can only run dry between epidemics if a future difficulty/board
+    // change makes a pile larger than the deck can support — not reachable
+    // with today's DIFFICULTIES, but a card that can't be drawn should skip
+    // Infect, not crash the command.
+    if (gs.infectionDeck.length > 0) {
+        const cityId = gs.infectionDeck.pop()!;
+        const color = CITIES[cityId].color;
+        gs.infectionDiscard.push(cityId);
+
+        if (gs.cures[color] === 'eradicated') {
+            outbreakData.gameState.history.unshift(`Epidemic draws ${CITIES[cityId].name}, already eradicated`);
+        } else {
+            const cubes = gs.cities.map(c => c.cubes);
+            const result = placeEpidemicCubesOrOutbreak(cubes, cityId, color, gs.cubesLeft);
+            const gameEnded = applyPlacementResult(
+                outbreakData, color, result,
+                () => `Epidemic infects ${CITIES[cityId].name} with 3 cubes of ${DISEASE_COLOR_DEFS[color].name}`,
+                spreadToNames => `Epidemic saturates ${CITIES[cityId].name} — it outbreaks and spreads to ${spreadToNames}`,
+            );
+            if (gameEnded) return null;
         }
     }
+
+    // 3 — INTENSIFY (§9.1 step 3, §14.2): shuffle the infection discard pile
+    // and place it on top of the deck — the ratchet that makes every city
+    // infected so far an immediate re-infection candidate.
+    const order = recordedOrder ?? shuffle(gs.infectionDiscard);
+    gs.infectionDeck = [...order, ...gs.infectionDeck];
+    gs.infectionDiscard = [];
+    outbreakData.gameState.history.unshift(`Epidemic! The infection discard pile is reshuffled onto the deck`);
+
+    return order;
 }
 
 // ─── OutbreakEndTurn ────────────────────────────────────────────────────────
@@ -382,6 +471,14 @@ export class OutbreakEndTurn implements IGameCommand {
     gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = 'Unknown';
     senderUsername: string = 'Unknown';
+    // Recorded Intensify shuffle(s) (§9.1 step 3) — the only mid-game
+    // randomness in Outbreak. One entry per epidemic resolved by a single
+    // Execute call, in the order they were resolved: §16 allows both cards
+    // drawn in a single draw phase to be epidemics, resolved one fully
+    // before the other begins, each with its own Intensify. Left unset until
+    // the first live run, then reused on replay so recap and the crew
+    // planner reproduce the identical reshuffle rather than rolling a new one.
+    recordedIntensifyOrders?: number[][];
     readonly className = 'OutbreakEndTurn';
 
     myString() { return `Outbreak EndTurn`; }
@@ -396,15 +493,35 @@ export class OutbreakEndTurn implements IGameCommand {
         if (ps.actionsLeft > 0) return INVALID;
 
         // Phase 2 (§7, §9): draw two, losing immediately if the deck can't
-        // supply one.
+        // supply one. An epidemic card is resolved fully and immediately
+        // instead of joining the hand (§9.1) — if both cards drawn this turn
+        // are epidemics, the first is resolved completely before the second
+        // is even drawn (§16).
+        let cardsDrawn = 0;
+        let intensifyIndex = 0;
         for (let i = 0; i < CARDS_DRAWN_PER_TURN; i++) {
             if (isPlayerDeckEmptyLoss(gs.playerDeck.length)) {
                 endInTeamLoss(outbreakData, `${this.senderUsername} had to draw with the player deck empty`);
                 return { validMove: true, turnOver: true };
             }
-            ps.hand.push(gs.playerDeck.shift()!);
+
+            const cardId = gs.playerDeck.shift()!;
+            if (cardId === EPIDEMIC_CARD_ID) {
+                const order = resolveEpidemic(outbreakData, this.recordedIntensifyOrders?.[intensifyIndex]);
+                gs.playerDiscard.push(cardId);
+                if (order) {
+                    (this.recordedIntensifyOrders ??= [])[intensifyIndex] = order;
+                    intensifyIndex++;
+                }
+                if (outbreakData.complete) return { validMove: true, turnOver: true };
+            } else {
+                ps.hand.push(cardId);
+                cardsDrawn++;
+            }
         }
-        outbreakData.gameState.history.unshift(`${this.senderUsername} drew 2 cards`);
+        if (cardsDrawn > 0) {
+            outbreakData.gameState.history.unshift(`${this.senderUsername} drew ${cardsDrawn} card${cardsDrawn === 1 ? '' : 's'}`);
+        }
 
         // Hand limit (§9, §16): over it, the turn pauses for OutbreakDiscard
         // rather than infecting yet — the discard step comes before Phase 3.
