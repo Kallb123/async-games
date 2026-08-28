@@ -82,6 +82,14 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     const [boardTarget, setBoardTarget] = useResettingState<BoardTarget | null>(null, `${displayedCurrentTurn}`);
     const eventTargeting = boardTarget && boardTarget.kind !== 'move' ? boardTarget : null;
 
+    // Which city a tapped hand/discard card is ringing on the board right
+    // now — purely a lookup aid, reset alongside the move/event target above
+    // so a stale ring never carries into someone else's turn.
+    const [highlightedCityId, setHighlightedCityId] = useResettingState<number | null>(null, `${displayedCurrentTurn}`);
+    function handleCardTap(cityId: number) {
+        setHighlightedCityId(highlightedCityId === cityId ? null : cityId);
+    }
+
     const validCities = new Set<number>();
     if (gs && me && isMyTurn && boardTarget) {
         if (boardTarget.kind === 'move') {
@@ -252,6 +260,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                             validCities={validCities}
                             onCityClick={isMyTurn && !complete && !submitting ? handleCityClick : undefined}
                             boardTag={boardTag}
+                            highlightedCityId={highlightedCityId}
                         />
                     </div>
 
@@ -292,9 +301,19 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                         />
                     )}
 
-                    <OutbreakInfectionDiscard infectionDiscard={gs.infectionDiscard} />
+                    <OutbreakInfectionDiscard
+                        infectionDiscard={gs.infectionDiscard}
+                        onCardTap={handleCardTap}
+                        highlightedCityId={highlightedCityId}
+                    />
 
-                    <OutbreakHands playerStates={gs.playerStates} usernameList={usernameList} myUsername={myUsername} />
+                    <OutbreakHands
+                        playerStates={gs.playerStates}
+                        usernameList={usernameList}
+                        myUsername={myUsername}
+                        onCardTap={handleCardTap}
+                        highlightedCityId={highlightedCityId}
+                    />
 
                     {recapAvailable && (
                         <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} usernames={usernameList} />

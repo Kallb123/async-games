@@ -8,6 +8,9 @@ interface OutbreakHandsProps {
     /** Player seats in turn order. */
     usernameList: string[];
     myUsername: string;
+    /** Tapping a city card rings that city on the board. */
+    onCardTap?: (cityId: number) => void;
+    highlightedCityId?: number | null;
 }
 
 /**
@@ -17,7 +20,7 @@ interface OutbreakHandsProps {
  * the same wrapper Settlements & Cities and Train Time use for a single
  * "your hand" — looped, since a co-op table needs every hand at once.
  */
-export default function OutbreakHands({ playerStates, usernameList, myUsername }: OutbreakHandsProps) {
+export default function OutbreakHands({ playerStates, usernameList, myUsername, onCardTap, highlightedCityId = null }: OutbreakHandsProps) {
     return (
         <>
             {usernameList.map(username => {
@@ -40,7 +43,14 @@ export default function OutbreakHands({ playerStates, usernameList, myUsername }
                                 ? <span className="ag-hand-note">No cards.</span>
                                 : (
                                     <>
-                                        {ps.hand.map(cardId => <OutbreakCardChip key={cardId} cardId={cardId} />)}
+                                        {ps.hand.map(cardId => (
+                                            <OutbreakCardChip
+                                                key={cardId}
+                                                cardId={cardId}
+                                                onTap={onCardTap}
+                                                highlighted={cardId === highlightedCityId}
+                                            />
+                                        ))}
                                         {ps.contingencyCard !== null && <OutbreakCardChip cardId={ps.contingencyCard} stored />}
                                     </>
                                 )}

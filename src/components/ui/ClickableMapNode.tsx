@@ -9,6 +9,10 @@ interface ClickableMapNodeProps {
     isValid?: boolean;
     /** Highlight this node as the already-chosen selection (white ring). */
     isSelected?: boolean;
+    /** Highlight this node as something pointed at from elsewhere on screen
+     *  (e.g. a tapped card) — purely informational, so it never affects
+     *  whether the node is clickable. */
+    isHighlighted?: boolean;
     onClick?: () => void;
     /** Hover/long-press tooltip — becomes the SVG `<title>`. */
     title: React.ReactNode;
@@ -24,11 +28,14 @@ interface ClickableMapNodeProps {
  * cube stacks, a station marker and pawns) is not. Render a node's own
  * content as `children`; this only owns the interaction chrome around it.
  */
-export default function ClickableMapNode({ x, y, radius, isValid = false, isSelected = false, onClick, title, children }: ClickableMapNodeProps) {
+export default function ClickableMapNode({ x, y, radius, isValid = false, isSelected = false, isHighlighted = false, onClick, title, children }: ClickableMapNodeProps) {
     const clickable = !!onClick && (isValid || isSelected);
     return (
         <g onClick={() => clickable && onClick?.()} style={{ cursor: clickable ? 'pointer' : 'default' }}>
             <title>{title}</title>
+            {isHighlighted && (
+                <circle cx={x} cy={y} r={radius + 6.5} fill="none" stroke="var(--ag-purple)" strokeWidth={2.5} strokeDasharray="3 2" />
+            )}
             {isValid && (
                 <circle cx={x} cy={y} r={radius + 4.5} fill="none" stroke="var(--ag-gold)" strokeWidth={2.5} />
             )}

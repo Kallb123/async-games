@@ -19,6 +19,8 @@ interface OutbreakBoardProps {
     validCities: Set<number>;
     onCityClick?: (cityId: number) => void;
     boardTag?: string | null;
+    /** The city named by a tapped hand/discard card, ringed for reference only. */
+    highlightedCityId?: number | null;
 }
 
 /**
@@ -30,7 +32,7 @@ interface OutbreakBoardProps {
  * own component rather than a shared one wearing different data (see
  * docs/games/outbreak-gdd.md §21.6 step 5).
  */
-export default function OutbreakBoard({ cities, playerStates, usernameList, validCities, onCityClick, boardTag = null }: OutbreakBoardProps) {
+export default function OutbreakBoard({ cities, playerStates, usernameList, validCities, onCityClick, boardTag = null, highlightedCityId = null }: OutbreakBoardProps) {
     const pawnsByCity = new Map<number, string[]>();
     usernameList.forEach(username => {
         const cityId = playerStates[username]?.city;
@@ -71,6 +73,7 @@ export default function OutbreakBoard({ cities, playerStates, usernameList, vali
                                 key={def.id}
                                 x={def.x} y={def.y} radius={NODE_RADIUS}
                                 isValid={isValid}
+                                isHighlighted={def.id === highlightedCityId}
                                 onClick={onCityClick && (() => onCityClick(def.id))}
                                 title={<>
                                     {def.name} — {DISEASE_COLOR_DEFS[def.color].name}
