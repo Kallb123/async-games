@@ -3,7 +3,7 @@ import { deserializeJSON } from "../apiModels/Serialisable";
 import { IGameCommand, IGameType } from "../apiModels/gameCommand";
 import { runCommand } from "./commandPipeline";
 import { createAdapterRegistry } from "./adapterRegistry";
-import { OutbreakAction, OutbreakDiscard, OutbreakEndTurn } from "@/games/Outbreak/OutbreakLogic";
+import { OutbreakAction, OutbreakDiscard, OutbreakEndTurn, OutbreakPlayEvent } from "@/games/Outbreak/OutbreakLogic";
 import { IOutbreakGameData } from "@/games/Outbreak/OutbreakModels";
 import { HAND_LIMIT } from "@/games/Outbreak/rules";
 
@@ -51,11 +51,24 @@ registerTurnTimeoutAdapter({
     // OutbreakDiscard, if the draw needs it. Nothing here touches
     // specificGameState directly; it only decides which of those commands
     // runs next.
+    //
+    // §21.6 step 10 added a fourth phase a stalled turn can be left in:
+    // 'forecast', if the player played Forecast and then went quiet before
+    // submitting an order — nobody else can, since a forecastOrder must come
+    // from currentTurn. Resolved with the identity order (the 6 cards go back
+    // exactly as drawn): a forced resolution shouldn't invent the strategy a
+    // real player would have applied.
     buildTimeoutCommand(gameData, userId) {
         const gs = (gameData as IOutbreakGameData).specificGameState;
         const ps = gs.players.get(userId);
         if (!ps) return null;
 
+        if (gs.phase === 'forecast') {
+            const order = new OutbreakPlayEvent();
+            order.kind = 'forecastOrder';
+            order.cardIds = [...gs.forecastCards];
+            return order;
+        }
         if (gs.phase === 'discard') {
             const discard = new OutbreakDiscard();
             discard.cardIds = ps.hand.slice(0, ps.hand.length - HAND_LIMIT);

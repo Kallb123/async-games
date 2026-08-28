@@ -9,6 +9,14 @@ import {
     DISEASE_COLORS,
     DISEASE_COLOR_DEFS,
     EPIDEMIC_CARD_ID,
+    EVENT_CARD_AIRLIFT,
+    EVENT_CARD_FORECAST,
+    EVENT_CARD_GOVERNMENT_GRANT,
+    EVENT_CARD_ONE_QUIET_NIGHT,
+    EVENT_CARD_RESILIENT_POPULATION,
+    eventCardName,
+    isCityCardId,
+    isEventCardId,
     MAX_RESEARCH_STATIONS,
     OutbreakDiseaseColor,
 } from "@/games/Outbreak/board";
@@ -271,6 +279,9 @@ function applyShareKnowledge(
     const giver = direction === 'give' ? ps : target;
     const receiver = direction === 'give' ? target : ps;
     const chosenCardId = cardId ?? ps.city;
+    // §11: even the Researcher's exemption only reaches "any city card" —
+    // event and epidemic card ids are never a valid Share Knowledge payload.
+    if (!isCityCardId(chosenCardId)) return null;
     if (shareKnowledgeCardMatchRequired(giver.role) && chosenCardId !== ps.city) return null;
 
     const idx = giver.hand.indexOf(chosenCardId);
@@ -548,6 +559,16 @@ function applyPlacementResult(
 function resolveInfectPhase(outbreakData: IOutbreakGameData): void {
     if (outbreakData.complete) return;
     const gs = outbreakData.specificGameState;
+
+    // One Quiet Night (§12): consumes itself the moment it would otherwise
+    // take effect, skipping this Infect Cities phase entirely rather than
+    // reducing the rate or protecting individual cities.
+    if (gs.oneQuietNightActive) {
+        gs.oneQuietNightActive = false;
+        outbreakData.gameState.history.unshift('One Quiet Night — the Infect Cities phase is skipped');
+        return;
+    }
+
     const rate = infectionRateFor(gs.infectionRateIndex);
     // Quarantine Specialist (§11, §16): computed once — nobody moves mid-phase.
     const isProtected = quarantinePredicate(gs);
@@ -755,14 +776,270 @@ export class OutbreakDiscard implements IGameCommand {
 
         for (const id of chosen) ps.hand.splice(ps.hand.indexOf(id), 1);
         gs.playerDiscard.push(...chosen);
-        gs.phase = 'actions';
 
         outbreakData.gameState.history.unshift(
             `${this.senderUsername} discarded ${chosen.length} card${chosen.length === 1 ? '' : 's'} down to the hand limit`,
         );
 
-        resolveInfectPhase(outbreakData);
-        return { validMove: true, turnOver: true };
+        // The check above already guarantees the hand is exactly at the
+        // limit, so this always finishes the draw phase — sharing the same
+        // helper OutbreakPlayEvent uses when an event card played to duck the
+        // limit does the same job (see maybeFinishDrawPhase).
+        const turnOver = maybeFinishDrawPhase(outbreakData, ps);
+        return { validMove: true, turnOver };
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
+    }
+}
+
+// ─── Event cards (§12, §21.6 step 10) ──────────────────────────────────────
+//
+// OutbreakPlayEvent covers the five one-shot cards of §12, the Contingency
+// Planner's retrieval (§11), and Forecast's second (ordering) step — one
+// parameterised command rather than five-plus, following §21.4's "four
+// command classes, not fifteen". §21.3: played only on your own turn — the
+// command route already rejects anything from a user who isn't currentTurn,
+// so nothing here re-checks that — at any point in the action phase, or
+// during the player's own draw phase to duck the hand limit; never
+// mid-resolution of another card, which is why phase 'forecast' rejects the
+// ordinary 'play'/'retrieve' kinds and accepts only 'forecastOrder'.
+
+// After a hand shrinks below/at HAND_LIMIT while phase is 'discard' — an
+// event card played to duck the limit (§21.3), or OutbreakDiscard's own
+// discard — the draw phase is done: back to 'actions', then Phase 3 runs.
+// Shared so the two paths that can finish it can't drift apart.
+function maybeFinishDrawPhase(outbreakData: IOutbreakGameData, ps: IOutbreakPlayerState): boolean {
+    const gs = outbreakData.specificGameState;
+    if (gs.phase !== 'discard' || ps.hand.length > HAND_LIMIT) return false;
+    gs.phase = 'actions';
+    resolveInfectPhase(outbreakData);
+    return true;
+}
+
+// True while an event card may be played outright (the 'play' kind) — the
+// action phase, or the player's own draw phase catching up from a hand-limit
+// overflow (§21.3). Excludes 'forecast': nothing else may be played while a
+// Forecast's ordering step is still pending.
+function eventPlayableInPhase(phase: IOutbreakSpecificGameState['phase']): boolean {
+    return phase === 'actions' || phase === 'discard';
+}
+
+// Removes `cardId` from wherever the acting player is holding it — her hand,
+// or the Contingency Planner's stored slot (§11) — and discards it, unless it
+// came from storage: "when played, it is removed from the game permanently"
+// rather than rejoining a discard pile a second retrieval could reach.
+// Callers must already have confirmed the card is held one way or the other.
+function spendEventCard(gs: IOutbreakSpecificGameState, ps: IOutbreakPlayerState, cardId: number): void {
+    const handIdx = ps.hand.indexOf(cardId);
+    if (handIdx !== -1) {
+        ps.hand.splice(handIdx, 1);
+        gs.playerDiscard.push(cardId);
+        return;
+    }
+    ps.contingencyCard = null;
+}
+
+// Airlift (§12): move any one pawn to any city. §21.3 deviation: no consent
+// required — there's nobody to ask in real time with turns hours or days
+// apart, and co-op means no adversarial use.
+function applyAirlift(gs: IOutbreakSpecificGameState, targetUserId: string | null, destination: number | null): string | null {
+    if (!targetUserId || destination === null || !CITIES[destination]) return null;
+    const target = gs.players.get(targetUserId);
+    if (!target || destination === target.city) return null;
+
+    const fromName = CITIES[target.city].name;
+    target.city = destination;
+    return withMedicNote(gs, target, `played Airlift, moving a teammate from ${fromName} to ${CITIES[destination].name}`);
+}
+
+// Government Grant (§12): a free research station anywhere, subject to the
+// same 6-station cap and relocation rule every station placement obeys (§5,
+// §8.2) — Build a Research Station without the discard or the "must be your
+// current city" constraint.
+function applyGovernmentGrant(gs: IOutbreakSpecificGameState, destination: number | null, relocateFrom: number | null): string | null {
+    if (destination === null || !gs.cities[destination] || gs.cities[destination].station) return null;
+
+    if (stationCityIds(gs.cities).length >= MAX_RESEARCH_STATIONS) {
+        if (relocateFrom === null || relocateFrom === destination || !gs.cities[relocateFrom]?.station) return null;
+        gs.cities[relocateFrom].station = false;
+    }
+    gs.cities[destination].station = true;
+
+    return relocateFrom !== null
+        ? `played Government Grant, building a research station in ${CITIES[destination].name}, relocated from ${CITIES[relocateFrom].name}`
+        : `played Government Grant, building a research station in ${CITIES[destination].name}`;
+}
+
+// One Quiet Night (§12): the *next* Infect Cities phase is skipped entirely.
+// Recorded as a flag rather than applied immediately, since Phase 3 hasn't
+// happened yet — consumed the next time resolveInfectPhase runs, above.
+function applyOneQuietNight(gs: IOutbreakSpecificGameState): string {
+    gs.oneQuietNightActive = true;
+    return 'played One Quiet Night — the next Infect Cities phase will be skipped';
+}
+
+// Resilient Population (§12, §14.2): delete one card from the infection
+// discard pile permanently — best played immediately before an Intensify
+// step, to remove a hotspot from the ratchet for good.
+function applyResilientPopulation(gs: IOutbreakSpecificGameState, infectionCardId: number | null): string | null {
+    if (infectionCardId === null) return null;
+    const idx = gs.infectionDiscard.indexOf(infectionCardId);
+    if (idx === -1) return null;
+
+    gs.infectionDiscard.splice(idx, 1);
+    return `played Resilient Population, permanently removing ${CITIES[infectionCardId].name} from the infection discard pile`;
+}
+
+// Forecast (§12), step 1: draw the top 6 infection cards face-up and pause
+// for their new order, resolved by a second OutbreakPlayEvent — kind
+// 'forecastOrder', gated on `phase === 'forecast'` (§21.4). The phase to
+// resume (whichever of 'actions'/'discard' this was played from) is recorded
+// so the second step can finish a hand-limit duck exactly the way
+// OutbreakDiscard would (maybeFinishDrawPhase) — recorded here, before this
+// function moves the phase to 'forecast' itself.
+function applyForecast(gs: IOutbreakSpecificGameState): string {
+    const drawn = gs.infectionDeck.splice(0, Math.min(6, gs.infectionDeck.length));
+    gs.forecastCards = drawn;
+    gs.forecastResumePhase = gs.phase;
+    gs.phase = 'forecast';
+    return `played Forecast, drawing the top ${drawn.length} infection card${drawn.length === 1 ? '' : 's'} to rearrange`;
+}
+
+// Forecast, step 2: `order` must be the same 6 (or fewer, if the deck ran
+// short) cards drawn in step 1, in whatever sequence the player chose —
+// returned face-down on top of the infection deck.
+function isSamePermutation(a: number[], b: number[]): boolean {
+    if (a.length !== b.length) return false;
+    const sortedA = [...a].sort((x, y) => x - y);
+    const sortedB = [...b].sort((x, y) => x - y);
+    return sortedA.every((v, i) => v === sortedB[i]);
+}
+
+function applyForecastOrder(outbreakData: IOutbreakGameData, order: number[]): string | null {
+    const gs = outbreakData.specificGameState;
+    if (!isSamePermutation(order, gs.forecastCards)) return null;
+
+    gs.infectionDeck = [...order, ...gs.infectionDeck];
+    gs.forecastCards = [];
+    gs.phase = gs.forecastResumePhase ?? 'actions';
+    gs.forecastResumePhase = null;
+    return `rearranged the top ${order.length} infection card${order.length === 1 ? '' : 's'}`;
+}
+
+// Contingency Planner (§11, §21.6 step 10): as an action, retrieve any
+// discarded event card and store it on her role card — held outside the hand
+// limit (IOutbreakPlayerState.contingencyCard), one at a time, until played
+// (spendEventCard then removes it from the game for good rather than
+// returning it to the discard pile).
+function applyRetrieve(gs: IOutbreakSpecificGameState, ps: IOutbreakPlayerState, cardId: number | null): string | null {
+    if (ps.role !== 'contingencyPlanner') return null;
+    if (ps.contingencyCard !== null) return null;
+    if (cardId === null || !isEventCardId(cardId)) return null;
+
+    const idx = gs.playerDiscard.indexOf(cardId);
+    if (idx === -1) return null;
+
+    gs.playerDiscard.splice(idx, 1);
+    ps.contingencyCard = cardId;
+    return `retrieved ${eventCardName(cardId)} from the discard pile`;
+}
+
+// The 'play' kind: dispatches to the one card named by `cmd.cardId`, then —
+// only once its effect actually applied — spends it. Validating before
+// spending matters: an invalid destination/target must leave the card in
+// hand rather than burning it on a no-op.
+function applyPlayEvent(outbreakData: IOutbreakGameData, ps: IOutbreakPlayerState, cmd: OutbreakPlayEvent): string | null {
+    const gs = outbreakData.specificGameState;
+    if (cmd.cardId === null || !isEventCardId(cmd.cardId)) return null;
+    if (!ps.hand.includes(cmd.cardId) && ps.contingencyCard !== cmd.cardId) return null;
+
+    let historyLine: string | null;
+    switch (cmd.cardId) {
+        case EVENT_CARD_AIRLIFT:
+            historyLine = applyAirlift(gs, cmd.targetUserId, cmd.destination);
+            break;
+        case EVENT_CARD_GOVERNMENT_GRANT:
+            historyLine = applyGovernmentGrant(gs, cmd.destination, cmd.relocateFrom);
+            break;
+        case EVENT_CARD_ONE_QUIET_NIGHT:
+            historyLine = applyOneQuietNight(gs);
+            break;
+        case EVENT_CARD_FORECAST:
+            historyLine = applyForecast(gs);
+            break;
+        case EVENT_CARD_RESILIENT_POPULATION:
+            historyLine = applyResilientPopulation(gs, cmd.infectionCardId);
+            break;
+        default:
+            historyLine = null;
+    }
+    if (historyLine === null) return null;
+
+    spendEventCard(gs, ps, cmd.cardId);
+    return historyLine;
+}
+
+export type OutbreakEventKind =
+    | 'play'
+    | 'retrieve'
+    | 'forecastOrder';
+
+@serializable
+export class OutbreakPlayEvent implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    kind: OutbreakEventKind = 'play';
+    /** play: the event card to play, from hand or the Contingency Planner's stored card. retrieve: the discarded event card to retrieve. */
+    cardId: number | null = null;
+    /** Airlift / Government Grant: destination city. */
+    destination: number | null = null;
+    /** Government Grant: which existing station to relocate, once all six are placed. */
+    relocateFrom: number | null = null;
+    /** Airlift: whose pawn moves. */
+    targetUserId: string | null = null;
+    /** Resilient Population: infection-discard city id to remove from the game. */
+    infectionCardId: number | null = null;
+    /** forecastOrder: the reordered infection city ids drawn by Forecast, top card first. */
+    cardIds: number[] = [];
+    readonly className = 'OutbreakPlayEvent';
+
+    myString() { return `Outbreak PlayEvent kind=${this.kind} cardId=${this.cardId}`; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const outbreakData = gameData as IOutbreakGameData;
+        const gs = outbreakData.specificGameState;
+        const ps = playerState(gs, this.senderId);
+        if (!ps) return INVALID;
+
+        if (this.kind === 'forecastOrder') {
+            if (gs.phase !== 'forecast') return INVALID;
+            const historyLine = applyForecastOrder(outbreakData, this.cardIds);
+            if (historyLine === null) return INVALID;
+            outbreakData.gameState.history.unshift(`${this.senderUsername} ${historyLine}`);
+            return { validMove: true, turnOver: maybeFinishDrawPhase(outbreakData, ps) };
+        }
+
+        if (this.kind === 'retrieve') {
+            if (gs.phase !== 'actions' || ps.actionsLeft <= 0) return INVALID;
+            const historyLine = applyRetrieve(gs, ps, this.cardId);
+            if (historyLine === null) return INVALID;
+            ps.actionsLeft -= 1;
+            outbreakData.gameState.history.unshift(`${this.senderUsername} ${historyLine}`);
+            return { validMove: true, turnOver: false };
+        }
+
+        // 'play': free of action cost either way (§12) — only ever ends the
+        // turn by finishing a hand-limit duck, never by spending an action.
+        if (!eventPlayableInPhase(gs.phase)) return INVALID;
+        const historyLine = applyPlayEvent(outbreakData, ps, this);
+        if (historyLine === null) return INVALID;
+        outbreakData.gameState.history.unshift(`${this.senderUsername} ${historyLine}`);
+        return { validMove: true, turnOver: maybeFinishDrawPhase(outbreakData, ps) };
     }
 
     Undo(gameData: IGameData): void {

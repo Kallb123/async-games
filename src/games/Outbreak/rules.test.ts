@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ADJACENCY, CITIES, EPIDEMIC_CARD_ID, ROLES } from "./board";
+import { ADJACENCY, CITIES, EPIDEMIC_CARD_ID, EVENT_CARD_FORECAST, ROLES } from "./board";
 import {
     buildEpidemicDeck,
     canDiscoverCure,
@@ -55,6 +55,13 @@ describe("getLegalMoves", () => {
         const withOwnCard = getLegalMoves({ currentCity, hand: [currentCity], researchStations: [] });
         const charterFlights = withOwnCard.filter(m => m.type === "charterFlight");
         expect(charterFlights).toHaveLength(CITIES.length - 1);
+    });
+
+    it("ignores event and epidemic card ids in hand — neither names a flyable destination (§21.6 step 10)", () => {
+        const tokyo = idFor("Tokyo");
+        const moves = getLegalMoves({ currentCity, hand: [tokyo, EVENT_CARD_FORECAST, EPIDEMIC_CARD_ID], researchStations: [] });
+        const directFlights = moves.filter(m => m.type === "directFlight");
+        expect(directFlights).toEqual([{ type: "directFlight", destination: tokyo, discardCityId: tokyo }]);
     });
 
     it("offers a shuttle flight only between cities with research stations", () => {

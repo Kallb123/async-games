@@ -34,6 +34,12 @@ export interface IOutbreakSpecificGameStateResponse {
     infectionDiscard: number[];
     playerStates: { [username: string]: IOutbreakPlayerStateResponse };
     phase: OutbreakPhase;
+    // One Quiet Night (§12): true once played, until it consumes itself by
+    // skipping the next Infect Cities phase.
+    oneQuietNightActive: boolean;
+    // Forecast (§12), step 1: the revealed top infection cards awaiting a
+    // new order — empty outside `phase === 'forecast'`.
+    forecastCards: number[];
 }
 
 export interface IOutbreakGameDataResponse extends IGameDataResponse {

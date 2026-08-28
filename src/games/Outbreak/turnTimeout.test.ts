@@ -49,6 +49,9 @@ function baseState(turnOrder: string[]): IOutbreakSpecificGameState {
         infectionDiscard: [],
         players,
         phase: 'actions',
+        oneQuietNightActive: false,
+        forecastCards: [],
+        forecastResumePhase: null,
     };
 }
 
@@ -117,6 +120,30 @@ describe("resolveStalledTurn (Outbreak)", () => {
         expect(resolution).toBe('advanced');
         expect(commandHistory(game).map(c => c.className)).toEqual(['OutbreakEndTurn', 'OutbreakDiscard']);
         expect(ps.hand.length).toBe(HAND_LIMIT);
+        expect(state.phase).toBe('actions');
+        expect(game.currentTurn).toBe("u2");
+    });
+
+    it("resolves a stalled Forecast with the identity order, then proceeds as normal (§21.6 step 10)", async () => {
+        const state = baseState(["u1", "u2"]);
+        state.players.get("u1")!.actionsLeft = 0;
+        state.phase = 'forecast';
+        state.forecastResumePhase = 'actions';
+        state.forecastCards = [idFor("Chicago"), idFor("Miami"), idFor("Tokyo")];
+        state.infectionDeck = [idFor("Paris")];
+        state.playerDeck = [idFor("Cairo"), idFor("Sydney")];
+        const game = makeGame(state, ["u1", "u2"]);
+
+        const resolution = await resolveStalledTurn(game, "u1", "Alice");
+
+        expect(resolution).toBe('advanced');
+        expect(commandHistory(game).map(c => c.className)).toEqual(['OutbreakPlayEvent', 'OutbreakEndTurn']);
+        // The 3 forecast cards return exactly as drawn — the identity order —
+        // on top of the deck; the infect phase (rate 2) then draws the first
+        // two of that same order, proving nothing got reshuffled along the way.
+        expect(state.infectionDiscard).toEqual([idFor("Chicago"), idFor("Miami")]);
+        expect(state.infectionDeck).toEqual([idFor("Tokyo"), idFor("Paris")]);
+        expect(state.forecastCards).toEqual([]);
         expect(state.phase).toBe('actions');
         expect(game.currentTurn).toBe("u2");
     });

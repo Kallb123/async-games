@@ -1,7 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { OutbreakAction, OutbreakDiscard, OutbreakEndTurn, OutbreakGameType } from "./OutbreakLogic";
+import { OutbreakAction, OutbreakDiscard, OutbreakEndTurn, OutbreakGameType, OutbreakPlayEvent } from "./OutbreakLogic";
 import { IOutbreakGameData, IOutbreakPlayerState } from "./OutbreakModels";
-import { ADJACENCY, ATLANTA_CITY_ID, CITIES, CITY_COUNT, DISEASE_COLORS, EPIDEMIC_CARD_ID, cityIdsForColor } from "./board";
+import {
+    ADJACENCY,
+    ATLANTA_CITY_ID,
+    CITIES,
+    CITY_COUNT,
+    DISEASE_COLORS,
+    EPIDEMIC_CARD_ID,
+    EVENT_CARD_AIRLIFT,
+    EVENT_CARD_FORECAST,
+    EVENT_CARD_GOVERNMENT_GRANT,
+    EVENT_CARD_ONE_QUIET_NIGHT,
+    EVENT_CARD_RESILIENT_POPULATION,
+    MAX_RESEARCH_STATIONS,
+    cityIdsForColor,
+} from "./board";
 import {
     ACTIONS_PER_TURN,
     CUBES_PER_CITY_LIMIT,
@@ -54,6 +68,9 @@ function baseState(turnOrder: string[]): IOutbreakSpecificGameState {
         infectionDiscard: [],
         players,
         phase: 'actions',
+        oneQuietNightActive: false,
+        forecastCards: [],
+        forecastResumePhase: null,
     };
 }
 
@@ -89,6 +106,13 @@ function discardCmd(cardIds: number[], senderId = "u1"): OutbreakDiscard {
     command.senderUsername = senderId === "u1" ? "Alice" : "Bob";
     command.cardIds = cardIds;
     return command;
+}
+
+function eventCmd(overrides: Partial<OutbreakPlayEvent> = {}, senderId = "u1"): OutbreakPlayEvent {
+    const command = new OutbreakPlayEvent();
+    command.senderId = senderId;
+    command.senderUsername = senderId === "u1" ? "Alice" : "Bob";
+    return Object.assign(command, overrides);
 }
 
 // ─── Movement ───────────────────────────────────────────────────────────────
@@ -1263,5 +1287,315 @@ describe("Operations Expert (§11)", () => {
 
         expect(game.currentTurn).toBe("u1");
         expect(ps.opsExpertFlightUsed).toBe(false);
+    });
+});
+
+// ─── OutbreakPlayEvent (§12, §21.6 step 10) ────────────────────────────────
+
+describe("OutbreakPlayEvent — Airlift (§12)", () => {
+    it("moves any pawn to any city, free of action cost, no consent required (§21.3)", async () => {
+        const state = baseState(["u1", "u2"]);
+        state.players.get("u1")!.hand = [EVENT_CARD_AIRLIFT];
+        const game = makeGame(state);
+        const tokyo = idFor("Tokyo");
+
+        const outcome = await eventCmd({ cardId: EVENT_CARD_AIRLIFT, targetUserId: "u2", destination: tokyo }).Execute(game);
+
+        expect(outcome).toEqual({ validMove: true, turnOver: false });
+        expect(state.players.get("u2")!.city).toBe(tokyo);
+        expect(state.players.get("u1")!.hand).toEqual([]);
+        expect(state.players.get("u1")!.actionsLeft).toBe(ACTIONS_PER_TURN); // free
+        expect(state.playerDiscard).toEqual([EVENT_CARD_AIRLIFT]);
+    });
+
+    it("rejects moving a pawn to the city it's already in, without spending the card", async () => {
+        const state = baseState(["u1", "u2"]);
+        state.players.get("u1")!.hand = [EVENT_CARD_AIRLIFT];
+        const game = makeGame(state);
+
+        const outcome = await eventCmd({ cardId: EVENT_CARD_AIRLIFT, targetUserId: "u2", destination: ATLANTA_CITY_ID }).Execute(game);
+
+        expect(outcome.validMove).toBe(false);
+        expect(state.players.get("u1")!.hand).toEqual([EVENT_CARD_AIRLIFT]);
+    });
+
+    it("triggers the Medic's automatic clear on arrival", async () => {
+        const state = baseState(["u1", "u2"]);
+        state.players.get("u1")!.hand = [EVENT_CARD_AIRLIFT];
+        state.players.get("u2")!.role = 'medic';
+        const tokyo = idFor("Tokyo");
+        state.cities[tokyo].cubes.blue = 2;
+        state.cubesLeft.blue = CUBES_PER_COLOR - 2;
+        state.cures.blue = 'cured';
+        const game = makeGame(state);
+
+        const outcome = await eventCmd({ cardId: EVENT_CARD_AIRLIFT, targetUserId: "u2", destination: tokyo }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(state.cities[tokyo].cubes.blue).toBe(0);
+        expect(state.cubesLeft.blue).toBe(CUBES_PER_COLOR);
+    });
+});
+
+describe("OutbreakPlayEvent — Government Grant (§12)", () => {
+    it("builds a research station anywhere, free, no discard", async () => {
+        const state = baseState(["u1"]);
+        state.players.get("u1")!.hand = [EVENT_CARD_GOVERNMENT_GRANT];
+        const game = makeGame(state, ["u1"]);
+        const tokyo = idFor("Tokyo");
+
+        const outcome = await eventCmd({ cardId: EVENT_CARD_GOVERNMENT_GRANT, destination: tokyo }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(state.cities[tokyo].station).toBe(true);
+        expect(state.players.get("u1")!.hand).toEqual([]);
+    });
+
+    it("rejects a destination that already has a station", async () => {
+        const state = baseState(["u1"]);
+        state.players.get("u1")!.hand = [EVENT_CARD_GOVERNMENT_GRANT];
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await eventCmd({ cardId: EVENT_CARD_GOVERNMENT_GRANT, destination: ATLANTA_CITY_ID }).Execute(game);
+
+        expect(outcome.validMove).toBe(false);
+    });
+
+    it("requires relocating an existing station once all six are placed (§5)", async () => {
+        const state = baseState(["u1"]);
+        state.players.get("u1")!.hand = [EVENT_CARD_GOVERNMENT_GRANT];
+        const stations = [ATLANTA_CITY_ID, idFor("Chicago"), idFor("Miami"), idFor("Tokyo"), idFor("Cairo"), idFor("Sydney")];
+        expect(stations).toHaveLength(MAX_RESEARCH_STATIONS);
+        stations.forEach(id => { state.cities[id].station = true; });
+        const game = makeGame(state, ["u1"]);
+        const paris = idFor("Paris");
+
+        const noRelocate = await eventCmd({ cardId: EVENT_CARD_GOVERNMENT_GRANT, destination: paris, relocateFrom: null }).Execute(game);
+        expect(noRelocate.validMove).toBe(false);
+
+        const withRelocate = await eventCmd({ cardId: EVENT_CARD_GOVERNMENT_GRANT, destination: paris, relocateFrom: idFor("Sydney") }).Execute(game);
+        expect(withRelocate.validMove).toBe(true);
+        expect(state.cities[paris].station).toBe(true);
+        expect(state.cities[idFor("Sydney")].station).toBe(false);
+    });
+});
+
+describe("OutbreakPlayEvent — One Quiet Night (§12)", () => {
+    it("skips the next Infect Cities phase entirely, then consumes itself", async () => {
+        const state = baseState(["u1"]);
+        state.players.get("u1")!.hand = [EVENT_CARD_ONE_QUIET_NIGHT];
+        state.players.get("u1")!.actionsLeft = 0;
+        state.playerDeck = [idFor("Chicago"), idFor("Miami")];
+        state.infectionDeck = [idFor("Tokyo"), idFor("Cairo")];
+        const game = makeGame(state, ["u1"]);
+
+        const played = await eventCmd({ cardId: EVENT_CARD_ONE_QUIET_NIGHT }).Execute(game);
+        expect(played).toEqual({ validMove: true, turnOver: false });
+        expect(state.oneQuietNightActive).toBe(true);
+
+        const outcome = await endTurnCmd().Execute(game);
+
+        expect(outcome).toEqual({ validMove: true, turnOver: true });
+        expect(state.oneQuietNightActive).toBe(false);
+        expect(state.infectionDeck).toEqual([idFor("Tokyo"), idFor("Cairo")]); // untouched
+        expect(state.cities[idFor("Tokyo")].cubes).toEqual(emptyCubeCounts());
+    });
+});
+
+describe("OutbreakPlayEvent — Resilient Population (§12, §14.2)", () => {
+    it("permanently removes one card from the infection discard pile", async () => {
+        const state = baseState(["u1"]);
+        state.players.get("u1")!.hand = [EVENT_CARD_RESILIENT_POPULATION];
+        const cairo = idFor("Cairo");
+        state.infectionDiscard = [idFor("Tokyo"), cairo, idFor("Miami")];
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await eventCmd({ cardId: EVENT_CARD_RESILIENT_POPULATION, infectionCardId: cairo }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(state.infectionDiscard).toEqual([idFor("Tokyo"), idFor("Miami")]);
+    });
+
+    it("rejects a card that isn't in the infection discard pile, without spending the event", async () => {
+        const state = baseState(["u1"]);
+        state.players.get("u1")!.hand = [EVENT_CARD_RESILIENT_POPULATION];
+        state.infectionDiscard = [idFor("Tokyo")];
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await eventCmd({ cardId: EVENT_CARD_RESILIENT_POPULATION, infectionCardId: idFor("Cairo") }).Execute(game);
+
+        expect(outcome.validMove).toBe(false);
+        expect(state.players.get("u1")!.hand).toEqual([EVENT_CARD_RESILIENT_POPULATION]);
+    });
+});
+
+describe("OutbreakPlayEvent — Forecast (§12)", () => {
+    it("draws the top 6 infection cards and pauses in phase 'forecast'", async () => {
+        const state = baseState(["u1"]);
+        state.players.get("u1")!.hand = [EVENT_CARD_FORECAST];
+        const deck = Array.from({ length: 8 }, (_, i) => i);
+        state.infectionDeck = [...deck];
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await eventCmd({ cardId: EVENT_CARD_FORECAST }).Execute(game);
+
+        expect(outcome).toEqual({ validMove: true, turnOver: false });
+        expect(state.phase).toBe('forecast');
+        expect(state.forecastCards).toEqual(deck.slice(0, 6));
+        expect(state.infectionDeck).toEqual(deck.slice(6));
+        expect(state.forecastResumePhase).toBe('actions');
+        expect(state.players.get("u1")!.hand).toEqual([]);
+    });
+
+    it("rejects any other event while a Forecast order is pending", async () => {
+        const state = baseState(["u1"]);
+        state.players.get("u1")!.hand = [EVENT_CARD_FORECAST, EVENT_CARD_ONE_QUIET_NIGHT];
+        state.infectionDeck = Array.from({ length: 6 }, (_, i) => i);
+        const game = makeGame(state, ["u1"]);
+        await eventCmd({ cardId: EVENT_CARD_FORECAST }).Execute(game);
+
+        const outcome = await eventCmd({ cardId: EVENT_CARD_ONE_QUIET_NIGHT }).Execute(game);
+
+        expect(outcome.validMove).toBe(false);
+    });
+
+    it("writes back a chosen reorder on top of the deck and resumes the phase it was played from", async () => {
+        const state = baseState(["u1"]);
+        state.players.get("u1")!.hand = [EVENT_CARD_FORECAST];
+        state.infectionDeck = [0, 1, 2, 3, 4, 5, 6];
+        const game = makeGame(state, ["u1"]);
+        await eventCmd({ cardId: EVENT_CARD_FORECAST }).Execute(game);
+        const reordered = [...state.forecastCards].reverse();
+
+        const outcome = await eventCmd({ kind: 'forecastOrder', cardIds: reordered }).Execute(game);
+
+        expect(outcome).toEqual({ validMove: true, turnOver: false });
+        expect(state.phase).toBe('actions');
+        expect(state.forecastCards).toEqual([]);
+        expect(state.infectionDeck).toEqual([...reordered, 6]);
+    });
+
+    it("rejects an order that isn't a permutation of the drawn cards", async () => {
+        const state = baseState(["u1"]);
+        state.players.get("u1")!.hand = [EVENT_CARD_FORECAST];
+        state.infectionDeck = [0, 1, 2];
+        const game = makeGame(state, ["u1"]);
+        await eventCmd({ cardId: EVENT_CARD_FORECAST }).Execute(game);
+
+        const outcome = await eventCmd({ kind: 'forecastOrder', cardIds: [0, 1] }).Execute(game);
+
+        expect(outcome.validMove).toBe(false);
+        expect(state.phase).toBe('forecast');
+    });
+
+    it("finishes a hand-limit duck once the order resolves, running the infect phase (§21.3)", async () => {
+        const state = baseState(["u1"]);
+        const ps = state.players.get("u1")!;
+        ps.hand = [idFor("Chicago"), idFor("Miami"), idFor("Tokyo"), idFor("Cairo"), idFor("Sydney"), idFor("Lagos"), idFor("Paris"), EVENT_CARD_FORECAST];
+        ps.actionsLeft = 0;
+        state.phase = 'discard';
+        state.infectionDeck = [idFor("Baghdad")];
+        const game = makeGame(state, ["u1"]);
+
+        const played = await eventCmd({ cardId: EVENT_CARD_FORECAST }).Execute(game);
+        expect(played).toEqual({ validMove: true, turnOver: false });
+        expect(ps.hand).toHaveLength(HAND_LIMIT);
+        expect(state.phase).toBe('forecast'); // the order is still pending
+
+        const outcome = await eventCmd({ kind: 'forecastOrder', cardIds: [...state.forecastCards] }).Execute(game);
+
+        expect(outcome).toEqual({ validMove: true, turnOver: true });
+        expect(state.phase).toBe('actions');
+        expect(state.infectionDiscard).toEqual([idFor("Baghdad")]);
+    });
+});
+
+describe("OutbreakPlayEvent — Contingency Planner retrieval (§11, §21.6 step 10)", () => {
+    it("retrieves a discarded event card as an action, held outside the hand limit", async () => {
+        const state = baseState(["u1"]);
+        const ps = state.players.get("u1")!;
+        ps.role = 'contingencyPlanner';
+        state.playerDiscard = [EVENT_CARD_AIRLIFT];
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await eventCmd({ kind: 'retrieve', cardId: EVENT_CARD_AIRLIFT }).Execute(game);
+
+        expect(outcome).toEqual({ validMove: true, turnOver: false });
+        expect(ps.contingencyCard).toBe(EVENT_CARD_AIRLIFT);
+        expect(ps.actionsLeft).toBe(ACTIONS_PER_TURN - 1);
+        expect(state.playerDiscard).toEqual([]);
+        expect(ps.hand).toEqual([]);
+    });
+
+    it("rejects retrieval for any role but the Contingency Planner", async () => {
+        const state = baseState(["u1"]);
+        state.playerDiscard = [EVENT_CARD_AIRLIFT];
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await eventCmd({ kind: 'retrieve', cardId: EVENT_CARD_AIRLIFT }).Execute(game);
+
+        expect(outcome.validMove).toBe(false);
+    });
+
+    it("rejects retrieving a second card while one is already stored", async () => {
+        const state = baseState(["u1"]);
+        const ps = state.players.get("u1")!;
+        ps.role = 'contingencyPlanner';
+        ps.contingencyCard = EVENT_CARD_AIRLIFT;
+        state.playerDiscard = [EVENT_CARD_FORECAST];
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await eventCmd({ kind: 'retrieve', cardId: EVENT_CARD_FORECAST }).Execute(game);
+
+        expect(outcome.validMove).toBe(false);
+    });
+
+    it("plays a stored card by removing it from the game rather than returning it to the discard pile", async () => {
+        const state = baseState(["u1"]);
+        const ps = state.players.get("u1")!;
+        ps.role = 'contingencyPlanner';
+        ps.contingencyCard = EVENT_CARD_ONE_QUIET_NIGHT;
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await eventCmd({ cardId: EVENT_CARD_ONE_QUIET_NIGHT }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(state.oneQuietNightActive).toBe(true);
+        expect(ps.contingencyCard).toBeNull();
+        expect(state.playerDiscard).toEqual([]);
+    });
+});
+
+describe("OutbreakPlayEvent — phase gating and action cost (§21.3, §12)", () => {
+    it("rejects playing an event outside the action or discard phase", async () => {
+        const state = baseState(["u1"]);
+        state.players.get("u1")!.hand = [EVENT_CARD_ONE_QUIET_NIGHT];
+        state.phase = 'forecast';
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await eventCmd({ cardId: EVENT_CARD_ONE_QUIET_NIGHT }).Execute(game);
+
+        expect(outcome.validMove).toBe(false);
+    });
+
+    it("rejects a card the sender isn't actually holding", async () => {
+        const state = baseState(["u1"]);
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await eventCmd({ cardId: EVENT_CARD_AIRLIFT, targetUserId: "u1", destination: idFor("Tokyo") }).Execute(game);
+
+        expect(outcome.validMove).toBe(false);
+    });
+
+    it("costs no action to play — actionsLeft is untouched", async () => {
+        const state = baseState(["u1"]);
+        const ps = state.players.get("u1")!;
+        ps.hand = [EVENT_CARD_RESILIENT_POPULATION];
+        state.infectionDiscard = [idFor("Tokyo")];
+        const game = makeGame(state, ["u1"]);
+
+        await eventCmd({ cardId: EVENT_CARD_RESILIENT_POPULATION, infectionCardId: idFor("Tokyo") }).Execute(game);
+
+        expect(ps.actionsLeft).toBe(ACTIONS_PER_TURN);
     });
 });
