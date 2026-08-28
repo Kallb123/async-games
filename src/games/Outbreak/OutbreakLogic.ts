@@ -46,6 +46,7 @@ import {
     treatDiseaseRemovalCount,
 } from "@/games/Outbreak/rules";
 import { shuffle } from "@/utils/games/shuffle";
+import { pluralize } from "@/utils/ui/text";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  OUTBREAK
@@ -855,10 +856,7 @@ export class OutbreakDiscard implements IGameCommand {
     cardIds: number[] = [];
     readonly className = 'OutbreakDiscard';
 
-    myString() {
-        const n = this.cardIds.length;
-        return `discarded ${n} card${n === 1 ? '' : 's'} down to the hand limit`;
-    }
+    myString() { return `discarded ${pluralize(this.cardIds.length, 'card')} down to the hand limit`; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const outbreakData = gameData as IOutbreakGameData;
