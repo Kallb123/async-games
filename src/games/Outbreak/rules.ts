@@ -4,7 +4,8 @@
 // action picker computes hints from this module directly, the same way
 // Solitaire's rules.ts is shared by SolitaireLogic.ts and the board UI (see
 // docs/new-game.md, "Isomorphic rules modules").
-import { ADJACENCY, CITY_COUNT, OutbreakDiseaseColor } from "./board";
+import { ADJACENCY, CITY_COUNT, EPIDEMIC_CARD_ID, OutbreakDiseaseColor } from "./board";
+import { shuffle } from "@/utils/games/shuffle";
 
 // ─── The action economy (§7-8) ──────────────────────────────────────────────
 
@@ -173,6 +174,63 @@ export function placeCubeOrOutbreak(
     }
 
     return { cubes: next, outbreaks: outbrokenCities.length, outbrokenCities, cubesLeft: nextLeft, cubeExhausted: false };
+}
+
+// Epidemic INFECT step (§9.1 step 2): place all 3 cubes of `color` on
+// `cityId` in one shot, rather than one at a time as the ordinary infect
+// phase does. Reaching exactly 3 triggers no outbreak; a city that's already
+// sitting at the 3-cube cap outbreaks immediately instead of receiving a 4th
+// cube it can't hold. The already-saturated case delegates to
+// placeCubeOrOutbreak so the chain-reaction and exhaustion logic isn't
+// duplicated — it already outbreaks the instant a city is found at the cap.
+export function placeEpidemicCubesOrOutbreak(
+    cubes: OutbreakBoardCubes,
+    cityId: number,
+    color: OutbreakDiseaseColor,
+    cubesLeft?: OutbreakCubeCounts,
+): IOutbreakChainResult {
+    if (cubes[cityId][color] >= CUBES_PER_CITY_LIMIT) {
+        return placeCubeOrOutbreak(cubes, cityId, color, new Set(), cubesLeft);
+    }
+
+    const needed = CUBES_PER_CITY_LIMIT - cubes[cityId][color];
+    if (cubesLeft && isCubeExhaustionLoss(cubesLeft[color], needed)) {
+        return {
+            cubes: cubes.map(c => ({ ...c })),
+            outbreaks: 0,
+            outbrokenCities: [],
+            cubesLeft: { ...cubesLeft },
+            cubeExhausted: true,
+        };
+    }
+
+    const next = cubes.map(c => ({ ...c }));
+    next[cityId] = { ...next[cityId], [color]: CUBES_PER_CITY_LIMIT };
+    const nextLeft = cubesLeft ? { ...cubesLeft, [color]: cubesLeft[color] - needed } : undefined;
+    return { cubes: next, outbreaks: 0, outbrokenCities: [], cubesLeft: nextLeft, cubeExhausted: false };
+}
+
+// ─── Deck construction: epidemic piles (§6 step 7, §13) ────────────────────
+
+// Divides the player cards left after starting hands are dealt into
+// `epidemicCount` piles as equal in size as possible, shuffles exactly one
+// epidemic card into each, and stacks the piles in order. This is what
+// spreads epidemics roughly evenly through the game while keeping their
+// exact timing unknown, and it's the single dial §13's difficulty setting
+// turns: more epidemics means smaller piles, so Intensify steps land closer
+// together and the infection rate climbs sooner.
+export function buildEpidemicDeck(remainingCards: number[], epidemicCount: number): number[] {
+    const base = Math.floor(remainingCards.length / epidemicCount);
+    const remainder = remainingCards.length % epidemicCount;
+    const deck: number[] = [];
+    let index = 0;
+    for (let i = 0; i < epidemicCount; i++) {
+        const pileSize = base + (i < remainder ? 1 : 0);
+        const pile = remainingCards.slice(index, index + pileSize);
+        index += pileSize;
+        deck.push(...shuffle([...pile, EPIDEMIC_CARD_ID]));
+    }
+    return deck;
 }
 
 // ─── Cure eligibility (§8.2) ────────────────────────────────────────────────

@@ -16,6 +16,7 @@ import {
     CITIES,
     CITY_COUNT,
     DISEASE_COLORS,
+    epidemicCountFor,
     OutbreakCureState,
     OutbreakDifficulty,
     OutbreakDiseaseColor,
@@ -25,6 +26,7 @@ import {
     ACTIONS_PER_TURN,
     CUBES_PER_COLOR,
     OutbreakCubeCounts,
+    buildEpidemicDeck,
     emptyCubeCounts,
     placeCubeOrOutbreak,
     startingHandSize,
@@ -134,10 +136,11 @@ export interface IOutbreakSpecificGameState {
     cures: Record<OutbreakDiseaseColor, OutbreakCureState>;
     outbreaks: number;
     infectionRateIndex: number;
-    // Just the 48 shuffled city cards for now — the epidemic piles (§6 step 7)
-    // that difficulty inserts land in §21.6 step 8, rebuilding this deck
-    // around them. Event cards join it in step 10.
+    // The 48 city cards plus one EPIDEMIC_CARD_ID per epidemic in play (§6
+    // step 7) — event cards join it in §21.6 step 10.
     playerDeck: number[];
+    // May contain EPIDEMIC_CARD_ID entries: an epidemic is discarded like any
+    // other player card once resolved (§9.1).
     playerDiscard: number[];
     infectionDeck: number[]; // top first — redacted to a count on the wire
     infectionDiscard: number[]; // public, and the game's most-read information (§14.2)
@@ -193,8 +196,9 @@ export function cloneOutbreakState(
 // a shuffled player deck (just the 48 city cards; no epidemics yet) with
 // starting hands dealt from it before anything else touches it.
 //
-// The epidemic piles and roles are *not* built here — they land in §21.6
-// steps 8 and 9 respectively, alongside the commands that first need them.
+// The epidemic piles of §6 step 7 are built below, keyed off the difficulty
+// dial (§13). Roles are *not* built here — they land in §21.6 step 9,
+// alongside the commands that first need them.
 export function buildInitialOutbreakState(turnOrder: string[], difficulty: OutbreakDifficulty): IOutbreakSpecificGameState {
     const cities: IOutbreakCityState[] = Array.from({ length: CITY_COUNT }, () => ({ cubes: emptyCubeCounts(), station: false }));
     cities[ATLANTA_CITY_ID].station = true;
@@ -221,14 +225,20 @@ export function buildInitialOutbreakState(turnOrder: string[], difficulty: Outbr
     }
 
     // §6 step 6: shuffle the 48 city cards and deal each player their opening
-    // hand from it before anything else touches the deck.
-    const playerDeck = shuffle(Array.from({ length: CITY_COUNT }, (_, id) => id));
+    // hand from it before anything else touches the deck — before, per step
+    // 7, the epidemic piles below are even built.
+    const cityDeck = shuffle(Array.from({ length: CITY_COUNT }, (_, id) => id));
     const handSize = startingHandSize(turnOrder.length);
     const players = new Map<string, IOutbreakPlayerState>();
     for (const userId of turnOrder) {
-        const hand = playerDeck.splice(0, handSize);
+        const hand = cityDeck.splice(0, handSize);
         players.set(userId, { hand, city: ATLANTA_CITY_ID, role: null, contingencyCard: null, actionsLeft: ACTIONS_PER_TURN });
     }
+
+    // §6 step 7, §13: divide what's left into one equal-ish pile per epidemic
+    // card the difficulty calls for, shuffle an epidemic into each, and stack
+    // the piles — the single dial that sets the whole game's escalation pace.
+    const playerDeck = buildEpidemicDeck(cityDeck, epidemicCountFor(difficulty));
 
     return {
         difficulty,

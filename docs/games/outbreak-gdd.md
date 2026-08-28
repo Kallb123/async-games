@@ -925,6 +925,23 @@ infection rate track, and the recorded Intensify shuffle. This is the step that
 gives the game its difficulty curve; the win rate target of §3 can only be
 measured from here.
 
+*Landed.* `buildEpidemicDeck` in `rules.ts` builds the §6 step 7 piles — as
+equal in size as possible, one epidemic shuffled into each, stacked in
+order — off `epidemicCountFor(difficulty)` (`board.ts`), so
+`buildInitialOutbreakState` now deals hands from the plain city deck and only
+*then* builds the real player deck around the difficulty's epidemic count.
+`OutbreakEndTurn.Execute` resolves an epidemic drawn in Phase 2 fully and
+immediately (Increase, then Infect via the new `placeEpidemicCubesOrOutbreak`,
+then Intensify) instead of adding it to the hand, discarding it afterwards
+like any other player card; §16's two-epidemics-in-one-draw case falls out of
+resolving them one at a time in the same loop. The Intensify shuffle is the
+one new source of mid-game randomness, recorded onto
+`OutbreakEndTurn.recordedIntensifyOrders` (one entry per epidemic resolved by
+a single Execute call) the same way `recordedRoll` works elsewhere, so replay
+reproduces it exactly rather than re-rolling. Tests cover the pile
+construction, the cap-vs-outbreak branch of the epidemic Infect step, the
+recorded-order replay, and the two-epidemics-in-one-draw case.
+
 **9 — Roles.** All seven at once, dealt in `buildInitialOutbreakState` and
 expressed as exceptions in `rules.ts` rather than branches sprayed through
 `Execute`. Deliberately after the base rules are stable: every role bends a rule

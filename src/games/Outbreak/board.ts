@@ -206,6 +206,20 @@ export const DIFFICULTIES: OutbreakDifficultyDef[] = [
     { id: 'heroic', label: 'Heroic', epidemics: 6, description: 'The infection rate climbs fast and Intensify steps come relentlessly.' },
 ];
 
+/** Epidemic cards shuffled into the player deck at setup (§6 step 7) for a difficulty. */
+export function epidemicCountFor(difficulty: OutbreakDifficulty): number {
+    return DIFFICULTIES.find(d => d.id === difficulty)!.epidemics;
+}
+
+// ─── The epidemic card (§6 step 7, §9.1) ────────────────────────────────────
+
+// A sentinel player-card id: never a valid city id (0..CITY_COUNT-1), so a
+// deck, hand or discard-pile slot holding it is unambiguous. Every epidemic
+// card behaves identically once drawn (§9.1), so — unlike a city card, whose
+// id doubles as a lookup into CITIES — nothing needs to tell one apart from
+// another.
+export const EPIDEMIC_CARD_ID = -1;
+
 // ─── Shared state vocabulary ────────────────────────────────────────────────
 // Here (rather than in OutbreakModels.ts) so apiModels.ts can import it
 // without a cycle — the same reason WorldDominationPhase lives in

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { ADJACENCY, CITIES } from "./board";
+import { ADJACENCY, CITIES, EPIDEMIC_CARD_ID } from "./board";
 import {
+    buildEpidemicDeck,
     canDiscoverCure,
     cureCardsRequired,
     emptyBoardCubes,
@@ -10,6 +11,7 @@ import {
     isOutbreakCascadeLoss,
     isPlayerDeckEmptyLoss,
     placeCubeOrOutbreak,
+    placeEpidemicCubesOrOutbreak,
     stationCityIds,
     CUBES_PER_CITY_LIMIT,
     INFECTION_RATE_TRACK,
@@ -155,6 +157,76 @@ describe("placeCubeOrOutbreak", () => {
         expect(result.outbreaks).toBe(0);
         expect(result.outbrokenCities).toEqual([]);
         expect(result.cubes[idFor("Istanbul")].black).toBe(CUBES_PER_CITY_LIMIT);
+    });
+});
+
+describe("placeEpidemicCubesOrOutbreak (§9.1 step 2)", () => {
+    it("places all 3 cubes at once when the city is below the cap", () => {
+        const cubes = emptyBoardCubes();
+        cubes[idFor("Atlanta")].blue = 1;
+
+        const result = placeEpidemicCubesOrOutbreak(cubes, idFor("Atlanta"), "blue");
+
+        expect(result.outbreaks).toBe(0);
+        expect(result.cubes[idFor("Atlanta")].blue).toBe(CUBES_PER_CITY_LIMIT);
+        // Pure: the input board is untouched.
+        expect(cubes[idFor("Atlanta")].blue).toBe(1);
+    });
+
+    it("adds only enough cubes to reach the cap, not a full 3, when some are already there", () => {
+        const cubes = emptyBoardCubes();
+        cubes[idFor("Chicago")].blue = 2;
+
+        const result = placeEpidemicCubesOrOutbreak(cubes, idFor("Chicago"), "blue", { blue: 1, yellow: 0, black: 0, red: 0 });
+
+        expect(result.outbreaks).toBe(0);
+        expect(result.cubes[idFor("Chicago")].blue).toBe(CUBES_PER_CITY_LIMIT);
+        expect(result.cubesLeft).toEqual({ blue: 0, yellow: 0, black: 0, red: 0 });
+    });
+
+    it("triggers an outbreak instead of a 4th cube when the city is already at the cap", () => {
+        const cubes = emptyBoardCubes();
+        cubes[idFor("Atlanta")].blue = CUBES_PER_CITY_LIMIT;
+
+        const result = placeEpidemicCubesOrOutbreak(cubes, idFor("Atlanta"), "blue");
+
+        expect(result.outbreaks).toBe(1);
+        expect(result.outbrokenCities).toEqual([idFor("Atlanta")]);
+        expect(result.cubes[idFor("Atlanta")].blue).toBe(CUBES_PER_CITY_LIMIT);
+        for (const neighbor of ADJACENCY[idFor("Atlanta")]) {
+            expect(result.cubes[neighbor].blue).toBe(1);
+        }
+    });
+
+    it("loses immediately if the supply can't cover the cubes needed to reach the cap", () => {
+        const cubes = emptyBoardCubes();
+        cubes[idFor("Chicago")].blue = 0;
+
+        const result = placeEpidemicCubesOrOutbreak(cubes, idFor("Chicago"), "blue", { blue: 2, yellow: 0, black: 0, red: 0 });
+
+        expect(result.cubeExhausted).toBe(true);
+        expect(result.cubes[idFor("Chicago")].blue).toBe(0);
+    });
+});
+
+describe("buildEpidemicDeck (§6 step 7)", () => {
+    it("shuffles exactly one epidemic into each of N equal-ish piles and stacks them", () => {
+        const cards = Array.from({ length: 40 }, (_, i) => i);
+        const deck = buildEpidemicDeck(cards, 5);
+
+        expect(deck).toHaveLength(45);
+        expect(deck.filter(c => c === EPIDEMIC_CARD_ID)).toHaveLength(5);
+        // Every original card survives exactly once.
+        expect(deck.filter(c => c !== EPIDEMIC_CARD_ID).sort((a, b) => a - b)).toEqual(cards);
+    });
+
+    it("distributes a remainder across piles as evenly as possible rather than dropping cards", () => {
+        const cards = Array.from({ length: 44 }, (_, i) => i); // 44 / 5 doesn't divide evenly
+        const deck = buildEpidemicDeck(cards, 5);
+
+        expect(deck).toHaveLength(49);
+        expect(deck.filter(c => c === EPIDEMIC_CARD_ID)).toHaveLength(5);
+        expect(deck.filter(c => c !== EPIDEMIC_CARD_ID).sort((a, b) => a - b)).toEqual(cards);
     });
 });
 
