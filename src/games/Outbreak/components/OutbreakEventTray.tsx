@@ -40,6 +40,20 @@ interface OutbreakEventTrayProps {
     onCancelTargeting: () => void;
 }
 
+// The shell every sub-picker below shares: a hint (plain instruction or a
+// `ag-callout` warning), an optional list of choices, and a way out. Four of
+// this tray's five branches are exactly this shape with different rows —
+// extracted once they hit that count, per AGENTS.md's "second copy" rule.
+function PickerSheet({ hint, onCancel, children }: { hint: React.ReactNode; onCancel: () => void; children?: React.ReactNode }) {
+    return (
+        <div className="ag-actionsheet">
+            {hint}
+            {children && <div className="ag-build-list">{children}</div>}
+            <button type="button" className="ag-btn ag-btn--light ag-btn--block" onClick={onCancel}>↩ Cancel</button>
+        </div>
+    );
+}
+
 /**
  * The event-card tray (§21.6 step 11): everywhere a player's five one-shot
  * cards (§12) get played from, own-turn-only per §21.3. Distinct from the
@@ -84,121 +98,115 @@ export default function OutbreakEventTray({
             const destination = targeting.destination;
             const stations = stationCityIds(gs.cities);
             return (
-                <div className="ag-actionsheet">
-                    <div className="ag-callout">
-                        All {MAX_RESEARCH_STATIONS} stations are placed — pick one to relocate to {CITIES[destination].name}.
-                    </div>
-                    <div className="ag-build-list">
-                        {stations.map(cityId => {
-                            const target = `event:governmentGrant:${cityId}`;
-                            const pending = pendingTarget === target;
-                            return (
-                                <button
-                                    key={cityId}
-                                    type="button"
-                                    className={`ag-build-row${pending ? ' ag-pending-skin' : ''}`}
-                                    onClick={() => {
-                                        const cmd = new OutbreakPlayEvent();
-                                        cmd.kind = 'play';
-                                        cmd.cardId = EVENT_CARD_GOVERNMENT_GRANT;
-                                        cmd.destination = destination;
-                                        cmd.relocateFrom = cityId;
-                                        send(cmd, target);
-                                    }}
-                                >
-                                    <span className="ag-icon-box">🏥</span>
-                                    <span className="ag-build-main">
-                                        <span className="ag-build-name">{CITIES[cityId].name}</span>
-                                    </span>
-                                    {pending ? <PendingTag label="Relocating" /> : <span className="ag-build-tag">Relocate</span>}
-                                </button>
-                            );
-                        })}
-                    </div>
-                    <button type="button" className="ag-btn ag-btn--light ag-btn--block" onClick={onCancelTargeting}>↩ Cancel</button>
-                </div>
+                <PickerSheet
+                    hint={
+                        <div className="ag-callout">
+                            All {MAX_RESEARCH_STATIONS} stations are placed — pick one to relocate to {CITIES[destination].name}.
+                        </div>
+                    }
+                    onCancel={onCancelTargeting}
+                >
+                    {stations.map(cityId => {
+                        const target = `event:governmentGrant:${cityId}`;
+                        const pending = pendingTarget === target;
+                        return (
+                            <button
+                                key={cityId}
+                                type="button"
+                                className={`ag-build-row${pending ? ' ag-pending-skin' : ''}`}
+                                onClick={() => {
+                                    const cmd = new OutbreakPlayEvent();
+                                    cmd.kind = 'play';
+                                    cmd.cardId = EVENT_CARD_GOVERNMENT_GRANT;
+                                    cmd.destination = destination;
+                                    cmd.relocateFrom = cityId;
+                                    send(cmd, target);
+                                }}
+                            >
+                                <span className="ag-icon-box">🏥</span>
+                                <span className="ag-build-main">
+                                    <span className="ag-build-name">{CITIES[cityId].name}</span>
+                                </span>
+                                {pending ? <PendingTag label="Relocating" /> : <span className="ag-build-tag">Relocate</span>}
+                            </button>
+                        );
+                    })}
+                </PickerSheet>
             );
         }
 
         const hint = targeting.kind === 'airlift'
             ? '✈️ Airlift — tap a highlighted city on the map.'
             : '🏥 Government Grant — tap a highlighted city on the map.';
-        return (
-            <div className="ag-actionsheet">
-                <p className="ag-action-hint" style={{ marginTop: 0 }}>{hint}</p>
-                <button type="button" className="ag-btn ag-btn--light ag-btn--block" onClick={onCancelTargeting}>↩ Cancel</button>
-            </div>
-        );
+        return <PickerSheet hint={<p className="ag-action-hint" style={{ marginTop: 0 }}>{hint}</p>} onCancel={onCancelTargeting} />;
     }
 
     // ── Picking who Airlift moves ────────────────────────────────────────
     if (pickingAirliftTarget) {
         return (
-            <div className="ag-actionsheet">
-                <p className="ag-action-hint" style={{ marginTop: 0 }}>✈️ Airlift — whose pawn moves?</p>
-                <div className="ag-build-list">
-                    {usernameList.flatMap(username => {
-                        const p = gs.playerStates[username];
-                        if (!p) return [];
-                        return [
-                            <button
-                                key={username}
-                                type="button"
-                                className="ag-build-row"
-                                onClick={() => {
-                                    setPickingAirliftTarget(false);
-                                    onStartTargeting({ cardId: EVENT_CARD_AIRLIFT, kind: 'airlift', targetUserId: p.userId });
-                                }}
-                            >
-                                <span className="ag-icon-box">🧑‍⚕️</span>
-                                <span className="ag-build-main">
-                                    <span className="ag-build-name">{username === myUsername ? 'You' : username}</span>
-                                    <span className="ag-build-cost">{CITIES[p.city].name}</span>
-                                </span>
-                                <span className="ag-build-tag">Pick</span>
-                            </button>,
-                        ];
-                    })}
-                </div>
-                <button type="button" className="ag-btn ag-btn--light ag-btn--block" onClick={() => setPickingAirliftTarget(false)}>↩ Cancel</button>
-            </div>
+            <PickerSheet
+                hint={<p className="ag-action-hint" style={{ marginTop: 0 }}>✈️ Airlift — whose pawn moves?</p>}
+                onCancel={() => setPickingAirliftTarget(false)}
+            >
+                {usernameList.flatMap(username => {
+                    const p = gs.playerStates[username];
+                    if (!p) return [];
+                    return [
+                        <button
+                            key={username}
+                            type="button"
+                            className="ag-build-row"
+                            onClick={() => {
+                                setPickingAirliftTarget(false);
+                                onStartTargeting({ cardId: EVENT_CARD_AIRLIFT, kind: 'airlift', targetUserId: p.userId });
+                            }}
+                        >
+                            <span className="ag-icon-box">🧑‍⚕️</span>
+                            <span className="ag-build-main">
+                                <span className="ag-build-name">{username === myUsername ? 'You' : username}</span>
+                                <span className="ag-build-cost">{CITIES[p.city].name}</span>
+                            </span>
+                            <span className="ag-build-tag">Pick</span>
+                        </button>,
+                    ];
+                })}
+            </PickerSheet>
         );
     }
 
     // ── Resilient Population: pick one card out of the infection discard ──
     if (pickingResilientPopulation) {
         return (
-            <div className="ag-actionsheet">
-                <p className="ag-action-hint" style={{ marginTop: 0 }}>🧬 Resilient Population — remove which card, permanently?</p>
-                <div className="ag-build-list">
-                    {gs.infectionDiscard.map((cityId, i) => {
-                        const target = `event:resilientPopulation:${i}`;
-                        const pending = pendingTarget === target;
-                        return (
-                            <button
-                                key={`${cityId}-${i}`}
-                                type="button"
-                                className={`ag-build-row${pending ? ' ag-pending-skin' : ''}`}
-                                onClick={() => {
-                                    const cmd = new OutbreakPlayEvent();
-                                    cmd.kind = 'play';
-                                    cmd.cardId = EVENT_CARD_RESILIENT_POPULATION;
-                                    cmd.infectionCardId = cityId;
-                                    send(cmd, target);
-                                }}
-                            >
-                                <span className="ag-icon-box" style={{ background: cardColor(cityId) }}>🗺️</span>
-                                <span className="ag-build-main">
-                                    <span className="ag-build-name">{cardName(cityId)}</span>
-                                </span>
-                                {pending ? <PendingTag label="Removing" /> : <span className="ag-build-tag">Remove</span>}
-                            </button>
-                        );
-                    })}
-                    {gs.infectionDiscard.length === 0 && <p className="ag-action-hint">The infection discard pile is empty.</p>}
-                </div>
-                <button type="button" className="ag-btn ag-btn--light ag-btn--block" onClick={() => setPickingResilientPopulation(false)}>↩ Cancel</button>
-            </div>
+            <PickerSheet
+                hint={<p className="ag-action-hint" style={{ marginTop: 0 }}>🧬 Resilient Population — remove which card, permanently?</p>}
+                onCancel={() => setPickingResilientPopulation(false)}
+            >
+                {gs.infectionDiscard.map((cityId, i) => {
+                    const target = `event:resilientPopulation:${i}`;
+                    const pending = pendingTarget === target;
+                    return (
+                        <button
+                            key={`${cityId}-${i}`}
+                            type="button"
+                            className={`ag-build-row${pending ? ' ag-pending-skin' : ''}`}
+                            onClick={() => {
+                                const cmd = new OutbreakPlayEvent();
+                                cmd.kind = 'play';
+                                cmd.cardId = EVENT_CARD_RESILIENT_POPULATION;
+                                cmd.infectionCardId = cityId;
+                                send(cmd, target);
+                            }}
+                        >
+                            <span className="ag-icon-box" style={{ background: cardColor(cityId) }}>🗺️</span>
+                            <span className="ag-build-main">
+                                <span className="ag-build-name">{cardName(cityId)}</span>
+                            </span>
+                            {pending ? <PendingTag label="Removing" /> : <span className="ag-build-tag">Remove</span>}
+                        </button>
+                    );
+                })}
+                {gs.infectionDiscard.length === 0 && <p className="ag-action-hint">The infection discard pile is empty.</p>}
+            </PickerSheet>
         );
     }
 
@@ -206,35 +214,34 @@ export default function OutbreakEventTray({
     const retrievableCards = gs.playerDiscard.filter(isEventCardId);
     if (pickingRetrieve) {
         return (
-            <div className="ag-actionsheet">
-                <p className="ag-action-hint" style={{ marginTop: 0 }}>🗃 Retrieve which discarded event card?</p>
-                <div className="ag-build-list">
-                    {retrievableCards.map((cardId, i) => {
-                        const target = `event:retrieve:${i}`;
-                        const pending = pendingTarget === target;
-                        return (
-                            <button
-                                key={`${cardId}-${i}`}
-                                type="button"
-                                className={`ag-build-row${pending ? ' ag-pending-skin' : ''}`}
-                                onClick={() => {
-                                    const cmd = new OutbreakPlayEvent();
-                                    cmd.kind = 'retrieve';
-                                    cmd.cardId = cardId;
-                                    send(cmd, target);
-                                }}
-                            >
-                                <span className="ag-icon-box" style={{ background: cardColor(cardId) }}>🃏</span>
-                                <span className="ag-build-main">
-                                    <span className="ag-build-name">{cardName(cardId)}</span>
-                                </span>
-                                {pending ? <PendingTag label="Retrieving" /> : <span className="ag-build-tag">Retrieve</span>}
-                            </button>
-                        );
-                    })}
-                </div>
-                <button type="button" className="ag-btn ag-btn--light ag-btn--block" onClick={() => setPickingRetrieve(false)}>↩ Cancel</button>
-            </div>
+            <PickerSheet
+                hint={<p className="ag-action-hint" style={{ marginTop: 0 }}>🗃 Retrieve which discarded event card?</p>}
+                onCancel={() => setPickingRetrieve(false)}
+            >
+                {retrievableCards.map((cardId, i) => {
+                    const target = `event:retrieve:${i}`;
+                    const pending = pendingTarget === target;
+                    return (
+                        <button
+                            key={`${cardId}-${i}`}
+                            type="button"
+                            className={`ag-build-row${pending ? ' ag-pending-skin' : ''}`}
+                            onClick={() => {
+                                const cmd = new OutbreakPlayEvent();
+                                cmd.kind = 'retrieve';
+                                cmd.cardId = cardId;
+                                send(cmd, target);
+                            }}
+                        >
+                            <span className="ag-icon-box" style={{ background: cardColor(cardId) }}>🃏</span>
+                            <span className="ag-build-main">
+                                <span className="ag-build-name">{cardName(cardId)}</span>
+                            </span>
+                            {pending ? <PendingTag label="Retrieving" /> : <span className="ag-build-tag">Retrieve</span>}
+                        </button>
+                    );
+                })}
+            </PickerSheet>
         );
     }
 

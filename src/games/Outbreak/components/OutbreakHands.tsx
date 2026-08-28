@@ -35,7 +35,7 @@ export default function OutbreakHands({ playerStates, usernameList, myUsername }
                             </span>
                             {role && <span className="ag-hand-note">{role.name}</span>}
                         </div>
-                        <div className="ag-hand-cards">
+                        <div className="ag-hand-cards ag-hand-cards--wrap">
                             {cardCount === 0
                                 ? <span className="ag-hand-note">No cards.</span>
                                 : (

@@ -23,7 +23,7 @@ export default function OutbreakInfectionDiscard({ infectionDiscard }: OutbreakI
                 <span className="ag-hand-title">Infection discard · {infectionDiscard.length}</span>
                 <span className="ag-hand-note">most recent first</span>
             </div>
-            <div className="ag-hand-cards">
+            <div className="ag-hand-cards ag-hand-cards--wrap">
                 {cards.length === 0
                     ? <span className="ag-hand-note">Empty.</span>
                     : cards.map((cityId, i) => <OutbreakCardChip key={`${cityId}-${i}`} cardId={cityId} />)}
