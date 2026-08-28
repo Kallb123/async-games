@@ -16,7 +16,7 @@ import {
     isCityCardId,
     OutbreakDiseaseColor,
 } from "@/games/Outbreak/board";
-import { canDiscoverCure, infectionRateFor } from "@/games/Outbreak/rules";
+import { canDiscoverCure, infectionRateFor, IOutbreakInfectionLogEntry } from "@/games/Outbreak/rules";
 import { pluralize } from "@/utils/ui/text";
 
 // §3's whole emotional arc is the board getting worse while the team fights
@@ -31,6 +31,7 @@ const OB_STATION = "ob_station";
 const OB_EPIDEMIC = "ob_epidemic";
 const OB_OUTBREAK = "ob_outbreak";
 const OB_INFECT = "ob_infect";
+const OB_CONTAINED = "ob_contained";
 const OB_AIRLIFT = "ob_airlift";
 const OB_GRANT = "ob_grant";
 const OB_QUIET_NIGHT = "ob_quiet_night";
@@ -225,6 +226,27 @@ function toEvents(
             break;
     }
 
+    // ── The Quarantine Specialist quietly earning her keep ────────────────
+    // Not folded into the OutbreakEndTurn case above: a card she contains
+    // places no cube and triggers no outbreak, so the before/after cube and
+    // outbreak counts that case reads can't tell a contained draw apart from
+    // nothing having been drawn at all — the infection log is the only place
+    // that recorded it happened. Checked on every command class, not just
+    // OutbreakEndTurn, since OutbreakDiscard and OutbreakPlayEvent can also
+    // be the one that finishes the draw phase and runs Phase 3.
+    const infectionLog = (command as unknown as { infectionLog?: IOutbreakInfectionLogEntry[] }).infectionLog;
+    const contained = infectionLog?.filter(e => e.outcome === 'contained') ?? [];
+    if (contained.length > 0) {
+        events.push({
+            ...base,
+            id: `${command.id}:contained`,
+            type: OB_CONTAINED,
+            glyph: '🛡️',
+            title: `The Quarantine Specialist blocked ${pluralize(contained.length, 'infection')}`,
+            detail: contained.map(e => CITIES[e.cityId!].name).join(', '),
+        });
+    }
+
     // ── The ending, however it lands, regardless of which command caused it ──
     if (next.complete && !prev.complete) {
         const won = curedEverything(nextState);
@@ -245,6 +267,7 @@ function summarize(events: IGameEvent[], _forUserId: string): IRecapSummary {
     const cures = events.filter(e => e.type === OB_CURE).length;
     const outbreaks = events.filter(e => e.type === OB_OUTBREAK).length;
     const epidemics = events.filter(e => e.type === OB_EPIDEMIC).length;
+    const contained = events.some(e => e.type === OB_CONTAINED);
     const lost = events.some(e => e.type === OB_LOSS);
     const won = events.some(e => e.type === OB_WIN);
     const beats = events.filter(e => e.type !== OB_WIN && e.type !== OB_LOSS).length;
@@ -260,6 +283,8 @@ function summarize(events: IGameEvent[], _forUserId: string): IRecapSummary {
         tail = ' — an epidemic hit, and the rate is climbing.';
     } else if (cures > 0) {
         tail = cures > 1 ? ' — the team found more cures.' : ' — the team found a cure.';
+    } else if (contained) {
+        tail = ' — the Quarantine Specialist held the line. 🛡️';
     }
 
     return {

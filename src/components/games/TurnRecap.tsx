@@ -12,7 +12,9 @@ export interface TurnRecapEvent {
     glyph?: string;
     title: string;
     detail?: string;
-    timestamp: string;
+    /** Omit for a same-instant screen (e.g. an end-of-turn summary) where a
+     *  relative "3m ago" on every row would just repeat itself. */
+    timestamp?: string;
     dotColour: string;
     /** The reaction already sent for this action (there's only ever the viewer's), or null. */
     reaction?: string | null;
@@ -20,6 +22,9 @@ export interface TurnRecapEvent {
 
 interface TurnRecapProps {
     header: { name: string; accent: string; glyph?: string };
+    /** The line under the header's game name — "Since your last turn" for the
+     *  away recap, or a game's own wording for a same-session screen. */
+    since?: string;
     summary: { headline: string; subline: string };
     events: TurnRecapEvent[];
     tip?: { glyph: string; text: string } | null;
@@ -38,7 +43,7 @@ const ACCENT_CLASSES = new Set(['terracotta', 'green', 'gold', 'purple']);
 // welcome-back headline, a player-coloured timeline of what happened while you
 // were away, an optional strategic tip, and a call-to-action into the board.
 // One component, every game — driven entirely by props.
-export default function TurnRecap({ header, summary, events, tip, cta, backHref = '/', onReact }: TurnRecapProps) {
+export default function TurnRecap({ header, since = "Since your last turn", summary, events, tip, cta, backHref = '/', onReact }: TurnRecapProps) {
     const now = useNowToTheMinute();
     const accentClass = ACCENT_CLASSES.has(header.accent) ? `ag-accent-${header.accent}` : undefined;
     const accentStyle = accentClass ? undefined : { background: header.accent };
@@ -56,7 +61,7 @@ export default function TurnRecap({ header, summary, events, tip, cta, backHref 
                 </Link>
                 <div className="ag-recap-head-main">
                     <div className="ag-recap-game">{header.name}</div>
-                    <div className="ag-recap-since">Since your last turn</div>
+                    <div className="ag-recap-since">{since}</div>
                 </div>
             </div>
 
@@ -69,7 +74,7 @@ export default function TurnRecap({ header, summary, events, tip, cta, backHref 
                         id: event.id,
                         dotColour: event.dotColour,
                         title: `${event.title}${event.glyph ? ` ${event.glyph}` : ''}`,
-                        detail: [event.detail, formatRelativeTime(event.timestamp, now)].filter(Boolean).join(' · '),
+                        detail: [event.detail, event.timestamp ? formatRelativeTime(event.timestamp, now) : null].filter(Boolean).join(' · '),
                         trailing: onReact ? (
                             <ReactionPicker
                                 reacted={event.reaction}
