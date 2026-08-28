@@ -22,6 +22,7 @@ import {
     OutbreakPhase,
 } from "./board";
 import {
+    ACTIONS_PER_TURN,
     CUBES_PER_COLOR,
     OutbreakCubeCounts,
     emptyCubeCounts,
@@ -218,7 +219,7 @@ export function buildInitialOutbreakState(turnOrder: string[], difficulty: Outbr
 
     const players = new Map<string, IOutbreakPlayerState>();
     for (const userId of turnOrder) {
-        players.set(userId, { hand: [], city: ATLANTA_CITY_ID, role: null, contingencyCard: null, actionsLeft: 4 });
+        players.set(userId, { hand: [], city: ATLANTA_CITY_ID, role: null, contingencyCard: null, actionsLeft: ACTIONS_PER_TURN });
     }
 
     return {

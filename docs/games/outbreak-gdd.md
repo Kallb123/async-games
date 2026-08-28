@@ -752,6 +752,22 @@ diseases are cured. The game is winnable and unloseable — which is exactly the
 point of stopping here: the action economy can be tested in isolation before
 anything is fighting back.
 
+*Landed.* One parameterised `OutbreakAction` in `OutbreakLogic.ts` covers all
+eight §8 kinds (drive/direct/charter/shuttle, build a research station, treat
+disease, share knowledge, discover a cure) plus a `pass` to forfeit, matching
+§21.4's "four command classes, not fifteen" rather than splitting into eight.
+Movement reuses `rules.ts`'s `getLegalMoves` instead of re-deriving adjacency,
+hand and research-station eligibility a second time; curing reuses
+`canDiscoverCure`/`cureCardsRequired`. `OutbreakGameType.CheckEndTurn` refills
+`actionsLeft` (now `ACTIONS_PER_TURN` in `rules.ts`, joining
+`MAX_RESEARCH_STATIONS` in `board.ts`) for the next player and advances the
+turn on the fourth action; `CheckGameOver` wins the team — `teamwin`, no
+single winner — the moment all four diseases are cured or eradicated. With no
+draw or infect phase yet, nothing here can place a cube or trip any of §4.2's
+three defeat conditions, so the game is exactly what this step promised:
+winnable and unloseable. `OutbreakLogic.test.ts` covers it with the same
+in-memory harness `SolitaireLogic.test.ts` uses.
+
 **5 — The board screen, first pass.** Enough UI to play step 4 by hand, so every
 step after this one is playtestable as it lands rather than five commits later.
 A pan-and-zoom SVG map over map art, following `WorldDominationBoard.tsx`:
@@ -762,12 +778,32 @@ counters, `ActionButton` and `ag-actionsheet` for the action picker,
 `GameOptionsMenu`, `GameFinishBanner`, `useGameData`, `useSubmitCommand`,
 `usePushEvents`, `useEndGame`.
 
-*Note for this step:* World Domination will then be the second game drawing a
-node-and-edge map over art in an SVG. If the two are genuinely the same
-component with different data, promote it to `src/components/ui/` and port World
-Domination onto it in the same commit — a second copy is the signal to extract
-the first (`AGENTS.md`). If Outbreak's per-city cube stacks and four-colour
-state make it a different component wearing the same hat, keep them apart and
+*Note for this step, updated now that Train Time has landed and this genuinely
+needed re-checking:* the pan-and-zoom shell isn't an open question any more —
+`BoardZoom` (`src/components/ui/BoardZoom.tsx`) already wraps both
+`WorldDominationBoard.tsx` and `TrainTimeBoard.tsx`, so Outbreak's board should
+just import it, the same as they do. Likewise the `ag-board-frame` base class
+plus a per-game `.ag-<game>-frame` subclass on top of it
+(`.ag-world-domination-frame`, `.ag-tt-frame`) is an established convention
+now, not a decision — Outbreak's board wants its own, something like
+`.ag-outbreak-frame`.
+
+What's still genuinely open is narrower than this note originally made it
+sound: only the *node-and-edge-over-photographic-map-art* rendering inside
+`WorldDominationBoard.tsx` — positioned circles joined by straight adjacency
+lines, drawn over a raster `<image>` — remains one-of-a-kind. Train Time did
+not turn out to be a second instance of it: `TrainTimeBoard.tsx` has no image
+backdrop at all, and draws each route as its own curved, dashed SVG path from
+`ROUTE_GEOMETRY` (`TrainTime/ui.ts`) rather than a straight line between two
+fixed points — a stylised printed chart, not a map over art. So it doesn't
+retroactively answer whether Outbreak and World Domination's node maps are
+"genuinely the same component with different data" — World Domination is
+still the only comparison point for that specific pattern, and the original
+call stands: if Outbreak's per-city cube stacks and four-colour state turn out
+to be the same component wearing different data once written, promote it to
+`src/components/ui/` and port World Domination onto it in the same commit
+(`AGENTS.md`) — a second copy is the signal to extract the first. If the cube
+stacks make it a different component wearing the same hat, keep them apart and
 say so in the commit message. Decide by writing it, not up front.
 
 **6 — The draw and infect phases.** `OutbreakEndTurn`: draw two, the hand-limit

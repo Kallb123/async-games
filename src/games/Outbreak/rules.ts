@@ -6,6 +6,11 @@
 // docs/new-game.md, "Isomorphic rules modules").
 import { ADJACENCY, CITY_COUNT, OutbreakDiseaseColor } from "./board";
 
+// ─── The action economy (§7-8) ──────────────────────────────────────────────
+
+/** Actions per player per turn (§7 Phase 1, §21.4 — refills at turn start). */
+export const ACTIONS_PER_TURN = 4;
+
 // ─── Movement (§8.1) ────────────────────────────────────────────────────────
 
 export type OutbreakMoveType = 'drive' | 'directFlight' | 'charterFlight' | 'shuttleFlight';
