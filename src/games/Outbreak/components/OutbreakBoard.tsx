@@ -65,6 +65,7 @@ export default function OutbreakBoard({ cities, playerStates, usernameList, vali
                         const state = cities[def.id];
                         if (!state) return null;
                         const isValid = validCities.has(def.id);
+                        const isHighlighted = def.id === highlightedCityId;
                         const colorHex = DISEASE_COLOR_DEFS[def.color].hex;
                         const cubeColors = DISEASE_COLORS.filter(c => state.cubes[c] > 0);
                         const pawns = pawnsByCity.get(def.id) ?? [];
@@ -74,7 +75,7 @@ export default function OutbreakBoard({ cities, playerStates, usernameList, vali
                                 key={def.id}
                                 x={def.x} y={def.y} radius={NODE_RADIUS}
                                 isValid={isValid}
-                                isHighlighted={def.id === highlightedCityId}
+                                isHighlighted={isHighlighted}
                                 onClick={onCityClick && (() => onCityClick(def.id))}
                                 title={<>
                                     {def.name} — {DISEASE_COLOR_DEFS[def.color].name}
@@ -82,7 +83,10 @@ export default function OutbreakBoard({ cities, playerStates, usernameList, vali
                                     {cubeColors.map(c => ` · ${state.cubes[c]} ${c}`).join('')}
                                 </>}
                             >
-                                <circle cx={def.x} cy={def.y} r={NODE_RADIUS} fill={colorHex} stroke="#fff" strokeWidth={1.3} />
+                                <circle
+                                    cx={def.x} cy={def.y} r={NODE_RADIUS} fill={colorHex} stroke="#fff" strokeWidth={1.3}
+                                    className={isHighlighted ? 'ag-map-node-pulse' : undefined}
+                                />
 
                                 {(() => {
                                     const label = CITY_LABEL_OFFSET[def.labelDir];

@@ -1468,19 +1468,21 @@ a.ag-list-row, a.ag-list-row-main {
     animation: ag-pulse 1s ease-in-out infinite;
 }
 
-/* The ring ClickableMapNode draws around a card-highlighted city — pulses so
-   it reads against a busy map instead of sitting there as a static dashed
-   line (--ag-pulse-min is deliberately shallower than the skeleton's so the
-   ring never fully fades). */
-.ag-map-highlight-ring {
-    --ag-pulse-min: 0.3;
+/* The ring ClickableMapNode draws around a card-highlighted city, and the
+   city's own node pulsing in sync with it so the whole marker reads as one
+   selected unit — not just a ring around an otherwise static dot
+   (--ag-pulse-min is deliberately shallower than the skeleton's so neither
+   ever fully fades). */
+.ag-map-highlight-ring, .ag-map-node-pulse {
     animation: ag-pulse 1s ease-in-out infinite;
     transform-box: fill-box;
     transform-origin: center;
 }
+.ag-map-highlight-ring { --ag-pulse-min: 0.3; }
+.ag-map-node-pulse { --ag-pulse-min: 0.4; }
 
 @media (prefers-reduced-motion: reduce) {
-    .ag-hand-card--highlighted, .ag-map-highlight-ring { animation: none; }
+    .ag-hand-card--highlighted, .ag-map-highlight-ring, .ag-map-node-pulse { animation: none; }
 }
 
 /* Dev-card chips shown under the resource hand */
