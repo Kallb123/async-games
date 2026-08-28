@@ -220,6 +220,40 @@ export function epidemicCountFor(difficulty: OutbreakDifficulty): number {
 // another.
 export const EPIDEMIC_CARD_ID = -1;
 
+// ─── Roles (§11, §21.6 step 9) ──────────────────────────────────────────────
+// Static reference data only — dealt in OutbreakModels.buildInitialOutbreakState
+// and expressed as small pure exceptions to the base rules in rules.ts, rather
+// than as `if (role === ...)` branches sprayed through OutbreakLogic.ts's
+// Execute methods.
+
+export type OutbreakRoleId =
+    | 'medic'
+    | 'scientist'
+    | 'researcher'
+    | 'dispatcher'
+    | 'opsExpert'
+    | 'quarantineSpecialist'
+    | 'contingencyPlanner';
+
+export interface OutbreakRoleDef {
+    id: OutbreakRoleId;
+    name: string;
+    ability: string;
+}
+
+// All seven, dealt one per seat at random (§6 step 5) — see rules.ts's
+// dealRoles. contingencyPlanner has no observable effect yet: its retrieval
+// ability has nothing to retrieve until event cards exist (§21.6 step 10).
+export const ROLES: OutbreakRoleDef[] = [
+    { id: 'medic', name: 'Medic', ability: 'Treat Disease clears every cube of a colour in one action, cured or not. Cured cubes vanish automatically from any city she enters or is in.' },
+    { id: 'scientist', name: 'Scientist', ability: 'Discovers a cure with 4 cards of a colour instead of 5.' },
+    { id: 'researcher', name: 'Researcher', ability: 'A card leaving her hand during Share Knowledge — given by her, or taken from her — need not match the shared city.' },
+    { id: 'dispatcher', name: 'Dispatcher', ability: "May move another player's pawn using her own hand, or move any pawn to a city already occupied by another pawn." },
+    { id: 'opsExpert', name: 'Operations Expert', ability: 'Builds a research station without discarding a card. Once per turn, flies from a station to any city by discarding any city card.' },
+    { id: 'quarantineSpecialist', name: 'Quarantine Specialist', ability: 'Prevents all cube placement and outbreaks in her city and every adjacent city.' },
+    { id: 'contingencyPlanner', name: 'Contingency Planner', ability: 'Recovers a discarded event card for later use (§21.6 step 10).' },
+];
+
 // ─── Shared state vocabulary ────────────────────────────────────────────────
 // Here (rather than in OutbreakModels.ts) so apiModels.ts can import it
 // without a cycle — the same reason WorldDominationPhase lives in

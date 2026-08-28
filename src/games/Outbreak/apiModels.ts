@@ -1,5 +1,5 @@
 import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
-import type { OutbreakCureState, OutbreakDifficulty, OutbreakDiseaseColor, OutbreakPhase } from "./board";
+import type { OutbreakCureState, OutbreakDifficulty, OutbreakDiseaseColor, OutbreakPhase, OutbreakRoleId } from "./board";
 
 export interface IOutbreakCityResponse {
     cubes: Record<OutbreakDiseaseColor, number>;
@@ -13,7 +13,7 @@ export interface IOutbreakPlayerStateResponse {
     // full for every player, not just the viewer.
     hand: number[];
     city: number;
-    role: string | null;
+    role: OutbreakRoleId | null;
     actionsLeft: number;
 }
 
