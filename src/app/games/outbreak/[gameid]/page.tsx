@@ -9,6 +9,7 @@ import OutbreakActions from "@/games/Outbreak/components/OutbreakActions";
 import OutbreakHands from "@/games/Outbreak/components/OutbreakHands";
 import OutbreakInfectionDiscard from "@/games/Outbreak/components/OutbreakInfectionDiscard";
 import OutbreakEventTray, { OutbreakEventTargeting } from "@/games/Outbreak/components/OutbreakEventTray";
+import OutbreakEndTurnScreen from "@/games/Outbreak/components/OutbreakEndTurnScreen";
 import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
@@ -20,12 +21,12 @@ import MatchHistory from "@/components/games/MatchHistory";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
-import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
+import { SubmitCommand, useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
-import { OutbreakAction, OutbreakPlayEvent } from "@/utils/apiModels/GameLogic";
-import { HAND_LIMIT, OutbreakMoveType, getLegalMoves, infectionRateFor, stationCityIds } from "@/games/Outbreak/rules";
+import { IOutbreakInfectionPhaseOutcome, OutbreakAction, OutbreakPlayEvent } from "@/utils/apiModels/GameLogic";
+import { HAND_LIMIT, IOutbreakInfectionLogEntry, OutbreakMoveType, getLegalMoves, infectionRateFor, stationCityIds } from "@/games/Outbreak/rules";
 import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, EVENT_CARD_AIRLIFT, EVENT_CARD_GOVERNMENT_GRANT, MAX_RESEARCH_STATIONS } from "@/games/Outbreak/board";
 import { playerColour } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
@@ -46,8 +47,21 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     const gameId = gameid;
 
     const { gameData, setGameData, getGameData } = useGameData<IOutbreakGameDataResponse>(gameId);
-    const { submitCommand, submitting, pendingTarget } = useSubmitCommand<IOutbreakGameDataResponse>(gameId, user, setGameData, getGameData);
+    const { submitCommand: rawSubmitCommand, submitting, pendingTarget } = useSubmitCommand<IOutbreakGameDataResponse>(gameId, user, setGameData, getGameData);
     const { endGame } = useEndGame(gameId);
+
+    // End-of-turn screen: whichever command just finished the draw/infect
+    // phase (OutbreakEndTurn, or a discard/event card that ducked the hand
+    // limit) hands back what it drew and what it did on its own outcome —
+    // see IOutbreakInfectionPhaseOutcome. Every submit goes through this one
+    // wrapper so it's caught regardless of which control fired it.
+    const [turnResult, setTurnResult] = useState<IOutbreakInfectionLogEntry[] | null>(null);
+    const submitCommand: SubmitCommand = (command, callback, target) =>
+        rawSubmitCommand(command, (r) => {
+            const infectionLog = (r.outcome as IOutbreakInfectionPhaseOutcome).infectionLog;
+            if (infectionLog?.length) setTurnResult(infectionLog);
+            callback?.(r);
+        }, target);
 
     // Turn review steps back through the real turns of the match; the board,
     // the hands and the log all render whichever point is being viewed. The
@@ -219,6 +233,17 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                 cta="See the damage →"
                 onDismiss={recap.dismiss}
                 onReact={recap.react}
+            />
+        );
+    }
+
+    // End-of-turn screen: what the draw and infect phases just did to us,
+    // shown once before the board moves on to whoever's turn it is now.
+    if (turnResult) {
+        return (
+            <OutbreakEndTurnScreen
+                infectionLog={turnResult}
+                onDismiss={() => setTurnResult(null)}
             />
         );
     }

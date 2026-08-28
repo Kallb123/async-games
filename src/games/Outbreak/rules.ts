@@ -119,6 +119,33 @@ export function emptyBoardCubes(): OutbreakBoardCubes {
     return Array.from({ length: CITY_COUNT }, emptyCubeCounts);
 }
 
+// One infection-card draw's outcome, or an epidemic's own Increase+Infect
+// step, or the whole Infect Cities phase being skipped — the building block
+// of IOutbreakInfectionPhaseOutcome.infectionLog (OutbreakLogic.ts), returned
+// by OutbreakEndTurn/OutbreakDiscard/OutbreakPlayEvent's Execute (§21.6 step
+// 6, step 12). Built so both the end-of-turn screen and the away recap
+// (recap.ts) can narrate exactly what a draw did — including the Quarantine
+// Specialist quietly containing it, which a before/after cube count can't
+// tell apart from an ordinary placement.
+export type OutbreakInfectionOutcome =
+    | 'placed'      // one cube added, no cap hit
+    | 'outbreak'    // the city was already at the cap; it outbroke and chained
+    | 'contained'   // the Quarantine Specialist blocked it entirely
+    | 'eradicated'; // the colour is already eradicated; drawn and discarded, no effect
+
+export interface IOutbreakInfectionLogEntry {
+    kind: 'infect' | 'epidemic' | 'quietNight';
+    /** Set for 'infect', and for 'epidemic' once its Infect step actually drew
+     * a card (omitted if the infection deck was empty). */
+    cityId?: number;
+    color?: OutbreakDiseaseColor;
+    outcome?: OutbreakInfectionOutcome;
+    /** Cities the outbreak spread to, in order — only set when outcome === 'outbreak'. */
+    spreadTo?: number[];
+    /** 'epidemic' only: the infection rate after its Increase step. */
+    rateAfter?: number;
+}
+
 export interface IOutbreakChainResult {
     cubes: OutbreakBoardCubes;
     /** Number of new outbreaks triggered while resolving this placement. */
