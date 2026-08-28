@@ -7,12 +7,23 @@
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="colorAccent">@color/colorAccent</item>
+        <item name="android:windowBackground">@color/ag_background</item>
     </style>
 
+    <!-- The theme the activity runs under once the splash screen hands over,
+         and so the one that paints the window itself. From targetSdk 35 the
+         window is edge-to-edge and can't opt out, which means the WebView is
+         inset and the strips behind the status and gesture bars show *this*
+         background rather than the page's. Left at the AppCompat DayNight
+         default that framed the always-cream app in white, or in near-black on
+         a phone set to dark mode; `@color/ag_background` is the app's own
+         field colour, generated into `values/ag_colors.xml` by
+         `npm run icons` from the same `colours.ts` the stylesheet uses. -->
     <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <item name="android:windowBackground">@color/ag_background</item>
     </style>
 
 

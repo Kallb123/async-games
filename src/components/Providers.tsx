@@ -6,6 +6,8 @@ import BottomBanner from './BottomBanner';
 import { useServiceWorker } from '@/utils/hooks/useServiceWorker';
 import { useCapacitorBackButton } from '@/utils/hooks/useCapacitorBackButton';
 import { useCapacitorSplashScreen } from '@/utils/hooks/useCapacitorSplashScreen';
+import { useCapacitorDeepLinks } from '@/utils/hooks/useCapacitorDeepLinks';
+import { useCapacitorPush } from '@/utils/hooks/useCapacitorPush';
 
 export default function Providers({ children }: { children: ReactNode }) {
     // App-wide: the worker that makes the app installable and offline-capable,
@@ -19,6 +21,11 @@ export default function Providers({ children }: { children: ReactNode }) {
     // Native Android shell only: dismisses the branded splash overlay once
     // this, the app's one always-mounted client component, has painted.
     useCapacitorSplashScreen();
+    // Native Android shell only: a link to the site opened from outside the
+    // app, and a push arriving or being tapped. Both are per-app listeners, so
+    // this is the one place they can be registered once.
+    useCapacitorDeepLinks();
+    useCapacitorPush();
 
     return (
         <ToastProvider>

@@ -43,3 +43,8 @@ next-env.d.ts
 
 # clerk configuration (can include secrets)
 /.clerk/
+
+# The Android app's Firebase config. Written by the release workflow from the
+# GOOGLE_SERVICES_JSON secret, and downloaded from the Firebase console for a
+# local build — one source of truth, rather than a copy in here going stale.
+/android/app/google-services.json

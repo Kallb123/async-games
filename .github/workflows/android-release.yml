@@ -30,6 +30,26 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      # The Android app's half of the Firebase project. Without it Gradle skips
+      # the google-services plugin (see android/app/build.gradle) and the APK
+      # ships unable to register for push at all — which, for an app whose job
+      # is telling you it's your turn, is not a build worth publishing. Held as
+      # a secret rather than committed so the file that ends up in the APK is
+      # whatever the Firebase console currently says, not a copy that drifted.
+      - name: Write google-services.json
+        env:
+          # Through the environment, not interpolated into the script: the file
+          # is JSON full of quotes and braces, and a shell has opinions about
+          # those.
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -z "$GOOGLE_SERVICES_JSON" ]; then
+            echo "Missing repo secret: GOOGLE_SERVICES_JSON"
+            echo "Add an Android app (package com.asyncgames.app) to the async-games Firebase project, download its google-services.json, and paste the file's contents in under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+
       - name: Sync native Android project
         run: npx cap sync android
 

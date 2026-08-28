@@ -7,8 +7,14 @@ android {
         applicationId "com.asyncgames.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // The native shell's own version, which is not the web app's: the site
+        // redeploys on every merge, while this is only rebuilt when a release
+        // is cut, so an installed app is today's site inside whichever wrapper
+        // the player last installed. Both are shown in the settings footer
+        // (`useAppVersion`). Bump these when the shell itself changes —
+        // versionCode must go up for Android to accept an upgrade.
+        versionCode 2
+        versionName "1.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

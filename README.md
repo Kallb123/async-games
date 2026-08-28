@@ -76,6 +76,8 @@ That rewrites every shipped image of the mark:
 | `public/icons/og-image.png` | `og:image` / `twitter:image` share card |
 | `android/app/src/main/res/mipmap-*/ic_launcher*.png`, `values/ic_launcher_background.xml` | the Capacitor Android app's launcher icon (legacy + adaptive, every density) |
 | `android/app/src/main/res/drawable{,-port,-land}-*/splash.png` | the Android app's launch screen |
+| `android/app/src/main/res/drawable-*/ic_stat_notify.png` | the Android app's notification icon (a white silhouette — Android uses the alpha channel and tints the rest) |
+| `android/app/src/main/res/values/ag_colors.xml` | the theme colours the native shell needs as Android resources (window background, notification tint) |
 
 The share card is the only asset that needs anything extra: it sets the
 wordmark in Bricolage Grotesque, so that font must be installed as a system

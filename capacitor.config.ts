@@ -45,6 +45,21 @@ const config: CapacitorConfig = {
             androidScaleType: 'CENTER_CROP',
             showSpinner: false,
         },
+        // Capacitor 8 handles the status and gesture bars from core — there is
+        // no plugin to install for this. Its default style follows the
+        // *device's* light/dark setting, which is the wrong question here: the
+        // app is cream in both, so a phone in dark mode was getting white
+        // icons on it. LIGHT means "light background, dark icons" and holds
+        // whatever the device is set to.
+        //
+        // Insets are core's too (`insetsHandling` defaults to 'css'): it pads
+        // the WebView clear of the bars and publishes the measurements as
+        // `--safe-area-inset-*` custom properties on <html>. Read those rather
+        // than `env(safe-area-inset-*)`, which only resolves under a
+        // `viewport-fit=cover` this app doesn't set.
+        SystemBars: {
+            style: 'LIGHT',
+        },
     },
 };
 

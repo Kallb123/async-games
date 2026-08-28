@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ag_background">#f6e8de</color>
+    <color name="ag_notification">#b74b21</color>
+</resources>

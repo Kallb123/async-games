@@ -22,7 +22,39 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- App Links: a shared join link (or any other page of the site)
+                 tapped in a chat app opens here instead of the browser, and
+                 `useCapacitorDeepLinks` routes it in-app when the app is
+                 already running. `singleTask` above is what makes that the
+                 same instance rather than a second one.
+
+                 Android only auto-opens these once it has verified the domain
+                 against /.well-known/assetlinks.json, which the site serves
+                 from ANDROID_APP_FINGERPRINT (see .env.example and
+                 src/app/api/assetlinks/route.ts). Until that is set the filter
+                 is harmless: links keep opening in the browser, and a player
+                 can still turn the app on by hand under Open by default. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="asyncgames.com" />
+                <data android:scheme="https" android:host="www.asyncgames.com" />
+            </intent-filter>
+
         </activity>
+
+        <!-- What a push notification looks like in the tray. Without these FCM
+             falls back to the launcher icon, which Android reduces to its alpha
+             channel — a solid white square. `ic_stat_notify` is the mark as a
+             silhouette, tinted `ag_notification`; both are written by
+             `npm run icons`. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_notify" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/ag_notification" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -38,4 +70,8 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 13+ asks before an app may post notifications; the request is
+         made from the same "Enable" button the web build uses, through
+         `useNotificationPermission`. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>
