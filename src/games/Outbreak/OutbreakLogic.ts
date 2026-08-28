@@ -160,6 +160,7 @@ function applyMove(
         gs.playerDiscard.push(move.discardCityId);
     }
     movingPs.city = destination;
+    movingPs.timesTravelled += 1;
 
     const verb = actingPs === movingPs ? MOVE_VERB[moveType] : `dispatched a teammate's pawn (${MOVE_VERB[moveType]})`;
     return withMedicNote(gs, movingPs, `${verb} from ${fromName} to ${CITIES[destination].name}`);
@@ -183,6 +184,7 @@ function applyDispatcherRelocate(
 
     const fromName = CITIES[target.city].name;
     target.city = destination;
+    target.timesTravelled += 1;
     return withMedicNote(gs, target, `dispatched a teammate's pawn from ${fromName} to ${CITIES[destination].name}`);
 }
 
@@ -206,6 +208,7 @@ function applyOpsExpertFlight(
     const fromName = CITIES[ps.city].name;
     ps.city = destination;
     ps.opsExpertFlightUsed = true;
+    ps.timesTravelled += 1;
 
     return withMedicNote(gs, ps, `flew from the research station in ${fromName} to ${CITIES[destination].name}`);
 }
@@ -261,6 +264,7 @@ function applyTreatDisease(gs: IOutbreakSpecificGameState, ps: IOutbreakPlayerSt
     const cured = gs.cures[color] !== 'none';
     const removed = treatDiseaseRemovalCount(cured, present, ps.role);
     removeCubes(gs, ps.city, color, removed);
+    ps.cubesTreated += removed;
 
     const colorName = DISEASE_COLOR_DEFS[color].name;
     if (cured) return `cleared the last of ${colorName} from ${CITIES[ps.city].name}`;
@@ -862,6 +866,7 @@ function applyAirlift(gs: IOutbreakSpecificGameState, targetUserId: string | nul
 
     const fromName = CITIES[target.city].name;
     target.city = destination;
+    target.timesTravelled += 1;
     return withMedicNote(gs, target, `played Airlift, moving a teammate from ${fromName} to ${CITIES[destination].name}`);
 }
 
