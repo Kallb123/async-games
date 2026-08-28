@@ -67,6 +67,13 @@ import {
     formatTrainTimeCharts,
 } from "@/games/TrainTime/TrainTimeModels";
 import type { ITrainTimeSpecificGameStateResponse } from "@/games/TrainTime/apiModels";
+import {
+    IOutbreakGameData,
+    IOutbreakGameResultStats,
+    computeOutbreakResultStats,
+    outbreakGameResultStatsSchemaDef,
+    formatOutbreakResultStats,
+} from "@/games/Outbreak/OutbreakModels";
 
 export interface IGameResultData {
     gameId: uuidString,
@@ -206,6 +213,16 @@ var TrainTimeGameResultSchema = new Schema<ITrainTimeGameResultDataDocument>({
 }, { discriminatorKey: 'kind' });
 export var TrainTimeGameResultModel = models.TrainTimeGameResult || GameResultModel.discriminator<ITrainTimeGameResultDataDocument, ITrainTimeGameResultDataModel>('TrainTimeGameResult', TrainTimeGameResultSchema);
 
+export interface IOutbreakGameResultData extends IGameResultData {
+    stats: IOutbreakGameResultStats;
+}
+export interface IOutbreakGameResultDataDocument extends IOutbreakGameResultData, Document {}
+export interface IOutbreakGameResultDataModel extends Model<IOutbreakGameResultDataDocument> {}
+var OutbreakGameResultSchema = new Schema<IOutbreakGameResultDataDocument>({
+    stats: outbreakGameResultStatsSchemaDef
+}, { discriminatorKey: 'kind' });
+export var OutbreakGameResultModel = models.OutbreakGameResult || GameResultModel.discriminator<IOutbreakGameResultDataDocument, IOutbreakGameResultDataModel>('OutbreakGameResult', OutbreakGameResultSchema);
+
 // Maps a GameData's gameType to the discriminator model + stats calculator
 // that boil its final specificGameState down to the interesting numbers, plus
 // a formatter that turns those numbers into display-ready stat groups. Games
@@ -291,6 +308,11 @@ const GAME_RESULT_STATS: Record<string, {
         model: SolitaireGameResultModel,
         compute: (gameData) => computeSolitaireResultStats(gameData as ISolitaireGameData),
         format: formatSolitaireResultStats,
+    },
+    Outbreak: {
+        model: OutbreakGameResultModel,
+        compute: (gameData) => computeOutbreakResultStats(gameData as IOutbreakGameData),
+        format: formatOutbreakResultStats,
     },
 };
 

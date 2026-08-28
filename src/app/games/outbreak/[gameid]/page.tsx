@@ -15,6 +15,7 @@ import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import Stat from "@/components/ui/Stat";
 import TurnNavControls from "@/components/games/TurnNavControls";
+import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import MatchHistory from "@/components/games/MatchHistory";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
@@ -22,6 +23,7 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
+import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { OutbreakAction, OutbreakPlayEvent } from "@/utils/apiModels/GameLogic";
 import { HAND_LIMIT, OutbreakMoveType, getLegalMoves, infectionRateFor, stationCityIds } from "@/games/Outbreak/rules";
 import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, EVENT_CARD_AIRLIFT, EVENT_CARD_GOVERNMENT_GRANT, MAX_RESEARCH_STATIONS } from "@/games/Outbreak/board";
@@ -59,6 +61,12 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
         history: gameData?.gameState?.history ?? [],
     });
     const recapAvailable = gameData?.recapAvailable ?? false;
+
+    // "Since you were last here": the away-time narrative is the board
+    // getting worse (docs/games/outbreak-gdd.md §3, §21.6 step 12) — shown
+    // before the board whenever it's our turn and something happened while
+    // we were away.
+    const recap = useTurnRecap(gameId);
 
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
@@ -171,6 +179,12 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
         : [];
 
     const menuOptions: GameOption[] = [
+        ...(recap.hasRecap ? [{
+            key: 'recap',
+            label: 'Show last recap',
+            icon: '🔁',
+            onClick: recap.reshow,
+        }] : []),
         {
             key: 'history',
             label: 'Turn history',
@@ -187,6 +201,19 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
         }] : []),
     ];
     const optionsMenu = gs ? <GameOptionsMenu options={menuOptions} /> : undefined;
+
+    // Recap intro: a standalone welcome-back screen shown before the board
+    // when it's our turn and moves happened while we were away.
+    if (recap.show) {
+        return (
+            <TurnRecapScreen
+                recap={recap.recap!}
+                cta="See the damage →"
+                onDismiss={recap.dismiss}
+                onReact={recap.react}
+            />
+        );
+    }
 
     return (
         <GameShell title="Outbreak" subtitle={subtitle} right={optionsMenu} syncing={submitting} className="ag-game--outbreak">

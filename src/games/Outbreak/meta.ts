@@ -11,5 +11,5 @@ export const meta: GameMeta = {
     tagline: "Race a spreading pandemic as a team — cure all four diseases before the world falls apart.",
     accent: "#c0392b",
     glyph: "🦠",
-    available: false,
+    available: true,
 };

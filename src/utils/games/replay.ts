@@ -11,6 +11,7 @@ import { buildInitialSettlementsAndCitiesState, gameStateToResponse as settlemen
 import { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import { buildInitialWorldDominationState, gameStateToResponse as worldDominationStateToModel, IWorldDominationGameData } from "@/games/WorldDomination/WorldDominationModels";
 import { buildInitialTrainTimeStateFromGameData, gameStateToModel as trainTimeStateToModel, ITrainTimeGameData } from "@/games/TrainTime/TrainTimeModels";
+import { buildInitialOutbreakStateFromGameData, gameStateToModel as outbreakStateToModel, IOutbreakGameData } from "@/games/Outbreak/OutbreakModels";
 // Side-effect import: evaluating GameLogic registers every @serializable command
 // class so deserializeJSON can rehydrate them during replay.
 import "../apiModels/GameLogic";
@@ -177,6 +178,17 @@ registerReplayAdapter({
     // draw commands are the obvious exclusions, but ClaimRoute and PassTurn can
     // *end the game* through finishTurn, and this game's DTO reveals every
     // player's tickets once gs.gameOver is set.
+    plannableCommands: [],
+});
+
+registerReplayAdapter({
+    className: "OutbreakGameType",
+    buildInitialSpecificGameState: (gameData) => buildInitialOutbreakStateFromGameData(gameData as IOutbreakGameData),
+    toResponseState: (specificGameState, userIdNameMap, viewerId) =>
+        outbreakStateToModel(specificGameState as never, userIdNameMap, viewerId),
+    // The crew planner is §21.6 step 13, not this one — deck freeze is
+    // feasible (only OutbreakEndTurn touches a deck) but no planning UI
+    // exists yet, so this stays empty until that step turns it on.
     plannableCommands: [],
 });
 
