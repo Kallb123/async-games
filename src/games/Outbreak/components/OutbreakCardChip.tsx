@@ -29,6 +29,8 @@ export default function OutbreakCardChip({ cardId, stored = false, onTap, highli
             title={stored ? `${cardName(cardId)} · stored` : cardName(cardId)}
             onClick={tappable ? () => onTap(cardId) : undefined}
             role={tappable ? 'button' : undefined}
+            tabIndex={tappable ? 0 : undefined}
+            onKeyDown={tappable ? (e) => { if (e.key === 'Enter') onTap(cardId); } : undefined}
         >
             <span className="ag-hand-card-dot" style={{ background: cardColor(cardId) }} />
             <span className="ag-hand-card-name">{cardName(cardId)}{stored ? ' ⭐' : ''}</span>
