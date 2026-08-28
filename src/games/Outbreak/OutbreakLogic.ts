@@ -18,6 +18,7 @@ import {
     canDiscoverCure,
     cureCardsRequired,
     getLegalMoves,
+    stationCityIds,
 } from "@/games/Outbreak/rules";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -39,12 +40,6 @@ function playerState(gs: IOutbreakSpecificGameState, userId: string): IOutbreakP
     return gs.players.get(userId);
 }
 
-function stationCities(gs: IOutbreakSpecificGameState): number[] {
-    const ids: number[] = [];
-    gs.cities.forEach((c, id) => { if (c.station) ids.push(id); });
-    return ids;
-}
-
 const MOVE_VERB: Record<OutbreakMoveType, string> = {
     drive: 'drove',
     directFlight: 'flew direct',
@@ -62,7 +57,7 @@ function applyMove(
     moveType: OutbreakMoveType,
     destination: number,
 ): string | null {
-    const legal = getLegalMoves({ currentCity: ps.city, hand: ps.hand, researchStations: stationCities(gs) });
+    const legal = getLegalMoves({ currentCity: ps.city, hand: ps.hand, researchStations: stationCityIds(gs.cities) });
     const move = legal.find(m => m.type === moveType && m.destination === destination);
     if (!move) return null;
 
@@ -84,7 +79,7 @@ function applyBuildStation(gs: IOutbreakSpecificGameState, ps: IOutbreakPlayerSt
     const cardIdx = ps.hand.indexOf(cityId);
     if (cardIdx === -1) return null;
 
-    if (stationCities(gs).length >= MAX_RESEARCH_STATIONS) {
+    if (stationCityIds(gs.cities).length >= MAX_RESEARCH_STATIONS) {
         if (relocateFrom === null || relocateFrom === cityId || !gs.cities[relocateFrom]?.station) return null;
         gs.cities[relocateFrom].station = false;
     }

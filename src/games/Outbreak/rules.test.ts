@@ -5,11 +5,14 @@ import {
     cureCardsRequired,
     emptyBoardCubes,
     getLegalMoves,
+    infectionRateFor,
     isCubeExhaustionLoss,
     isOutbreakCascadeLoss,
     isPlayerDeckEmptyLoss,
     placeCubeOrOutbreak,
+    stationCityIds,
     CUBES_PER_CITY_LIMIT,
+    INFECTION_RATE_TRACK,
     OUTBREAK_LOSS_THRESHOLD,
 } from "./rules";
 
@@ -152,5 +155,30 @@ describe("placeCubeOrOutbreak", () => {
         expect(result.outbreaks).toBe(0);
         expect(result.outbrokenCities).toEqual([]);
         expect(result.cubes[idFor("Istanbul")].black).toBe(CUBES_PER_CITY_LIMIT);
+    });
+});
+
+describe("stationCityIds", () => {
+    it("returns the ids of every city flagged as a station, in id order", () => {
+        const cities = [{ station: false }, { station: true }, { station: false }, { station: true }];
+        expect(stationCityIds(cities)).toEqual([1, 3]);
+    });
+
+    it("returns an empty array when no city has a station", () => {
+        expect(stationCityIds([{ station: false }, { station: false }])).toEqual([]);
+    });
+});
+
+describe("infectionRateFor (§9.1)", () => {
+    it("reads the escalating track by index", () => {
+        expect(INFECTION_RATE_TRACK).toEqual([2, 2, 2, 3, 3, 4, 4]);
+        INFECTION_RATE_TRACK.forEach((rate, index) => {
+            expect(infectionRateFor(index)).toBe(rate);
+        });
+    });
+
+    it("clamps to the final rate past the end of the track", () => {
+        expect(infectionRateFor(INFECTION_RATE_TRACK.length)).toBe(4);
+        expect(infectionRateFor(99)).toBe(4);
     });
 });

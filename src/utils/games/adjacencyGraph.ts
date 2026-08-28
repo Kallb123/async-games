@@ -34,3 +34,21 @@ export function buildSymmetricAdjacency(
 export function isAdjacentIn(adjacency: number[][], a: number, b: number): boolean {
     return adjacency[a]?.includes(b) ?? false;
 }
+
+/**
+ * Dedupes a symmetric adjacency list into one edge per connected pair, for
+ * drawing a board's adjacency lines without drawing each twice.
+ */
+export function edgeListFrom(adjacency: number[][]): [number, number][] {
+    const seen = new Set<string>();
+    const edges: [number, number][] = [];
+    adjacency.forEach((neighbours, from) => {
+        neighbours.forEach(to => {
+            const key = from < to ? `${from}-${to}` : `${to}-${from}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            edges.push([from, to]);
+        });
+    });
+    return edges;
+}

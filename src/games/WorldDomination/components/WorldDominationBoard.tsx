@@ -1,8 +1,10 @@
 'use client'
 import React from 'react';
 import BoardZoom from '@/components/ui/BoardZoom';
+import ClickableMapNode from '@/components/ui/ClickableMapNode';
 import type { IWorldDominationTerritoryResponse } from '@/games/WorldDomination/apiModels';
 import { TERRITORIES, ADJACENCY, CONTINENT_ORDER, CONTINENTS, continentLabelAnchor, BOARD_VIEWBOX } from '@/games/WorldDomination/board';
+import { edgeListFrom } from '@/utils/games/adjacencyGraph';
 
 interface WorldDominationBoardProps {
     territories: IWorldDominationTerritoryResponse[];
@@ -17,20 +19,7 @@ interface WorldDominationBoardProps {
     placementPrompt?: string | null;
 }
 
-// Dedupe the adjacency graph into one edge per pair for line-drawing.
-const EDGE_LIST: [number, number][] = (() => {
-    const seen = new Set<string>();
-    const edges: [number, number][] = [];
-    ADJACENCY.forEach((neighbours, from) => {
-        neighbours.forEach(to => {
-            const key = from < to ? `${from}-${to}` : `${to}-${from}`;
-            if (seen.has(key)) return;
-            seen.add(key);
-            edges.push([from, to]);
-        });
-    });
-    return edges;
-})();
+const EDGE_LIST = edgeListFrom(ADJACENCY);
 
 export default function WorldDominationBoard({
     territories,
@@ -89,26 +78,20 @@ export default function WorldDominationBoard({
                         const color = usernameToColor(t.owner);
                         const isValid = validTerritories.has(id);
                         const isSelected = selectedTerritoryId === id;
-                        const clickable = !!onTerritoryClick && (isValid || isSelected);
                         const radius = 8.5 + Math.min(3, Math.floor(t.armies / 8));
                         return (
-                            <g
+                            <ClickableMapNode
                                 key={id}
-                                onClick={() => clickable && onTerritoryClick?.(id)}
-                                style={{ cursor: clickable ? 'pointer' : 'default' }}
+                                x={def.x} y={def.y} radius={radius}
+                                isValid={isValid} isSelected={isSelected}
+                                onClick={onTerritoryClick && (() => onTerritoryClick(id))}
+                                title={<>{def.name} — {t.owner ?? 'unclaimed'} · {t.armies} armies</>}
                             >
-                                <title>{def.name} — {t.owner ?? 'unclaimed'} · {t.armies} armies</title>
-                                {isValid && (
-                                    <circle cx={def.x} cy={def.y} r={radius + 4.5} fill="none" stroke="var(--ag-gold)" strokeWidth={2.5} />
-                                )}
-                                {isSelected && (
-                                    <circle cx={def.x} cy={def.y} r={radius + 4.5} fill="none" stroke="#fff" strokeWidth={2.5} />
-                                )}
                                 <circle cx={def.x} cy={def.y} r={radius} fill={color} stroke="#fff" strokeWidth={1.3} />
                                 <text x={def.x} y={def.y + 3.2} textAnchor="middle" fontSize={9} fontWeight={800} fill="#fff">
                                     {t.armies}
                                 </text>
-                            </g>
+                            </ClickableMapNode>
                         );
                     })}
                 </svg>
