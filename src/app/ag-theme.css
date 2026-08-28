@@ -1462,8 +1462,25 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-hand-card--tappable { cursor: pointer; }
 .ag-hand-card--tappable:active { filter: brightness(0.96); }
 .ag-hand-card--highlighted {
-    border-color: var(--ag-green);
-    box-shadow: 0 0 0 1.5px var(--ag-green);
+    border-color: var(--ag-danger);
+    box-shadow: 0 0 0 1.5px var(--ag-danger);
+    --ag-pulse-min: 0.55;
+    animation: ag-pulse 1s ease-in-out infinite;
+}
+
+/* The ring ClickableMapNode draws around a card-highlighted city — pulses so
+   it reads against a busy map instead of sitting there as a static dashed
+   line (--ag-pulse-min is deliberately shallower than the skeleton's so the
+   ring never fully fades). */
+.ag-map-highlight-ring {
+    --ag-pulse-min: 0.3;
+    animation: ag-pulse 1s ease-in-out infinite;
+    transform-box: fill-box;
+    transform-origin: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ag-hand-card--highlighted, .ag-map-highlight-ring { animation: none; }
 }
 
 /* Dev-card chips shown under the resource hand */

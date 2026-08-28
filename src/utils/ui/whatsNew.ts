@@ -44,6 +44,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "A tapped Outbreak card's city stands out on the map",
+                detail: "The ring around the city you tapped a card for used to be a static green dashed line that got lost against the board. It's a pulsing red ring now, so you can actually spot it.",
+                game: "outbreak",
+            },
+            {
                 title: "Tapping back to your games starts right away",
                 detail: "Heading home used to leave the tap looking like it hadn't registered for a moment while the page worked out what to show you. It now shows straight away and fills in as it's ready, so nothing feels stuck.",
             },
@@ -58,10 +63,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Swiping back closes what's open",
                 detail: "The back gesture used to walk you out of the game whenever a sheet or menu was open. It now closes whatever is on top — the claim sheet, a trade, the options menu — and only leaves the screen once there's nothing left to close.",
-            },
-            {
-                title: "Lists settle instead of jumping",
-                detail: "When your games finish loading, the placeholder rows hand over to the real ones in place — a spare one shrinks away, an extra one grows in, and a list with nothing in it closes up gently rather than snapping shut under your thumb. Your profile's recent form settles the same way now.",
             },
         ],
     },
