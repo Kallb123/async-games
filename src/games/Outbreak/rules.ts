@@ -10,6 +10,7 @@ import {
     DISEASE_COLORS,
     EPIDEMIC_CARD_ID,
     isAdjacent,
+    isCityCardId,
     OutbreakCureState,
     OutbreakDiseaseColor,
     OutbreakRoleId,
@@ -73,8 +74,10 @@ export function getLegalMoves(options: IOutbreakMoveOptions): IOutbreakMove[] {
         push({ type: 'drive', destination });
     }
 
+    // Event and epidemic card ids share this same hand array (§21.6 step 10)
+    // but name no destination — only a city card can fly you anywhere.
     for (const cityId of options.hand) {
-        if (cityId === options.currentCity) continue;
+        if (cityId === options.currentCity || !isCityCardId(cityId)) continue;
         push({ type: 'directFlight', destination: cityId, discardCityId: cityId });
     }
 

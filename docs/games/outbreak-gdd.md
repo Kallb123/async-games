@@ -981,6 +981,40 @@ the deepest coverage, including the cross-command cases above.
 Forecast's ordering step and the Contingency Planner's retrieval (which is why
 this follows roles). Own-turn-only, per 21.3.
 
+*Landed.* `OutbreakPlayEvent` covers all three kinds §21.4 named as one
+parameterised command: `play` for the five cards of §12, `retrieve` for the
+Contingency Planner (§11), and `forecastOrder` for Forecast's second step.
+Landing it exposed a gap left open since step 6: `buildInitialOutbreakState`
+had only ever shuffled the 48 city cards into the pre-epidemic deck, never
+the 5 events §5 and §6 step 6 call for — this step closes that too. The five
+`EVENT_CARD_IDS` join `EPIDEMIC_CARD_ID` in `board.ts` as negative sentinels,
+and the new `isCityCardId`/`isEventCardId` tell the three card kinds apart
+everywhere a hand is read generically — `getLegalMoves`, Share Knowledge's
+Researcher exemption, and the board screen's discard/cure pickers, all of
+which assumed every hand card was a city card until an event card could
+actually land in one.
+§21.3's own-turn-only rule needed nothing new — it's the command route's
+existing `currentTurn` check, the same as every other command. What this
+step does add is `eventPlayableInPhase`: playable in the action phase, or
+your own draw phase to duck the hand limit (§9), never mid-resolution of
+another event. That duck is shared code — `maybeFinishDrawPhase` is the one
+place that notices a hand back at the limit and runs the infect phase, and
+both `OutbreakDiscard` (refactored onto it) and `OutbreakPlayEvent` call it,
+so the two paths can't drift apart. One Quiet Night is a one-turn flag
+consumed by `resolveInfectPhase`; Forecast is necessarily two round trips —
+`forecastCards` and `forecastResumePhase`, both new persisted state, hold the
+drawn cards and the phase to resume once the reorder resolves. The
+Contingency Planner's retrieval costs an action and holds at most one card;
+playing that stored card removes it from the game rather than returning it
+to a discard pile a second retrieval could reach, per §11's own wording.
+Step 7's turn-timeout adapter picked up a fourth stalled phase to resolve:
+a turn left mid-Forecast is finished with the identity order, since a forced
+resolution shouldn't invent the strategy a real player would have applied.
+Tests cover all five cards, the Contingency Planner's action-costing
+retrieve/spend-from-storage split, Forecast's two-step flow — including the
+not-a-permutation rejection and the phase-restore/hand-limit-duck
+interaction — and the phase gating itself.
+
 **11 — The board screen, second pass.** The pieces that make a co-op table work
 without a chat window: every player's hand rendered for everyone
 (`ag-hand`/`ag-hand-card`, already shared by Settlements & Cities and Train

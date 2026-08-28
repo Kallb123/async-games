@@ -220,6 +220,57 @@ export function epidemicCountFor(difficulty: OutbreakDifficulty): number {
 // another.
 export const EPIDEMIC_CARD_ID = -1;
 
+/** A city-card id — the one card kind whose id doubles as a CITIES lookup. */
+export function isCityCardId(cardId: number): boolean {
+    return cardId >= 0 && cardId < CITY_COUNT;
+}
+
+// ─── Event cards (§12, §21.6 step 10) ──────────────────────────────────────
+// Five more sentinel player-card ids, one per event, playing the same
+// "never a valid city id" trick as EPIDEMIC_CARD_ID above — negative and
+// distinct from it and from each other, so OutbreakPlayEvent can switch on
+// which one a hand or the Contingency Planner's stored slot holds.
+
+export const EVENT_CARD_AIRLIFT = -2;
+export const EVENT_CARD_GOVERNMENT_GRANT = -3;
+export const EVENT_CARD_ONE_QUIET_NIGHT = -4;
+export const EVENT_CARD_FORECAST = -5;
+export const EVENT_CARD_RESILIENT_POPULATION = -6;
+
+export type OutbreakEventCardId =
+    | typeof EVENT_CARD_AIRLIFT
+    | typeof EVENT_CARD_GOVERNMENT_GRANT
+    | typeof EVENT_CARD_ONE_QUIET_NIGHT
+    | typeof EVENT_CARD_FORECAST
+    | typeof EVENT_CARD_RESILIENT_POPULATION;
+
+export interface OutbreakEventCardDef {
+    id: OutbreakEventCardId;
+    name: string;
+    effect: string;
+}
+
+// §12: five one-shot cards, shuffled into the 53-card player deck at setup
+// (buildInitialOutbreakState) alongside the 48 city cards, before epidemics
+// are added.
+export const EVENT_CARDS: OutbreakEventCardDef[] = [
+    { id: EVENT_CARD_AIRLIFT, name: 'Airlift', effect: 'Move any one pawn to any city.' },
+    { id: EVENT_CARD_GOVERNMENT_GRANT, name: 'Government Grant', effect: 'Place a research station in any city, no discard required.' },
+    { id: EVENT_CARD_ONE_QUIET_NIGHT, name: 'One Quiet Night', effect: 'Skip the next Infect Cities phase entirely.' },
+    { id: EVENT_CARD_FORECAST, name: 'Forecast', effect: 'Draw the top 6 infection cards, rearrange them in any order, return them face-down.' },
+    { id: EVENT_CARD_RESILIENT_POPULATION, name: 'Resilient Population', effect: 'Remove any 1 card from the infection discard pile permanently from the game.' },
+];
+
+export const EVENT_CARD_IDS: OutbreakEventCardId[] = EVENT_CARDS.map(c => c.id);
+
+export function isEventCardId(cardId: number): cardId is OutbreakEventCardId {
+    return (EVENT_CARD_IDS as number[]).includes(cardId);
+}
+
+export function eventCardName(cardId: number): string {
+    return EVENT_CARDS.find(c => c.id === cardId)?.name ?? 'Unknown event';
+}
+
 // ─── Roles (§11, §21.6 step 9) ──────────────────────────────────────────────
 // Static reference data only — dealt in OutbreakModels.buildInitialOutbreakState
 // and expressed as small pure exceptions to the base rules in rules.ts, rather

@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { ADJACENCY, CITIES, CITY_COUNT, DISEASE_COLORS, cityIdsForColor, isAdjacent } from "./board";
+import {
+    ADJACENCY,
+    CITIES,
+    CITY_COUNT,
+    DISEASE_COLORS,
+    EPIDEMIC_CARD_ID,
+    EVENT_CARDS,
+    EVENT_CARD_IDS,
+    cityIdsForColor,
+    eventCardName,
+    isAdjacent,
+    isCityCardId,
+    isEventCardId,
+} from "./board";
 
 describe("Outbreak board", () => {
     it("has 48 cities", () => {
@@ -45,5 +58,41 @@ describe("Outbreak board", () => {
             }
         }
         expect(visited.size).toBe(CITY_COUNT);
+    });
+});
+
+// ─── Event cards (§12, §21.6 step 10) ──────────────────────────────────────
+
+describe("event cards", () => {
+    it("names exactly the five of §12, each with a unique negative sentinel id", () => {
+        expect(EVENT_CARDS).toHaveLength(5);
+        expect(EVENT_CARDS.map(c => c.name).sort()).toEqual(
+            ['Airlift', 'Forecast', 'Government Grant', 'One Quiet Night', 'Resilient Population'].sort(),
+        );
+        expect(new Set(EVENT_CARD_IDS).size).toBe(5);
+        for (const id of EVENT_CARD_IDS) {
+            expect(id).toBeLessThan(0);
+            expect(id).not.toBe(EPIDEMIC_CARD_ID);
+        }
+    });
+
+    it("isCityCardId and isEventCardId partition city ids from event/epidemic ids", () => {
+        for (let id = 0; id < CITY_COUNT; id++) {
+            expect(isCityCardId(id)).toBe(true);
+            expect(isEventCardId(id)).toBe(false);
+        }
+        expect(isCityCardId(EPIDEMIC_CARD_ID)).toBe(false);
+        expect(isEventCardId(EPIDEMIC_CARD_ID)).toBe(false);
+        for (const id of EVENT_CARD_IDS) {
+            expect(isCityCardId(id)).toBe(false);
+            expect(isEventCardId(id)).toBe(true);
+        }
+    });
+
+    it("eventCardName resolves every event card id", () => {
+        for (const card of EVENT_CARDS) {
+            expect(eventCardName(card.id)).toBe(card.name);
+        }
+        expect(eventCardName(EPIDEMIC_CARD_ID)).toBe('Unknown event');
     });
 });

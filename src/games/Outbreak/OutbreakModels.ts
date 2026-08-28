@@ -17,6 +17,7 @@ import {
     CITY_COUNT,
     DISEASE_COLORS,
     epidemicCountFor,
+    EVENT_CARD_IDS,
     OutbreakCureState,
     OutbreakDifficulty,
     OutbreakDiseaseColor,
@@ -117,13 +118,17 @@ export interface IOutbreakCityState {
 }
 
 export interface IOutbreakPlayerState {
-    // City-card ids held. Event cards join this once OutbreakPlayEvent lands
-    // (§21.6 step 10) — public throughout, never redacted per viewer (§2's
+    // City-card and event-card ids held (board.ts's isCityCardId/isEventCardId
+    // tell them apart) — public throughout, never redacted per viewer (§2's
     // "shared table, shared brain" pillar).
     hand: number[];
     city: number;
     // Dealt in buildInitialOutbreakState via rules.ts's dealRoles (§21.6 step 9).
     role: OutbreakRoleId | null;
+    // Contingency Planner only (§11, §21.6 step 10): an event card retrieved
+    // from the discard pile, held outside the hand and hand limit until
+    // played — at which point it's removed from the game rather than
+    // rejoining the discard pile (see spendEventCard in OutbreakLogic.ts).
     contingencyCard: number | null;
     // Refills at the *start* of this player's own turn, not the end of the
     // previous one (docs/games/outbreak-gdd.md §21.4 — the crew planner
@@ -153,6 +158,19 @@ export interface IOutbreakSpecificGameState {
     infectionDiscard: number[]; // public, and the game's most-read information (§14.2)
     players: Map<string, IOutbreakPlayerState>;
     phase: OutbreakPhase;
+    // One Quiet Night (§12, §21.6 step 10): consumed the next time
+    // resolveInfectPhase runs, skipping that Infect Cities phase entirely.
+    oneQuietNightActive: boolean;
+    // Forecast (§12), step 1: the top infection cards drawn face-up, awaiting
+    // the reorder OutbreakPlayEvent's 'forecastOrder' kind submits — public,
+    // like the infection discard pile, since Forecast reveals them to the
+    // whole table. Empty outside `phase === 'forecast'`.
+    forecastCards: number[];
+    // The phase ('actions' or 'discard') Forecast was played from, restored
+    // once its ordering step resolves — §21.3 lets an event duck the hand
+    // limit, and Forecast's own card leaving the hand may already have
+    // settled that before the reorder even happens.
+    forecastResumePhase: OutbreakPhase | null;
 }
 
 function cloneCityState(c: IOutbreakCityState): IOutbreakCityState {
@@ -193,6 +211,9 @@ export function cloneOutbreakState(
         infectionDiscard: [...gs.infectionDiscard],
         players: clonePlayerStates(gs.players, userIdList, clonePlayerState),
         phase: gs.phase,
+        oneQuietNightActive: gs.oneQuietNightActive,
+        forecastCards: [...gs.forecastCards],
+        forecastResumePhase: gs.forecastResumePhase,
     };
 }
 
@@ -201,8 +222,8 @@ export function cloneOutbreakState(
 // every pawn there too, and the initial infection (shuffle the infection
 // deck, flip 3 cards placing 3 cubes each, then 3 placing 2 each, then 3
 // placing 1 each — 9 cities infected, 18 cubes placed) — plus, per §6 step 6,
-// a shuffled player deck (just the 48 city cards; no epidemics yet) with
-// starting hands dealt from it before anything else touches it.
+// a shuffled 53-card player deck (48 city cards + 5 events; no epidemics
+// yet) with starting hands dealt from it before anything else touches it.
 //
 // The epidemic piles of §6 step 7 are built below, keyed off the difficulty
 // dial (§13). Roles (§6 step 5, §11) are dealt alongside starting hands: all
@@ -233,15 +254,20 @@ export function buildInitialOutbreakState(turnOrder: string[], difficulty: Outbr
         cubesLeft[color] = CUBES_PER_COLOR - used;
     }
 
-    // §6 step 6: shuffle the 48 city cards and deal each player their opening
-    // hand from it before anything else touches the deck — before, per step
-    // 7, the epidemic piles below are even built.
-    const cityDeck = shuffle(Array.from({ length: CITY_COUNT }, (_, id) => id));
+    // §6 step 6: shuffle the 48 city cards plus the 5 event cards (§12) and
+    // deal each player their opening hand from it before anything else
+    // touches the deck — before, per step 7, the epidemic piles below are
+    // even built. An event card is exactly as likely to open in a hand as a
+    // city card; nothing about the deal favours one kind.
+    const cardDeck = shuffle([
+        ...Array.from({ length: CITY_COUNT }, (_, id) => id),
+        ...EVENT_CARD_IDS,
+    ]);
     const handSize = startingHandSize(turnOrder.length);
     const roles = dealRoles(turnOrder);
     const players = new Map<string, IOutbreakPlayerState>();
     for (const userId of turnOrder) {
-        const hand = cityDeck.splice(0, handSize);
+        const hand = cardDeck.splice(0, handSize);
         players.set(userId, {
             hand,
             city: ATLANTA_CITY_ID,
@@ -255,7 +281,7 @@ export function buildInitialOutbreakState(turnOrder: string[], difficulty: Outbr
     // §6 step 7, §13: divide what's left into one equal-ish pile per epidemic
     // card the difficulty calls for, shuffle an epidemic into each, and stack
     // the piles — the single dial that sets the whole game's escalation pace.
-    const playerDeck = buildEpidemicDeck(cityDeck, epidemicCountFor(difficulty));
+    const playerDeck = buildEpidemicDeck(cardDeck, epidemicCountFor(difficulty));
 
     return {
         difficulty,
@@ -270,6 +296,9 @@ export function buildInitialOutbreakState(turnOrder: string[], difficulty: Outbr
         infectionDiscard,
         players,
         phase: 'actions',
+        oneQuietNightActive: false,
+        forecastCards: [],
+        forecastResumePhase: null,
     };
 }
 
@@ -307,6 +336,9 @@ function makeOutbreakStateSchemaDef() {
         playerDiscard: [Number],
         infectionDeck: [Number],
         infectionDiscard: [Number],
+        oneQuietNightActive: { type: Boolean, default: false },
+        forecastCards: [Number],
+        forecastResumePhase: { type: String, default: null },
         players: {
             type: Schema.Types.Map,
             of: {
@@ -391,6 +423,8 @@ export function gameStateToModel(
         infectionDiscard: [...gs.infectionDiscard],
         playerStates,
         phase: gs.phase,
+        oneQuietNightActive: gs.oneQuietNightActive,
+        forecastCards: [...gs.forecastCards],
     };
 }
 

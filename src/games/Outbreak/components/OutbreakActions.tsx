@@ -4,7 +4,7 @@ import ActionButton from '@/components/ui/ActionButton';
 import PendingTag from '@/components/ui/PendingTag';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
 import type { IOutbreakSpecificGameStateResponse } from '@/games/Outbreak/apiModels';
-import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, MAX_RESEARCH_STATIONS, OutbreakDiseaseColor } from '@/games/Outbreak/board';
+import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, eventCardName, isCityCardId, MAX_RESEARCH_STATIONS, OutbreakDiseaseColor } from '@/games/Outbreak/board';
 import { HAND_LIMIT, OutbreakMoveType, cureCardsRequired, getLegalMoves, opsExpertBuildsFree, stationCityIds } from '@/games/Outbreak/rules';
 import { OutbreakAction, OutbreakDiscard, OutbreakEndTurn } from '@/utils/apiModels/GameLogic';
 
@@ -59,6 +59,7 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
                 <div className="ag-build-list">
                     {me.hand.map(cardId => {
                         const selected = discardChoice.includes(cardId);
+                        const isCity = isCityCardId(cardId);
                         return (
                             <button
                                 key={cardId}
@@ -66,9 +67,11 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
                                 className={`ag-build-row${selected ? ' ag-build-row--active' : ''}`}
                                 onClick={() => toggle(cardId)}
                             >
-                                <span className="ag-icon-box" style={{ background: DISEASE_COLOR_DEFS[CITIES[cardId].color].hex }}>🗺️</span>
+                                <span className="ag-icon-box" style={{ background: isCity ? DISEASE_COLOR_DEFS[CITIES[cardId].color].hex : 'var(--ag-purple)' }}>
+                                    {isCity ? '🗺️' : '🃏'}
+                                </span>
                                 <span className="ag-build-main">
-                                    <span className="ag-build-name">{CITIES[cardId].name}</span>
+                                    <span className="ag-build-name">{isCity ? CITIES[cardId].name : eventCardName(cardId)}</span>
                                 </span>
                                 <span className="ag-build-tag">{selected ? 'Discarding' : 'Keep'}</span>
                             </button>
@@ -138,7 +141,7 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
 
     const treatable = DISEASE_COLORS.filter(color => cityState.cubes[color] > 0);
     const citymates = Object.values(gs.playerStates).filter(p => p.userId !== me.userId && p.city === me.city);
-    const cureColors = DISEASE_COLORS.filter(color => gs.cures[color] === 'none' && me.hand.some(id => CITIES[id].color === color));
+    const cureColors = DISEASE_COLORS.filter(color => gs.cures[color] === 'none' && me.hand.some(id => isCityCardId(id) && CITIES[id].color === color));
     const cureRequired = cureCardsRequired(me.role === 'scientist');
     const stationIsFree = opsExpertBuildsFree(me.role);
 
@@ -294,7 +297,7 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
 
                 {/* ── Discover a cure ──────────────────────────────────────── */}
                 {cureColors.map(color => {
-                    const cardIds = me.hand.filter(id => CITIES[id].color === color).slice(0, cureRequired);
+                    const cardIds = me.hand.filter(id => isCityCardId(id) && CITIES[id].color === color).slice(0, cureRequired);
                     const atStation = cityState.station;
                     const disabled = !atStation || cardIds.length < cureRequired;
                     const target = `cure:${color}`;
