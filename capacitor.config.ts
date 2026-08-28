@@ -26,6 +26,26 @@ const config: CapacitorConfig = {
         // CAPACITOR_SERVER_URL with pk_test_ keys.
         allowNavigation: ['clerk.asyncgames.com'],
     },
+    plugins: {
+        // Without this plugin the native cold-start theme (see
+        // android/.../styles.xml, AppTheme.NoActionBarLaunch) dismisses itself the
+        // moment the WebView is attached — before it has actually fetched and
+        // painted the remote page — leaving a blank/black gap until the network
+        // load finishes. The plugin keeps a branded overlay up through that gap;
+        // `launchAutoHide: false` means it stays until useCapacitorSplashScreen
+        // calls `SplashScreen.hide()` once the page has painted.
+        SplashScreen: {
+            launchAutoHide: false,
+            // Keep in sync with `SRGB.bg` (src/utils/ui/colours.ts) — this file
+            // is consumed by native Gradle/Capacitor tooling outside the Next
+            // bundle, so it can't import that module, but it's the same field
+            // colour the icon/splash generator paints `drawable*/splash.png` on.
+            backgroundColor: '#f6e8de',
+            androidSplashResourceName: 'splash',
+            androidScaleType: 'CENTER_CROP',
+            showSpinner: false,
+        },
+    },
 };
 
 export default config;
