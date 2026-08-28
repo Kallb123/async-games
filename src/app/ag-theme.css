@@ -21,7 +21,7 @@
     --ag-stack-gap: 12px;
     /* How long a row takes to grow in, shrink away or move between two
        natural heights. `ANIM_MS` in `Collapse.tsx` mirrors this. */
-    --ag-anim-ms: 450ms;
+    --ag-anim-ms: 300ms;
 
     --ag-terracotta: oklch(0.55 0.15 40);
     --ag-terracotta-deep: oklch(0.45 0.14 40);
