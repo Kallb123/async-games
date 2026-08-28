@@ -175,6 +175,10 @@ export const ATLANTA_CITY_ID = CITIES.find(c => c.name === 'Atlanta')!.id;
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 4;
 
+// §5: a hard cap of 6 research stations on the board at once; building a 7th
+// requires relocating one of the existing six (§8.2).
+export const MAX_RESEARCH_STATIONS = 6;
+
 // ─── Difficulty (§13) ───────────────────────────────────────────────────────
 
 export type OutbreakDifficulty = 'introductory' | 'standard' | 'heroic';
