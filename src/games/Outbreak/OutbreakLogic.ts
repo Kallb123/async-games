@@ -210,6 +210,22 @@ function applyOpsExpertFlight(
     return withMedicNote(gs, ps, `flew from the research station in ${fromName} to ${CITIES[destination].name}`);
 }
 
+// Places a research station at `cityId`, honouring the shared 6-station cap
+// and relocation rule (§5, §8.2) — the one piece Build a Research Station and
+// Government Grant (§12) actually share; they differ only in cost (a
+// discarded card vs free) and in whether the target must be the acting
+// player's own city. Returns false, mutating nothing, when the cap requires
+// relocating and `relocateFrom` doesn't name a real, distinct, currently
+// stationed city.
+function placeStation(gs: IOutbreakSpecificGameState, cityId: number, relocateFrom: number | null): boolean {
+    if (stationCityIds(gs.cities).length >= MAX_RESEARCH_STATIONS) {
+        if (relocateFrom === null || relocateFrom === cityId || !gs.cities[relocateFrom]?.station) return false;
+        gs.cities[relocateFrom].station = false;
+    }
+    gs.cities[cityId].station = true;
+    return true;
+}
+
 // Build a Research Station (§8.2, §11 Operations Expert): discard the card
 // matching the current city; relocate an existing station when all six are
 // already placed. The Operations Expert waives the discard entirely.
@@ -219,17 +235,12 @@ function applyBuildStation(gs: IOutbreakSpecificGameState, ps: IOutbreakPlayerSt
     const free = opsExpertBuildsFree(ps.role);
     const cardIdx = ps.hand.indexOf(cityId);
     if (!free && cardIdx === -1) return null;
-
-    if (stationCityIds(gs.cities).length >= MAX_RESEARCH_STATIONS) {
-        if (relocateFrom === null || relocateFrom === cityId || !gs.cities[relocateFrom]?.station) return null;
-        gs.cities[relocateFrom].station = false;
-    }
+    if (!placeStation(gs, cityId, relocateFrom)) return null;
 
     if (!free) {
         ps.hand.splice(cardIdx, 1);
         gs.playerDiscard.push(cityId);
     }
-    gs.cities[cityId].station = true;
 
     const suffix = free ? ' for free' : '';
     return relocateFrom !== null
@@ -860,12 +871,7 @@ function applyAirlift(gs: IOutbreakSpecificGameState, targetUserId: string | nul
 // current city" constraint.
 function applyGovernmentGrant(gs: IOutbreakSpecificGameState, destination: number | null, relocateFrom: number | null): string | null {
     if (destination === null || !gs.cities[destination] || gs.cities[destination].station) return null;
-
-    if (stationCityIds(gs.cities).length >= MAX_RESEARCH_STATIONS) {
-        if (relocateFrom === null || relocateFrom === destination || !gs.cities[relocateFrom]?.station) return null;
-        gs.cities[relocateFrom].station = false;
-    }
-    gs.cities[destination].station = true;
+    if (!placeStation(gs, destination, relocateFrom)) return null;
 
     return relocateFrom !== null
         ? `played Government Grant, building a research station in ${CITIES[destination].name}, relocated from ${CITIES[relocateFrom].name}`
