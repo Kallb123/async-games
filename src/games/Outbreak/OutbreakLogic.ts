@@ -46,6 +46,7 @@ import {
     treatDiseaseRemovalCount,
 } from "@/games/Outbreak/rules";
 import { shuffle } from "@/utils/games/shuffle";
+import { pluralize } from "@/utils/ui/text";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  OUTBREAK
@@ -440,7 +441,28 @@ export class OutbreakAction implements IGameCommand {
     cardIds: number[] = [];
     readonly className = 'OutbreakAction';
 
-    myString() { return `Outbreak Action kind=${this.kind} destination=${this.destination} color=${this.color}`; }
+    // Player-facing summary for the turn-review scrubber (TurnNavControls) —
+    // shown next to the sender's name, so it reads as "<name> · <this>".
+    // Built from the command's own fields rather than the fuller historyLine
+    // text Execute() writes (applyMove et al.), since those also draw on game
+    // state — the acting player's current city — that isn't available here.
+    myString() {
+        const dest = this.destination >= 0 ? CITIES[this.destination]?.name : undefined;
+        switch (this.kind) {
+            case 'drive': return dest ? `drove to ${dest}` : 'drove';
+            case 'directFlight': return dest ? `flew direct to ${dest}` : 'flew direct';
+            case 'charterFlight': return dest ? `chartered a flight to ${dest}` : 'chartered a flight';
+            case 'shuttleFlight': return dest ? `took a shuttle to ${dest}` : 'took a shuttle';
+            case 'dispatcherRelocate': return dest ? `moved a teammate's pawn to ${dest}` : "moved a teammate's pawn";
+            case 'opsExpertFlight': return dest ? `flew a research-station flight to ${dest}` : 'flew a research-station flight';
+            case 'buildStation': return 'built a research station';
+            case 'treatDisease': return this.color ? `treated ${DISEASE_COLOR_DEFS[this.color].name} disease` : 'treated a disease';
+            case 'shareKnowledge': return this.direction === 'take' ? "took a city card from a teammate" : 'shared a city card with a teammate';
+            case 'cure': return this.color ? `discovered the cure for ${DISEASE_COLOR_DEFS[this.color].name} disease` : 'discovered a cure';
+            case 'pass': return 'forfeited an action';
+            default: return 'took an action';
+        }
+    }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const outbreakData = gameData as IOutbreakGameData;
@@ -753,7 +775,7 @@ export class OutbreakEndTurn implements IGameCommand {
     recordedIntensifyOrders?: number[][];
     readonly className = 'OutbreakEndTurn';
 
-    myString() { return `Outbreak EndTurn`; }
+    myString() { return 'ended their turn'; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const outbreakData = gameData as IOutbreakGameData;
@@ -834,7 +856,7 @@ export class OutbreakDiscard implements IGameCommand {
     cardIds: number[] = [];
     readonly className = 'OutbreakDiscard';
 
-    myString() { return `Outbreak Discard cardIds=${this.cardIds.join(',')}`; }
+    myString() { return `discarded ${pluralize(this.cardIds.length, 'card')} down to the hand limit`; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const outbreakData = gameData as IOutbreakGameData;
@@ -1084,7 +1106,15 @@ export class OutbreakPlayEvent implements IGameCommand {
     cardIds: number[] = [];
     readonly className = 'OutbreakPlayEvent';
 
-    myString() { return `Outbreak PlayEvent kind=${this.kind} cardId=${this.cardId}`; }
+    myString() {
+        const name = this.cardId !== null ? eventCardName(this.cardId) : 'an event card';
+        switch (this.kind) {
+            case 'play': return `played ${name}`;
+            case 'retrieve': return `retrieved ${name} from the discard pile`;
+            case 'forecastOrder': return 'reordered the top of the infection deck';
+            default: return `played ${name}`;
+        }
+    }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const outbreakData = gameData as IOutbreakGameData;
