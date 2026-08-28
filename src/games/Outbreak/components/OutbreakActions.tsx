@@ -5,8 +5,8 @@ import PendingTag from '@/components/ui/PendingTag';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
 import type { IOutbreakSpecificGameStateResponse } from '@/games/Outbreak/apiModels';
 import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, MAX_RESEARCH_STATIONS, OutbreakDiseaseColor } from '@/games/Outbreak/board';
-import { OutbreakMoveType, cureCardsRequired, getLegalMoves, stationCityIds } from '@/games/Outbreak/rules';
-import { OutbreakAction } from '@/utils/apiModels/GameLogic';
+import { HAND_LIMIT, OutbreakMoveType, cureCardsRequired, getLegalMoves, stationCityIds } from '@/games/Outbreak/rules';
+import { OutbreakAction, OutbreakDiscard, OutbreakEndTurn } from '@/utils/apiModels/GameLogic';
 
 const MOVE_DEFS: { type: OutbreakMoveType; icon: string; name: string; hint: string }[] = [
     { type: 'drive', icon: '🚗', name: 'Drive / Ferry', hint: 'Move to a connected city' },
@@ -29,6 +29,7 @@ interface OutbreakActionsProps {
 
 export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode, submitCommand, pendingTarget }: OutbreakActionsProps) {
     const [relocating, setRelocating] = useState(false);
+    const [discardChoice, setDiscardChoice] = useState<number[]>([]);
 
     const me = gs.playerStates[myUsername];
     if (!me) return null;
@@ -37,6 +38,78 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
         const cmd = new OutbreakAction();
         Object.assign(cmd, overrides);
         submitCommand(cmd, () => setRelocating(false), target);
+    }
+
+    // ── Over the hand limit (§9, §21.6 step 6): discard before anything else,
+    //     including before the turn can end — OutbreakEndTurn already put the
+    //     game in this phase and is waiting on OutbreakDiscard to close it. ──
+    if (gs.phase === 'discard') {
+        const mustDiscard = Math.max(0, me.hand.length - HAND_LIMIT);
+        const enough = discardChoice.length >= mustDiscard;
+
+        function toggle(cardId: number) {
+            setDiscardChoice(prev => prev.includes(cardId) ? prev.filter(id => id !== cardId) : [...prev, cardId]);
+        }
+
+        return (
+            <div className="ag-actionsheet">
+                <p className="ag-action-hint" style={{ marginTop: 0 }}>
+                    🗂 Discard {mustDiscard} card{mustDiscard === 1 ? '' : 's'} to get back to the {HAND_LIMIT}-card hand limit.
+                </p>
+                <div className="ag-build-list">
+                    {me.hand.map(cardId => {
+                        const selected = discardChoice.includes(cardId);
+                        return (
+                            <button
+                                key={cardId}
+                                type="button"
+                                className={`ag-build-row${selected ? ' ag-build-row--active' : ''}`}
+                                onClick={() => toggle(cardId)}
+                            >
+                                <span className="ag-icon-box" style={{ background: DISEASE_COLOR_DEFS[CITIES[cardId].color].hex }}>🗺️</span>
+                                <span className="ag-build-main">
+                                    <span className="ag-build-name">{CITIES[cardId].name}</span>
+                                </span>
+                                <span className="ag-build-tag">{selected ? 'Discarding' : 'Keep'}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+                <ActionButton
+                    className="ag-btn ag-btn--primary ag-btn--block"
+                    style={{ marginTop: 10 }}
+                    disabled={!enough}
+                    pending={pendingTarget === 'discard'}
+                    pendingLabel="Discarding…"
+                    onClick={() => {
+                        const cmd = new OutbreakDiscard();
+                        cmd.cardIds = discardChoice;
+                        submitCommand(cmd, () => setDiscardChoice([]), 'discard');
+                    }}
+                >
+                    {enough ? `Discard ${discardChoice.length}` : `Pick at least ${mustDiscard}`}
+                </ActionButton>
+            </div>
+        );
+    }
+
+    // ── Out of actions (§7 Phase 1 done): end the turn to draw and infect ──
+    if (me.actionsLeft <= 0) {
+        return (
+            <div className="ag-actionsheet">
+                <p className="ag-action-hint" style={{ marginTop: 0 }}>
+                    ⏭ Out of actions — end your turn to draw 2 cards and infect.
+                </p>
+                <ActionButton
+                    className="ag-btn ag-btn--primary ag-btn--block"
+                    pending={pendingTarget === 'endTurn'}
+                    pendingLabel="Ending turn…"
+                    onClick={() => submitCommand(new OutbreakEndTurn(), undefined, 'endTurn')}
+                >
+                    End turn
+                </ActionButton>
+            </div>
+        );
     }
 
     // ── A movement mode is active: the board is showing its destinations ────

@@ -17,7 +17,7 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { OutbreakAction } from "@/utils/apiModels/GameLogic";
-import { OutbreakMoveType, getLegalMoves, infectionRateFor, stationCityIds } from "@/games/Outbreak/rules";
+import { HAND_LIMIT, OutbreakMoveType, getLegalMoves, infectionRateFor, stationCityIds } from "@/games/Outbreak/rules";
 import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS } from "@/games/Outbreak/board";
 import { playerColour } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
@@ -73,6 +73,8 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
             subtitle = abandoned.subtitle;
         } else if (complete) {
             subtitle = gameData?.endReason === 'teamloss' ? '💀 The team lost' : '🎉 The team won!';
+        } else if (isMyTurn && gs.phase === 'discard') {
+            subtitle = <span className="ag-hi">Discard down to {HAND_LIMIT}</span>;
         } else {
             subtitle = isMyTurn
                 ? <><span className="ag-hi">Your move</span> · {me?.actionsLeft ?? 0} actions left</>

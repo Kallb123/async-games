@@ -11,6 +11,20 @@ import { ADJACENCY, CITY_COUNT, OutbreakDiseaseColor } from "./board";
 /** Actions per player per turn (§7 Phase 1, §21.4 — refills at turn start). */
 export const ACTIONS_PER_TURN = 4;
 
+// ─── The draw and infect phases (§7 Phase 2-3, §9-10, §21.6 step 6) ────────
+
+/** Player cards drawn at the start of Phase 2, every turn. */
+export const CARDS_DRAWN_PER_TURN = 2;
+
+/** Hand limit enforced at the end of Phase 2 — over this, discard down to it. */
+export const HAND_LIMIT = 7;
+
+// §6 step 6: 2 players deal 4 cards each, 3 deal 3, 4 deal 2 — the official
+// "6 minus the seat count" shorthand.
+export function startingHandSize(playerCount: number): number {
+    return Math.max(0, 6 - playerCount);
+}
+
 // ─── Movement (§8.1) ────────────────────────────────────────────────────────
 
 export type OutbreakMoveType = 'drive' | 'directFlight' | 'charterFlight' | 'shuttleFlight';
@@ -97,6 +111,16 @@ export interface IOutbreakChainResult {
     outbreaks: number;
     /** Cities that outbroke, in the order they did. */
     outbrokenCities: number[];
+    /** Echoes back the (decremented) supply, when `cubesLeft` was passed in. */
+    cubesLeft?: OutbreakCubeCounts;
+    /**
+     * True when `cubesLeft` was passed in and the colour's supply ran out
+     * mid-resolution — §4.2's cube-exhaustion loss. Per §16 ("cube supply
+     * runs dry mid-outbreak — the loss is immediate, do not finish resolving
+     * the chain"), the walk stops the instant this happens rather than
+     * completing the chain.
+     */
+    cubeExhausted?: boolean;
 }
 
 // Places 1 cube of `color` on `cityId`. If the city already has
@@ -112,13 +136,21 @@ export interface IOutbreakChainResult {
 // resolving one infection card should pass a fresh empty set (the default);
 // a caller resolving several cards in the same phase should pass its own
 // set per card.
+//
+// `cubesLeft` is optional: setup's initial infection has 24-per-colour
+// supply to spare and calls this with it omitted (unlimited supply, exactly
+// today's behaviour). The infect phase (§21.6 step 6) passes it in, so a
+// colour that runs out mid-chain stops the walk immediately instead of
+// placing cubes the supply doesn't have.
 export function placeCubeOrOutbreak(
     cubes: OutbreakBoardCubes,
     cityId: number,
     color: OutbreakDiseaseColor,
     alreadyOutbroken: Set<number> = new Set(),
+    cubesLeft?: OutbreakCubeCounts,
 ): IOutbreakChainResult {
     const next = cubes.map(c => ({ ...c }));
+    const nextLeft = cubesLeft ? { ...cubesLeft } : undefined;
     const outbrokenCities: number[] = [];
     const queue: number[] = [cityId];
 
@@ -132,12 +164,15 @@ export function placeCubeOrOutbreak(
             for (const neighbor of ADJACENCY[city]) {
                 queue.push(neighbor);
             }
+        } else if (nextLeft && isCubeExhaustionLoss(nextLeft[color], 1)) {
+            return { cubes: next, outbreaks: outbrokenCities.length, outbrokenCities, cubesLeft: nextLeft, cubeExhausted: true };
         } else {
             next[city][color] += 1;
+            if (nextLeft) nextLeft[color] -= 1;
         }
     }
 
-    return { cubes: next, outbreaks: outbrokenCities.length, outbrokenCities };
+    return { cubes: next, outbreaks: outbrokenCities.length, outbrokenCities, cubesLeft: nextLeft, cubeExhausted: false };
 }
 
 // ─── Cure eligibility (§8.2) ────────────────────────────────────────────────
