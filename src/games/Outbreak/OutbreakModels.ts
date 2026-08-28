@@ -404,6 +404,7 @@ export function gameStateToModel(
             hand: [...ps.hand],
             city: ps.city,
             role: ps.role,
+            contingencyCard: ps.contingencyCard,
             actionsLeft: ps.actionsLeft,
         };
     }

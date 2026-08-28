@@ -1432,6 +1432,32 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-hand-emoji { font-size: 17px; line-height: 1.1; }
 .ag-hand-count { font: 800 13px var(--ag-font); }
 
+/* A hand made of named cards (a city or event card, not a fixed set of
+   counted resources) can run longer than one row, so it wraps rather than
+   squeezing every card down to fit one line — the per-player hand panel and
+   the infection discard pile of §21.6 step 11, not the fixed 5-resource row
+   above, which still wants its cards splitting one line evenly. */
+.ag-hand-cards--wrap { flex-wrap: wrap; }
+
+/* A named card tile within a wrapping hand, sized to its label rather than
+   splitting the row evenly. */
+.ag-hand-card--named {
+    flex: 0 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 9px;
+    max-width: 130px;
+}
+.ag-hand-card-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.ag-hand-card-name {
+    font: 700 10.5px var(--ag-font);
+    color: var(--ag-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Dev-card chips shown under the resource hand */
 .ag-hand-devs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .ag-devchip {
