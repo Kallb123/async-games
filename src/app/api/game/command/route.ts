@@ -9,6 +9,7 @@ import { IGameData, trySave } from '@/utils/mongodb/GameData';
 import { requireLiveGame } from '@/utils/games/liveGame';
 import { isCommandForGameType } from '@/utils/games/gameCommands';
 import { finishGame } from '@/utils/games/finishGame';
+import { runCommand } from '@/utils/games/commandPipeline';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
 import { IGameDataResponse } from '@/utils/apiModels/GameDataApi';
 
@@ -133,7 +134,9 @@ export async function POST(request: NextRequest) {
   // the game's usernameList resolves them.
   commandRequest.senderUsername = await senderName(gameData, userId);
 
-  const commandOutcome = await commandRequest.Execute(gameData);
+  // Checks whether the turn should be progressed and actions it if so
+  const gameType: IGameType = deserializeJSON(JSON.stringify(gameData.gameType));
+  const { outcome: commandOutcome, gameOver } = await runCommand(gameData, gameType, commandRequest);
   if (!commandOutcome.validMove) {
     return NextResponse.json({}, {status: 401, statusText: "Not a valid move"});
   }
@@ -144,12 +147,9 @@ export async function POST(request: NextRequest) {
     gameData.missedTurnCounts.set(commandRequest.senderId, 0);
   }
 
-  gameData.gameState.commandHistory.push(commandRequest);
   gameData.markModified('gameState.commandHistory');
 
-  // Checks whether the turn should be progressed and actions it if so
-  const gameType: IGameType = deserializeJSON(JSON.stringify(gameData.gameType));
-  if (gameType.CheckGameOver(gameData)) {
+  if (gameOver) {
     // How it ended is the game's to say: a co-op game records 'teamwin' or
     // 'teamloss' on the way through CheckGameOver, and this branch used to
     // overwrite whatever it had said with "win" — filing a defeat as a victory.
@@ -174,8 +174,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response, {status: 200});
   }
-  
-  gameType.CheckEndTurn(gameData, commandOutcome);
 
   if (commandOutcome.turnOver) {
     gameData.lastTurnTimestamp = new Date().toISOString();

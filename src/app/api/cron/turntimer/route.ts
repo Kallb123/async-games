@@ -3,6 +3,7 @@ import { buildTurnExpiringNotification, buildYourTurnNotification } from '@/util
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { IGameDataDocument, ISweepCandidate, SWEEP_CANDIDATE_LIMIT, findSweepCandidates, trySave } from '@/utils/mongodb/GameData';
 import { finishGame } from '@/utils/games/finishGame';
+import { resolveStalledTurn } from '@/utils/games/turnTimeout';
 import { NextRequest, NextResponse } from 'next/server';
 import { formatRemainingTime, hasAbandonedGame, isExpired, needsSweeping } from '@/utils/games/TurnTimer';
 import { requireLiveGame } from '@/utils/games/liveGame';
@@ -40,17 +41,57 @@ async function abandonGame(gameData: IGameDataDocument, missingPlayerId: string)
     return 'abandoned';
 }
 
-/** Rotates a timed-out turn on to the next player and tells them. */
+/**
+ * Ends a timed-out player's turn and tells whoever's up next.
+ *
+ * A game that registers a turn-timeout adapter (turnTimeout.ts) gets its
+ * stalled turn resolved through its own commands first — Execute, push onto
+ * commandHistory, CheckGameOver/CheckEndTurn — so a game whose board only
+ * deteriorates on a player's own turn (Outbreak's draw and infect phases)
+ * doesn't get to skip that deterioration just because the cron did the
+ * skipping (docs/games/outbreak-gdd.md §21.2, gap 2). A game that registers
+ * nothing keeps the plain advance this always did.
+ */
 async function passTurnOn(gameData: IGameDataDocument, timedOutPlayerId: string): Promise<SweepOutcome> {
-    const currentIndex = gameData.gameState.turnOrder.findIndex(to => to === timedOutPlayerId);
-    gameData.currentTurn = gameData.gameState.turnOrder[(currentIndex + 1) % gameData.gameState.turnOrder.length];
+    const userList = await usersById(gameData.userIdList);
+    const timedOutName = readableName(userList.find(u => u.id === timedOutPlayerId), 'The last player');
+
+    const resolution = await resolveStalledTurn(gameData, timedOutPlayerId, timedOutName);
+
+    if (resolution === 'stuck') {
+        console.error(`Turn-timeout adapter for game ${gameData.gameId} couldn't resolve ${timedOutPlayerId}'s stalled turn; leaving it for the next sweep`);
+        return 'skipped';
+    }
+
+    if (resolution === 'gameOver') {
+        // How it ended is the game's to say: a co-op game records 'teamwin' or
+        // 'teamloss' on the way through CheckGameOver, and the `?? "win"` here
+        // only fills in for a game that named no reason of its own (see the
+        // same call in the command route). A player may also have taken their
+        // turn concurrently with this cron run — finishGame leaves their move
+        // alone rather than clobbering it with a stale expiry.
+        const finished = await finishGame(gameData, {
+            winner: gameData.winner,
+            endReason: gameData.endReason ?? "win",
+        });
+        if (!finished.saved) return 'skipped';
+        await finished.announce();
+        return 'expired';
+    }
+
+    if (resolution === 'noAdapter') {
+        const currentIndex = gameData.gameState.turnOrder.findIndex(to => to === timedOutPlayerId);
+        gameData.currentTurn = gameData.gameState.turnOrder[(currentIndex + 1) % gameData.gameState.turnOrder.length];
+    }
+
+    // resolution === 'advanced': a registered timeout command already ran and
+    // CheckEndTurn moved currentTurn on. Either way there's a new current
+    // player now, so save and tell them.
     gameData.lastTurnTimestamp = new Date().toISOString();
     gameData.timerWarningNotificationSent = false;
     // A player may have taken their turn concurrently with this cron run —
     // leave this game rather than clobber their move with a stale expiry.
     if (!(await trySave(gameData))) return 'skipped';
-
-    const userList = await usersById(gameData.userIdList);
 
     // The turn arrived because the previous player ran out of time, not
     // because they moved — say so, it's the more useful headline.
@@ -61,7 +102,7 @@ async function passTurnOn(gameData: IGameDataDocument, timedOutPlayerId: string)
             gameId: gameData.gameId,
             link: gameNotificationLink(gameData.gameType.url, gameData.gameId)
         }, await buildYourTurnNotification(gameData, turnUser.id, userListToUserIdNameMap(userList), {
-            timedOutName: readableName(userList.find(u => u.id === timedOutPlayerId), 'The last player')
+            timedOutName
         }), {
             channel: 'yourTurn'
         });

@@ -875,6 +875,50 @@ different board than the live one, for exactly the turns the recap exists to
 narrate. Outbreak's timeout is `OutbreakEndTurn`, which resolves the draw and
 infect phases from wherever the turn was left.
 
+*Landed.* `src/utils/games/turnTimeout.ts` is the registry, in the same shape
+as `registerReplayAdapter`: an `ITurnTimeoutAdapter` names a game type and a
+`buildTimeoutCommand(gameData, userId)` that hands back the next command
+needed to move a stalled turn toward ending it, or `null` once there's
+nothing left the game knows how to do automatically. `resolveStalledTurn`
+calls it in a loop — Execute, push onto `commandHistory`,
+`CheckGameOver`/`CheckEndTurn`, the same three steps the command route and
+`buildTimeline()` already perform — until the turn ends, the game ends, or
+the adapter gives up. A loop rather than one command, because a real timeout
+usually finds a player with every action still unspent: Outbreak's adapter
+forfeits each open action with the same `OutbreakAction{kind:'pass'}` a live
+player bailing out early would send, then hands back `OutbreakEndTurn` to run
+the draw and infect phases, then — if that draw pushes the hand over the
+limit — an `OutbreakDiscard` computed from the current hand, before the turn
+can actually end. Resolving all of it inside one cron tick matters as much as
+resolving it correctly: `sweepGame`'s missed-turn count only resets when a
+turn's timestamp resets, so a design that dribbled out one command per
+~15-minute tick would rack up that count once per partial command and abandon
+the game long before anyone had really missed three turns. `passTurnOn` in
+the turntimer cron calls `resolveStalledTurn` first and only falls back to
+plain-advance-`currentTurn` when nothing is registered for the game type, so
+every other game's timeout behaviour is unchanged. `OutbreakLogic.ts` itself
+is untouched — `OutbreakEndTurn`'s existing "rejects while actions remain"
+rule still holds for a live player's own request; the adapter only ever
+reaches it after the same forfeits a player could have sent by hand.
+`src/games/Outbreak/turnTimeout.test.ts` covers all four branches
+(`resolveStalledTurn` at zero and non-zero `actionsLeft`, a forced draw that
+lands in `discard`, and one that empties the deck into a `teamloss`) plus the
+no-adapter fallback.
+
+Caveman review caught that this made the `Execute` → `commandHistory.push` →
+rehydrate `gameType` → `CheckGameOver`/`CheckEndTurn` shape a third
+hand-written copy, alongside the command route and `buildTimeline()`'s
+`applyCommands` — exactly the kind of drift risk §21.4 already worries about
+for the chain-walk logic. That step is now `runCommand` in the new
+`src/utils/games/commandPipeline.ts`, and all three call sites — the command
+route, `buildTimeline()`, and `resolveStalledTurn` — run every command through
+it; only `markModified` stays with each caller, since `buildTimeline()`'s
+in-memory replay state has no such method to call. The same review flagged the
+`Record<string, T>` + register/get registry as a third copy too (alongside
+`registerReplayAdapter` and `registerRecapAdapter`), so that's now
+`createAdapterRegistry<T>()` in `src/utils/games/adapterRegistry.ts`, and all
+three registries — replay, recap, and this one — are built on it.
+
 **8 — Epidemics.** The three-step resolution of §9.1, the pile-based deck
 construction of §6 step 7, the difficulty dial from step 3 becoming live, the
 infection rate track, and the recorded Intensify shuffle. This is the step that
