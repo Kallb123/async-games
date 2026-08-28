@@ -18,6 +18,9 @@ export interface IOutbreakPlayerStateResponse {
     // (§2, §21.6 step 10).
     contingencyCard: number | null;
     actionsLeft: number;
+    // Running totals for the end-of-game charts — see IOutbreakPlayerState.
+    cubesTreated: number;
+    timesTravelled: number;
 }
 
 export interface IOutbreakSpecificGameStateResponse {

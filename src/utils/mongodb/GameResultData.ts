@@ -73,7 +73,9 @@ import {
     computeOutbreakResultStats,
     outbreakGameResultStatsSchemaDef,
     formatOutbreakResultStats,
+    formatOutbreakCharts,
 } from "@/games/Outbreak/OutbreakModels";
+import type { IOutbreakSpecificGameStateResponse } from "@/games/Outbreak/apiModels";
 
 export interface IGameResultData {
     gameId: uuidString,
@@ -311,8 +313,20 @@ const GAME_RESULT_STATS: Record<string, {
     },
     Outbreak: {
         model: OutbreakGameResultModel,
-        compute: (gameData) => computeOutbreakResultStats(gameData as IOutbreakGameData),
+        compute: async (gameData) => {
+            const outbreakGameData = gameData as IOutbreakGameData;
+            const cubesTreatedPerTurn = await computePerTurnStat<IOutbreakSpecificGameStateResponse>(
+                outbreakGameData,
+                (state, userId) => playerByUserId(state, userId)?.cubesTreated,
+            );
+            const timesTravelledPerTurn = await computePerTurnStat<IOutbreakSpecificGameStateResponse>(
+                outbreakGameData,
+                (state, userId) => playerByUserId(state, userId)?.timesTravelled,
+            );
+            return computeOutbreakResultStats(outbreakGameData, cubesTreatedPerTurn, timesTravelledPerTurn);
+        },
         format: formatOutbreakResultStats,
+        charts: formatOutbreakCharts,
     },
 };
 

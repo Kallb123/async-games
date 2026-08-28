@@ -52,6 +52,8 @@ function baseState(turnOrder: string[]): IOutbreakSpecificGameState {
             contingencyCard: null,
             actionsLeft: ACTIONS_PER_TURN,
             opsExpertFlightUsed: false,
+            cubesTreated: 0,
+            timesTravelled: 0,
         });
     }
 

@@ -2,7 +2,13 @@ import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { v4 as uuidv4 } from 'uuid';
-import { GameResultStatGroup, uuidString } from "@/utils/apiModels/GameDataApi";
+import {
+    GameResultChart,
+    GameResultStatGroup,
+    compactCharts,
+    formatPerTurnChart,
+    uuidString,
+} from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
 import { OutbreakGameType } from "@/utils/apiModels/GameLogic";
@@ -141,6 +147,16 @@ export interface IOutbreakPlayerState {
     // for every other role, but kept unconditional like the rest of this
     // state rather than made optional for one role.
     opsExpertFlightUsed: boolean;
+    // Running totals for the end-of-game charts (never reset mid-game) — see
+    // computeOutbreakResultStats below. cubesTreated counts cubes removed by
+    // this player's own Treat Disease action (not a Medic's automatic
+    // clearing, which is a side effect of moving rather than a chosen
+    // action). timesTravelled counts every time this player's own pawn
+    // relocated, however it moved — her own drive/flight, a Dispatcher
+    // moving her, or Airlift — since the chart is about where she ended up,
+    // not who spent the action.
+    cubesTreated: number;
+    timesTravelled: number;
 }
 
 export interface IOutbreakSpecificGameState {
@@ -187,6 +203,8 @@ function clonePlayerState(ps: IOutbreakPlayerState): IOutbreakPlayerState {
         contingencyCard: ps.contingencyCard,
         actionsLeft: ps.actionsLeft,
         opsExpertFlightUsed: ps.opsExpertFlightUsed,
+        cubesTreated: ps.cubesTreated,
+        timesTravelled: ps.timesTravelled,
     };
 }
 
@@ -277,6 +295,8 @@ export function buildInitialOutbreakState(turnOrder: string[], difficulty: Outbr
             contingencyCard: null,
             actionsLeft: ACTIONS_PER_TURN,
             opsExpertFlightUsed: false,
+            cubesTreated: 0,
+            timesTravelled: 0,
         });
     }
 
@@ -360,6 +380,8 @@ function makeOutbreakStateSchemaDef() {
                 contingencyCard: { type: Number, default: null },
                 actionsLeft: Number,
                 opsExpertFlightUsed: { type: Boolean, default: false },
+                cubesTreated: { type: Number, default: 0 },
+                timesTravelled: { type: Number, default: 0 },
             },
         },
         phase: String,
@@ -418,6 +440,8 @@ export function gameStateToModel(
             role: ps.role,
             contingencyCard: ps.contingencyCard,
             actionsLeft: ps.actionsLeft,
+            cubesTreated: ps.cubesTreated,
+            timesTravelled: ps.timesTravelled,
         };
     }
 
@@ -446,15 +470,23 @@ export var OutbreakGameDataModel =
     GameDataModel.discriminator<IOutbreakGameDataDocument, IOutbreakGameDataModel>('OutbreakGameData', OutbreakGameDataSchema);
 
 // ─── Result stats (§21.6 step 12) ───────────────────────────────────────────
-// A co-op table shares one result, so this is one game-wide stat group (no
-// per-player breakdown) — the same shape Solitaire uses for its own solo
-// summary. Wired into GAME_RESULT_STATS in src/utils/mongodb/GameResultData.ts.
+// A co-op table shares one result, so the formatted summary below is one
+// game-wide stat group (no per-player breakdown) — the same shape Solitaire
+// uses for its own solo summary. The two per-turn series are per-player
+// though, same as every other game's end-of-game charts (see
+// computePerTurnStat in replay.ts): cumulative cubes treated and cumulative
+// times travelled, read off each player's own running totals on
+// specificGameState.players (IOutbreakPlayerState.cubesTreated/
+// timesTravelled) rather than recomputed here. Wired into GAME_RESULT_STATS
+// in src/utils/mongodb/GameResultData.ts.
 
 export interface IOutbreakGameResultStats {
     curesDiscovered: number;
     outbreaks: number;
     turnsLasted: number;
     difficulty: OutbreakDifficulty;
+    cubesTreatedPerTurn: Map<string, number>[];
+    timesTravelledPerTurn: Map<string, number>[];
 }
 
 export const outbreakGameResultStatsSchemaDef = {
@@ -462,9 +494,15 @@ export const outbreakGameResultStatsSchemaDef = {
     outbreaks: Number,
     turnsLasted: Number,
     difficulty: String,
+    cubesTreatedPerTurn: [{ type: Schema.Types.Map, of: Number }],
+    timesTravelledPerTurn: [{ type: Schema.Types.Map, of: Number }],
 };
 
-export function computeOutbreakResultStats(gameData: IOutbreakGameData): IOutbreakGameResultStats {
+export function computeOutbreakResultStats(
+    gameData: IOutbreakGameData,
+    cubesTreatedPerTurn: Map<string, number>[],
+    timesTravelledPerTurn: Map<string, number>[],
+): IOutbreakGameResultStats {
     const gs = gameData.specificGameState;
     return {
         curesDiscovered: DISEASE_COLORS.filter(color => gs.cures[color] !== 'none').length,
@@ -474,7 +512,21 @@ export function computeOutbreakResultStats(gameData: IOutbreakGameData): IOutbre
         // event, so this counts real turns rather than raw command volume.
         turnsLasted: gameData.gameState.commandHistory.filter(c => c.className === 'OutbreakEndTurn').length,
         difficulty: gs.difficulty,
+        cubesTreatedPerTurn,
+        timesTravelledPerTurn,
     };
+}
+
+// Renders the two per-turn series as GameResult charts — mirrors Train
+// Time's formatTrainTimeCharts.
+export function formatOutbreakCharts(
+    stats: IOutbreakGameResultStats,
+    usernameById: Map<string, string>,
+): GameResultChart[] {
+    return compactCharts(
+        formatPerTurnChart(stats.cubesTreatedPerTurn, usernameById, "Cubes treated per turn", "Cubes"),
+        formatPerTurnChart(stats.timesTravelledPerTurn, usernameById, "Times travelled per turn", "Moves"),
+    );
 }
 
 export function formatOutbreakResultStats(stats: IOutbreakGameResultStats): GameResultStatGroup[] {
