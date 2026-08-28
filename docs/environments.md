@@ -40,6 +40,7 @@ Point two Clerk instances at one database and:
 | `CRON_SECRET` | its own secret | a different secret |
 | `APP_URL` | `https://asyncgames.com` | the preview or `localhost` origin |
 | Firebase Admin (`FIREBASE_*`) | one project is fine on both sides — device tokens live in Clerk private metadata, so they partition with the instance |
+| `ANDROID_APP_FINGERPRINT` | the release keystore's SHA-256, so Android opens `asyncgames.com` links in the app | unset, unless you're verifying a debug-signed APK against a preview — then that keystore's SHA-256 |
 
 Nothing in `src/` is instance- or database-aware. `dbConnect()`
 (`src/utils/mongodb/mongodb.ts`) hands `MONGODB_URI` straight to

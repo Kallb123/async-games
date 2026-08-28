@@ -323,6 +323,49 @@ function splashSvg(width, height) {
 </svg>`;
 }
 
+// The status-bar icon a push notification is shown under. Android draws it
+// from the alpha channel alone — every non-transparent pixel comes out in the
+// system's tint — so this is the mark as a flat white silhouette rather than
+// the terracotta plate the launcher gets. Left to itself the framework falls
+// back to the launcher icon, which under that rule flattens to a solid white
+// square; `AndroidManifest.xml` points FCM's `default_notification_icon` here
+// instead.
+const NOTIFICATION_ICON_DP = 24;
+
+function notificationIconSvg(size) {
+    // Every fill goes white: the brass pip and the darker hub can't read as
+    // themselves in a silhouette Android is going to tint in one colour
+    // anyway. `background: false` keeps the plate off, so what's left is the
+    // alpha the status bar actually uses.
+    return clockDieSvg({ size, background: false }).replace(/fill="#[0-9a-f]{3,8}"/gi, 'fill="#ffffff"');
+}
+
+async function writeAndroidNotificationIcon(write) {
+    for (const [density, scale] of Object.entries(DENSITIES)) {
+        const size = Math.round(NOTIFICATION_ICON_DP * scale);
+        await write(
+            path.join(ANDROID_RES, `drawable-${density}`, 'ic_stat_notify.png'),
+            await png(notificationIconSvg(size)),
+        );
+    }
+}
+
+// The theme colours the native shell needs as Android resources: the field the
+// window is painted on behind the WebView (edge-to-edge means the strips under
+// the status and gesture bars are the window's, not the page's, so a stock
+// white/near-black there frames the app in a colour it never uses), and the
+// tint Android applies to the notification icon above. Generated from the same
+// `colours.ts` the stylesheet and every icon here are drawn from.
+async function writeAndroidColours(write) {
+    await write(
+        path.join(ANDROID_RES, 'values', 'ag_colors.xml'),
+        `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n`
+        + `    <color name="ag_background">${COLOURS.bg}</color>\n`
+        + `    <color name="ag_notification">${COLOURS.terracotta}</color>\n`
+        + `</resources>\n`,
+    );
+}
+
 async function writeAndroidSplash(write) {
     let fallback;
     for (const { bucket, width, height } of SPLASH_SIZES) {
@@ -352,6 +395,10 @@ async function main() {
     await mkdir(PUBLIC_ICONS, { recursive: true });
 
     const write = async (file, data) => {
+        // A density bucket a previous run never needed (the notification
+        // icon's `drawable-*`) won't exist yet, and neither will `public/`
+        // subfolders on a fresh clone.
+        await mkdir(path.dirname(file), { recursive: true });
         await writeFile(file, data);
         console.log(`wrote ${path.relative(ROOT, file)}`);
     };
@@ -392,6 +439,8 @@ async function main() {
     // splash screen `cap add android` scaffolds in.
     await writeAndroidIcons(write);
     await writeAndroidSplash(write);
+    await writeAndroidNotificationIcon(write);
+    await writeAndroidColours(write);
 
     if (hasWordmarkFont()) {
         await write(path.join(PUBLIC_ICONS, 'og-image.png'), await png(ogImageSvg()));

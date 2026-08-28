@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect } from 'react';
-import { Capacitor } from '@capacitor/core';
 import { SplashScreen } from '@capacitor/splash-screen';
+import { isNativeShell } from '@/utils/native';
 
 /**
  * Native Android shell only: dismisses the branded splash overlay
@@ -12,7 +12,7 @@ import { SplashScreen } from '@capacitor/splash-screen';
  */
 export function useCapacitorSplashScreen() {
     useEffect(() => {
-        if (!Capacitor.isNativePlatform()) {
+        if (!isNativeShell()) {
             return;
         }
         SplashScreen.hide();

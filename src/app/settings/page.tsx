@@ -17,6 +17,7 @@ import { NotificationChannel, NOTIFICATION_CHANNELS } from "@/utils/firebase/not
 import { requestNotificationPermission, useNotificationPermission } from "@/utils/hooks/useNotificationPermission";
 import useFcmToken from "@/utils/hooks/useFcmToken";
 import { useInstallPrompt } from "@/utils/hooks/useInstallPrompt";
+import { useAppVersion } from "@/utils/hooks/useAppVersion";
 import { useHydrated } from "@/utils/hooks/useNow";
 import { formatBuildTime } from "@/utils/ui/time";
 import { BUILD_TIME } from "@/utils/buildInfo";
@@ -40,6 +41,9 @@ export default function Settings() {
     const { showToast } = useToast();
     const { fcmToken } = useFcmToken();
     const installMethod = useInstallPrompt();
+    // Native shell only — the version of the wrapper, which is not the version
+    // of the site it is showing.
+    const appVersion = useAppVersion();
     // Local time, so only the browser can format it — nothing to show until it has.
     const hydrated = useHydrated();
 
@@ -147,6 +151,18 @@ export default function Settings() {
                     <NotificationOffer permission={permission} />
                 )}
 
+                {/* Said out loud rather than left blank: this section used to
+                    render nothing at all here, so a player whose browser can't
+                    do push saw an empty "Notifications" heading and no reason
+                    for it. */}
+                {permission === 'unsupported' && (
+                    <div className="ag-callout">
+                        This browser can&apos;t receive notifications. Open Async Games in
+                        Chrome, Edge or Safari — or install it to your home screen — and
+                        the settings will appear here.
+                    </div>
+                )}
+
                 {hasPrefPermission && (
                     <div className="ag-list" aria-describedby={prefs && !prefs.enabled ? "notifications-paused-hint" : undefined}>
                         <OptionToggleRow
@@ -235,6 +251,10 @@ export default function Settings() {
                 <LegalLinks />
                 <div className="ag-hint ag-hint--center">
                     v{packageJson.version}{hydrated && BUILD_TIME && ` · built ${formatBuildTime(BUILD_TIME)}`}
+                    {/* The installed app's own version, which moves on its own
+                        release schedule — see `useAppVersion`. Nothing in a
+                        browser. */}
+                    {appVersion && ` · app v${appVersion.version} (${appVersion.build})`}
                 </div>
             </div>
 

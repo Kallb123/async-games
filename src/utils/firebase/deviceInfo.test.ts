@@ -13,6 +13,11 @@ describe('parseUserAgent', () => {
         expect(device).toEqual({ type: 'mobile', os: 'Android', browser: 'Chrome' });
     });
 
+    it('names the native Android shell rather than the Chrome it embeds', () => {
+        const device = parseUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8 Build/UQ1A; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/126.0.0.0 Mobile Safari/537.36');
+        expect(device).toEqual({ type: 'mobile', os: 'Android', browser: 'Async Games app' });
+    });
+
     it('recognises an iPad as a tablet', () => {
         const device = parseUserAgent('Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/604.1');
         expect(device.type).toBe('tablet');

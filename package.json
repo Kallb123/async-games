@@ -19,6 +19,8 @@
     "@capacitor/android": "^8.5.0",
     "@capacitor/app": "^8.1.1",
     "@capacitor/core": "^8.5.0",
+    "@capacitor/push-notifications": "^8.1.2",
+    "@capacitor/share": "^8.0.1",
     "@capacitor/splash-screen": "^8.0.2",
     "@clerk/nextjs": "^7",
     "bootstrap": "^5",

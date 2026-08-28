@@ -2,8 +2,8 @@
 
 import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
+import { isNativeShell } from '@/utils/native';
 import { closeTopmostRequest } from './useCloseRequest';
 
 /**
@@ -27,7 +27,7 @@ export function useCapacitorBackButton() {
     const pathname = usePathname();
 
     useEffect(() => {
-        if (!Capacitor.isNativePlatform()) {
+        if (!isNativeShell()) {
             return;
         }
 

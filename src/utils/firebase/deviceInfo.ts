@@ -14,6 +14,11 @@ const OS_RULES: [RegExp, string][] = [
 ];
 
 const BROWSER_RULES: [RegExp, string][] = [
+    // The native shell, which is a WebView and says so: Android appends `wv`
+    // to the platform token for one. It carries a Chrome version too, so this
+    // has to win over the Chrome rule below, or every player on the app reads
+    // as another Chrome in their own device list.
+    [/;\s*wv\)/i, 'Async Games app'],
     [/Edg[A-Z]?\//i, 'Edge'],
     [/OPR\/|Opera/i, 'Opera'],
     [/SamsungBrowser/i, 'Samsung Internet'],

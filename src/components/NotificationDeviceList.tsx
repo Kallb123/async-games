@@ -8,6 +8,7 @@ import { deviceGlyph, deviceIdForToken, STALE_DEVICE_DAYS } from "@/utils/fireba
 import { formatRelativeTime } from "@/utils/ui/time";
 import { useNowToTheMinute } from "@/utils/hooks/useNow";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
+import { useNotificationPermission } from "@/utils/hooks/useNotificationPermission";
 import { useEffect, useState } from "react";
 
 /**
@@ -20,6 +21,10 @@ export default function NotificationDeviceList({ currentToken }: { currentToken?
     const { data, isLoading, isRefreshing, refresh } = useRefreshableData<{ devices: RegisteredDevice[] }>('/api/notificationtoken');
     const [removingId, setRemovingId] = useState<string | null>(null);
     const now = useNowToTheMinute();
+    // Only to explain an empty list: a client that can't receive push has a
+    // reason for having registered nothing, and saying it beats a blank space
+    // where the list would be.
+    const permission = useNotificationPermission();
     const currentId = currentToken ? deviceIdForToken(currentToken) : undefined;
     const devices = data?.devices ?? [];
 
@@ -56,6 +61,9 @@ export default function NotificationDeviceList({ currentToken }: { currentToken?
             label="Your devices"
             isLoading={isLoading}
             isRefreshing={isRefreshing}
+            empty={permission === 'unsupported'
+                ? <div className="ag-empty">Not supported on this browser, so it hasn&apos;t registered itself.</div>
+                : <div className="ag-empty">No devices yet. Turn notifications on and this one adds itself.</div>}
             hint={<>
                 A removed device stops getting notifications until you next open Async Games on it.
                 Devices you haven&apos;t used for {STALE_DEVICE_DAYS} days are forgotten automatically.

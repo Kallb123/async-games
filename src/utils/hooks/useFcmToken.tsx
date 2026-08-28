@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react';
 import { getMessaging, getToken } from 'firebase/messaging';
 import firebaseApp from '../firebase/firebase';
+import { getNativePushToken } from '../firebase/nativePush';
+import { isNativeShell } from '../native';
 import { useIsAuthorised } from './useAuthGuard';
 import { useNotificationPermission } from './useNotificationPermission';
 
@@ -36,10 +38,17 @@ const useFcmToken = () => {
         if (!isAuthorised || permission !== 'granted') {
           return;
         }
-        const messaging = getMessaging(firebaseApp);
-        const currentToken = await getToken(messaging, {
-          vapidKey: 'BDp9df2UuofIOAnwGQkfG7hyRf73aZ3kk6_GltpZtTFcIaMtwmcz7whJ_7GHB1Zay3QtQ8FqQMnNKoyD6LLpaZo',
-        });
+        // Same token, two ways of asking for it: the native shell registers
+        // with FCM through the OS (`nativePush.ts`), because the WebView it
+        // runs has no service worker push for the web SDK to use — and
+        // `getMessaging` throws outright there rather than returning nothing.
+        // What comes back is a registration token either way, so everything
+        // below this line is one path.
+        const currentToken = isNativeShell()
+          ? await getNativePushToken()
+          : await getToken(getMessaging(firebaseApp), {
+              vapidKey: 'BDp9df2UuofIOAnwGQkfG7hyRf73aZ3kk6_GltpZtTFcIaMtwmcz7whJ_7GHB1Zay3QtQ8FqQMnNKoyD6LLpaZo',
+            });
         if (!currentToken) {
           console.log('No registration token available. Request permission to generate one.');
           return;

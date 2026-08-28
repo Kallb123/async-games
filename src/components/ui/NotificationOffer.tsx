@@ -1,5 +1,6 @@
 'use client'
 import OfferCard from '@/components/ui/OfferCard';
+import { isNativeShell } from '@/utils/native';
 import { NotificationPermissionState, requestNotificationPermission } from '@/utils/hooks/useNotificationPermission';
 
 interface NotificationOfferProps {
@@ -13,7 +14,9 @@ interface NotificationOfferProps {
  * the browser for permission. `OfferCard` supplies the surface.
  *
  * A browser that has already been told no cannot be re-asked from script, so
- * `denied` gets the instructions rather than a button that would do nothing.
+ * `denied` gets the instructions rather than a button that would do nothing —
+ * and in the native shell those instructions have to name Android's app
+ * settings, because there is no browser in there to go looking for.
  */
 export default function NotificationOffer({ permission, className, onDismiss }: NotificationOfferProps) {
     return (
@@ -29,7 +32,9 @@ export default function NotificationOffer({ permission, className, onDismiss }: 
             )}
         >
             {permission === 'denied'
-                ? 'Notifications are blocked for this site. Allow them in your browser’s site settings to hear about invites and turns.'
+                ? (isNativeShell()
+                    ? 'Notifications are turned off for Async Games. Allow them in Android’s app settings to hear about invites and turns.'
+                    : 'Notifications are blocked for this site. Allow them in your browser’s site settings to hear about invites and turns.')
                 : 'Hear about it when a friend invites you to a game, and when it’s your turn to move.'}
         </OfferCard>
     );

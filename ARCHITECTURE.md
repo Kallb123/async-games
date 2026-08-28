@@ -40,6 +40,7 @@ Currently implemented games:
 | Push notifications | **Firebase Cloud Messaging** (client SDK + `firebase-admin`) |
 | Styling | Custom `ag-*` design system (`src/app/ag-theme.css`) + Bootstrap 5 (legacy, in-game boards only) |
 | Animation | `framer-motion` |
+| Android app | **Capacitor 8** shell around the live site (`capacitor.config.ts`, `android/`) |
 | Hosting | **Vercel** |
 | Scheduled work | Vercel Cron (daily backstop) + external cron service (e.g. cron-job.org) hitting `/api/cron/turntimer` |
 
@@ -473,6 +474,20 @@ recap failure is caught and downgraded — it can cost a nicer sentence, never
 the move. Notification artwork comes from `gameNotificationImage`, which reads
 the game's own `meta.ts`, so a push can never carry another game's icon.
 
+**Two clients, one token.** Everything below describes the web client; the
+native Android shell reaches the same place by another road. Its WebView
+implements neither the Notification API nor the Push API, so `firebase/messaging`
+cannot work there at all — `nativePush.ts` registers with FCM over the Capacitor
+bridge instead and hands back a registration token of exactly the same kind, and
+`useNotificationPermission` reads the OS permission rather than the browser's
+(asynchronously, which is what its `'checking'` state is for). From
+`/api/notificationtoken` onwards — the stored `TimedToken`, the device list,
+`sendPushToUsers`, the copy, the `link` a tap follows — there is one path, not
+two. On the delivery side `useCapacitorPush` stands in for both the foreground
+`onMessage` and the service worker's click handler; the tray notification itself
+is Android's, drawn with the `ic_stat_notify` silhouette and tint named in
+`AndroidManifest.xml`.
+
 **Token registration.** On the client, `useFcmToken` (`src/utils/hooks/`) requests
 notification permission, gets an FCM token, and POSTs it to
 `/api/notificationtoken`, which stores it in the user's Clerk private metadata.
@@ -511,6 +526,11 @@ and rewrites only the metadata that actually changed.
   with `onMessage` and re-dispatches each push as a `window` `CustomEvent` named
   after its `event` field. Game pages listen for events like `YourTurn` and
   re-fetch game state — this is how a board updates without a socket.
+- *Native shell:* `useCapacitorPush` does both of those jobs — the OS shows the
+  notification when the app is backgrounded, and delivers it to the listener
+  when it isn't. Both paths dispatch through the same `dispatchPushEvent`
+  (`src/utils/firebase/pushEvents.ts`), so a screen listening for `YourTurn`
+  never learns which client it is running on.
 
 Common event names: `NewInvite`, `InviteAccepted`, `GameStart`, `YourTurn`,
 `TurnExpiringSoon`, `GameOver`. `YourTurn` is also sent when a game starts, to
@@ -650,6 +670,47 @@ description or theme colour is exactly what those two files exist to prevent.
   game's name, slug, art, accent colour, and player count across the library,
   home cards, and setup headers.
 
+### The native Android shell
+
+`capacitor.config.ts` wraps the **live deployment** in a WebView rather than
+bundling a static export — the app needs SSR, Clerk middleware and dynamic API
+routes. So the APK is a shell: the screens inside it are the same React this
+repo builds for the web, served from `asyncgames.com`, and an installed app is
+today's site inside whichever wrapper the player last installed. That is why the
+settings footer shows two versions (`useAppVersion` reads the shell's own
+`versionName`/`versionCode` from `android/app/build.gradle`), and why a change
+here has to keep working in an *older* shell than the one it shipped with.
+
+What the shell adds, all of it in hooks that no-op off-Capacitor and are mounted
+once in `Providers`:
+
+| Hook | What it answers |
+|---|---|
+| `useCapacitorBackButton` | Android's back gesture, which otherwise exits the app (see "Closing an overlay" above) |
+| `useCapacitorSplashScreen` | Hides the branded launch overlay once the remote page has painted |
+| `useCapacitorDeepLinks` | An `asyncgames.com` link opened from outside, routed in-app rather than reloaded |
+| `useCapacitorPush` | A push arriving while the app is open, and a push being tapped |
+
+Two more differences are worth knowing, because both are cases where the WebView
+is *not* a browser:
+
+- **It has no Notification API and no Push API**, so web push cannot work in it
+  at all. Push goes through the OS instead — see §8.
+- **It has no Web Share API**, so `shareOrCopyLink` (`src/utils/ui/share.ts`)
+  uses the Capacitor share sheet there and `navigator.share` elsewhere.
+
+The system bars are **core Capacitor 8**, not a plugin: it insets the WebView
+under an edge-to-edge window and publishes `--safe-area-inset-*` on `<html>`.
+`plugins.SystemBars` in the config pins the bar icons dark, because the app is
+cream whatever the device's dark-mode setting says; `AppTheme.NoActionBar` in
+`android/app/src/main/res/values/styles.xml` paints the window that same cream,
+since the strips behind the bars are the window's, not the page's. Don't reach
+for `@capacitor/status-bar` or a keyboard plugin — core already does both jobs.
+
+Everything drawn for the shell — launcher icon, splash, the notification
+silhouette `ic_stat_notify`, and the `ag_colors.xml` those themes reference —
+comes out of `npm run icons`, from the same `colours.ts` the stylesheet uses.
+
 ## 12. Adding a new game
 
 The engine is designed so a new game is additive, and everything about it lives
@@ -727,8 +788,9 @@ one-liner fails with a message naming the exact file and line to add.
 - **Environment variables** (see `.env.example`): `MONGODB_URI`; Clerk
   (`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, injected via the Clerk
   Vercel integration); Firebase Admin (`FIREBASE_PROJECT_ID`,
-  `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`); `CRON_SECRET`; and optional
-  `ACCESS_PASSWORD`. The Firebase **client** config (in
+  `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`); `CRON_SECRET`; optional
+  `ACCESS_PASSWORD`; and optional `ANDROID_APP_FINGERPRINT` (the signing
+  certificate the Android app is verified by — see the APK bullet below). The Firebase **client** config (in
   `src/utils/firebase/firebase.ts` and the service worker) is public by design.
 - **Environments:** production and preview/local each get their own **Clerk
   instance** *and* their own **MongoDB database**, and the two must split
@@ -740,6 +802,14 @@ one-liner fails with a message naming the exact file and line to add.
   one Atlas cluster, not a second cluster.
   [`docs/environments.md`](./docs/environments.md) has the full variable split
   and the Clerk production cut-over.
+- **Android APK** (`.github/workflows/android-release.yml`): on a published
+  release (or manual dispatch), syncs the native project and builds a signed
+  APK. It needs the four `ANDROID_*` signing secrets and
+  `GOOGLE_SERVICES_JSON` — the Firebase console's config file for the Android
+  app, without which Gradle skips the google-services plugin and the APK ships
+  unable to register for push. `ANDROID_APP_FINGERPRINT` (a Vercel environment
+  variable, not a repo secret) is the other half of App Links: it is what
+  `/.well-known/assetlinks.json` serves.
 - **CI** (`.github/workflows/ci.yml`): on push/PR to `main`, runs
   `npx tsc --noEmit` (type check), `npm run lint` (ESLint, `--max-warnings 0`),
   `npm test` (Vitest), and `npx next build`. All must pass before merge.
