@@ -1419,9 +1419,9 @@ a.ag-list-row, a.ag-list-row-main {
     color: var(--ag-ink-soft);
 }
 .ag-hand-note { font: 600 10.5px var(--ag-font); color: var(--ag-ink-soft); }
-.ag-hand-cards { display: flex; gap: 7px; }
+.ag-hand-cards { display: flex; flex-wrap: wrap; gap: 7px; }
 .ag-hand-card {
-    flex: 1;
+    flex: 1 1 60px;
     border-radius: 10px;
     padding: 8px 0;
     text-align: center;
@@ -1431,6 +1431,26 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-hand-card--empty { opacity: 0.45; }
 .ag-hand-emoji { font-size: 17px; line-height: 1.1; }
 .ag-hand-count { font: 800 13px var(--ag-font); }
+
+/* A named card tile (a city or event card, not a counted resource) — the
+   variant every per-player hand and the infection discard pile use (§21.6
+   step 11), sized to its label rather than splitting the row evenly. */
+.ag-hand-card--named {
+    flex: 0 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 9px;
+    max-width: 130px;
+}
+.ag-hand-card-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.ag-hand-card-name {
+    font: 700 10.5px var(--ag-font);
+    color: var(--ag-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 
 /* Dev-card chips shown under the resource hand */
 .ag-hand-devs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }

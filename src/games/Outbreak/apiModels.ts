@@ -14,6 +14,9 @@ export interface IOutbreakPlayerStateResponse {
     hand: number[];
     city: number;
     role: OutbreakRoleId | null;
+    // Contingency Planner only — public for the same reason the hand is
+    // (§2, §21.6 step 10).
+    contingencyCard: number | null;
     actionsLeft: number;
 }
 

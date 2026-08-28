@@ -4,9 +4,10 @@ import ActionButton from '@/components/ui/ActionButton';
 import PendingTag from '@/components/ui/PendingTag';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
 import type { IOutbreakSpecificGameStateResponse } from '@/games/Outbreak/apiModels';
-import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, eventCardName, isCityCardId, MAX_RESEARCH_STATIONS, OutbreakDiseaseColor } from '@/games/Outbreak/board';
+import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, MAX_RESEARCH_STATIONS, OutbreakDiseaseColor, cardColor, cardName, isCityCardId } from '@/games/Outbreak/board';
 import { HAND_LIMIT, OutbreakMoveType, cureCardsRequired, getLegalMoves, opsExpertBuildsFree, stationCityIds } from '@/games/Outbreak/rules';
-import { OutbreakAction, OutbreakDiscard, OutbreakEndTurn } from '@/utils/apiModels/GameLogic';
+import { OutbreakAction, OutbreakDiscard, OutbreakEndTurn, OutbreakPlayEvent } from '@/utils/apiModels/GameLogic';
+import { useResettingState } from '@/utils/hooks/useResettingState';
 
 const MOVE_DEFS: { type: OutbreakMoveType; icon: string; name: string; hint: string }[] = [
     { type: 'drive', icon: '🚗', name: 'Drive / Ferry', hint: 'Move to a connected city' },
@@ -30,6 +31,10 @@ interface OutbreakActionsProps {
 export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode, submitCommand, pendingTarget }: OutbreakActionsProps) {
     const [relocating, setRelocating] = useState(false);
     const [discardChoice, setDiscardChoice] = useState<number[]>([]);
+    // Forecast's ordering step (§12, §21.6 step 11): starts at the drawn order
+    // every time a *new* draw arrives, keyed off the cards themselves rather
+    // than a phase transition, since the phase stays 'forecast' the whole step.
+    const [forecastOrder, setForecastOrder] = useResettingState<number[]>(gs.forecastCards, gs.forecastCards.join(','));
 
     const me = gs.playerStates[myUsername];
     if (!me) return null;
@@ -59,7 +64,6 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
                 <div className="ag-build-list">
                     {me.hand.map(cardId => {
                         const selected = discardChoice.includes(cardId);
-                        const isCity = isCityCardId(cardId);
                         return (
                             <button
                                 key={cardId}
@@ -67,11 +71,11 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
                                 className={`ag-build-row${selected ? ' ag-build-row--active' : ''}`}
                                 onClick={() => toggle(cardId)}
                             >
-                                <span className="ag-icon-box" style={{ background: isCity ? DISEASE_COLOR_DEFS[CITIES[cardId].color].hex : 'var(--ag-purple)' }}>
-                                    {isCity ? '🗺️' : '🃏'}
+                                <span className="ag-icon-box" style={{ background: cardColor(cardId) }}>
+                                    {isCityCardId(cardId) ? '🗺️' : '🃏'}
                                 </span>
                                 <span className="ag-build-main">
-                                    <span className="ag-build-name">{isCity ? CITIES[cardId].name : eventCardName(cardId)}</span>
+                                    <span className="ag-build-name">{cardName(cardId)}</span>
                                 </span>
                                 <span className="ag-build-tag">{selected ? 'Discarding' : 'Keep'}</span>
                             </button>
@@ -91,6 +95,54 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
                     }}
                 >
                     {enough ? `Discard ${discardChoice.length}` : `Pick at least ${mustDiscard}`}
+                </ActionButton>
+            </div>
+        );
+    }
+
+    // ── Forecast's ordering step (§12, §21.6 step 10): blocks everything else
+    //     until the drawn cards go back down in a chosen order (§21.3). ──
+    if (gs.phase === 'forecast') {
+        function move(i: number, dir: -1 | 1) {
+            const j = i + dir;
+            if (j < 0 || j >= forecastOrder.length) return;
+            const next = [...forecastOrder];
+            [next[i], next[j]] = [next[j], next[i]];
+            setForecastOrder(next);
+        }
+
+        return (
+            <div className="ag-actionsheet">
+                <p className="ag-action-hint" style={{ marginTop: 0 }}>
+                    🔮 Forecast — rearrange the top {forecastOrder.length} infection cards, then return them face-down.
+                </p>
+                <div className="ag-build-list">
+                    {forecastOrder.map((cityId, i) => (
+                        <div key={`${cityId}-${i}`} className="ag-build-row">
+                            <span className="ag-icon-box" style={{ background: cardColor(cityId) }}>🗺️</span>
+                            <span className="ag-build-main">
+                                <span className="ag-build-name">{i + 1}. {cardName(cityId)}</span>
+                            </span>
+                            <span style={{ display: 'flex', gap: 4 }}>
+                                <button type="button" className="ag-btn ag-btn--light" style={{ padding: '4px 9px' }} disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Move ${cardName(cityId)} earlier`}>↑</button>
+                                <button type="button" className="ag-btn ag-btn--light" style={{ padding: '4px 9px' }} disabled={i === forecastOrder.length - 1} onClick={() => move(i, 1)} aria-label={`Move ${cardName(cityId)} later`}>↓</button>
+                            </span>
+                        </div>
+                    ))}
+                </div>
+                <ActionButton
+                    className="ag-btn ag-btn--primary ag-btn--block"
+                    style={{ marginTop: 10 }}
+                    pending={pendingTarget === 'forecastOrder'}
+                    pendingLabel="Confirming…"
+                    onClick={() => {
+                        const cmd = new OutbreakPlayEvent();
+                        cmd.kind = 'forecastOrder';
+                        cmd.cardIds = forecastOrder;
+                        submitCommand(cmd, undefined, 'forecastOrder');
+                    }}
+                >
+                    Confirm order
                 </ActionButton>
             </div>
         );

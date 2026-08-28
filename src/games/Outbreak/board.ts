@@ -271,6 +271,21 @@ export function eventCardName(cardId: number): string {
     return EVENT_CARDS.find(c => c.id === cardId)?.name ?? 'Unknown event';
 }
 
+// Shared by every screen that renders a bare hand-card id — the discard
+// picker (§21.6 step 6), and the hand panel and event tray of step 11 — so
+// the city-card-or-event-card ternary lives in one place rather than being
+// re-typed at each call site.
+
+/** Human-readable label for any hand-card id: a city name, or an event's name. */
+export function cardName(cardId: number): string {
+    return isCityCardId(cardId) ? CITIES[cardId].name : eventCardName(cardId);
+}
+
+/** The colour swatch for a hand-card tile: its home region's colour for a city card, purple for an event. */
+export function cardColor(cardId: number): string {
+    return isCityCardId(cardId) ? DISEASE_COLOR_DEFS[CITIES[cardId].color].hex : 'var(--ag-purple)';
+}
+
 // ─── Roles (§11, §21.6 step 9) ──────────────────────────────────────────────
 // Static reference data only — dealt in OutbreakModels.buildInitialOutbreakState
 // and expressed as small pure exceptions to the base rules in rules.ts, rather
@@ -304,6 +319,10 @@ export const ROLES: OutbreakRoleDef[] = [
     { id: 'quarantineSpecialist', name: 'Quarantine Specialist', ability: 'Prevents all cube placement and outbreaks in her city and every adjacent city.' },
     { id: 'contingencyPlanner', name: 'Contingency Planner', ability: 'Recovers a discarded event card for later use (§21.6 step 10).' },
 ];
+
+export function roleDef(roleId: OutbreakRoleId | null): OutbreakRoleDef | null {
+    return roleId ? ROLES.find(r => r.id === roleId) ?? null : null;
+}
 
 // ─── Shared state vocabulary ────────────────────────────────────────────────
 // Here (rather than in OutbreakModels.ts) so apiModels.ts can import it
