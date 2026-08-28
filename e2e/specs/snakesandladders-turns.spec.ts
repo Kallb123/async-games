@@ -30,9 +30,18 @@ function rollButton(page: Page) {
 // The recap screen replaces the board entirely while it's showing (real
 // behaviour: "since you were last here, this happened"), so a reload that
 // lands on it needs dismissing before the actual roll button exists in the
-// DOM at all.
+// DOM at all. The recap is fetched independently of the game data
+// (useTurnRecap's own /api/game/[gameid]/recap call), so a single isVisible()
+// check right after reload can run before it's decided whether to show at
+// all — races both outcomes (the CTA appearing, or the real button appearing
+// directly because there was nothing to recap) instead of guessing which
+// wins by checking once too early.
 async function dismissRecapIfShown(page: Page): Promise<void> {
   const cta = page.locator('button.ag-recap-cta');
+  await Promise.race([
+    cta.waitFor({ state: 'visible' }),
+    rollButton(page).waitFor({ state: 'visible' }),
+  ]).catch(() => {});
   if (await cta.isVisible().catch(() => false)) {
     await cta.click();
   }
