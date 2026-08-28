@@ -950,6 +950,33 @@ surface being debugged. The Medic's free removal on entry and the Quarantine
 Specialist's suppression are the two that reach outside their own command and
 deserve their own tests.
 
+*Landed.* `board.ts` carries the static `ROLES` table (id, name, ability
+text); `rules.ts` deals them (`dealRoles`, a straight shuffle-and-slice of all
+seven) and holds every role's rule bend as a small pure predicate —
+`treatDiseaseRemovalCount`, `medicAutoClearColors`, `isProtectedByQuarantine`,
+`opsExpertBuildsFree`, `shareKnowledgeCardMatchRequired`,
+`dispatcherCanControlOthers` — so `OutbreakLogic.ts`'s `Execute` methods call
+into them rather than branching on `role` inline. Two roles reach outside
+their own command, as called out above: the Medic's automatic clear is a
+shared helper invoked from movement (`applyMove`, `applyDispatcherRelocate`,
+`applyOpsExpertFlight`) and from `applyPlacementResult`/`applyCure`, so it
+fires equally on her own move, a Dispatcher-driven move, or a cube landing on
+a colour already cured while she stands there; the Quarantine Specialist's
+protection is threaded through `placeCubeOrOutbreak` and
+`placeEpidemicCubesOrOutbreak` as an `isProtected` predicate, so a chain
+reaction simply cannot continue past a protected city. The Dispatcher and
+Operations Expert each needed one new `OutbreakActionKind`
+(`dispatcherRelocate`, `opsExpertFlight`) and `OutbreakAction` gained two
+fields shared across roles (`cardId` for Share Knowledge/the Ops Expert
+flight; `targetUserId` on movement kinds for the Dispatcher) rather than one
+field per ability. The Operations Expert's once-per-turn flight is tracked by
+a new `opsExpertFlightUsed` per-player flag that refills alongside
+`actionsLeft`. The Contingency Planner is dealt but inert — her retrieval
+ability has nothing to retrieve until event cards exist (step 10). Tests
+cover every role's rule bend in `rules.test.ts`, plus full command-level
+coverage in `OutbreakLogic.test.ts` — the Medic and Quarantine Specialist get
+the deepest coverage, including the cross-command cases above.
+
 **10 — Event cards.** The five of §12 through `OutbreakPlayEvent`, including
 Forecast's ordering step and the Contingency Planner's retrieval (which is why
 this follows roles). Own-turn-only, per 21.3.

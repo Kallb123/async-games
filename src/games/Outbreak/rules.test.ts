@@ -1,18 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { ADJACENCY, CITIES, EPIDEMIC_CARD_ID } from "./board";
+import { ADJACENCY, CITIES, EPIDEMIC_CARD_ID, ROLES } from "./board";
 import {
     buildEpidemicDeck,
     canDiscoverCure,
     cureCardsRequired,
+    dealRoles,
+    dispatcherCanControlOthers,
     emptyBoardCubes,
     getLegalMoves,
     infectionRateFor,
     isCubeExhaustionLoss,
     isOutbreakCascadeLoss,
     isPlayerDeckEmptyLoss,
+    isProtectedByQuarantine,
+    medicAutoClearColors,
+    opsExpertBuildsFree,
     placeCubeOrOutbreak,
     placeEpidemicCubesOrOutbreak,
+    shareKnowledgeCardMatchRequired,
     stationCityIds,
+    treatDiseaseRemovalCount,
     CUBES_PER_CITY_LIMIT,
     INFECTION_RATE_TRACK,
     OUTBREAK_LOSS_THRESHOLD,
@@ -252,5 +259,139 @@ describe("infectionRateFor (§9.1)", () => {
     it("clamps to the final rate past the end of the track", () => {
         expect(infectionRateFor(INFECTION_RATE_TRACK.length)).toBe(4);
         expect(infectionRateFor(99)).toBe(4);
+    });
+});
+
+// ─── Roles (§11, §21.6 step 9) ─────────────────────────────────────────────
+
+describe("dealRoles", () => {
+    it("deals one of the seven roles to every seat, with no repeats", () => {
+        const turnOrder = ["u1", "u2", "u3", "u4"];
+        const assignment = dealRoles(turnOrder);
+
+        expect(assignment.size).toBe(turnOrder.length);
+        const dealt = turnOrder.map(userId => assignment.get(userId));
+        expect(dealt.every(role => role !== undefined)).toBe(true);
+        expect(new Set(dealt).size).toBe(turnOrder.length); // no repeats
+        expect(dealt.every(role => ROLES.some(r => r.id === role))).toBe(true);
+    });
+
+    it("deals no more roles than there are seats, out of all seven", () => {
+        const assignment = dealRoles(["u1", "u2"]);
+        expect(assignment.size).toBe(2);
+        expect(ROLES.length).toBe(7);
+    });
+});
+
+describe("treatDiseaseRemovalCount (§11 Medic)", () => {
+    it("removes only 1 cube of an uncured colour for every non-Medic role", () => {
+        expect(treatDiseaseRemovalCount(false, 3, null)).toBe(1);
+        expect(treatDiseaseRemovalCount(false, 3, 'scientist')).toBe(1);
+    });
+
+    it("removes every cube of a cured colour regardless of role", () => {
+        expect(treatDiseaseRemovalCount(true, 3, null)).toBe(3);
+    });
+
+    it("removes every cube in one action for the Medic, cured or not", () => {
+        expect(treatDiseaseRemovalCount(false, 3, 'medic')).toBe(3);
+        expect(treatDiseaseRemovalCount(true, 3, 'medic')).toBe(3);
+    });
+});
+
+describe("medicAutoClearColors (§11, §16 Medic)", () => {
+    const cures = { blue: 'cured', yellow: 'none', black: 'eradicated', red: 'none' } as const;
+    const cubes = { blue: 2, yellow: 1, black: 0, red: 0 };
+
+    it("qualifies every cured colour with cubes present, for the Medic only", () => {
+        expect(medicAutoClearColors('medic', cubes, cures).sort()).toEqual(['blue']);
+    });
+
+    it("never qualifies anything for any other role", () => {
+        expect(medicAutoClearColors(null, cubes, cures)).toEqual([]);
+        expect(medicAutoClearColors('scientist', cubes, cures)).toEqual([]);
+    });
+
+    it("does not qualify an uncured colour even with cubes present", () => {
+        expect(medicAutoClearColors('medic', { blue: 0, yellow: 3, black: 0, red: 0 }, cures)).toEqual([]);
+    });
+});
+
+describe("isProtectedByQuarantine (§11, §16 Quarantine Specialist)", () => {
+    it("is never protected when no one holds the role", () => {
+        expect(isProtectedByQuarantine(null, idFor("Atlanta"))).toBe(false);
+    });
+
+    it("protects her own city and every adjacent city", () => {
+        const atlanta = idFor("Atlanta");
+        expect(isProtectedByQuarantine(atlanta, atlanta)).toBe(true);
+        for (const neighbor of ADJACENCY[atlanta]) {
+            expect(isProtectedByQuarantine(atlanta, neighbor)).toBe(true);
+        }
+    });
+
+    it("does not protect a city that isn't hers or adjacent to it", () => {
+        expect(isProtectedByQuarantine(idFor("Atlanta"), idFor("Tokyo"))).toBe(false);
+    });
+});
+
+describe("placeCubeOrOutbreak / placeEpidemicCubesOrOutbreak with isProtected (§11, §16)", () => {
+    it("places nothing and triggers no outbreak in a protected city", () => {
+        const cubes = emptyBoardCubes();
+        const atlanta = idFor("Atlanta");
+        cubes[atlanta].blue = CUBES_PER_CITY_LIMIT;
+
+        const result = placeCubeOrOutbreak(cubes, atlanta, "blue", new Set(), undefined, id => id === atlanta);
+
+        expect(result.outbreaks).toBe(0);
+        expect(result.cubes[atlanta].blue).toBe(CUBES_PER_CITY_LIMIT);
+        for (const neighbor of ADJACENCY[atlanta]) {
+            expect(result.cubes[neighbor].blue).toBe(0);
+        }
+    });
+
+    it("stops a chain from spreading further once it reaches a protected city", () => {
+        const cubes = emptyBoardCubes();
+        const chicago = idFor("Chicago");
+        const atlanta = idFor("Atlanta"); // adjacent to Chicago
+        cubes[chicago].blue = CUBES_PER_CITY_LIMIT;
+
+        // Atlanta is protected: the outbreak from Chicago must not place a
+        // cube there, and therefore cannot cascade past it either.
+        const result = placeCubeOrOutbreak(cubes, chicago, "blue", new Set(), undefined, id => id === atlanta);
+
+        expect(result.outbreaks).toBe(1);
+        expect(result.outbrokenCities).toEqual([chicago]);
+        expect(result.cubes[atlanta].blue).toBe(0);
+    });
+
+    it("blocks an epidemic's Infect step in a protected city entirely", () => {
+        const cubes = emptyBoardCubes();
+        const chicago = idFor("Chicago");
+
+        const result = placeEpidemicCubesOrOutbreak(cubes, chicago, "blue", undefined, id => id === chicago);
+
+        expect(result.outbreaks).toBe(0);
+        expect(result.cubes[chicago].blue).toBe(0);
+        expect(result.cubeExhausted).toBe(false);
+    });
+});
+
+describe("opsExpertBuildsFree / shareKnowledgeCardMatchRequired / dispatcherCanControlOthers (§11)", () => {
+    it("only the Operations Expert builds stations for free", () => {
+        expect(opsExpertBuildsFree('opsExpert')).toBe(true);
+        expect(opsExpertBuildsFree(null)).toBe(false);
+        expect(opsExpertBuildsFree('medic')).toBe(false);
+    });
+
+    it("only a card leaving the Researcher's own hand is exempt from matching the city", () => {
+        expect(shareKnowledgeCardMatchRequired('researcher')).toBe(false);
+        expect(shareKnowledgeCardMatchRequired(null)).toBe(true);
+        expect(shareKnowledgeCardMatchRequired('medic')).toBe(true);
+    });
+
+    it("only the Dispatcher may act on another player's pawn", () => {
+        expect(dispatcherCanControlOthers('dispatcher')).toBe(true);
+        expect(dispatcherCanControlOthers(null)).toBe(false);
     });
 });

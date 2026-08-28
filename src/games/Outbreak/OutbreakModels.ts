@@ -21,12 +21,14 @@ import {
     OutbreakDifficulty,
     OutbreakDiseaseColor,
     OutbreakPhase,
+    OutbreakRoleId,
 } from "./board";
 import {
     ACTIONS_PER_TURN,
     CUBES_PER_COLOR,
     OutbreakCubeCounts,
     buildEpidemicDeck,
+    dealRoles,
     emptyCubeCounts,
     placeCubeOrOutbreak,
     startingHandSize,
@@ -120,13 +122,18 @@ export interface IOutbreakPlayerState {
     // "shared table, shared brain" pillar).
     hand: number[];
     city: number;
-    // Dealt in §21.6 step 9; null until roles exist.
-    role: string | null;
+    // Dealt in buildInitialOutbreakState via rules.ts's dealRoles (§21.6 step 9).
+    role: OutbreakRoleId | null;
     contingencyCard: number | null;
     // Refills at the *start* of this player's own turn, not the end of the
     // previous one (docs/games/outbreak-gdd.md §21.4 — the crew planner
     // needs this to cross from one player's actions to the next).
     actionsLeft: number;
+    // Operations Expert (§11): her once-per-turn station-to-anywhere flight.
+    // Resets alongside actionsLeft at the start of her own turn. Meaningless
+    // for every other role, but kept unconditional like the rest of this
+    // state rather than made optional for one role.
+    opsExpertFlightUsed: boolean;
 }
 
 export interface IOutbreakSpecificGameState {
@@ -159,6 +166,7 @@ function clonePlayerState(ps: IOutbreakPlayerState): IOutbreakPlayerState {
         role: ps.role,
         contingencyCard: ps.contingencyCard,
         actionsLeft: ps.actionsLeft,
+        opsExpertFlightUsed: ps.opsExpertFlightUsed,
     };
 }
 
@@ -197,8 +205,9 @@ export function cloneOutbreakState(
 // starting hands dealt from it before anything else touches it.
 //
 // The epidemic piles of §6 step 7 are built below, keyed off the difficulty
-// dial (§13). Roles are *not* built here — they land in §21.6 step 9,
-// alongside the commands that first need them.
+// dial (§13). Roles (§6 step 5, §11) are dealt alongside starting hands: all
+// seven shuffled and the first N — one per seat — assigned, exactly as the
+// physical deal would work with more players than roles.
 export function buildInitialOutbreakState(turnOrder: string[], difficulty: OutbreakDifficulty): IOutbreakSpecificGameState {
     const cities: IOutbreakCityState[] = Array.from({ length: CITY_COUNT }, () => ({ cubes: emptyCubeCounts(), station: false }));
     cities[ATLANTA_CITY_ID].station = true;
@@ -229,10 +238,18 @@ export function buildInitialOutbreakState(turnOrder: string[], difficulty: Outbr
     // 7, the epidemic piles below are even built.
     const cityDeck = shuffle(Array.from({ length: CITY_COUNT }, (_, id) => id));
     const handSize = startingHandSize(turnOrder.length);
+    const roles = dealRoles(turnOrder);
     const players = new Map<string, IOutbreakPlayerState>();
     for (const userId of turnOrder) {
         const hand = cityDeck.splice(0, handSize);
-        players.set(userId, { hand, city: ATLANTA_CITY_ID, role: null, contingencyCard: null, actionsLeft: ACTIONS_PER_TURN });
+        players.set(userId, {
+            hand,
+            city: ATLANTA_CITY_ID,
+            role: roles.get(userId) ?? null,
+            contingencyCard: null,
+            actionsLeft: ACTIONS_PER_TURN,
+            opsExpertFlightUsed: false,
+        });
     }
 
     // §6 step 7, §13: divide what's left into one equal-ish pile per epidemic
@@ -298,6 +315,7 @@ function makeOutbreakStateSchemaDef() {
                 role: { type: String, default: null },
                 contingencyCard: { type: Number, default: null },
                 actionsLeft: Number,
+                opsExpertFlightUsed: { type: Boolean, default: false },
             },
         },
         phase: String,

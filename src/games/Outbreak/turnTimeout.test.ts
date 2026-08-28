@@ -26,7 +26,14 @@ function baseState(turnOrder: string[]): IOutbreakSpecificGameState {
 
     const players = new Map<string, IOutbreakPlayerState>();
     for (const userId of turnOrder) {
-        players.set(userId, { hand: [], city: ATLANTA_CITY_ID, role: null, contingencyCard: null, actionsLeft: ACTIONS_PER_TURN });
+        players.set(userId, {
+            hand: [],
+            city: ATLANTA_CITY_ID,
+            role: null,
+            contingencyCard: null,
+            actionsLeft: ACTIONS_PER_TURN,
+            opsExpertFlightUsed: false,
+        });
     }
 
     return {

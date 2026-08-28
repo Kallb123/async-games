@@ -22,13 +22,19 @@ import {
     OutbreakMoveType,
     canDiscoverCure,
     cureCardsRequired,
+    dispatcherCanControlOthers,
     getLegalMoves,
     infectionRateFor,
     isOutbreakCascadeLoss,
     isPlayerDeckEmptyLoss,
+    isProtectedByQuarantine,
+    medicAutoClearColors,
+    opsExpertBuildsFree,
     placeCubeOrOutbreak,
     placeEpidemicCubesOrOutbreak,
+    shareKnowledgeCardMatchRequired,
     stationCityIds,
+    treatDiseaseRemovalCount,
 } from "@/games/Outbreak/rules";
 import { shuffle } from "@/utils/games/shuffle";
 
@@ -61,55 +67,172 @@ const MOVE_VERB: Record<OutbreakMoveType, string> = {
     shuttleFlight: 'took a shuttle',
 };
 
+// Removes `count` cubes of `color` from `cityId`, restocks the supply, and
+// runs the eradication check (§8.3) that both Treat Disease and the Medic's
+// automatic clearing share — the one place that decrements a city's cubes.
+function removeCubes(gs: IOutbreakSpecificGameState, cityId: number, color: OutbreakDiseaseColor, count: number): void {
+    gs.cities[cityId].cubes[color] -= count;
+    gs.cubesLeft[color] += count;
+    if (gs.cures[color] === 'cured' && gs.cubesLeft[color] === CUBES_PER_COLOR) {
+        gs.cures[color] = 'eradicated';
+    }
+}
+
+// On entry: checks every colour cured at `ps`'s (new) city at once, since a
+// single move can walk her into a city carrying more than one cured colour.
+// Called from applyMove, applyDispatcherRelocate and applyOpsExpertFlight,
+// whoever ends up moving her — rules.ts only decides *which* colours qualify
+// (medicAutoClearColors).
+function applyMedicAutoClearOnEntry(gs: IOutbreakSpecificGameState, ps: IOutbreakPlayerState): string | null {
+    const colors = medicAutoClearColors(ps.role, gs.cities[ps.city].cubes, gs.cures);
+    if (colors.length === 0) return null;
+    for (const color of colors) removeCubes(gs, ps.city, color, gs.cities[ps.city].cubes[color]);
+    return `the Medic automatically clears ${colors.map(c => DISEASE_COLOR_DEFS[c].name).join(', ')} from ${CITIES[ps.city].name}`;
+}
+
+// Appends applyMedicAutoClearOnEntry's note to `base`, if any — the common
+// tail of every command that can move her pawn (applyMove,
+// applyDispatcherRelocate, applyOpsExpertFlight).
+function withMedicNote(gs: IOutbreakSpecificGameState, ps: IOutbreakPlayerState, base: string): string {
+    const medicNote = applyMedicAutoClearOnEntry(gs, ps);
+    return medicNote ? `${base} — ${medicNote}` : base;
+}
+
+// Stationary sweep: `color` just became cured (applyCure) or was just placed
+// on the board while already cured (applyPlacementResult) — either way, any
+// Medic already standing in a city holding it clears it on the spot.
+function applyMedicAutoClearForColor(gs: IOutbreakSpecificGameState, color: OutbreakDiseaseColor): string[] {
+    if (gs.cures[color] === 'none') return [];
+    const notes: string[] = [];
+    for (const ps of gs.players.values()) {
+        if (medicAutoClearColors(ps.role, gs.cities[ps.city].cubes, gs.cures).includes(color)) {
+            removeCubes(gs, ps.city, color, gs.cities[ps.city].cubes[color]);
+            notes.push(`the Medic automatically clears ${DISEASE_COLOR_DEFS[color].name} from ${CITIES[ps.city].name}`);
+        }
+    }
+    return notes;
+}
+
+// Quarantine Specialist (§11, §16): at most one player holds this role, so
+// her current city (or null if nobody does) is all placeCubeOrOutbreak and
+// placeEpidemicCubesOrOutbreak need to know. Returns the predicate directly,
+// since both of resolveInfectPhase and resolveEpidemic want the same wrapping.
+function quarantinePredicate(gs: IOutbreakSpecificGameState): (cityId: number) => boolean {
+    let city: number | null = null;
+    for (const ps of gs.players.values()) {
+        if (ps.role === 'quarantineSpecialist') { city = ps.city; break; }
+    }
+    return cityId => isProtectedByQuarantine(city, cityId);
+}
+
 // Drive/Ferry, Direct Flight, Charter Flight and Shuttle Flight (§8.1) all
 // reduce to "is this among the legal moves rules.ts already computes for the
 // client's action picker" — reusing getLegalMoves rather than re-deriving
 // adjacency, hand and research-station eligibility a second time here.
+//
+// `actingPs` and `movingPs` differ only for the Dispatcher (§11): she pays
+// with her own actions and hand while another player's pawn is the one that
+// actually moves — legality (adjacency, the destination card, the station
+// network) is computed against the *mover's* city, but any discard comes out
+// of the *actor's* hand.
 function applyMove(
     gs: IOutbreakSpecificGameState,
-    ps: IOutbreakPlayerState,
+    actingPs: IOutbreakPlayerState,
+    movingPs: IOutbreakPlayerState,
     moveType: OutbreakMoveType,
     destination: number,
 ): string | null {
-    const legal = getLegalMoves({ currentCity: ps.city, hand: ps.hand, researchStations: stationCityIds(gs.cities) });
+    const legal = getLegalMoves({ currentCity: movingPs.city, hand: actingPs.hand, researchStations: stationCityIds(gs.cities) });
     const move = legal.find(m => m.type === moveType && m.destination === destination);
     if (!move) return null;
 
-    const fromName = CITIES[ps.city].name;
+    const fromName = CITIES[movingPs.city].name;
     if (move.discardCityId !== undefined) {
-        ps.hand.splice(ps.hand.indexOf(move.discardCityId), 1);
+        actingPs.hand.splice(actingPs.hand.indexOf(move.discardCityId), 1);
         gs.playerDiscard.push(move.discardCityId);
     }
-    ps.city = destination;
+    movingPs.city = destination;
 
-    return `${MOVE_VERB[moveType]} from ${fromName} to ${CITIES[destination].name}`;
+    const verb = actingPs === movingPs ? MOVE_VERB[moveType] : `dispatched a teammate's pawn (${MOVE_VERB[moveType]})`;
+    return withMedicNote(gs, movingPs, `${verb} from ${fromName} to ${CITIES[destination].name}`);
 }
 
-// Build a Research Station (§8.2): discard the card matching the current
-// city; relocate an existing station when all six are already placed.
+// Dispatcher (§11), second half: move any pawn — including her own — to a
+// city already occupied by another pawn. No card, no adjacency requirement;
+// just 1 action.
+function applyDispatcherRelocate(
+    gs: IOutbreakSpecificGameState,
+    ps: IOutbreakPlayerState,
+    targetUserId: string | null,
+    destination: number,
+): string | null {
+    if (!dispatcherCanControlOthers(ps.role)) return null;
+    if (!targetUserId) return null;
+    const target = gs.players.get(targetUserId);
+    if (!target || destination === target.city) return null;
+    const occupied = [...gs.players.values()].some(p => p !== target && p.city === destination);
+    if (!occupied) return null;
+
+    const fromName = CITIES[target.city].name;
+    target.city = destination;
+    return withMedicNote(gs, target, `dispatched a teammate's pawn from ${fromName} to ${CITIES[destination].name}`);
+}
+
+// Operations Expert (§11), second half: once per turn, fly from a research
+// station to any city by discarding any city card — Charter Flight without
+// the "must match your current city" constraint, and without needing the
+// destination to be a station too.
+function applyOpsExpertFlight(
+    gs: IOutbreakSpecificGameState,
+    ps: IOutbreakPlayerState,
+    destination: number,
+    cardId: number | null,
+): string | null {
+    if (ps.role !== 'opsExpert') return null;
+    if (ps.opsExpertFlightUsed) return null;
+    if (!gs.cities[ps.city].station) return null;
+    if (cardId === null || destination === ps.city || !ps.hand.includes(cardId)) return null;
+
+    ps.hand.splice(ps.hand.indexOf(cardId), 1);
+    gs.playerDiscard.push(cardId);
+    const fromName = CITIES[ps.city].name;
+    ps.city = destination;
+    ps.opsExpertFlightUsed = true;
+
+    return withMedicNote(gs, ps, `flew from the research station in ${fromName} to ${CITIES[destination].name}`);
+}
+
+// Build a Research Station (§8.2, §11 Operations Expert): discard the card
+// matching the current city; relocate an existing station when all six are
+// already placed. The Operations Expert waives the discard entirely.
 function applyBuildStation(gs: IOutbreakSpecificGameState, ps: IOutbreakPlayerState, relocateFrom: number | null): string | null {
     const cityId = ps.city;
     if (gs.cities[cityId].station) return null;
+    const free = opsExpertBuildsFree(ps.role);
     const cardIdx = ps.hand.indexOf(cityId);
-    if (cardIdx === -1) return null;
+    if (!free && cardIdx === -1) return null;
 
     if (stationCityIds(gs.cities).length >= MAX_RESEARCH_STATIONS) {
         if (relocateFrom === null || relocateFrom === cityId || !gs.cities[relocateFrom]?.station) return null;
         gs.cities[relocateFrom].station = false;
     }
 
-    ps.hand.splice(cardIdx, 1);
-    gs.playerDiscard.push(cityId);
+    if (!free) {
+        ps.hand.splice(cardIdx, 1);
+        gs.playerDiscard.push(cityId);
+    }
     gs.cities[cityId].station = true;
 
+    const suffix = free ? ' for free' : '';
     return relocateFrom !== null
-        ? `built a research station in ${CITIES[cityId].name}, relocated from ${CITIES[relocateFrom].name}`
-        : `built a research station in ${CITIES[cityId].name}`;
+        ? `built a research station in ${CITIES[cityId].name}${suffix}, relocated from ${CITIES[relocateFrom].name}`
+        : `built a research station in ${CITIES[cityId].name}${suffix}`;
 }
 
-// Treat Disease (§8.2): remove 1 cube of a colour present in the current
-// city, or — once that disease is cured — all of them in one action.
-// Eradication (§8.3) follows immediately if that empties the board.
+// Treat Disease (§8.2, §11 Medic): remove 1 cube of a colour present in the
+// current city, or — once that disease is cured, or for the Medic always —
+// all of them in one action. Eradication (§8.3) follows immediately if that
+// empties the board.
 function applyTreatDisease(gs: IOutbreakSpecificGameState, ps: IOutbreakPlayerState, color: OutbreakDiseaseColor | null): string | null {
     if (!color) return null;
     const city = gs.cities[ps.city];
@@ -117,68 +240,74 @@ function applyTreatDisease(gs: IOutbreakSpecificGameState, ps: IOutbreakPlayerSt
     if (present <= 0) return null;
 
     const cured = gs.cures[color] !== 'none';
-    const removed = cured ? present : 1;
-    city.cubes[color] -= removed;
-    gs.cubesLeft[color] += removed;
-    if (gs.cures[color] === 'cured' && gs.cubesLeft[color] === CUBES_PER_COLOR) {
-        gs.cures[color] = 'eradicated';
-    }
+    const removed = treatDiseaseRemovalCount(cured, present, ps.role);
+    removeCubes(gs, ps.city, color, removed);
 
     const colorName = DISEASE_COLOR_DEFS[color].name;
-    return cured
-        ? `cleared the last of ${colorName} from ${CITIES[ps.city].name}`
+    if (cured) return `cleared the last of ${colorName} from ${CITIES[ps.city].name}`;
+    return removed > 1
+        ? `cleared all ${removed} ${colorName} cubes from ${CITIES[ps.city].name}`
         : `treated a ${colorName} cube in ${CITIES[ps.city].name}`;
 }
 
-// Share Knowledge (§8.2): both players must be in the same city, and the card
-// that moves must match it. Only the acting player's action is spent — the
-// card may travel either direction between them.
+// Share Knowledge (§8.2, §11 Researcher): both players must be in the same
+// city, and the card that moves must match it — unless it's leaving the
+// Researcher's own hand (given by her, or taken from her), in which case any
+// city card she holds qualifies. Only the acting player's action is spent —
+// the card may travel either direction between them. `cardId` defaults to
+// the shared city's own card, i.e. exactly the base rule, when omitted.
 function applyShareKnowledge(
     gs: IOutbreakSpecificGameState,
     senderId: string,
     ps: IOutbreakPlayerState,
     targetUserId: string | null,
     direction: 'give' | 'take' | null,
+    cardId: number | null,
 ): string | null {
     if (!targetUserId || !direction || targetUserId === senderId) return null;
     const target = gs.players.get(targetUserId);
     if (!target || target.city !== ps.city) return null;
 
-    const cardId = ps.city;
-    const cityName = CITIES[cardId].name;
+    const giver = direction === 'give' ? ps : target;
+    const receiver = direction === 'give' ? target : ps;
+    const chosenCardId = cardId ?? ps.city;
+    if (shareKnowledgeCardMatchRequired(giver.role) && chosenCardId !== ps.city) return null;
 
-    if (direction === 'give') {
-        const idx = ps.hand.indexOf(cardId);
-        if (idx === -1) return null;
-        ps.hand.splice(idx, 1);
-        target.hand.push(cardId);
-        return `shared the ${cityName} card with a teammate`;
-    }
-
-    const idx = target.hand.indexOf(cardId);
+    const idx = giver.hand.indexOf(chosenCardId);
     if (idx === -1) return null;
-    target.hand.splice(idx, 1);
-    ps.hand.push(cardId);
-    return `took the ${cityName} card from a teammate`;
+    giver.hand.splice(idx, 1);
+    receiver.hand.push(chosenCardId);
+
+    const cityName = CITIES[chosenCardId].name;
+    return direction === 'give'
+        ? `shared the ${cityName} card with a teammate`
+        : `took the ${cityName} card from a teammate`;
 }
 
-// Discover a Cure (§8.2): at a research station, discard exactly
-// cureCardsRequired() cards of one colour. Eradication (§8.3) follows
-// immediately if that colour already has zero cubes on the board.
+// Discover a Cure (§8.2, §11 Scientist): at a research station, discard
+// exactly cureCardsRequired() cards of one colour — 4 rather than 5 for the
+// Scientist. Eradication (§8.3) follows immediately if that colour already
+// has zero cubes on the board. A Medic already standing in a city holding
+// this colour clears it on the spot (§11, §16) — the same sweep a later
+// infect-phase placement of an already-cured colour triggers.
 function applyCure(gs: IOutbreakSpecificGameState, ps: IOutbreakPlayerState, color: OutbreakDiseaseColor | null, cardIds: number[]): string | null {
     if (!color || gs.cures[color] !== 'none') return null;
 
+    const isScientist = ps.role === 'scientist';
     const chosen = [...new Set(cardIds)];
-    const required = cureCardsRequired();
+    const required = cureCardsRequired(isScientist);
     if (chosen.length !== required) return null;
     if (!chosen.every(id => CITIES[id]?.color === color && ps.hand.includes(id))) return null;
-    if (!canDiscoverCure({ atResearchStation: gs.cities[ps.city].station, handColorCount: chosen.length })) return null;
+    if (!canDiscoverCure({ atResearchStation: gs.cities[ps.city].station, handColorCount: chosen.length, isScientist })) return null;
 
     for (const id of chosen) ps.hand.splice(ps.hand.indexOf(id), 1);
     gs.playerDiscard.push(...chosen);
     gs.cures[color] = gs.cubesLeft[color] === CUBES_PER_COLOR ? 'eradicated' : 'cured';
 
-    return `discovered the cure for ${DISEASE_COLOR_DEFS[color].name} disease`;
+    let historyLine = `discovered the cure for ${DISEASE_COLOR_DEFS[color].name} disease`;
+    const medicNotes = applyMedicAutoClearForColor(gs, color);
+    if (medicNotes.length > 0) historyLine += ` — ${medicNotes.join('; ')}`;
+    return historyLine;
 }
 
 // ─── Game type ──────────────────────────────────────────────────────────────
@@ -200,9 +329,13 @@ export class OutbreakGameType implements IGameType {
         outbreakData.currentTurn = next;
 
         // actionsLeft refills at the *start* of the new current player's turn,
-        // not the end of the previous one — see IOutbreakPlayerState.
+        // not the end of the previous one — see IOutbreakPlayerState. Her
+        // once-per-turn Operations Expert flight (§11) resets the same way.
         const nextPs = playerState(outbreakData.specificGameState, next);
-        if (nextPs) nextPs.actionsLeft = ACTIONS_PER_TURN;
+        if (nextPs) {
+            nextPs.actionsLeft = ACTIONS_PER_TURN;
+            nextPs.opsExpertFlightUsed = false;
+        }
     }
 
     CheckGameOver(gameData: IGameData): boolean {
@@ -235,7 +368,17 @@ export class OutbreakGameType implements IGameType {
 
 // ─── OutbreakAction ─────────────────────────────────────────────────────────
 
-export type OutbreakActionKind = OutbreakMoveType | 'buildStation' | 'treatDisease' | 'shareKnowledge' | 'cure' | 'pass';
+export type OutbreakActionKind =
+    | OutbreakMoveType
+    | 'buildStation'
+    | 'treatDisease'
+    | 'shareKnowledge'
+    | 'cure'
+    | 'pass'
+    // Dispatcher (§11): move any pawn to a city already occupied by another.
+    | 'dispatcherRelocate'
+    // Operations Expert (§11): the once-per-turn station-to-anywhere flight.
+    | 'opsExpertFlight';
 
 @serializable
 export class OutbreakAction implements IGameCommand {
@@ -245,16 +388,27 @@ export class OutbreakAction implements IGameCommand {
     senderId: string = 'Unknown';
     senderUsername: string = 'Unknown';
     kind: OutbreakActionKind = 'pass';
-    /** Movement kinds: the city to move to. */
+    /** Movement kinds / dispatcherRelocate: the city to move to. */
     destination: number = -1;
     /** buildStation: which existing station to relocate, once all six are placed. */
     relocateFrom: number | null = null;
     /** treatDisease / cure: which disease colour. */
     color: OutbreakDiseaseColor | null = null;
-    /** shareKnowledge: the other player the city card moves to/from. */
+    /**
+     * shareKnowledge: the other player the city card moves to/from.
+     * Movement kinds: a Dispatcher (§11) may set this to move that player's
+     * pawn instead of her own, discarding from her own hand.
+     * dispatcherRelocate: the player whose pawn is relocated.
+     */
     targetUserId: string | null = null;
     /** shareKnowledge: 'give' moves the card from the sender to the target; 'take' the reverse. */
     direction: 'give' | 'take' | null = null;
+    /**
+     * shareKnowledge: which card moves — omit for the shared city's own card
+     * (the base rule); a Researcher (§11) may name any card in the hand it
+     * leaves. opsExpertFlight: the city card discarded to make the flight.
+     */
+    cardId: number | null = null;
     /** cure: exactly cureCardsRequired() city-card ids of `color`, discarded to pay for it. */
     cardIds: number[] = [];
     readonly className = 'OutbreakAction';
@@ -275,8 +429,22 @@ export class OutbreakAction implements IGameCommand {
             case 'drive':
             case 'directFlight':
             case 'charterFlight':
-            case 'shuttleFlight':
-                historyLine = applyMove(gs, ps, this.kind, this.destination);
+            case 'shuttleFlight': {
+                // Dispatcher (§11): targetUserId, if set, names whose pawn
+                // moves — the sender still pays with her own actions and hand.
+                const movingPs = this.targetUserId ? playerState(gs, this.targetUserId) : ps;
+                if (!movingPs || (movingPs !== ps && !dispatcherCanControlOthers(ps.role))) {
+                    historyLine = null;
+                } else {
+                    historyLine = applyMove(gs, ps, movingPs, this.kind, this.destination);
+                }
+                break;
+            }
+            case 'dispatcherRelocate':
+                historyLine = applyDispatcherRelocate(gs, ps, this.targetUserId, this.destination);
+                break;
+            case 'opsExpertFlight':
+                historyLine = applyOpsExpertFlight(gs, ps, this.destination, this.cardId);
                 break;
             case 'buildStation':
                 historyLine = applyBuildStation(gs, ps, this.relocateFrom);
@@ -285,7 +453,7 @@ export class OutbreakAction implements IGameCommand {
                 historyLine = applyTreatDisease(gs, ps, this.color);
                 break;
             case 'shareKnowledge':
-                historyLine = applyShareKnowledge(gs, this.senderId, ps, this.targetUserId, this.direction);
+                historyLine = applyShareKnowledge(gs, this.senderId, ps, this.targetUserId, this.direction, this.cardId);
                 break;
             case 'cure':
                 historyLine = applyCure(gs, ps, this.color, this.cardIds);
@@ -355,6 +523,12 @@ function applyPlacementResult(
             : describeInfected(),
     );
 
+    // Medic (§11, §16): this placement may have just put `color` — already
+    // cured, but not yet eradicated — into a city she's already standing in.
+    for (const note of applyMedicAutoClearForColor(gs, color)) {
+        outbreakData.gameState.history.unshift(note);
+    }
+
     if (result.cubeExhausted) {
         endInTeamLoss(outbreakData, `no ${DISEASE_COLOR_DEFS[color].name} cubes remain in supply`);
         return true;
@@ -375,6 +549,8 @@ function resolveInfectPhase(outbreakData: IOutbreakGameData): void {
     if (outbreakData.complete) return;
     const gs = outbreakData.specificGameState;
     const rate = infectionRateFor(gs.infectionRateIndex);
+    // Quarantine Specialist (§11, §16): computed once — nobody moves mid-phase.
+    const isProtected = quarantinePredicate(gs);
 
     for (let i = 0; i < rate; i++) {
         // Intensify (§9.1 step 3) recycles the infection discard back onto
@@ -393,10 +569,12 @@ function resolveInfectPhase(outbreakData: IOutbreakGameData): void {
         if (gs.cures[color] === 'eradicated') continue;
 
         const cubes = gs.cities.map(c => c.cubes);
-        const result = placeCubeOrOutbreak(cubes, cityId, color, new Set(), gs.cubesLeft);
+        const result = placeCubeOrOutbreak(cubes, cityId, color, new Set(), gs.cubesLeft, isProtected);
         const gameEnded = applyPlacementResult(
             outbreakData, color, result,
-            () => `infected ${CITIES[cityId].name} with ${DISEASE_COLOR_DEFS[color].name}`,
+            () => isProtected(cityId)
+                ? `${DISEASE_COLOR_DEFS[color].name} infection in ${CITIES[cityId].name} is contained by the Quarantine Specialist`
+                : `infected ${CITIES[cityId].name} with ${DISEASE_COLOR_DEFS[color].name}`,
             spreadToNames => `outbreak in ${CITIES[cityId].name}! It spreads to ${spreadToNames}`,
         );
         if (gameEnded) return;
@@ -440,11 +618,16 @@ function resolveEpidemic(outbreakData: IOutbreakGameData, recordedOrder: number[
         if (gs.cures[color] === 'eradicated') {
             outbreakData.gameState.history.unshift(`Epidemic draws ${CITIES[cityId].name}, already eradicated`);
         } else {
+            // Quarantine Specialist (§11, §16): her protection covers an
+            // epidemic's Infect step exactly as it does ordinary infection.
+            const isProtected = quarantinePredicate(gs);
             const cubes = gs.cities.map(c => c.cubes);
-            const result = placeEpidemicCubesOrOutbreak(cubes, cityId, color, gs.cubesLeft);
+            const result = placeEpidemicCubesOrOutbreak(cubes, cityId, color, gs.cubesLeft, isProtected);
             const gameEnded = applyPlacementResult(
                 outbreakData, color, result,
-                () => `Epidemic infects ${CITIES[cityId].name} with 3 cubes of ${DISEASE_COLOR_DEFS[color].name}`,
+                () => isProtected(cityId)
+                    ? `Epidemic draws ${CITIES[cityId].name}, contained by the Quarantine Specialist`
+                    : `Epidemic infects ${CITIES[cityId].name} with 3 cubes of ${DISEASE_COLOR_DEFS[color].name}`,
                 spreadToNames => `Epidemic saturates ${CITIES[cityId].name} — it outbreaks and spreads to ${spreadToNames}`,
             );
             if (gameEnded) return null;

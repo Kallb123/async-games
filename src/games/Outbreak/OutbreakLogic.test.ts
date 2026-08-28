@@ -31,7 +31,14 @@ function baseState(turnOrder: string[]): IOutbreakSpecificGameState {
 
     const players = new Map<string, IOutbreakPlayerState>();
     for (const userId of turnOrder) {
-        players.set(userId, { hand: [], city: ATLANTA_CITY_ID, role: null, contingencyCard: null, actionsLeft: ACTIONS_PER_TURN });
+        players.set(userId, {
+            hand: [],
+            city: ATLANTA_CITY_ID,
+            role: null,
+            contingencyCard: null,
+            actionsLeft: ACTIONS_PER_TURN,
+            opsExpertFlightUsed: false,
+        });
     }
 
     return {
@@ -881,5 +888,380 @@ describe("OutbreakEndTurn epidemics", () => {
         expect(state.cities[chicago].cubes.blue).toBe(0);
         expect(game.complete).toBe(true);
         expect(game.endReason).toBe('teamloss');
+    });
+});
+
+// ─── Roles (§11, §21.6 step 9) ─────────────────────────────────────────────
+
+describe("Medic (§11)", () => {
+    it("clears every cube of an uncured colour in one Treat Disease action", async () => {
+        const state = baseState(["u1"]);
+        state.players.get("u1")!.role = 'medic';
+        state.cities[ATLANTA_CITY_ID].cubes.blue = CUBES_PER_CITY_LIMIT;
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await cmd({ kind: 'treatDisease', color: 'blue' }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(state.cities[ATLANTA_CITY_ID].cubes.blue).toBe(0);
+        expect(state.cubesLeft.blue).toBe(CUBES_PER_COLOR + CUBES_PER_CITY_LIMIT);
+    });
+
+    it("automatically clears a cured colour's cubes from a city she moves into, at no extra action cost", async () => {
+        const state = baseState(["u1"]);
+        const medic = state.players.get("u1")!;
+        medic.role = 'medic';
+        const chicago = idFor("Chicago");
+        state.cities[chicago].cubes.blue = 2;
+        state.cures.blue = 'cured';
+        state.cubesLeft.blue = CUBES_PER_COLOR - 2;
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await cmd({ kind: 'drive', destination: chicago }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(medic.city).toBe(chicago);
+        expect(state.cities[chicago].cubes.blue).toBe(0);
+        expect(state.cubesLeft.blue).toBe(CUBES_PER_COLOR);
+        // Only the move itself cost an action.
+        expect(medic.actionsLeft).toBe(ACTIONS_PER_TURN - 1);
+    });
+
+    it("follows the pawn a Dispatcher moves for her, not just her own moves", async () => {
+        const state = baseState(["u1", "u2"]);
+        const dispatcher = state.players.get("u1")!;
+        const medic = state.players.get("u2")!;
+        dispatcher.role = 'dispatcher';
+        medic.role = 'medic';
+        const chicago = idFor("Chicago");
+        state.cities[chicago].cubes.blue = 1;
+        state.cures.blue = 'cured';
+        state.cubesLeft.blue = CUBES_PER_COLOR - 1;
+        const game = makeGame(state);
+
+        const outcome = await cmd({ kind: 'drive', destination: chicago, targetUserId: "u2" }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(medic.city).toBe(chicago);
+        expect(state.cities[chicago].cubes.blue).toBe(0);
+        // The Dispatcher paid for the move, not the Medic.
+        expect(dispatcher.actionsLeft).toBe(ACTIONS_PER_TURN - 1);
+        expect(medic.actionsLeft).toBe(ACTIONS_PER_TURN);
+    });
+
+    it("clears a newly cured colour immediately when she's already standing in an infected city", async () => {
+        const state = baseState(["u1", "u2"]);
+        const curer = state.players.get("u1")!;
+        const medic = state.players.get("u2")!;
+        medic.role = 'medic';
+        const chicago = idFor("Chicago");
+        medic.city = chicago;
+        state.cities[chicago].cubes.blue = 2;
+        // A cube survives elsewhere so curing stops at 'cured' rather than
+        // 'eradicated' — isolating the Medic's sweep from eradication.
+        const tokyo = idFor("Tokyo");
+        state.cities[tokyo].cubes.blue = 1;
+        state.cubesLeft.blue = CUBES_PER_COLOR - 3;
+        const blueCards = cityIdsForColor('blue').slice(0, cureCardsRequired());
+        curer.hand = [...blueCards];
+        const game = makeGame(state);
+
+        await cmd({ kind: 'cure', color: 'blue', cardIds: blueCards }).Execute(game);
+
+        expect(state.cures.blue).toBe('cured');
+        expect(state.cities[chicago].cubes.blue).toBe(0);
+        expect(state.cities[tokyo].cubes.blue).toBe(1);
+        expect(state.cubesLeft.blue).toBe(CUBES_PER_COLOR - 1);
+    });
+
+    it("clears cubes of an already-cured colour the instant the infect phase places them in her city", async () => {
+        const state = baseState(["u1"]);
+        const medic = state.players.get("u1")!;
+        medic.role = 'medic';
+        medic.actionsLeft = 0;
+        const chicago = idFor("Chicago"); // blue
+        medic.city = chicago;
+        state.cures.blue = 'cured';
+        state.playerDeck = [idFor("San Francisco"), idFor("Osaka")];
+        state.infectionDeck = [chicago];
+        const game = makeGame(state, ["u1"]);
+
+        await endTurnCmd().Execute(game);
+
+        expect(state.cities[chicago].cubes.blue).toBe(0);
+        expect(state.cubesLeft.blue).toBe(CUBES_PER_COLOR);
+    });
+});
+
+describe("Quarantine Specialist (§11, §16)", () => {
+    it("blocks ordinary infection from placing a cube in her city or any adjacent city", async () => {
+        const state = baseState(["u1"]);
+        const qs = state.players.get("u1")!;
+        qs.role = 'quarantineSpecialist'; // stationed in Atlanta
+        qs.actionsLeft = 0;
+        const chicago = idFor("Chicago"); // blue, adjacent to Atlanta
+        state.playerDeck = [idFor("San Francisco"), idFor("Osaka")];
+        state.infectionDeck = [chicago];
+        const game = makeGame(state, ["u1"]);
+
+        await endTurnCmd().Execute(game);
+
+        expect(state.cities[chicago].cubes.blue).toBe(0);
+        expect(state.infectionDiscard).toEqual([chicago]);
+        expect(state.outbreaks).toBe(0);
+        expect(game.complete).toBe(false);
+    });
+
+    it("prevents an outbreak from spreading into a protected neighbour, without preventing the outbreak itself", async () => {
+        const state = baseState(["u1"]);
+        const qs = state.players.get("u1")!;
+        qs.role = 'quarantineSpecialist';
+        // Protects Chicago plus its neighbours: San Francisco, Los Angeles,
+        // Mexico City, Atlanta, Montreal.
+        qs.city = idFor("Chicago");
+        qs.actionsLeft = 0;
+        // Miami (yellow) is adjacent to Atlanta, Washington and Mexico City,
+        // but is not itself protected — so its own outbreak is real.
+        const miami = idFor("Miami");
+        state.cities[miami].cubes.yellow = CUBES_PER_CITY_LIMIT;
+        state.playerDeck = [idFor("San Francisco"), idFor("Osaka")];
+        state.infectionDeck = [miami];
+        const game = makeGame(state, ["u1"]);
+
+        await endTurnCmd().Execute(game);
+
+        expect(state.outbreaks).toBe(1);
+        // Protected neighbours of Chicago receive nothing from the spread.
+        expect(state.cities[idFor("Atlanta")].cubes.yellow).toBe(0);
+        expect(state.cities[idFor("Mexico City")].cubes.yellow).toBe(0);
+        // Washington isn't protected — the spread reaches it normally.
+        expect(state.cities[idFor("Washington")].cubes.yellow).toBe(1);
+    });
+
+    it("blocks an epidemic's Infect step in her city, without preventing Increase or Intensify", async () => {
+        const state = baseState(["u1"]);
+        const qs = state.players.get("u1")!;
+        qs.role = 'quarantineSpecialist'; // stationed in Atlanta
+        qs.actionsLeft = 0;
+        // Isolates this epidemic's own Increase/Infect/Intensify from the
+        // ordinary infect phase that would otherwise follow it in the same
+        // Execute call (see stateWithEpidemicDrawIsolated above).
+        qs.hand = cityIdsForColor('black').slice(0, HAND_LIMIT);
+        state.playerDeck = [EPIDEMIC_CARD_ID, idFor("Osaka")];
+        state.infectionDeck = [idFor("Tokyo"), ATLANTA_CITY_ID]; // bottom card is her own city
+        state.infectionDiscard = [idFor("Miami")];
+        const game = makeGame(state, ["u1"]);
+
+        await endTurnCmd().Execute(game);
+
+        expect(state.infectionRateIndex).toBe(1); // Increase still ran
+        expect(state.cities[ATLANTA_CITY_ID].cubes.blue).toBe(0); // Infect blocked
+        expect(state.outbreaks).toBe(0);
+        expect(state.infectionDiscard).toEqual([]); // Intensify still ran
+        expect(state.phase).toBe('discard'); // drawing Osaka pushed the hand over the limit
+        expect(game.complete).toBe(false);
+    });
+});
+
+describe("Scientist (§11)", () => {
+    it("cures with only 4 cards of a colour, one fewer than the base rule", async () => {
+        const state = baseState(["u1"]);
+        const ps = state.players.get("u1")!;
+        ps.role = 'scientist';
+        // A cube still on the board — this cure should stop at 'cured', not
+        // jump straight to 'eradicated' (mirrors the base-rule cure test).
+        state.cities[idFor("Chicago")].cubes.blue = 1;
+        state.cubesLeft.blue = CUBES_PER_COLOR - 1;
+        const blueCards = cityIdsForColor('blue').slice(0, cureCardsRequired(true));
+        ps.hand = [...blueCards];
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await cmd({ kind: 'cure', color: 'blue', cardIds: blueCards }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(state.cures.blue).toBe('cured');
+    });
+
+    it("rejects a non-Scientist curing with only 4 cards", async () => {
+        const state = baseState(["u1"]);
+        const blueCards = cityIdsForColor('blue').slice(0, 4);
+        state.players.get("u1")!.hand = [...blueCards];
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await cmd({ kind: 'cure', color: 'blue', cardIds: blueCards }).Execute(game);
+
+        expect(outcome.validMove).toBe(false);
+    });
+});
+
+describe("Researcher (§11)", () => {
+    it("gives a non-matching city card from her own hand while sharing knowledge", async () => {
+        const state = baseState(["u1", "u2"]);
+        const researcher = state.players.get("u1")!;
+        researcher.role = 'researcher';
+        const tokyo = idFor("Tokyo"); // doesn't match Atlanta, the shared city
+        researcher.hand = [tokyo];
+        const game = makeGame(state);
+
+        const outcome = await cmd({ kind: 'shareKnowledge', targetUserId: "u2", direction: 'give', cardId: tokyo }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(researcher.hand).toEqual([]);
+        expect(state.players.get("u2")!.hand).toEqual([tokyo]);
+    });
+
+    it("rejects a non-Researcher giving a card that doesn't match the shared city", async () => {
+        const state = baseState(["u1", "u2"]);
+        const tokyo = idFor("Tokyo");
+        state.players.get("u1")!.hand = [tokyo];
+        const game = makeGame(state);
+
+        const outcome = await cmd({ kind: 'shareKnowledge', targetUserId: "u2", direction: 'give', cardId: tokyo }).Execute(game);
+
+        expect(outcome.validMove).toBe(false);
+    });
+
+    it("lets a teammate take a non-matching card out of the Researcher's hand", async () => {
+        const state = baseState(["u1", "u2"]);
+        const researcher = state.players.get("u2")!;
+        researcher.role = 'researcher';
+        const tokyo = idFor("Tokyo");
+        researcher.hand = [tokyo];
+        const game = makeGame(state);
+
+        const outcome = await cmd({ kind: 'shareKnowledge', targetUserId: "u2", direction: 'take', cardId: tokyo }, "u1").Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(state.players.get("u1")!.hand).toEqual([tokyo]);
+        expect(researcher.hand).toEqual([]);
+    });
+});
+
+describe("Dispatcher (§11)", () => {
+    it("moves another player's pawn, discarding from her own hand rather than the mover's", async () => {
+        const state = baseState(["u1", "u2"]);
+        const dispatcher = state.players.get("u1")!;
+        dispatcher.role = 'dispatcher';
+        const tokyo = idFor("Tokyo");
+        dispatcher.hand = [tokyo]; // the Direct Flight card comes from the Dispatcher's hand
+        const game = makeGame(state);
+
+        const outcome = await cmd({ kind: 'directFlight', destination: tokyo, targetUserId: "u2" }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(state.players.get("u2")!.city).toBe(tokyo);
+        expect(dispatcher.city).toBe(ATLANTA_CITY_ID);
+        expect(dispatcher.hand).toEqual([]);
+    });
+
+    it("rejects a non-Dispatcher acting on another player's pawn", async () => {
+        const state = baseState(["u1", "u2"]);
+        const game = makeGame(state);
+        const chicago = idFor("Chicago");
+
+        const outcome = await cmd({ kind: 'drive', destination: chicago, targetUserId: "u2" }).Execute(game);
+
+        expect(outcome.validMove).toBe(false);
+        expect(state.players.get("u2")!.city).toBe(ATLANTA_CITY_ID);
+    });
+
+    it("relocates any pawn to a city already occupied by another pawn, at 1 action and no card", async () => {
+        const state = baseState(["u1", "u2"]);
+        const dispatcher = state.players.get("u1")!;
+        dispatcher.role = 'dispatcher';
+        const tokyo = idFor("Tokyo");
+        state.players.get("u2")!.city = tokyo;
+        const game = makeGame(state);
+
+        const outcome = await cmd({ kind: 'dispatcherRelocate', targetUserId: "u1", destination: tokyo }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(dispatcher.city).toBe(tokyo);
+        expect(dispatcher.actionsLeft).toBe(ACTIONS_PER_TURN - 1);
+    });
+
+    it("rejects relocating a pawn to a city with no other pawn already in it", async () => {
+        const state = baseState(["u1", "u2"]);
+        state.players.get("u1")!.role = 'dispatcher';
+        const game = makeGame(state);
+
+        const outcome = await cmd({ kind: 'dispatcherRelocate', targetUserId: "u2", destination: idFor("Tokyo") }).Execute(game);
+
+        expect(outcome.validMove).toBe(false);
+    });
+});
+
+describe("Operations Expert (§11)", () => {
+    it("builds a research station without discarding a card", async () => {
+        const state = baseState(["u1"]);
+        const ps = state.players.get("u1")!;
+        ps.role = 'opsExpert';
+        ps.city = idFor("Chicago");
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await cmd({ kind: 'buildStation' }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(state.cities[idFor("Chicago")].station).toBe(true);
+        expect(ps.hand).toEqual([]);
+        expect(state.playerDiscard).toEqual([]);
+    });
+
+    it("flies from a research station to any city once per turn by discarding any city card", async () => {
+        const state = baseState(["u1"]);
+        const ps = state.players.get("u1")!;
+        ps.role = 'opsExpert';
+        const anyCard = idFor("Chicago");
+        const tokyo = idFor("Tokyo");
+        ps.hand = [anyCard];
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await cmd({ kind: 'opsExpertFlight', destination: tokyo, cardId: anyCard }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(ps.city).toBe(tokyo);
+        expect(ps.hand).toEqual([]);
+        expect(ps.opsExpertFlightUsed).toBe(true);
+    });
+
+    it("rejects a second use of the flight in the same turn", async () => {
+        const state = baseState(["u1"]);
+        const ps = state.players.get("u1")!;
+        ps.role = 'opsExpert';
+        ps.opsExpertFlightUsed = true;
+        ps.hand = [idFor("Chicago")];
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await cmd({ kind: 'opsExpertFlight', destination: idFor("Tokyo"), cardId: idFor("Chicago") }).Execute(game);
+
+        expect(outcome.validMove).toBe(false);
+    });
+
+    it("rejects the flight away from a city with no research station", async () => {
+        const state = baseState(["u1"]);
+        const ps = state.players.get("u1")!;
+        ps.role = 'opsExpert';
+        ps.city = idFor("Chicago"); // no station here
+        ps.hand = [idFor("Miami")];
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await cmd({ kind: 'opsExpertFlight', destination: idFor("Tokyo"), cardId: idFor("Miami") }).Execute(game);
+
+        expect(outcome.validMove).toBe(false);
+    });
+
+    it("resets the once-per-turn flight when her turn comes back around", () => {
+        const state = baseState(["u1", "u2"]);
+        const ps = state.players.get("u1")!;
+        ps.role = 'opsExpert';
+        ps.opsExpertFlightUsed = true;
+        const game = makeGame(state);
+        const gameType = new OutbreakGameType();
+
+        gameType.CheckEndTurn(game, { validMove: true, turnOver: true }); // u1 -> u2
+        gameType.CheckEndTurn(game, { validMove: true, turnOver: true }); // u2 -> u1
+
+        expect(game.currentTurn).toBe("u1");
+        expect(ps.opsExpertFlightUsed).toBe(false);
     });
 });

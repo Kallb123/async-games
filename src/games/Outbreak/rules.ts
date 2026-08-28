@@ -4,7 +4,17 @@
 // action picker computes hints from this module directly, the same way
 // Solitaire's rules.ts is shared by SolitaireLogic.ts and the board UI (see
 // docs/new-game.md, "Isomorphic rules modules").
-import { ADJACENCY, CITY_COUNT, EPIDEMIC_CARD_ID, OutbreakDiseaseColor } from "./board";
+import {
+    ADJACENCY,
+    CITY_COUNT,
+    DISEASE_COLORS,
+    EPIDEMIC_CARD_ID,
+    isAdjacent,
+    OutbreakCureState,
+    OutbreakDiseaseColor,
+    OutbreakRoleId,
+    ROLES,
+} from "./board";
 import { shuffle } from "@/utils/games/shuffle";
 
 // ─── The action economy (§7-8) ──────────────────────────────────────────────
@@ -143,12 +153,17 @@ export interface IOutbreakChainResult {
 // today's behaviour). The infect phase (§21.6 step 6) passes it in, so a
 // colour that runs out mid-chain stops the walk immediately instead of
 // placing cubes the supply doesn't have.
+//
+// `isProtected` is the Quarantine Specialist's exception (§11, §16): a city
+// it flags neither receives a cube nor outbreaks, and the chain does not
+// continue past it — there's nothing there to trigger it further.
 export function placeCubeOrOutbreak(
     cubes: OutbreakBoardCubes,
     cityId: number,
     color: OutbreakDiseaseColor,
     alreadyOutbroken: Set<number> = new Set(),
     cubesLeft?: OutbreakCubeCounts,
+    isProtected?: (cityId: number) => boolean,
 ): IOutbreakChainResult {
     const next = cubes.map(c => ({ ...c }));
     const nextLeft = cubesLeft ? { ...cubesLeft } : undefined;
@@ -158,6 +173,7 @@ export function placeCubeOrOutbreak(
     while (queue.length > 0) {
         const city = queue.shift()!;
         if (alreadyOutbroken.has(city)) continue;
+        if (isProtected?.(city)) continue;
 
         if (next[city][color] >= CUBES_PER_CITY_LIMIT) {
             alreadyOutbroken.add(city);
@@ -188,9 +204,22 @@ export function placeEpidemicCubesOrOutbreak(
     cityId: number,
     color: OutbreakDiseaseColor,
     cubesLeft?: OutbreakCubeCounts,
+    isProtected?: (cityId: number) => boolean,
 ): IOutbreakChainResult {
+    // Quarantine Specialist (§11, §16): her protection applies to an
+    // epidemic's Infect step exactly as it does to ordinary infection.
+    if (isProtected?.(cityId)) {
+        return {
+            cubes: cubes.map(c => ({ ...c })),
+            outbreaks: 0,
+            outbrokenCities: [],
+            cubesLeft: cubesLeft ? { ...cubesLeft } : undefined,
+            cubeExhausted: false,
+        };
+    }
+
     if (cubes[cityId][color] >= CUBES_PER_CITY_LIMIT) {
-        return placeCubeOrOutbreak(cubes, cityId, color, new Set(), cubesLeft);
+        return placeCubeOrOutbreak(cubes, cityId, color, new Set(), cubesLeft, isProtected);
     }
 
     const needed = CUBES_PER_CITY_LIMIT - cubes[cityId][color];
@@ -267,6 +296,67 @@ export const INFECTION_RATE_TRACK = [2, 2, 2, 3, 3, 4, 4];
 
 export function infectionRateFor(infectionRateIndex: number): number {
     return INFECTION_RATE_TRACK[infectionRateIndex] ?? INFECTION_RATE_TRACK[INFECTION_RATE_TRACK.length - 1];
+}
+
+// ─── Roles (§11, §21.6 step 9) ──────────────────────────────────────────────
+// Each role is a permanent, narrow exception to one of the rules above rather
+// than a system of its own — kept here as small pure predicates/helpers so
+// OutbreakLogic.ts's Execute methods call into them instead of branching on
+// `role` inline.
+
+/** §6 step 5: shuffle all seven roles and deal the first N, one per seat. */
+export function dealRoles(turnOrder: string[]): Map<string, OutbreakRoleId> {
+    const shuffled = shuffle(ROLES.map(r => r.id));
+    const assignment = new Map<string, OutbreakRoleId>();
+    turnOrder.forEach((userId, i) => assignment.set(userId, shuffled[i]));
+    return assignment;
+}
+
+/** Treat Disease (§8.2, §11 Medic): a cured colour always clears in full, and
+ * so does any colour at all for the Medic — everyone else only removes 1
+ * cube of an uncured colour. */
+export function treatDiseaseRemovalCount(cured: boolean, present: number, role: OutbreakRoleId | null): number {
+    return (cured || role === 'medic') ? present : 1;
+}
+
+/** Medic (§11, §16): every colour cured while she is standing in a city, or
+ * that becomes cured while she is, clears there automatically — no action
+ * required, and it follows her through a move the Dispatcher makes for her.
+ * Returns which colours qualify at `cubes`. */
+export function medicAutoClearColors(
+    role: OutbreakRoleId | null,
+    cubes: OutbreakCubeCounts,
+    cures: Record<OutbreakDiseaseColor, OutbreakCureState>,
+): OutbreakDiseaseColor[] {
+    if (role !== 'medic') return [];
+    return DISEASE_COLORS.filter(color => cures[color] !== 'none' && cubes[color] > 0);
+}
+
+/** Quarantine Specialist (§11, §16): no cube placement and no outbreak in her
+ * city or any city adjacent to it — including an epidemic's Infect step, and
+ * blocking the outbreak it would otherwise cause entirely. Setup's initial
+ * infection (§6 step 8) runs before roles are dealt and is deliberately
+ * exempt from this. */
+export function isProtectedByQuarantine(quarantineSpecialistCity: number | null, cityId: number): boolean {
+    if (quarantineSpecialistCity === null) return false;
+    return cityId === quarantineSpecialistCity || isAdjacent(quarantineSpecialistCity, cityId);
+}
+
+/** Operations Expert (§11): Build a Research Station waives its discard cost. */
+export function opsExpertBuildsFree(role: OutbreakRoleId | null): boolean {
+    return role === 'opsExpert';
+}
+
+/** Researcher (§11): a card leaving *her* hand during Share Knowledge — given
+ * by her, or taken from her by someone else — need not match the shared
+ * city. A card she takes from someone else's hand still must. */
+export function shareKnowledgeCardMatchRequired(giverRole: OutbreakRoleId | null): boolean {
+    return giverRole !== 'researcher';
+}
+
+/** Dispatcher (§11): may act on another player's pawn as if it were her own. */
+export function dispatcherCanControlOthers(role: OutbreakRoleId | null): boolean {
+    return role === 'dispatcher';
 }
 
 // ─── Loss checks (§4.2) ─────────────────────────────────────────────────────

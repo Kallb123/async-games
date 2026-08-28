@@ -5,7 +5,7 @@ import PendingTag from '@/components/ui/PendingTag';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
 import type { IOutbreakSpecificGameStateResponse } from '@/games/Outbreak/apiModels';
 import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, MAX_RESEARCH_STATIONS, OutbreakDiseaseColor } from '@/games/Outbreak/board';
-import { HAND_LIMIT, OutbreakMoveType, cureCardsRequired, getLegalMoves, stationCityIds } from '@/games/Outbreak/rules';
+import { HAND_LIMIT, OutbreakMoveType, cureCardsRequired, getLegalMoves, opsExpertBuildsFree, stationCityIds } from '@/games/Outbreak/rules';
 import { OutbreakAction, OutbreakDiscard, OutbreakEndTurn } from '@/utils/apiModels/GameLogic';
 
 const MOVE_DEFS: { type: OutbreakMoveType; icon: string; name: string; hint: string }[] = [
@@ -139,7 +139,8 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
     const treatable = DISEASE_COLORS.filter(color => cityState.cubes[color] > 0);
     const citymates = Object.values(gs.playerStates).filter(p => p.userId !== me.userId && p.city === me.city);
     const cureColors = DISEASE_COLORS.filter(color => gs.cures[color] === 'none' && me.hand.some(id => CITIES[id].color === color));
-    const cureRequired = cureCardsRequired();
+    const cureRequired = cureCardsRequired(me.role === 'scientist');
+    const stationIsFree = opsExpertBuildsFree(me.role);
 
     return (
         <div className="ag-actionsheet">
@@ -196,7 +197,7 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
                     </>
                 ) : (() => {
                     const pending = pendingTarget === 'buildStation';
-                    const disabled = !hasCityCard;
+                    const disabled = !stationIsFree && !hasCityCard;
                     return (
                         <button
                             type="button"
@@ -208,7 +209,9 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
                             <span className="ag-build-main">
                                 <span className="ag-build-name">Build a research station</span>
                                 <span className="ag-build-cost">
-                                    {needsRelocate ? `Discard ${CITIES[me.city].name}, relocate one of ${MAX_RESEARCH_STATIONS}` : `Discard ${CITIES[me.city].name}'s card`}
+                                    {stationIsFree
+                                        ? (needsRelocate ? `Free, relocate one of ${MAX_RESEARCH_STATIONS}` : 'Free (Operations Expert)')
+                                        : (needsRelocate ? `Discard ${CITIES[me.city].name}, relocate one of ${MAX_RESEARCH_STATIONS}` : `Discard ${CITIES[me.city].name}'s card`)}
                                 </span>
                             </span>
                             {pending
@@ -223,6 +226,7 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
                 {/* ── Treat disease ────────────────────────────────────────── */}
                 {treatable.map(color => {
                     const cured = gs.cures[color] !== 'none';
+                    const clearsAll = cured || me.role === 'medic';
                     const target = `treatDisease:${color}`;
                     const pending = pendingTarget === target;
                     return (
@@ -236,7 +240,7 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
                             <span className="ag-build-main">
                                 <span className="ag-build-name">Treat {DISEASE_COLOR_DEFS[color].name}</span>
                                 <span className="ag-build-cost">
-                                    {cured ? `Clears all ${cityState.cubes[color]} cubes here` : `Removes 1 of ${cityState.cubes[color]} cubes`}
+                                    {clearsAll ? `Clears all ${cityState.cubes[color]} cubes here` : `Removes 1 of ${cityState.cubes[color]} cubes`}
                                 </span>
                             </span>
                             {pending ? <PendingTag label="Treating" /> : <span className="ag-build-tag">Treat</span>}
