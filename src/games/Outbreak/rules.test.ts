@@ -143,7 +143,17 @@ describe("placeCubeOrOutbreak", () => {
         const result = placeCubeOrOutbreak(cubes, istanbul, "black");
 
         expect(result.outbreaks).toBe(2);
-        expect(result.outbrokenCities).toEqual([istanbul, cairo]);
+        expect(result.outbreakChain.map(s => s.city)).toEqual([istanbul, cairo]);
+
+        // Each burst records the neighbours that actually took a cube from it —
+        // a city that itself outbroke this resolution takes none, so Istanbul's
+        // burst spreads to Cairo's cluster but not Cairo, and Cairo's spreads
+        // back to everyone but the already-outbroken Istanbul.
+        const [istanbulStep, cairoStep] = result.outbreakChain;
+        expect(istanbulStep.infected).toEqual(expect.arrayContaining([milan, stPetersburg, baghdad, algiers]));
+        expect(istanbulStep.infected).not.toContain(cairo);
+        expect(cairoStep.infected).toEqual(expect.arrayContaining([riyadh, khartoum, baghdad, algiers]));
+        expect(cairoStep.infected).not.toContain(istanbul);
 
         // Outbreaking cities stay capped at the limit — no cube is added there.
         expect(result.cubes[istanbul].black).toBe(CUBES_PER_CITY_LIMIT);
@@ -169,7 +179,7 @@ describe("placeCubeOrOutbreak", () => {
         const result = placeCubeOrOutbreak(cubes, idFor("Istanbul"), "black", alreadyOutbroken);
 
         expect(result.outbreaks).toBe(0);
-        expect(result.outbrokenCities).toEqual([]);
+        expect(result.outbreakChain).toEqual([]);
         expect(result.cubes[idFor("Istanbul")].black).toBe(CUBES_PER_CITY_LIMIT);
     });
 });
@@ -205,7 +215,7 @@ describe("placeEpidemicCubesOrOutbreak (§9.1 step 2)", () => {
         const result = placeEpidemicCubesOrOutbreak(cubes, idFor("Atlanta"), "blue");
 
         expect(result.outbreaks).toBe(1);
-        expect(result.outbrokenCities).toEqual([idFor("Atlanta")]);
+        expect(result.outbreakChain.map(s => s.city)).toEqual([idFor("Atlanta")]);
         expect(result.cubes[idFor("Atlanta")].blue).toBe(CUBES_PER_CITY_LIMIT);
         for (const neighbor of ADJACENCY[idFor("Atlanta")]) {
             expect(result.cubes[neighbor].blue).toBe(1);
@@ -368,7 +378,7 @@ describe("placeCubeOrOutbreak / placeEpidemicCubesOrOutbreak with isProtected (�
         const result = placeCubeOrOutbreak(cubes, chicago, "blue", new Set(), undefined, id => id === atlanta);
 
         expect(result.outbreaks).toBe(1);
-        expect(result.outbrokenCities).toEqual([chicago]);
+        expect(result.outbreakChain.map(s => s.city)).toEqual([chicago]);
         expect(result.cubes[atlanta].blue).toBe(0);
     });
 

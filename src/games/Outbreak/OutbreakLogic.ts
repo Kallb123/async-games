@@ -588,7 +588,7 @@ function applyPlacementResult(
 
     outbreakData.gameState.history.unshift(
         result.outbreaks > 0
-            ? describeOutbreak(result.outbrokenCities.map(id => CITIES[id].name).join(', '))
+            ? describeOutbreak(result.outbreakChain.map(step => CITIES[step.city].name).join(', '))
             : describeInfected(),
     );
 
@@ -667,7 +667,7 @@ function resolveInfectPhase(outbreakData: IOutbreakGameData): IOutbreakInfection
             cityId,
             color,
             outcome: result.outbreaks > 0 ? 'outbreak' : contained ? 'contained' : 'placed',
-            spreadTo: result.outbreaks > 0 ? result.outbrokenCities : undefined,
+            outbreakChain: result.outbreaks > 0 ? result.outbreakChain : undefined,
         });
         const gameEnded = applyPlacementResult(
             outbreakData, color, result,
@@ -733,7 +733,7 @@ function resolveEpidemic(
             const cubes = gs.cities.map(c => c.cubes);
             const result = placeEpidemicCubesOrOutbreak(cubes, cityId, color, gs.cubesLeft, isProtected);
             entry.outcome = result.outbreaks > 0 ? 'outbreak' : contained ? 'contained' : 'placed';
-            if (result.outbreaks > 0) entry.spreadTo = result.outbrokenCities;
+            if (result.outbreaks > 0) entry.outbreakChain = result.outbreakChain;
             const gameEnded = applyPlacementResult(
                 outbreakData, color, result,
                 () => contained

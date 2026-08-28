@@ -106,6 +106,116 @@ describe("Outbreak recap adapter — Quarantine Specialist containment", () => {
         }
     });
 
+    it("names the cities an outbreak overflowed onto", () => {
+        const lagos = idFor("Lagos");
+        const [khartoum, kinshasa, saoPaulo] = [idFor("Khartoum"), idFor("Kinshasa"), idFor("Sao Paulo")];
+        const prev = state();
+        const next = { ...state(), outbreaks: 1 };
+        const outcome: IOutbreakInfectionPhaseOutcome = {
+            validMove: true,
+            turnOver: true,
+            infectionLog: [{
+                kind: 'infect', cityId: lagos, color: 'yellow', outcome: 'outbreak',
+                outbreakChain: [{ city: lagos, infected: [khartoum, kinshasa, saoPaulo] }],
+            }],
+        };
+
+        const events = outbreakRecapAdapter.toEvents(snap(prev), snap(next), cmd({ className: "OutbreakEndTurn" }), outcome);
+
+        const outbreak = events.find(e => e.type === "ob_outbreak");
+        expect(outbreak?.title).toBe("1 outbreak — the marker is now 1/8");
+        expect(outbreak?.detail).toBe("Lagos overflowed onto Khartoum, Kinshasa and Sao Paulo");
+    });
+
+    it("walks a cascade of outbreaks city by city, showing how each infected its neighbours", () => {
+        const [istanbul, cairo] = [idFor("Istanbul"), idFor("Cairo")];
+        const [milan, baghdad, algiers, khartoum] = [idFor("Milan"), idFor("Baghdad"), idFor("Algiers"), idFor("Khartoum")];
+        const prev = state();
+        const next = { ...state(), outbreaks: 2 };
+        const outcome: IOutbreakInfectionPhaseOutcome = {
+            validMove: true,
+            turnOver: true,
+            infectionLog: [{
+                kind: 'infect', cityId: istanbul, color: 'black', outcome: 'outbreak',
+                outbreakChain: [
+                    { city: istanbul, infected: [milan, baghdad, algiers] },
+                    { city: cairo, infected: [algiers, baghdad, khartoum] },
+                ],
+            }],
+        };
+
+        const events = outbreakRecapAdapter.toEvents(snap(prev), snap(next), cmd({ className: "OutbreakEndTurn" }), outcome);
+
+        const outbreak = events.find(e => e.type === "ob_outbreak");
+        expect(outbreak?.title).toBe("2 outbreaks — the marker is now 2/8");
+        expect(outbreak?.detail).toBe(
+            "Istanbul cascaded: Istanbul → Milan, Baghdad and Algiers; Cairo → Algiers, Baghdad and Khartoum",
+        );
+    });
+
+    it("names each outbreak when more than one card outbroke in the same phase", () => {
+        const [lagos, miami, bogota] = [idFor("Lagos"), idFor("Miami"), idFor("Bogota")];
+        const kinshasa = idFor("Kinshasa");
+        const prev = state();
+        const next = { ...state(), outbreaks: 2 };
+        const outcome: IOutbreakInfectionPhaseOutcome = {
+            validMove: true,
+            turnOver: true,
+            infectionLog: [
+                { kind: 'infect', cityId: lagos, color: 'yellow', outcome: 'outbreak', outbreakChain: [{ city: lagos, infected: [kinshasa] }] },
+                { kind: 'infect', cityId: miami, color: 'yellow', outcome: 'outbreak', outbreakChain: [{ city: miami, infected: [bogota] }] },
+            ],
+        };
+
+        const events = outbreakRecapAdapter.toEvents(snap(prev), snap(next), cmd({ className: "OutbreakEndTurn" }), outcome);
+
+        const outbreak = events.find(e => e.type === "ob_outbreak");
+        expect(outbreak?.detail).toBe("Lagos overflowed onto Kinshasa · Miami overflowed onto Bogota");
+    });
+
+    it("names the infected cities on an ordinary infect phase instead of just a cube count", () => {
+        const [chicago, paris] = [idFor("Chicago"), idFor("Paris")];
+        const prev = state();
+        const nextCities = state().cities.map(c => ({ ...c, cubes: { ...c.cubes } }));
+        nextCities[chicago].cubes.blue = 2;
+        nextCities[paris].cubes.blue = 1;
+        const next = { ...state(), cities: nextCities };
+        const outcome: IOutbreakInfectionPhaseOutcome = {
+            validMove: true,
+            turnOver: true,
+            infectionLog: [
+                { kind: 'infect', cityId: chicago, color: 'blue', outcome: 'placed' },
+                { kind: 'infect', cityId: chicago, color: 'blue', outcome: 'placed' },
+                { kind: 'infect', cityId: paris, color: 'blue', outcome: 'placed' },
+            ],
+        };
+
+        const events = outbreakRecapAdapter.toEvents(snap(prev), snap(next), cmd({ className: "OutbreakEndTurn" }), outcome);
+
+        const infect = events.find(e => e.type === "ob_infect");
+        expect(infect?.title).toBe("The board got worse — 3 new cubes placed");
+        expect(infect?.detail).toBe("Chicago (×2), Paris");
+    });
+
+    it("narrates the infect phase even when a hand-limit discard is the command that finishes it", () => {
+        const lagos = idFor("Lagos");
+        const kinshasa = idFor("Kinshasa");
+        const prev = state();
+        const next = { ...state(), outbreaks: 1 };
+        const outcome: IOutbreakInfectionPhaseOutcome = {
+            validMove: true,
+            turnOver: true,
+            infectionLog: [{
+                kind: 'infect', cityId: lagos, color: 'yellow', outcome: 'outbreak',
+                outbreakChain: [{ city: lagos, infected: [kinshasa] }],
+            }],
+        };
+
+        const events = outbreakRecapAdapter.toEvents(snap(prev), snap(next), cmd({ className: "OutbreakDiscard" }), outcome);
+
+        expect(events.some(e => e.type === "ob_outbreak")).toBe(true);
+    });
+
     it("summarizes a contained-only turn distinctly from a silent one", () => {
         const containedEvent = outbreakRecapAdapter.toEvents(
             snap(state()),

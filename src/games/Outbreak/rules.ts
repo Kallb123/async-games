@@ -140,18 +140,34 @@ export interface IOutbreakInfectionLogEntry {
     cityId?: number;
     color?: OutbreakDiseaseColor;
     outcome?: OutbreakInfectionOutcome;
-    /** Cities the outbreak spread to, in order — only set when outcome === 'outbreak'. */
-    spreadTo?: number[];
+    /** The outbreak and any chain reaction it set off, burst by burst, in the
+     *  order the cities overflowed — only set when outcome === 'outbreak'. The
+     *  first step's city is the one the drawn card infected; each step names the
+     *  neighbours that took a cube from that burst, so a recap can show exactly
+     *  which cities an outbreak overflowed onto and how a cascade spread. */
+    outbreakChain?: IOutbreakOutbreakStep[];
     /** 'epidemic' only: the infection rate after its Increase step. */
     rateAfter?: number;
+}
+
+/** One city overflowing during an outbreak chain: the city that burst and the
+ *  adjacent cities that took a cube from it. A neighbour already outbroken this
+ *  resolution (§10.1) or shielded by the Quarantine Specialist (§11) takes no
+ *  cube and is left out — this lists only where a cube actually landed. */
+export interface IOutbreakOutbreakStep {
+    city: number;
+    infected: number[];
 }
 
 export interface IOutbreakChainResult {
     cubes: OutbreakBoardCubes;
     /** Number of new outbreaks triggered while resolving this placement. */
     outbreaks: number;
-    /** Cities that outbroke, in the order they did. */
-    outbrokenCities: number[];
+    /** Each city that outbroke, in the order it did, paired with the neighbours
+     *  that took a cube from its burst. `outbreakChain.length` is the outbreak
+     *  count; `outbreakChain.map(s => s.city)` is the list of cities that
+     *  overflowed. */
+    outbreakChain: IOutbreakOutbreakStep[];
     /** Echoes back the (decremented) supply, when `cubesLeft` was passed in. */
     cubesLeft?: OutbreakCubeCounts;
     /**
@@ -197,29 +213,36 @@ export function placeCubeOrOutbreak(
 ): IOutbreakChainResult {
     const next = cubes.map(c => ({ ...c }));
     const nextLeft = cubesLeft ? { ...cubesLeft } : undefined;
-    const outbrokenCities: number[] = [];
-    const queue: number[] = [cityId];
+    const outbreakChain: IOutbreakOutbreakStep[] = [];
+    // Each burst is queued along with the city whose overflow queued it, so a
+    // cube that lands can be attributed back to the burst that spread it (`from`
+    // is null only for the drawn city that starts the chain).
+    const stepByCity = new Map<number, IOutbreakOutbreakStep>();
+    const queue: { city: number; from: number | null }[] = [{ city: cityId, from: null }];
 
     while (queue.length > 0) {
-        const city = queue.shift()!;
+        const { city, from } = queue.shift()!;
         if (alreadyOutbroken.has(city)) continue;
         if (isProtected?.(city)) continue;
 
         if (next[city][color] >= CUBES_PER_CITY_LIMIT) {
             alreadyOutbroken.add(city);
-            outbrokenCities.push(city);
+            const step: IOutbreakOutbreakStep = { city, infected: [] };
+            outbreakChain.push(step);
+            stepByCity.set(city, step);
             for (const neighbor of ADJACENCY[city]) {
-                queue.push(neighbor);
+                queue.push({ city: neighbor, from: city });
             }
         } else if (nextLeft && isCubeExhaustionLoss(nextLeft[color], 1)) {
-            return { cubes: next, outbreaks: outbrokenCities.length, outbrokenCities, cubesLeft: nextLeft, cubeExhausted: true };
+            return { cubes: next, outbreaks: outbreakChain.length, outbreakChain, cubesLeft: nextLeft, cubeExhausted: true };
         } else {
             next[city][color] += 1;
             if (nextLeft) nextLeft[color] -= 1;
+            if (from !== null) stepByCity.get(from)!.infected.push(city);
         }
     }
 
-    return { cubes: next, outbreaks: outbrokenCities.length, outbrokenCities, cubesLeft: nextLeft, cubeExhausted: false };
+    return { cubes: next, outbreaks: outbreakChain.length, outbreakChain, cubesLeft: nextLeft, cubeExhausted: false };
 }
 
 // Epidemic INFECT step (§9.1 step 2): place all 3 cubes of `color` on
@@ -242,7 +265,7 @@ export function placeEpidemicCubesOrOutbreak(
         return {
             cubes: cubes.map(c => ({ ...c })),
             outbreaks: 0,
-            outbrokenCities: [],
+            outbreakChain: [],
             cubesLeft: cubesLeft ? { ...cubesLeft } : undefined,
             cubeExhausted: false,
         };
@@ -257,7 +280,7 @@ export function placeEpidemicCubesOrOutbreak(
         return {
             cubes: cubes.map(c => ({ ...c })),
             outbreaks: 0,
-            outbrokenCities: [],
+            outbreakChain: [],
             cubesLeft: { ...cubesLeft },
             cubeExhausted: true,
         };
@@ -266,7 +289,7 @@ export function placeEpidemicCubesOrOutbreak(
     const next = cubes.map(c => ({ ...c }));
     next[cityId] = { ...next[cityId], [color]: CUBES_PER_CITY_LIMIT };
     const nextLeft = cubesLeft ? { ...cubesLeft, [color]: cubesLeft[color] - needed } : undefined;
-    return { cubes: next, outbreaks: 0, outbrokenCities: [], cubesLeft: nextLeft, cubeExhausted: false };
+    return { cubes: next, outbreaks: 0, outbreakChain: [], cubesLeft: nextLeft, cubeExhausted: false };
 }
 
 // ─── Deck construction: epidemic piles (§6 step 7, §13) ────────────────────

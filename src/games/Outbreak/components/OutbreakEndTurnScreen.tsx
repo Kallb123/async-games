@@ -2,6 +2,7 @@
 import TurnRecap, { TurnRecapEvent } from '@/components/games/TurnRecap';
 import type { IOutbreakInfectionLogEntry } from '@/games/Outbreak/rules';
 import { CITIES, DISEASE_COLOR_DEFS } from '@/games/Outbreak/board';
+import { describeOutbreakChain } from '@/games/Outbreak/narration';
 import { meta } from '@/games/Outbreak/meta';
 import { pluralize } from '@/utils/ui/text';
 
@@ -37,7 +38,7 @@ function eventFor(entry: IOutbreakInfectionLogEntry, index: number): TurnRecapEv
             case 'contained':
                 return { ...base, detail: `Drew ${cityName} — contained by the Quarantine Specialist` };
             case 'outbreak':
-                return { ...base, detail: `${cityName} was already saturated — outbreak! Spreads to ${(entry.spreadTo ?? []).map(spreadId => CITIES[spreadId].name).join(', ')}` };
+                return { ...base, detail: `${cityName} was already saturated — outbreak! ${describeOutbreakChain(entry.outbreakChain)}` };
             default:
                 return { ...base, detail: `Infects ${cityName} with 3 cubes of ${DISEASE_COLOR_DEFS[entry.color!].name}` };
         }
@@ -55,7 +56,7 @@ function eventFor(entry: IOutbreakInfectionLogEntry, index: number): TurnRecapEv
             return {
                 id, dotColour, glyph: '💥',
                 title: `Outbreak in ${cityName}!`,
-                detail: `Spreads to ${(entry.spreadTo ?? []).map(spreadId => CITIES[spreadId].name).join(', ')}`,
+                detail: describeOutbreakChain(entry.outbreakChain),
             };
         default:
             return { id, dotColour, glyph: '🦠', title: `${cityName} infected with ${colorName}` };
