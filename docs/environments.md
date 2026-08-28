@@ -99,7 +99,8 @@ the Clerk dashboard and set:
 | `E2E_MONGODB_URI` | the `asyncgames-e2e` connection string |
 | `ACCESS_PASSWORD` | same value as the dev deployment's — only needed if that deployment has the gate configured at all |
 | `E2E_PLAYER_ONE_EMAIL` / `E2E_PLAYER_ONE_PASSWORD` | first test user |
-| `E2E_PLAYER_TWO_EMAIL` / `E2E_PLAYER_TWO_PASSWORD` | second test user (for a multiplayer spec) |
+| `E2E_PLAYER_TWO_EMAIL` / `E2E_PLAYER_TWO_PASSWORD` | second test user |
+| `E2E_PLAYER_TWO_USERNAME` | second test user's Clerk *username* — the multiplayer spec (`e2e/specs/snakesandladders-turns.spec.ts`) invites them by username, since that's how invites are actually resolved (`usersByUsername`), not by email |
 
 `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, the `FIREBASE_*` vars
 and `CRON_SECRET` are the same secrets `ci.yml`'s build step already uses.

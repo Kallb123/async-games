@@ -21,17 +21,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({error: "You're not signed in."}, {status: 400, statusText: "Not signed in"});
   }
 
-  const withinLimit = await Promise.all([
-    consumeRateLimit('unlock-user', userId, UNLOCK_LIMIT, UNLOCK_WINDOW_MS),
-    consumeRateLimit('unlock-ip', clientIp(request.headers), UNLOCK_LIMIT, UNLOCK_WINDOW_MS),
-  ]);
-  if (withinLimit.includes(false)) {
-    return NextResponse.json(
-      {error: "Too many attempts. Please try again later."},
-      {status: 429, statusText: "Too many attempts"},
-    );
-  }
-
   const setUnlocked = async (unlocked: boolean) => {
     await (await clerkClient()).users.updateUserMetadata(userId, { publicMetadata: { unlocked } });
   };
@@ -51,6 +40,22 @@ export async function POST(request: NextRequest) {
   }
 
   if (typeof password !== 'string' || !timingSafeStringEqual(password, accessPassword)) {
+    // Only a wrong guess spends the budget — a correct unlock below never
+    // calls consumeRateLimit at all. Gated on its own atomic increment-and-
+    // check, not a separate read first: two guesses racing each other both
+    // still land on a count consumeRateLimit itself computed, so neither can
+    // slip through on a stale read the other's write already overtook.
+    const withinLimit = await Promise.all([
+      consumeRateLimit('unlock-user', userId, UNLOCK_LIMIT, UNLOCK_WINDOW_MS),
+      consumeRateLimit('unlock-ip', clientIp(request.headers), UNLOCK_LIMIT, UNLOCK_WINDOW_MS),
+    ]);
+    if (withinLimit.includes(false)) {
+      return NextResponse.json(
+        {error: "Too many attempts. Please try again later."},
+        {status: 429, statusText: "Too many attempts"},
+      );
+    }
+
     await setUnlocked(false);
     return NextResponse.json({error: "Incorrect password. Please try again."}, {status: 400, statusText: "Incorrect password"});
   }
