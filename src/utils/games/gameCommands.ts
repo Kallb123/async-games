@@ -86,11 +86,13 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
         "TrainTimeKeepTickets",
         "TrainTimePassTurn",
     ],
-    // docs/games/outbreak-gdd.md §21.6 step 4 adds OutbreakAction. Steps 6 and
-    // 10 add OutbreakEndTurn, OutbreakDiscard and OutbreakPlayEvent as they
-    // land.
+    // docs/games/outbreak-gdd.md §21.6 step 4 added OutbreakAction; step 6
+    // added OutbreakEndTurn and OutbreakDiscard. Step 10 adds
+    // OutbreakPlayEvent as it lands.
     OutbreakGameType: [
         "OutbreakAction",
+        "OutbreakEndTurn",
+        "OutbreakDiscard",
     ],
 };
 

@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { OutbreakAction, OutbreakGameType } from "./OutbreakLogic";
+import { OutbreakAction, OutbreakDiscard, OutbreakEndTurn, OutbreakGameType } from "./OutbreakLogic";
 import { IOutbreakGameData, IOutbreakPlayerState } from "./OutbreakModels";
-import { ATLANTA_CITY_ID, CITIES, CITY_COUNT, DISEASE_COLORS, cityIdsForColor } from "./board";
-import { ACTIONS_PER_TURN, CUBES_PER_COLOR, cureCardsRequired, emptyCubeCounts } from "./rules";
+import { ADJACENCY, ATLANTA_CITY_ID, CITIES, CITY_COUNT, DISEASE_COLORS, cityIdsForColor } from "./board";
+import {
+    ACTIONS_PER_TURN,
+    CUBES_PER_CITY_LIMIT,
+    CUBES_PER_COLOR,
+    HAND_LIMIT,
+    OUTBREAK_LOSS_THRESHOLD,
+    cureCardsRequired,
+    emptyCubeCounts,
+} from "./rules";
 import type { IOutbreakSpecificGameState } from "./OutbreakModels";
 
 // ─── Minimal in-memory game harness (mirrors SolitaireLogic.test.ts) ──────────
@@ -58,6 +66,21 @@ function cmd(overrides: Partial<OutbreakAction> = {}, senderId = "u1"): Outbreak
     action.senderId = senderId;
     action.senderUsername = senderId === "u1" ? "Alice" : "Bob";
     return Object.assign(action, overrides);
+}
+
+function endTurnCmd(senderId = "u1"): OutbreakEndTurn {
+    const command = new OutbreakEndTurn();
+    command.senderId = senderId;
+    command.senderUsername = senderId === "u1" ? "Alice" : "Bob";
+    return command;
+}
+
+function discardCmd(cardIds: number[], senderId = "u1"): OutbreakDiscard {
+    const command = new OutbreakDiscard();
+    command.senderId = senderId;
+    command.senderUsername = senderId === "u1" ? "Alice" : "Bob";
+    command.cardIds = cardIds;
+    return command;
 }
 
 // ─── Movement ───────────────────────────────────────────────────────────────
@@ -368,23 +391,18 @@ describe("OutbreakAction pass and the four-action turn", () => {
         expect(outcome).toEqual({ validMove: false, turnOver: false });
     });
 
-    it("reports turnOver on the fourth action, and CheckEndTurn hands the turn to the next player with a full refill", async () => {
+    it("never ends the turn itself, even on the fourth action — only OutbreakEndTurn may (§21.4)", async () => {
         const state = baseState(["u1", "u2"]);
         const game = makeGame(state, ["u1", "u2"]);
-        const gameType = new OutbreakGameType();
 
         let outcome;
         for (let i = 0; i < ACTIONS_PER_TURN; i++) {
             outcome = await cmd({ kind: 'pass' }).Execute(game);
-            expect(outcome.validMove).toBe(true);
+            expect(outcome).toEqual({ validMove: true, turnOver: false });
         }
-        expect(outcome).toMatchObject({ turnOver: true });
         expect(state.players.get("u1")!.actionsLeft).toBe(0);
-
-        gameType.CheckEndTurn(game, outcome!);
-
-        expect(game.currentTurn).toBe("u2");
-        expect(state.players.get("u2")!.actionsLeft).toBe(ACTIONS_PER_TURN);
+        expect(state.phase).toBe('actions');
+        expect(game.currentTurn).toBe("u1");
     });
 });
 
@@ -421,18 +439,246 @@ describe("OutbreakGameType.CheckGameOver", () => {
         const game = makeGame(state, ["u1", "u2"]);
         const gameType = new OutbreakGameType();
 
-        let outcome;
         for (const color of DISEASE_COLORS) {
             const cardIds = cityIdsForColor(color).slice(0, cureCardsRequired());
-            outcome = await cmd({ kind: 'cure', color, cardIds }).Execute(game);
-            expect(outcome.validMove).toBe(true);
+            const outcome = await cmd({ kind: 'cure', color, cardIds }).Execute(game);
+            expect(outcome).toEqual({ validMove: true, turnOver: false });
         }
 
-        expect(outcome).toMatchObject({ turnOver: true });
         expect(gameType.CheckGameOver(game)).toBe(true);
         expect(game.endReason).toBe('teamwin');
-        // Nobody ever drew a card or placed a cube — the loss conditions of §4.2
-        // simply have no way to fire in this commit.
+        // Nobody ever drew a card or placed a cube — the four cure actions
+        // alone won the game before OutbreakEndTurn was ever called.
         expect(state.cubesLeft).toEqual({ blue: CUBES_PER_COLOR, yellow: CUBES_PER_COLOR, black: CUBES_PER_COLOR, red: CUBES_PER_COLOR });
+    });
+});
+
+// ─── OutbreakEndTurn — the draw and infect phases (§21.6 step 6) ───────────
+
+describe("OutbreakEndTurn", () => {
+    it("rejects while actions remain", async () => {
+        const state = baseState(["u1"]);
+        state.players.get("u1")!.actionsLeft = 1;
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await endTurnCmd().Execute(game);
+
+        expect(outcome).toEqual({ validMove: false, turnOver: false });
+    });
+
+    it("rejects outside the action phase", async () => {
+        const state = baseState(["u1"]);
+        state.players.get("u1")!.actionsLeft = 0;
+        state.phase = 'discard';
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await endTurnCmd().Execute(game);
+
+        expect(outcome).toEqual({ validMove: false, turnOver: false });
+    });
+
+    it("draws two cards and ends the turn when the hand stays within the limit", async () => {
+        const state = baseState(["u1", "u2"]);
+        state.players.get("u1")!.actionsLeft = 0;
+        const [first, second, third] = [idFor("Chicago"), idFor("Tokyo"), idFor("Miami")];
+        state.playerDeck = [first, second, third];
+        const game = makeGame(state, ["u1", "u2"]);
+        const gameType = new OutbreakGameType();
+
+        const outcome = await endTurnCmd().Execute(game);
+
+        expect(outcome).toEqual({ validMove: true, turnOver: true });
+        expect(state.players.get("u1")!.hand).toEqual([first, second]);
+        expect(state.playerDeck).toEqual([third]);
+        expect(state.phase).toBe('actions');
+
+        gameType.CheckEndTurn(game, outcome);
+        expect(game.currentTurn).toBe("u2");
+        expect(state.players.get("u2")!.actionsLeft).toBe(ACTIONS_PER_TURN);
+    });
+
+    it("moves to the discard phase when the draw pushes the hand over the limit", async () => {
+        const state = baseState(["u1"]);
+        const ps = state.players.get("u1")!;
+        ps.actionsLeft = 0;
+        ps.hand = cityIdsForColor('red').slice(0, 6);
+        state.playerDeck = [idFor("Chicago"), idFor("Miami")];
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await endTurnCmd().Execute(game);
+
+        expect(outcome).toEqual({ validMove: true, turnOver: false });
+        expect(state.phase).toBe('discard');
+        expect(ps.hand.length).toBe(8);
+    });
+
+    it("loses the game immediately when the player deck is empty on a draw (§4.2 time-out)", async () => {
+        const state = baseState(["u1"]);
+        state.players.get("u1")!.actionsLeft = 0;
+        state.playerDeck = [];
+        const game = makeGame(state, ["u1"]);
+        const gameType = new OutbreakGameType();
+
+        await endTurnCmd().Execute(game);
+
+        expect(game.complete).toBe(true);
+        expect(game.winner).toBe('');
+        expect(game.endReason).toBe('teamloss');
+        expect(game.currentTurn).toBe('');
+        expect(gameType.CheckGameOver(game)).toBe(true);
+    });
+
+    it("infects at the fixed rate of 2, placing one cube per card drawn", async () => {
+        const state = baseState(["u1"]);
+        state.players.get("u1")!.actionsLeft = 0;
+        state.playerDeck = [idFor("San Francisco"), idFor("Osaka")];
+        const cardA = idFor("Chicago"); // blue
+        const cardB = idFor("Lagos"); // yellow
+        state.infectionDeck = [cardA, cardB];
+        const game = makeGame(state, ["u1"]);
+
+        await endTurnCmd().Execute(game);
+
+        expect(state.cities[cardA].cubes.blue).toBe(1);
+        expect(state.cities[cardB].cubes.yellow).toBe(1);
+        expect(state.cubesLeft.blue).toBe(CUBES_PER_COLOR - 1);
+        expect(state.cubesLeft.yellow).toBe(CUBES_PER_COLOR - 1);
+        expect(state.infectionDiscard).toEqual([cardA, cardB]);
+        expect(state.infectionDeck).toEqual([]);
+        expect(game.complete).toBe(false);
+    });
+
+    it("triggers an outbreak that spreads a cube to every adjacent city", async () => {
+        const state = baseState(["u1"]);
+        state.players.get("u1")!.actionsLeft = 0;
+        state.playerDeck = [idFor("San Francisco"), idFor("Osaka")];
+        state.cities[ATLANTA_CITY_ID].cubes.blue = CUBES_PER_CITY_LIMIT;
+        state.infectionDeck = [ATLANTA_CITY_ID];
+        const game = makeGame(state, ["u1"]);
+
+        await endTurnCmd().Execute(game);
+
+        expect(state.outbreaks).toBe(1);
+        expect(state.cities[ATLANTA_CITY_ID].cubes.blue).toBe(CUBES_PER_CITY_LIMIT);
+        for (const neighbor of ADJACENCY[ATLANTA_CITY_ID]) {
+            expect(state.cities[neighbor].cubes.blue).toBe(1);
+        }
+        expect(game.complete).toBe(false);
+    });
+
+    it("loses the game when an outbreak pushes the marker to the threshold (§4.2 outbreak cascade)", async () => {
+        const state = baseState(["u1"]);
+        state.players.get("u1")!.actionsLeft = 0;
+        state.playerDeck = [idFor("San Francisco"), idFor("Osaka")];
+        state.outbreaks = OUTBREAK_LOSS_THRESHOLD - 1;
+        state.cities[ATLANTA_CITY_ID].cubes.blue = CUBES_PER_CITY_LIMIT;
+        state.infectionDeck = [ATLANTA_CITY_ID];
+        const game = makeGame(state, ["u1"]);
+        const gameType = new OutbreakGameType();
+
+        await endTurnCmd().Execute(game);
+
+        expect(state.outbreaks).toBe(OUTBREAK_LOSS_THRESHOLD);
+        expect(game.complete).toBe(true);
+        expect(game.endReason).toBe('teamloss');
+        expect(gameType.CheckGameOver(game)).toBe(true);
+    });
+
+    it("loses the game when a colour's cube supply runs out mid-infection (§4.2, §16)", async () => {
+        const state = baseState(["u1"]);
+        state.players.get("u1")!.actionsLeft = 0;
+        state.playerDeck = [idFor("San Francisco"), idFor("Osaka")];
+        const chicago = idFor("Chicago"); // blue, currently uninfected
+        state.cubesLeft.blue = 0;
+        state.infectionDeck = [chicago];
+        const game = makeGame(state, ["u1"]);
+
+        await endTurnCmd().Execute(game);
+
+        expect(state.cities[chicago].cubes.blue).toBe(0);
+        expect(game.complete).toBe(true);
+        expect(game.endReason).toBe('teamloss');
+    });
+
+    it("skips cube placement for an eradicated disease but still discards the card", async () => {
+        const state = baseState(["u1"]);
+        state.players.get("u1")!.actionsLeft = 0;
+        state.playerDeck = [idFor("San Francisco"), idFor("Osaka")];
+        const chicago = idFor("Chicago"); // blue
+        state.cures.blue = 'eradicated';
+        state.infectionDeck = [chicago];
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await endTurnCmd().Execute(game);
+
+        expect(state.cities[chicago].cubes.blue).toBe(0);
+        expect(state.infectionDiscard).toEqual([chicago]);
+        expect(game.complete).toBe(false);
+        expect(outcome).toEqual({ validMove: true, turnOver: true });
+    });
+});
+
+// ─── OutbreakDiscard — the hand-limit discard step (§21.6 step 6) ─────────
+
+describe("OutbreakDiscard", () => {
+    it("rejects outside the discard phase", async () => {
+        const state = baseState(["u1"]);
+        state.players.get("u1")!.hand = cityIdsForColor('red').slice(0, 9);
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await discardCmd([cityIdsForColor('red')[0]]).Execute(game);
+
+        expect(outcome).toEqual({ validMove: false, turnOver: false });
+    });
+
+    it("rejects discarding a card not held", async () => {
+        const state = baseState(["u1"]);
+        const hand = cityIdsForColor('red').slice(0, 9);
+        state.players.get("u1")!.hand = [...hand];
+        state.phase = 'discard';
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await discardCmd([idFor("Chicago")]).Execute(game);
+
+        expect(outcome).toEqual({ validMove: false, turnOver: false });
+    });
+
+    it("rejects discarding too few to reach the hand limit", async () => {
+        const state = baseState(["u1"]);
+        const hand = cityIdsForColor('red').slice(0, 9); // 9 cards, 2 over the limit
+        state.players.get("u1")!.hand = [...hand];
+        state.phase = 'discard';
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await discardCmd([hand[0]]).Execute(game);
+
+        expect(outcome).toEqual({ validMove: false, turnOver: false });
+    });
+
+    it("discards down to the hand limit, resumes the action phase, and runs the infect phase", async () => {
+        const state = baseState(["u1", "u2"]);
+        const hand = cityIdsForColor('red').slice(0, 9);
+        const ps = state.players.get("u1")!;
+        ps.hand = [...hand];
+        ps.actionsLeft = 0;
+        state.phase = 'discard';
+        const cardA = idFor("Chicago"); // blue
+        state.infectionDeck = [cardA];
+        const game = makeGame(state, ["u1", "u2"]);
+        const gameType = new OutbreakGameType();
+        const toDiscard = hand.slice(0, 2);
+
+        const outcome = await discardCmd(toDiscard).Execute(game);
+
+        expect(outcome).toEqual({ validMove: true, turnOver: true });
+        expect(ps.hand).toEqual(hand.slice(2));
+        expect(ps.hand.length).toBe(HAND_LIMIT);
+        expect(state.playerDiscard).toEqual(toDiscard);
+        expect(state.phase).toBe('actions');
+        // The infect phase ran once the hand limit was resolved.
+        expect(state.cities[cardA].cubes.blue).toBe(1);
+
+        gameType.CheckEndTurn(game, outcome);
+        expect(game.currentTurn).toBe("u2");
     });
 });

@@ -27,6 +27,7 @@ import {
     OutbreakCubeCounts,
     emptyCubeCounts,
     placeCubeOrOutbreak,
+    startingHandSize,
 } from "./rules";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -60,10 +61,9 @@ OutbreakInvitationSchema.methods.CreateGame = async function(
     const difficulty = this.difficulty as OutbreakDifficulty;
 
     // §6 step 9 wants whoever holds the highest-population city card, but
-    // nobody holds a hand yet at creation (deck-building lands in
-    // docs/games/outbreak-gdd.md §21.6 step 8) — so, like Train Time's
-    // running order, the physical criterion doesn't translate and the order
-    // is simply drawn at random.
+    // city population isn't modelled on CITY_DEFS (board.ts) — it's cosmetic
+    // flavour for a one-off setup pick, not part of the win/loss economy — so,
+    // like Train Time's running order, the order is simply drawn at random.
     const turnOrder = shuffle(userIdList);
     const usernameMap = await userIdListToUsernameMap(userIdList);
     const history = [
@@ -78,6 +78,7 @@ OutbreakInvitationSchema.methods.CreateGame = async function(
         0,
     );
     history.push(`Setup: ${infectedCount} cities begin infected (${cubesPlaced} cubes)`);
+    history.push(`Setup: each player dealt ${startingHandSize(turnOrder.length)} cards`);
 
     const gameData: IOutbreakGameData = {
         gameId: uuidv4() as uuidString,
@@ -133,8 +134,9 @@ export interface IOutbreakSpecificGameState {
     cures: Record<OutbreakDiseaseColor, OutbreakCureState>;
     outbreaks: number;
     infectionRateIndex: number;
-    // Built in §21.6 step 8 alongside the epidemic piles (§6 step 7); empty
-    // until then.
+    // Just the 48 shuffled city cards for now — the epidemic piles (§6 step 7)
+    // that difficulty inserts land in §21.6 step 8, rebuilding this deck
+    // around them. Event cards join it in step 10.
     playerDeck: number[];
     playerDiscard: number[];
     infectionDeck: number[]; // top first — redacted to a count on the wire
@@ -187,11 +189,12 @@ export function cloneOutbreakState(
 // the opening board of §6 steps 4, 5 and 8 — a research station in Atlanta,
 // every pawn there too, and the initial infection (shuffle the infection
 // deck, flip 3 cards placing 3 cubes each, then 3 placing 2 each, then 3
-// placing 1 each — 9 cities infected, 18 cubes placed).
+// placing 1 each — 9 cities infected, 18 cubes placed) — plus, per §6 step 6,
+// a shuffled player deck (just the 48 city cards; no epidemics yet) with
+// starting hands dealt from it before anything else touches it.
 //
-// The player deck, epidemic piles and roles are *not* built here — they land
-// in §21.6 steps 8 and 9 respectively, alongside the commands that first
-// need them.
+// The epidemic piles and roles are *not* built here — they land in §21.6
+// steps 8 and 9 respectively, alongside the commands that first need them.
 export function buildInitialOutbreakState(turnOrder: string[], difficulty: OutbreakDifficulty): IOutbreakSpecificGameState {
     const cities: IOutbreakCityState[] = Array.from({ length: CITY_COUNT }, () => ({ cubes: emptyCubeCounts(), station: false }));
     cities[ATLANTA_CITY_ID].station = true;
@@ -217,9 +220,14 @@ export function buildInitialOutbreakState(turnOrder: string[], difficulty: Outbr
         cubesLeft[color] = CUBES_PER_COLOR - used;
     }
 
+    // §6 step 6: shuffle the 48 city cards and deal each player their opening
+    // hand from it before anything else touches the deck.
+    const playerDeck = shuffle(Array.from({ length: CITY_COUNT }, (_, id) => id));
+    const handSize = startingHandSize(turnOrder.length);
     const players = new Map<string, IOutbreakPlayerState>();
     for (const userId of turnOrder) {
-        players.set(userId, { hand: [], city: ATLANTA_CITY_ID, role: null, contingencyCard: null, actionsLeft: ACTIONS_PER_TURN });
+        const hand = playerDeck.splice(0, handSize);
+        players.set(userId, { hand, city: ATLANTA_CITY_ID, role: null, contingencyCard: null, actionsLeft: ACTIONS_PER_TURN });
     }
 
     return {
@@ -229,7 +237,7 @@ export function buildInitialOutbreakState(turnOrder: string[], difficulty: Outbr
         cures: { blue: 'none', yellow: 'none', black: 'none', red: 'none' },
         outbreaks: 0,
         infectionRateIndex: 0,
-        playerDeck: [],
+        playerDeck,
         playerDiscard: [],
         infectionDeck,
         infectionDiscard,

@@ -838,6 +838,30 @@ loseable, at a fixed infection rate of 2. Keep this the *only* command that
 touches a deck (21.4) — step 13's planner is built on that and on nothing
 else.
 
+*Landed.* `OutbreakEndTurn` and `OutbreakDiscard` are in `OutbreakLogic.ts`.
+`OutbreakAction` no longer ends the turn itself on the fourth action — it
+always returns `turnOver: false` now (§21.4) — so `buildInitialOutbreakState`
+had to start actually building the player deck it hands `OutbreakEndTurn`:
+the 48 city cards, shuffled, with each seat dealt its §6-step-6 opening hand
+(2 players → 4 cards, 3 → 3, 4 → 2) before anything else touches it. No
+epidemics yet — those land with the pile-based deck construction of step 8 —
+so the deck this step draws from is just those 48 cards. `OutbreakEndTurn`
+draws two, loses the game immediately on an empty deck, and — if the draw
+pushed the hand over 7 — hands off to `OutbreakDiscard` via `phase: 'discard'`
+rather than infecting yet; either way, the infect phase (fixed rate of 2 until
+step 8) runs once the hand is legal, placing cubes through the same
+`placeCubeOrOutbreak` step 2 already had, now supply-aware: passed the
+colour's remaining `cubesLeft`, it stops the chain walk the instant supply
+runs out rather than completing it (§16), rather than becoming a second copy
+of the chain-walk logic. All three §4.2 losses — an empty player deck, a
+colour's cube supply, the outbreak marker reaching 8 — set `complete`/
+`winner`/`'teamloss'` directly where they're detected, since none of them can
+be re-derived from state afterward the way the win check can; `CheckGameOver`
+just passes that through. The board screen picked up the two controls this
+makes necessary: an "End turn" prompt once `actionsLeft` hits zero, and a
+discard picker (reusing `ag-build-row`/`ag-build-row--active`, no new
+component) once `phase` is `'discard'`.
+
 **7 — Turn-timeout resolution.** Now that a skipped turn is worth skipping,
 close gap 2 of 21.2. **Not** a new `IGameType` method: the cron should construct
 the game's own pass command, `Execute` it, push it onto `commandHistory` and let

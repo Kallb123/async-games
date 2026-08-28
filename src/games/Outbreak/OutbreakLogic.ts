@@ -13,11 +13,17 @@ import {
 } from "@/games/Outbreak/board";
 import {
     ACTIONS_PER_TURN,
+    CARDS_DRAWN_PER_TURN,
     CUBES_PER_COLOR,
+    HAND_LIMIT,
     OutbreakMoveType,
     canDiscoverCure,
     cureCardsRequired,
     getLegalMoves,
+    infectionRateFor,
+    isOutbreakCascadeLoss,
+    isPlayerDeckEmptyLoss,
+    placeCubeOrOutbreak,
     stationCityIds,
 } from "@/games/Outbreak/rules";
 
@@ -25,14 +31,17 @@ import {
 //  OUTBREAK
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// docs/games/outbreak-gdd.md §21.6 step 4: the action phase. One parameterised
-// OutbreakAction covers all eight action kinds of §8 plus the pass-to-forfeit
-// escape hatch, following §21.4's "four command classes, not fifteen" — the
-// same shape as OutbreakEndTurn (§21.6 step 6) and OutbreakPlayEvent (step
-// 10) will take. There is deliberately no draw or infect phase yet: nothing
-// in this file can place a cube or empty a deck, so the game is winnable (cure
-// all four diseases) and unloseable (none of §4.2's three defeat conditions
-// can fire) until OutbreakEndTurn lands.
+// docs/games/outbreak-gdd.md §21.6 step 4 added the action phase: one
+// parameterised OutbreakAction covering all eight action kinds of §8 plus the
+// pass-to-forfeit escape hatch, following §21.4's "four command classes, not
+// fifteen". Step 6 (this file, now) adds OutbreakEndTurn and OutbreakDiscard —
+// the draw and infect phases — which is what makes the game loseable: none of
+// §4.2's three defeat conditions could fire before this, since nothing could
+// place a cube or empty a deck. OutbreakAction therefore never ends a turn
+// itself any more (§21.4: "the fourth action returns turnOver: false"); only
+// OutbreakEndTurn (and, when the draw pushes a hand over the limit,
+// OutbreakDiscard) can — and OutbreakEndTurn is the *only* command that
+// touches a deck, which is the invariant step 13's crew planner is built on.
 
 const INVALID: ICommandOutcome = { validMove: false, turnOver: false };
 
@@ -193,6 +202,16 @@ export class OutbreakGameType implements IGameType {
 
     CheckGameOver(gameData: IGameData): boolean {
         const outbreakData = gameData as IOutbreakGameData;
+        // Every §4.2 loss (an empty player deck on a draw, a colour's supply
+        // running out mid-outbreak, the outbreak marker reaching the
+        // threshold) can only be detected mid-resolution, inside
+        // OutbreakEndTurn.Execute — so it already mutates
+        // complete/winner/endReason/currentTurn directly there (see
+        // endInTeamLoss), the same thing this method does for a win, below.
+        // This is just the pass-through so the command route, which calls
+        // CheckGameOver after every command uniformly, notices.
+        if (outbreakData.complete) return true;
+
         const gs = outbreakData.specificGameState;
         if (!DISEASE_COLORS.every(color => gs.cures[color] !== 'none')) return false;
 
@@ -277,7 +296,173 @@ export class OutbreakAction implements IGameCommand {
         ps.actionsLeft -= 1;
         outbreakData.gameState.history.unshift(`${this.senderUsername} ${historyLine}`);
 
-        return { validMove: true, turnOver: ps.actionsLeft <= 0 };
+        // Never ends the turn itself, even on the fourth action (§21.4): only
+        // OutbreakEndTurn (and, past the hand limit, OutbreakDiscard) may —
+        // folding the draw/infect phases in here would make it impossible for
+        // step 13's crew planner to cross from one player's actions to the
+        // next without firing the deck.
+        return { validMove: true, turnOver: false };
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
+    }
+}
+
+// ─── The draw and infect phases (§7 Phase 2-3, §9-10, §21.6 step 6) ────────
+
+// Ends the game in a shared defeat (§4.2), the moment one of the three loss
+// conditions is detected — mirroring what CheckGameOver already does for a
+// win (OutbreakGameType.CheckGameOver, above), since a loss can only be
+// noticed here, mid-resolution, rather than re-derived afterwards from state.
+function endInTeamLoss(outbreakData: IOutbreakGameData, reason: string): void {
+    outbreakData.complete = true;
+    outbreakData.winner = '';
+    outbreakData.endReason = 'teamloss';
+    outbreakData.currentTurn = '';
+    outbreakData.gameState.history.unshift(`The team loses — ${reason}.`);
+}
+
+// Phase 3 (§10): draw infection cards equal to the current rate (fixed at 2
+// until epidemics land in §21.6 step 8), placing 1 cube per card and
+// resolving outbreaks and chains. Stops the instant a §4.2 loss condition
+// fires (cube exhaustion or the outbreak marker reaching 8) rather than
+// finishing the remaining draws (§16). Returns early — before placing
+// anything — if the game already ended in the draw/discard step above it.
+function resolveInfectPhase(outbreakData: IOutbreakGameData): void {
+    if (outbreakData.complete) return;
+    const gs = outbreakData.specificGameState;
+    const rate = infectionRateFor(gs.infectionRateIndex);
+
+    for (let i = 0; i < rate; i++) {
+        // Nothing recycles the infection discard into the deck until
+        // Intensify lands (§21.6 step 8) — a long enough game could in
+        // principle run it dry. Rather than invent unrecorded randomness to
+        // paper over that, the infect phase simply has fewer cards to draw
+        // that turn.
+        if (gs.infectionDeck.length === 0) break;
+
+        const cityId = gs.infectionDeck.shift()!;
+        const color = CITIES[cityId].color;
+        gs.infectionDiscard.push(cityId);
+
+        // §8.3/§16: an eradicated disease's cards are drawn and discarded
+        // with no effect — nothing is placed and it can't outbreak.
+        if (gs.cures[color] === 'eradicated') continue;
+
+        const cubes = gs.cities.map(c => c.cubes);
+        const result = placeCubeOrOutbreak(cubes, cityId, color, new Set(), gs.cubesLeft);
+        gs.cities.forEach((c, id) => { c.cubes = result.cubes[id]; });
+        if (result.cubesLeft) gs.cubesLeft = result.cubesLeft;
+        gs.outbreaks += result.outbreaks;
+
+        outbreakData.gameState.history.unshift(
+            result.outbreaks > 0
+                ? `outbreak in ${CITIES[cityId].name}! It spreads to ${result.outbrokenCities.map(id => CITIES[id].name).join(', ')}`
+                : `infected ${CITIES[cityId].name} with ${DISEASE_COLOR_DEFS[color].name}`,
+        );
+
+        if (result.cubeExhausted) {
+            endInTeamLoss(outbreakData, `no ${DISEASE_COLOR_DEFS[color].name} cubes remain in supply`);
+            return;
+        }
+        if (isOutbreakCascadeLoss(gs.outbreaks)) {
+            endInTeamLoss(outbreakData, `the outbreak marker reached ${gs.outbreaks}`);
+            return;
+        }
+    }
+}
+
+// ─── OutbreakEndTurn ────────────────────────────────────────────────────────
+
+@serializable
+export class OutbreakEndTurn implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    readonly className = 'OutbreakEndTurn';
+
+    myString() { return `Outbreak EndTurn`; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const outbreakData = gameData as IOutbreakGameData;
+        const gs = outbreakData.specificGameState;
+
+        const ps = playerState(gs, this.senderId);
+        if (!ps) return INVALID;
+        if (gs.phase !== 'actions') return INVALID;
+        if (ps.actionsLeft > 0) return INVALID;
+
+        // Phase 2 (§7, §9): draw two, losing immediately if the deck can't
+        // supply one.
+        for (let i = 0; i < CARDS_DRAWN_PER_TURN; i++) {
+            if (isPlayerDeckEmptyLoss(gs.playerDeck.length)) {
+                endInTeamLoss(outbreakData, `${this.senderUsername} had to draw with the player deck empty`);
+                return { validMove: true, turnOver: true };
+            }
+            ps.hand.push(gs.playerDeck.shift()!);
+        }
+        outbreakData.gameState.history.unshift(`${this.senderUsername} drew 2 cards`);
+
+        // Hand limit (§9, §16): over it, the turn pauses for OutbreakDiscard
+        // rather than infecting yet — the discard step comes before Phase 3.
+        if (ps.hand.length > HAND_LIMIT) {
+            gs.phase = 'discard';
+            outbreakData.gameState.history.unshift(`${this.senderUsername} must discard down to ${HAND_LIMIT} cards`);
+            return { validMove: true, turnOver: false };
+        }
+
+        resolveInfectPhase(outbreakData);
+        return { validMove: true, turnOver: true };
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
+    }
+}
+
+// ─── OutbreakDiscard ────────────────────────────────────────────────────────
+
+@serializable
+export class OutbreakDiscard implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    /** City-card ids to discard, down to HAND_LIMIT. */
+    cardIds: number[] = [];
+    readonly className = 'OutbreakDiscard';
+
+    myString() { return `Outbreak Discard cardIds=${this.cardIds.join(',')}`; }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const outbreakData = gameData as IOutbreakGameData;
+        const gs = outbreakData.specificGameState;
+
+        const ps = playerState(gs, this.senderId);
+        if (!ps) return INVALID;
+        if (gs.phase !== 'discard') return INVALID;
+
+        const chosen = [...new Set(this.cardIds)];
+        if (chosen.length === 0) return INVALID;
+        if (!chosen.every(id => ps.hand.includes(id))) return INVALID;
+        // Must reach the limit, but no further than it — the same short-of
+        // or past-it rejection OutbreakAction's cure applies to its own count.
+        if (ps.hand.length - chosen.length !== HAND_LIMIT) return INVALID;
+
+        for (const id of chosen) ps.hand.splice(ps.hand.indexOf(id), 1);
+        gs.playerDiscard.push(...chosen);
+        gs.phase = 'actions';
+
+        outbreakData.gameState.history.unshift(
+            `${this.senderUsername} discarded ${chosen.length} card${chosen.length === 1 ? '' : 's'} down to the hand limit`,
+        );
+
+        resolveInfectPhase(outbreakData);
+        return { validMove: true, turnOver: true };
     }
 
     Undo(gameData: IGameData): void {
