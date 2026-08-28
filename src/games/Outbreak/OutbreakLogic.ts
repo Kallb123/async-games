@@ -425,22 +425,30 @@ function resolveEpidemic(outbreakData: IOutbreakGameData, recordedOrder: number[
 
     // 2 — INFECT: draw the *bottom* infection card, placing 3 cubes on the
     // named city in one shot — or triggering an outbreak if it's already
-    // sitting at the 3-cube cap (§9.1 step 2).
-    const cityId = gs.infectionDeck.pop()!;
-    const color = CITIES[cityId].color;
-    gs.infectionDiscard.push(cityId);
+    // sitting at the 3-cube cap (§9.1 step 2). Guarded the same way
+    // resolveInfectPhase's ordinary draw is: the deck and discard pile
+    // between them always hold every infection card between them, so this
+    // can only run dry between epidemics if a future difficulty/board
+    // change makes a pile larger than the deck can support — not reachable
+    // with today's DIFFICULTIES, but a card that can't be drawn should skip
+    // Infect, not crash the command.
+    if (gs.infectionDeck.length > 0) {
+        const cityId = gs.infectionDeck.pop()!;
+        const color = CITIES[cityId].color;
+        gs.infectionDiscard.push(cityId);
 
-    if (gs.cures[color] === 'eradicated') {
-        outbreakData.gameState.history.unshift(`Epidemic draws ${CITIES[cityId].name}, already eradicated`);
-    } else {
-        const cubes = gs.cities.map(c => c.cubes);
-        const result = placeEpidemicCubesOrOutbreak(cubes, cityId, color, gs.cubesLeft);
-        const gameEnded = applyPlacementResult(
-            outbreakData, color, result,
-            () => `Epidemic infects ${CITIES[cityId].name} with 3 cubes of ${DISEASE_COLOR_DEFS[color].name}`,
-            spreadToNames => `Epidemic saturates ${CITIES[cityId].name} — it outbreaks and spreads to ${spreadToNames}`,
-        );
-        if (gameEnded) return null;
+        if (gs.cures[color] === 'eradicated') {
+            outbreakData.gameState.history.unshift(`Epidemic draws ${CITIES[cityId].name}, already eradicated`);
+        } else {
+            const cubes = gs.cities.map(c => c.cubes);
+            const result = placeEpidemicCubesOrOutbreak(cubes, cityId, color, gs.cubesLeft);
+            const gameEnded = applyPlacementResult(
+                outbreakData, color, result,
+                () => `Epidemic infects ${CITIES[cityId].name} with 3 cubes of ${DISEASE_COLOR_DEFS[color].name}`,
+                spreadToNames => `Epidemic saturates ${CITIES[cityId].name} — it outbreaks and spreads to ${spreadToNames}`,
+            );
+            if (gameEnded) return null;
+        }
     }
 
     // 3 — INTENSIFY (§9.1 step 3, §14.2): shuffle the infection discard pile

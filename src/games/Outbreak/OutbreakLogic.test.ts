@@ -770,6 +770,18 @@ describe("OutbreakEndTurn epidemics", () => {
         }
     });
 
+    it("Infect: skips the draw without crashing if the infection deck is ever empty", async () => {
+        const state = stateWithEpidemicDrawIsolated();
+        state.infectionDeck = [];
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await endTurnCmd().Execute(game);
+
+        expect(outcome).toEqual({ validMove: true, turnOver: false });
+        expect(state.infectionRateIndex).toBe(1); // Increase still ran
+        expect(game.complete).toBe(false);
+    });
+
     it("discards the epidemic card itself, never adding it to the hand", async () => {
         const state = stateWithEpidemicDrawIsolated();
         state.infectionDeck = [idFor("Tokyo")];
