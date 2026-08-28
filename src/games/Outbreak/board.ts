@@ -26,6 +26,9 @@ export const DISEASE_COLOR_DEFS: Record<OutbreakDiseaseColor, OutbreakDiseaseCol
     red: { id: 'red', name: 'Red', region: 'East/Southeast Asia & Oceania', hex: '#ed362d' },
 };
 
+/** Which side of its node a city's name label sits on (see CITY_LABEL_OFFSET), hand-picked to keep the 48 labels off the printed routes and each other on this densely-packed map. */
+export type OutbreakLabelDir = 'n' | 's' | 'e' | 'w';
+
 export interface OutbreakCityDef {
     id: number;
     name: string;
@@ -33,6 +36,7 @@ export interface OutbreakCityDef {
     /** Schematic (not geographic) board position for the SVG map, 0-800 x 0-460. */
     x: number;
     y: number;
+    labelDir: OutbreakLabelDir;
 }
 
 // City list — order and colour grouping follow docs/games/outbreak-gdd.md §5.1
@@ -43,64 +47,64 @@ export interface OutbreakCityDef {
 // the two cities the art doesn't draw at all.
 const CITY_DEFS: Omit<OutbreakCityDef, 'id'>[] = [
     // Blue — North America & Europe (0-11)
-    { name: 'San Francisco', color: 'blue', x: 61, y: 141 },
-    { name: 'Chicago', color: 'blue', x: 134, y: 115 },
-    { name: 'Atlanta', color: 'blue', x: 179, y: 199 },
-    { name: 'Montreal', color: 'blue', x: 197, y: 115 },
-    { name: 'New York', color: 'blue', x: 208, y: 153 },
-    { name: 'Washington', color: 'blue', x: 147, y: 157 },
-    { name: 'London', color: 'blue', x: 329, y: 83 },
-    { name: 'Madrid', color: 'blue', x: 311, y: 148 },
-    { name: 'Paris', color: 'blue', x: 362, y: 115 },
-    { name: 'Essen', color: 'blue', x: 371, y: 79 },
-    { name: 'Milan', color: 'blue', x: 416, y: 135 },
-    { name: 'St. Petersburg', color: 'blue', x: 433, y: 70 },
+    { name: 'San Francisco', color: 'blue', x: 61, y: 141, labelDir: 'n' },
+    { name: 'Chicago', color: 'blue', x: 134, y: 115, labelDir: 'n' },
+    { name: 'Atlanta', color: 'blue', x: 179, y: 199, labelDir: 'w' },
+    { name: 'Montreal', color: 'blue', x: 197, y: 115, labelDir: 'n' },
+    { name: 'New York', color: 'blue', x: 208, y: 153, labelDir: 's' },
+    { name: 'Washington', color: 'blue', x: 147, y: 157, labelDir: 'w' },
+    { name: 'London', color: 'blue', x: 329, y: 83, labelDir: 'n' },
+    { name: 'Madrid', color: 'blue', x: 311, y: 148, labelDir: 'w' },
+    { name: 'Paris', color: 'blue', x: 362, y: 115, labelDir: 'n' },
+    { name: 'Essen', color: 'blue', x: 371, y: 79, labelDir: 'n' },
+    { name: 'Milan', color: 'blue', x: 416, y: 135, labelDir: 'e' },
+    { name: 'St. Petersburg', color: 'blue', x: 433, y: 70, labelDir: 'n' },
     // Yellow — South America & Africa (12-23)
-    { name: 'Los Angeles', color: 'yellow', x: 80, y: 192 },
-    { name: 'Mexico City', color: 'yellow', x: 123, y: 210 },
+    { name: 'Los Angeles', color: 'yellow', x: 80, y: 192, labelDir: 'w' },
+    { name: 'Mexico City', color: 'yellow', x: 123, y: 210, labelDir: 's' },
     // The art has no Miami node at all — Atlanta connects straight to Bogotá
     // in board.png instead of routing through it. x/y here are interpolated
     // from its neighbours (Atlanta, Washington, Mexico City, Bogotá) rather
     // than read off the art, and will need correcting if the art ever adds it.
-    { name: 'Miami', color: 'yellow', x: 195, y: 225 },
-    { name: 'Bogota', color: 'yellow', x: 175, y: 251 },
-    { name: 'Lima', color: 'yellow', x: 167, y: 315 },
-    { name: 'Santiago', color: 'yellow', x: 179, y: 370 },
-    { name: 'Buenos Aires', color: 'yellow', x: 227, y: 356 },
-    { name: 'Sao Paulo', color: 'yellow', x: 260, y: 315 },
-    { name: 'Lagos', color: 'yellow', x: 390, y: 291 },
-    { name: 'Kinshasa', color: 'yellow', x: 360, y: 243 },
-    { name: 'Khartoum', color: 'yellow', x: 424, y: 239 },
-    { name: 'Johannesburg', color: 'yellow', x: 424, y: 342 },
+    { name: 'Miami', color: 'yellow', x: 195, y: 225, labelDir: 'e' },
+    { name: 'Bogota', color: 'yellow', x: 175, y: 251, labelDir: 'w' },
+    { name: 'Lima', color: 'yellow', x: 167, y: 315, labelDir: 'w' },
+    { name: 'Santiago', color: 'yellow', x: 179, y: 370, labelDir: 'w' },
+    { name: 'Buenos Aires', color: 'yellow', x: 227, y: 356, labelDir: 's' },
+    { name: 'Sao Paulo', color: 'yellow', x: 260, y: 315, labelDir: 'e' },
+    { name: 'Lagos', color: 'yellow', x: 390, y: 291, labelDir: 's' },
+    { name: 'Kinshasa', color: 'yellow', x: 360, y: 243, labelDir: 'w' },
+    { name: 'Khartoum', color: 'yellow', x: 424, y: 239, labelDir: 'n' },
+    { name: 'Johannesburg', color: 'yellow', x: 424, y: 342, labelDir: 's' },
     // Black — Middle East & Central/South Asia (24-35)
-    { name: 'Algiers', color: 'black', x: 375, y: 169 },
-    { name: 'Cairo', color: 'black', x: 410, y: 187 },
-    { name: 'Istanbul', color: 'black', x: 456, y: 163 },
-    { name: 'Moscow', color: 'black', x: 467, y: 102 },
-    { name: 'Baghdad', color: 'black', x: 463, y: 218 },
-    { name: 'Tehran', color: 'black', x: 499, y: 128 },
+    { name: 'Algiers', color: 'black', x: 375, y: 169, labelDir: 'w' },
+    { name: 'Cairo', color: 'black', x: 410, y: 187, labelDir: 's' },
+    { name: 'Istanbul', color: 'black', x: 456, y: 163, labelDir: 'n' },
+    { name: 'Moscow', color: 'black', x: 467, y: 102, labelDir: 'n' },
+    { name: 'Baghdad', color: 'black', x: 463, y: 218, labelDir: 's' },
+    { name: 'Tehran', color: 'black', x: 499, y: 128, labelDir: 'e' },
     // Same gap as Miami above: the art has no Riyadh node either — Baghdad
     // connects straight to Karachi/Khartoum instead. Interpolated from Cairo,
     // Baghdad and Karachi, not read off the art.
-    { name: 'Riyadh', color: 'black', x: 460, y: 250 },
-    { name: 'Karachi', color: 'black', x: 513, y: 188 },
-    { name: 'Delhi', color: 'black', x: 597, y: 180 },
-    { name: 'Mumbai', color: 'black', x: 522, y: 225 },
-    { name: 'Chennai', color: 'black', x: 558, y: 256 },
-    { name: 'Kolkata', color: 'black', x: 547, y: 167 },
+    { name: 'Riyadh', color: 'black', x: 460, y: 250, labelDir: 'w' },
+    { name: 'Karachi', color: 'black', x: 513, y: 188, labelDir: 'w' },
+    { name: 'Delhi', color: 'black', x: 597, y: 180, labelDir: 's' },
+    { name: 'Mumbai', color: 'black', x: 522, y: 225, labelDir: 's' },
+    { name: 'Chennai', color: 'black', x: 558, y: 256, labelDir: 'w' },
+    { name: 'Kolkata', color: 'black', x: 547, y: 167, labelDir: 'e' },
     // Red — East/Southeast Asia & Oceania (36-47)
-    { name: 'Beijing', color: 'red', x: 630, y: 121 },
-    { name: 'Seoul', color: 'red', x: 679, y: 119 },
-    { name: 'Tokyo', color: 'red', x: 723, y: 141 },
-    { name: 'Shanghai', color: 'red', x: 632, y: 159 },
-    { name: 'Hong Kong', color: 'red', x: 633, y: 203 },
-    { name: 'Taipei', color: 'red', x: 682, y: 193 },
-    { name: 'Osaka', color: 'red', x: 724, y: 182 },
-    { name: 'Bangkok', color: 'red', x: 603, y: 228 },
-    { name: 'Ho Chi Minh City', color: 'red', x: 638, y: 262 },
-    { name: 'Manila', color: 'red', x: 692, y: 255 },
-    { name: 'Jakarta', color: 'red', x: 596, y: 296 },
-    { name: 'Sydney', color: 'red', x: 729, y: 356 },
+    { name: 'Beijing', color: 'red', x: 630, y: 121, labelDir: 'n' },
+    { name: 'Seoul', color: 'red', x: 679, y: 119, labelDir: 'n' },
+    { name: 'Tokyo', color: 'red', x: 723, y: 141, labelDir: 'e' },
+    { name: 'Shanghai', color: 'red', x: 632, y: 159, labelDir: 'e' },
+    { name: 'Hong Kong', color: 'red', x: 633, y: 203, labelDir: 'w' },
+    { name: 'Taipei', color: 'red', x: 682, y: 193, labelDir: 'e' },
+    { name: 'Osaka', color: 'red', x: 724, y: 182, labelDir: 'e' },
+    { name: 'Bangkok', color: 'red', x: 603, y: 228, labelDir: 'w' },
+    { name: 'Ho Chi Minh City', color: 'red', x: 638, y: 262, labelDir: 's' },
+    { name: 'Manila', color: 'red', x: 692, y: 255, labelDir: 'e' },
+    { name: 'Jakarta', color: 'red', x: 596, y: 296, labelDir: 'w' },
+    { name: 'Sydney', color: 'red', x: 729, y: 356, labelDir: 'e' },
 ];
 
 export const CITIES: OutbreakCityDef[] = CITY_DEFS.map((c, id) => ({ ...c, id }));
@@ -176,6 +180,14 @@ export function cityIdsForColor(color: OutbreakDiseaseColor): number[] {
 }
 
 export const BOARD_VIEWBOX = { width: 800, height: 460 };
+
+/** Offset + anchor for a city's name label, keyed by labelDir — same shape as TrainTime's CITY_LABEL_OFFSET, sized for this board's 7px node radius and 6px label text. */
+export const CITY_LABEL_OFFSET: Record<OutbreakLabelDir, { dx: number; dy: number; anchor: 'start' | 'middle' | 'end' }> = {
+    n: { dx: 0, dy: -10, anchor: 'middle' },
+    s: { dx: 0, dy: 15, anchor: 'middle' },
+    e: { dx: 10, dy: 2.5, anchor: 'start' },
+    w: { dx: -10, dy: 2.5, anchor: 'end' },
+};
 
 // §6 steps 4-5: the first research station, and every pawn's starting city.
 export const ATLANTA_CITY_ID = CITIES.find(c => c.name === 'Atlanta')!.id;

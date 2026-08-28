@@ -2,8 +2,9 @@
 import React from 'react';
 import BoardZoom from '@/components/ui/BoardZoom';
 import ClickableMapNode from '@/components/ui/ClickableMapNode';
+import MapLabel from '@/components/ui/MapLabel';
 import type { IOutbreakPlayerStateResponse, IOutbreakCityResponse } from '@/games/Outbreak/apiModels';
-import { ADJACENCY, BOARD_VIEWBOX, CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS } from '@/games/Outbreak/board';
+import { ADJACENCY, BOARD_VIEWBOX, CITIES, CITY_LABEL_OFFSET, DISEASE_COLORS, DISEASE_COLOR_DEFS } from '@/games/Outbreak/board';
 import { edgeListFrom } from '@/utils/games/adjacencyGraph';
 import { playerColour } from '@/utils/ui/playerColours';
 
@@ -82,6 +83,19 @@ export default function OutbreakBoard({ cities, playerStates, usernameList, vali
                                 </>}
                             >
                                 <circle cx={def.x} cy={def.y} r={NODE_RADIUS} fill={colorHex} stroke="#fff" strokeWidth={1.3} />
+
+                                {(() => {
+                                    const label = CITY_LABEL_OFFSET[def.labelDir];
+                                    return (
+                                        <MapLabel
+                                            x={def.x + label.dx} y={def.y + label.dy}
+                                            textAnchor={label.anchor}
+                                            fontSize={6} fontWeight={700}
+                                        >
+                                            {def.name}
+                                        </MapLabel>
+                                    );
+                                })()}
 
                                 {state.station && (
                                     <rect

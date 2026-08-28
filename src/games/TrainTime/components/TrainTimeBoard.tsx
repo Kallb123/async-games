@@ -1,6 +1,7 @@
 'use client'
 import React from 'react';
 import BoardZoom from '@/components/ui/BoardZoom';
+import MapLabel from '@/components/ui/MapLabel';
 import { BOARD_VIEWBOX, CITIES, ROUTES, routeName } from '@/games/TrainTime/board';
 import { CITY_LABEL_OFFSET, ROUTE_GEOMETRY, TRACK_PALETTE } from '@/games/TrainTime/ui';
 
@@ -109,7 +110,7 @@ export default function TrainTimeBoard({
                                     stroke="oklch(0.42 0.04 40)"
                                     strokeWidth={2.4}
                                 />
-                                <text
+                                <MapLabel
                                     x={city.x + label.dx}
                                     y={city.y + label.dy}
                                     textAnchor={label.anchor}
@@ -118,11 +119,10 @@ export default function TrainTimeBoard({
                                     fill={onTicket ? 'var(--tt-ink)' : 'oklch(0.4 0.04 45)'}
                                     stroke="oklch(0.96 0.024 85)"
                                     strokeWidth={4.5}
-                                    paintOrder="stroke"
                                     strokeLinejoin="round"
                                 >
                                     {city.name}
-                                </text>
+                                </MapLabel>
                             </g>
                         );
                     })}

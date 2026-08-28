@@ -2,6 +2,7 @@
 import React from 'react';
 import BoardZoom from '@/components/ui/BoardZoom';
 import ClickableMapNode from '@/components/ui/ClickableMapNode';
+import MapLabel from '@/components/ui/MapLabel';
 import type { IWorldDominationTerritoryResponse } from '@/games/WorldDomination/apiModels';
 import { TERRITORIES, ADJACENCY, CONTINENT_ORDER, CONTINENTS, continentLabelAnchor, BOARD_VIEWBOX } from '@/games/WorldDomination/board';
 import { edgeListFrom } from '@/utils/games/adjacencyGraph';
@@ -46,13 +47,14 @@ export default function WorldDominationBoard({
                         const c = CONTINENTS[cid];
                         const anchor = continentLabelAnchor(cid);
                         return (
-                            <text
+                            <MapLabel
                                 key={cid}
-                                x={anchor.x + 10} y={anchor.y + 16} fontSize={9} fontWeight={800} letterSpacing="0.04em"
-                                fill={c.color} stroke="rgba(0,0,0,0.6)" strokeWidth={3} paintOrder="stroke"
+                                x={anchor.x + 10} y={anchor.y + 16}
+                                textAnchor="start" letterSpacing="0.04em"
+                                fill={c.color}
                             >
                                 {c.name.toUpperCase()} +{c.bonus}
-                            </text>
+                            </MapLabel>
                         );
                     })}
 
