@@ -121,11 +121,12 @@ export function emptyBoardCubes(): OutbreakBoardCubes {
 
 // One infection-card draw's outcome, or an epidemic's own Increase+Infect
 // step, or the whole Infect Cities phase being skipped — the building block
-// of OutbreakEndTurn/OutbreakDiscard/OutbreakPlayEvent's `infectionLog`
-// (§21.6 step 6, step 12). Recorded so both the end-of-turn screen and the
-// away recap (recap.ts) can narrate exactly what a draw did — including the
-// Quarantine Specialist quietly containing it, which a before/after cube
-// count can't tell apart from an ordinary placement.
+// of IOutbreakInfectionPhaseOutcome.infectionLog (OutbreakLogic.ts), returned
+// by OutbreakEndTurn/OutbreakDiscard/OutbreakPlayEvent's Execute (§21.6 step
+// 6, step 12). Built so both the end-of-turn screen and the away recap
+// (recap.ts) can narrate exactly what a draw did — including the Quarantine
+// Specialist quietly containing it, which a before/after cube count can't
+// tell apart from an ordinary placement.
 export type OutbreakInfectionOutcome =
     | 'placed'      // one cube added, no cap hit
     | 'outbreak'    // the city was already at the cap; it outbroke and chained

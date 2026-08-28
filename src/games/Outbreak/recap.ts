@@ -1,6 +1,6 @@
 import type { IRecapAdapter, IGameEvent, IRecapSummary, IRecapTip } from "@/utils/games/recap";
 import type { ITurnSnapshot } from "@/utils/games/replay";
-import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic";
+import type { IGameCommand, ICommandOutcome, IOutbreakInfectionPhaseOutcome } from "@/utils/apiModels/GameLogic";
 import { playerByUserId } from "@/utils/apiModels/GameDataApi";
 import type { IOutbreakSpecificGameStateResponse } from "@/games/Outbreak/apiModels";
 import {
@@ -16,7 +16,7 @@ import {
     isCityCardId,
     OutbreakDiseaseColor,
 } from "@/games/Outbreak/board";
-import { canDiscoverCure, infectionRateFor, IOutbreakInfectionLogEntry } from "@/games/Outbreak/rules";
+import { canDiscoverCure, infectionRateFor } from "@/games/Outbreak/rules";
 import { pluralize } from "@/utils/ui/text";
 
 // §3's whole emotional arc is the board getting worse while the team fights
@@ -66,7 +66,7 @@ function toEvents(
     prev: ITurnSnapshot,
     next: ITurnSnapshot,
     command: IGameCommand,
-    _outcome: ICommandOutcome
+    outcome: ICommandOutcome
 ): IGameEvent[] {
     const prevState = state(prev);
     const nextState = state(next);
@@ -230,12 +230,14 @@ function toEvents(
     // Not folded into the OutbreakEndTurn case above: a card she contains
     // places no cube and triggers no outbreak, so the before/after cube and
     // outbreak counts that case reads can't tell a contained draw apart from
-    // nothing having been drawn at all — the infection log is the only place
-    // that recorded it happened. Checked on every command class, not just
+    // nothing having been drawn at all — the infection log on the command's
+    // own outcome (IOutbreakInfectionPhaseOutcome) is the only place that
+    // recorded it happened. Checked on every command class, not just
     // OutbreakEndTurn, since OutbreakDiscard and OutbreakPlayEvent can also
-    // be the one that finishes the draw phase and runs Phase 3.
-    const infectionLog = (command as unknown as { infectionLog?: IOutbreakInfectionLogEntry[] }).infectionLog;
-    const contained = infectionLog?.filter(e => e.outcome === 'contained') ?? [];
+    // be the one that finishes the draw phase and runs Phase 3 — reading
+    // `outcome` rather than `command` structurally no-ops for every other
+    // command, which never has an `infectionLog`.
+    const contained = (outcome as IOutbreakInfectionPhaseOutcome).infectionLog?.filter(e => e.outcome === 'contained') ?? [];
     if (contained.length > 0) {
         events.push({
             ...base,

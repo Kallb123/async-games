@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { OutbreakAction, OutbreakDiscard, OutbreakEndTurn, OutbreakGameType, OutbreakPlayEvent } from "./OutbreakLogic";
+import { IOutbreakInfectionPhaseOutcome, OutbreakAction, OutbreakDiscard, OutbreakEndTurn, OutbreakGameType, OutbreakPlayEvent } from "./OutbreakLogic";
 import { IOutbreakGameData, IOutbreakPlayerState } from "./OutbreakModels";
 import {
     ADJACENCY,
@@ -521,7 +521,9 @@ describe("OutbreakEndTurn", () => {
 
         const outcome = await endTurnCmd().Execute(game);
 
-        expect(outcome).toEqual({ validMove: true, turnOver: true });
+        // infectionDeck is empty (baseState's default, untouched here), so
+        // Phase 3 breaks on its first draw without producing any log entry.
+        expect(outcome).toEqual({ validMove: true, turnOver: true, infectionLog: [] });
         expect(state.players.get("u1")!.hand).toEqual([first, second]);
         expect(state.playerDeck).toEqual([third]);
         expect(state.phase).toBe('actions');
@@ -541,7 +543,8 @@ describe("OutbreakEndTurn", () => {
 
         const outcome = await endTurnCmd().Execute(game);
 
-        expect(outcome).toEqual({ validMove: true, turnOver: false });
+        // Paused before Phase 3 ever runs, so there's nothing in the log yet.
+        expect(outcome).toEqual({ validMove: true, turnOver: false, infectionLog: [] });
         expect(state.phase).toBe('discard');
         expect(ps.hand.length).toBe(8);
     });
@@ -648,7 +651,11 @@ describe("OutbreakEndTurn", () => {
         expect(state.cities[chicago].cubes.blue).toBe(0);
         expect(state.infectionDiscard).toEqual([chicago]);
         expect(game.complete).toBe(false);
-        expect(outcome).toEqual({ validMove: true, turnOver: true });
+        expect(outcome).toEqual({
+            validMove: true,
+            turnOver: true,
+            infectionLog: [{ kind: 'infect', cityId: chicago, color: 'blue', outcome: 'eradicated' }],
+        });
     });
 });
 
@@ -704,7 +711,11 @@ describe("OutbreakDiscard", () => {
 
         const outcome = await discardCmd(toDiscard).Execute(game);
 
-        expect(outcome).toEqual({ validMove: true, turnOver: true });
+        expect(outcome).toEqual({
+            validMove: true,
+            turnOver: true,
+            infectionLog: [{ kind: 'infect', cityId: cardA, color: 'blue', outcome: 'placed' }],
+        });
         expect(ps.hand).toEqual(hand.slice(2));
         expect(ps.hand.length).toBe(HAND_LIMIT);
         expect(state.playerDiscard).toEqual(toDiscard);
@@ -810,8 +821,10 @@ describe("OutbreakEndTurn epidemics", () => {
 
         const outcome = await endTurnCmd().Execute(game);
 
-        expect(outcome).toEqual({ validMove: true, turnOver: false });
-        expect(state.infectionRateIndex).toBe(1); // Increase still ran
+        // Increase still ran (rate index 0 -> 1, so rateAfter is 2), but with
+        // nothing in the deck the Infect step never drew a card.
+        expect(outcome).toEqual({ validMove: true, turnOver: false, infectionLog: [{ kind: 'epidemic', rateAfter: 2 }] });
+        expect(state.infectionRateIndex).toBe(1);
         expect(game.complete).toBe(false);
     });
 
@@ -875,7 +888,11 @@ describe("OutbreakEndTurn epidemics", () => {
 
         const outcome = await command.Execute(game);
 
-        expect(outcome).toEqual({ validMove: true, turnOver: true });
+        // Phase 3 also runs after both epidemics (the empty hand never hits
+        // the limit) and reshuffles a fresh deck order, so its log entries
+        // aren't asserted here — this test is about the two-epidemics
+        // mechanic, not what Phase 3 drew afterwards.
+        expect(outcome).toMatchObject({ validMove: true, turnOver: true });
         expect(state.infectionRateIndex).toBe(2); // two Increase steps
         expect(command.recordedIntensifyOrders).toHaveLength(2); // two Intensify shuffles
         expect(state.players.get("u1")!.hand).toEqual([]); // no city card was drawn at all
@@ -1030,12 +1047,16 @@ describe("Quarantine Specialist (§11, §16)", () => {
         state.infectionDeck = [chicago];
         const game = makeGame(state, ["u1"]);
 
-        await endTurnCmd().Execute(game);
+        const outcome = await endTurnCmd().Execute(game) as IOutbreakInfectionPhaseOutcome;
 
         expect(state.cities[chicago].cubes.blue).toBe(0);
         expect(state.infectionDiscard).toEqual([chicago]);
         expect(state.outbreaks).toBe(0);
         expect(game.complete).toBe(false);
+        // The bug this fixes: a contained draw moved no cube and triggered no
+        // outbreak, so a viewer diffing before/after board state alone (the
+        // away recap's old approach) couldn't tell it happened at all.
+        expect(outcome.infectionLog).toEqual([{ kind: 'infect', cityId: chicago, color: 'blue', outcome: 'contained' }]);
     });
 
     it("prevents an outbreak from spreading into a protected neighbour, without preventing the outbreak itself", async () => {
@@ -1078,12 +1099,15 @@ describe("Quarantine Specialist (§11, §16)", () => {
         state.infectionDiscard = [idFor("Miami")];
         const game = makeGame(state, ["u1"]);
 
-        await endTurnCmd().Execute(game);
+        const outcome = await endTurnCmd().Execute(game) as IOutbreakInfectionPhaseOutcome;
 
         expect(state.infectionRateIndex).toBe(1); // Increase still ran
         expect(state.cities[ATLANTA_CITY_ID].cubes.blue).toBe(0); // Infect blocked
         expect(state.outbreaks).toBe(0);
         expect(state.infectionDiscard).toEqual([]); // Intensify still ran
+        expect(outcome.infectionLog).toEqual([
+            { kind: 'epidemic', rateAfter: 2, cityId: ATLANTA_CITY_ID, color: 'blue', outcome: 'contained' },
+        ]);
         expect(state.phase).toBe('discard'); // drawing Osaka pushed the hand over the limit
         expect(game.complete).toBe(false);
     });
@@ -1303,7 +1327,9 @@ describe("OutbreakPlayEvent — Airlift (§12)", () => {
 
         const outcome = await eventCmd({ cardId: EVENT_CARD_AIRLIFT, targetUserId: "u2", destination: tokyo }).Execute(game);
 
-        expect(outcome).toEqual({ validMove: true, turnOver: false });
+        // Still mid-actions phase, so the draw phase never finished — nothing
+        // in the log.
+        expect(outcome).toEqual({ validMove: true, turnOver: false, infectionLog: [] });
         expect(state.players.get("u2")!.city).toBe(tokyo);
         expect(state.players.get("u1")!.hand).toEqual([]);
         expect(state.players.get("u1")!.actionsLeft).toBe(ACTIONS_PER_TURN); // free
@@ -1392,12 +1418,14 @@ describe("OutbreakPlayEvent — One Quiet Night (§12)", () => {
         const game = makeGame(state, ["u1"]);
 
         const played = await eventCmd({ cardId: EVENT_CARD_ONE_QUIET_NIGHT }).Execute(game);
-        expect(played).toEqual({ validMove: true, turnOver: false });
+        expect(played).toEqual({ validMove: true, turnOver: false, infectionLog: [] });
         expect(state.oneQuietNightActive).toBe(true);
 
         const outcome = await endTurnCmd().Execute(game);
 
-        expect(outcome).toEqual({ validMove: true, turnOver: true });
+        // Phase 3 is skipped outright, logged as its own entry rather than
+        // silently producing nothing.
+        expect(outcome).toEqual({ validMove: true, turnOver: true, infectionLog: [{ kind: 'quietNight' }] });
         expect(state.oneQuietNightActive).toBe(false);
         expect(state.infectionDeck).toEqual([idFor("Tokyo"), idFor("Cairo")]); // untouched
         expect(state.cities[idFor("Tokyo")].cubes).toEqual(emptyCubeCounts());
@@ -1441,7 +1469,7 @@ describe("OutbreakPlayEvent — Forecast (§12)", () => {
 
         const outcome = await eventCmd({ cardId: EVENT_CARD_FORECAST }).Execute(game);
 
-        expect(outcome).toEqual({ validMove: true, turnOver: false });
+        expect(outcome).toEqual({ validMove: true, turnOver: false, infectionLog: [] });
         expect(state.phase).toBe('forecast');
         expect(state.forecastCards).toEqual(deck.slice(0, 6));
         expect(state.infectionDeck).toEqual(deck.slice(6));
@@ -1471,7 +1499,7 @@ describe("OutbreakPlayEvent — Forecast (§12)", () => {
 
         const outcome = await eventCmd({ kind: 'forecastOrder', cardIds: reordered }).Execute(game);
 
-        expect(outcome).toEqual({ validMove: true, turnOver: false });
+        expect(outcome).toEqual({ validMove: true, turnOver: false, infectionLog: [] });
         expect(state.phase).toBe('actions');
         expect(state.forecastCards).toEqual([]);
         expect(state.infectionDeck).toEqual([...reordered, 6]);
@@ -1500,13 +1528,19 @@ describe("OutbreakPlayEvent — Forecast (§12)", () => {
         const game = makeGame(state, ["u1"]);
 
         const played = await eventCmd({ cardId: EVENT_CARD_FORECAST }).Execute(game);
-        expect(played).toEqual({ validMove: true, turnOver: false });
+        // Forecast itself always moves to phase 'forecast', which isn't
+        // 'discard' — so the draw phase hasn't finished yet either way.
+        expect(played).toEqual({ validMove: true, turnOver: false, infectionLog: [] });
         expect(ps.hand).toHaveLength(HAND_LIMIT);
         expect(state.phase).toBe('forecast'); // the order is still pending
 
         const outcome = await eventCmd({ kind: 'forecastOrder', cardIds: [...state.forecastCards] }).Execute(game);
 
-        expect(outcome).toEqual({ validMove: true, turnOver: true });
+        expect(outcome).toEqual({
+            validMove: true,
+            turnOver: true,
+            infectionLog: [{ kind: 'infect', cityId: idFor("Baghdad"), color: CITIES[idFor("Baghdad")].color, outcome: 'placed' }],
+        });
         expect(state.phase).toBe('actions');
         expect(state.infectionDiscard).toEqual([idFor("Baghdad")]);
     });

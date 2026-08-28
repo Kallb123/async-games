@@ -511,6 +511,26 @@ export class OutbreakAction implements IGameCommand {
 
 // ─── The draw and infect phases (§7 Phase 2-3, §9-10, §21.6 step 6) ────────
 
+// OutbreakEndTurn/OutbreakDiscard/OutbreakPlayEvent's outcome, whichever of
+// them ran (part of) the draw/infect phases — the established
+// ICommandOutcome-extension pattern every other game with per-command result
+// data uses (see ISnakesAndLaddersDiceRollOutcome, IDiceCitiesDiceRollOutcome),
+// rather than a field on the command itself: `outcome` is Execute's own
+// return value, never something deserialised from a request body, so there's
+// nothing here for a client to forge, and nothing worth persisting to
+// commandHistory since replaying the same command recomputes it identically.
+export interface IOutbreakInfectionPhaseOutcome extends ICommandOutcome {
+    infectionLog: IOutbreakInfectionLogEntry[];
+}
+
+// Every valid-move return from OutbreakEndTurn/OutbreakDiscard/OutbreakPlayEvent
+// builds one of these — a tiny helper instead of repeating the object shape
+// (and re-declaring the type at each call site to dodge the excess-property
+// check a bare `return { ..., infectionLog } as ICommandOutcome` would trip).
+function infectionPhaseOutcome(turnOver: boolean, infectionLog: IOutbreakInfectionLogEntry[]): IOutbreakInfectionPhaseOutcome {
+    return { validMove: true, turnOver, infectionLog };
+}
+
 // Ends the game in a shared defeat (§4.2), the moment one of the three loss
 // conditions is detected — mirroring what CheckGameOver already does for a
 // win (OutbreakGameType.CheckGameOver, above), since a loss can only be
@@ -731,13 +751,6 @@ export class OutbreakEndTurn implements IGameCommand {
     // the first live run, then reused on replay so recap and the crew
     // planner reproduce the identical reshuffle rather than rolling a new one.
     recordedIntensifyOrders?: number[][];
-    // The infection log this Execute call produced (§21.6 step 6, step 12):
-    // one entry per epidemic's own Infect step plus one per ordinary Phase 3
-    // draw, in the order they resolved. Always recomputed fresh — there's no
-    // randomness in it to preserve across a replay, unlike
-    // recordedIntensifyOrders above — and read directly by the end-of-turn
-    // screen (via the command route's response) and by recap.ts.
-    infectionLog?: IOutbreakInfectionLogEntry[];
     readonly className = 'OutbreakEndTurn';
 
     myString() { return `Outbreak EndTurn`; }
@@ -751,8 +764,11 @@ export class OutbreakEndTurn implements IGameCommand {
         if (gs.phase !== 'actions') return INVALID;
         if (ps.actionsLeft > 0) return INVALID;
 
+        // The infection log this Execute call produces (§21.6 step 6, step
+        // 12): one entry per epidemic's own Infect step plus one per
+        // ordinary Phase 3 draw, in the order they resolved — see
+        // IOutbreakInfectionPhaseOutcome.
         const infectionLog: IOutbreakInfectionLogEntry[] = [];
-        this.infectionLog = infectionLog;
 
         // Phase 2 (§7, §9): draw two, losing immediately if the deck can't
         // supply one. An epidemic card is resolved fully and immediately
@@ -764,7 +780,7 @@ export class OutbreakEndTurn implements IGameCommand {
         for (let i = 0; i < CARDS_DRAWN_PER_TURN; i++) {
             if (isPlayerDeckEmptyLoss(gs.playerDeck.length)) {
                 endInTeamLoss(outbreakData, `${this.senderUsername} had to draw with the player deck empty`);
-                return { validMove: true, turnOver: true };
+                return infectionPhaseOutcome(true, infectionLog);
             }
 
             const cardId = gs.playerDeck.shift()!;
@@ -776,7 +792,9 @@ export class OutbreakEndTurn implements IGameCommand {
                     (this.recordedIntensifyOrders ??= [])[intensifyIndex] = order;
                     intensifyIndex++;
                 }
-                if (outbreakData.complete) return { validMove: true, turnOver: true };
+                if (outbreakData.complete) {
+                    return infectionPhaseOutcome(true, infectionLog);
+                }
             } else {
                 ps.hand.push(cardId);
                 cardsDrawn++;
@@ -791,11 +809,11 @@ export class OutbreakEndTurn implements IGameCommand {
         if (ps.hand.length > HAND_LIMIT) {
             gs.phase = 'discard';
             outbreakData.gameState.history.unshift(`${this.senderUsername} must discard down to ${HAND_LIMIT} cards`);
-            return { validMove: true, turnOver: false };
+            return infectionPhaseOutcome(false, infectionLog);
         }
 
         infectionLog.push(...resolveInfectPhase(outbreakData));
-        return { validMove: true, turnOver: true };
+        return infectionPhaseOutcome(true, infectionLog);
     }
 
     Undo(gameData: IGameData): void {
@@ -814,9 +832,6 @@ export class OutbreakDiscard implements IGameCommand {
     senderUsername: string = 'Unknown';
     /** City-card ids to discard, down to HAND_LIMIT. */
     cardIds: number[] = [];
-    // Set only when this discard was the one that finished the draw phase —
-    // see OutbreakEndTurn.infectionLog.
-    infectionLog?: IOutbreakInfectionLogEntry[];
     readonly className = 'OutbreakDiscard';
 
     myString() { return `Outbreak Discard cardIds=${this.cardIds.join(',')}`; }
@@ -848,8 +863,7 @@ export class OutbreakDiscard implements IGameCommand {
         // helper OutbreakPlayEvent uses when an event card played to duck the
         // limit does the same job (see maybeFinishDrawPhase).
         const { turnOver, infectionLog } = maybeFinishDrawPhase(outbreakData, ps);
-        this.infectionLog = infectionLog;
-        return { validMove: true, turnOver };
+        return infectionPhaseOutcome(turnOver, infectionLog);
     }
 
     Undo(gameData: IGameData): void {
@@ -1068,9 +1082,6 @@ export class OutbreakPlayEvent implements IGameCommand {
     infectionCardId: number | null = null;
     /** forecastOrder: the reordered infection city ids drawn by Forecast, top card first. */
     cardIds: number[] = [];
-    // Set only when this command was the one that finished the draw phase —
-    // see OutbreakEndTurn.infectionLog.
-    infectionLog?: IOutbreakInfectionLogEntry[];
     readonly className = 'OutbreakPlayEvent';
 
     myString() { return `Outbreak PlayEvent kind=${this.kind} cardId=${this.cardId}`; }
@@ -1087,8 +1098,7 @@ export class OutbreakPlayEvent implements IGameCommand {
             if (historyLine === null) return INVALID;
             outbreakData.gameState.history.unshift(`${this.senderUsername} ${historyLine}`);
             const { turnOver, infectionLog } = maybeFinishDrawPhase(outbreakData, ps);
-            this.infectionLog = infectionLog;
-            return { validMove: true, turnOver };
+            return infectionPhaseOutcome(turnOver, infectionLog);
         }
 
         if (this.kind === 'retrieve') {
@@ -1107,8 +1117,7 @@ export class OutbreakPlayEvent implements IGameCommand {
         if (historyLine === null) return INVALID;
         outbreakData.gameState.history.unshift(`${this.senderUsername} ${historyLine}`);
         const { turnOver, infectionLog } = maybeFinishDrawPhase(outbreakData, ps);
-        this.infectionLog = infectionLog;
-        return { validMove: true, turnOver };
+        return infectionPhaseOutcome(turnOver, infectionLog);
     }
 
     Undo(gameData: IGameData): void {

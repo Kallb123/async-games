@@ -1090,6 +1090,34 @@ Outbreak for real, and `src/utils/ui/whatsNew.ts` has its "New games" line.
 with the identity order) found while reviewing steps 7 and 10 for this
 write-up.
 
+*Revisited.* The diff-reading approach above has a blind spot: a card the
+Quarantine Specialist contains places no cube and triggers no outbreak, so a
+snapshot diff can't tell it apart from nothing having been drawn at all — the
+away recap simply never mentioned it. The fix is a structured
+`infectionLog` (`rules.ts`'s `IOutbreakInfectionLogEntry`, one entry per card
+drawn — placed, contained, an outbreak with its spread, an eradicated no-op,
+or the whole phase skipped by One Quiet Night — plus one entry per epidemic's
+own Increase+Infect step), returned from `OutbreakEndTurn`/`OutbreakDiscard`/
+`OutbreakPlayEvent`'s `Execute` as `IOutbreakInfectionPhaseOutcome` — the same
+`ICommandOutcome`-extension pattern `ISnakesAndLaddersDiceRollOutcome` and
+`IDiceCitiesDiceRollOutcome` already use, not a field on the command itself:
+`outcome` is Execute's own return value, never something a client request
+body can plant, and never worth persisting since replaying the same command
+recomputes it identically. `recap.ts` reads it off `outcome` (available to
+`toEvents` on every command, not just `OutbreakEndTurn`, since a discard or
+an event card can just as easily be the one that finishes the draw phase) to
+add an `ob_contained` row the old diff missed.
+
+The same `infectionLog` also feeds a new, second screen:
+`OutbreakEndTurnScreen`, shown to the player who just finished the draw/infect
+phase (any of the three commands above) rather than the next one — the
+existing recap only ever narrates for whoever's turn it now is, so the player
+who caused an epidemic or an outbreak never otherwise saw the play-by-play of
+their own turn. It reuses `TurnRecap` rather than forking a new shell —
+`TurnRecap` picked up an optional `since` label and an optional per-event
+`timestamp` (a same-instant screen has nothing relative to say) to make that
+reuse possible instead of bespoke markup.
+
 **13 — The crew planner.** Last deliberately: it is the most novel thing here and
 the easiest to cut, and the game ships complete without it. Three pieces, per
 21.5:

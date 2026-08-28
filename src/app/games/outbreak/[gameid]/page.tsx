@@ -25,7 +25,7 @@ import { SubmitCommand, useSubmitCommand } from "@/utils/hooks/useSubmitCommand"
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
-import { OutbreakAction, OutbreakPlayEvent } from "@/utils/apiModels/GameLogic";
+import { IOutbreakInfectionPhaseOutcome, OutbreakAction, OutbreakPlayEvent } from "@/utils/apiModels/GameLogic";
 import { HAND_LIMIT, IOutbreakInfectionLogEntry, OutbreakMoveType, getLegalMoves, infectionRateFor, stationCityIds } from "@/games/Outbreak/rules";
 import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, EVENT_CARD_AIRLIFT, EVENT_CARD_GOVERNMENT_GRANT, MAX_RESEARCH_STATIONS } from "@/games/Outbreak/board";
 import { playerColour } from "@/utils/ui/playerColours";
@@ -52,13 +52,14 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
 
     // End-of-turn screen: whichever command just finished the draw/infect
     // phase (OutbreakEndTurn, or a discard/event card that ducked the hand
-    // limit) hands back what it drew and what it did — see
-    // ICommandResponse.outbreakInfectionLog. Every submit goes through this
-    // one wrapper so it's caught regardless of which control fired it.
+    // limit) hands back what it drew and what it did on its own outcome —
+    // see IOutbreakInfectionPhaseOutcome. Every submit goes through this one
+    // wrapper so it's caught regardless of which control fired it.
     const [turnResult, setTurnResult] = useState<IOutbreakInfectionLogEntry[] | null>(null);
     const submitCommand: SubmitCommand = (command, callback, target) =>
         rawSubmitCommand(command, (r) => {
-            if (r.outbreakInfectionLog?.length) setTurnResult(r.outbreakInfectionLog);
+            const infectionLog = (r.outcome as IOutbreakInfectionPhaseOutcome).infectionLog;
+            if (infectionLog?.length) setTurnResult(infectionLog);
             callback?.(r);
         }, target);
 

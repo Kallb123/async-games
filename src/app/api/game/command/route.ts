@@ -12,24 +12,10 @@ import { finishGame } from '@/utils/games/finishGame';
 import { runCommand } from '@/utils/games/commandPipeline';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
 import { IGameDataResponse } from '@/utils/apiModels/GameDataApi';
-import type { IOutbreakInfectionLogEntry } from '@/games/Outbreak/rules';
 
 export interface ICommandResponse {
   outcome: ICommandOutcome,
-  gameData: IGameDataResponse,
-  /**
-   * Outbreak only: the infection-phase result of the command that was just
-   * executed, when it ran one — OutbreakEndTurn directly, or
-   * OutbreakDiscard/OutbreakPlayEvent finishing a hand-limit duck (see
-   * OutbreakEndTurn.infectionLog). Lets the client show an end-of-turn
-   * screen immediately rather than waiting on a recap, which only ever
-   * covers the *next* player. Every entry here describes a card already
-   * drawn and resolved this turn — the same information `infectionDiscard`
-   * and the board already made public — so it carries nothing a player
-   * couldn't already see. Undefined for every other game, and for a command
-   * that didn't run an infection phase.
-   */
-  outbreakInfectionLog?: IOutbreakInfectionLogEntry[],
+  gameData: IGameDataResponse
 }
 
 /**
@@ -155,11 +141,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({}, {status: 401, statusText: "Not a valid move"});
   }
 
-  // Execute() may have left result data on the command instance it just ran
-  // against — see ICommandResponse.outbreakInfectionLog. Read here, once,
-  // before the request/response cycle discards this in-memory object.
-  const outbreakInfectionLog = (commandRequest as unknown as { infectionLog?: IOutbreakInfectionLogEntry[] }).infectionLog;
-
   // They acted within their turn window, so they haven't missed this one —
   // clear any run of expiries the turntimer cron had counted against them.
   if (gameData.missedTurnCounts?.get(commandRequest.senderId)) {
@@ -183,8 +164,7 @@ export async function POST(request: NextRequest) {
 
     const response: ICommandResponse = {
       outcome: commandOutcome,
-      gameData: await gameData.CreateDataResponse(userId),
-      ...(outbreakInfectionLog?.length ? { outbreakInfectionLog } : {}),
+      gameData: await gameData.CreateDataResponse(userId)
     }
 
     // Recording the match result and telling everyone the game is over doesn't
@@ -206,8 +186,7 @@ export async function POST(request: NextRequest) {
 
   const response: ICommandResponse = {
     outcome: commandOutcome,
-    gameData: await gameData.CreateDataResponse(userId),
-    ...(outbreakInfectionLog?.length ? { outbreakInfectionLog } : {}),
+    gameData: await gameData.CreateDataResponse(userId)
   }
 
   if (!commandOutcome.turnOver) {
