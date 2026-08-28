@@ -43,7 +43,8 @@ export default function OutbreakHands({ playerStates, usernameList, myUsername, 
                             {role && (
                                 <button
                                     type="button"
-                                    className="ag-hand-note ag-link-muted"
+                                    className="ag-hand-note"
+                                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
                                     onClick={() => setInfoRole(role)}
                                 >
                                     {role.name} ⓘ
