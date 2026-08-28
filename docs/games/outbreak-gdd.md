@@ -806,6 +806,30 @@ to be the same component wearing different data once written, promote it to
 stacks make it a different component wearing the same hat, keep them apart and
 say so in the commit message. Decide by writing it, not up front.
 
+*Landed.* The call came down on the "different component" side: a city node
+carries its home colour, up to four disease-cube stacks, a station marker and
+player pawns at once, against World Domination's single owner-coloured circle
+— different enough in shape and count that one shared node would need a
+payload/slot API more contorted than just having two. `OutbreakBoard.tsx` and
+`OutbreakActions.tsx` are new, wrapped in `BoardZoom` and an `.ag-outbreak-frame`
+subclass of `.ag-board-frame` as the note above expected, with the action
+picker built from the same `ag-actionsheet`/`ag-build-list`/`ag-build-row`
+primitives `SettlementsAndCitiesActions.tsx`/`DiceCitiesActions.tsx` use —
+covering all eight `OutbreakAction` kinds plus pass, including the all-6-stations
+relocate flow and a research-station gate on curing. Caveman review did find
+one real duplicate short of the node itself: the clickable-wrapper +
+valid/selected ring + tooltip `<g>` around each node was now byte-for-byte
+identical between the two boards, so that piece was extracted into
+`src/components/ui/ClickableMapNode.tsx` and both boards render their own
+node content inside it. The other genuine duplicate — the
+adjacency-list-to-edge-list dedup used to draw the lines — was likewise
+pulled into `adjacencyGraph.ts`'s new `edgeListFrom`, with `WorldDominationBoard.tsx`
+ported onto it in the same commit. `rules.ts` also picked up `stationCityIds`
+(promoted out of a private duplicate in `OutbreakLogic.ts` now that the client
+needs the same lookup) and `infectionRateFor`/`INFECTION_RATE_TRACK`, so the
+board's infection-rate stat reads a real value ahead of epidemics landing in
+step 8.
+
 **6 — The draw and infect phases.** `OutbreakEndTurn`: draw two, the hand-limit
 discard step, the infect phase at the current rate, cube placement, outbreaks and
 chains, and all three loss conditions (§4.2) reported through step 1's

@@ -1,6 +1,7 @@
 'use client'
 import React from 'react';
 import BoardZoom from '@/components/ui/BoardZoom';
+import ClickableMapNode from '@/components/ui/ClickableMapNode';
 import type { IOutbreakPlayerStateResponse, IOutbreakCityResponse } from '@/games/Outbreak/apiModels';
 import { ADJACENCY, BOARD_VIEWBOX, CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS } from '@/games/Outbreak/board';
 import { edgeListFrom } from '@/utils/games/adjacencyGraph';
@@ -61,27 +62,22 @@ export default function OutbreakBoard({ cities, playerStates, usernameList, vali
                         const state = cities[def.id];
                         if (!state) return null;
                         const isValid = validCities.has(def.id);
-                        const clickable = !!onCityClick && isValid;
                         const colorHex = DISEASE_COLOR_DEFS[def.color].hex;
                         const cubeColors = DISEASE_COLORS.filter(c => state.cubes[c] > 0);
                         const pawns = pawnsByCity.get(def.id) ?? [];
 
                         return (
-                            <g
+                            <ClickableMapNode
                                 key={def.id}
-                                onClick={() => clickable && onCityClick?.(def.id)}
-                                style={{ cursor: clickable ? 'pointer' : 'default' }}
-                            >
-                                <title>
+                                x={def.x} y={def.y} radius={NODE_RADIUS}
+                                isValid={isValid}
+                                onClick={onCityClick && (() => onCityClick(def.id))}
+                                title={<>
                                     {def.name} — {DISEASE_COLOR_DEFS[def.color].name}
                                     {state.station ? ' · research station' : ''}
                                     {cubeColors.map(c => ` · ${state.cubes[c]} ${c}`).join('')}
-                                </title>
-
-                                {isValid && (
-                                    <circle cx={def.x} cy={def.y} r={NODE_RADIUS + 4.5} fill="none" stroke="var(--ag-gold)" strokeWidth={2.5} />
-                                )}
-
+                                </>}
+                            >
                                 <circle cx={def.x} cy={def.y} r={NODE_RADIUS} fill={colorHex} stroke="#fff" strokeWidth={1.3} />
 
                                 {state.station && (
@@ -128,7 +124,7 @@ export default function OutbreakBoard({ cities, playerStates, usernameList, vali
                                         </g>
                                     );
                                 })()}
-                            </g>
+                            </ClickableMapNode>
                         );
                     })}
                 </svg>
