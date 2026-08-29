@@ -423,7 +423,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                     )}
 
                     {showLog && (
-                        <MatchHistory entries={nav.displayedHistory} usernames={usernameList} oldestFirst />
+                        <MatchHistory entries={nav.displayedHistory} userIdList={userIdList} oldestFirst />
                     )}
                 </>
             )}

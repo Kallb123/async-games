@@ -303,7 +303,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
                     <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} usernames={usernameList} />
 
                     {showLog && (
-                        <MatchHistory entries={nav.displayedHistory} usernames={usernameList} oldestFirst />
+                        <MatchHistory entries={nav.displayedHistory} userIdList={userIdList} oldestFirst />
                     )}
                 </>
             )}

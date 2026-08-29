@@ -451,7 +451,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                     )}
 
                     {showLog && (
-                        <MatchHistory entries={nav.displayedHistory} usernames={usernameList} />
+                        <MatchHistory entries={nav.displayedHistory} userIdList={userIdList} />
                     )}
                 </>
             )}

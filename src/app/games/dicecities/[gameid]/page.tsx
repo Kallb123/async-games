@@ -200,7 +200,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
             <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} usernames={usernameList} />
 
             {showLog && (
-                <MatchHistory entries={nav.displayedHistory} usernames={usernameList} />
+                <MatchHistory entries={nav.displayedHistory} userIdList={userIdList} />
             )}
         </GameShell>
     );

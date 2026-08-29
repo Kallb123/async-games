@@ -420,7 +420,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                     )}
 
                     {showLog && (
-                        <MatchHistory entries={nav.displayedHistory} usernames={usernameList} />
+                        <MatchHistory entries={nav.displayedHistory} userIdList={userIdList} />
                     )}
                 </>
             )}

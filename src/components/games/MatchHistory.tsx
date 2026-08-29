@@ -1,12 +1,12 @@
 import RecapTimeline from "@/components/ui/RecapTimeline";
-import { playerColourFor } from "@/utils/ui/playerColours";
+import { playerColourForId } from "@/utils/ui/playerColours";
 import { IHistoryEntry } from "@/utils/games/history";
 
 interface MatchHistoryProps {
     /** The game's log lines, newest first as the game state stores them. */
     entries: IHistoryEntry[];
-    /** The game's usernames in seat order — a line that names one is dotted in that player's colour. */
-    usernames?: string[];
+    /** The game's players in seat order — a line is dotted in its actor's colour. */
+    userIdList?: string[];
     /** Read the log the other way up, oldest line first. */
     oldestFirst?: boolean;
 }
@@ -14,7 +14,13 @@ interface MatchHistoryProps {
 // The in-game match history every game shows behind the log toggle: the turn
 // recap's timeline at its compact scale, each line dotted in the colour of
 // whoever it is about. Lines nobody made (setup, the narrator) stay neutral.
-export default function MatchHistory({ entries, usernames = [], oldestFirst = false }: MatchHistoryProps) {
+//
+// Whose line it is comes from the actorId the game recorded when it wrote the
+// line. This used to guess, by looking for a player whose name the line started
+// with — which picked the wrong player when one name prefixed another ("Dave"
+// and "DaveT", settled by seat order), and lost the colour entirely once a
+// player renamed and the frozen line no longer matched anybody.
+export default function MatchHistory({ entries, userIdList = [], oldestFirst = false }: MatchHistoryProps) {
     const lines = oldestFirst ? entries.slice().reverse() : entries;
 
     return (
@@ -27,7 +33,7 @@ export default function MatchHistory({ entries, usernames = [], oldestFirst = fa
                     compact
                     events={lines.map((entry, i) => ({
                         id: String(i),
-                        dotColour: playerColourFor(usernames.find((username) => entry.text.startsWith(username)), usernames),
+                        dotColour: playerColourForId(entry.actorId, userIdList),
                         title: entry.text,
                     }))}
                 />

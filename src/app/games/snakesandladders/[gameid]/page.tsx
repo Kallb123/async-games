@@ -263,7 +263,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
             />
 
             {showLog && (
-                <MatchHistory entries={nav.displayedHistory} usernames={usernameList} oldestFirst />
+                <MatchHistory entries={nav.displayedHistory} userIdList={userIdList} oldestFirst />
             )}
         </GameShell>
     );
