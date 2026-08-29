@@ -8,6 +8,12 @@ import { readJsonBody } from '@/utils/api/requestBody';
 // to work through a word list. Per account rather than per IP: the caller is
 // always signed in, so the account is the thing worth limiting, and a shared
 // network shouldn't be able to spend someone else's allowance.
+//
+// A speed bump rather than a wall, since a handle became editable: the same
+// question is answerable unmetered by us from the browser, where a rename that
+// comes back form_identifier_exists means taken (docs/dynamic-names.md §7).
+// Still worth keeping — this is the cheap way to ask, and the only one that
+// sends a real friend request on a hit.
 const FRIEND_INVITE_LIMIT = 30;
 const FRIEND_INVITE_WINDOW_MS = 60 * 60 * 1000;
 import { NextRequest, NextResponse } from 'next/server';

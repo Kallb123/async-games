@@ -573,6 +573,44 @@ Per AGENTS.md's review-crew boundaries, these are outside this document:
   Also worth their eye: whether the rename endpoint needs a rate limit, and
   whether `api/friends/invite`'s case-insensitive compare (unlike the other two
   call sites) matters here.
+
+  **Answered when PR 4 shipped — verdict: ship it, nothing blocking.** All three
+  answers turn on the same structural fact: the rename is the browser's own
+  `PATCH /v1/me` to Clerk, so no code in this repo is on that path and *every*
+  server-side policy on a rename is unimplementable without first inventing
+  `POST /api/user/username`.
+
+  - **Handle recycling is real and accepted.** Nothing persisted is keyed by
+    handle — PR 2 saw to that — so an existing friendship or seat cannot
+    transfer with a name, and both ways a typed handle is consumed need a
+    further human act (a friend request must be accepted; a game invite means
+    the host chose to seat them). The impersonator gains only what any invited
+    player gets. The real mitigation, if the risk is ever judged to matter, is
+    a svix-signed `user.updated` webhook recording freed handles and a
+    quarantine window in `usersByUsername` — its own PR, not this one.
+  - **No rate limit** (so commit 4.3 was not built). `consumeRateLimit` only
+    fires on our routes and there is no route here; buying one means a server
+    write that duplicates what Clerk already does correctly, and Clerk enforces
+    its own per-IP limits on `/v1/me`. The honest cost is that
+    `api/friends/invite`'s 30/hour is now a speed bump rather than a wall — the
+    same question is answerable unmetered from the console, where
+    `form_identifier_exists` means taken. Its comment says so now.
+  - **The guest gate is UX, not a control.** Hiding the editor stops a guest
+    being *offered* a handle, not from setting one — nothing server-side is
+    involved. `readableName` inverts for a guest so a squatted handle isn't
+    even displayed, but `usersByUsername` would still resolve it. If "a guest
+    has no handle" is ever meant as a rule, it needs the route above.
+  - **Case-insensitivity doesn't matter here.** Clerk enforces case-insensitive
+    uniqueness, so case variants can never be two accounts. The
+    `.toLowerCase()` at `friends/invite/route.ts:44` guards `usersByFilter`
+    handing back a non-matching user, not case confusion. The asymmetry worth
+    knowing: `lobby/route.ts:80` and `gameSetupRequest.ts:90` check only a
+    count, which is safe today and would stop being safe if Clerk's `username`
+    filter ever loosened toward partial matching.
+  - **One accepted staleness.** `api/lobby/route.ts:111` freezes `senderName`
+    onto the lobby, so a join card keeps naming a handle its creator has since
+    given up. Capped by the lobby TTL, and resolving live would cost the round
+    trip that snapshot exists to avoid.
 - **rulebook** — the player-visible "What's new" line, when this ships.
   Deliberately not added by this document, which is planning only.
 
