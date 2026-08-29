@@ -203,7 +203,8 @@ function applyOpsExpertFlight(
     if (ps.role !== 'opsExpert') return null;
     if (ps.opsExpertFlightUsed) return null;
     if (!gs.cities[ps.city].station) return null;
-    if (cardId === null || destination === ps.city || !ps.hand.includes(cardId)) return null;
+    // §11 spends "any city card" — an event card can't pay for the flight.
+    if (cardId === null || destination === ps.city || !isCityCardId(cardId) || !ps.hand.includes(cardId)) return null;
 
     ps.hand.splice(ps.hand.indexOf(cardId), 1);
     gs.playerDiscard.push(cardId);

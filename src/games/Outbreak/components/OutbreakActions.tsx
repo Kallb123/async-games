@@ -22,14 +22,23 @@ interface OutbreakActionsProps {
     /** The movement kind currently being targeted on the board, if any. */
     moveMode: OutbreakMoveType | null;
     setMoveMode: (m: OutbreakMoveType | null) => void;
+    /** Operations Expert (§11): true while her station-to-anywhere flight is
+     *  picking a destination on the map (the card is already chosen). */
+    opsFlightActive: boolean;
+    /** Begin that flight with the given city card chosen to pay for it. */
+    onStartOpsFlight: (cardId: number) => void;
+    onCancelOpsFlight: () => void;
     submitCommand: SubmitCommand;
     /** The `target` of the in-flight command, so only the tapped row shows as
      *  processing. Null when nothing is in flight. */
     pendingTarget: string | null;
 }
 
-export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode, submitCommand, pendingTarget }: OutbreakActionsProps) {
+export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode, opsFlightActive, onStartOpsFlight, onCancelOpsFlight, submitCommand, pendingTarget }: OutbreakActionsProps) {
     const [relocating, setRelocating] = useState(false);
+    // Operations Expert (§11): picking which city card pays for her flight,
+    // before the map lights up for the destination.
+    const [pickingOpsFlight, setPickingOpsFlight] = useState(false);
     const [discardChoice, setDiscardChoice] = useState<number[]>([]);
     // Forecast's ordering step (§12, §21.6 step 11): starts at the drawn order
     // every time a *new* draw arrives, keyed off the cards themselves rather
@@ -182,6 +191,53 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
         );
     }
 
+    // ── Operations Expert flight, step 2 (§11): the card is chosen, the board
+    //     is lit up for the destination — tap a city there to fly. ──────────
+    if (opsFlightActive) {
+        return (
+            <div className="ag-actionsheet">
+                <p className="ag-action-hint" style={{ marginTop: 0 }}>
+                    🛩 <b>Operations Expert flight</b> — tap a highlighted city on the map.
+                </p>
+                <button type="button" className="ag-btn ag-btn--light ag-btn--block" onClick={onCancelOpsFlight}>
+                    ↩ Cancel
+                </button>
+            </div>
+        );
+    }
+
+    // ── Operations Expert flight, step 1 (§11): pick which city card to
+    //     discard, then hand off to the map for the destination. ────────────
+    if (pickingOpsFlight) {
+        const cityCards = me.hand.filter(isCityCardId);
+        return (
+            <div className="ag-actionsheet">
+                <p className="ag-action-hint" style={{ marginTop: 0 }}>
+                    🛩 Operations Expert flight — discard which city card?
+                </p>
+                <div className="ag-build-list">
+                    {cityCards.map(cardId => (
+                        <button
+                            key={cardId}
+                            type="button"
+                            className="ag-build-row"
+                            onClick={() => { setPickingOpsFlight(false); onStartOpsFlight(cardId); }}
+                        >
+                            <span className="ag-icon-box" style={{ background: cardColor(cardId) }}>🗺️</span>
+                            <span className="ag-build-main">
+                                <span className="ag-build-name">{cardName(cardId)}</span>
+                            </span>
+                            <span className="ag-build-tag">Discard</span>
+                        </button>
+                    ))}
+                </div>
+                <button type="button" className="ag-btn ag-btn--light ag-btn--block" onClick={() => setPickingOpsFlight(false)}>
+                    ↩ Cancel
+                </button>
+            </div>
+        );
+    }
+
     const legalMoves = getLegalMoves({ currentCity: me.city, hand: me.hand, researchStations: stationCityIds(gs.cities) });
     const movesByType = new Map<OutbreakMoveType, number>();
     legalMoves.forEach(m => movesByType.set(m.type, (movesByType.get(m.type) ?? 0) + 1));
@@ -223,6 +279,28 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
                         </button>
                     );
                 })}
+
+                {/* ── Operations Expert flight (§11) ──────────────────────── */}
+                {me.role === 'opsExpert' && cityState.station && !me.opsExpertFlightUsed && (() => {
+                    const hasAnyCityCard = me.hand.some(isCityCardId);
+                    return (
+                        <button
+                            type="button"
+                            className={`ag-build-row${hasAnyCityCard ? '' : ' ag-build-row--disabled'}`}
+                            disabled={!hasAnyCityCard}
+                            onClick={() => setPickingOpsFlight(true)}
+                        >
+                            <span className="ag-icon-box">🛩</span>
+                            <span className="ag-build-main">
+                                <span className="ag-build-name">Operations Expert flight</span>
+                                <span className="ag-build-cost">Discard any city card to fly anywhere · once per turn</span>
+                            </span>
+                            {hasAnyCityCard
+                                ? <span className="ag-build-tag">Fly</span>
+                                : <span className="ag-build-tag ag-build-tag--muted">No card</span>}
+                        </button>
+                    );
+                })()}
 
                 {/* ── Build a research station ────────────────────────────── */}
                 {!cityState.station && (relocating ? (

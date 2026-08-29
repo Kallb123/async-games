@@ -35,7 +35,12 @@ import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
 // the destination/target an in-flight event card still needs. One state
 // covers both — like movement, only the page owns the board's click handler
 // — with `OutbreakEventTray` driving the event half via onStartTargeting.
-type BoardTarget = { kind: 'move'; type: OutbreakMoveType } | OutbreakEventTargeting;
+type BoardTarget =
+    | { kind: 'move'; type: OutbreakMoveType }
+    // Operations Expert (§11): the once-per-turn flight from a station to any
+    // city, with the city card chosen in OutbreakActions already picked.
+    | { kind: 'opsFlight'; cardId: number }
+    | OutbreakEventTargeting;
 
 export default function GameOutbreak({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
@@ -94,7 +99,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     // turn changes so a stale pick from a previous player never lingers into
     // someone else's turn.
     const [boardTarget, setBoardTarget] = useResettingState<BoardTarget | null>(null, `${displayedCurrentTurn}`);
-    const eventTargeting = boardTarget && boardTarget.kind !== 'move' ? boardTarget : null;
+    const eventTargeting = boardTarget && boardTarget.kind !== 'move' && boardTarget.kind !== 'opsFlight' ? boardTarget : null;
 
     // Which city a tapped hand/discard card is ringing on the board right
     // now — purely a lookup aid, reset alongside the move/event target above
@@ -109,6 +114,8 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
         if (boardTarget.kind === 'move') {
             const legal = getLegalMoves({ currentCity: me.city, hand: me.hand, researchStations: stationCityIds(gs.cities) });
             legal.filter(m => m.type === boardTarget.type).forEach(m => validCities.add(m.destination));
+        } else if (boardTarget.kind === 'opsFlight') {
+            gs.cities.forEach((_, id) => { if (id !== me.city) validCities.add(id); });
         } else if (boardTarget.kind === 'governmentGrant' && boardTarget.destination === undefined) {
             gs.cities.forEach((c, id) => { if (!c.station) validCities.add(id); });
         } else if (boardTarget.kind === 'airlift' && boardTarget.targetUserId !== undefined) {
@@ -125,6 +132,15 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
             cmd.kind = boardTarget.type;
             cmd.destination = cityId;
             submitCommand(cmd, () => setBoardTarget(null), 'move');
+            return;
+        }
+
+        if (boardTarget.kind === 'opsFlight') {
+            const cmd = new OutbreakAction();
+            cmd.kind = 'opsExpertFlight';
+            cmd.destination = cityId;
+            cmd.cardId = boardTarget.cardId;
+            submitCommand(cmd, () => setBoardTarget(null), 'opsFlight');
             return;
         }
 
@@ -155,6 +171,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
 
     const boardTag = !boardTarget ? null
         : boardTarget.kind === 'move' ? 'Choose a destination'
+        : boardTarget.kind === 'opsFlight' ? 'Choose a destination'
         : boardTarget.kind === 'governmentGrant' && boardTarget.destination === undefined ? 'Choose a station city'
         : boardTarget.kind === 'airlift' && boardTarget.targetUserId !== undefined ? 'Choose a destination'
         : null;
@@ -321,6 +338,9 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                             myUsername={myUsername}
                             moveMode={boardTarget?.kind === 'move' ? boardTarget.type : null}
                             setMoveMode={m => setBoardTarget(m ? { kind: 'move', type: m } : null)}
+                            opsFlightActive={boardTarget?.kind === 'opsFlight'}
+                            onStartOpsFlight={cardId => setBoardTarget({ kind: 'opsFlight', cardId })}
+                            onCancelOpsFlight={() => setBoardTarget(null)}
                             submitCommand={submitCommand}
                             pendingTarget={pendingTarget}
                         />
