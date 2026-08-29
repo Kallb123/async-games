@@ -12,11 +12,11 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useToast } from "@/components/ToastContext";
 import AuthScreen from "@/components/ui/AuthScreen";
 import BackLink from "@/components/ui/BackLink";
-import DieFace from "@/components/ui/DieFace";
+import DisplayNameField from "@/components/ui/DisplayNameField";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { JOIN_CODE_LENGTH, normaliseJoinCode, readJoinCode } from "@/utils/games/joinCode";
 import { invitedYouTo, lobbyPath, seatsLeftLabel } from "@/utils/games/lobby";
-import { MAX_GUEST_NAME_LENGTH, isValidGuestName, randomGuestName } from "@/utils/games/guestName";
+import { isValidGuestName, randomGuestName } from "@/utils/games/guestName";
 import { readResumeTicket } from "@/utils/users/resumeLink";
 import { useEnterStartedGame } from "@/utils/hooks/useEnterStartedGame";
 import ResumeLinkOffer from "@/components/ui/ResumeLinkOffer";
@@ -337,32 +337,17 @@ function JoinScreen({ initiallySignedIn, initialName, initialDie }: JoinScreenPr
       <AuthScreen title={title} subtitle={subtitle}>
         <form onSubmit={handleGuestSubmit} className="ag-section" style={{ width: "100%" }}>
           <JoinCodeField code={code} onChange={setCode} />
-          <div style={{ marginTop: 12 }}>
-            <label htmlFor="guest-name" className="ag-section-label ag-field-label">Your username</label>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input
-                id="guest-name"
-                className="ag-input"
-                type="text"
-                autoComplete="off"
-                maxLength={MAX_GUEST_NAME_LENGTH}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Your name"
-                style={{ flex: 1 }}
-              />
-              <button
-                type="button"
-                className="ag-die-btn"
-                onClick={rerollName}
-                disabled={joining}
-                aria-label="Shuffle to a new random name"
-                title="Shuffle to a new random name"
-              >
-                <DieFace value={nameDie} size={32} />
-              </button>
-            </div>
-          </div>
+          <DisplayNameField
+            id="guest-name"
+            label="Your username"
+            value={name}
+            onChange={setName}
+            placeholder="Your name"
+            disabled={joining}
+            dieValue={nameDie}
+            onReroll={rerollName}
+            style={{ marginTop: 12 }}
+          />
           <JoinButton joining={joining} disabled={joining || !normaliseJoinCode(code) || !isValidGuestName(name.trim())} />
         </form>
       </AuthScreen>
