@@ -49,7 +49,7 @@ SolitaireInvitationSchema.methods.CreateGame = async function(invite: ISolitaire
         missedTurnCounts: new Map(),
         gameState: {
             turnOrder: userIdList,
-            history: [`Dealt a new ${drawMode === 'DRAW_3' ? 'Draw-3' : 'Draw-1'} game`],
+            history: [{ text: `Dealt a new ${drawMode === 'DRAW_3' ? 'Draw-3' : 'Draw-1'} game` }],
             commandHistory: []
         },
         complete: false,

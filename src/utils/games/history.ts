@@ -51,6 +51,17 @@ export function userToken(userId: string): string {
     return `{{${userId}}}`;
 }
 
+/**
+ * A line about a player's own action: their mention, then the rest of the
+ * sentence. The shape almost every history line has.
+ *
+ *     playerHistory(this.senderId, `rolled a ${roll}`)
+ *     // { text: "{{user_2abc}} rolled a 4", actorId: "user_2abc" }
+ */
+export function playerHistory(userId: string, rest: string): IHistoryEntry {
+    return { text: `${userToken(userId)} ${rest}`, actorId: userId };
+}
+
 // Deliberately not `[^]` — a token never spans lines, and refusing to match a
 // brace keeps a malformed line from swallowing the rest of the text.
 const USER_TOKEN = /\{\{([^{}\n]*)\}\}/g;
