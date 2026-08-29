@@ -1,4 +1,5 @@
 import type { IGameType } from "./gameCommand";
+import type { IHistoryEntry } from "@/utils/games/history";
 import type { IInvitationResponse } from "@/utils/mongodb/InvitationData";
 
 export type uuidString = `${string}-${string}-${string}-${string}-${string}`;
@@ -114,7 +115,9 @@ export interface IGameDataResponse {
     currentTurn: string,
     gameState: {
         turnOrder: string[],
-        history: string[]
+        // Newest first, with every {{userId}} token already resolved to a name
+        // — ready to render. `actorId` says whose line it is.
+        history: IHistoryEntry[]
     },
     complete: boolean,
     winner: string,

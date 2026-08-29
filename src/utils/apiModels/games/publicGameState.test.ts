@@ -27,7 +27,7 @@ const RESPONSE_BUILDERS = [
 function makeGameState(): IGameState {
     return {
         turnOrder: ["user-1", "user-2"],
-        history: ["user-1 rolled a 6"],
+        history: [{ text: "{{user-1}} rolled a 6", actorId: "user-1" }],
         // Stands in for the real thing: a command carrying a field its game
         // means to keep private (Smartthink's secret code, Train Time's kept
         // ticket ids, SAC's robber RNG).
@@ -35,14 +35,15 @@ function makeGameState(): IGameState {
     };
 }
 
+const NAMES = { "user-1": "Alice", "user-2": "Bob" };
+
 describe("publicGameState", () => {
     it("drops commandHistory and keeps the public fields", () => {
         const state = makeGameState();
 
-        const result = publicGameState(state);
+        const result = publicGameState(state, NAMES);
 
         expect(result.turnOrder).toEqual(["user-1", "user-2"]);
-        expect(result.history).toEqual(["user-1 rolled a 6"]);
         expect("commandHistory" in result).toBe(false);
         // The whole point is what a client can read off the wire, so assert on
         // the serialised form too — an own-property check alone would miss a
@@ -50,14 +51,21 @@ describe("publicGameState", () => {
         expect(JSON.stringify(result)).not.toContain("secretCode");
     });
 
-    it("takes a rewritten history when a game substitutes usernames for userIds", () => {
+    it("resolves the player tokens in the history it sends", () => {
         const state = makeGameState();
 
-        const result = publicGameState(state, ["Alice rolled a 6"]);
+        const result = publicGameState(state, NAMES);
 
-        expect(result.history).toEqual(["Alice rolled a 6"]);
-        expect(result.turnOrder).toEqual(["user-1", "user-2"]);
-        expect("commandHistory" in result).toBe(false);
+        expect(result.history).toEqual([{ text: "Alice rolled a 6", actorId: "user-1" }]);
+    });
+
+    it("still resolves a line stored before its game was converted", () => {
+        const state = makeGameState();
+        state.history = ["user-1 rolled a 6"];
+
+        const result = publicGameState(state, NAMES);
+
+        expect(result.history).toEqual([{ text: "Alice rolled a 6" }]);
     });
 });
 

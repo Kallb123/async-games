@@ -9,7 +9,6 @@ import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users
 import { WorldDominationGameType } from "@/utils/apiModels/GameLogic";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { shuffle } from "@/utils/games/shuffle";
-import { replaceHistoryUserIds } from "@/utils/games/history";
 import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
 import {
     TERRITORIES,
@@ -285,10 +284,7 @@ WorldDominationGameDataSchema.methods.CreateDataResponse = async function(viewer
         userIdList: doc.userIdList,
         turnTimer: doc.turnTimer,
         currentTurn: doc.currentTurn,
-        gameState: publicGameState(
-            doc.gameState,
-            replaceHistoryUserIds(doc.gameState.history, userIdNameMap),
-        ),
+        gameState: publicGameState(doc.gameState, userIdNameMap),
         complete: doc.complete,
         winner: doc.winner,
         endReason: doc.endReason,

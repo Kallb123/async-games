@@ -1,5 +1,6 @@
 import { IGameData } from "../mongodb/GameData";
 import { UNKNOWN_PLAYER_NAME } from "../users/clerk";
+import { IHistoryEntry, resolveStoredHistory } from "./history";
 import { IGameCommand, IGameType, ICommandOutcome } from "../apiModels/GameLogic";
 import { deserializeJSON } from "../apiModels/Serialisable";
 import { runCommand } from "./commandPipeline";
@@ -25,8 +26,9 @@ export interface ITurnSnapshot {
     currentTurn: string;
     complete: boolean;
     winner: string;
-    // Newest-first history log up to and including this point.
-    history: string[];
+    // Newest-first history log up to and including this point, with every
+    // player token already resolved to a name (see utils/games/history.ts).
+    history: IHistoryEntry[];
     // Metadata about the command that produced this snapshot (null for the initial state).
     command: {
         senderId: string;
@@ -259,7 +261,7 @@ export async function buildTimeline(
             currentTurn: state.currentTurn,
             complete: state.complete,
             winner: state.winner,
-            history: [...state.gameState.history],
+            history: resolveStoredHistory(state.gameState.history, userIdNameMap),
             command: command
                 ? {
                       senderId: command.senderId,
@@ -335,7 +337,7 @@ export async function buildTimeline(
     // beyond what the replayed commands produced. Append them to every snapshot
     // so the setup steps stay visible throughout recap/planning.
     const persistedHistory = gameData.gameState.history ?? [];
-    const setupHistory = persistedHistory.slice(state.gameState.history.length);
+    const setupHistory = resolveStoredHistory(persistedHistory.slice(state.gameState.history.length), userIdNameMap);
 
     const resolvedPlannedCommands: unknown[] = [];
     if (!gameOver && plannedCommands.length) {

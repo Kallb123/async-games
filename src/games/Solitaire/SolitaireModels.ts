@@ -130,13 +130,17 @@ SolitaireGameDataSchema.methods.CreateDataResponse = async function(_viewerId: s
 
     const gameDataDocument: ISolitaireGameData = this as ISolitaireGameData;
 
+    const usernameList = await userIdListToUsernameList(gameDataDocument.userIdList);
+    const userIdNameMap: { [key: string]: string } = {};
+    gameDataDocument.userIdList.forEach((userId, i) => { userIdNameMap[userId] = usernameList[i]; });
+
     return {
         gameType: gameDataDocument.gameType,
-        usernameList: await userIdListToUsernameList(gameDataDocument.userIdList),
+        usernameList,
         userIdList: gameDataDocument.userIdList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
-        gameState: publicGameState(gameDataDocument.gameState),
+        gameState: publicGameState(gameDataDocument.gameState, userIdNameMap),
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
         specificGameState: gameStateToModel(gameDataDocument.specificGameState)

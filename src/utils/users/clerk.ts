@@ -1,12 +1,17 @@
 import { clerkClient, User } from "@clerk/nextjs/server";
-import { isGuest, readableName } from "@/utils/ui/players";
+import { isGuest, readableName, UNKNOWN_PLAYER_NAME } from "@/utils/ui/players";
 import { profileImageUrl } from "@/utils/ui/avatar";
 
 // Shown for a userId Clerk can't resolve (a deleted account, most likely
 // today) instead of silently dropping it. Every caller below zips this
 // result back up against the userId list it was given by position, so a
 // dropped entry would shift every name after it onto the wrong seat.
-export const UNKNOWN_PLAYER_NAME = "Unknown player";
+//
+// Declared alongside the other name resolvers in ui/players so that code which
+// can't import this server-only module (the history token resolver) still
+// falls back to the same string; re-exported here because every server caller
+// already reaches for it through clerk.
+export { UNKNOWN_PLAYER_NAME };
 
 // The invite-only gate (docs/account-less-play.md §5/§8): a user can sign in
 // without being allowed to use the app yet. Every route that lets someone

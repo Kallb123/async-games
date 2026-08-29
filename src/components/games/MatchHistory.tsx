@@ -1,9 +1,10 @@
 import RecapTimeline from "@/components/ui/RecapTimeline";
 import { playerColourFor } from "@/utils/ui/playerColours";
+import { IHistoryEntry } from "@/utils/games/history";
 
 interface MatchHistoryProps {
     /** The game's log lines, newest first as the game state stores them. */
-    entries: string[];
+    entries: IHistoryEntry[];
     /** The game's usernames in seat order — a line that names one is dotted in that player's colour. */
     usernames?: string[];
     /** Read the log the other way up, oldest line first. */
@@ -26,8 +27,8 @@ export default function MatchHistory({ entries, usernames = [], oldestFirst = fa
                     compact
                     events={lines.map((entry, i) => ({
                         id: String(i),
-                        dotColour: playerColourFor(usernames.find((username) => entry.startsWith(username)), usernames),
-                        title: entry,
+                        dotColour: playerColourFor(usernames.find((username) => entry.text.startsWith(username)), usernames),
+                        title: entry.text,
                     }))}
                 />
             )}

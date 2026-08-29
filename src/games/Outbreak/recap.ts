@@ -290,7 +290,7 @@ function toEvents(
             id: `${command.id}:ending`,
             type: won ? OB_WIN : OB_LOSS,
             glyph: won ? '🎉' : '💀',
-            title: won ? 'All four diseases are cured — the team wins!' : (next.history[0] ?? 'The team has lost.'),
+            title: won ? 'All four diseases are cured — the team wins!' : (next.history[0]?.text ?? 'The team has lost.'),
             affectedIds: Object.values(nextState.playerStates).map(p => p.userId),
         });
     }

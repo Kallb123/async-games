@@ -228,7 +228,7 @@ TrainTimeGameDataSchema.methods.CreateDataResponse = async function(viewerId: st
         userIdList: doc.userIdList,
         turnTimer: doc.turnTimer,
         currentTurn: doc.currentTurn,
-        gameState: publicGameState(doc.gameState),
+        gameState: publicGameState(doc.gameState, userIdNameMap),
         complete: doc.complete,
         winner: doc.winner,
         endReason: doc.endReason,
