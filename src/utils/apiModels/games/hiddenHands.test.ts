@@ -43,11 +43,11 @@ describe("World Domination's response", () => {
     it("gives the viewer their own hand and everyone else a count", () => {
         const response = worldDominationStateToResponse(worldDominationState(), NAMES, "u1");
 
-        expect(response.playerStates.Alice.cards).toEqual([ALICE_CARD]);
-        expect(response.playerStates.Alice.cardCount).toBe(1);
+        expect(response.playerStates.u1.cards).toEqual([ALICE_CARD]);
+        expect(response.playerStates.u1.cardCount).toBe(1);
 
-        expect(response.playerStates.Bob.cards).toBeUndefined();
-        expect(response.playerStates.Bob.cardCount).toBe(2);
+        expect(response.playerStates.u2.cards).toBeUndefined();
+        expect(response.playerStates.u2.cardCount).toBe(2);
     });
 
     it("keeps an opponent's cards out of the payload entirely", () => {
@@ -64,10 +64,10 @@ describe("World Domination's response", () => {
         // has left after cashing in a set.
         const response = worldDominationStateToResponse(worldDominationState(), NAMES, null);
 
-        expect(response.playerStates.Alice.cards).toBeUndefined();
-        expect(response.playerStates.Bob.cards).toBeUndefined();
-        expect(response.playerStates.Alice.cardCount).toBe(1);
-        expect(response.playerStates.Bob.cardCount).toBe(2);
+        expect(response.playerStates.u1.cards).toBeUndefined();
+        expect(response.playerStates.u2.cards).toBeUndefined();
+        expect(response.playerStates.u1.cardCount).toBe(1);
+        expect(response.playerStates.u2.cardCount).toBe(2);
         expect(JSON.stringify(response)).not.toContain("secret-card");
     });
 });

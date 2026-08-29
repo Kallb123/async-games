@@ -320,7 +320,7 @@ export function gameStateToResponse(
     for (const [userId, ps] of playerStatesSource) {
         const username = userIdNameMap[userId];
         const owned = gs.territories.filter(t => t.owner === userId);
-        playerStates[username] = {
+        playerStates[userId] = {
             userId,
             username,
             territoryCount: owned.length,
@@ -334,13 +334,16 @@ export function gameStateToResponse(
         };
     }
 
+    // Territory owners and the last-battle participants stay keyed by the stable
+    // userId all the way to the client, which resolves a name from playerStates
+    // when it needs one — so a rename can't shift an owner reference or a key.
     const territories = gs.territories.map(t => ({
-        owner: t.owner ? (userIdNameMap[t.owner] ?? t.owner) : null,
+        owner: t.owner ?? null,
         armies: t.armies,
     }));
 
     const lastBattle = gs.lastBattle ? {
-        attackerId: userIdNameMap[gs.lastBattle.attackerId] ?? gs.lastBattle.attackerId,
+        attackerId: gs.lastBattle.attackerId,
         fromTerritoryId: gs.lastBattle.fromTerritoryId,
         toTerritoryId: gs.lastBattle.toTerritoryId,
         attackerDice: [...gs.lastBattle.attackerDice],
@@ -348,9 +351,7 @@ export function gameStateToResponse(
         attackerLosses: gs.lastBattle.attackerLosses,
         defenderLosses: gs.lastBattle.defenderLosses,
         conquered: gs.lastBattle.conquered,
-        defenderEliminated: gs.lastBattle.defenderEliminated
-            ? (userIdNameMap[gs.lastBattle.defenderEliminated] ?? gs.lastBattle.defenderEliminated)
-            : null,
+        defenderEliminated: gs.lastBattle.defenderEliminated ?? null,
     } : null;
 
     return {
