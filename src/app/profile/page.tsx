@@ -18,7 +18,7 @@ import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { useNowToTheMinute } from "@/utils/hooks/useNow";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useProfilePicture } from "@/utils/hooks/useProfilePicture";
-import { displayName, isGuest, personalName, profileHeading } from "@/utils/ui/players";
+import { displayName, isGuest, personalName, profileHeading, publicHandle } from "@/utils/ui/players";
 import { profileImageUrl } from "@/utils/ui/avatar";
 import type { IGameStats, IRecentMatch } from "@/app/api/stats/route";
 import type { IReceivedReaction } from "@/app/api/reactions/route";
@@ -180,7 +180,7 @@ export default function Profile() {
                 {/* Keyed on the handle in play so reopening the editor starts
                     from the current one rather than whatever was last typed. */}
                 {editingUsername && (
-                    <UsernameForm key={user?.username ?? ''} onSaved={() => setEditingUsername(false)} />
+                    <UsernameForm key={publicHandle(user) ?? ''} onSaved={() => setEditingUsername(false)} />
                 )}
             </CollapsingSection>
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import ActionButton from "@/components/ui/ActionButton";
 import DisplayNameField from "@/components/ui/DisplayNameField";
 import { useClerkUserSave } from "@/utils/hooks/useClerkUserSave";
+import { publicHandle } from "@/utils/ui/players";
 import { MAX_USERNAME_LENGTH, USERNAME_RULE, isValidUsername } from "@/utils/users/username";
 
 // Changing the handle a player is known and invited by. A username is one
@@ -23,7 +24,10 @@ export default function UsernameForm({ onSaved }: {
     // shows, the toasts and the in-flight flag are the same four things a
     // profile picture needs, so they live in the shared hook.
     const { user, isSaving, save } = useClerkUserSave();
-    const current = user?.username ?? '';
+    // Through publicHandle rather than user.username raw, so the box can
+    // never open on the account id a guest's Clerk username actually is —
+    // the screen gates on that too, but the component holds its own line.
+    const current = publicHandle(user) ?? '';
     const [username, setUsername] = useState(current);
 
     const next = username.trim();

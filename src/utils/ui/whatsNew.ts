@@ -45,7 +45,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "Change the name friends invite you by",
-                detail: "The username you picked when you signed up used to be yours for good, typo and all. Your profile now has an Edit username button — take a new one and it follows you everywhere straight away, from your friends' invite lists to the games and match history you're already in.",
+                detail: "The username you picked when you signed up used to be yours for good, typo and all. Your profile now has an Edit username button — take a new one and it follows you straight away: your friends' invite lists, the games you're already in, and your match history.",
             },
             {
                 title: "Open a seat in Outbreak for anyone with the code",

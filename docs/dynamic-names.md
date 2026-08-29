@@ -397,9 +397,19 @@ Per AGENTS.md's component-reuse rule, none of this is new:
   twice already — `PasswordForm.tsx:50-71` and `ClaimAccountForm.tsx:54-90`.
   There is **no** `.ag-inline-edit` or form-row class in `ag-theme.css`;
   `ag-form-card` *is* the pattern. Don't invent a class, don't inline-style a row.
-- **Validation**: `isValidGuestName` / `MAX_GUEST_NAME_LENGTH`
-  (`utils/games/guestName.ts:5`), and `randomGuestName` if a reroll is offered.
-  No second regex.
+- **Validation**: ~~`isValidGuestName` / `MAX_GUEST_NAME_LENGTH`~~ — **this
+  was wrong, and PR 4 did the opposite.** A guest name and a Clerk handle are
+  not the same rule: `isValidGuestName` accepts `Dave Smith`, `O'Brien` and
+  `ダンダン`, and Clerk's handle charset takes none of them, so reusing it
+  would let a player type a name only the round trip rejects. The handle rule
+  already existed — it was just stranded in the server-only `clerk.ts` — so it
+  moved to `src/utils/users/username.ts` (`isValidUsername`,
+  `MIN/MAX_USERNAME_LENGTH`, `USERNAME_RULE`, `slugifyUsername`), which the
+  claim route and the profile form now share. That is a *moved* regex, not a
+  second one; the second regex the rule was guarding against would have been
+  re-deriving Clerk's charset inline in the form. **PR 5's display-name editor
+  wants `isValidGuestName`** — the free-text name genuinely is that rule.
+  `randomGuestName` still applies if a reroll is offered.
 - **Preview text**: `profileHeading` / `personalName` / `publicHandle`. Never
   re-derive "which name shows here".
 
@@ -415,6 +425,15 @@ optional `onReroll`, `label`) and use it in both. Note the shared piece is the
 **field**, not a hook: JoinForm's name goes to the join API, the profile's goes
 to Clerk. A `useDisplayName` hook would have one call site, which AGENTS.md
 rule 3 says is not yet a shared piece.
+
+**A second extraction the caveman found once PR 4 was written**, missed by the
+paragraph above: the *write* was duplicated too. `UsernameForm`'s submit was a
+second copy of `useProfilePicture`'s save — the same guard, reload, toast pair
+and in-flight flag around one write to the signed-in Clerk user. Those four
+things now live in `src/utils/hooks/useClerkUserSave.tsx`, and both callers are
+a two-line `save(...)`. **PR 5.2's display-name editor is its third caller** —
+`save(u => u.update({ firstName }), ...)` — so it should not hand-roll the
+sequence either.
 
 ### 5e. The §1c defects go first, not here
 
@@ -515,8 +534,8 @@ fails with `form_param_unknown`.
 | # | Commit | Notes |
 |---|---|---|
 | 4.1 | Extract `DisplayNameField` from the join form | The second-copy extraction (§5d). `JoinForm.tsx:340-365` keeps working through the new component — no behaviour change. |
-| 4.2 | Let a player change their username from their profile | `user.update({ username })` → `user.reload()` → toast, no API route (§5b). Reuses `ProfileIdentity`'s `action` slot, `ag-card ag-form-card`, `ActionButton`, and `isValidGuestName`. Surfaces Clerk's `form_identifier_exists` as a readable sentence. |
-| 4.3 | Rate-limit username changes | Only if `locksmith` asks for it — `consumeRateLimit` already exists. A cooldown is the standard mitigation for handle-churn impersonation (§2, "Other popular methods"). |
+| 4.2 | Let a player change their username from their profile | `user.update({ username })` → `user.reload()` → toast, no API route (§5b). Reuses `ProfileIdentity`'s `action` slot, `ag-card ag-form-card` and `ActionButton`; validates with `isValidUsername` (§5c). Surfaces Clerk's `form_identifier_exists` as a readable sentence. |
+| 4.3 | ~~Rate-limit username changes~~ | **Not built.** The locksmith's answer was no: the write is the browser's own call to Clerk, so `consumeRateLimit` has no route to sit on and buying one would mean a server write duplicating what Clerk already does. See §7. |
 | 4.4 | Add the "What's new" line | **Required** by AGENTS.md — this is player-visible. Enhancements group, newest first. |
 
 **Review:** `locksmith` (**blocking** — freeing an old handle means an invite
