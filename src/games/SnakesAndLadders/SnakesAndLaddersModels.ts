@@ -8,7 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { userIdListToUsernameList } from "@/utils/users/clerk";
 import { IHistoryEntry, userToken } from "@/utils/games/history";
 import { SnakesAndLaddersGameType } from "@/utils/apiModels/GameLogic";
-import { DiceRoll } from "@/utils/games/DiceRoll";
+import { rollOffTurnOrder } from "@/utils/games/rollOff";
 
 export interface SnakesAndLaddersInvitationRequest extends IInvitationRequest {
     /** House rule: rolling a 6 earns another roll instead of ending the turn. */
@@ -25,35 +25,6 @@ export interface ISnakesAndLaddersInvitationDataDocument extends ISnakesAndLadde
 export interface ISnakesAndLaddersInvitationDataModel extends Model<ISnakesAndLaddersInvitationDataDocument> {
 }
 
-function SortUsersByRoll(userIdList: string[], turnOrder: string[], history: IHistoryEntry[], dieToRoll: number) {
-    let turnRolls = userIdList.map((userId) => {
-        return { userId, diceRoll: DiceRoll(dieToRoll) };
-    });
-    let distinctRolls: Map<number, string[]> = new Map;
-    turnRolls.forEach(turnRoll => {
-        const lookup = distinctRolls.get(turnRoll.diceRoll);
-        if (lookup) {
-            lookup.push(turnRoll.userId);
-        } else {
-            distinctRolls.set(turnRoll.diceRoll, [turnRoll.userId]);
-        }
-    });
-    const sortedRolls = [...distinctRolls.keys()].sort((a, b) => b - a);
-    sortedRolls.forEach(roll => {
-        const usersInRoll = distinctRolls.get(roll);
-        if (!usersInRoll) {
-            return;
-        }
-        if (usersInRoll.length > 1) {
-            history.push({ text: `Setup: ${usersInRoll.map(userToken).join(" & ")} rolled a ${roll} and are re-rolling` });
-            SortUsersByRoll(usersInRoll, turnOrder, history, dieToRoll);
-        } else {
-            turnOrder.push(usersInRoll[0]);
-            // The first player settled into turnOrder is the roll-off winner.
-            history.push({ text: `Setup: ${userToken(usersInRoll[0])} rolled a ${roll}${turnOrder.length === 1 ? " and goes first" : ""}` });
-        }
-    });
-}
 
 var SnakesAndLaddersInvitationSchema = new Schema<ISnakesAndLaddersInvitationDataDocument>({
     reRollOnSix: Boolean
@@ -63,10 +34,7 @@ SnakesAndLaddersInvitationSchema.methods.CreateGame = async function(invite: ISn
 
     const gameType = new SnakesAndLaddersGameType();
 
-    const turnOrder: string[] = [];
-    const history: IHistoryEntry[] = [];
-
-    SortUsersByRoll(userIdList, turnOrder, history, 6);
+    const { turnOrder, history } = rollOffTurnOrder(userIdList, 6);
 
     const reRollOnSix = this.reRollOnSix === true;
     if (reRollOnSix) {
