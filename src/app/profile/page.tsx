@@ -9,6 +9,8 @@ import ProfileIdentity from "@/components/ui/ProfileIdentity";
 import RecentFormSection from "@/components/ui/RecentFormSection";
 import ReactionPicker from "@/components/ui/ReactionPicker";
 import ListSection from "@/components/ui/ListSection";
+import CollapsingSection from "@/components/ui/CollapsingSection";
+import UsernameForm from "@/components/UsernameForm";
 import { IFriendRequestResponse } from "@/utils/mongodb/FriendshipData";
 import { formatRelativeTime } from "@/utils/ui/time";
 import { FRIEND_EVENTS } from "@/utils/hooks/usePushEvents";
@@ -41,6 +43,7 @@ export default function Profile() {
     const now = useNowToTheMinute();
     const picture = useProfilePicture();
 
+    const [editingUsername, setEditingUsername] = useState(false);
     const [inviteUsername, setInviteUsername] = useState("");
     const [isSending, setIsSending] = useState(false);
     const [showAdd, setShowAdd] = useState(false);
@@ -133,24 +136,49 @@ export default function Profile() {
                 </div>
             </div>
 
-            {/* Identity — your own avatar is the way in to changing your picture */}
+            {/* Identity — your own avatar is the way in to changing your
+                picture, and the controls under it the way in to the rest.
+                A guest has no handle to edit: theirs is the account id
+                createGuest() minted, and publicHandle shows none, so the
+                option arrives when they claim the account. */}
             <ProfileIdentity
                 {...heading}
                 imageUrl={profileImageUrl(user)}
                 onAvatarClick={picture.openPicker}
                 avatarBusy={picture.isSaving}
-                action={picture.hasPicture && (
-                    <button
-                        type="button"
-                        className="ag-link-muted"
-                        onClick={picture.removePicture}
-                        disabled={picture.isSaving}
-                    >
-                        Remove photo
-                    </button>
-                )}
+                action={
+                    <div style={{ display: "flex", gap: 12 }}>
+                        {user && !guest && (
+                            <button
+                                type="button"
+                                className="ag-link-muted"
+                                onClick={() => setEditingUsername(v => !v)}
+                            >
+                                {editingUsername ? "Cancel" : "Edit username"}
+                            </button>
+                        )}
+                        {picture.hasPicture && (
+                            <button
+                                type="button"
+                                className="ag-link-muted"
+                                onClick={picture.removePicture}
+                                disabled={picture.isSaving}
+                            >
+                                Remove photo
+                            </button>
+                        )}
+                    </div>
+                }
             />
             {picture.fileInput}
+
+            <CollapsingSection collapsed={!editingUsername}>
+                {/* Keyed on the handle in play so reopening the editor starts
+                    from the current one rather than whatever was last typed. */}
+                {editingUsername && (
+                    <UsernameForm key={user?.username ?? ''} onSaved={() => setEditingUsername(false)} />
+                )}
+            </CollapsingSection>
 
             {/* Honest stats */}
             <div className="ag-section">

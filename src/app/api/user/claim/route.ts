@@ -4,6 +4,7 @@ import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameResultModel } from '@/utils/mongodb/GameResultData';
 import { isGuestPlaceholderEmail } from '@/utils/users/guest';
 import { availableUsernameFrom } from '@/utils/users/clerk';
+import { clerkErrorMessage } from '@/utils/users/clerkErrors';
 import { clientIp, consumeRateLimit } from '@/utils/rateLimit';
 import { readJsonBody } from '@/utils/api/requestBody';
 
@@ -18,17 +19,6 @@ const CLAIM_WINDOW_MS = 60 * 60 * 1000;
 interface IClaimRequest {
     email: string;
     password: string;
-}
-
-// The first Clerk error worth showing, in the guest's own words — falls back
-// to something generic for whatever isn't a Clerk-shaped rejection (a network
-// error, say). Duck-typed rather than importing @clerk/backend's error class
-// just to narrow this: the Backend API's error responses all carry `errors`
-// in this shape, and that's the only part read here.
-function clerkErrorMessage(error: unknown, fallback: string): string {
-    const errors = (error as { errors?: { longMessage?: string; message?: string }[] } | null)?.errors;
-    const first = errors?.[0];
-    return first?.longMessage || first?.message || fallback;
 }
 
 // Claiming a guest account (docs/account-less-play.md step 16): after their
