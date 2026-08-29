@@ -831,7 +831,16 @@ identical between the two boards, so that piece was extracted into
 node content inside it. The other genuine duplicate — the
 adjacency-list-to-edge-list dedup used to draw the lines — was likewise
 pulled into `adjacencyGraph.ts`'s new `edgeListFrom`, with `WorldDominationBoard.tsx`
-ported onto it in the same commit. `rules.ts` also picked up `stationCityIds`
+ported onto it in the same commit. *(Later:* that whole `<g>`-of-`<line>`s
+adjacency layer was promoted again, into `src/components/ui/MapEdges.tsx` on
+top of a pure `src/utils/ui/mapEdges.ts` — the vehicle for fixing the cross-map
+edges. San Francisco ↔ Tokyo and the three others like it join two cities on
+opposite sides of the map and were drawn as one line straight across the whole
+board; `mapEdgeGeometry` now splits any edge spanning more than half the board
+width into two stubs heading off each map edge — clipped for free by the root
+`<svg>` viewBox — with a `wrapY` for the edge label. World Domination's
+front-line highlight runs through the same helper, so an Alaska ↔ Kamchatka
+battle wraps too.)* `rules.ts` also picked up `stationCityIds`
 (promoted out of a private duplicate in `OutbreakLogic.ts` now that the client
 needs the same lookup) and `infectionRateFor`/`INFECTION_RATE_TRACK`, so the
 board's infection-rate stat reads a real value ahead of epidemics landing in

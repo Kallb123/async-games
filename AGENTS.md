@@ -49,10 +49,14 @@ out. A second copy is the signal to extract the first one.
   the public landing page). Every heading-and-body block on a page is a
   `Section`; `CollapsingSection` adds the animation for one that comes and
   goes, and `ListSection` adds the `ag-list`, its skeletons and its empty
-  message. Never hand-roll an `ag-section-head` again.
+  message. Never hand-roll an `ag-section-head` again. The node-and-edge map
+  boards (World Domination, Outbreak) share `BoardZoom`, `ClickableMapNode`,
+  `MapLabel` and `MapEdges` (the adjacency layer, which draws cross-map edges
+  as labelled stubs off each edge rather than a line across the whole board).
 - `src/utils/ui/` — pure presentation helpers: `games.ts` (per-game metadata:
   name, art, accent, players), `avatar.ts` (deterministic avatar colours),
-  `players.ts` (opponent summaries).
+  `players.ts` (opponent summaries), `mapEdges.ts` (the wrap geometry `MapEdges`
+  draws).
 - `src/utils/hooks/` — shared stateful logic, e.g. `usePlayerList` (the
   "who's playing" invite picker used by every game-setup screen).
 

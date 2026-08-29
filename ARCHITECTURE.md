@@ -658,7 +658,10 @@ description or theme colour is exactly what those two files exist to prevent.
     section family every screen is laid out with: `Section` (the padded box and
     its heading), `CollapsingSection` (one that grows and shrinks) and
     `ListSection` (one holding an animated `ag-list`, its `SkeletonRow`
-    placeholders and its empty message).
+    placeholders and its empty message). The node-and-edge map boards (World
+    Domination, Outbreak) share a kit here too: `BoardZoom`, `ClickableMapNode`,
+    `MapLabel`, and `MapEdges` (the adjacency lines, with cross-map edges drawn
+    as labelled stubs off each map edge rather than a line across the board).
   - `src/utils/ui/` — pure helpers: `games.ts` (per-game metadata: name, art,
     accent, players), `avatar.ts`, `players.ts`.
   - `src/utils/hooks/` — shared stateful logic (`usePlayerList`, the invite
