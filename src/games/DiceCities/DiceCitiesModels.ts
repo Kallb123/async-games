@@ -285,7 +285,7 @@ DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(_viewerId: 
 export function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap: { [key: string]: string}) : IDiceCitiesGameStateResponse {
     const playerStates: { [key: string]: IDiceCitiesPlayerStateResponse; } = {};
     for (const [userId, playerStateModel] of gameState.playerStates) {
-        playerStates[userIdNameMap[userId]] = {
+        playerStates[userId] = {
             userId,
             username: userIdNameMap[userId],
             cards: playerStateModel.cards.map(cardCount => {
