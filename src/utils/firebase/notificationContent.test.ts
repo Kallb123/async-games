@@ -84,7 +84,7 @@ describe('your turn notification', () => {
 
     it('falls back to the newest history line for games with no recap adapter', async () => {
         const push = await buildYourTurnNotification(
-            game({ gameState: { turnOrder: [], history: ['Priya guessed 4 pegs'], commandHistory: [] } } as Partial<IGameData>),
+            game({ gameState: { turnOrder: [], history: [{ text: '{{u2}} guessed 4 pegs', actorId: 'u2' }], commandHistory: [] } } as Partial<IGameData>),
             'u1',
             names
         );
@@ -95,7 +95,7 @@ describe('your turn notification', () => {
         buildEventFeed.mockRejectedValue(new Error('cannot replay this game'));
 
         const push = await buildYourTurnNotification(
-            game({ gameState: { turnOrder: [], history: ['Priya built a settlement'], commandHistory: [] } } as Partial<IGameData>),
+            game({ gameState: { turnOrder: [], history: [{ text: '{{u2}} built a settlement', actorId: 'u2' }], commandHistory: [] } } as Partial<IGameData>),
             'u1',
             names
         );

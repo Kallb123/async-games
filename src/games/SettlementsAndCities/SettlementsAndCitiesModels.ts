@@ -5,11 +5,11 @@ import { ISACGameDataResponse, ISACSpecificGameStateResponse, ISACPlayerStateRes
 import { uuidString, GameResultStatGroup, GameResultChart, formatPerTurnChart, compactCharts, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
-import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
+import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { SettlementsAndCitiesGameType } from "@/utils/apiModels/GameLogic";
-import { DiceRoll } from "@/utils/games/DiceRoll";
 import { shuffle } from "@/utils/games/shuffle";
 import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
+import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import {
     generateBoard,
     createInitialPlayerState,
@@ -49,33 +49,6 @@ export interface ISettlementsAndCitiesInvitationDataDocument
 export interface ISettlementsAndCitiesInvitationDataModel
     extends Model<ISettlementsAndCitiesInvitationDataDocument> {}
 
-function SortUsersByRoll(
-    userIdList: string[],
-    usernameMap: Map<string, string>,
-    turnOrder: string[],
-    history: string[],
-    dieToRoll: number,
-) {
-    const turnRolls = userIdList.map(userId => ({ userId, diceRoll: DiceRoll(dieToRoll) }));
-    const distinctRolls = new Map<number, string[]>();
-    turnRolls.forEach(({ userId, diceRoll }) => {
-        const bucket = distinctRolls.get(diceRoll);
-        if (bucket) bucket.push(userId);
-        else distinctRolls.set(diceRoll, [userId]);
-    });
-    [...distinctRolls.keys()].sort((a, b) => b - a).forEach(roll => {
-        const users = distinctRolls.get(roll)!;
-        if (users.length > 1) {
-            const names = users.map(u => usernameMap.get(u));
-            history.push(`Setup: ${names.join(' & ')} rolled a ${roll} and are re-rolling`);
-            SortUsersByRoll(users, usernameMap, turnOrder, history, dieToRoll);
-        } else {
-            turnOrder.push(users[0]);
-            // The first player settled into turnOrder is the roll-off winner.
-            history.push(`Setup: ${usernameMap.get(users[0])} rolled a ${roll}${turnOrder.length === 1 ? ' and goes first' : ''}`);
-        }
-    });
-}
 
 // ─── Initial-state snapshot (turn recap) ───────────────────────────────────────
 // SAC's board and dev-card deck are randomised at creation and can't be
@@ -187,16 +160,13 @@ SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
     const expansions = normaliseExpansions(this.expansions);
     const victoryTarget = computeVictoryTarget(expansions);
 
-    const turnOrder: string[] = [];
-    const history: string[] = [];
-    const usernameMap = await userIdListToUsernameMap(userIdList);
-    SortUsersByRoll(userIdList, usernameMap, turnOrder, history, 6);
+    const { turnOrder, history } = rollOffTurnOrder(userIdList);
 
     const enabledNames = enabledExpansionNames(expansions);
     if (enabledNames.length > 0) {
-        history.push(`Setup: expansions enabled — ${enabledNames.join(', ')}`);
+        history.push({ text: `Setup: expansions enabled — ${enabledNames.join(', ')}` });
     }
-    history.push(`Setup: first to ${victoryTarget} victory points wins`);
+    history.push({ text: `Setup: first to ${victoryTarget} victory points wins` });
 
     const { hexes, harbors, desertHexIndex } = generateBoard();
 
@@ -371,11 +341,7 @@ SettlementsAndCitiesGameDataSchema.methods.CreateDataResponse = async function(v
     console.log('CreateDataResponse: Settlements and Cities game');
 
     const doc: ISettlementsAndCitiesGameData = this as ISettlementsAndCitiesGameData;
-    const usernameList = await userIdListToUsernameList(doc.userIdList);
-    const userIdNameMap: { [key: string]: string } = {};
-    (doc.userIdList as string[]).forEach((userId, i) => {
-        userIdNameMap[userId] = usernameList[i];
-    });
+    const { usernameList, userIdNameMap } = await userIdListToNamesAndMap(doc.userIdList);
 
     return {
         gameType: doc.gameType,
@@ -383,10 +349,7 @@ SettlementsAndCitiesGameDataSchema.methods.CreateDataResponse = async function(v
         userIdList: doc.userIdList,
         turnTimer: doc.turnTimer,
         currentTurn: doc.currentTurn,
-        gameState: publicGameState(
-            doc.gameState,
-            replaceHistoryUserIds(doc.gameState.history, userIdNameMap),
-        ),
+        gameState: publicGameState(doc.gameState, userIdNameMap),
         complete: doc.complete,
         winner: doc.winner,
         endReason: doc.endReason,
@@ -397,17 +360,6 @@ SettlementsAndCitiesGameDataSchema.methods.CreateDataResponse = async function(v
         recapAvailable: !!doc.initialSpecificGameState,
     };
 };
-
-function replaceHistoryUserIds(history: string[], userIdNameMap: { [key: string]: string }): string[] {
-    return history.map(entry => {
-        let updated = entry;
-        for (const [userId, username] of Object.entries(userIdNameMap)) {
-            if (!userId) continue;
-            updated = updated.split(userId).join(username);
-        }
-        return updated;
-    });
-}
 
 export function gameStateToResponse(
     gs: ISACSpecificGameState,

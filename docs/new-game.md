@@ -96,7 +96,9 @@ handful of one-line additions to shared files in the last step.
 - One `@serializable` class per command, `implements IGameCommand`. Each
   `Execute` validates against current state, returns
   `{ validMove: false }` and mutates nothing if illegal, or mutates
-  `specificGameState` in place, appends a line to `gameState.history`, and
+  `specificGameState` in place, appends a line to `gameState.history` — built
+  with `playerHistory(this.senderId, ...)` so the line names its player by
+  token, never by a name that can change (`src/utils/games/history.ts`) — and
   returns `{ validMove: true, turnOver }`.
 - **Any `Execute` that consumes randomness records its outcome on the command**
   (`this.recordedRoll ?? DiceRoll(6)`) — §7(b). Do this as you write the

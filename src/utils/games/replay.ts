@@ -1,5 +1,6 @@
 import { IGameData } from "../mongodb/GameData";
-import { UNKNOWN_PLAYER_NAME } from "../users/clerk";
+import { UNKNOWN_PLAYER_NAME } from "../ui/players";
+import { IHistoryEntry, resolveHistory } from "./history";
 import { IGameCommand, IGameType, ICommandOutcome } from "../apiModels/GameLogic";
 import { deserializeJSON } from "../apiModels/Serialisable";
 import { runCommand } from "./commandPipeline";
@@ -25,8 +26,9 @@ export interface ITurnSnapshot {
     currentTurn: string;
     complete: boolean;
     winner: string;
-    // Newest-first history log up to and including this point.
-    history: string[];
+    // Newest-first history log up to and including this point, with every
+    // player token already resolved to a name (see utils/games/history.ts).
+    history: IHistoryEntry[];
     // Metadata about the command that produced this snapshot (null for the initial state).
     command: {
         senderId: string;
@@ -228,6 +230,22 @@ export async function buildTimeline(
 
     const gameType: IGameType = deserializeJSON(JSON.stringify(gameData.gameType));
 
+    // The names history tokens resolve to. Today's directory first, exactly as
+    // the live board uses it — and for a player it can no longer name, the last
+    // name this game recorded for them, for the same reason the command loop
+    // below keeps one: a guest swept seven days after their last game
+    // (GUEST_SWEEP_DAYS) should still be "Dave" in the recap of a game they
+    // played, not "Unknown player".
+    const historyNames = { ...userIdNameMap };
+    (gameData.gameState.commandHistory ?? []).forEach((raw) => {
+        const command = raw as { senderId?: string, senderUsername?: string } | null;
+        if (!command?.senderId || !command.senderUsername) return;
+        const known = historyNames[command.senderId];
+        if (!known || known === UNKNOWN_PLAYER_NAME) {
+            historyNames[command.senderId] = command.senderUsername;
+        }
+    });
+
     // A fresh, in-memory game document we mutate as we replay. specificGameState
     // is game-specific (added by each discriminator), so we widen the base type.
     type ReplayState = IGameData & { specificGameState: unknown };
@@ -259,7 +277,7 @@ export async function buildTimeline(
             currentTurn: state.currentTurn,
             complete: state.complete,
             winner: state.winner,
-            history: [...state.gameState.history],
+            history: resolveHistory(state.gameState.history, historyNames),
             command: command
                 ? {
                       senderId: command.senderId,
@@ -285,23 +303,12 @@ export async function buildTimeline(
         for (const raw of rawCommands) {
             const command: IGameCommand = deserializeJSON(JSON.stringify(raw));
             // senderUsername is the name recorded on the command when it was
-            // played, and it is what every history line and recap event this
-            // replay produces reads. Prefer today's resolved name, so a name
-            // that has since changed — or a guest's random account username,
-            // stamped by a client that predates the server doing it — isn't
-            // read back verbatim forever.
-            //
-            // Not `?? recorded`: userIdListToUserIdNameMap has an entry for
-            // every id it was given, holding UNKNOWN_PLAYER_NAME for one Clerk
-            // can't resolve, so the key is always present. A guest swept seven
-            // days after their last game (GUEST_SWEEP_DAYS) is exactly that
-            // case, and the name their moves carry is the only one left — the
-            // recap of a game they played should still say "Dave", not
-            // "Unknown player".
-            const resolved = userIdNameMap[command.senderId];
-            if (resolved && resolved !== UNKNOWN_PLAYER_NAME) {
-                command.senderUsername = resolved;
-            }
+            // played, and it titles this move in every recap this replay feeds.
+            // Prefer today's name, so one that has since changed — or a guest's
+            // random account username, stamped by a client that predates the
+            // server doing it — isn't read back verbatim forever. historyNames
+            // above already encodes that preference, recorded name and all.
+            command.senderUsername = historyNames[command.senderId] ?? command.senderUsername;
             // Every command was executed on its sender's turn.
             state.currentTurn = command.senderId;
             const { outcome, gameOver } = await runCommand(state, gameType, command);
@@ -335,7 +342,7 @@ export async function buildTimeline(
     // beyond what the replayed commands produced. Append them to every snapshot
     // so the setup steps stay visible throughout recap/planning.
     const persistedHistory = gameData.gameState.history ?? [];
-    const setupHistory = persistedHistory.slice(state.gameState.history.length);
+    const setupHistory = resolveHistory(persistedHistory.slice(state.gameState.history.length), historyNames);
 
     const resolvedPlannedCommands: unknown[] = [];
     if (!gameOver && plannedCommands.length) {

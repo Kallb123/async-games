@@ -3,6 +3,7 @@ import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
 import { serializable } from "@/utils/apiModels/Serialisable";
+import { playerHistory } from "@/utils/games/history";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 
 export interface ISmartthinkGuessOutcome extends ICommandOutcome {
@@ -80,7 +81,7 @@ export class SmartthinkSetSecretCode implements IGameCommand {
         }
         stGameData.specificGameState.secretCode = this.secretCode;
         stGameData.specificGameState.secretCodeSet = true;
-        stGameData.gameState.history.unshift(`${this.senderUsername} set the secret code`);
+        stGameData.gameState.history.unshift(playerHistory(this.senderId, `set the secret code`));
         return { turnOver: true, validMove: true };
     }
 
@@ -143,7 +144,7 @@ export class SmartthinkSubmitGuess implements IGameCommand {
 
         const feedback = calculateSmartthinkFeedback(stGameData.specificGameState.secretCode, this.guess);
         stGameData.specificGameState.guessRows.push({ guess: this.guess, black: feedback.black, white: feedback.white });
-        stGameData.gameState.history.unshift(`${this.senderUsername} guessed ${this.guess.map(v => v + 1).join('-')} and received ${feedback.black} black, ${feedback.white} white`);
+        stGameData.gameState.history.unshift(playerHistory(this.senderId, `guessed ${this.guess.map(v => v + 1).join('-')} and received ${feedback.black} black, ${feedback.white} white`));
         return { turnOver: true, validMove: true, black: feedback.black, white: feedback.white } as ISmartthinkGuessOutcome;
     }
 

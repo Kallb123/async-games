@@ -5,9 +5,9 @@ import { ISmartthinkGameDataResponse, ISmartthinkGameStateResponse } from "./api
 import { IGameResponse, uuidString, GameResultStatGroup } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
-import { UserDirectory, userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
+import { UserDirectory, userIdListToNamesAndMap, userIdListToUsernameMap } from "@/utils/users/clerk";
 import { SmartthinkGameType } from "@/utils/apiModels/GameLogic";
-import { DiceRoll } from "@/utils/games/DiceRoll";
+import { rollOffTurnOrder } from "@/utils/games/rollOff";
 
 export const SMARTTHINK_COMPUTER_ID = "Computer";
 export const SMARTTHINK_COMPUTER_USERNAME = "Computer";
@@ -51,34 +51,6 @@ export interface ISmartthinkGameDataDocument extends ISmartthinkGameData, IGameD
 export interface ISmartthinkGameDataModel extends Model<ISmartthinkGameDataDocument> {
 }
 
-function SortUsersByRoll(userIdList: string[], usernameMap: Map<string, string>, turnOrder: string[], history: string[], dieToRoll: number) {
-    const turnRolls = userIdList.map((userId) => ({ userId, diceRoll: DiceRoll(dieToRoll) }));
-    const distinctRolls: Map<number, string[]> = new Map;
-    turnRolls.forEach(turnRoll => {
-        const lookup = distinctRolls.get(turnRoll.diceRoll);
-        if (lookup) {
-            lookup.push(turnRoll.userId);
-        } else {
-            distinctRolls.set(turnRoll.diceRoll, [turnRoll.userId]);
-        }
-    });
-    const sortedRolls = [...distinctRolls.keys()].sort((a, b) => b - a);
-    sortedRolls.forEach(roll => {
-        const usersInRoll = distinctRolls.get(roll);
-        if (!usersInRoll) {
-            return;
-        }
-        if (usersInRoll.length > 1) {
-            const usernamesInRoll = usersInRoll.map(userId => usernameMap.get(userId));
-            history.push(`Setup: ${usernamesInRoll.join(" & ")} rolled a ${roll} and are re-rolling`);
-            SortUsersByRoll(usersInRoll, usernameMap, turnOrder, history, dieToRoll);
-        } else {
-            turnOrder.push(usersInRoll[0]);
-            // The first player settled into turnOrder is the roll-off winner.
-            history.push(`Setup: ${usernameMap.get(usersInRoll[0])} rolled a ${roll}${turnOrder.length === 1 ? " and goes first" : ""}`);
-        }
-    });
-}
 
 function generateSmartthinkSecretCode(): number[] {
     return Array.from({ length: 4 }, () => Math.floor(Math.random() * 6));
@@ -98,7 +70,8 @@ export function CreateSmartthinkSoloGameData(userId: string, username: string, t
         missedTurnCounts: new Map(),
         gameState: {
             turnOrder: [userId],
-            history: [`Setup: ${SMARTTHINK_COMPUTER_USERNAME} set the secret code`],
+            // The computer is not a player, so this line has no actor to record.
+            history: [{ text: `Setup: ${SMARTTHINK_COMPUTER_USERNAME} set the secret code` }],
             commandHistory: []
         },
         complete: false,
@@ -122,11 +95,8 @@ SmartthinkInvitationSchema.methods.CreateGame = async function(invite: ISmartthi
 
     const gameType = new SmartthinkGameType();
 
-    const turnOrder: string[] = [];
-    const history: string[] = [];
+    const { turnOrder, history } = rollOffTurnOrder(userIdList);
     const usernameMap = await userIdListToUsernameMap(userIdList);
-
-    SortUsersByRoll(userIdList, usernameMap, turnOrder, history, 6);
 
     const codeSetterId = turnOrder[0];
     const codeSetterUsername = usernameMap.get(codeSetterId) ?? "";
@@ -284,11 +254,7 @@ SmartthinkGameDataSchema.methods.CreateDataResponse = async function(_viewerId: 
 
     const gameDataDocument: ISmartthinkGameData = this as ISmartthinkGameData;
 
-    const usernameList = await userIdListToUsernameList(gameDataDocument.userIdList);
-    const userIdNameMap: { [key: string]: string } = {};
-    (gameDataDocument.userIdList as string[]).forEach((userId: string, i: number) => {
-        userIdNameMap[userId] = usernameList[i];
-    });
+    const { usernameList, userIdNameMap } = await userIdListToNamesAndMap(gameDataDocument.userIdList);
 
     return {
         gameType: gameDataDocument.gameType,
@@ -296,7 +262,7 @@ SmartthinkGameDataSchema.methods.CreateDataResponse = async function(_viewerId: 
         userIdList: gameDataDocument.userIdList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
-        gameState: publicGameState(gameDataDocument.gameState),
+        gameState: publicGameState(gameDataDocument.gameState, userIdNameMap),
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
         endReason: gameDataDocument.endReason,

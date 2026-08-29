@@ -2,6 +2,10 @@ import { ICompletedGame, IGameResponse } from "@/utils/apiModels/GameDataApi";
 
 // "Alice", "Alice & Bob", "Alice & 2 others" — the one way the app names a
 // group of players, wherever it has to fit them into a line of text.
+// Shown for a userId Clerk can't resolve (a deleted account, most likely
+// today) instead of silently dropping it — see clerk.ts, which re-exports this.
+export const UNKNOWN_PLAYER_NAME = "Unknown player";
+
 export function nameList(names: string[], emptyLabel = "solo"): string {
     if (names.length === 0) return emptyLabel;
     if (names.length === 1) return names[0];

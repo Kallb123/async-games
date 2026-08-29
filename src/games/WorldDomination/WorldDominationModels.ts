@@ -5,11 +5,11 @@ import { IWorldDominationGameDataResponse, IWorldDominationSpecificGameStateResp
 import { uuidString, GameResultStatGroup, GameResultChart, formatPerTurnChart, compactCharts, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
-import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
+import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { WorldDominationGameType } from "@/utils/apiModels/GameLogic";
-import { DiceRoll } from "@/utils/games/DiceRoll";
 import { shuffle } from "@/utils/games/shuffle";
 import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
+import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import {
     TERRITORIES,
     TERRITORY_COUNT,
@@ -34,32 +34,6 @@ export interface IWorldDominationInvitationDataDocument extends IWorldDomination
 
 export interface IWorldDominationInvitationDataModel extends Model<IWorldDominationInvitationDataDocument> {}
 
-function SortUsersByRoll(
-    userIdList: string[],
-    usernameMap: Map<string, string>,
-    turnOrder: string[],
-    history: string[],
-    dieToRoll: number,
-) {
-    const turnRolls = userIdList.map(userId => ({ userId, diceRoll: DiceRoll(dieToRoll) }));
-    const distinctRolls = new Map<number, string[]>();
-    turnRolls.forEach(({ userId, diceRoll }) => {
-        const bucket = distinctRolls.get(diceRoll);
-        if (bucket) bucket.push(userId);
-        else distinctRolls.set(diceRoll, [userId]);
-    });
-    [...distinctRolls.keys()].sort((a, b) => b - a).forEach(roll => {
-        const users = distinctRolls.get(roll)!;
-        if (users.length > 1) {
-            const names = users.map(u => usernameMap.get(u));
-            history.push(`Setup: ${names.join(' & ')} rolled a ${roll} and are re-rolling`);
-            SortUsersByRoll(users, usernameMap, turnOrder, history, dieToRoll);
-        } else {
-            turnOrder.push(users[0]);
-            history.push(`Setup: ${usernameMap.get(users[0])} rolled a ${roll}${turnOrder.length === 1 ? ' and goes first' : ''}`);
-        }
-    });
-}
 
 // ─── Player / combat / specific state ──────────────────────────────────────
 
@@ -160,10 +134,7 @@ WorldDominationInvitationSchema.methods.CreateGame = async function(
 
     const gameType = new WorldDominationGameType();
 
-    const turnOrder: string[] = [];
-    const history: string[] = [];
-    const usernameMap = await userIdListToUsernameMap(userIdList);
-    SortUsersByRoll(userIdList, usernameMap, turnOrder, history, 6);
+    const { turnOrder, history } = rollOffTurnOrder(userIdList);
 
     // Territories are dealt out evenly and at random (docs §3.2 Option B — the
     // draft-order placement of Option A doesn't translate well to async turns,
@@ -181,7 +152,7 @@ WorldDominationInvitationSchema.methods.CreateGame = async function(
         playerStates.set(userId, { cards: [], eliminated: false, conqueredTerritoryThisTurn: false, totalArmiesDeployed: 0 });
     }
 
-    history.push(`Setup: territories dealt — ${startingPool} armies each, place your remaining troops`);
+    history.push({ text: `Setup: territories dealt — ${startingPool} armies each, place your remaining troops` });
 
     const firstPlayer = turnOrder[0];
     const firstOwned = territories.filter(t => t.owner === firstPlayer).length;
@@ -272,11 +243,7 @@ WorldDominationGameDataSchema.methods.CreateDataResponse = async function(viewer
     console.log('CreateDataResponse: World Domination game');
 
     const doc: IWorldDominationGameData = this as IWorldDominationGameData;
-    const usernameList = await userIdListToUsernameList(doc.userIdList);
-    const userIdNameMap: { [key: string]: string } = {};
-    (doc.userIdList as string[]).forEach((userId, i) => {
-        userIdNameMap[userId] = usernameList[i];
-    });
+    const { usernameList, userIdNameMap } = await userIdListToNamesAndMap(doc.userIdList);
 
     return {
         gameType: doc.gameType,
@@ -284,10 +251,7 @@ WorldDominationGameDataSchema.methods.CreateDataResponse = async function(viewer
         userIdList: doc.userIdList,
         turnTimer: doc.turnTimer,
         currentTurn: doc.currentTurn,
-        gameState: publicGameState(
-            doc.gameState,
-            replaceHistoryUserIds(doc.gameState.history, userIdNameMap),
-        ),
+        gameState: publicGameState(doc.gameState, userIdNameMap),
         complete: doc.complete,
         winner: doc.winner,
         endReason: doc.endReason,
@@ -296,17 +260,6 @@ WorldDominationGameDataSchema.methods.CreateDataResponse = async function(viewer
         recapAvailable: !!doc.initialSpecificGameState,
     };
 };
-
-function replaceHistoryUserIds(history: string[], userIdNameMap: { [key: string]: string }): string[] {
-    return history.map(entry => {
-        let updated = entry;
-        for (const [userId, username] of Object.entries(userIdNameMap)) {
-            if (!userId) continue;
-            updated = updated.split(userId).join(username);
-        }
-        return updated;
-    });
-}
 
 export function gameStateToResponse(
     gs: IWorldDominationSpecificGameState,

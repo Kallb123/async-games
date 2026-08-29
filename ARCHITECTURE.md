@@ -212,7 +212,7 @@ interface IGameData {
     timerWarningNotificationSent: boolean;
     gameState: {
         turnOrder: string[];         // user IDs, decided at creation
-        history: string[];           // newest-first human-readable log
+        history: IHistoryEntry[];    // newest-first log; { text, actorId? }
         commandHistory: IGameCommand[]; // every move, stored as Schema.Types.Mixed
     };
     complete: boolean;
@@ -241,7 +241,9 @@ Documents are never sent raw to the client. `CreateResponse()` (list summary) an
 `CreateDataResponse(viewerId)` (full game) methods convert a document into a DTO:
 they resolve usernames via Clerk and run the game's `gameStateToModel` to turn
 internal Maps/IDs into a client-friendly, username-keyed shape. DTO interfaces
-live in `src/utils/apiModels/GameDataApi.ts` and each game's `apiModels.ts`.
+live in `src/utils/apiModels/GameDataApi.ts` and each game's `apiModels.ts` —
+except `IHistoryEntry`, which sits in `src/utils/games/history.ts` beside the
+resolver that owns its `{{userId}}` invariant.
 
 A game's response is **not the same for everybody**. `CreateDataResponse` takes
 the signed-in player it is being built for, and passes it to `gameStateToModel`,
@@ -341,7 +343,9 @@ interface IGameCommand {
 
 `Execute` is the heart of the rules. It **validates** the move against current
 state and returns `{ validMove: false }` if illegal (nothing is mutated), or
-mutates `specificGameState`, appends to `gameState.history`, and returns
+mutates `specificGameState`, appends to `gameState.history` (via
+`playerHistory`, so the line names its player by `{{userId}}` token rather than
+by a name that can change — see `src/utils/games/history.ts`), and returns
 `{ validMove: true, turnOver: bool }`. Subclasses extend `ICommandOutcome` to
 carry extra data back to the client (e.g. dice results, Mastermind peg feedback).
 

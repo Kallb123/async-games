@@ -10,10 +10,11 @@ import {
     uuidString,
 } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
-import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
+import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { OutbreakGameType } from "@/utils/apiModels/GameLogic";
 import { shuffle } from "@/utils/games/shuffle";
 import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
+import { userToken } from "@/utils/games/history";
 import {
     IOutbreakGameDataResponse,
     IOutbreakSpecificGameStateResponse,
@@ -78,10 +79,9 @@ OutbreakInvitationSchema.methods.CreateGame = async function(
     // flavour for a one-off setup pick, not part of the win/loss economy — so,
     // like Train Time's running order, the order is simply drawn at random.
     const turnOrder = shuffle(userIdList);
-    const usernameMap = await userIdListToUsernameMap(userIdList);
     const history = [
-        `Setup: running order is ${turnOrder.map(u => usernameMap.get(u) ?? u).join(' → ')}`,
-        `Setup: ${difficulty} difficulty — a research station is up in Atlanta`,
+        { text: `Setup: running order is ${turnOrder.map(userToken).join(' → ')}` },
+        { text: `Setup: ${difficulty} difficulty — a research station is up in Atlanta` },
     ];
 
     const specificGameState = buildInitialOutbreakState(turnOrder, difficulty);
@@ -90,8 +90,8 @@ OutbreakInvitationSchema.methods.CreateGame = async function(
         (sum, c) => sum + DISEASE_COLORS.reduce((s, color) => s + c.cubes[color], 0),
         0,
     );
-    history.push(`Setup: ${infectedCount} cities begin infected (${cubesPlaced} cubes)`);
-    history.push(`Setup: each player dealt ${startingHandSize(turnOrder.length)} cards`);
+    history.push({ text: `Setup: ${infectedCount} cities begin infected (${cubesPlaced} cubes)` });
+    history.push({ text: `Setup: each player dealt ${startingHandSize(turnOrder.length)} cards` });
 
     const gameData: IOutbreakGameData = {
         gameId: uuidv4() as uuidString,
@@ -400,9 +400,7 @@ OutbreakGameDataSchema.methods.CreateDataResponse = async function(viewerId: str
     console.log('CreateDataResponse: Outbreak game');
 
     const doc: IOutbreakGameData = this as IOutbreakGameData;
-    const usernameList = await userIdListToUsernameList(doc.userIdList);
-    const userIdNameMap: { [key: string]: string } = {};
-    doc.userIdList.forEach((userId, i) => { userIdNameMap[userId] = usernameList[i]; });
+    const { usernameList, userIdNameMap } = await userIdListToNamesAndMap(doc.userIdList);
 
     return {
         gameType: doc.gameType,
@@ -410,7 +408,7 @@ OutbreakGameDataSchema.methods.CreateDataResponse = async function(viewerId: str
         userIdList: doc.userIdList,
         turnTimer: doc.turnTimer,
         currentTurn: doc.currentTurn,
-        gameState: publicGameState(doc.gameState),
+        gameState: publicGameState(doc.gameState, userIdNameMap),
         complete: doc.complete,
         winner: doc.winner,
         endReason: doc.endReason,

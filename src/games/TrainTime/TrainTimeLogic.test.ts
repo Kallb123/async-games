@@ -784,7 +784,7 @@ describe("the Long Haul bonus (§7)", () => {
 
         await play(game, claim(routeId, Array(route.length).fill('red')));
 
-        expect(game.gameState.history[0]).toContain(`longest run now ${route.length}`);
+        expect(game.gameState.history[0].text).toContain(`longest run now ${route.length}`);
     });
 });
 

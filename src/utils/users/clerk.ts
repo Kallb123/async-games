@@ -1,12 +1,16 @@
 import { clerkClient, User } from "@clerk/nextjs/server";
-import { isGuest, readableName } from "@/utils/ui/players";
+import { isGuest, readableName, UNKNOWN_PLAYER_NAME } from "@/utils/ui/players";
 import { profileImageUrl } from "@/utils/ui/avatar";
 
 // Shown for a userId Clerk can't resolve (a deleted account, most likely
 // today) instead of silently dropping it. Every caller below zips this
 // result back up against the userId list it was given by position, so a
 // dropped entry would shift every name after it onto the wrong seat.
-export const UNKNOWN_PLAYER_NAME = "Unknown player";
+//
+// Declared alongside the other name resolvers in ui/players, so that code which
+// can't import this server-only module — the history token resolver, which
+// reaches client bundles through useTurnNavigation — falls back to the same
+// string. Import it from there.
 
 // The invite-only gate (docs/account-less-play.md §5/§8): a user can sign in
 // without being allowed to use the app yet. Every route that lets someone
@@ -224,6 +228,20 @@ export async function userIdListToUserIdNameMap(userIdList: string[]): Promise<{
     const userIdNameMap: { [key: string]: string } = {};
     usernameMap.forEach((username, id) => { userIdNameMap[id] = username; });
     return userIdNameMap;
+}
+
+// Both shapes every CreateDataResponse needs, from one Clerk lookup: the
+// usernameList it sends, and the { [userId]: username } map it resolves its
+// board state and history tokens with. Every game built both by hand from the
+// same list and zipped them back up by index.
+export async function userIdListToNamesAndMap(userIdList: string[]): Promise<{
+    usernameList: string[],
+    userIdNameMap: { [key: string]: string }
+}> {
+    const usernameList = await userIdListToUsernameList(userIdList);
+    const userIdNameMap: { [key: string]: string } = {};
+    userIdList.forEach((userId, i) => { userIdNameMap[userId] = usernameList[i]; });
+    return { usernameList, userIdNameMap };
 }
 
 // Same { [userId]: username } shape as userIdListToUserIdNameMap, but built from

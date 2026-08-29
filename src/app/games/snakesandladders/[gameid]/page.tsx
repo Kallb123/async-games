@@ -252,7 +252,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
             <TurnNavControls
                 nav={nav as unknown as ReturnType<typeof useTurnNavigation>}
                 canPlan={!complete}
-                usernames={usernameList}
+                userIdList={userIdList}
                 planningActions={
                     <SnakesAndLaddersPlayerActions
                         hasRolled={false}
@@ -263,7 +263,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
             />
 
             {showLog && (
-                <MatchHistory entries={nav.displayedHistory} usernames={usernameList} oldestFirst />
+                <MatchHistory entries={nav.displayedHistory} userIdList={userIdList} oldestFirst />
             )}
         </GameShell>
     );

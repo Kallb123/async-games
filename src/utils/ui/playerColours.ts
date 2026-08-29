@@ -10,20 +10,14 @@ export function playerColour(index: number): string {
     return PLAYER_COLOURS[index % PLAYER_COLOURS.length];
 }
 
-// The colour for a named player, or the neutral ink when the name isn't one of
-// the game's players — a setup line nobody made, an unknown sender. Prefer this
-// over `playerColour(list.indexOf(name))`, which paints an unknown name as
-// player one.
+// The neutral ink for a swatch that belongs to nobody — a setup line nobody
+// made, an unknown sender.
 export const NEUTRAL_PLAYER_COLOUR = "var(--ag-ink-softer)";
-export function playerColourFor(username: string | null | undefined, usernames: string[]): string {
-    const index = username ? usernames.indexOf(username) : -1;
-    return index >= 0 ? playerColour(index) : NEUTRAL_PLAYER_COLOUR;
-}
 
 // The colour for a player identified by their stable Clerk userId, following
-// the game's userIdList order (parallel to usernameList, so the swatch matches
-// playerColourFor's). Prefer this on any board that keys players by id — unlike
-// the name-based version, a rename can't shift a player's swatch.
+// the game's userIdList order (parallel to usernameList, so a player keeps the
+// same colour across the board, the scoreboard and the log). Prefer this over
+// `playerColour(list.indexOf(id))`, which paints an unknown id as player one.
 export function playerColourForId(userId: string | null | undefined, userIdList: string[]): string {
     const index = userId ? userIdList.indexOf(userId) : -1;
     return index >= 0 ? playerColour(index) : NEUTRAL_PLAYER_COLOUR;

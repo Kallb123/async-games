@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { IGameCommand } from "@/utils/apiModels/GameLogic";
+import { IHistoryEntry } from "@/utils/games/history";
 
 // One reconstructed point on the game timeline (mirrors the server ITurnSnapshot).
 export interface ITurnSnapshot<TState = unknown> {
@@ -8,7 +9,7 @@ export interface ITurnSnapshot<TState = unknown> {
     currentTurn: string;
     complete: boolean;
     winner: string;
-    history: string[];
+    history: IHistoryEntry[];
     command: {
         senderId: string;
         senderUsername: string;
@@ -33,7 +34,7 @@ export interface LiveGameView<TState> {
     currentTurn: string;
     complete: boolean;
     winner: string;
-    history: string[];
+    history: IHistoryEntry[];
 }
 
 // Shared navigation model behind both turn recap (stepping back through actual

@@ -38,6 +38,11 @@ function positions(saved: Record<string, unknown>): Record<string, { position: n
     return (saved.specificGameState as { playerPositions: Record<string, { position: number }> }).playerPositions;
 }
 
+/** The match-history log as the stored game holds it: tokens, not names. */
+function storedHistory(saved: Record<string, unknown>): { text: string, actorId?: string }[] {
+    return (saved.gameState as { history: { text: string, actorId?: string }[] }).history;
+}
+
 /** The moves the stored game has recorded — its private replay log. */
 function commandHistory(saved: Record<string, unknown>): unknown[] {
     return (saved.gameState as { commandHistory: unknown[] }).commandHistory;
@@ -193,9 +198,11 @@ describe('POST /api/game/command', () => {
         })));
 
         const saved = storedGame('game_1')!;
-        const history = (saved.gameState as { history: string[] }).history;
-        expect(history.join('\n')).not.toContain('evil.example');
-        expect(history[0]).toContain('ann');
+        const history = storedHistory(saved);
+        expect(history.map(entry => entry.text).join('\n')).not.toContain('evil.example');
+        // The stored line names her by id; the board resolves it to her name.
+        expect(history[0].actorId).toBe(ANN.id);
+        expect(history[0].text).toContain(ANN.id);
         expect((commandHistory(saved)[0] as { senderUsername: string }).senderUsername).toBe('ann');
     });
 
@@ -208,11 +215,13 @@ describe('POST /api/game/command', () => {
         seedSnakesAndLadders({ userIdList: [guest.id, BOB.id], currentTurn: guest.id, gameState: { turnOrder: [guest.id, BOB.id], history: [], commandHistory: [] } },
             { [guest.id]: 10, [BOB.id]: 20 });
 
-        await command(jsonPost('/api/game/command', diceRoll({ senderId: guest.id })));
+        const response = await command(jsonPost('/api/game/command', diceRoll({ senderId: guest.id })));
 
-        const history = (storedGame('game_1')!.gameState as { history: string[] }).history;
-        expect(history[0]).toContain('Dave');
-        expect(history.join('\n')).not.toContain('guest_3f2ab9c14d');
+        // The name is resolved on the way out, so it is the response — what the
+        // board actually reads — that has to say Dave.
+        const history: { text: string }[] = (await response.json()).gameData.gameState.history;
+        expect(history[0].text).toContain('Dave');
+        expect(history.map(entry => entry.text).join('\n')).not.toContain('guest_3f2ab9c14d');
     });
 
     it('plays the turn even when Clerk cannot name the player', async () => {
@@ -220,7 +229,7 @@ describe('POST /api/game/command', () => {
         seedSnakesAndLadders({
             gameState: {
                 turnOrder: [ANN.id, BOB.id],
-                history: ['ann rolled a 4'],
+                history: [{ text: `{{${ANN.id}}} rolled a 4`, actorId: ANN.id }],
                 // Their own last move carries the name this game knows them by.
                 commandHistory: [{ ...diceRoll(), id: '00000000-0000-0000-0000-000000000000' }]
             }
@@ -234,9 +243,13 @@ describe('POST /api/game/command', () => {
         expect(response.status).toBe(200);
         const saved = storedGame('game_1')!;
         expect(positions(saved)[ANN.id].position).toBe(13);
-        const history = (saved.gameState as { history: string[] }).history;
-        expect(history[0]).toContain('ann');
-        expect(history[0]).not.toContain('Unknown player');
+        // And nothing is frozen into the line while Clerk is down: it records
+        // her id, so it reads correctly again the moment Clerk answers.
+        const history = storedHistory(saved);
+        expect(history[0].actorId).toBe(ANN.id);
+        expect(history[0].text).not.toContain('Unknown player');
+        // Her last move still carries a name for the recap engine to fall back on.
+        expect((commandHistory(saved).at(-1) as { senderUsername: string }).senderUsername).toBe('ann');
     });
 
     it('refuses a game that has finished', async () => {

@@ -10,10 +10,11 @@ import {
     formatPerTurnChart,
 } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
-import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
+import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { shuffle } from "@/utils/games/shuffle";
 import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
 import { TrainTimeGameType } from "@/utils/apiModels/GameLogic";
+import { userToken } from "@/utils/games/history";
 import {
     ITrainTimeGameDataResponse,
     ITrainTimeSpecificGameStateResponse,
@@ -62,9 +63,8 @@ TrainTimeInvitationSchema.methods.CreateGame = async function(
     // "The most experienced traveller goes first" doesn't translate to async
     // play, so the running order is simply drawn at random.
     const turnOrder = shuffle(userIdList);
-    const usernameMap = await userIdListToUsernameMap(userIdList);
     const history = [
-        `Setup: running order is ${turnOrder.map(u => usernameMap.get(u) ?? u).join(' → ')}`,
+        { text: `Setup: running order is ${turnOrder.map(userToken).join(' → ')}` },
     ];
 
     const specificGameState = buildInitialTrainTimeState(turnOrder);
@@ -218,9 +218,7 @@ TrainTimeGameDataSchema.methods.CreateDataResponse = async function(viewerId: st
     console.log('CreateDataResponse: Train Time game');
 
     const doc: ITrainTimeGameData = this as ITrainTimeGameData;
-    const usernameList = await userIdListToUsernameList(doc.userIdList);
-    const userIdNameMap: { [key: string]: string } = {};
-    doc.userIdList.forEach((userId, i) => { userIdNameMap[userId] = usernameList[i]; });
+    const { usernameList, userIdNameMap } = await userIdListToNamesAndMap(doc.userIdList);
 
     return {
         gameType: doc.gameType,
@@ -228,7 +226,7 @@ TrainTimeGameDataSchema.methods.CreateDataResponse = async function(viewerId: st
         userIdList: doc.userIdList,
         turnTimer: doc.turnTimer,
         currentTurn: doc.currentTurn,
-        gameState: publicGameState(doc.gameState),
+        gameState: publicGameState(doc.gameState, userIdNameMap),
         complete: doc.complete,
         winner: doc.winner,
         endReason: doc.endReason,
