@@ -10,6 +10,7 @@ import OutbreakHands from "@/games/Outbreak/components/OutbreakHands";
 import OutbreakInfectionDiscard from "@/games/Outbreak/components/OutbreakInfectionDiscard";
 import OutbreakEventTray, { OutbreakEventTargeting } from "@/games/Outbreak/components/OutbreakEventTray";
 import OutbreakEndTurnScreen from "@/games/Outbreak/components/OutbreakEndTurnScreen";
+import OutbreakInfectionRateScale from "@/games/Outbreak/components/OutbreakInfectionRateScale";
 import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
@@ -51,6 +52,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     console.log(`GET ${pathName}`);
     const { user } = useAuthGuard();
     const [showLog, setShowLog] = useState(false);
+    const [showInfectionScale, setShowInfectionScale] = useState(false);
 
     const { gameid } = use(params);
     const gameId = gameid;
@@ -306,11 +308,19 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 
             {gs && (
-                <div className="ag-stat-row">
-                    <Stat value={`${gs.outbreaks}/8`} label="Outbreaks" />
-                    <Stat value={infectionRateFor(gs.infectionRateIndex)} label="Infection rate" />
-                    <Stat value={DISEASE_COLORS.reduce((sum, c) => sum + gs.cubesLeft[c], 0)} label="Cubes left" />
-                </div>
+                <>
+                    <div className="ag-stat-row">
+                        <Stat value={`${gs.outbreaks}/8`} label="Outbreaks" />
+                        <Stat
+                            value={infectionRateFor(gs.infectionRateIndex)}
+                            label="Infection rate"
+                            onClick={() => setShowInfectionScale(v => !v)}
+                            pressed={showInfectionScale}
+                        />
+                        <Stat value={DISEASE_COLORS.reduce((sum, c) => sum + gs.cubesLeft[c], 0)} label="Cubes left" />
+                    </div>
+                    {showInfectionScale && <OutbreakInfectionRateScale infectionRateIndex={gs.infectionRateIndex} />}
+                </>
             )}
 
             {complete && (

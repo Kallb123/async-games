@@ -3261,6 +3261,43 @@ button.ag-tt-ticket { cursor: pointer; }
 .ag-game--outbreak .ag-stat-row { background: var(--ob-navy-2); padding: 0 12px 10px; }
 .ag-game--outbreak .ag-stat { background: var(--ag-surface); border-radius: 9px; }
 
+/* ---- Infection-rate drawer: the escalation scale behind the stat ---- */
+/* Sits under the stat row on the same navy panel, so tapping the stat reads
+   as opening a slice out of it — the Train Time ticket-drawer move. */
+.ag-ob-ratescale {
+    background: var(--ob-navy-2);
+    padding: 0 12px 12px;
+}
+.ag-ob-ratescale-track { display: flex; gap: 6px; }
+.ag-ob-ratescale-space {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 0;
+    border-radius: 8px;
+    background: oklch(0.24 0.045 250);
+    color: oklch(0.72 0.03 250);
+    font: 800 16px var(--ag-font);
+}
+/* Spaces the marker has already climbed through, dimmed but distinct. */
+.ag-ob-ratescale-space--past {
+    background: oklch(0.3 0.05 25);
+    color: oklch(0.82 0.06 25);
+}
+/* The space the marker is on now. */
+.ag-ob-ratescale-space--current {
+    background: var(--ob-crimson);
+    color: var(--ag-on-dark);
+    box-shadow: 0 0 0 2px oklch(0.6 0.15 25);
+}
+.ag-ob-ratescale-note {
+    margin: 8px 0 0;
+    font: 600 11px var(--ag-font);
+    color: var(--ag-on-dark);
+    opacity: 0.75;
+}
+
 /* ---- The board: the map's own dark ocean, not the default sky-blue sea ---- */
 .ag-game--outbreak .ag-board-area {
     background: radial-gradient(circle at 50% 30%, var(--ob-navy-2), var(--ob-navy));
