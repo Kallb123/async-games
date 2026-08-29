@@ -95,11 +95,11 @@ const CITY_DEFS: Omit<OutbreakCityDef, 'id'>[] = [
     // Red — East/Southeast Asia & Oceania (36-47)
     { name: 'Beijing', color: 'red', x: 630, y: 121, labelDir: 'n' },
     { name: 'Seoul', color: 'red', x: 679, y: 119, labelDir: 'n' },
-    { name: 'Tokyo', color: 'red', x: 723, y: 141, labelDir: 'e' },
+    { name: 'Tokyo', color: 'red', x: 723, y: 141, labelDir: 'n' },
     { name: 'Shanghai', color: 'red', x: 632, y: 159, labelDir: 'e' },
     { name: 'Hong Kong', color: 'red', x: 633, y: 203, labelDir: 'w' },
     { name: 'Taipei', color: 'red', x: 682, y: 193, labelDir: 'e' },
-    { name: 'Osaka', color: 'red', x: 724, y: 182, labelDir: 'e' },
+    { name: 'Osaka', color: 'red', x: 724, y: 182, labelDir: 's' },
     { name: 'Bangkok', color: 'red', x: 603, y: 228, labelDir: 'w' },
     { name: 'Ho Chi Minh City', color: 'red', x: 638, y: 262, labelDir: 's' },
     { name: 'Manila', color: 'red', x: 692, y: 255, labelDir: 'e' },

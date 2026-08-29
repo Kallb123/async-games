@@ -2,10 +2,12 @@
 import React from 'react';
 import BoardZoom from '@/components/ui/BoardZoom';
 import ClickableMapNode from '@/components/ui/ClickableMapNode';
+import MapEdges from '@/components/ui/MapEdges';
 import MapLabel from '@/components/ui/MapLabel';
 import type { IWorldDominationTerritoryResponse } from '@/games/WorldDomination/apiModels';
 import { TERRITORIES, ADJACENCY, CONTINENT_ORDER, CONTINENTS, continentLabelAnchor, BOARD_VIEWBOX } from '@/games/WorldDomination/board';
 import { edgeListFrom } from '@/utils/games/adjacencyGraph';
+import { mapEdgeGeometry } from '@/utils/ui/mapEdges';
 
 interface WorldDominationBoardProps {
     territories: IWorldDominationTerritoryResponse[];
@@ -58,21 +60,20 @@ export default function WorldDominationBoard({
                         );
                     })}
 
-                    {/* Adjacency lines */}
-                    <g stroke="#fff" strokeWidth={1} strokeOpacity={0.5}>
-                        {EDGE_LIST.map(([a, b]) => (
-                            <line key={`${a}-${b}`} x1={TERRITORIES[a].x} y1={TERRITORIES[a].y} x2={TERRITORIES[b].x} y2={TERRITORIES[b].y} />
-                        ))}
-                    </g>
+                    {/* Adjacency lines (cross-map edges wrap round the globe) */}
+                    <MapEdges nodes={TERRITORIES} edges={EDGE_LIST} width={BOARD_VIEWBOX.width} />
 
-                    {/* Front-line highlight from the last battle */}
-                    {frontLine && (
+                    {/* Front-line highlight from the last battle — wraps too when
+                        the battle was across the map (e.g. Alaska ↔ Kamchatka) */}
+                    {frontLine && mapEdgeGeometry(
+                        TERRITORIES[frontLine.fromTerritoryId], TERRITORIES[frontLine.toTerritoryId], BOARD_VIEWBOX.width,
+                    ).segments.map((s, i) => (
                         <line
-                            x1={TERRITORIES[frontLine.fromTerritoryId].x} y1={TERRITORIES[frontLine.fromTerritoryId].y}
-                            x2={TERRITORIES[frontLine.toTerritoryId].x} y2={TERRITORIES[frontLine.toTerritoryId].y}
+                            key={i}
+                            x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2}
                             stroke="#cf3b32" strokeWidth={2.5} strokeOpacity={0.8}
                         />
-                    )}
+                    ))}
 
                     {/* Territories */}
                     {territories.map((t, id) => {

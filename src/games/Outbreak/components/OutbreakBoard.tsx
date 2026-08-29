@@ -2,6 +2,7 @@
 import React from 'react';
 import BoardZoom from '@/components/ui/BoardZoom';
 import ClickableMapNode from '@/components/ui/ClickableMapNode';
+import MapEdges from '@/components/ui/MapEdges';
 import MapLabel from '@/components/ui/MapLabel';
 import type { IOutbreakPlayerStateResponse, IOutbreakCityResponse } from '@/games/Outbreak/apiModels';
 import { ADJACENCY, BOARD_VIEWBOX, CITIES, CITY_LABEL_OFFSET, DISEASE_COLORS, DISEASE_COLOR_DEFS } from '@/games/Outbreak/board';
@@ -54,12 +55,9 @@ export default function OutbreakBoard({ cities, playerStates, usernameList, vali
 
                     {/* Adjacency lines — the map art's own printed routes are
                         decorative reference only (and, in places, wrong: see
-                        the commit notes), so gameplay draws its own. */}
-                    <g stroke="#fff" strokeWidth={1} strokeOpacity={0.35}>
-                        {EDGE_LIST.map(([a, b]) => (
-                            <line key={`${a}-${b}`} x1={CITIES[a].x} y1={CITIES[a].y} x2={CITIES[b].x} y2={CITIES[b].y} />
-                        ))}
-                    </g>
+                        the commit notes), so gameplay draws its own. Cross-map
+                        edges (San Francisco ↔ Tokyo, etc.) wrap round the globe. */}
+                    <MapEdges nodes={CITIES} edges={EDGE_LIST} width={BOARD_VIEWBOX.width} strokeOpacity={0.35} />
 
                     {CITIES.map(def => {
                         const state = cities[def.id];
