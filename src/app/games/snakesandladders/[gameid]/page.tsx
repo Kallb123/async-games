@@ -26,7 +26,7 @@ import { ISnakesAndLaddersGameStateResponse } from "@/games/SnakesAndLadders/api
 import { ISnakesAndLaddersDiceRollOutcome, SnakesAndLaddersRequestDiceRoll } from "@/utils/apiModels/GameLogic";
 import { SL_REROLL_PARAM } from "@/games/SnakesAndLadders/ui";
 import { rematchFlag } from "@/utils/ui/rematch";
-import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
+import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
 import MatchHistory from "@/components/games/MatchHistory";
 
@@ -90,15 +90,12 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     const complete = nav.displayedComplete;
     const isMyTurn = nav.isLive && user?.id === gameData?.currentTurn;
 
-    // userId → colour, following the persistent usernameList ordering so a
+    // userId → colour, following the persistent userIdList ordering so a
     // player keeps the same swatch on the board and the scoreboard.
     const usernameList = gameData?.usernameList ?? [];
+    const userIdList = gameData?.userIdList ?? [];
     const players = boardState?.playerStates ? Object.values(boardState.playerStates) : [];
-    const colorForUserId = (userId: string): string => {
-        const ps = players.find(p => p.userId === userId);
-        const idx = ps ? usernameList.indexOf(ps.username) : -1;
-        return PLAYER_COLOURS[(idx >= 0 ? idx : 0) % PLAYER_COLOURS.length];
-    };
+    const colorForUserId = (userId: string): string => playerColourForId(userId, userIdList);
 
     const displayedCurrentTurn = nav.displayedCurrentTurn;
     const displayedWinner = nav.displayedWinner;
@@ -129,8 +126,8 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
 
     // ── Scoreboard: each player's square is their score ──────────────────────
     const scoreEntries: ScoreEntry[] = boardState
-        ? usernameList.flatMap((username, i): ScoreEntry[] => {
-            const ps = boardState.playerStates?.[username];
+        ? userIdList.flatMap((userId, i): ScoreEntry[] => {
+            const ps = boardState.playerStates?.[userId];
             if (!ps) return [];
             const isMe = ps.userId === user?.id;
             const isActive = ps.userId === displayedCurrentTurn && !complete;
@@ -138,8 +135,8 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
                 ? '👑 lead'
                 : `sq ${ps.position}`;
             return [{
-                id: username,
-                name: isMe ? 'You' : username,
+                id: userId,
+                name: isMe ? 'You' : ps.username,
                 color: PLAYER_COLOURS[i % PLAYER_COLOURS.length],
                 sub,
                 score: ps.position,
