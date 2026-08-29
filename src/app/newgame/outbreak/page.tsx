@@ -8,6 +8,7 @@ import GameSetupLayout from "@/components/ui/GameSetupLayout";
 import PartySizeHint from "@/components/ui/PartySizeHint";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import OptionSection from "@/components/ui/OptionSection";
+import SeatCountSelect from "@/components/ui/SeatCountSelect";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
 import { useCreateLobbyOrInvite } from "@/utils/hooks/useCreateLobbyOrInvite";
@@ -25,7 +26,7 @@ function NewGameOutbreakForm() {
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
   const [difficulty, setDifficulty] = useState<OutbreakDifficulty>("standard");
   const gameMeta = GAME_META.outbreak;
-  const { partySize, canSubmit, actionLabel, footnote, submit } = useCreateLobbyOrInvite({
+  const { seatCount, setSeatCount, maxSeats, partySize, canSubmit, actionLabel, footnote, submit } = useCreateLobbyOrInvite({
     meta: gameMeta,
     gameType: 'Outbreak',
     invitePath: '/api/newgame/outbreak',
@@ -52,6 +53,7 @@ function NewGameOutbreakForm() {
       footnote={footnote}
     >
       <UserInviteList userList={userList} setItem={setItem} />
+      <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxSeats} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
       <PartySizeHint meta={gameMeta} total={partySize} />
 

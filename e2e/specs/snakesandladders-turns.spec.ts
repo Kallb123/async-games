@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { clearGames, clerkUserId, logBrowserErrors } from '../helpers';
 
 // The multiplayer follow-up to solitaire-smoke.spec.ts: prove the two-player
 // path solitaire can't reach — inviting a named player, that player accepting
@@ -12,9 +13,7 @@ import { test, expect, type Page } from '@playwright/test';
 // e2e/auth.setup.ts's sign-in credentials: E2E_PLAYER_TWO_USERNAME.
 
 test.afterAll(async ({ request }) => {
-  // Same dev-only wipe routes as solitaire-smoke.spec.ts — see its comment.
-  await request.get('/api/dev/clearlive');
-  await request.get('/api/dev/clearresults');
+  await clearGames(request);
 });
 
 // Scoped to the live action button's own class, not just its text: the
@@ -44,24 +43,6 @@ async function dismissRecapIfShown(page: Page): Promise<void> {
   ]).catch(() => {});
   if (await cta.isVisible().catch(() => false)) {
     await cta.click();
-  }
-}
-
-// The Clerk user id the page is signed in as. Clerk's JS hydrates
-// asynchronously after the page itself has loaded, so this polls for
-// `window.Clerk.user.id` rather than reading it once — a page that just
-// navigated hasn't necessarily had time to hydrate yet, and reading too
-// early would misreport a slower page as signed in as nobody.
-async function clerkUserId(page: Page): Promise<string | undefined> {
-  try {
-    const handle = await page.waitForFunction(
-      () => (window as unknown as { Clerk?: { user?: { id?: string } } }).Clerk?.user?.id,
-      undefined,
-      { timeout: 15_000 }
-    );
-    return (await handle.jsonValue()) as string | undefined;
-  } catch {
-    return undefined;
   }
 }
 
@@ -110,20 +91,6 @@ async function roll(page: Page): Promise<void> {
   if (!response.ok()) {
     throw new Error(`Roll command rejected: ${response.status()} ${await response.text()}`);
   }
-}
-
-// Prints a page's console.error output and uncaught exceptions to this
-// process's own stdout (Playwright's reporter doesn't forward these), tagged
-// so a failure can tell which of the two players it came from.
-function logBrowserErrors(page: Page, label: string): void {
-  page.on('console', (msg) => {
-    if (msg.type() === 'error') {
-      console.log(`[${label} console.error] ${msg.text()}`);
-    }
-  });
-  page.on('pageerror', (err) => {
-    console.log(`[${label} pageerror] ${err.message}`);
-  });
 }
 
 test('invite a player, start a game, and take a turn each', async ({ browser }) => {
