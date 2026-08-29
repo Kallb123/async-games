@@ -70,13 +70,8 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
-                title: "The Operations Expert can finally take her special flight",
-                detail: "Her write-up promised a once-per-turn flight from a research station to any city by discarding a city card, but there was no way to actually make it — only the ordinary station-to-station shuttle. The flight is now an action you can pick on your turn.",
-                game: "outbreak",
-            },
-            {
-                title: "The Researcher can share the cards her ability promises",
-                detail: "Her write-up says a card leaving her hand needn't match the city you're both standing in, but Share Knowledge only ever offered that one matching card. She can now give — or let a teammate take — any city card from her hand.",
+                title: "Three roles can finally use the abilities their cards promise",
+                detail: "The Operations Expert's once-per-turn flight to any city, the Researcher sharing a card that doesn't match the city you're on, and the Dispatcher moving a teammate's pawn or sending one pawn to another's city were all described on the role cards but had no button to make them. Each is now an action you can pick on your turn.",
                 game: "outbreak",
             },
             {

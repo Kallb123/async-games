@@ -52,6 +52,77 @@ function CardPickerSheet({ hint, cards, tagLabel, onPick, onCancel }: {
     );
 }
 
+// The four movement rows (§8.1), shown both in the main action list (moving
+// my own pawn) and in the Dispatcher's move-a-teammate picker (§11) — the two
+// differ only in whose city the legal-move counts were computed against and
+// what tapping a row starts, so the row markup lives here once.
+function MoveTypeRows({ movesByType, onPick }: {
+    movesByType: Map<OutbreakMoveType, number>;
+    onPick: (type: OutbreakMoveType) => void;
+}) {
+    return (
+        <>
+            {MOVE_DEFS.map(def => {
+                const count = movesByType.get(def.type) ?? 0;
+                const disabled = count === 0;
+                return (
+                    <button
+                        key={def.type}
+                        type="button"
+                        className={`ag-build-row${disabled ? ' ag-build-row--disabled' : ''}`}
+                        disabled={disabled}
+                        onClick={() => onPick(def.type)}
+                    >
+                        <span className="ag-icon-box">{def.icon}</span>
+                        <span className="ag-build-main">
+                            <span className="ag-build-name">{def.name}</span>
+                            <span className="ag-build-cost">{def.hint}</span>
+                        </span>
+                        {disabled
+                            ? <span className="ag-build-tag ag-build-tag--muted">No targets</span>
+                            : <span className="ag-build-tag">{count} {count === 1 ? 'city' : 'cities'}</span>}
+                    </button>
+                );
+            })}
+        </>
+    );
+}
+
+// The "pick a pawn" sheet the Dispatcher's two abilities share (§11): whose
+// pawn to move with her hand, and which pawn to send to a shared city. Each
+// row names a player and the city their pawn stands in.
+function PlayerPickerSheet({ hint, players, tagLabel, onPick, onCancel }: {
+    hint: string;
+    players: { userId: string; username: string; city: number }[];
+    tagLabel: string;
+    onPick: (userId: string) => void;
+    onCancel: () => void;
+}) {
+    return (
+        <div className="ag-actionsheet">
+            <p className="ag-action-hint" style={{ marginTop: 0 }}>{hint}</p>
+            <div className="ag-build-list">
+                {players.map(p => (
+                    <button
+                        key={p.userId}
+                        type="button"
+                        className="ag-build-row"
+                        onClick={() => onPick(p.userId)}
+                    >
+                        <span className="ag-icon-box">🧑‍⚕️</span>
+                        <span className="ag-build-main">
+                            <span className="ag-build-name">{p.username}</span>
+                            <span className="ag-build-cost">{CITIES[p.city].name}</span>
+                        </span>
+                        <span className="ag-build-tag">{tagLabel}</span>
+                    </button>
+                ))}
+            </div>
+            <button type="button" className="ag-btn ag-btn--light ag-btn--block" onClick={onCancel}>↩ Cancel</button>
+        </div>
+    );
+}
+
 interface OutbreakActionsProps {
     gs: IOutbreakSpecificGameStateResponse;
     myUsername: string;
@@ -63,14 +134,24 @@ interface OutbreakActionsProps {
     opsFlightActive: boolean;
     /** Begin that flight with the given city card chosen to pay for it. */
     onStartOpsFlight: (cardId: number) => void;
-    onCancelOpsFlight: () => void;
+    /** Dispatcher (§11): the pawn whose destination is being picked on the map
+     *  right now, and which of her two abilities is driving it — null when no
+     *  Dispatcher-driven board target is active. */
+    dispatchBoard: { moverUserId: string; mode: 'move' | 'relocate' } | null;
+    /** Begin moving `moverUserId`'s pawn by `type`, paying from my hand. */
+    onStartDispatchMove: (type: OutbreakMoveType, moverUserId: string) => void;
+    /** Begin sending `moverUserId`'s pawn to a city another pawn occupies. */
+    onStartDispatchRelocate: (moverUserId: string) => void;
+    /** Clear any actions-driven board target (ops flight or either Dispatcher
+     *  ability) — the page owns the map, so cancelling it lives up there. */
+    onCancelBoardTarget: () => void;
     submitCommand: SubmitCommand;
     /** The `target` of the in-flight command, so only the tapped row shows as
      *  processing. Null when nothing is in flight. */
     pendingTarget: string | null;
 }
 
-export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode, opsFlightActive, onStartOpsFlight, onCancelOpsFlight, submitCommand, pendingTarget }: OutbreakActionsProps) {
+export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode, opsFlightActive, onStartOpsFlight, dispatchBoard, onStartDispatchMove, onStartDispatchRelocate, onCancelBoardTarget, submitCommand, pendingTarget }: OutbreakActionsProps) {
     const [relocating, setRelocating] = useState(false);
     // Operations Expert (§11): picking which city card pays for her flight,
     // before the map lights up for the destination.
@@ -78,6 +159,15 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
     // Researcher (§11): the teammate and direction of a non-matching Share
     // Knowledge in progress, while she picks which card actually moves.
     const [shareChoice, setShareChoice] = useState<{ userId: string; username: string; direction: 'give' | 'take' } | null>(null);
+    // Dispatcher (§11): which of her two abilities is mid-setup, and — for the
+    // move ability — whose pawn has been chosen, before the move type. The
+    // final destination is picked on the map (dispatchBoard, above).
+    const [dispatch, setDispatch] = useState<
+        | { stage: 'moveWho' }
+        | { stage: 'moveType'; moverUserId: string }
+        | { stage: 'relocateWho' }
+        | null
+    >(null);
     const [discardChoice, setDiscardChoice] = useState<number[]>([]);
     // Forecast's ordering step (§12, §21.6 step 11): starts at the drawn order
     // every time a *new* draw arrives, keyed off the cards themselves rather
@@ -238,7 +328,7 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
                 <p className="ag-action-hint" style={{ marginTop: 0 }}>
                     🛩 <b>Operations Expert flight</b> — tap a highlighted city on the map.
                 </p>
-                <button type="button" className="ag-btn ag-btn--light ag-btn--block" onClick={onCancelOpsFlight}>
+                <button type="button" className="ag-btn ag-btn--light ag-btn--block" onClick={onCancelBoardTarget}>
                     ↩ Cancel
                 </button>
             </div>
@@ -283,6 +373,74 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
         }
     }
 
+    // ── Dispatcher (§11), destination step: a pawn is chosen and the board is
+    //     lit for its destination — tap a city there. ─────────────────────────
+    if (dispatchBoard) {
+        const mover = Object.values(gs.playerStates).find(p => p.userId === dispatchBoard.moverUserId);
+        const moverName = mover ? (mover.userId === me.userId ? 'your' : `${mover.username}'s`) : 'the';
+        return (
+            <div className="ag-actionsheet">
+                <p className="ag-action-hint" style={{ marginTop: 0 }}>
+                    🧭 <b>Dispatcher</b> — tap a highlighted city to {dispatchBoard.mode === 'move' ? `move ${moverName} pawn` : `send ${moverName} pawn there`}.
+                </p>
+                <button type="button" className="ag-btn ag-btn--light ag-btn--block" onClick={onCancelBoardTarget}>
+                    ↩ Cancel
+                </button>
+            </div>
+        );
+    }
+
+    // ── Dispatcher move, step 1 (§11): whose pawn to move with my hand. ──────
+    if (dispatch?.stage === 'moveWho') {
+        const others = Object.values(gs.playerStates).filter(p => p.userId !== me.userId);
+        return (
+            <PlayerPickerSheet
+                hint="🧭 Dispatcher — whose pawn do you want to move?"
+                players={others}
+                tagLabel="Move"
+                onPick={moverUserId => setDispatch({ stage: 'moveType', moverUserId })}
+                onCancel={() => setDispatch(null)}
+            />
+        );
+    }
+
+    // ── Dispatcher move, step 2 (§11): how that pawn travels — legal moves are
+    //     computed from the *mover's* city but paid from my hand. ─────────────
+    if (dispatch?.stage === 'moveType') {
+        const mover = Object.values(gs.playerStates).find(p => p.userId === dispatch.moverUserId);
+        if (mover) {
+            const moverMoves = getLegalMoves({ currentCity: mover.city, hand: me.hand, researchStations: stationCityIds(gs.cities) });
+            const moverByType = new Map<OutbreakMoveType, number>();
+            moverMoves.forEach(m => moverByType.set(m.type, (moverByType.get(m.type) ?? 0) + 1));
+            return (
+                <div className="ag-actionsheet">
+                    <p className="ag-action-hint" style={{ marginTop: 0 }}>
+                        🧭 Dispatcher — how does {mover.username}&apos;s pawn travel? (Paid from your hand.)
+                    </p>
+                    <div className="ag-build-list">
+                        <MoveTypeRows movesByType={moverByType} onPick={type => { setDispatch(null); onStartDispatchMove(type, dispatch.moverUserId); }} />
+                    </div>
+                    <button type="button" className="ag-btn ag-btn--light ag-btn--block" onClick={() => setDispatch(null)}>↩ Cancel</button>
+                </div>
+            );
+        }
+    }
+
+    // ── Dispatcher relocate (§11): which pawn to send to a city another pawn
+    //     already occupies — no card, no adjacency, just an action. ───────────
+    if (dispatch?.stage === 'relocateWho') {
+        const everyone = Object.values(gs.playerStates).map(p => ({ userId: p.userId, username: p.userId === me.userId ? 'You' : p.username, city: p.city }));
+        return (
+            <PlayerPickerSheet
+                hint="🧭 Dispatcher — which pawn do you want to send to a teammate?"
+                players={everyone}
+                tagLabel="Send"
+                onPick={moverUserId => { setDispatch(null); onStartDispatchRelocate(moverUserId); }}
+                onCancel={() => setDispatch(null)}
+            />
+        );
+    }
+
     const legalMoves = getLegalMoves({ currentCity: me.city, hand: me.hand, researchStations: stationCityIds(gs.cities) });
     const movesByType = new Map<OutbreakMoveType, number>();
     legalMoves.forEach(m => movesByType.set(m.type, (movesByType.get(m.type) ?? 0) + 1));
@@ -298,32 +456,48 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
     const cureRequired = cureCardsRequired(me.role === 'scientist');
     const stationIsFree = opsExpertBuildsFree(me.role);
 
+    // Dispatcher (§11): she can move a teammate's pawn with her hand, and send
+    // any pawn to a city another pawn already occupies. The first needs a
+    // teammate; the second needs two pawns in different cities to have a shared
+    // destination at all.
+    const isDispatcher = me.role === 'dispatcher';
+    const hasOtherPlayers = Object.values(gs.playerStates).some(p => p.userId !== me.userId);
+    const pawnsSpread = new Set(Object.values(gs.playerStates).map(p => p.city)).size >= 2;
+
     return (
         <div className="ag-actionsheet">
             <div className="ag-build-list">
                 {/* ── Movement ─────────────────────────────────────────────── */}
-                {MOVE_DEFS.map(def => {
-                    const count = movesByType.get(def.type) ?? 0;
-                    const disabled = count === 0;
-                    return (
-                        <button
-                            key={def.type}
-                            type="button"
-                            className={`ag-build-row${disabled ? ' ag-build-row--disabled' : ''}`}
-                            disabled={disabled}
-                            onClick={() => setMoveMode(def.type)}
-                        >
-                            <span className="ag-icon-box">{def.icon}</span>
-                            <span className="ag-build-main">
-                                <span className="ag-build-name">{def.name}</span>
-                                <span className="ag-build-cost">{def.hint}</span>
-                            </span>
-                            {disabled
-                                ? <span className="ag-build-tag ag-build-tag--muted">No targets</span>
-                                : <span className="ag-build-tag">{count} {count === 1 ? 'city' : 'cities'}</span>}
-                        </button>
-                    );
-                })}
+                <MoveTypeRows movesByType={movesByType} onPick={setMoveMode} />
+
+                {/* ── Dispatcher (§11) ──────────────────────────────────────── */}
+                {isDispatcher && hasOtherPlayers && (
+                    <button type="button" className="ag-build-row" onClick={() => setDispatch({ stage: 'moveWho' })}>
+                        <span className="ag-icon-box">🧭</span>
+                        <span className="ag-build-main">
+                            <span className="ag-build-name">Move a teammate&apos;s pawn</span>
+                            <span className="ag-build-cost">Travel their pawn, paid from your hand</span>
+                        </span>
+                        <span className="ag-build-tag">Dispatch</span>
+                    </button>
+                )}
+                {isDispatcher && (
+                    <button
+                        type="button"
+                        className={`ag-build-row${pawnsSpread ? '' : ' ag-build-row--disabled'}`}
+                        disabled={!pawnsSpread}
+                        onClick={() => setDispatch({ stage: 'relocateWho' })}
+                    >
+                        <span className="ag-icon-box">🧭</span>
+                        <span className="ag-build-main">
+                            <span className="ag-build-name">Send a pawn to a teammate</span>
+                            <span className="ag-build-cost">Move any pawn onto another pawn&apos;s city</span>
+                        </span>
+                        {pawnsSpread
+                            ? <span className="ag-build-tag">Dispatch</span>
+                            : <span className="ag-build-tag ag-build-tag--muted">No target</span>}
+                    </button>
+                )}
 
                 {/* ── Operations Expert flight (§11) ──────────────────────── */}
                 {me.role === 'opsExpert' && cityState.station && !me.opsExpertFlightUsed && (() => {

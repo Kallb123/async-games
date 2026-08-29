@@ -40,6 +40,10 @@ type BoardTarget =
     // Operations Expert (§11): the once-per-turn flight from a station to any
     // city, with the city card chosen in OutbreakActions already picked.
     | { kind: 'opsFlight'; cardId: number }
+    // Dispatcher (§11): moving a chosen teammate's pawn by a chosen move type
+    // (paid from her hand), or sending a chosen pawn to a city another occupies.
+    | { kind: 'dispatchMove'; type: OutbreakMoveType; moverUserId: string }
+    | { kind: 'dispatchRelocate'; moverUserId: string }
     | OutbreakEventTargeting;
 
 export default function GameOutbreak({ params }: { params: Promise<{ gameid: uuidString }> }) {
@@ -99,7 +103,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     // turn changes so a stale pick from a previous player never lingers into
     // someone else's turn.
     const [boardTarget, setBoardTarget] = useResettingState<BoardTarget | null>(null, `${displayedCurrentTurn}`);
-    const eventTargeting = boardTarget && boardTarget.kind !== 'move' && boardTarget.kind !== 'opsFlight' ? boardTarget : null;
+    const eventTargeting = boardTarget && (boardTarget.kind === 'airlift' || boardTarget.kind === 'governmentGrant') ? boardTarget : null;
 
     // Which city a tapped hand/discard card is ringing on the board right
     // now — purely a lookup aid, reset alongside the move/event target above
@@ -116,6 +120,17 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
             legal.filter(m => m.type === boardTarget.type).forEach(m => validCities.add(m.destination));
         } else if (boardTarget.kind === 'opsFlight') {
             gs.cities.forEach((_, id) => { if (id !== me.city) validCities.add(id); });
+        } else if (boardTarget.kind === 'dispatchMove') {
+            const mover = Object.values(gs.playerStates).find(p => p.userId === boardTarget.moverUserId);
+            if (mover) {
+                const legal = getLegalMoves({ currentCity: mover.city, hand: me.hand, researchStations: stationCityIds(gs.cities) });
+                legal.filter(m => m.type === boardTarget.type).forEach(m => validCities.add(m.destination));
+            }
+        } else if (boardTarget.kind === 'dispatchRelocate') {
+            const mover = Object.values(gs.playerStates).find(p => p.userId === boardTarget.moverUserId);
+            if (mover) {
+                Object.values(gs.playerStates).forEach(p => { if (p.userId !== mover.userId && p.city !== mover.city) validCities.add(p.city); });
+            }
         } else if (boardTarget.kind === 'governmentGrant' && boardTarget.destination === undefined) {
             gs.cities.forEach((c, id) => { if (!c.station) validCities.add(id); });
         } else if (boardTarget.kind === 'airlift' && boardTarget.targetUserId !== undefined) {
@@ -141,6 +156,24 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
             cmd.destination = cityId;
             cmd.cardId = boardTarget.cardId;
             submitCommand(cmd, () => setBoardTarget(null), 'opsFlight');
+            return;
+        }
+
+        if (boardTarget.kind === 'dispatchMove') {
+            const cmd = new OutbreakAction();
+            cmd.kind = boardTarget.type;
+            cmd.destination = cityId;
+            cmd.targetUserId = boardTarget.moverUserId;
+            submitCommand(cmd, () => setBoardTarget(null), 'dispatchMove');
+            return;
+        }
+
+        if (boardTarget.kind === 'dispatchRelocate') {
+            const cmd = new OutbreakAction();
+            cmd.kind = 'dispatcherRelocate';
+            cmd.destination = cityId;
+            cmd.targetUserId = boardTarget.moverUserId;
+            submitCommand(cmd, () => setBoardTarget(null), 'dispatchRelocate');
             return;
         }
 
@@ -172,6 +205,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     const boardTag = !boardTarget ? null
         : boardTarget.kind === 'move' ? 'Choose a destination'
         : boardTarget.kind === 'opsFlight' ? 'Choose a destination'
+        : boardTarget.kind === 'dispatchMove' || boardTarget.kind === 'dispatchRelocate' ? 'Choose a destination'
         : boardTarget.kind === 'governmentGrant' && boardTarget.destination === undefined ? 'Choose a station city'
         : boardTarget.kind === 'airlift' && boardTarget.targetUserId !== undefined ? 'Choose a destination'
         : null;
@@ -340,7 +374,14 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                             setMoveMode={m => setBoardTarget(m ? { kind: 'move', type: m } : null)}
                             opsFlightActive={boardTarget?.kind === 'opsFlight'}
                             onStartOpsFlight={cardId => setBoardTarget({ kind: 'opsFlight', cardId })}
-                            onCancelOpsFlight={() => setBoardTarget(null)}
+                            dispatchBoard={
+                                boardTarget?.kind === 'dispatchMove' ? { moverUserId: boardTarget.moverUserId, mode: 'move' }
+                                : boardTarget?.kind === 'dispatchRelocate' ? { moverUserId: boardTarget.moverUserId, mode: 'relocate' }
+                                : null
+                            }
+                            onStartDispatchMove={(type, moverUserId) => setBoardTarget({ kind: 'dispatchMove', type, moverUserId })}
+                            onStartDispatchRelocate={moverUserId => setBoardTarget({ kind: 'dispatchRelocate', moverUserId })}
+                            onCancelBoardTarget={() => setBoardTarget(null)}
                             submitCommand={submitCommand}
                             pendingTarget={pendingTarget}
                         />
