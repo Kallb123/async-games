@@ -5,25 +5,30 @@ see, covering both a **changeable username** (the unique handle they're
 invited by) and a **secondary display name** (a friendly, non-unique label
 alongside it), plus the other models worth considering.
 
-Short answer, in three phases:
+Short answer — the destination is **option C** (a changeable unique handle
+*and* a free-text display name), reached in five PRs. §6 breaks them into
+commits.
 
-1. **Re-key the response DTOs by `userId`** (§3) — six games key board state by
+1. **Bug fixes** (§1c) — three independent defects, landed first so no refactor
+   carries them along.
+2. **Re-key the response DTOs by `userId`** (§3) — six games key board state by
    resolved *name*.
-2. **Tokenise the history strings** (§4) — 89 sites bake a name into stored
+3. **Tokenise the history strings** (§4) — 89 sites bake a name into stored
    text.
-3. **Make the Clerk username editable** (§5) — the actual feature.
+4. **Make the Clerk username editable** (§5) — the feature.
+5. **Add display names** (option C) — a separate pass, safe once 2 has landed.
 
 Names are already resolved per request from Clerk on every path that matters,
-so phase 3 is a UI job, not a data job — roughly one form on `/profile` and one
+so PR 4 is a UI job, not a data job — roughly one form on `/profile` and one
 extracted field component.
 
-Phases 1 and 2 are the same principle applied at two layers: **the thing you
+PRs 2 and 3 are the same principle applied at two layers: **the thing you
 store should be the thing that never changes.** Both are worth doing **on their
 own merits, independent of this feature** — today's correctness rests on
 usernames being unique and permanent, which is precisely the property we are
 about to remove. Both are also cheaper than they look. Persisted game state is
-already `userId`-based everywhere, so phase 1 is mostly *deleting* translation
-code with no migration (§3a); and phase 2's mechanism **already exists and
+already `userId`-based everywhere, so PR 2 is mostly *deleting* translation
+code with no migration (§3a); and PR 3's mechanism **already exists and
 ships in two games** — just duplicated, undelimited, and applied inconsistently
 (§4a).
 
@@ -113,7 +118,7 @@ Also worth deleting while in the file: **`usernameListToUserIdList`
 |---|---|---|---|---|---|
 | **0** | **Re-key DTOs by `userId`** (prerequisite, not a user-facing option) | Nothing directly — it unblocks the rest | Removes a mutable key that is a latent bug today. Storage is already id-based, so **no migration**. `playerByUserId` already exists with 37 call sites. Net *deletes* translation code. Makes A safe and B/C possible. | Touches six games' render paths, which is where regressions hide. Slightly less readable raw JSON (§3a). Should land as its own PR. | ✅ **Do first** |
 | **0b** | **Tokenise history strings** (prerequisite, §4) | Nothing directly — history lines stop lying after a rename | Mechanism already ships in 2 games, so this is mostly *consolidation*: replaces a byte-identical duplicated helper and a naive substring replace. Also kills `MatchHistory`'s `startsWith` actor guess (§4c). Schema change is **free today** while history is test data. | 89 write sites to touch, though mechanically. Raw Mongo history becomes less readable. Changes a persisted field's shape — cheap now, expensive later. | ✅ **Do while free** |
-| **A** | **Editable Clerk username** — `user.update({ username })` | One name, changeable, still globally unique | Zero new storage, zero new API routes. Propagates automatically through `nameOf`. Clerk enforces uniqueness and availability. Fixes §1c defects as a side effect. | Frees the old handle for someone else to claim → invite-by-handle can resolve to a different person (**locksmith**, §6). Needs `username` enabled as a Clerk instance attribute — verify first. | ✅ **Then this** |
+| **A** | **Editable Clerk username** — `user.update({ username })` | One name, changeable, still globally unique | Zero new storage, zero new API routes. Propagates automatically through `nameOf`. Clerk enforces uniqueness and availability. Fixes §1c defects as a side effect. | Frees the old handle for someone else to claim → invite-by-handle can resolve to a different person (**locksmith**, §7). Needs `username` enabled as a Clerk instance attribute — verify first. | ✅ **Then this** |
 | **B** | **Secondary display name** — editable `firstName`, shown to everyone | A friendly non-unique name; handle stays fixed | Familiar (Twitter/X). Non-unique means no "name taken" friction. Field already exists — no schema change. | Requires flipping `readableName`'s order. **Blocked until option 0 lands**, or non-unique names collapse board state (§3). Handle still unchangeable, so the original ask is only half met. | ⚠️ Viable after 0 |
 | **C** | **Both tiers** — handle *and* display name (Discord/GitHub) | Changeable `@handle` plus a separate display name | The model users expect from Discord/GitHub. Most flexible. After option 0 the technical objection dissolves, leaving a **product** decision rather than an engineering one. | Two editors and two validation rules. Impersonation surface is wider than A: a non-unique display name can freely copy someone else's. | ⚠️ Product call, after 0 |
 | **D** | **Per-game / per-lobby nickname** | A different name per table | Fun; sidesteps global uniqueness (per-lobby `uniqueGuestName` already exists). | `GameData` deliberately stores **no** names. Needs a second lookup path beside `buildUserDirectory` and a per-game override in all 8 `gameStateToModel`s. Duplicates `nameOf` once per game. Impersonation risk inside a game. | ❌ Over-engineered |
@@ -353,10 +358,10 @@ separately). Keep the strings; fix what is baked into them.
 
 ---
 
-## 5. Implementation plan — the rename itself (option A)
+## 5. How the rename is built (option A)
 
-Phase 1 is option 0, scoped in §3a: re-key the DTOs, its own PR, no user-facing
-change. What follows assumes it has landed.
+The design detail for the rename itself. It assumes PRs 1–3 have landed; §6
+sequences the whole thing into commits.
 
 ### 5a. Verify first
 
@@ -411,22 +416,144 @@ optional `onReroll`, `label`) and use it in both. Note the shared piece is the
 to Clerk. A `useDisplayName` hook would have one call site, which AGENTS.md
 rule 3 says is not yet a shared piece.
 
-### 5e. Sweep-up (small, same PR)
+### 5e. The §1c defects go first, not here
 
-- Set a username on the claim path so claimed guests stop being invisible (§1c).
-- Route `UserInviteList`'s three raw `friend.user.username` reads through
-  `displayName()`/`publicHandle()`.
-- Delete `usernameListToUserIdList` — dead code.
+The three sweep-up items (the claim path setting no username,
+`UserInviteList`'s raw reads, the dead `usernameListToUserIdList`) are
+independent of the rename and are **PR 1** in §6 — their own commits, landed
+before any refactor, so a bug fix never arrives tangled up with a rewrite.
 
 ### 5f. Not needed
 
-No Mongo migration. No backfill. No new collection. No new API route — in
-either phase. Nothing about dynamic names touches storage, because storage
-never held a name in the first place.
+No Mongo migration. No backfill. No new collection. No new API route — in any
+phase. The one schema change in the whole plan is §4's history shape, and it
+is free because that data is disposable.
 
 ---
 
-## 6. Handoffs
+## 6. Commit breakdown — the route to option C
+
+Five PRs, sequenced so every commit builds green and no commit mixes a bug fix
+with a refactor. Bug fixes are called out as their own commits throughout.
+
+Pre-commit gates on **every** commit below, per AGENTS.md: `npm run build`,
+`npx tsc --noEmit`, `npm run lint` (`--max-warnings 0`). Anything touching
+`src/utils/apiModels/` or a game's rules also runs `npm test`.
+
+### PR 1 — Standalone bug fixes
+
+Independent of everything else. Land first so the later refactors are not
+carrying defects along with them.
+
+| # | Commit | Notes |
+|---|---|---|
+| 1.1 | Delete the unused `usernameListToUserIdList` | Pure deletion (`clerk.ts:239`, zero callers). Also update the two stale references in `docs/account-less-play.md` (§lines 40, 357). |
+| 1.2 | Resolve friend names through the shared helper | Fixes `UserInviteList.tsx:48,52,91-95` and `profile/page.tsx:284,303` reading `friend.user.username` raw. Route through `displayName()`/`publicHandle()`. Also fixes claimed guests vanishing from the invite picker's suggestions. |
+| 1.3 | Give a claimed guest a real username | `api/user/claim/route.ts` — derive a candidate from their display name, uniquify against Clerk, set it in the same `updateUser` pass. Makes them findable by `usersByUsername`. They can change it once PR 4 lands. |
+
+**Review:** `locksmith` on 1.3 (it writes to Clerk on a guest principal, and the
+claim route is already rate-limited — confirm the new write sits inside that
+gate). `caveman` on 1.2.
+
+**Not player-visible enough for a "What's new" line**, except arguably 1.3 —
+judgement call for `rulebook`.
+
+### PR 2 — Re-key response DTOs by `userId` (option 0, §3)
+
+Split **per game** rather than per layer. A commit that re-keys the server
+without the client would render an empty board, so each game moves end-to-end
+in one commit and stays green.
+
+| # | Commit | Notes |
+|---|---|---|
+| 2.1 | Add `userIdList` to the game response DTOs | Additive; nothing reads it yet. `IGameDataResponse`, `IGameResponse`, `CreateResponse`, `CreateDataResponse`. Zero behaviour change. |
+| 2.2 | Add id-based player identity helpers | `playerColourFor` by id alongside the name version; an `opponents()` overload taking ids. Additive — old callers untouched. |
+| 2.3 | Key Snakes and Ladders player states by `userId` | Server (`SnakesAndLaddersModels.ts:183`) + board page + components, together. The template for the five that follow. |
+| 2.4 | Key Dice Cities player states by `userId` | |
+| 2.5 | Key Settlements and Cities player states by `userId` | Also `gs.playerStates[v.owner]` at `page.tsx:198`. |
+| 2.6 | Key World Domination player states by `userId` | |
+| 2.7 | Key Train Time player states by `userId` | |
+| 2.8 | Key Outbreak player states by `userId` | Most client sites (board, hands, event tray, actions). |
+| 2.9 | Key per-turn chart series by `userId` | `formatPerTurnChart` (`GameDataApi.ts:59`) maps `Map<userId, n>` → `Record<username, n>` — the same collision class as `playerStates`, one shared helper. |
+| 2.10 | Compare player identity by id, not name | The 11 `currentUsername(user)` sites → `user.id`. Six get simpler. This is the commit that kills the stale-session empty board (§3c). |
+| 2.11 | Remove the name-based identity helpers left unused | Cleanup. **If this commit is not a net deletion, something was rebuilt rather than removed.** |
+
+**Review:** `croupier` on 2.3 (then spot-check one more) — every response
+builder changes shape, though no new field ships. `caveman` on 2.11.
+`gremlin` on 2.10.
+
+**No "What's new" line** — internal refactor, invisible to players.
+
+### PR 3 — Tokenise history strings (option 0b, §4)
+
+Uses a short-lived strangler so games convert one at a time instead of one
+89-site commit that cannot half-work. The transitional branch is deleted in
+3.11, so the temporary complexity does not outlive the PR.
+
+| # | Commit | Notes |
+|---|---|---|
+| 3.1 | Extract the duplicated history id resolver | **Bug fix (duplication).** One shared helper replacing the byte-identical copies at `SettlementsAndCitiesModels.ts:400` and `WorldDominationModels.ts:299`. Behaviour identical for now — dedup only. |
+| 3.2 | Fix the resolver re-scanning its own output | **Bug fix.** Single-pass replace so a name containing another player's id cannot double-substitute (§4b). |
+| 3.3 | Add `IHistoryEntry` and the token resolver | `{ text, actorId? }`, a `{{userId}}` resolver, and a normaliser that still accepts a plain `string`. Additive — no game uses it yet. |
+| 3.4–3.10 | Convert one game's history to tokens | Seven commits, one per game folder writing history. Each swaps `${this.senderUsername}` for a token and sets `actorId`. Green after each. |
+| 3.11 | Drop the legacy string branch and tighten the type | `IGameState.history` becomes `IHistoryEntry[]`. Schema updated. **Discard the existing history test data** rather than migrating. |
+| 3.12 | Colour history lines by their recorded actor | **Bug fix.** Replaces `MatchHistory.tsx:29`'s `entry.startsWith(username)` guess, which mis-attributes when one name prefixes another (§4c). |
+| 3.13 | Stop World Domination's shared history saying "you" | **Bug fix (croupier).** `WorldDominationLogic.ts:355` writes `you lost ${attackerLosses}` into the history *every* player reads. Placed here because it edits the same lines 3.6 rewrites — doing it earlier just guarantees a conflict. |
+
+**Review:** `croupier` on 3.13 and on the PR as a whole (history is shared
+state). `caveman` on 3.1 and 3.11. `rulebook` on the schema change.
+
+**No "What's new" line** — the log looks the same to a player; it just stops
+going stale.
+
+### PR 4 — Editable username (option A, §5)
+
+The first player-visible PR. Verify `username` is enabled as a Clerk instance
+attribute **before starting** (§5a) — without it `user.update({ username })`
+fails with `form_param_unknown`.
+
+| # | Commit | Notes |
+|---|---|---|
+| 4.1 | Extract `DisplayNameField` from the join form | The second-copy extraction (§5d). `JoinForm.tsx:340-365` keeps working through the new component — no behaviour change. |
+| 4.2 | Let a player change their username from their profile | `user.update({ username })` → `user.reload()` → toast, no API route (§5b). Reuses `ProfileIdentity`'s `action` slot, `ag-card ag-form-card`, `ActionButton`, and `isValidGuestName`. Surfaces Clerk's `form_identifier_exists` as a readable sentence. |
+| 4.3 | Rate-limit username changes | Only if `locksmith` asks for it — `consumeRateLimit` already exists. A cooldown is the standard mitigation for handle-churn impersonation (§2, "Other popular methods"). |
+| 4.4 | Add the "What's new" line | **Required** by AGENTS.md — this is player-visible. Enhancements group, newest first. |
+
+**Review:** `locksmith` (**blocking** — freeing an old handle means an invite
+typed from memory can reach a different person; that question needs answering
+before this ships), `caveman` on 4.1, `rulebook` on 4.4.
+
+### PR 5 — Display names (option C, separate pass)
+
+Only safe after PR 2. Non-unique names are exactly what the re-key made
+survivable.
+
+| # | Commit | Notes |
+|---|---|---|
+| 5.1 | Show a player's display name instead of their handle | Flips `readableName`'s order (`players.ts:64`) to `firstName` → `username`. **This is the whole behaviour change** (§1a). It also makes guests and registered users consistent, since guests already resolve by `firstName` — so this commit *removes* the guest special-case rather than adding a second one. |
+| 5.2 | Let a player edit their display name | Reuses `DisplayNameField` from 4.1. Both fields now sit on `/profile`: handle (unique, how you are invited) and display name (free text, what people see). |
+| 5.3 | Disambiguate duplicate display names in a game | Two players called "Dave" are now distinct but look identical. Show the handle as a tiebreak where a seat list would otherwise repeat a name. Scope depends on how it actually looks — worth deferring until 5.1 is on screen. |
+| 5.4 | Add the "What's new" line | Player-visible. |
+
+**Review:** `croupier` on 5.1 (it changes what name every response carries),
+`caveman` on 5.2, `rulebook` on 5.4.
+
+### Sequencing summary
+
+```
+PR 1  bug fixes            ── independent, land any time
+PR 2  re-key by userId     ── blocks PR 4 (stale-session bug) and PR 5 (collisions)
+PR 3  tokenise history     ── blocks PR 4 (history would lie after a rename)
+PR 4  editable username    ── the feature
+PR 5  display names        ── the separate pass
+```
+
+PRs 2 and 3 are independent of each other and can run in parallel or either
+order. Both must precede PR 4.
+
+---
+
+## 7. Handoffs
 
 Per AGENTS.md's review-crew boundaries, these are outside this document:
 
