@@ -235,16 +235,3 @@ export function toUserDto(user: User): UserDto {
         publicMetadata: { guest: isGuest(user) },
     };
 }
-
-export async function usernameListToUserIdList(usernameList: string[]): Promise<string[]> {
-    const users = await usersByUsername(usernameList);
-    const userIdList: string[] = [];
-    usernameList.forEach(username => {
-        const user = users.find(u => u.username === username);
-        if (!user) {
-            return;
-        }
-        userIdList.push(user.id);
-    });
-    return userIdList;
-}
