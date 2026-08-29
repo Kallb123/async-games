@@ -60,36 +60,50 @@ fourth; this plan removes the duplicate as the vehicle for the fix.
 ### 3.1 Detect a wrapping edge from geometry, not a per-board list
 
 An edge wraps exactly when its two ends are on opposite sides of the map, and
-that is already visible in the coordinates: the four wrap edges span 631-662 of
-the 800-wide viewBox, while the longest genuine edge on either board spans
-144 (Northwest Territory ↔ Greenland; Outbreak's longest is Jakarta ↔ Sydney
-at 133). A single threshold — "horizontal span greater than half the board
-width", i.e. 400 here — sits in a gap with nothing in it between 144 and 631,
-and needs no new data in either `board.ts`, nothing to keep in sync
-when a board's coordinates are recalibrated, and no chance of a board
-declaring a wrap edge its coordinates do not have.
+that is already visible in the coordinates: the four wrap edges span 78.9-82.8%
+of the 800-wide viewBox, while the longest genuine edge on either board spans
+18.0% (144 — Northwest Territory ↔ Greenland; Outbreak's longest is Jakarta ↔
+Sydney at 133). A single threshold — "horizontal span greater than half the
+board width" — sits in a gap with nothing in it between 144 and 631, so it is
+not a knife-edge: anything from ~20% to ~78% picks the same four edges. It
+needs no new data in either `board.ts`, nothing to keep in sync when a board's
+coordinates are recalibrated, and gives a board no way to declare a wrap edge
+its coordinates do not have.
 
-The threshold is a documented default on the helper, not a magic number buried
-in a component.
+The threshold is a named module constant in the helper, not a magic number
+buried in a component, and not a parameter — no caller would pass it. Promote
+it to one the day a board needs a different value.
 
-*Rejected:* a `WRAP_EDGES` list per board. It is more code, in two more
-places, to express something the coordinates already say.
+*Rejected:* a `WRAP_EDGES` list per board. It is new data in two `board.ts`
+files, plus a prop, plus a lookup, to say something the coordinates already
+say.
 
-### 3.2 Draw it as one line cut by the map's edges
+### 3.2 Draw it as one line the map's own edges cut in half
 
-Treat the connection as the straight line it would be on a cylinder. For an
-edge between `L` (the smaller `x`) and `R`:
+Treat the connection as the straight line it would be on a cylinder, and draw
+each half as a line running off the board towards the other end's *ghost* — a
+copy of that node one board-width away:
 
-- the **left stub** runs from `L` towards a ghost of `R` placed at `R.x - width`
-  (i.e. just off the left edge), clipped at `x = 0`;
-- the **right stub** runs from `R` towards a ghost of `L` placed at
-  `L.x + width`, clipped at `x = width`.
+- the **left stub** runs from `L` (the smaller `x`) to `(R.x - width, R.y)`;
+- the **right stub** runs from `R` to `(L.x + width, L.y)`.
 
-The two stubs then meet the two edges at the *same* `y` — that falls out of the
-maths, and is worth an assertion in the test, because it is what makes the pair
-read as one line wrapping round rather than two unrelated spurs. It also gives
-each stub the correct slope for free (the Los Angeles ↔ Sydney stubs slope
-down, the San Francisco ↔ Tokyo pair is flat).
+Nothing computes where those lines leave the map, because the browser already
+does: both boards draw into a root `<svg viewBox="0 0 800 460">`, which clips to
+its viewport by default, and nothing in `ag-theme.css` sets `overflow: visible`
+on an svg (`:1354` and `:1358` set `display`, `width`, `border-radius` and
+nothing else). The off-board part of each ghost line simply is not painted, at
+fit width and zoomed alike.
+
+That also gives each stub the correct slope for free — the Los Angeles ↔ Sydney
+stubs slope down, the San Francisco ↔ Tokyo pair is flat — and, because the two
+ghost lines are the same line shifted by exactly one board width, both halves
+leave the map at the same `y`. That shared `y` is what makes the pair read as
+one line wrapping round rather than two unrelated spurs, and it is the one
+number the labels need:
+
+```ts
+wrapY = L.y + (L.x / (L.x + width - R.x)) * (R.y - L.y)
+```
 
 *Rejected:* short fixed-length horizontal stubs. Simpler to compute, but every
 stub then has the same angle, so a player cannot tell which of San Francisco's
@@ -110,12 +124,15 @@ interface MapEdgesProps {
     edges: [number, number][];
     /** The board viewBox width the map wraps at. */
     width: number;
-    stroke?: string;          // default '#fff'
-    strokeWidth?: number;     // default 1
-    strokeOpacity?: number;   // default 0.5 (Outbreak passes 0.35)
-    labelFontSize?: number;   // default 6
+    /** Default 0.5; Outbreak's busier map passes 0.35. */
+    strokeOpacity?: number;
 }
 ```
+
+That is the only prop the two call sites disagree on — both pass
+`stroke="#fff"` and `strokeWidth={1}` today — so the stroke colour, width and
+the label font size are hardcoded inside. Add a prop back when a third board
+actually wants a different one.
 
 `WorldDominationTerritoryDef` and `OutbreakCityDef` both already satisfy
 `{ name, x, y }`, so neither board needs an adapter.
@@ -130,23 +147,21 @@ export interface MapEdgeSegment { x1: number; y1: number; x2: number; y2: number
 export interface MapEdgeGeometry {
     /** One segment normally; two — left stub then right stub — when it wraps. */
     segments: MapEdgeSegment[];
-    /** Where the edge leaves and re-enters the map; only set when it wraps. */
+    /** Where both halves leave the map; only set when it wraps (see §3.2). */
     wrapY?: number;
 }
 
-/** @param wrapFraction span/width above which an edge is taken to go round the back. */
 export function mapEdgeGeometry(
     a: { x: number; y: number },
     b: { x: number; y: number },
     width: number,
-    wrapFraction = 0.5,
 ): MapEdgeGeometry;
 ```
 
 Keeping the maths out of the component is what lets the **front-line
 highlight** reuse it: `WorldDominationBoard` maps the same
 `mapEdgeGeometry(...).segments` into its red `<line>`s and the highlight wraps
-too, without `MapEdges` growing a "highlighted edge" prop.
+too, without `MapEdges` growing a "highlighted edge" prop and a second job.
 
 It lives in `src/utils/ui/` rather than `src/utils/games/adjacencyGraph.ts`
 because it is screen geometry, not graph structure — `adjacencyGraph.ts` knows
@@ -162,7 +177,7 @@ Each wrap stub gets one `MapLabel` at the map edge, naming the node at the
   `y = wrapY - 3`
 
 `MapLabel`'s outline stroke already makes them readable over the art, and its
-`pointerEvents="none"` keeps them out of the way of the node tap targets.
+hardcoded `pointerEvents="none"` keeps them off the node tap targets.
 
 Computed `wrapY` values, useful when eyeballing the result: Alaska ↔ Kamchatka
 ≈ 29.6; San Francisco ↔ Tokyo = 141; San Francisco ↔ Manila ≈ 182.2; Los
@@ -176,13 +191,16 @@ Angeles ↔ Sydney ≈ 278.9.
 - Add `src/utils/ui/mapEdges.test.ts`:
   - a short edge returns exactly one segment, endpoint-to-endpoint, and no
     `wrapY`;
-  - a wrapping edge returns two segments, one touching `x = 0` and one touching
-    `x = width`, both starting at their own node;
-  - both stubs leave the map at the same `y`, and that `y` is `wrapY`;
+  - a wrapping edge returns two segments, each starting at its own node and
+    ending one board-width away past the opposite map edge;
+  - `wrapY` is where *both* halves cross the map edge — solve each segment for
+    `x = 0` and `x = width` and check they agree with it and each other. One
+    test, and the one that would catch a sign slip putting the two labels on
+    different rows;
   - the result is the same whichever order the two nodes are passed in;
-  - the four real edges of §1, fed from `TERRITORIES` / `CITIES`, wrap; a
-    sampled set of ordinary edges on both boards does not (this is the
-    regression guard on the threshold).
+  - the four real edges of §1, fed from `TERRITORIES` / `CITIES`, wrap; every
+    other edge on both boards does not (loop the two `EDGE_LIST`s — this is the
+    regression guard on the threshold, and it is cheap to check exhaustively).
 - No visual change yet. Gates: `npx tsc --noEmit`, `npm run lint`, `npm test`.
 
 ### Commit 2 — the shared edge layer, both boards ported
@@ -195,22 +213,23 @@ Angeles ↔ Sydney ≈ 278.9.
   too.
 - `OutbreakBoard.tsx`: the same, with `nodes={CITIES}` and
   `strokeOpacity={0.35}`.
+- Flip Tokyo (`723, 141`) and Osaka (`724, 182`) from `labelDir: 'e'` to `'n'`
+  and `'s'` in `src/games/Outbreak/board.ts`. Their names sit at `x ≈ 733` on
+  rows 141 and 182 — exactly the `wrapY` of the two `San Francisco →` stubs, so
+  without the flip this commit knowingly ships overlapping labels. That field
+  exists for precisely this; do not special-case it in `MapEdges`.
 - Both boards keep their own node rendering — that stays two components on
   purpose (`docs/games/outbreak-gdd.md` §21.6 step 5 settled it).
 - Gates: `npm run build`, `npx tsc --noEmit`, `npm run lint`, `npm test`.
 
-### Commit 3 — calibration and the release note
+### Commit 3 — release note and doc upkeep
 
-Only after looking at both boards at fit width and zoomed in (`npm run dev`,
-open a World Domination and an Outbreak game):
+After looking at both boards at fit width and zoomed in (`npm run dev`, open a
+World Domination and an Outbreak game):
 
-- Nudge any wrap label that collides with an existing city label. The known
-  risk is the Outbreak right edge, where Tokyo (723, 141, `labelDir: 'e'`) and
-  Osaka (724, 182, `labelDir: 'e'`) put their names at `x ≈ 733` on the same
-  rows as the `San Francisco →` stubs at `wrapY` 141 and 182. Fix it by
-  flipping those two cities' `labelDir` to `'n'` / `'s'` in
-  `src/games/Outbreak/board.ts` — that field exists for exactly this — rather
-  than by special-casing anything in `MapEdges`.
+- Nudge any *further* label collision the eye finds — the Tokyo/Osaka one is
+  already handled in commit 2 because it was worked out on paper, not
+  discovered by looking.
 - Add the note to `src/utils/ui/whatsNew.ts` under **Bug fixes**, in the
   player's language: the long lines that used to cut across the map are now
   drawn heading off each edge with the name of what they connect to. Drop the
@@ -222,12 +241,12 @@ open a World Domination and an Outbreak game):
 - Gates: all four again.
 
 Commits 1 and 2 could land as one; they are split so the geometry is proven by
-tests before any pixels move. Commit 3 must stay separate from 2 — it is the
-one that needs a human to have looked at the board.
+tests before any pixels move.
 
 ## 5. Verification
 
-- `npm test` covers the geometry (commit 1's test file).
+- `npm test` covers the geometry (commit 1's test file), including the
+  exhaustive "only these four edges wrap" check.
 - Visual check, both games, fit width and zoomed: no line crosses the middle of
   the map any more; each wrap stub has a readable label; the label pairs match
   up left-to-right; nothing overlaps a city or continent name; the front-line
@@ -240,11 +259,26 @@ one that needs a human to have looked at the board.
 ## 6. Risks and non-goals
 
 - **Threshold misfire.** A future board whose real edges span more than half
-  its width would need `wrapFraction` passed explicitly. The helper takes it as
-  a parameter for that reason; the test pins today's boards.
+  its width would need `WRAP_FRACTION` promoted to a parameter. Today's boards
+  are pinned by the exhaustive test in commit 1.
 - **The art's seam.** The maths assumes the map art's left edge is
   geographically the same meridian as its right. Both boards' art is a standard
-  Pacific-split world map, so this holds; and because both stubs leave at the
+  Pacific-split world map, so this holds; and because both halves leave at the
   same `y`, a small mismatch still reads as one deliberate line.
 - **Not touching** the adjacency data, any API contract, `TrainTimeBoard`, or
   either board's node rendering. This is presentation only.
+- **Leaving alone:** the front-line highlight's hardcoded `stroke="#cf3b32"`.
+  Commit 2 rewrites that line anyway, but `var(--ag-danger)` is a different red
+  (`#c0392b`), so swapping it would be a visual change smuggled into a
+  structural commit.
+
+## 7. Review
+
+Reviewed by `caveman` before implementation. Findings applied above: the
+clipping maths in §3.2 was reimplementing the SVG renderer and is gone; three
+of `MapEdges`' four style props had no caller that differed and are gone; the
+threshold went from a parameter to a constant; and the Tokyo/Osaka `labelDir`
+flip moved from commit 3 to commit 2, because a collision computed on paper is
+not a discovery that needs a human to look first. Its two numeric corrections
+(longest genuine span is 144, not ~130; Alaska ↔ Kamchatka `wrapY` is 29.6, not
+~36) are folded in.
