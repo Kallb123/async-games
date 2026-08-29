@@ -16,6 +16,42 @@ const MOVE_DEFS: { type: OutbreakMoveType; icon: string; name: string; hint: str
     { type: 'shuttleFlight', icon: '🚉', name: 'Shuttle Flight', hint: 'Move between research stations' },
 ];
 
+// The "pick one city card from a list" sheet shared by the two abilities that
+// need it: the Operations Expert choosing which card pays for her flight, and
+// the Researcher choosing which non-matching card to give or take (§11). Both
+// are a hint, a list of city-card rows, and a way out — extracted once the
+// second one appeared, per AGENTS.md's "second copy" rule.
+function CardPickerSheet({ hint, cards, tagLabel, onPick, onCancel }: {
+    hint: string;
+    cards: number[];
+    tagLabel: string;
+    onPick: (cardId: number) => void;
+    onCancel: () => void;
+}) {
+    return (
+        <div className="ag-actionsheet">
+            <p className="ag-action-hint" style={{ marginTop: 0 }}>{hint}</p>
+            <div className="ag-build-list">
+                {cards.map(cardId => (
+                    <button
+                        key={cardId}
+                        type="button"
+                        className="ag-build-row"
+                        onClick={() => onPick(cardId)}
+                    >
+                        <span className="ag-icon-box" style={{ background: cardColor(cardId) }}>🗺️</span>
+                        <span className="ag-build-main">
+                            <span className="ag-build-name">{cardName(cardId)}</span>
+                        </span>
+                        <span className="ag-build-tag">{tagLabel}</span>
+                    </button>
+                ))}
+            </div>
+            <button type="button" className="ag-btn ag-btn--light ag-btn--block" onClick={onCancel}>↩ Cancel</button>
+        </div>
+    );
+}
+
 interface OutbreakActionsProps {
     gs: IOutbreakSpecificGameStateResponse;
     myUsername: string;
@@ -39,6 +75,9 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
     // Operations Expert (§11): picking which city card pays for her flight,
     // before the map lights up for the destination.
     const [pickingOpsFlight, setPickingOpsFlight] = useState(false);
+    // Researcher (§11): the teammate and direction of a non-matching Share
+    // Knowledge in progress, while she picks which card actually moves.
+    const [shareChoice, setShareChoice] = useState<{ userId: string; username: string; direction: 'give' | 'take' } | null>(null);
     const [discardChoice, setDiscardChoice] = useState<number[]>([]);
     // Forecast's ordering step (§12, §21.6 step 11): starts at the drawn order
     // every time a *new* draw arrives, keyed off the cards themselves rather
@@ -209,33 +248,39 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
     // ── Operations Expert flight, step 1 (§11): pick which city card to
     //     discard, then hand off to the map for the destination. ────────────
     if (pickingOpsFlight) {
-        const cityCards = me.hand.filter(isCityCardId);
         return (
-            <div className="ag-actionsheet">
-                <p className="ag-action-hint" style={{ marginTop: 0 }}>
-                    🛩 Operations Expert flight — discard which city card?
-                </p>
-                <div className="ag-build-list">
-                    {cityCards.map(cardId => (
-                        <button
-                            key={cardId}
-                            type="button"
-                            className="ag-build-row"
-                            onClick={() => { setPickingOpsFlight(false); onStartOpsFlight(cardId); }}
-                        >
-                            <span className="ag-icon-box" style={{ background: cardColor(cardId) }}>🗺️</span>
-                            <span className="ag-build-main">
-                                <span className="ag-build-name">{cardName(cardId)}</span>
-                            </span>
-                            <span className="ag-build-tag">Discard</span>
-                        </button>
-                    ))}
-                </div>
-                <button type="button" className="ag-btn ag-btn--light ag-btn--block" onClick={() => setPickingOpsFlight(false)}>
-                    ↩ Cancel
-                </button>
-            </div>
+            <CardPickerSheet
+                hint="🛩 Operations Expert flight — discard which city card?"
+                cards={me.hand.filter(isCityCardId)}
+                tagLabel="Discard"
+                onPick={cardId => { setPickingOpsFlight(false); onStartOpsFlight(cardId); }}
+                onCancel={() => setPickingOpsFlight(false)}
+            />
         );
+    }
+
+    // ── Researcher Share Knowledge (§11): pick which of the giver's city
+    //     cards moves — hers to give, or hers for a teammate to take. ───────
+    if (shareChoice) {
+        const mate = Object.values(gs.playerStates).find(p => p.userId === shareChoice.userId);
+        if (mate) {
+            const giverHand = shareChoice.direction === 'give' ? me.hand : mate.hand;
+            return (
+                <CardPickerSheet
+                    hint={shareChoice.direction === 'give'
+                        ? `🤝 Give which card to ${shareChoice.username}?`
+                        : `🤝 Take which card from ${shareChoice.username}?`}
+                    cards={giverHand.filter(isCityCardId)}
+                    tagLabel={shareChoice.direction === 'give' ? 'Give' : 'Take'}
+                    onPick={cardId => {
+                        const cmd = new OutbreakAction();
+                        Object.assign(cmd, { kind: 'shareKnowledge', targetUserId: shareChoice.userId, direction: shareChoice.direction, cardId });
+                        submitCommand(cmd, () => setShareChoice(null), `share:${shareChoice.direction}:${shareChoice.userId}`);
+                    }}
+                    onCancel={() => setShareChoice(null)}
+                />
+            );
+        }
     }
 
     const legalMoves = getLegalMoves({ currentCity: me.city, hand: me.hand, researchStations: stationCityIds(gs.cities) });
@@ -382,9 +427,34 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
                 })}
 
                 {/* ── Share knowledge ──────────────────────────────────────── */}
+                {/* The base action moves the shared city's own card (§8.2); the
+                    Researcher (§11) instead moves any city card leaving *her*
+                    hand — either direction — so those rows open the card picker
+                    above rather than submitting outright. Only one Researcher is
+                    ever dealt, so a mate is never a Researcher on both sides. */}
                 {citymates.flatMap(mate => {
                     const rows: React.ReactNode[] = [];
-                    if (hasCityCard) {
+
+                    // Give: a card leaves my hand → mate.
+                    if (me.role === 'researcher') {
+                        if (me.hand.some(isCityCardId)) {
+                            rows.push(
+                                <button
+                                    key={`share:give:${mate.userId}`}
+                                    type="button"
+                                    className="ag-build-row"
+                                    onClick={() => setShareChoice({ userId: mate.userId, username: mate.username, direction: 'give' })}
+                                >
+                                    <span className="ag-icon-box">🤝</span>
+                                    <span className="ag-build-main">
+                                        <span className="ag-build-name">Give a card to {mate.username}</span>
+                                        <span className="ag-build-cost">Any city card (Researcher)</span>
+                                    </span>
+                                    <span className="ag-build-tag">Give</span>
+                                </button>,
+                            );
+                        }
+                    } else if (hasCityCard) {
                         const target = `share:give:${mate.userId}`;
                         const pending = pendingTarget === target;
                         rows.push(
@@ -403,7 +473,27 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
                             </button>,
                         );
                     }
-                    if (mate.hand.includes(me.city)) {
+
+                    // Take: a card leaves mate's hand → me.
+                    if (mate.role === 'researcher') {
+                        if (mate.hand.some(isCityCardId)) {
+                            rows.push(
+                                <button
+                                    key={`share:take:${mate.userId}`}
+                                    type="button"
+                                    className="ag-build-row"
+                                    onClick={() => setShareChoice({ userId: mate.userId, username: mate.username, direction: 'take' })}
+                                >
+                                    <span className="ag-icon-box">🤝</span>
+                                    <span className="ag-build-main">
+                                        <span className="ag-build-name">Take a card from {mate.username}</span>
+                                        <span className="ag-build-cost">Any city card (Researcher)</span>
+                                    </span>
+                                    <span className="ag-build-tag">Take</span>
+                                </button>,
+                            );
+                        }
+                    } else if (mate.hand.includes(me.city)) {
                         const target = `share:take:${mate.userId}`;
                         const pending = pendingTarget === target;
                         rows.push(
@@ -422,6 +512,7 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
                             </button>,
                         );
                     }
+
                     return rows;
                 })}
 

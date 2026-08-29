@@ -75,6 +75,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 game: "outbreak",
             },
             {
+                title: "The Researcher can share the cards her ability promises",
+                detail: "Her write-up says a card leaving her hand needn't match the city you're both standing in, but Share Knowledge only ever offered that one matching card. She can now give — or let a teammate take — any city card from her hand.",
+                game: "outbreak",
+            },
+            {
                 title: "The logo on a join link takes you home",
                 detail: "Landing on a friend's join screen with nothing filled in used to be a dead end — there was no way back except the browser's own back button. Tapping the logo at the top now takes you home.",
             },
@@ -86,10 +91,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "The name a guest picks is the name everyone sees",
                 detail: "Take a seat as a guest and the name you typed now follows you everywhere — the move you just made, the recap of what you missed, stepping back through the turns, your profile, the reaction you send someone and the “you won” line. They used to show the jumble of letters your account was filed under instead.",
-            },
-            {
-                title: "Your badge no longer flashes a stranger's initial",
-                detail: "For a moment before your profile loaded, the little circle on the home page and your profile showed a “T” or a “Y” — the first letter of the words standing in for your name. You now get a plain silhouette until your real initials or photo are ready.",
             },
         ],
     },
