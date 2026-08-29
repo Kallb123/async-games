@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { clearGames } from '../helpers';
 
 // The first, deliberately small E2E spec: prove the pipeline Vitest can't
 // reach (Clerk session → middleware → API route → Mongo → client render)
@@ -8,12 +9,7 @@ import { test, expect } from '@playwright/test';
 test.use({ storageState: 'playwright/.auth/player-one.json' });
 
 test.afterAll(async ({ request }) => {
-  // Dev-only wipe routes (src/app/api/dev/*) — 404 unless VERCEL_ENV/NODE_ENV
-  // says this is a dev deployment, which playwright.config.ts's webServer
-  // sets. Keeps the dedicated e2e Mongo database from accumulating a game
-  // per run; any signed-in request can call them (see wipeRoute.ts).
-  await request.get('/api/dev/clearlive');
-  await request.get('/api/dev/clearresults');
+  await clearGames(request);
 });
 
 test('sign in, deal a solitaire game, and draw a card', async ({ page }) => {
