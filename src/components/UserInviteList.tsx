@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import Avatar from '@/components/ui/Avatar';
 import Section from '@/components/ui/Section';
 import { profileImageUrl } from '@/utils/ui/avatar';
-import { personalName } from '@/utils/ui/players';
+import { personalName, publicHandle, displayName } from '@/utils/ui/players';
 
 interface UserInviteProps {
     userList: string[],
@@ -45,11 +45,17 @@ export default function UserInviteList({ userList, setItem }: UserInviteProps) {
         }
     };
 
-    const suggestions = friends.filter(f => f.user.username && !added.includes(f.user.username));
+    // Invites resolve by handle (usersByUsername), so a friend only belongs in
+    // the suggestions if they have one to invite by — publicHandle is null for a
+    // guest, whose Clerk username is a meaningless account id, not a handle.
+    const suggestions = friends.filter(f => {
+        const handle = publicHandle(f.user);
+        return handle && !added.includes(handle);
+    });
 
-    // A chip is added by typed username, so the only picture we have for one is
-    // whatever the friends list already told us about that name.
-    const pictureFor = (username: string) => friends.find(f => f.user.username === username)?.user.imageUrl ?? null;
+    // A chip is added by its handle, so the only picture we have for one is
+    // whatever the friends list already told us about that handle.
+    const pictureFor = (handle: string) => friends.find(f => publicHandle(f.user) === handle)?.user.imageUrl ?? null;
 
     return (
         <Section label="Who's playing">
@@ -88,11 +94,11 @@ export default function UserInviteList({ userList, setItem }: UserInviteProps) {
                 <div className="ag-list" style={{ marginTop: 12 }}>
                     {suggestions.map(friend => (
                         <div key={friend.friendshipId} className="ag-list-row">
-                            <Avatar name={friend.user.username} imageUrl={friend.user.imageUrl} size={30} />
+                            <Avatar name={personalName(friend.user)} imageUrl={friend.user.imageUrl} size={30} />
                             <div className="ag-list-row-main">
-                                <div className="ag-list-row-title">{friend.user.username}</div>
+                                <div className="ag-list-row-title">{displayName(friend.user)}</div>
                             </div>
-                            <button type="button" className="ag-pill-action" onClick={() => addUser(friend.user.username!)}>Add</button>
+                            <button type="button" className="ag-pill-action" onClick={() => addUser(publicHandle(friend.user)!)}>Add</button>
                         </div>
                     ))}
                 </div>

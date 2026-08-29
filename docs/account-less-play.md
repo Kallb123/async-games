@@ -37,7 +37,7 @@ five places where the app stops treating an id as opaque:
 | # | Choke point | Where | What it does with the id |
 |---|---|---|---|
 | 1 | **Session → id** | `await auth()` in ~40 API routes; `useAuthGuard` on the client | Turns a request into a `userId`, or rejects it |
-| 2 | **id → name** | `src/utils/users/clerk.ts` (`userIdListToUsernameList/Map/ImageMap`, `usernameListToUserIdList`) | Clerk lookup for every response DTO |
+| 2 | **id → name** | `src/utils/users/clerk.ts` (`userIdListToUsernameList/Map/ImageMap`) | Clerk lookup for every response DTO |
 | 3 | **id → devices** | `sendPushToUsers(users: User[])`, `getDeviceTokens(user)` in `src/utils/firebase/` | Reads FCM tokens from Clerk `privateMetadata` |
 | 4 | **id → preferences** | `getNotificationPreferences(user)` | Reads Clerk `privateMetadata` |
 | 5 | **id → access** | `user.publicMetadata.unlocked` | The invite-only gate |
@@ -354,10 +354,7 @@ It was not one call site: every game's `gameStateToModel` builds its
 `userIdListToUsernameList` and `userIdListToUsernameMap`
 (`src/utils/users/clerk.ts`) now stay position/key-complete: an unresolvable
 id gets the placeholder `UNKNOWN_PLAYER_NAME` ("Unknown player") instead of
-being dropped, so every call site keeps its alignment. `usernameListToUserIdList`
-(username → id, the reverse direction) is unaffected — it has no callers yet,
-and there is no meaningful id to place as a stand-in — so revisit it if a
-caller appears.
+being dropped, so every call site keeps its alignment.
 
 **One principal, one seat.** A lobby's seats are claimed by id, so the claim
 has to refuse an id that already has a place at that lobby — as a named

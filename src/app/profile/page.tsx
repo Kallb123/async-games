@@ -16,7 +16,7 @@ import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { useNowToTheMinute } from "@/utils/hooks/useNow";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useProfilePicture } from "@/utils/hooks/useProfilePicture";
-import { displayName, isGuest, profileHeading } from "@/utils/ui/players";
+import { displayName, isGuest, personalName, profileHeading } from "@/utils/ui/players";
 import { profileImageUrl } from "@/utils/ui/avatar";
 import type { IGameStats, IRecentMatch } from "@/app/api/stats/route";
 import type { IReceivedReaction } from "@/app/api/reactions/route";
@@ -246,7 +246,7 @@ export default function Profile() {
                             className="ag-list-row-main"
                             style={{ display: "flex", alignItems: "center", gap: 12 }}
                         >
-                            <Avatar name={friend.user.username} imageUrl={friend.user.imageUrl} size={36} />
+                            <Avatar name={personalName(friend.user)} imageUrl={friend.user.imageUrl} size={36} />
                             <div className="ag-list-row-main">
                                 <div className="ag-list-row-title">{displayName(friend.user)}</div>
                                 <div className="ag-list-row-sub">
@@ -279,9 +279,9 @@ export default function Profile() {
             >
                 {incomingRequests.map((request) => (
                     <div key={request.friendshipId} className="ag-list-row">
-                        <Avatar name={request.user.username} imageUrl={request.user.imageUrl} size={36} />
+                        <Avatar name={personalName(request.user)} imageUrl={request.user.imageUrl} size={36} />
                         <div className="ag-list-row-main">
-                            <div className="ag-list-row-title">{request.user.username}</div>
+                            <div className="ag-list-row-title">{displayName(request.user)}</div>
                             <div className="ag-list-row-sub">wants to be friends · {moment(request.timestamp).fromNow()}</div>
                         </div>
                         <button type="button" className="ag-pill-action ag-pill-action--accept" onClick={() => handleAccept(request.friendshipId)}>Accept</button>
@@ -300,9 +300,9 @@ export default function Profile() {
             >
                 {outgoingRequests.map((request) => (
                     <div key={request.friendshipId} className="ag-list-row">
-                        <Avatar name={request.user.username} imageUrl={request.user.imageUrl} size={36} />
+                        <Avatar name={personalName(request.user)} imageUrl={request.user.imageUrl} size={36} />
                         <div className="ag-list-row-main">
-                            <div className="ag-list-row-title">{request.user.username}</div>
+                            <div className="ag-list-row-title">{displayName(request.user)}</div>
                             <div className="ag-list-row-sub">waiting to accept · {moment(request.timestamp).fromNow()}</div>
                         </div>
                         <button type="button" className="ag-link-muted" onClick={() => handleRemove(request.friendshipId, 'Friend request cancelled.')}>Cancel</button>

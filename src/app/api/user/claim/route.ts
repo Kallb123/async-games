@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameResultModel } from '@/utils/mongodb/GameResultData';
 import { isGuestPlaceholderEmail } from '@/utils/users/guest';
+import { availableUsernameFrom } from '@/utils/users/clerk';
 import { clientIp, consumeRateLimit } from '@/utils/rateLimit';
 import { readJsonBody } from '@/utils/api/requestBody';
 
@@ -35,8 +36,9 @@ function clerkErrorMessage(error: unknown, fallback: string): string {
 // user they already are keepable. The id never changes, so every game,
 // result and turn history they're in carries over with no migration — the
 // only writes are Clerk's (the real email in, the guest placeholder out, the
-// password, and dropping publicMetadata.guest) and one indexed $pull on
-// GameResult.unclaimedPlayerIds so their finished games start counting.
+// password, a real username derived from their display name, and dropping
+// publicMetadata.guest) and one indexed $pull on GameResult.unclaimedPlayerIds
+// so their finished games start counting.
 export async function POST(request: NextRequest) {
     console.log(`POST ${request.nextUrl.pathname}`);
 
@@ -66,6 +68,15 @@ export async function POST(request: NextRequest) {
     const placeholderEmail = user.emailAddresses.find(address => isGuestPlaceholderEmail(address.emailAddress));
 
     try {
+        // A guest's Clerk username is the meaningless account id createGuest()
+        // minted, so they're unfindable by usersByUsername and silently dropped
+        // from invite pickers. Claiming is the moment they become a real,
+        // invitable account, so mint them a real handle from the display name
+        // they've been playing under (their firstName) and set it in the same
+        // updateUser pass as the password. Derived before any write below, so a
+        // failed lookup leaves nothing half-claimed behind.
+        const username = await availableUsernameFrom(user.firstName ?? '');
+
         // Marked verified here the same way guest.ts's own placeholder is:
         // there is no inbox to prove ownership of on this account yet, and
         // `primary: true` moves primary status off the placeholder in the
@@ -80,7 +91,7 @@ export async function POST(request: NextRequest) {
         if (placeholderEmail) {
             await client.emailAddresses.deleteEmailAddress(placeholderEmail.id);
         }
-        await client.users.updateUser(userId, { password });
+        await client.users.updateUser(userId, { password, username });
     } catch (error) {
         console.error('Failed to claim guest account', error);
         return NextResponse.json(
