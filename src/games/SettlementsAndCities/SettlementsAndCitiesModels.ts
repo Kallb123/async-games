@@ -9,6 +9,7 @@ import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users
 import { SettlementsAndCitiesGameType } from "@/utils/apiModels/GameLogic";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { shuffle } from "@/utils/games/shuffle";
+import { replaceHistoryUserIds } from "@/utils/games/history";
 import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
 import {
     generateBoard,
@@ -397,17 +398,6 @@ SettlementsAndCitiesGameDataSchema.methods.CreateDataResponse = async function(v
         recapAvailable: !!doc.initialSpecificGameState,
     };
 };
-
-function replaceHistoryUserIds(history: string[], userIdNameMap: { [key: string]: string }): string[] {
-    return history.map(entry => {
-        let updated = entry;
-        for (const [userId, username] of Object.entries(userIdNameMap)) {
-            if (!userId) continue;
-            updated = updated.split(userId).join(username);
-        }
-        return updated;
-    });
-}
 
 export function gameStateToResponse(
     gs: ISACSpecificGameState,
