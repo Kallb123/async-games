@@ -32,8 +32,8 @@ export type OutbreakEventTargeting =
 
 interface OutbreakEventTrayProps {
     gs: IOutbreakSpecificGameStateResponse;
-    myUsername: string;
-    usernameList: string[];
+    myUserId: string;
+    userIdList: string[];
     submitCommand: SubmitCommand;
     pendingTarget: string | null;
     targeting: OutbreakEventTargeting | null;
@@ -66,13 +66,13 @@ function PickerSheet({ hint, onCancel, children }: { hint: React.ReactNode; onCa
  * though — unlike playing one — it costs an action.
  */
 export default function OutbreakEventTray({
-    gs, myUsername, usernameList, submitCommand, pendingTarget, targeting, onStartTargeting, onCancelTargeting,
+    gs, myUserId, userIdList, submitCommand, pendingTarget, targeting, onStartTargeting, onCancelTargeting,
 }: OutbreakEventTrayProps) {
     const [pickingAirliftTarget, setPickingAirliftTarget] = useState(false);
     const [pickingResilientPopulation, setPickingResilientPopulation] = useState(false);
     const [pickingRetrieve, setPickingRetrieve] = useState(false);
 
-    const me = gs.playerStates[myUsername];
+    const me = gs.playerStates[myUserId];
     if (!me) return null;
 
     function send(cmd: OutbreakPlayEvent, target: string) {
@@ -149,12 +149,12 @@ export default function OutbreakEventTray({
                 hint={<p className="ag-action-hint" style={{ marginTop: 0 }}>✈️ Airlift — whose pawn moves?</p>}
                 onCancel={() => setPickingAirliftTarget(false)}
             >
-                {usernameList.flatMap(username => {
-                    const p = gs.playerStates[username];
+                {userIdList.flatMap(userId => {
+                    const p = gs.playerStates[userId];
                     if (!p) return [];
                     return [
                         <button
-                            key={username}
+                            key={userId}
                             type="button"
                             className="ag-build-row"
                             onClick={() => {
@@ -164,7 +164,7 @@ export default function OutbreakEventTray({
                         >
                             <span className="ag-icon-box">🧑‍⚕️</span>
                             <span className="ag-build-main">
-                                <span className="ag-build-name">{username === myUsername ? 'You' : username}</span>
+                                <span className="ag-build-name">{userId === myUserId ? 'You' : p.username}</span>
                                 <span className="ag-build-cost">{[roleDef(p.role)?.name, CITIES[p.city].name].filter(Boolean).join(' · ')}</span>
                             </span>
                             <span className="ag-build-tag">Pick</span>

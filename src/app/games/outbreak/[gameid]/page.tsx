@@ -98,8 +98,10 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     const displayedCurrentTurn = nav.displayedCurrentTurn;
     const isMyTurn = nav.isLive && !!user && user.id === displayedCurrentTurn && !complete;
     const myUsername = currentUsername(user);
+    const myUserId = user?.id ?? '';
     const usernameList = gameData?.usernameList ?? [];
-    const me = gs?.playerStates[myUsername];
+    const userIdList = gameData?.userIdList ?? [];
+    const me = gs?.playerStates[myUserId];
 
     // What the board is targeting right now, if anything — reset whenever the
     // turn changes so a stale pick from a previous player never lingers into
@@ -236,14 +238,14 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     }
 
     const scoreEntries: ScoreEntry[] = gs
-        ? usernameList.flatMap((username, i): ScoreEntry[] => {
-            const ps = gs.playerStates[username];
+        ? userIdList.flatMap((userId, i): ScoreEntry[] => {
+            const ps = gs.playerStates[userId];
             if (!ps) return [];
-            const isMe = username === myUsername;
+            const isMe = userId === myUserId;
             const isActive = ps.userId === displayedCurrentTurn && !complete;
             return [{
-                id: username,
-                name: isMe ? 'You' : username,
+                id: userId,
+                name: isMe ? 'You' : ps.username,
                 color: playerColour(i),
                 sub: isActive ? `${ps.actionsLeft} actions · ${CITIES[ps.city].name}` : CITIES[ps.city].name,
                 score: ps.hand.length,
@@ -346,7 +348,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                         <OutbreakBoard
                             cities={gs.cities}
                             playerStates={gs.playerStates}
-                            usernameList={usernameList}
+                            userIdList={userIdList}
                             validCities={validCities}
                             onCityClick={isMyTurn && !complete && !submitting ? handleCityClick : undefined}
                             boardTag={boardTag}
@@ -370,8 +372,8 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                     {isMyTurn && !complete && (gs.phase === 'actions' || gs.phase === 'discard') && (
                         <OutbreakEventTray
                             gs={gs}
-                            myUsername={myUsername}
-                            usernameList={usernameList}
+                            myUserId={myUserId}
+                            userIdList={userIdList}
                             submitCommand={submitCommand}
                             pendingTarget={pendingTarget}
                             targeting={eventTargeting}
@@ -383,7 +385,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                     {isMyTurn && !complete && (
                         <OutbreakActions
                             gs={gs}
-                            myUsername={myUsername}
+                            myUserId={myUserId}
                             moveMode={boardTarget?.kind === 'move' ? boardTarget.type : null}
                             setMoveMode={m => setBoardTarget(m ? { kind: 'move', type: m } : null)}
                             opsFlightActive={boardTarget?.kind === 'opsFlight'}
@@ -409,8 +411,8 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
 
                     <OutbreakHands
                         playerStates={gs.playerStates}
-                        usernameList={usernameList}
-                        myUsername={myUsername}
+                        userIdList={userIdList}
+                        myUserId={myUserId}
                         onCardTap={handleCardTap}
                         highlightedCityId={highlightedCityId}
                     />

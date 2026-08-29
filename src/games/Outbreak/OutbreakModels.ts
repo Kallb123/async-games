@@ -433,7 +433,7 @@ export function gameStateToModel(
     const playerStates: IOutbreakSpecificGameStateResponse['playerStates'] = {};
     for (const [userId, ps] of playerStatesSource) {
         const username = userIdNameMap[userId] ?? userId;
-        playerStates[username] = {
+        playerStates[userId] = {
             userId,
             username,
             hand: [...ps.hand],

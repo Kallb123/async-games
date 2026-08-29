@@ -125,7 +125,7 @@ function PlayerPickerSheet({ hint, players, tagLabel, onPick, onCancel }: {
 
 interface OutbreakActionsProps {
     gs: IOutbreakSpecificGameStateResponse;
-    myUsername: string;
+    myUserId: string;
     /** The movement kind currently being targeted on the board, if any. */
     moveMode: OutbreakMoveType | null;
     setMoveMode: (m: OutbreakMoveType | null) => void;
@@ -151,7 +151,7 @@ interface OutbreakActionsProps {
     pendingTarget: string | null;
 }
 
-export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode, opsFlightActive, onStartOpsFlight, dispatchBoard, onStartDispatchMove, onStartDispatchRelocate, onCancelBoardTarget, submitCommand, pendingTarget }: OutbreakActionsProps) {
+export default function OutbreakActions({ gs, myUserId, moveMode, setMoveMode, opsFlightActive, onStartOpsFlight, dispatchBoard, onStartDispatchMove, onStartDispatchRelocate, onCancelBoardTarget, submitCommand, pendingTarget }: OutbreakActionsProps) {
     const [relocating, setRelocating] = useState(false);
     // Operations Expert (§11): picking which city card pays for her flight,
     // before the map lights up for the destination.
@@ -174,7 +174,7 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
     // than a phase transition, since the phase stays 'forecast' the whole step.
     const [forecastOrder, setForecastOrder] = useResettingState<number[]>(gs.forecastCards, gs.forecastCards.join(','));
 
-    const me = gs.playerStates[myUsername];
+    const me = gs.playerStates[myUserId];
     if (!me) return null;
 
     function send(overrides: Partial<OutbreakAction>, target: string) {
