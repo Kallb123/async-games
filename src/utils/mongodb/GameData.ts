@@ -124,6 +124,29 @@ export var GameDataSchema = new Schema<IGameDataDocument> ({
     endReason: String,
     forfeitedBy: String
 }, {discriminatorKey: 'kind', optimisticConcurrency: true});
+
+// Heal a game whose history predates the tokenised { text, actorId } shape.
+//
+// Such a log is on disk as a bare `string[]`. Mongoose can't cast a string to
+// the history subdocument, so the getter reads back an empty array — which the
+// tokenisation change relied on ("rebuilds its log from the next turn") — but
+// the uncast primitives stay behind on the path and make the *next* save throw
+// a ValidationError ("Tried to set nested object field ... to primitive value"),
+// which surfaced as a 500 on the first command played in any pre-existing game.
+//
+// Reassigning the path drops those primitives so the document saves cleanly.
+// The legacy strings are unrecoverable through the document API by this point
+// (the cast already dropped them), so this discards the old log rather than
+// migrating it — the deal docs/dynamic-names.md §4d takes deliberately. Only an
+// empty resolved history can be poisoned: a converted game's entries are all
+// objects and read back intact, so a game mid-log is left untouched.
+GameDataSchema.post('init', function(this: IGameDataDocument) {
+    const history = this.gameState?.history;
+    if (history && history.length === 0) {
+        this.gameState.history = [];
+    }
+});
+
 GameDataSchema.methods.CreateResponse = function(directory: UserDirectory): IGameResponse {
     console.log("CreateResponse: Generic game");
 
