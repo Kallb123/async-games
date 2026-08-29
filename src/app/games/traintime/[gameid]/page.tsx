@@ -37,7 +37,7 @@ import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { TrainTimeClaimRoute, TrainTimeDrawTickets, TrainTimeKeepTickets } from "@/utils/apiModels/GameLogic";
 import { TRACK_PALETTE } from "@/games/TrainTime/ui";
-import { playerColour } from "@/utils/ui/playerColours";
+import { playerColour, playerColourForId } from "@/utils/ui/playerColours";
 import { pluralize } from "@/utils/ui/text";
 import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
 import MatchHistory from "@/components/games/MatchHistory";
@@ -85,9 +85,11 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     // this rather than off whose turn it is.
     const isMyTurn = nav.isLive && user?.id === displayedCurrentTurn && !complete;
     const myUsername = currentUsername(user);
+    const myUserId = user?.id ?? '';
     const usernameList = useMemo(() => gameData?.usernameList ?? [], [gameData?.usernameList]);
+    const userIdList = useMemo(() => gameData?.userIdList ?? [], [gameData?.userIdList]);
     const playerCount = usernameList.length;
-    const me = gs?.playerStates[myUsername];
+    const me = gs?.playerStates[myUserId];
 
     // Everything the player picked for this turn resets when the turn moves on
     // or a route goes off the board under them.
@@ -105,8 +107,8 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     // claim sheet prices against it.
     const claimContext: ClaimContext | null = useMemo(() => {
         if (!gs || !me) return null;
-        return { routeOwners: gs.routeOwners, playerCount, hand: gs.myHand, trains: me.trains, playerId: myUsername };
-    }, [gs, me, myUsername, playerCount]);
+        return { routeOwners: gs.routeOwners, playerCount, hand: gs.myHand, trains: me.trains, playerId: myUserId };
+    }, [gs, me, myUserId, playerCount]);
 
     // A draw already started this turn is one action, so nothing is claimable
     // until it finishes.
@@ -182,10 +184,10 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     // The standings, the ticket reveal and the final score sheet are all
     // per-player lists over the same seating order, so the join happens once.
     const players = gs
-        ? usernameList.flatMap((username, i) => {
-            const ps = gs.playerStates[username];
+        ? userIdList.flatMap((userId, i) => {
+            const ps = gs.playerStates[userId];
             return ps
-                ? [{ username, ps, colour: playerColour(i), isMe: username === myUsername }]
+                ? [{ userId, username: ps.username, ps, colour: playerColour(i), isMe: userId === myUserId }]
                 : [];
         })
         : [];
@@ -201,14 +203,14 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     const runAfterClaim = useMemo(() => {
         if (!gs || selectedRouteId === null) return myRun;
         const owners = [...gs.routeOwners];
-        owners[selectedRouteId] = myUsername;
-        return longestRun(owners, myUsername);
-    }, [gs, selectedRouteId, myUsername, myRun]);
+        owners[selectedRouteId] = myUserId;
+        return longestRun(owners, myUserId);
+    }, [gs, selectedRouteId, myUserId, myRun]);
 
-    const scoreEntries: ScoreEntry[] = players.map(({ username, ps, colour, isMe }) => {
-        const isActive = username === currentTurnUsername && !complete;
+    const scoreEntries: ScoreEntry[] = players.map(({ userId, username, ps, colour, isMe }) => {
+        const isActive = userId === displayedCurrentTurn && !complete;
         return {
-            id: username,
+            id: userId,
             name: isMe ? 'You' : username,
             color: colour,
             sub: `${ps.trains} tr. · 🃏 ${ps.handCount}`,
@@ -399,7 +401,8 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                     <div className="ag-board-area">
                         <TrainTimeBoard
                             routeOwners={gs.routeOwners}
-                            usernameToColour={(username) => playerColour(usernameList.indexOf(username))}
+                            colourForOwner={(owner) => playerColourForId(owner, userIdList)}
+                            nameForOwner={playerName}
                             claimableRoutes={claimableRoutes}
                             highlightClaimable={action === 'claim'}
                             selectedRouteId={selectedRouteId}
@@ -408,8 +411,8 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                             boardTag={boardTag}
                         />
                         <div className="ag-tt-legend">
-                            {players.map(({ username, ps, colour, isMe }) => (
-                                <span key={username} className="ag-tt-legend-item">
+                            {players.map(({ userId, username, ps, colour, isMe }) => (
+                                <span key={userId} className="ag-tt-legend-item">
                                     <span className="ag-tt-legend-rail" style={{ background: colour }} />
                                     {isMe ? 'You' : username} {ps.routesClaimed}
                                 </span>
@@ -434,7 +437,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                     ) : isMyTurn && (
                         <TrainTimeActions
                             gs={gs}
-                            myUsername={myUsername}
+                            myUserId={myUserId}
                             action={action}
                             setAction={setAction}
                             selectedRouteId={selectedRouteId}

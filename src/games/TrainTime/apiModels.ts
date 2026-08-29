@@ -42,12 +42,15 @@ export interface ITrainTimeSpecificGameStateResponse {
     market: TrainTimeCardColour[];
     deckCount: number;
     discardCount: number;
-    /** Owning username per route id, null where unclaimed. */
+    /** Owning player's stable userId per route id, null where unclaimed
+     *  (resolve a name via playerStates). */
     routeOwners: (string | null)[];
-    playerStates: { [username: string]: ITrainTimePlayerStateResponse };
+    // Keyed by the player's stable Clerk userId; each value carries the username
+    // for display. routeOwners and finalRoundPending are userIds too.
+    playerStates: { [userId: string]: ITrainTimePlayerStateResponse };
     /** Cards the requesting player has already taken in this turn's draw action (0 or 1). */
     myDrawsThisTurn: number;
-    /** Usernames who still owe a final turn once the last lap has started, else null. */
+    /** userIds who still owe a final turn once the last lap has started, else null. */
     finalRoundPending: string[] | null;
     /**
      * True once the game has actually been played out and scored — tickets

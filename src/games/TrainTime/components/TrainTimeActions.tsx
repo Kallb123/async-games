@@ -21,7 +21,7 @@ export type TrainTimeAction = 'draw' | 'claim' | 'tickets';
 
 interface TrainTimeActionsProps {
     gs: ITrainTimeSpecificGameStateResponse;
-    myUsername: string;
+    myUserId: string;
     action: TrainTimeAction;
     setAction: (action: TrainTimeAction) => void;
     /** The route tapped on the map, if any. */
@@ -42,10 +42,10 @@ interface TrainTimeActionsProps {
  * commits it.
  */
 export default function TrainTimeActions({
-    gs, myUsername, action, setAction, selectedRouteId, onClaim, claimableCount, onDrawTickets,
+    gs, myUserId, action, setAction, selectedRouteId, onClaim, claimableCount, onDrawTickets,
     submitCommand, pendingTarget,
 }: TrainTimeActionsProps) {
-    const me = gs.playerStates[myUsername];
+    const me = gs.playerStates[myUserId];
     if (!me) return null;
 
     const hand = gs.myHand;

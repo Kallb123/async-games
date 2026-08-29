@@ -248,7 +248,7 @@ export function gameStateToModel(
     const playerStates: ITrainTimeSpecificGameStateResponse['playerStates'] = {};
     for (const [userId, ps] of playerStatesSource) {
         const username = userIdNameMap[userId] ?? userId;
-        playerStates[username] = {
+        playerStates[userId] = {
             userId,
             username,
             handCount: ps.hand.length,
@@ -268,13 +268,13 @@ export function gameStateToModel(
 
     const viewer = viewerId ? playerStatesSource.get(viewerId) : undefined;
 
-    const toUsername = (userId: string | null) => (userId ? userIdNameMap[userId] ?? userId : null);
-
     return {
         market: [...gs.market],
         deckCount: gs.deck.length,
         discardCount: gs.discard.length,
-        routeOwners: gs.routeOwners.map(toUsername),
+        // Route owners and the final-round queue stay keyed by the stable userId;
+        // the client resolves a name from playerStates when it needs one.
+        routeOwners: gs.routeOwners.map(owner => owner ?? null),
         playerStates,
         myDrawsThisTurn: viewerId ? drawsTakenBy(gs, viewerId) : 0,
         ticketDeckCount: gs.ticketDeck.length,
@@ -284,7 +284,7 @@ export function gameStateToModel(
             ? Math.min(ticketsToKeep(viewer), viewer.pendingTickets.length)
             : 0,
         finalRoundPending: gs.finalRoundPending
-            ? gs.finalRoundPending.map(userId => toUsername(userId) as string)
+            ? [...gs.finalRoundPending]
             : null,
         scored: gs.gameOver,
         myHand: viewer ? [...viewer.hand] : [],

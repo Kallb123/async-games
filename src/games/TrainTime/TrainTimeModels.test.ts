@@ -77,7 +77,7 @@ describe("Train Time Mongoose schema", () => {
         expect(alice).toEqual(state.playerStates.get("u1"));
 
         const response = gameStateToModel(replayed, Object.fromEntries(NAMES), "u1");
-        const ps = response.playerStates.Alice;
+        const ps = response.playerStates.u1;
         expect(totalScore(ps)).toBe(7);
         expect(ps.trains).toBe(TRAINS_PER_PLAYER - 4);
         expect(ps.routesClaimed).toBe(1);
