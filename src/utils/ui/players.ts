@@ -10,8 +10,27 @@ export function nameList(names: string[], emptyLabel = "solo"): string {
 }
 
 // Human-readable summary of who you're playing against, excluding yourself.
-export function opponents(game: IGameResponse, me: string | null | undefined, emptyLabel = "solo"): string {
-    return nameList(game.usernameList.filter(u => u !== me), emptyLabel);
+// Identifies "you" by your stable Clerk userId rather than your display name —
+// reading the parallel userIdList/usernameList to filter by id and show the
+// name. A rename can't make you count as your own opponent, and two players
+// sharing a display name are still told apart.
+export function opponentsById(game: IGameResponse, myId: string | null | undefined, emptyLabel = "solo"): string {
+    const names = game.usernameList.filter((_, i) => game.userIdList[i] !== myId);
+    return nameList(names, emptyLabel);
+}
+
+// The display name for one player in a game, resolved by their stable userId
+// through the response's parallel userIdList/usernameList. The one place a board
+// page turns a userId (a winner, the current turn, an owner) back into a name —
+// so no screen re-scans playerStates for the username it already ships. Falls
+// back to the id itself when it isn't one of the game's players (or the game
+// hasn't loaded), which is what every caller wants for an unknown reference.
+export function nameForUserId(
+    game: { userIdList: string[]; usernameList: string[] } | null | undefined,
+    userId: string | null | undefined,
+): string {
+    const index = game && userId ? game.userIdList.indexOf(userId) : -1;
+    return index >= 0 ? game!.usernameList[index] : (userId ?? "");
 }
 
 // Any user the app has to put a name to — a Clerk user, a profile DTO, a

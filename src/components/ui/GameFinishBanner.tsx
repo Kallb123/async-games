@@ -9,7 +9,10 @@ interface GameFinishBannerProps {
     gameId: string;
     gameUrl: string;
     usernameList: string[];
-    myUsername: string;
+    // Parallel to usernameList (same order); the viewer is excluded by userId so
+    // a namesake opponent is never dropped from the rematch list.
+    userIdList: string[];
+    myUserId: string;
     turnTimer?: string;
     extraParams?: Record<string, string>;
 }
@@ -17,8 +20,8 @@ interface GameFinishBannerProps {
 // Shown in place of the board once a game is complete: the result headline,
 // a link to the full GameResults page, and a "Rematch" link that jumps to
 // the New Game setup screen pre-filled with the same players and options.
-export default function GameFinishBanner({ message, gameId, gameUrl, usernameList, myUsername, turnTimer = "1d", extraParams }: GameFinishBannerProps) {
-    const invitees = usernameList.filter(u => u !== myUsername);
+export default function GameFinishBanner({ message, gameId, gameUrl, usernameList, userIdList, myUserId, turnTimer = "1d", extraParams }: GameFinishBannerProps) {
+    const invitees = usernameList.filter((_, i) => userIdList[i] !== myUserId);
     const rematchHref = buildRematchHref(gameUrl, { invitees, turnTimer, extraParams });
 
     return (

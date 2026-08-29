@@ -130,6 +130,7 @@ GameDataSchema.methods.CreateResponse = function(directory: UserDirectory): IGam
         gameType: gameDataDocument.gameType.gameType,
         friendlyName: gameDataDocument.gameType.friendlyName,
         usernameList,
+        userIdList: gameDataDocument.userIdList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
         currentTurnUsername: currentTurnIndex >= 0 ? usernameList[currentTurnIndex] : "",
@@ -153,6 +154,7 @@ GameDataSchema.methods.CreateDataResponse = async function(_viewerId: string | n
     return {
         gameType: gameDataDocument.gameType,
         usernameList: await userIdListToUsernameList(gameDataDocument.userIdList),
+        userIdList: gameDataDocument.userIdList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
         gameState: publicGameState(gameDataDocument.gameState),

@@ -380,6 +380,7 @@ SettlementsAndCitiesGameDataSchema.methods.CreateDataResponse = async function(v
     return {
         gameType: doc.gameType,
         usernameList,
+        userIdList: doc.userIdList,
         turnTimer: doc.turnTimer,
         currentTurn: doc.currentTurn,
         gameState: publicGameState(
@@ -422,7 +423,7 @@ export function gameStateToResponse(
 
     for (const [userId, ps] of mongoMap(gs.playerStates)) {
         const username = userIdNameMap[userId];
-        playerStates[username] = {
+        playerStates[userId] = {
             userId,
             username,
             resourceCount: total(ps.resources),
@@ -436,30 +437,30 @@ export function gameStateToResponse(
             visibleVP: calculateVisibleVP(userId, gs.vertices, gs.longestRoadOwner, gs.largestArmyOwner),
         };
         if (userId === viewerId) {
-            playerDevCards[username] = { ...ps.devCards };
-            playerNewDevCards[username] = { ...ps.newDevCards };
+            playerDevCards[userId] = { ...ps.devCards };
+            playerNewDevCards[userId] = { ...ps.newDevCards };
         }
     }
 
-    // Convert owner userId → username in vertices and edges
+    // Ownership stays keyed by the stable userId all the way to the client, which
+    // resolves a display name from playerStates[userId] when it needs one — so a
+    // rename can't shift an owner reference or a per-player key.
     const vertices = gs.vertices.map(v => ({
         building: v.building,
-        owner: v.owner ? (userIdNameMap[v.owner] ?? v.owner) : null,
+        owner: v.owner ?? null,
     }));
     const edges = gs.edges.map(e => ({
         hasRoad: e.hasRoad,
-        owner: e.owner ? (userIdNameMap[e.owner] ?? e.owner) : null,
+        owner: e.owner ?? null,
     }));
 
-    const longestRoadOwner = gs.longestRoadOwner ? (userIdNameMap[gs.longestRoadOwner] ?? gs.longestRoadOwner) : null;
-    const largestArmyOwner = gs.largestArmyOwner ? (userIdNameMap[gs.largestArmyOwner] ?? gs.largestArmyOwner) : null;
+    const longestRoadOwner = gs.longestRoadOwner ?? null;
+    const largestArmyOwner = gs.largestArmyOwner ?? null;
 
-    // Special Build Phase (§8.5) — surface the queue as usernames so the client
-    // can show whose special-build turn it is and who is still waiting.
-    const specialBuildQueue = (gs.specialBuildQueue ?? []).map(uid => userIdNameMap[uid] ?? uid);
-    const specialBuildMainPlayer = gs.specialBuildMainPlayer
-        ? (userIdNameMap[gs.specialBuildMainPlayer] ?? gs.specialBuildMainPlayer)
-        : null;
+    // Special Build Phase (§8.5) — the queue is userIds (index 0 = active now);
+    // the client shows whose special-build turn it is via playerStates.
+    const specialBuildQueue = gs.specialBuildQueue ?? [];
+    const specialBuildMainPlayer = gs.specialBuildMainPlayer ?? null;
 
     return {
         hexes: gs.hexes.map(h => ({ terrain: h.terrain, numberToken: h.numberToken })),
@@ -613,5 +614,5 @@ export function formatSettlementsAndCitiesResultStats(stats: ISACGameResultStats
 // Renders resourcesPerTurn as GameResult charts: one entry per turn, keyed by
 // username, for the result page's resources/turn chart.
 export function formatSettlementsAndCitiesCharts(stats: ISACGameResultStats, usernameById: Map<string, string>): GameResultChart[] {
-    return compactCharts(formatPerTurnChart(stats.resourcesPerTurn, usernameById, "Resources gathered per turn", "Resources"));
+    return compactCharts(formatPerTurnChart(stats.resourcesPerTurn, "Resources gathered per turn", "Resources"));
 }

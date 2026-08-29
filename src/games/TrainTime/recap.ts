@@ -200,14 +200,14 @@ function tip(liveState: unknown, forUserId: string): IRecapTip | null {
         };
     }
 
-    // routeOwners are usernames in the response shape, so the claim context is
+    // routeOwners are userIds in the response shape, so the claim context is
     // built in those terms (the same join the board screen does).
     const claimable = [...claimableRouteIds({
         routeOwners: gs.routeOwners,
         playerCount: players.length,
         hand: gs.myHand,
         trains: me.trains,
-        playerId: me.username,
+        playerId: me.userId,
     })].map(id => ROUTES[id]);
 
     if (claimable.length) {

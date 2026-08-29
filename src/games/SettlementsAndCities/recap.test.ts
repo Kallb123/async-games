@@ -26,8 +26,8 @@ function player(overrides: Partial<ISACPlayerStateResponse> & { userId: string; 
 }
 
 function state(players: ISACPlayerStateResponse[], overrides: Partial<ISACSpecificGameStateResponse> = {}): ISACSpecificGameStateResponse {
-    const playerStates: { [username: string]: ISACPlayerStateResponse } = {};
-    for (const p of players) playerStates[p.username] = p;
+    const playerStates: { [userId: string]: ISACPlayerStateResponse } = {};
+    for (const p of players) playerStates[p.userId] = p;
     return {
         hexes: [], vertices: [], edges: [], harbors: [],
         playerStates,
@@ -117,14 +117,16 @@ describe("Settlements & Cities recap adapter", () => {
     });
 
     it("emits a bonus-handover event when longest road changes hands", () => {
-        const prev = state([player({ userId: "u1", username: "Alice" }), player({ userId: "u2", username: "Bob" })], { longestRoadOwner: "Bob" });
-        const next = state([player({ userId: "u1", username: "Alice" }), player({ userId: "u2", username: "Bob" })], { longestRoadOwner: "Alice" });
+        const prev = state([player({ userId: "u1", username: "Alice" }), player({ userId: "u2", username: "Bob" })], { longestRoadOwner: "u2" });
+        const next = state([player({ userId: "u1", username: "Alice" }), player({ userId: "u2", username: "Bob" })], { longestRoadOwner: "u1" });
         const events = settlementsAndCitiesRecapAdapter.toEvents(snap(prev), snap(next), cmd({ className: "SACBuildRoad" }), OK);
         // Road builds are otherwise silent — only the handover surfaces.
         expect(events).toHaveLength(1);
         expect(events[0].type).toBe("sac_longest_road");
         expect(events[0].title).toContain("Longest Road");
         expect(events[0].affectedIds).toEqual(["u2"]);
+        // The copy names the previous holder, not their userId.
+        expect(events[0].detail).toContain("Bob");
     });
 
     it("flags players a monopoly stole from", () => {

@@ -6,9 +6,11 @@ import { BOARD_VIEWBOX, CITIES, ROUTES, routeName } from '@/games/TrainTime/boar
 import { CITY_LABEL_OFFSET, ROUTE_GEOMETRY, TRACK_PALETTE } from '@/games/TrainTime/ui';
 
 interface TrainTimeBoardProps {
-    /** Owning username per route id, null where unclaimed. */
+    /** Owning player's stable userId per route id, null where unclaimed. */
     routeOwners: (string | null)[];
-    usernameToColour: (username: string) => string;
+    /** owner userId → colour / display name. */
+    colourForOwner: (owner: string) => string;
+    nameForOwner: (owner: string) => string;
     /** Routes the current player could claim right now — the tappable ones. */
     claimableRoutes: Set<number>;
     /** Light up those routes and step everything else back, while the player
@@ -36,7 +38,8 @@ const CLAIMED_TRACK_WIDTH = 13;
  */
 export default function TrainTimeBoard({
     routeOwners,
-    usernameToColour,
+    colourForOwner,
+    nameForOwner,
     claimableRoutes,
     highlightClaimable = false,
     selectedRouteId,
@@ -60,7 +63,7 @@ export default function TrainTimeBoard({
                                 onClick={onRouteClick && claimable ? () => onRouteClick(route.id) : undefined}
                                 style={{ cursor: onRouteClick && claimable ? 'pointer' : 'default' }}
                             >
-                                <title>{routeName(route)} — {route.length} × {route.colour}{owner ? ` · ${owner}` : ''}</title>
+                                <title>{routeName(route)} — {route.length} × {route.colour}{owner ? ` · ${nameForOwner(owner)}` : ''}</title>
                                 {(selected || (highlightClaimable && claimable)) && (
                                     <path
                                         d={trackPath}
@@ -74,7 +77,7 @@ export default function TrainTimeBoard({
                                 <path
                                     d={trackPath}
                                     fill="none"
-                                    stroke={owner ? usernameToColour(owner) : TRACK_PALETTE[route.colour].fill}
+                                    stroke={owner ? colourForOwner(owner) : TRACK_PALETTE[route.colour].fill}
                                     strokeWidth={owner ? CLAIMED_TRACK_WIDTH : TRACK_WIDTH}
                                     strokeDasharray={dashArray}
                                     strokeOpacity={owner || claimable ? 1 : highlightClaimable ? 0.28 : 0.75}

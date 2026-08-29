@@ -9,11 +9,13 @@ export interface ISACHexResponse {
 
 export interface ISACVertexResponse {
     building: 'settlement' | 'city' | null;
+    // The owning player's stable Clerk userId (resolve a name via playerStates).
     owner: string | null;
 }
 
 export interface ISACEdgeResponse {
     hasRoad: boolean;
+    // The owning player's stable Clerk userId (resolve a name via playerStates).
     owner: string | null;
 }
 
@@ -57,7 +59,10 @@ export interface ISACSpecificGameStateResponse {
     vertices: ISACVertexResponse[];
     edges: ISACEdgeResponse[];
     harbors: ISACHarborResponse[];
-    playerStates: { [username: string]: ISACPlayerStateResponse };
+    // Keyed by the player's stable Clerk userId; each value carries the username
+    // for display. Vertex/edge owners and the bonus/special-build fields below
+    // are userIds too, resolved to names through this map.
+    playerStates: { [userId: string]: ISACPlayerStateResponse };
     robberHexIndex: number;
     phase: 'setup' | 'main';
     setupStep: number;
@@ -68,25 +73,26 @@ export interface ISACSpecificGameStateResponse {
     lastRollDie1: number | null;
     lastRollDie2: number | null;
     pendingRobber: boolean;
+    // Bonus holders, as stable Clerk userIds (resolve a name via playerStates).
     longestRoadOwner: string | null;
     largestArmyOwner: string | null;
     devCardDeckSize: number;
     pendingRoadBuilding: number;
     playedDevCard: boolean;
-    // Dev card identities, keyed by username. Development cards are hidden —
+    // Dev card identities, keyed by userId. Development cards are hidden —
     // including the victory-point ones, which stay hidden until they win the
     // game (docs/games/settlements-and-cities.md §6 "Development Cards", §7) —
     // so this carries exactly one entry: the player who asked.
     // Empty for a viewerless view. Everyone else's holding is devCardCount.
-    playerDevCards: { [username: string]: { [K in SAC_DevCard]: number } };
+    playerDevCards: { [userId: string]: { [K in SAC_DevCard]: number } };
     // Dev cards bought this turn — held but not yet playable until the turn ends
     // (they're promoted into playerDevCards on end-of-turn). Surfaced so the hand
     // can distinguish a just-bought card from a playable one. Viewer-only, same
     // as playerDevCards.
-    playerNewDevCards: { [username: string]: { [K in SAC_DevCard]: number } };
+    playerNewDevCards: { [userId: string]: { [K in SAC_DevCard]: number } };
     // 5–6 Player Extension Special Build Phase (§8.5). `specialBuildActive` is
     // true while other players take their between-turns build; `specialBuildQueue`
-    // lists the usernames still owed a special-build turn (index 0 = active now);
+    // lists the userIds still owed a special-build turn (index 0 = active now);
     // `specialBuildMainPlayer` is the player whose main turn opened the phase.
     specialBuildActive: boolean;
     specialBuildQueue: string[];

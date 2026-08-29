@@ -407,6 +407,7 @@ OutbreakGameDataSchema.methods.CreateDataResponse = async function(viewerId: str
     return {
         gameType: doc.gameType,
         usernameList,
+        userIdList: doc.userIdList,
         turnTimer: doc.turnTimer,
         currentTurn: doc.currentTurn,
         gameState: publicGameState(doc.gameState),
@@ -432,7 +433,7 @@ export function gameStateToModel(
     const playerStates: IOutbreakSpecificGameStateResponse['playerStates'] = {};
     for (const [userId, ps] of playerStatesSource) {
         const username = userIdNameMap[userId] ?? userId;
-        playerStates[username] = {
+        playerStates[userId] = {
             userId,
             username,
             hand: [...ps.hand],
@@ -525,8 +526,8 @@ export function formatOutbreakCharts(
     usernameById: Map<string, string>,
 ): GameResultChart[] {
     return compactCharts(
-        formatPerTurnChart(stats.cubesTreatedPerTurn, usernameById, "Cubes treated per turn", "Cubes"),
-        formatPerTurnChart(stats.timesTravelledPerTurn, usernameById, "Times travelled per turn", "Moves"),
+        formatPerTurnChart(stats.cubesTreatedPerTurn, "Cubes treated per turn", "Cubes"),
+        formatPerTurnChart(stats.timesTravelledPerTurn, "Times travelled per turn", "Moves"),
     );
 }
 

@@ -42,7 +42,9 @@ export interface IOutbreakSpecificGameStateResponse {
     infectionDeckCount: number;
     // Public, and the game's most-read information (§14.2).
     infectionDiscard: number[];
-    playerStates: { [username: string]: IOutbreakPlayerStateResponse };
+    // Keyed by the player's stable Clerk userId; each value carries the username
+    // for display.
+    playerStates: { [userId: string]: IOutbreakPlayerStateResponse };
     phase: OutbreakPhase;
     // One Quiet Night (§12): true once played, until it consumes itself by
     // skipping the next Infect Cities phase.

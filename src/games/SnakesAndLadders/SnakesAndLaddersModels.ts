@@ -151,6 +151,7 @@ SnakesAndLaddersGameDataSchema.methods.CreateDataResponse = async function(_view
     return {
         gameType: gameDataDocument.gameType,
         usernameList,
+        userIdList: gameDataDocument.userIdList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
         gameState: publicGameState(gameDataDocument.gameState),
@@ -180,7 +181,7 @@ export function buildInitialSnakesAndLaddersState(userIdList: string[], reRollOn
 export function gameStateToModel(gameState: ISnakesAndLaddersGameState, userIdNameMap: { [key: string]: string }): ISnakesAndLaddersGameStateResponse {
     const playerStates: { [key: string]: { username: string, userId: string, position: number } } = {};
     for (const [userId, playerStateModel] of gameState.playerPositions) {
-        playerStates[userIdNameMap[userId]] = {
+        playerStates[userId] = {
             userId,
             username: userIdNameMap[userId],
             position: playerStateModel.position

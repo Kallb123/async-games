@@ -268,6 +268,7 @@ DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(_viewerId: 
     return {
         gameType: gameDataDocument.gameType,
         usernameList,
+        userIdList: gameDataDocument.userIdList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
         gameState: publicGameState(gameDataDocument.gameState),
@@ -284,7 +285,7 @@ DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(_viewerId: 
 export function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap: { [key: string]: string}) : IDiceCitiesGameStateResponse {
     const playerStates: { [key: string]: IDiceCitiesPlayerStateResponse; } = {};
     for (const [userId, playerStateModel] of gameState.playerStates) {
-        playerStates[userIdNameMap[userId]] = {
+        playerStates[userId] = {
             userId,
             username: userIdNameMap[userId],
             cards: playerStateModel.cards.map(cardCount => {
@@ -391,5 +392,5 @@ export function formatDiceCitiesResultStats(stats: IDiceCitiesGameResultStats, u
 // Renders coinsPerTurn as GameResult charts: one entry per turn, keyed by
 // username, for the result page's coins/turn chart.
 export function formatDiceCitiesCharts(stats: IDiceCitiesGameResultStats, usernameById: Map<string, string>): GameResultChart[] {
-    return compactCharts(formatPerTurnChart(stats.coinsPerTurn, usernameById, "Coins per turn", "Coins"));
+    return compactCharts(formatPerTurnChart(stats.coinsPerTurn, "Coins per turn", "Coins"));
 }

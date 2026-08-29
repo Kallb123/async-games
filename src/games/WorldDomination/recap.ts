@@ -38,12 +38,19 @@ function getContinentBonus(territoryId: number): number {
 	return continent?.bonus ?? 0;
 }
 
+// The response labels territory owners by their stable userId; resolve one to a
+// display name through the playerStates the same snapshot carries.
+function usernameForId(state: WDState | undefined, userId: string | null | undefined): string | undefined {
+	if (!userId || !state?.playerStates) return undefined;
+	return Object.values(state.playerStates).find(p => p.userId === userId)?.username;
+}
+
 // Count owned territories in a continent
-function countOwnedInContinent(state: WDState | undefined, username: string, continentId: string): number {
+function countOwnedInContinent(state: WDState | undefined, userId: string, continentId: string): number {
 	if (!state?.territories) return 0;
 	let count = 0;
 	TERRITORIES.forEach((t) => {
-		if (t.continentId === continentId && state.territories[t.id]?.owner === username) {
+		if (t.continentId === continentId && state.territories[t.id]?.owner === userId) {
 			count++;
 		}
 	});
@@ -118,6 +125,7 @@ function toEvents(
 			// attacker, so reading it from nextState would silently name the
 			// attacker as their own defender.
 			const defender = prevState.territories?.[attackData.toTerritoryId]?.owner;
+				const defenderName = usernameForId(prevState, defender) ?? usernameForId(nextState, defender);
 			const lastBattle = nextState.lastBattle;
 
 			if (lastBattle) {
@@ -133,11 +141,11 @@ function toEvents(
 				// Named explicitly rather than "you" — the recap is read by every
 				// player, not just the attacker, so "you" would misname whoever's
 				// actually viewing it.
-				let detail = `${fromName} → ${toName} · ${name} lost ${attackerLosses}, ${defender ?? "defender"} lost ${defenderLosses}`;
+				let detail = `${fromName} → ${toName} · ${name} lost ${attackerLosses}, ${defenderName ?? "defender"} lost ${defenderLosses}`;
 
-				const defenderUserId = defender
-					? Object.values(nextState.playerStates).find(p => p.username === defender)?.userId
-					: undefined;
+				const defenderUserId = defender ?? undefined;
+				const eliminatedName = usernameForId(nextState, lastBattle.defenderEliminated)
+					?? usernameForId(prevState, lastBattle.defenderEliminated);
 
 				const event: WDEvent = {
 					...base,
@@ -147,7 +155,7 @@ function toEvents(
 					type: conquered ? "wd_conquest" : "wd_battle",
 					glyph: conquered ? "⚔️" : "🗡️",
 					title: conquered
-						? `${name} conquered ${toName}${lastBattle.defenderEliminated ? " and eliminated " + lastBattle.defenderEliminated : ""}`
+						? `${name} conquered ${toName}${lastBattle.defenderEliminated ? " and eliminated " + (eliminatedName ?? "a player") : ""}`
 						: `${name} attacked ${toName} from ${fromName}`,
 					detail,
 					affectedIds: defenderUserId ? [defenderUserId] : undefined,
@@ -157,7 +165,7 @@ function toEvents(
 				// other command until that occupation resolves) and merge the two.
 				if (conquered) {
 					event.conquestTerritoryId = attackData.toTerritoryId;
-					event.conquestEliminated = lastBattle.defenderEliminated;
+					event.conquestEliminated = eliminatedName ?? null;
 				}
 				events.push(event);
 			}
@@ -297,13 +305,13 @@ function tip(liveState: unknown, forUserId: string): IRecapTip | null {
 	if (!me) return null;
 
 	// Count territories owned
-	const myTerritories = state?.territories?.filter((t) => t.owner === me.username).length ?? 0;
+	const myTerritories = state?.territories?.filter((t) => t.owner === me.userId).length ?? 0;
 
 	// Check if we're close to a continent bonus
 	let closestContinent: { id: string; needed: number; bonus: number } | null = null;
 	for (const continentId of CONTINENT_ORDER) {
 		const continent = CONTINENTS[continentId];
-		const ownedCount = countOwnedInContinent(state, me.username, continentId);
+		const ownedCount = countOwnedInContinent(state, me.userId, continentId);
 		const territoryCount = TERRITORIES.filter((t) => t.continentId === continentId).length;
 		const needed = territoryCount - ownedCount;
 

@@ -7,16 +7,16 @@ import MapLabel from '@/components/ui/MapLabel';
 import type { IOutbreakPlayerStateResponse, IOutbreakCityResponse } from '@/games/Outbreak/apiModels';
 import { ADJACENCY, BOARD_VIEWBOX, CITIES, CITY_LABEL_OFFSET, DISEASE_COLORS, DISEASE_COLOR_DEFS } from '@/games/Outbreak/board';
 import { edgeListFrom } from '@/utils/games/adjacencyGraph';
-import { playerColour } from '@/utils/ui/playerColours';
+import { playerColourForId } from '@/utils/ui/playerColours';
 
 const EDGE_LIST = edgeListFrom(ADJACENCY);
 const NODE_RADIUS = 7;
 
 interface OutbreakBoardProps {
     cities: IOutbreakCityResponse[];
-    playerStates: { [username: string]: IOutbreakPlayerStateResponse };
-    /** Player seats in turn order — pawn colour is a player's index here. */
-    usernameList: string[];
+    playerStates: { [userId: string]: IOutbreakPlayerStateResponse };
+    /** Player seats in turn order (userIds) — pawn colour is a player's index here. */
+    userIdList: string[];
     /** Cities the pending move (if any) can legally land on — the tappable ones. */
     validCities: Set<number>;
     onCityClick?: (cityId: number) => void;
@@ -34,12 +34,12 @@ interface OutbreakBoardProps {
  * own component rather than a shared one wearing different data (see
  * docs/games/outbreak-gdd.md §21.6 step 5).
  */
-export default function OutbreakBoard({ cities, playerStates, usernameList, validCities, onCityClick, boardTag = null, highlightedCityId = null }: OutbreakBoardProps) {
+export default function OutbreakBoard({ cities, playerStates, userIdList, validCities, onCityClick, boardTag = null, highlightedCityId = null }: OutbreakBoardProps) {
     const pawnsByCity = new Map<number, string[]>();
-    usernameList.forEach(username => {
-        const cityId = playerStates[username]?.city;
+    userIdList.forEach(userId => {
+        const cityId = playerStates[userId]?.city;
         if (cityId === undefined) return;
-        pawnsByCity.set(cityId, [...(pawnsByCity.get(cityId) ?? []), username]);
+        pawnsByCity.set(cityId, [...(pawnsByCity.get(cityId) ?? []), userId]);
     });
 
     return (
@@ -129,13 +129,13 @@ export default function OutbreakBoard({ cities, playerStates, usernameList, vali
                                     const startX = def.x - (pawns.length * d) / 2;
                                     return (
                                         <g>
-                                            {pawns.map((username, i) => (
+                                            {pawns.map((userId, i) => (
                                                 <circle
-                                                    key={username}
+                                                    key={userId}
                                                     cx={startX + i * d + d / 2}
                                                     cy={def.y - NODE_RADIUS - 4}
                                                     r={3}
-                                                    fill={playerColour(usernameList.indexOf(username))}
+                                                    fill={playerColourForId(userId, userIdList)}
                                                     stroke="#fff"
                                                     strokeWidth={1}
                                                 />

@@ -35,6 +35,7 @@ export function toCompletedGames(results: IGameResultDataDocument[], directory: 
         url: result.url,
         friendlyName: GAME_META[result.url]?.name ?? result.url,
         winner: directory.name(result.winner),
+        winnerId: result.winner || undefined,
         endReason: result.endReason,
         forfeitedBy: result.forfeitedBy ? directory.name(result.forfeitedBy) : undefined,
         endedAt: result.endedAt,

@@ -20,8 +20,8 @@ import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { landmarkCount } from "@/games/DiceCities/ui";
-import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
-import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
+import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
+import { abandonedGameStatus, nameForUserId } from "@/utils/ui/players";
 import MatchHistory from "@/components/games/MatchHistory";
 
 // Sentinel used as "current turn" while reviewing a past turn, so no player's
@@ -67,12 +67,10 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const controlsPendingTarget = nav.isLive ? pendingTarget : null;
 
     const usernameList = gameData?.usernameList ?? [];
+    const userIdList = gameData?.userIdList ?? [];
+    const myUserId = user?.id ?? "";
     const players: IDiceCitiesPlayerStateResponse[] = displayed?.playerStates ? Object.values(displayed.playerStates) : [];
-    const colorForUserId = (userId: string): string => {
-        const ps = players.find(p => p.userId === userId);
-        const idx = ps ? usernameList.indexOf(ps.username) : -1;
-        return PLAYER_COLOURS[(idx >= 0 ? idx : 0) % PLAYER_COLOURS.length];
-    };
+    const colorForUserId = (userId: string): string => playerColourForId(userId, userIdList);
 
     const myState = players.find(p => p.userId === user?.id);
     const boardPlayer = myState ?? players.find(p => p.userId === displayedCurrentTurn) ?? players[0];
@@ -80,15 +78,13 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const isMyTurn = nav.isLive && !!user?.id && user.id === displayedCurrentTurn && !complete;
 
     const leaderLandmarks = players.reduce((m, p) => Math.max(m, landmarkCount(p)), 0);
-    const playerName = (userId?: string): string =>
-        players.find(p => p.userId === userId)?.username ?? userId ?? "";
+    const playerName = (userId?: string): string => nameForUserId(gameData, userId);
     const getWinnerDisplayName = (): string => playerName(displayedWinner);
     const getForfeitedByDisplayName = (): string => playerName(gameData?.forfeitedBy);
-    const currentTurnUsername = players.find(p => p.userId === displayedCurrentTurn)?.username ?? "";
+    const currentTurnUsername = playerName(displayedCurrentTurn);
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, getForfeitedByDisplayName());
     const hasRolled = displayed?.hasRolled ?? false;
-    const myUsername = currentUsername(user);
 
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
@@ -108,16 +104,16 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
 
     // ── Scoreboard: landmark progress + coin bank per player ─────────────────
     const scoreEntries: ScoreEntry[] = displayed
-        ? usernameList.flatMap((username, i): ScoreEntry[] => {
-            const ps = displayed.playerStates?.[username];
+        ? userIdList.flatMap((userId, i): ScoreEntry[] => {
+            const ps = displayed.playerStates?.[userId];
             if (!ps) return [];
             const isMe = ps.userId === user?.id;
             const isActive = ps.userId === displayedCurrentTurn && !complete;
             const lm = landmarkCount(ps);
             const isLeader = lm === leaderLandmarks && lm > 0;
             return [{
-                id: username,
-                name: isMe ? 'You' : username,
+                id: userId,
+                name: isMe ? 'You' : ps.username,
                 color: PLAYER_COLOURS[i % PLAYER_COLOURS.length],
                 sub: <>{isLeader ? '👑' : '★'} {lm}/4</>,
                 score: `${ps.money}🪙`,
@@ -178,7 +174,8 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
                     gameId={gameId}
                     gameUrl="dicecities"
                     usernameList={usernameList}
-                    myUsername={myUsername}
+                    userIdList={userIdList}
+                    myUserId={myUserId}
                     turnTimer={gameData?.turnTimer}
                 />
             )}

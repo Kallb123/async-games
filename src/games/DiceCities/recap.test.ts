@@ -21,7 +21,7 @@ function player(overrides: Partial<IDiceCitiesPlayerStateResponse> & { userId: s
 
 function state(players: IDiceCitiesPlayerStateResponse[]): IDiceCitiesGameStateResponse {
     const playerStates: { [key: string]: IDiceCitiesPlayerStateResponse } = {};
-    for (const p of players) playerStates[p.username] = p;
+    for (const p of players) playerStates[p.userId] = p;
     return {
         bankCards: [],
         bankMoney: BANK_TOTAL_COINS,

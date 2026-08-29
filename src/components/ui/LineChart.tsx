@@ -9,6 +9,10 @@ interface LineChartProps {
     /** Usernames in player order, so each line's colour matches that
      * player's colour everywhere else in the game (board, scoreboard, recap). */
     players: string[];
+    /** The players' stable userIds, in the same order as `players`. The chart's
+     * per-turn series are keyed by these, so a shared display name can't collapse
+     * two players onto one line. */
+    playerIds: string[];
 }
 
 const VB_WIDTH = 320;
@@ -34,7 +38,7 @@ function niceMax(max: number): number {
 // Turn-by-turn line chart for the GameResult page: turn number on the
 // x-axis, one line per player. Generic over any game's GameResultChart, so
 // every game can plug its own per-turn series into the same component.
-export default function LineChart({ chart, players }: LineChartProps) {
+export default function LineChart({ chart, players, playerIds }: LineChartProps) {
     const [hoverIndex, setHoverIndex] = useState<number | null>(null);
     const [showTable, setShowTable] = useState(false);
 
@@ -42,8 +46,8 @@ export default function LineChart({ chart, players }: LineChartProps) {
     const series = useMemo(() => players.map((name, i) => ({
         name,
         color: playerColour(i),
-        values: chart.turns.map(turn => turn[name] ?? 0),
-    })), [players, chart.turns]);
+        values: chart.turns.map(turn => turn[playerIds[i]] ?? 0),
+    })), [players, playerIds, chart.turns]);
 
     if (turnCount === 0 || series.length === 0) return null;
 
@@ -181,14 +185,14 @@ export default function LineChart({ chart, players }: LineChartProps) {
                         <thead>
                             <tr>
                                 <th>Turn</th>
-                                {players.map(name => <th key={name}>{name}</th>)}
+                                {players.map((name, i) => <th key={playerIds[i]}>{name}</th>)}
                             </tr>
                         </thead>
                         <tbody>
                             {chart.turns.map((turn, i) => (
                                 <tr key={i}>
                                     <td>{i + 1}</td>
-                                    {players.map(name => <td key={name}>{turn[name] ?? 0}</td>)}
+                                    {players.map((name, i) => <td key={playerIds[i]}>{turn[playerIds[i]] ?? 0}</td>)}
                                 </tr>
                             ))}
                         </tbody>
