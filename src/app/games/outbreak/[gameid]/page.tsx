@@ -416,7 +416,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                     />
 
                     {recapAvailable && (
-                        <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} usernames={usernameList} />
+                        <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} userIdList={userIdList} />
                     )}
 
                     {showLog && (

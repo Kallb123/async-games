@@ -59,10 +59,9 @@ const USER_TOKEN = /\{\{([^{}\n]*)\}\}/g;
 export function resolveHistory(
     history: IHistoryEntry[],
     userIdNameMap: { [key: string]: string },
-    fallback: string = UNKNOWN_PLAYER_NAME,
 ): IHistoryEntry[] {
     return history.map(entry => {
-        const text = entry.text.replace(USER_TOKEN, (_match, userId: string) => userIdNameMap[userId] || fallback);
+        const text = entry.text.replace(USER_TOKEN, (_match, userId: string) => userIdNameMap[userId] || UNKNOWN_PLAYER_NAME);
         // Field by field, never `{ ...entry }`. These entries come off a live
         // Mongoose document, and spreading a subdocument copies its internals
         // rather than its fields — including `$__parent`, the whole game

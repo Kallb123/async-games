@@ -1,6 +1,7 @@
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildYourTurnNotification } from '@/utils/firebase/notificationContent';
-import { UNKNOWN_PLAYER_NAME, buildUserDirectory, userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
+import { buildUserDirectory, userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
+import { UNKNOWN_PLAYER_NAME } from '@/utils/ui/players';
 import { auth } from '@clerk/nextjs/server';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';

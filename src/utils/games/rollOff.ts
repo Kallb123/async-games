@@ -12,7 +12,7 @@ import { IHistoryEntry, userToken } from "./history";
  *
  * Five games had their own copy of this, differing only in whitespace.
  */
-export function rollOffTurnOrder(userIdList: string[], dieToRoll: number): {
+export function rollOffTurnOrder(userIdList: string[], dieToRoll = 6): {
     turnOrder: string[],
     history: IHistoryEntry[]
 } {

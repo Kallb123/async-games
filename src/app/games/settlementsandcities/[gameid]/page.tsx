@@ -419,7 +419,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                     )}
 
                     {recapAvailable && (
-                        <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} usernames={usernameList} />
+                        <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} userIdList={userIdList} />
                     )}
 
                     {showLog && (

@@ -169,7 +169,7 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
                 />
             )}
 
-            <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} usernames={usernameList} />
+            <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} userIdList={userIdList} />
 
             {showLog && (
                 <MatchHistory entries={nav.displayedHistory} userIdList={userIdList} oldestFirst />

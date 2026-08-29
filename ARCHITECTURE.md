@@ -241,7 +241,9 @@ Documents are never sent raw to the client. `CreateResponse()` (list summary) an
 `CreateDataResponse(viewerId)` (full game) methods convert a document into a DTO:
 they resolve usernames via Clerk and run the game's `gameStateToModel` to turn
 internal Maps/IDs into a client-friendly, username-keyed shape. DTO interfaces
-live in `src/utils/apiModels/GameDataApi.ts` and each game's `apiModels.ts`.
+live in `src/utils/apiModels/GameDataApi.ts` and each game's `apiModels.ts` —
+except `IHistoryEntry`, which sits in `src/utils/games/history.ts` beside the
+resolver that owns its `{{userId}}` invariant.
 
 A game's response is **not the same for everybody**. `CreateDataResponse` takes
 the signed-in player it is being built for, and passes it to `gameStateToModel`,

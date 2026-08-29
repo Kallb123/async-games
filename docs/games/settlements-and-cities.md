@@ -782,10 +782,11 @@ alternative is a feature nobody gets to use, with two guardrails:
 * **Every settled trade is written to `gameState.history` in full**, so the
   table can see who is feeding whom. Two conventions to follow there: SAC
   commands **`unshift`** (the log is newest-first — push instead and it
-  inverts), and `replaceHistoryUserIds` substitutes user IDs for usernames on
-  the way out. That second one is a free win: embed **both parties' user IDs**
-  in the line and both get correct display names, which beats `senderUsername`
-  — client-supplied, and it only names one side of a two-party event.
+  inverts), and a line names a player with a `{{userId}}` token, resolved on
+  the way out (`src/utils/games/history.ts`). A two-party event is exactly what
+  that is for: `playerHistory(this.senderId, ...)` with a `userToken(otherId)`
+  in the text names both sides, and both keep reading correctly after either
+  of them renames.
 
 Two balance risks, documented rather than pre-solved:
 

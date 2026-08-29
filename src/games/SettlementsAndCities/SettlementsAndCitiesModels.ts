@@ -5,7 +5,7 @@ import { ISACGameDataResponse, ISACSpecificGameStateResponse, ISACPlayerStateRes
 import { uuidString, GameResultStatGroup, GameResultChart, formatPerTurnChart, compactCharts, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
-import { userIdListToUsernameList } from "@/utils/users/clerk";
+import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { SettlementsAndCitiesGameType } from "@/utils/apiModels/GameLogic";
 import { shuffle } from "@/utils/games/shuffle";
 import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
@@ -160,7 +160,7 @@ SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
     const expansions = normaliseExpansions(this.expansions);
     const victoryTarget = computeVictoryTarget(expansions);
 
-    const { turnOrder, history } = rollOffTurnOrder(userIdList, 6);
+    const { turnOrder, history } = rollOffTurnOrder(userIdList);
 
     const enabledNames = enabledExpansionNames(expansions);
     if (enabledNames.length > 0) {
@@ -341,11 +341,7 @@ SettlementsAndCitiesGameDataSchema.methods.CreateDataResponse = async function(v
     console.log('CreateDataResponse: Settlements and Cities game');
 
     const doc: ISettlementsAndCitiesGameData = this as ISettlementsAndCitiesGameData;
-    const usernameList = await userIdListToUsernameList(doc.userIdList);
-    const userIdNameMap: { [key: string]: string } = {};
-    (doc.userIdList as string[]).forEach((userId, i) => {
-        userIdNameMap[userId] = usernameList[i];
-    });
+    const { usernameList, userIdNameMap } = await userIdListToNamesAndMap(doc.userIdList);
 
     return {
         gameType: doc.gameType,

@@ -5,8 +5,7 @@ import { ISnakesAndLaddersGameDataResponse, ISnakesAndLaddersGameStateResponse }
 import { uuidString, GameResultStatGroup } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
-import { userIdListToUsernameList } from "@/utils/users/clerk";
-import { IHistoryEntry, userToken } from "@/utils/games/history";
+import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { SnakesAndLaddersGameType } from "@/utils/apiModels/GameLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 
@@ -34,7 +33,7 @@ SnakesAndLaddersInvitationSchema.methods.CreateGame = async function(invite: ISn
 
     const gameType = new SnakesAndLaddersGameType();
 
-    const { turnOrder, history } = rollOffTurnOrder(userIdList, 6);
+    const { turnOrder, history } = rollOffTurnOrder(userIdList);
 
     const reRollOnSix = this.reRollOnSix === true;
     if (reRollOnSix) {
@@ -108,11 +107,7 @@ SnakesAndLaddersGameDataSchema.methods.CreateDataResponse = async function(_view
 
     const gameDataDocument: ISnakesAndLaddersGameData = this as ISnakesAndLaddersGameData;
 
-    const usernameList = await userIdListToUsernameList(gameDataDocument.userIdList);
-    const userIdNameMap: { [key: string]: string } = {};
-    (gameDataDocument.userIdList as string[]).forEach((userId: string, i: number) => {
-        userIdNameMap[userId] = usernameList[i];
-    });
+    const { usernameList, userIdNameMap } = await userIdListToNamesAndMap(gameDataDocument.userIdList);
 
     return {
         gameType: gameDataDocument.gameType,

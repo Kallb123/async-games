@@ -4,7 +4,7 @@ import { Model, Schema, models } from "mongoose";
 import { ISolitaireGameDataResponse, ISolitaireGameStateResponse } from "./apiModels";
 import { uuidString, GameResultStatGroup } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
-import { userIdListToUsernameList } from "@/utils/users/clerk";
+import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { v4 as uuidv4 } from 'uuid';
 import { SolitaireGameType } from "@/utils/apiModels/GameLogic";
 import { UNLIMITED_TURN_TIMER } from "@/utils/games/TurnTimer";
@@ -130,9 +130,7 @@ SolitaireGameDataSchema.methods.CreateDataResponse = async function(_viewerId: s
 
     const gameDataDocument: ISolitaireGameData = this as ISolitaireGameData;
 
-    const usernameList = await userIdListToUsernameList(gameDataDocument.userIdList);
-    const userIdNameMap: { [key: string]: string } = {};
-    gameDataDocument.userIdList.forEach((userId, i) => { userIdNameMap[userId] = usernameList[i]; });
+    const { usernameList, userIdNameMap } = await userIdListToNamesAndMap(gameDataDocument.userIdList);
 
     return {
         gameType: gameDataDocument.gameType,

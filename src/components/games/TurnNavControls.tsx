@@ -2,7 +2,7 @@
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useNowToTheMinute } from "@/utils/hooks/useNow";
 import { formatRelativeTime } from "@/utils/ui/time";
-import { playerColourFor } from "@/utils/ui/playerColours";
+import { playerColourForId } from "@/utils/ui/playerColours";
 import { pluralize } from "@/utils/ui/text";
 
 // The subset of the navigation hook this control needs, kept game-agnostic.
@@ -14,15 +14,15 @@ interface TurnNavControlsProps {
     // (e.g. the game's normal action panel wired to nav.planMove).
     planningActions?: React.ReactNode;
     canPlan?: boolean;
-    /** The game's usernames in seat order, used to colour the reviewed turn's swatch. */
-    usernames?: string[];
+    /** The game's players in seat order, used to colour the reviewed turn's swatch. */
+    userIdList?: string[];
 }
 
 // The war-room scrubber from the design: a dark dock carrying the transport
 // buttons, a turn track showing where in the match you are standing, and a line
 // naming the turn you are looking at. Themed like the rest of the shell — the
 // panel is the app's dark ink, the key control its brass, never stock Bootstrap.
-export default function TurnNavControls({ nav, planningActions, canPlan = true, usernames = [] }: TurnNavControlsProps) {
+export default function TurnNavControls({ nav, planningActions, canPlan = true, userIdList = [] }: TurnNavControlsProps) {
     const now = useNowToTheMinute();
 
     if (nav.isLive) {
@@ -61,7 +61,7 @@ export default function TurnNavControls({ nav, planningActions, canPlan = true, 
 
     const command = nav.displayedCommand;
     const when = command ? formatRelativeTime(command.timestamp, now) : null;
-    const swatch = playerColourFor(command?.senderUsername, usernames);
+    const swatch = playerColourForId(command?.senderId, userIdList);
 
     // One tick per point on the timeline, index 0 (the opening position) first.
     const ticks = Array.from({ length: nav.totalTurns + 1 }, (_, i) =>

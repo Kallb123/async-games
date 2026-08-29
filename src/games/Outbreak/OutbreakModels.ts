@@ -10,7 +10,7 @@ import {
     uuidString,
 } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
-import { userIdListToUsernameList } from "@/utils/users/clerk";
+import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { OutbreakGameType } from "@/utils/apiModels/GameLogic";
 import { shuffle } from "@/utils/games/shuffle";
 import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
@@ -400,9 +400,7 @@ OutbreakGameDataSchema.methods.CreateDataResponse = async function(viewerId: str
     console.log('CreateDataResponse: Outbreak game');
 
     const doc: IOutbreakGameData = this as IOutbreakGameData;
-    const usernameList = await userIdListToUsernameList(doc.userIdList);
-    const userIdNameMap: { [key: string]: string } = {};
-    doc.userIdList.forEach((userId, i) => { userIdNameMap[userId] = usernameList[i]; });
+    const { usernameList, userIdNameMap } = await userIdListToNamesAndMap(doc.userIdList);
 
     return {
         gameType: doc.gameType,

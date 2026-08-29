@@ -21,6 +21,8 @@ and neither is quite what this feature needs:
   (`"Sarah rolled a 3 and climbed a ladder to square 68"`). Good wording, but
   **flat**: no timestamp, no actor id, no event type, no notion of *who was
   affected*. Rendered by [`GameHistoryList`](../src/components/games/GameHistoryList.tsx).
+  *(Since superseded: it is `IHistoryEntry[]` now and does carry an actor id —
+  see `src/utils/games/history.ts`. The rest of the paragraph still holds.)*
 - **`gameState.commandHistory: IGameCommand[]`** — structured and timestamped
   (`timestamp`, `senderId`, `senderUsername`, `className`, recorded RNG), but
   `myString()` prose is weak (`"SnakesAndLadders DiceRoll!"`), and one command

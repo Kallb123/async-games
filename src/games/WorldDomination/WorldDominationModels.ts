@@ -5,7 +5,7 @@ import { IWorldDominationGameDataResponse, IWorldDominationSpecificGameStateResp
 import { uuidString, GameResultStatGroup, GameResultChart, formatPerTurnChart, compactCharts, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
-import { userIdListToUsernameList } from "@/utils/users/clerk";
+import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { WorldDominationGameType } from "@/utils/apiModels/GameLogic";
 import { shuffle } from "@/utils/games/shuffle";
 import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
@@ -134,7 +134,7 @@ WorldDominationInvitationSchema.methods.CreateGame = async function(
 
     const gameType = new WorldDominationGameType();
 
-    const { turnOrder, history } = rollOffTurnOrder(userIdList, 6);
+    const { turnOrder, history } = rollOffTurnOrder(userIdList);
 
     // Territories are dealt out evenly and at random (docs §3.2 Option B — the
     // draft-order placement of Option A doesn't translate well to async turns,
@@ -243,11 +243,7 @@ WorldDominationGameDataSchema.methods.CreateDataResponse = async function(viewer
     console.log('CreateDataResponse: World Domination game');
 
     const doc: IWorldDominationGameData = this as IWorldDominationGameData;
-    const usernameList = await userIdListToUsernameList(doc.userIdList);
-    const userIdNameMap: { [key: string]: string } = {};
-    (doc.userIdList as string[]).forEach((userId, i) => {
-        userIdNameMap[userId] = usernameList[i];
-    });
+    const { usernameList, userIdNameMap } = await userIdListToNamesAndMap(doc.userIdList);
 
     return {
         gameType: doc.gameType,

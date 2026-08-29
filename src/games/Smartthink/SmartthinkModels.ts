@@ -5,7 +5,7 @@ import { ISmartthinkGameDataResponse, ISmartthinkGameStateResponse } from "./api
 import { IGameResponse, uuidString, GameResultStatGroup } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
-import { UserDirectory, userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
+import { UserDirectory, userIdListToNamesAndMap, userIdListToUsernameMap } from "@/utils/users/clerk";
 import { SmartthinkGameType } from "@/utils/apiModels/GameLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 
@@ -95,7 +95,7 @@ SmartthinkInvitationSchema.methods.CreateGame = async function(invite: ISmartthi
 
     const gameType = new SmartthinkGameType();
 
-    const { turnOrder, history } = rollOffTurnOrder(userIdList, 6);
+    const { turnOrder, history } = rollOffTurnOrder(userIdList);
     const usernameMap = await userIdListToUsernameMap(userIdList);
 
     const codeSetterId = turnOrder[0];
@@ -254,11 +254,7 @@ SmartthinkGameDataSchema.methods.CreateDataResponse = async function(_viewerId: 
 
     const gameDataDocument: ISmartthinkGameData = this as ISmartthinkGameData;
 
-    const usernameList = await userIdListToUsernameList(gameDataDocument.userIdList);
-    const userIdNameMap: { [key: string]: string } = {};
-    (gameDataDocument.userIdList as string[]).forEach((userId: string, i: number) => {
-        userIdNameMap[userId] = usernameList[i];
-    });
+    const { usernameList, userIdNameMap } = await userIdListToNamesAndMap(gameDataDocument.userIdList);
 
     return {
         gameType: gameDataDocument.gameType,

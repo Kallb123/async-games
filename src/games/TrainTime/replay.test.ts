@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildTimeline, computePerTurnStat } from "@/utils/games/replay";
-import { UNKNOWN_PLAYER_NAME } from "@/utils/users/clerk";
+import { UNKNOWN_PLAYER_NAME } from "@/utils/ui/players";
 import { buildEventFeed } from "@/utils/games/recap";
 import { deserializeJSON } from "@/utils/apiModels/Serialisable";
 import {

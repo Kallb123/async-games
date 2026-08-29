@@ -6,7 +6,7 @@ import { IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse, IDiceCitiesP
 import { uuidString, GameResultStatGroup, GameResultChart, formatPerTurnChart, compactCharts, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
-import { userIdListToUsernameList } from "@/utils/users/clerk";
+import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { DiceCitiesGameType } from "@/utils/apiModels/GameLogic";
 import { LANDMARKS } from "./ui";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
@@ -92,7 +92,7 @@ DiceCitiesInvitationSchema.methods.CreateGame = async function(invite: IDiceCiti
 
     const gameType = new DiceCitiesGameType();
 
-    const { turnOrder, history } = rollOffTurnOrder(userIdList, 6);
+    const { turnOrder, history } = rollOffTurnOrder(userIdList);
 
     const gameData: IDiceCitiesGameData = {
         gameId: uuidv4() as uuidString,
@@ -218,11 +218,7 @@ DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(_viewerId: 
 
     const gameDataDocument: IDiceCitiesGameData = this as IDiceCitiesGameData;
 
-    const usernameList = await userIdListToUsernameList(gameDataDocument.userIdList);
-    const userIdNameMap: { [key: string]: string} = {};
-    (gameDataDocument.userIdList as string[]).forEach((userId: string, i: number) => {
-        userIdNameMap[userId] = usernameList[i];
-    });
+    const { usernameList, userIdNameMap } = await userIdListToNamesAndMap(gameDataDocument.userIdList);
 
     return {
         gameType: gameDataDocument.gameType,

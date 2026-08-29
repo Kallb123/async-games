@@ -1,6 +1,6 @@
 import { Document, Model, Schema, model, models } from "mongoose";
 import { GameEndReason, IGameDataResponse, IGameResponse, uuidString } from "../apiModels/GameDataApi";
-import { UserDirectory, userIdListToUsernameList } from "../users/clerk";
+import { UserDirectory, userIdListToNamesAndMap } from "../users/clerk";
 import { IGameCommand, IGameType } from "../apiModels/GameLogic";
 import { actionableTurnFilter } from "../games/TurnTimer";
 import { IHistoryEntry, resolveHistory } from "../games/history";
@@ -158,9 +158,7 @@ GameDataSchema.methods.CreateDataResponse = async function(_viewerId: string | n
 
     const gameDataDocument: IGameData = this as IGameData;
 
-    const usernameList = await userIdListToUsernameList(gameDataDocument.userIdList);
-    const userIdNameMap: { [key: string]: string } = {};
-    gameDataDocument.userIdList.forEach((userId, i) => { userIdNameMap[userId] = usernameList[i]; });
+    const { usernameList, userIdNameMap } = await userIdListToNamesAndMap(gameDataDocument.userIdList);
 
     return {
         gameType: gameDataDocument.gameType,

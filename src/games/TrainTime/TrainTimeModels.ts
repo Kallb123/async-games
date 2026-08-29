@@ -10,7 +10,7 @@ import {
     formatPerTurnChart,
 } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
-import { userIdListToUsernameList } from "@/utils/users/clerk";
+import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { shuffle } from "@/utils/games/shuffle";
 import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
 import { TrainTimeGameType } from "@/utils/apiModels/GameLogic";
@@ -218,9 +218,7 @@ TrainTimeGameDataSchema.methods.CreateDataResponse = async function(viewerId: st
     console.log('CreateDataResponse: Train Time game');
 
     const doc: ITrainTimeGameData = this as ITrainTimeGameData;
-    const usernameList = await userIdListToUsernameList(doc.userIdList);
-    const userIdNameMap: { [key: string]: string } = {};
-    doc.userIdList.forEach((userId, i) => { userIdNameMap[userId] = usernameList[i]; });
+    const { usernameList, userIdNameMap } = await userIdListToNamesAndMap(doc.userIdList);
 
     return {
         gameType: doc.gameType,
