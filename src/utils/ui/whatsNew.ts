@@ -70,6 +70,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Map connections that go round the world stay off the map",
+                detail: "On the World Domination and Outbreak boards, the routes that cross from one side of the world to the other — Alaska to Kamchatka, San Francisco to Tokyo — used to be drawn as a long line straight across the whole map, over everything in the way. Each now heads off its own edge with a label naming where it comes out on the far side.",
+            },
+            {
                 title: "The logo on a join link takes you home",
                 detail: "Landing on a friend's join screen with nothing filled in used to be a dead end — there was no way back except the browser's own back button. Tapping the logo at the top now takes you home.",
             },
@@ -85,10 +89,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Your badge no longer flashes a stranger's initial",
                 detail: "For a moment before your profile loaded, the little circle on the home page and your profile showed a “T” or a “Y” — the first letter of the words standing in for your name. You now get a plain silhouette until your real initials or photo are ready.",
-            },
-            {
-                title: "The back arrow sits in the middle of its button",
-                detail: "The little round back arrow at the top of the library, your profile, settings and every other screen was leaning down and to one side of its circle. It's centred now.",
             },
         ],
     },
