@@ -133,6 +133,7 @@ SolitaireGameDataSchema.methods.CreateDataResponse = async function(_viewerId: s
     return {
         gameType: gameDataDocument.gameType,
         usernameList: await userIdListToUsernameList(gameDataDocument.userIdList),
+        userIdList: gameDataDocument.userIdList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
         gameState: publicGameState(gameDataDocument.gameState),

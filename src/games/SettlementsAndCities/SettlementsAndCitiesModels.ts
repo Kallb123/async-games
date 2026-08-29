@@ -380,6 +380,7 @@ SettlementsAndCitiesGameDataSchema.methods.CreateDataResponse = async function(v
     return {
         gameType: doc.gameType,
         usernameList,
+        userIdList: doc.userIdList,
         turnTimer: doc.turnTimer,
         currentTurn: doc.currentTurn,
         gameState: publicGameState(

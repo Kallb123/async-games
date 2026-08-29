@@ -252,8 +252,12 @@ SmartthinkGameDataSchema.methods.CreateResponse = function(directory: UserDirect
         : directory.name(userId);
 
     const usernameList = gameDataDocument.userIdList.map(userId => directory.name(userId));
+    // userIdList stays parallel to usernameList: the computer is not a Clerk
+    // user but it is a seat, so its id rides alongside its name.
+    const userIdList = [...gameDataDocument.userIdList];
     if (gameDataDocument.specificGameState.codeSetterId === SMARTTHINK_COMPUTER_ID) {
         usernameList.push(SMARTTHINK_COMPUTER_USERNAME);
+        userIdList.push(SMARTTHINK_COMPUTER_ID);
     }
 
     const winner = nameFor(gameDataDocument.winner);
@@ -264,6 +268,7 @@ SmartthinkGameDataSchema.methods.CreateResponse = function(directory: UserDirect
         gameType: gameDataDocument.gameType.gameType,
         friendlyName: gameDataDocument.gameType.friendlyName,
         usernameList,
+        userIdList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
         currentTurnUsername,
@@ -288,6 +293,7 @@ SmartthinkGameDataSchema.methods.CreateDataResponse = async function(_viewerId: 
     return {
         gameType: gameDataDocument.gameType,
         usernameList,
+        userIdList: gameDataDocument.userIdList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
         gameState: publicGameState(gameDataDocument.gameState),

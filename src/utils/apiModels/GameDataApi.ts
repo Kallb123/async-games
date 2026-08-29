@@ -21,6 +21,11 @@ export interface IGameResponse {
     gameType: string,
     friendlyName: string,
     usernameList: string[],
+    // Parallel to usernameList (same order): the stable Clerk userId for each
+    // player. usernameList is for display; userIdList is what the client
+    // compares identity and keys per-player state by, so a rename can't shift
+    // a key or misalign a lookup.
+    userIdList: string[],
     turnTimer: string,
     currentTurn: string,
     currentTurnUsername: string,
@@ -99,6 +104,10 @@ export function playerByUserId<P extends { userId: string }>(
 export interface IGameDataResponse {
     gameType: IGameType,
     usernameList: string[],
+    // Parallel to usernameList (same order): the stable Clerk userId for each
+    // player. See IGameResponse.userIdList — the client keys per-player board
+    // state by these ids rather than by the display name.
+    userIdList: string[],
     turnTimer: string,
     currentTurn: string,
     gameState: {

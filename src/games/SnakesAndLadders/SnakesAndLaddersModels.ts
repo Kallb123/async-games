@@ -151,6 +151,7 @@ SnakesAndLaddersGameDataSchema.methods.CreateDataResponse = async function(_view
     return {
         gameType: gameDataDocument.gameType,
         usernameList,
+        userIdList: gameDataDocument.userIdList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
         gameState: publicGameState(gameDataDocument.gameState),

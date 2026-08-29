@@ -407,6 +407,7 @@ OutbreakGameDataSchema.methods.CreateDataResponse = async function(viewerId: str
     return {
         gameType: doc.gameType,
         usernameList,
+        userIdList: doc.userIdList,
         turnTimer: doc.turnTimer,
         currentTurn: doc.currentTurn,
         gameState: publicGameState(doc.gameState),
