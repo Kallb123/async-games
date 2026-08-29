@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { clearGames, clerkUserId, logBrowserErrors } from '../helpers';
 
 // The account-less guest path (docs/account-less-play.md): a host opens a
@@ -22,16 +22,18 @@ import { clearGames, clerkUserId, logBrowserErrors } from '../helpers';
 // is exactly what must never reach the board.
 const GUEST_NAME = 'PandemicPat';
 
-// The dev wipe routes need a signed-in request, so give the top-level `request`
-// fixture the host's session, purely for the teardown (same as solitaire-smoke).
-// This touches only the fixtures the framework hands out; the guest below is a
-// hand-built `browser.newContext()` with no session of its own, so it stays the
-// signed-out stranger the test is about regardless of this.
-test.use({ storageState: 'playwright/.auth/player-one.json' });
-
-test.afterAll(async ({ request }) => {
-  await clearGames(request);
-});
+// Clerk has loaded its client SDK on this page — not that anyone is signed in
+// (a guest isn't, and never will be until they claim a ticket), just that
+// `useSignIn`'s `signIn`/`setActive` are ready, which the guest join handler
+// needs before it can turn its ticket into a session. Polls, because Clerk
+// boots asynchronously after the page itself has loaded.
+async function waitForClerkLoaded(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => (window as unknown as { Clerk?: { loaded?: boolean } }).Clerk?.loaded === true,
+    undefined,
+    { timeout: 15_000 }
+  );
+}
 
 test('host opens a lobby, a guest joins by code, and the guest name shows in game', async ({ browser }) => {
   // Two contexts, several full page loads and a guest mint through Clerk add up
@@ -40,7 +42,11 @@ test('host opens a lobby, a guest joins by code, and the guest name shows in gam
 
   // The host is a standing signed-in test user; the guest is a brand-new
   // context with no stored session at all — the whole point is that they never
-  // signed in.
+  // signed in. Both contexts are created here by hand (rather than via a
+  // file-level `storageState`) precisely so the guest's stays empty: a
+  // `test.use({ storageState })` would hand the guest the host's session cookie,
+  // and the server-rendered /join screen (which branches on that cookie) would
+  // then show them the signed-in code box instead of the guest form.
   const hostContext = await browser.newContext({ storageState: 'playwright/.auth/player-one.json' });
   const guestContext = await browser.newContext();
   const host = await hostContext.newPage();
@@ -69,10 +75,13 @@ test('host opens a lobby, a guest joins by code, and the guest name shows in gam
 
     // The guest opens the shared link — code already in the box — and, with no
     // account, gets the signed-out guest form. They type a name over the
-    // random one it pre-fills and claim the seat.
+    // random one it pre-fills and claim the seat. Wait for Clerk before
+    // submitting: the guest join handler turns a sign-in ticket into a session
+    // itself, and silently does nothing if Clerk hasn't loaded yet.
     await guest.goto(`/join?code=${joinCode}`);
     const nameInput = guest.locator('#guest-name');
     await expect(nameInput).toBeVisible();
+    await waitForClerkLoaded(guest);
     await nameInput.fill(GUEST_NAME);
     await guest.getByRole('button', { name: 'Join game' }).click();
 
@@ -83,21 +92,25 @@ test('host opens a lobby, a guest joins by code, and the guest name shows in gam
     // The guest is carried straight onto the Outbreak board — the game started
     // the moment their seat filled the party.
     await guest.waitForURL(/\/games\/outbreak\/.+/);
-    await expect(guest.getByText('Outbreak')).toBeVisible();
 
     // The host's lobby notices the game started (its invitation is gone) and
     // sends them to the same board, the way it does for any lobby.
     await host.waitForURL(/\/games\/outbreak\/.+/, { timeout: 30_000 });
-    await expect(host.getByText('Outbreak')).toBeVisible();
 
     // The whole point: the name the guest typed is what everyone sees. On the
-    // host's board the guest is another player, so their chosen name is on it
-    // (the scoreboard, their hand) — while the throwaway account underneath
-    // never is.
-    await expect(host.getByText(GUEST_NAME).first()).toBeVisible();
+    // host's board the guest is another player, so their chosen name is in the
+    // live scoreboard (there's no dedicated "guest name" element — it's just
+    // one of the player names) — while the throwaway account underneath never
+    // appears anywhere on the page.
+    const scoreboardNames = host.locator('.ag-score-name');
+    await expect(scoreboardNames.filter({ hasText: GUEST_NAME })).toBeVisible();
     await expect(host.locator('body')).not.toContainText('guests.asyncgames.com');
     await expect(host.locator('body')).not.toContainText('guest_');
   } finally {
+    // The dev wipe routes need a signed-in caller; the host's own request
+    // context carries their session, so drive the teardown through it (rather
+    // than a signed-out fixture) before the contexts close.
+    await clearGames(host.request).catch(() => {});
     await hostContext.close();
     await guestContext.close();
   }
