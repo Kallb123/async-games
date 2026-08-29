@@ -22,7 +22,7 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
-import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
+import { abandonedGameStatus } from "@/utils/ui/players";
 import MatchHistory from "@/components/games/MatchHistory";
 
 const PHASE_LABEL: Record<IWorldDominationSpecificGameStateResponse['phase'], string> = {
@@ -59,7 +59,6 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
     const isMyTurn = nav.isLive && user?.id === gameData?.currentTurn && !complete;
-    const myUsername = currentUsername(user);
     const myUserId = user?.id ?? '';
 
     const usernameList = gameData?.usernameList ?? [];
@@ -273,7 +272,8 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
                     gameId={gameId}
                     gameUrl="worlddomination"
                     usernameList={usernameList}
-                    myUsername={myUsername}
+                    userIdList={userIdList}
+                    myUserId={myUserId}
                     turnTimer={gameData?.turnTimer}
                 />
             )}

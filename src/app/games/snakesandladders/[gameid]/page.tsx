@@ -27,7 +27,7 @@ import { ISnakesAndLaddersDiceRollOutcome, SnakesAndLaddersRequestDiceRoll } fro
 import { SL_REROLL_PARAM } from "@/games/SnakesAndLadders/ui";
 import { rematchFlag } from "@/utils/ui/rematch";
 import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
-import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
+import { abandonedGameStatus } from "@/utils/ui/players";
 import MatchHistory from "@/components/games/MatchHistory";
 
 export default function GameSnakesAndLadders({ params }: { params: Promise<{ gameid: uuidString }> }) {
@@ -94,6 +94,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     // player keeps the same swatch on the board and the scoreboard.
     const usernameList = gameData?.usernameList ?? [];
     const userIdList = gameData?.userIdList ?? [];
+    const myUserId = user?.id ?? "";
     const players = boardState?.playerStates ? Object.values(boardState.playerStates) : [];
     const colorForUserId = (userId: string): string => playerColourForId(userId, userIdList);
 
@@ -108,7 +109,6 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     const currentTurnUsername = players.find(p => p.userId === displayedCurrentTurn)?.username ?? "";
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, getForfeitedByDisplayName());
-    const myUsername = currentUsername(user);
 
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
@@ -216,7 +216,8 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
                     gameId={gameId}
                     gameUrl="snakesandladders"
                     usernameList={usernameList}
-                    myUsername={myUsername}
+                    userIdList={userIdList}
+                    myUserId={myUserId}
                     turnTimer={gameData?.turnTimer}
                     extraParams={rematchFlag(SL_REROLL_PARAM, reRollOnSix)}
                 />

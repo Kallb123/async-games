@@ -19,7 +19,7 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import type { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
 import { SMARTTHINK_CODE_LENGTH } from "@/games/Smartthink/ui";
-import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
+import { abandonedGameStatus } from "@/utils/ui/players";
 import MatchHistory from "@/components/games/MatchHistory";
 
 const PLAYER_COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c"];
@@ -68,8 +68,9 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
     const getForfeitedByDisplayName = (): string => playerName(gameData?.forfeitedBy);
     const currentUserWon = complete && user?.id !== undefined && user.id === nav.displayedWinner;
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, getForfeitedByDisplayName());
-    const myUsername = currentUsername(user);
+    const myUserId = user?.id ?? '';
     const usernameList = gameData?.usernameList ?? [];
+    const userIdList = gameData?.userIdList ?? [];
 
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
@@ -141,7 +142,8 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
                     gameId={gameId}
                     gameUrl="smartthink"
                     usernameList={usernameList}
-                    myUsername={myUsername}
+                    userIdList={userIdList}
+                    myUserId={myUserId}
                     turnTimer={gameData?.turnTimer}
                 />
             )}

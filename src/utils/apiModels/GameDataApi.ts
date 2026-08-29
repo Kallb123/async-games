@@ -129,6 +129,10 @@ export interface ICompletedGame {
     url: string;
     friendlyName: string;
     winner: string;
+    // The winner's stable Clerk userId (absent for a no-winner finish), so the
+    // dashboard can tell whether *you* won by id rather than by comparing your
+    // display name — which a namesake would answer wrongly.
+    winnerId?: string;
     endReason?: GameEndReason;
     forfeitedBy?: string;
     endedAt: string;

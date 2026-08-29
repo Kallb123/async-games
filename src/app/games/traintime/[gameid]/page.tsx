@@ -39,7 +39,7 @@ import { TrainTimeClaimRoute, TrainTimeDrawTickets, TrainTimeKeepTickets } from 
 import { TRACK_PALETTE } from "@/games/TrainTime/ui";
 import { playerColour, playerColourForId } from "@/utils/ui/playerColours";
 import { pluralize } from "@/utils/ui/text";
-import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
+import { abandonedGameStatus } from "@/utils/ui/players";
 import MatchHistory from "@/components/games/MatchHistory";
 
 // Trains at or below this leave a player one big route from ending the game —
@@ -84,7 +84,6 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     // Reviewing a past turn is read-only, so every interactive path hangs off
     // this rather than off whose turn it is.
     const isMyTurn = nav.isLive && user?.id === displayedCurrentTurn && !complete;
-    const myUsername = currentUsername(user);
     const myUserId = user?.id ?? '';
     const usernameList = useMemo(() => gameData?.usernameList ?? [], [gameData?.usernameList]);
     const userIdList = useMemo(() => gameData?.userIdList ?? [], [gameData?.userIdList]);
@@ -370,7 +369,8 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                     gameId={gameId}
                     gameUrl="traintime"
                     usernameList={usernameList}
-                    myUsername={myUsername}
+                    userIdList={userIdList}
+                    myUserId={myUserId}
                     turnTimer={gameData?.turnTimer}
                 />
             )}

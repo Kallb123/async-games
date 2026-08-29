@@ -24,7 +24,7 @@ import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand, type SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
-import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
+import { abandonedGameStatus } from "@/utils/ui/players";
 import {
     SACPlaceSettlementSetup,
     SACPlaceRoadSetup,
@@ -92,7 +92,6 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     const complete = nav.displayedComplete;
     // Only the live active player can act; reviewing a past turn is read-only.
     const isMyTurn = nav.isLive && user?.id === gameData?.currentTurn;
-    const myUsername = currentUsername(user);
     const myUserId = user?.id ?? '';
 
     // owner userId → colour, following the persistent userIdList ordering.
@@ -342,7 +341,8 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                     gameId={gameId}
                     gameUrl="settlementsandcities"
                     usernameList={usernameList}
-                    myUsername={myUsername}
+                    userIdList={userIdList}
+                    myUserId={myUserId}
                     turnTimer={gameData?.turnTimer}
                     extraParams={{ expansions: enabledExpansionIds.join(',') }}
                 />

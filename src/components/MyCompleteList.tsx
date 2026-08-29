@@ -6,7 +6,7 @@ import Link from "next/link";
 import ListSection from "@/components/ui/ListSection";
 import type { RefreshableState } from "@/utils/hooks/useRefreshableData";
 import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
-import { currentUsername, finishedGameCopy } from "@/utils/ui/players";
+import { finishedGameCopy } from "@/utils/ui/players";
 
 interface MyCompleteListProps extends RefreshableState {
     games: ICompletedGame[];
@@ -18,7 +18,7 @@ export default function MyCompleteList({ games, isLoading, isRefreshing, limit }
     const { user } = useIsAuthorised();
     const router = useRouter();
 
-    const myUsername = currentUsername(user);
+    const myUserId = user?.id;
 
     const visibleGames = limit ? games.slice(0, limit) : games;
 
@@ -37,8 +37,8 @@ export default function MyCompleteList({ games, isLoading, isRefreshing, limit }
         >
             {visibleGames.map((game) => {
                 // A co-op table wins together, so every player at one gets the
-                // trophy — there is no winner id to match yourself against.
-                const iWon = game.endReason === 'teamwin' || (game.winner && game.winner === myUsername);
+                // trophy; otherwise you won iff the winner's id is yours.
+                const iWon = game.endReason === 'teamwin' || (!!game.winnerId && game.winnerId === myUserId);
                 return (
                     <button
                         key={game.gameId}

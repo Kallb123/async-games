@@ -21,7 +21,7 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { landmarkCount } from "@/games/DiceCities/ui";
 import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
-import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
+import { abandonedGameStatus } from "@/utils/ui/players";
 import MatchHistory from "@/components/games/MatchHistory";
 
 // Sentinel used as "current turn" while reviewing a past turn, so no player's
@@ -68,6 +68,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
 
     const usernameList = gameData?.usernameList ?? [];
     const userIdList = gameData?.userIdList ?? [];
+    const myUserId = user?.id ?? "";
     const players: IDiceCitiesPlayerStateResponse[] = displayed?.playerStates ? Object.values(displayed.playerStates) : [];
     const colorForUserId = (userId: string): string => playerColourForId(userId, userIdList);
 
@@ -85,7 +86,6 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, getForfeitedByDisplayName());
     const hasRolled = displayed?.hasRolled ?? false;
-    const myUsername = currentUsername(user);
 
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
@@ -175,7 +175,8 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
                     gameId={gameId}
                     gameUrl="dicecities"
                     usernameList={usernameList}
-                    myUsername={myUsername}
+                    userIdList={userIdList}
+                    myUserId={myUserId}
                     turnTimer={gameData?.turnTimer}
                 />
             )}
