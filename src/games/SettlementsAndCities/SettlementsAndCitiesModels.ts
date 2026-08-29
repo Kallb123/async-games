@@ -614,5 +614,5 @@ export function formatSettlementsAndCitiesResultStats(stats: ISACGameResultStats
 // Renders resourcesPerTurn as GameResult charts: one entry per turn, keyed by
 // username, for the result page's resources/turn chart.
 export function formatSettlementsAndCitiesCharts(stats: ISACGameResultStats, usernameById: Map<string, string>): GameResultChart[] {
-    return compactCharts(formatPerTurnChart(stats.resourcesPerTurn, usernameById, "Resources gathered per turn", "Resources"));
+    return compactCharts(formatPerTurnChart(stats.resourcesPerTurn, "Resources gathered per turn", "Resources"));
 }

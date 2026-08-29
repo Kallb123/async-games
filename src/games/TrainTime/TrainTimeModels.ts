@@ -396,8 +396,8 @@ export function formatTrainTimeCharts(
     usernameById: Map<string, string>,
 ): GameResultChart[] {
     return compactCharts(
-        formatPerTurnChart(stats.pointsPerTurn, usernameById, "Route points per turn", "Points"),
-        formatPerTurnChart(stats.longestRunPerTurn, usernameById, "Longest run per turn", "Track"),
+        formatPerTurnChart(stats.pointsPerTurn, "Route points per turn", "Points"),
+        formatPerTurnChart(stats.longestRunPerTurn, "Longest run per turn", "Track"),
     );
 }
 

@@ -526,8 +526,8 @@ export function formatOutbreakCharts(
     usernameById: Map<string, string>,
 ): GameResultChart[] {
     return compactCharts(
-        formatPerTurnChart(stats.cubesTreatedPerTurn, usernameById, "Cubes treated per turn", "Cubes"),
-        formatPerTurnChart(stats.timesTravelledPerTurn, usernameById, "Times travelled per turn", "Moves"),
+        formatPerTurnChart(stats.cubesTreatedPerTurn, "Cubes treated per turn", "Cubes"),
+        formatPerTurnChart(stats.timesTravelledPerTurn, "Times travelled per turn", "Moves"),
     );
 }
 

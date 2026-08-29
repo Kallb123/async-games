@@ -392,5 +392,5 @@ export function formatDiceCitiesResultStats(stats: IDiceCitiesGameResultStats, u
 // Renders coinsPerTurn as GameResult charts: one entry per turn, keyed by
 // username, for the result page's coins/turn chart.
 export function formatDiceCitiesCharts(stats: IDiceCitiesGameResultStats, usernameById: Map<string, string>): GameResultChart[] {
-    return compactCharts(formatPerTurnChart(stats.coinsPerTurn, usernameById, "Coins per turn", "Coins"));
+    return compactCharts(formatPerTurnChart(stats.coinsPerTurn, "Coins per turn", "Coins"));
 }

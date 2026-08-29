@@ -49,8 +49,9 @@ export interface GameResultStatGroup {
 // A turn-by-turn line chart for the GameResult page: turn number on the
 // x-axis, one line per series (typically per player). What's plotted varies
 // by game (coins, score, territory...), so this shape only fixes the
-// structure - one entry per turn, keyed by username - letting any game's
-// GameResult stats power the same chart component.
+// structure - one entry per turn, keyed by the player's stable userId - letting
+// any game's GameResult stats power the same chart component. The chart renderer
+// pairs each userId with a display name and colour through the players list.
 export interface GameResultChart {
     title: string;
     yLabel: string;
@@ -58,12 +59,13 @@ export interface GameResultChart {
 }
 
 // Turns a per-turn Map<userId, number> series (as produced by a replay-based
-// computeXPerTurn helper) into a GameResultChart, keying each turn's entries
-// by username. Shared by every game that plots a cumulative per-player stat
-// (coins, resources, ...) so only the series/labels differ per game.
+// computeXPerTurn helper) into a GameResultChart, keying each turn's entries by
+// userId. A shared display name can't collapse two players onto one line, and a
+// rename can't shift a key. Shared by every game that plots a cumulative
+// per-player stat (coins, resources, ...) so only the series/labels differ per
+// game.
 export function formatPerTurnChart(
     perTurn: Map<string, number>[],
-    usernameById: Map<string, string>,
     title: string,
     yLabel: string,
 ): GameResultChart | undefined {
@@ -74,7 +76,7 @@ export function formatPerTurnChart(
         turns: perTurn.map(turn => {
             const entry: Record<string, number> = {};
             for (const [userId, value] of turn) {
-                entry[usernameById.get(userId) ?? userId] = value;
+                entry[userId] = value;
             }
             return entry;
         }),

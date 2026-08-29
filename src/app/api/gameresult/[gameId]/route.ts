@@ -14,6 +14,10 @@ export interface IGameResultResponse {
     endReason?: GameEndReason;
     forfeitedBy?: string;
     players: string[];
+    // The players' stable Clerk userIds, parallel to `players` (same order).
+    // The per-turn charts are keyed by these, so a shared display name can't
+    // collapse two players onto one line.
+    playerIds: string[];
     endedAt: string;
     totalTurns: number;
     stats: GameResultStatGroup[];
@@ -55,6 +59,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         endReason: result.endReason,
         forfeitedBy: result.forfeitedBy ? (usernameById.get(result.forfeitedBy) ?? result.forfeitedBy) : undefined,
         players: playerIds.map(playerId => usernameById.get(playerId) ?? playerId),
+        playerIds,
         endedAt: result.endedAt,
         totalTurns: result.totalTurns,
         stats: formatGameResultStats(result.gameType, (result as any).stats, usernameById),

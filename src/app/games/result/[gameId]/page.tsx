@@ -65,7 +65,7 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
 
                 {result?.charts.map(chart => (
                     <Section label={chart.title} key={chart.title}>
-                        <LineChart chart={chart} players={result.players} />
+                        <LineChart chart={chart} players={result.players} playerIds={result.playerIds} />
                     </Section>
                 ))}
             </>)}

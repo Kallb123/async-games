@@ -453,7 +453,7 @@ export function formatWorldDominationResultStats(stats: IWorldDominationGameResu
 // armies/turn charts.
 export function formatWorldDominationCharts(stats: IWorldDominationGameResultStats, usernameById: Map<string, string>): GameResultChart[] {
     return compactCharts(
-        formatPerTurnChart(stats.armiesDeployedPerTurn, usernameById, "Armies deployed per turn", "Armies"),
-        formatPerTurnChart(stats.totalArmiesDeployedPerTurn, usernameById, "Cumulative armies deployed per turn", "Armies"),
+        formatPerTurnChart(stats.armiesDeployedPerTurn, "Armies deployed per turn", "Armies"),
+        formatPerTurnChart(stats.totalArmiesDeployedPerTurn, "Cumulative armies deployed per turn", "Armies"),
     );
 }
