@@ -230,6 +230,22 @@ export async function buildTimeline(
 
     const gameType: IGameType = deserializeJSON(JSON.stringify(gameData.gameType));
 
+    // The names history tokens resolve to. Today's directory first, exactly as
+    // the live board uses it — and for a player it can no longer name, the last
+    // name this game recorded for them, for the same reason the command loop
+    // below keeps one: a guest swept seven days after their last game
+    // (GUEST_SWEEP_DAYS) should still be "Dave" in the recap of a game they
+    // played, not "Unknown player".
+    const historyNames = { ...userIdNameMap };
+    (gameData.gameState.commandHistory ?? []).forEach((raw) => {
+        const command = raw as { senderId?: string, senderUsername?: string } | null;
+        if (!command?.senderId || !command.senderUsername) return;
+        const known = historyNames[command.senderId];
+        if (!known || known === UNKNOWN_PLAYER_NAME) {
+            historyNames[command.senderId] = command.senderUsername;
+        }
+    });
+
     // A fresh, in-memory game document we mutate as we replay. specificGameState
     // is game-specific (added by each discriminator), so we widen the base type.
     type ReplayState = IGameData & { specificGameState: unknown };
@@ -261,7 +277,7 @@ export async function buildTimeline(
             currentTurn: state.currentTurn,
             complete: state.complete,
             winner: state.winner,
-            history: resolveStoredHistory(state.gameState.history, userIdNameMap),
+            history: resolveStoredHistory(state.gameState.history, historyNames),
             command: command
                 ? {
                       senderId: command.senderId,
@@ -337,7 +353,7 @@ export async function buildTimeline(
     // beyond what the replayed commands produced. Append them to every snapshot
     // so the setup steps stay visible throughout recap/planning.
     const persistedHistory = gameData.gameState.history ?? [];
-    const setupHistory = resolveStoredHistory(persistedHistory.slice(state.gameState.history.length), userIdNameMap);
+    const setupHistory = resolveStoredHistory(persistedHistory.slice(state.gameState.history.length), historyNames);
 
     const resolvedPlannedCommands: unknown[] = [];
     if (!gameOver && plannedCommands.length) {
