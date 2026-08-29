@@ -5,7 +5,8 @@ import { ISnakesAndLaddersGameDataResponse, ISnakesAndLaddersGameStateResponse }
 import { uuidString, GameResultStatGroup } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
-import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
+import { userIdListToUsernameList } from "@/utils/users/clerk";
+import { IHistoryEntry, userToken } from "@/utils/games/history";
 import { SnakesAndLaddersGameType } from "@/utils/apiModels/GameLogic";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 
@@ -24,7 +25,7 @@ export interface ISnakesAndLaddersInvitationDataDocument extends ISnakesAndLadde
 export interface ISnakesAndLaddersInvitationDataModel extends Model<ISnakesAndLaddersInvitationDataDocument> {
 }
 
-function SortUsersByRoll(userIdList: string[], usernameMap: Map<string, string>, turnOrder: string[], history: string[], dieToRoll: number) {
+function SortUsersByRoll(userIdList: string[], turnOrder: string[], history: IHistoryEntry[], dieToRoll: number) {
     let turnRolls = userIdList.map((userId) => {
         return { userId, diceRoll: DiceRoll(dieToRoll) };
     });
@@ -44,13 +45,12 @@ function SortUsersByRoll(userIdList: string[], usernameMap: Map<string, string>,
             return;
         }
         if (usersInRoll.length > 1) {
-            const usernamesInRoll = usersInRoll.map(userId => usernameMap.get(userId));
-            history.push(`Setup: ${usernamesInRoll.join(" & ")} rolled a ${roll} and are re-rolling`);
-            SortUsersByRoll(usersInRoll, usernameMap, turnOrder, history, dieToRoll);
+            history.push({ text: `Setup: ${usersInRoll.map(userToken).join(" & ")} rolled a ${roll} and are re-rolling` });
+            SortUsersByRoll(usersInRoll, turnOrder, history, dieToRoll);
         } else {
             turnOrder.push(usersInRoll[0]);
             // The first player settled into turnOrder is the roll-off winner.
-            history.push(`Setup: ${usernameMap.get(usersInRoll[0])} rolled a ${roll}${turnOrder.length === 1 ? " and goes first" : ""}`);
+            history.push({ text: `Setup: ${userToken(usersInRoll[0])} rolled a ${roll}${turnOrder.length === 1 ? " and goes first" : ""}` });
         }
     });
 }
@@ -64,15 +64,13 @@ SnakesAndLaddersInvitationSchema.methods.CreateGame = async function(invite: ISn
     const gameType = new SnakesAndLaddersGameType();
 
     const turnOrder: string[] = [];
-    const history: string[] = [];
+    const history: IHistoryEntry[] = [];
 
-    const usernameMap = await userIdListToUsernameMap(userIdList);
-
-    SortUsersByRoll(userIdList, usernameMap, turnOrder, history, 6);
+    SortUsersByRoll(userIdList, turnOrder, history, 6);
 
     const reRollOnSix = this.reRollOnSix === true;
     if (reRollOnSix) {
-        history.push("Setup: re-roll on a 6 is enabled");
+        history.push({ text: "Setup: re-roll on a 6 is enabled" });
     }
 
     const initialSpecificGameState = buildInitialSnakesAndLaddersState(userIdList, reRollOnSix);
