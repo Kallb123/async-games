@@ -44,11 +44,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
-                title: "Outbreak shows how many actions you have left",
-                detail: "Your turn's action list now has an “Actions” heading with the count still to spend beside it, so you can see at a glance how much of your turn is left before you draw and the diseases spread.",
-                game: "outbreak",
-            },
-            {
                 title: "Open a seat in Outbreak for anyone with the code",
                 detail: "Setting up an Outbreak game now lets you leave seats open and share a code, so a friend can grab one and play as a guest without an account — the same way the other games already work.",
                 game: "outbreak",
@@ -64,6 +59,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "A game's result fills in where it will sit",
                 detail: "Opening a finished game used to flash a stack of placeholder rows and then throw the whole page away for a different one. The summary and the stats now load into the shape they'll take — and the little match pop-up on your profile fills in the same way instead of saying “Loading…”.",
+            },
+            {
+                title: "Swiping back closes what's open",
+                detail: "The back gesture used to walk you out of the game whenever a sheet or menu was open. It now closes whatever is on top — the claim sheet, a trade, the options menu — and only leaves the screen once there's nothing left to close.",
             },
         ],
     },
