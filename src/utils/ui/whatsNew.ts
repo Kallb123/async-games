@@ -70,11 +70,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
-                title: "Three roles can finally use the abilities their cards promise",
-                detail: "The Operations Expert's once-per-turn flight to any city, the Researcher sharing a card that doesn't match the city you're on, and the Dispatcher moving a teammate's pawn or sending one pawn to another's city were all described on the role cards but had no button to make them. Each is now an action you can pick on your turn.",
-                game: "outbreak",
-            },
-            {
                 title: "The logo on a join link takes you home",
                 detail: "Landing on a friend's join screen with nothing filled in used to be a dead end — there was no way back except the browser's own back button. Tapping the logo at the top now takes you home.",
             },
@@ -86,6 +81,14 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "The name a guest picks is the name everyone sees",
                 detail: "Take a seat as a guest and the name you typed now follows you everywhere — the move you just made, the recap of what you missed, stepping back through the turns, your profile, the reaction you send someone and the “you won” line. They used to show the jumble of letters your account was filed under instead.",
+            },
+            {
+                title: "Your badge no longer flashes a stranger's initial",
+                detail: "For a moment before your profile loaded, the little circle on the home page and your profile showed a “T” or a “Y” — the first letter of the words standing in for your name. You now get a plain silhouette until your real initials or photo are ready.",
+            },
+            {
+                title: "The back arrow sits in the middle of its button",
+                detail: "The little round back arrow at the top of the library, your profile, settings and every other screen was leaning down and to one side of its circle. It's centred now.",
             },
         ],
     },
