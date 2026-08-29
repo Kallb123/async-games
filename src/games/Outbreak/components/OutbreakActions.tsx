@@ -4,7 +4,7 @@ import ActionButton from '@/components/ui/ActionButton';
 import PendingTag from '@/components/ui/PendingTag';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
 import type { IOutbreakSpecificGameStateResponse } from '@/games/Outbreak/apiModels';
-import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, MAX_RESEARCH_STATIONS, OutbreakDiseaseColor, cardColor, cardName, isCityCardId } from '@/games/Outbreak/board';
+import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, MAX_RESEARCH_STATIONS, OutbreakDiseaseColor, OutbreakRoleId, cardColor, cardName, isCityCardId, roleDef } from '@/games/Outbreak/board';
 import { HAND_LIMIT, OutbreakMoveType, cureCardsRequired, getLegalMoves, opsExpertBuildsFree, stationCityIds } from '@/games/Outbreak/rules';
 import { OutbreakAction, OutbreakDiscard, OutbreakEndTurn, OutbreakPlayEvent } from '@/utils/apiModels/GameLogic';
 import { useResettingState } from '@/utils/hooks/useResettingState';
@@ -93,7 +93,7 @@ function MoveTypeRows({ movesByType, onPick }: {
 // row names a player and the city their pawn stands in.
 function PlayerPickerSheet({ hint, players, tagLabel, onPick, onCancel }: {
     hint: string;
-    players: { userId: string; username: string; city: number }[];
+    players: { userId: string; username: string; city: number; role: OutbreakRoleId | null }[];
     tagLabel: string;
     onPick: (userId: string) => void;
     onCancel: () => void;
@@ -112,7 +112,7 @@ function PlayerPickerSheet({ hint, players, tagLabel, onPick, onCancel }: {
                         <span className="ag-icon-box">🧑‍⚕️</span>
                         <span className="ag-build-main">
                             <span className="ag-build-name">{p.username}</span>
-                            <span className="ag-build-cost">{CITIES[p.city].name}</span>
+                            <span className="ag-build-cost">{[roleDef(p.role)?.name, CITIES[p.city].name].filter(Boolean).join(' · ')}</span>
                         </span>
                         <span className="ag-build-tag">{tagLabel}</span>
                     </button>
@@ -429,7 +429,7 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
     // ── Dispatcher relocate (§11): which pawn to send to a city another pawn
     //     already occupies — no card, no adjacency, just an action. ───────────
     if (dispatch?.stage === 'relocateWho') {
-        const everyone = Object.values(gs.playerStates).map(p => ({ userId: p.userId, username: p.userId === me.userId ? 'You' : p.username, city: p.city }));
+        const everyone = Object.values(gs.playerStates).map(p => ({ userId: p.userId, username: p.userId === me.userId ? 'You' : p.username, city: p.city, role: p.role }));
         return (
             <PlayerPickerSheet
                 hint="🧭 Dispatcher — which pawn do you want to send to a teammate?"
