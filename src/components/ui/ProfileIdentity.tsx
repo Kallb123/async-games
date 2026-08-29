@@ -14,7 +14,7 @@ interface ProfileIdentityProps extends ProfileHeading {
     onAvatarClick?: () => void;
     /** Shows a spinner over the avatar while the new picture is saving. */
     avatarBusy?: boolean;
-    /** Control rendered under the name — e.g. "Remove photo". */
+    /** Controls rendered under the name — e.g. "Edit username", "Remove photo". */
     action?: ReactNode;
 }
 
@@ -63,7 +63,7 @@ export default function ProfileIdentity({
                             <Skeleton width={100} height={11} style={{ marginTop: 8 }} />
                         </>
                     )}
-                {action && <div style={{ marginTop: 6 }}>{action}</div>}
+                {action && <div style={{ marginTop: 6, display: "flex", gap: 12 }}>{action}</div>}
             </div>
         </div>
     );

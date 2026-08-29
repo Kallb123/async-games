@@ -84,10 +84,6 @@ export function formatPerTurnChart(
     };
 }
 
-// Response-shaped game states key playerStates by username (for readable
-// JSON), so look a player up by their Clerk userId (what commands and replay
-// carry) by scanning the values. Shared by every game whose apiModels follow
-// this { [username: string]: PlayerStateResponse } shape.
 // Compacts one or more formatPerTurnChart() results (each undefined when its
 // underlying per-turn series was empty) into the GameResultChart[] a game's
 // GAME_RESULT_STATS.charts entry returns. Shared so every game's chart
@@ -96,6 +92,10 @@ export function compactCharts(...charts: (GameResultChart | undefined)[]): GameR
     return charts.filter((c): c is GameResultChart => !!c);
 }
 
+// Look a player up in a response-shaped game state by their Clerk userId —
+// what commands and replay carry, and what playerStates is keyed by. Scans
+// the values rather than indexing, so it stays right for any game whose
+// apiModels key that record some other way. Shared by every game.
 export function playerByUserId<P extends { userId: string }>(
     state: { playerStates?: Record<string, P> } | undefined,
     userId: string

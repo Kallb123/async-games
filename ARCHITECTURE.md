@@ -233,14 +233,18 @@ Key modelling decisions:
   reconstructed by replay when needed.
 - **User identity is never stored beyond a Clerk `userId`.** Usernames are
   resolved on demand via `src/utils/users/clerk.ts` helpers
-  (`userIdListToUsernameList/Map`) when building responses.
+  (`userIdListToUsernameList/Map`) when building responses. This is
+  load-bearing rather than tidy: a player can change their username from
+  `/profile` (`src/components/UsernameForm.tsx`), so a stored one goes stale
+  and anything keyed by one collides the moment two players share a name.
 
 ### Response shaping
 
 Documents are never sent raw to the client. `CreateResponse()` (list summary) and
 `CreateDataResponse(viewerId)` (full game) methods convert a document into a DTO:
 they resolve usernames via Clerk and run the game's `gameStateToModel` to turn
-internal Maps/IDs into a client-friendly, username-keyed shape. DTO interfaces
+internal Maps/IDs into a client-friendly, `userId`-keyed shape — the same
+stable key the documents themselves use, since a username can change. DTO interfaces
 live in `src/utils/apiModels/GameDataApi.ts` and each game's `apiModels.ts` —
 except `IHistoryEntry`, which sits in `src/utils/games/history.ts` beside the
 resolver that owns its `{{userId}}` invariant.

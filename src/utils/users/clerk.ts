@@ -1,6 +1,7 @@
 import { clerkClient, User } from "@clerk/nextjs/server";
 import { isGuest, readableName, UNKNOWN_PLAYER_NAME } from "@/utils/ui/players";
 import { profileImageUrl } from "@/utils/ui/avatar";
+import { MIN_USERNAME_LENGTH, slugifyUsername } from "@/utils/users/username";
 
 // Shown for a userId Clerk can't resolve (a deleted account, most likely
 // today) instead of silently dropping it. Every caller below zips this
@@ -72,20 +73,6 @@ async function usersByFilter(
 
 export function usersByUsername(usernameList: string[]): Promise<User[]> {
     return usersByFilter(usernameList, username => ({ username }));
-}
-
-// Clerk handles are letters/digits/underscore only, with a minimum length; a
-// name a player typed can be anything, so a derived handle is slugged to that
-// charset and padded before it can be offered as one.
-const MIN_USERNAME_LENGTH = 4;
-const MAX_USERNAME_LENGTH = 64;
-
-function slugifyUsername(name: string): string {
-    return name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "_")
-        .replace(/^_+|_+$/g, "")
-        .slice(0, MAX_USERNAME_LENGTH);
 }
 
 // A handle derived from `name` that no current Clerk user holds — slugged to
