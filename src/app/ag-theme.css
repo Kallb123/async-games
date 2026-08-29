@@ -1315,6 +1315,19 @@ a.ag-list-row, a.ag-list-row-main {
     box-shadow: 0 0 0 2px var(--ag-gold);
 }
 .ag-score-pill--warn { box-shadow: inset 0 0 0 1.5px var(--ag-danger); }
+.ag-score-pill--tappable { cursor: pointer; }
+.ag-score-pill--tappable:active { filter: brightness(0.96); }
+/* Selected pill — pulses in sync with the board city it rings, matching the
+   tapped-card highlight (.ag-hand-card--highlighted). */
+.ag-score-pill--highlighted {
+    border-color: var(--ag-danger);
+    box-shadow: 0 0 0 1.5px var(--ag-danger);
+    --ag-pulse-min: 0.55;
+    animation: ag-pulse 1s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+    .ag-score-pill--highlighted { animation: none; }
+}
 .ag-score-dot { width: 9px; height: 9px; flex: none; border-radius: 2px; }
 .ag-score-pill--me .ag-score-dot { outline: 1.5px solid var(--ag-on-dark); }
 .ag-score-main { flex: 1; min-width: 0; }

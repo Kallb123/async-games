@@ -249,6 +249,10 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                 score: ps.hand.length,
                 isMe,
                 isActive,
+                // Tapping a player rings the city they're standing in — reusing
+                // the same board highlight a tapped card lights up.
+                onClick: () => handleCardTap(ps.city),
+                highlighted: highlightedCityId === ps.city,
             }];
         })
         : [];

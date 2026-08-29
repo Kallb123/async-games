@@ -19,6 +19,12 @@ export interface ScoreEntry {
     /** Ring this player in the danger colour — they're about to end the game
      *  (Train Time's trains running out). */
     warn?: boolean;
+    /** Tap this pill — e.g. to ring the player's location on the board. Makes
+     *  the pill a button. */
+    onClick?: () => void;
+    /** This pill is the one currently selected — pulses in sync with whatever
+     *  it highlights (Outbreak's board city). */
+    highlighted?: boolean;
 }
 
 /**
@@ -31,7 +37,14 @@ export default function GameScoreboard({ entries }: { entries: ScoreEntry[] }) {
     return (
         <div className="ag-scorestrip">
             {entries.map((e) => (
-                <div key={e.id} className={`ag-score-pill${e.isMe ? ' ag-score-pill--me' : ''}${e.warn ? ' ag-score-pill--warn' : ''}`}>
+                <div
+                    key={e.id}
+                    className={`ag-score-pill${e.isMe ? ' ag-score-pill--me' : ''}${e.warn ? ' ag-score-pill--warn' : ''}${e.onClick ? ' ag-score-pill--tappable' : ''}${e.highlighted ? ' ag-score-pill--highlighted' : ''}`}
+                    onClick={e.onClick}
+                    role={e.onClick ? 'button' : undefined}
+                    tabIndex={e.onClick ? 0 : undefined}
+                    onKeyDown={e.onClick ? (ev) => { if (ev.key === 'Enter') e.onClick!(); } : undefined}
+                >
                     <span className="ag-score-dot" style={{ background: e.color }} />
                     <div className="ag-score-main">
                         <div className="ag-score-name">
