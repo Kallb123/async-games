@@ -5,22 +5,27 @@ see, covering both a **changeable username** (the unique handle they're
 invited by) and a **secondary display name** (a friendly, non-unique label
 alongside it), plus the other models worth considering.
 
-Short answer, in two phases: **first re-key the response DTOs by `userId`,
-then make the Clerk username editable.**
+Short answer, in three phases:
+
+1. **Re-key the response DTOs by `userId`** (§3) — six games key board state by
+   resolved *name*.
+2. **Tokenise the history strings** (§4) — 89 sites bake a name into stored
+   text.
+3. **Make the Clerk username editable** (§5) — the actual feature.
 
 Names are already resolved per request from Clerk on every path that matters,
-so the rename itself is a UI job, not a data job — roughly one form on
-`/profile` and one extracted field component.
+so phase 3 is a UI job, not a data job — roughly one form on `/profile` and one
+extracted field component.
 
-The reason for phase one is that six games currently key their board state by
-resolved *name*. Global username uniqueness is the only thing making that safe,
-which means today's correctness rests on a property we are about to remove.
-Even with uniqueness preserved, keying on a mutable value is a latent bug: it
-works until someone renames mid-game. It is worth fixing **on its own merits,
-independent of this feature** — and it turns out to be cheap, because
-persisted state is already `userId`-based everywhere (§3). The mutable key
-exists only in the DTO layer, so phase one is mostly *deleting* translation
-code, with no migration.
+Phases 1 and 2 are the same principle applied at two layers: **the thing you
+store should be the thing that never changes.** Both are worth doing **on their
+own merits, independent of this feature** — today's correctness rests on
+usernames being unique and permanent, which is precisely the property we are
+about to remove. Both are also cheaper than they look. Persisted game state is
+already `userId`-based everywhere, so phase 1 is mostly *deleting* translation
+code with no migration (§3a); and phase 2's mechanism **already exists and
+ships in two games** — just duplicated, undelimited, and applied inconsistently
+(§4a).
 
 ---
 
@@ -66,17 +71,17 @@ the feature, and it is where the risk lives (§3).
 ### 1b. Where a name is frozen rather than resolved
 
 Four places snapshot a name instead of re-resolving it. Three are deliberate
-and correct; the fourth is out of scope:
+and correct; the fourth is the subject of §4:
 
 | Snapshot | Where | Behaviour under a rename |
 |---|---|---|
 | `IGameCommand.senderUsername` | written `api/game/command/route.ts:135` | **Self-healing.** `replay.ts:301` prefers today's resolved name; rewritten next turn. |
 | `GameResult.guestNames` | `guest.ts:119` → `finishGame.ts:106` | **Correct as-is.** Snapshots guests whose Clerk user gets swept after `GUEST_SWEEP_DAYS`. Migrating it would be wrong. |
 | `Invitation.senderName` | written `api/lobby/route.ts:111`, read `lobbyPreview.ts:58` | **Goes stale** for the lobby's remaining TTL. Already documented as such on the field. Acceptable — a lobby is short-lived, and `lobbyPreview.ts:58` already falls back to a live Clerk read when the field is absent. |
-| `gameState.history[]` | 89 `unshift`/`push` sites across 8 game folders | **Frozen forever.** Names are baked into formatted strings. Out of scope per brief — this is test data today. |
+| `gameState.history[]` | 89 `unshift`/`push` sites across 8 game folders | **Frozen forever** — except in the 2 games that already resolve ids at render (`replaceHistoryUserIds`). The inconsistency, and the fix, are §4. |
 
 Nothing in Mongo is *keyed* on a name. **There is no migration.** The only
-write worth planning is a new one, not a backfill (§4a).
+write worth planning is a new one, not a backfill (§5e).
 
 ### 1c. Two defects this work should sweep up
 
@@ -107,7 +112,8 @@ Also worth deleting while in the file: **`usernameListToUserIdList`
 | # | Option | What the player gets | Pros | Cons | Verdict |
 |---|---|---|---|---|---|
 | **0** | **Re-key DTOs by `userId`** (prerequisite, not a user-facing option) | Nothing directly — it unblocks the rest | Removes a mutable key that is a latent bug today. Storage is already id-based, so **no migration**. `playerByUserId` already exists with 37 call sites. Net *deletes* translation code. Makes A safe and B/C possible. | Touches six games' render paths, which is where regressions hide. Slightly less readable raw JSON (§3a). Should land as its own PR. | ✅ **Do first** |
-| **A** | **Editable Clerk username** — `user.update({ username })` | One name, changeable, still globally unique | Zero new storage, zero new API routes. Propagates automatically through `nameOf`. Clerk enforces uniqueness and availability. Fixes §1c defects as a side effect. | Frees the old handle for someone else to claim → invite-by-handle can resolve to a different person (**locksmith**, §5). Needs `username` enabled as a Clerk instance attribute — verify first. | ✅ **Then this** |
+| **0b** | **Tokenise history strings** (prerequisite, §4) | Nothing directly — history lines stop lying after a rename | Mechanism already ships in 2 games, so this is mostly *consolidation*: replaces a byte-identical duplicated helper and a naive substring replace. Also kills `MatchHistory`'s `startsWith` actor guess (§4c). Schema change is **free today** while history is test data. | 89 write sites to touch, though mechanically. Raw Mongo history becomes less readable. Changes a persisted field's shape — cheap now, expensive later. | ✅ **Do while free** |
+| **A** | **Editable Clerk username** — `user.update({ username })` | One name, changeable, still globally unique | Zero new storage, zero new API routes. Propagates automatically through `nameOf`. Clerk enforces uniqueness and availability. Fixes §1c defects as a side effect. | Frees the old handle for someone else to claim → invite-by-handle can resolve to a different person (**locksmith**, §6). Needs `username` enabled as a Clerk instance attribute — verify first. | ✅ **Then this** |
 | **B** | **Secondary display name** — editable `firstName`, shown to everyone | A friendly non-unique name; handle stays fixed | Familiar (Twitter/X). Non-unique means no "name taken" friction. Field already exists — no schema change. | Requires flipping `readableName`'s order. **Blocked until option 0 lands**, or non-unique names collapse board state (§3). Handle still unchangeable, so the original ask is only half met. | ⚠️ Viable after 0 |
 | **C** | **Both tiers** — handle *and* display name (Discord/GitHub) | Changeable `@handle` plus a separate display name | The model users expect from Discord/GitHub. Most flexible. After option 0 the technical objection dissolves, leaving a **product** decision rather than an engineering one. | Two editors and two validation rules. Impersonation surface is wider than A: a non-unique display name can freely copy someone else's. | ⚠️ Product call, after 0 |
 | **D** | **Per-game / per-lobby nickname** | A different name per table | Fun; sidesteps global uniqueness (per-lobby `uniqueGuestName` already exists). | `GameData` deliberately stores **no** names. Needs a second lookup path beside `buildUserDirectory` and a per-game override in all 8 `gameStateToModel`s. Duplicates `nameOf` once per game. Impersonation risk inside a game. | ❌ Over-engineered |
@@ -229,19 +235,137 @@ the concrete payoff, not just tidiness.
 
 ---
 
-## 4. Implementation plan — phase 2 (option A)
+## 4. String outputs — the same problem, one layer down
+
+§3 fixes the *keys*. It does not fix the **89 history lines** that bake a name
+into a stored string. This section is the answer to "should history store a
+token and resolve it at render?" — and the answer is **yes, because the repo
+is already doing it, badly, in two games.**
+
+### 4a. What is actually stored today
+
+`gameState.history[]` is `string[]`, persisted, and read by the live board via
+`publicGameState`. Across the 8 game folders there are **89 write sites**, and
+they are not consistent:
+
+- **Most bake a name.** `${this.senderUsername} rolled a ${roll}` —
+  `SnakesAndLaddersLogic.ts:155`, and the same shape in all 8 games.
+- **Some write a raw `userId`.** `WorldDominationLogic.ts:79` writes
+  `${riskData.currentTurn} drew a World Domination card`; `:60` writes
+  `${first}`; `:357` writes `${defenderEliminated} eliminated!`. All three are
+  Clerk ids.
+
+To clean up the second group, **two games already resolve ids at render time**:
+
+```ts
+// SettlementsAndCitiesModels.ts:400 — and byte-identical at
+// WorldDominationModels.ts:299
+function replaceHistoryUserIds(history: string[], userIdNameMap: {...}): string[] {
+    return history.map(entry => {
+        let updated = entry;
+        for (const [userId, username] of Object.entries(userIdNameMap)) {
+            if (!userId) continue;
+            updated = updated.split(userId).join(username);
+        }
+        return updated;
+    });
+}
+```
+
+Hooked in through `publicGameState`'s optional history-override parameter
+(`GameData.ts:29`), which exists for exactly this.
+
+**So the mechanism is already in production.** It arrived as a patch for a few
+accidental id interpolations rather than as a design, which is why it is
+duplicated, undelimited, and applied by only 2 of 8 games. The result is that a
+single history array can hold both a frozen name and a live-resolved id.
+
+### 4b. Three things wrong with the current version
+
+1. **Duplicated verbatim** in two files — a caveman finding on its own.
+2. **No delimiter.** It substring-matches raw Clerk ids, and it **re-scans its
+   own output**: each replacement runs over the result of the previous one, so
+   a name containing another player's id would double-substitute. Vanishingly
+   unlikely, but it is luck, not design.
+3. **O(entries × players)** per response, with a `split`/`join` allocation per
+   player per line.
+
+### 4c. The heuristic this would also kill
+
+`MatchHistory.tsx:29` works out **who each line is about** by prefix-matching
+the rendered name:
+
+```ts
+dotColour: playerColourFor(usernames.find(u => entry.startsWith(u)), usernames)
+```
+
+That is guesswork. It mis-attributes when one name prefixes another ("Dave" vs
+"DaveT", resolved by array order), and under a rename it fails outright — the
+frozen line says the old name, `usernames` holds the new one, so the line
+loses its colour. A stored actor id turns this from a guess into a fact.
+
+### 4d. Recommendation — do it, and do it now
+
+Store the actor **structurally** and any other mentions as **delimited tokens**:
+
+```ts
+interface IHistoryEntry {
+    text: string;          // "{{user_2abc}} attacked Ukraine from Ural"
+    actorId?: string;      // whose line this is — kills the startsWith guess
+}
+```
+
+One shared resolver in `src/utils/games/` replaces both copies of
+`replaceHistoryUserIds`: a single-pass regex over `{{…}}` that does **not**
+re-scan substituted output, falling back to `UNKNOWN_PLAYER_NAME` for an id it
+cannot resolve (a swept guest). Rendered as React text, as today, so escaping
+is unchanged.
+
+**Why now specifically:** this changes the shape of a persisted field. Today
+`gameState.history` is test data you have said can be discarded, so the schema
+change costs nothing. Once real games exist you are choosing between a
+migration and living with tokens-in-strings forever. **This is the cheapest
+this will ever be** — which is the strongest argument for pulling it forward
+into the same batch of work rather than leaving it as the "someday" item my
+first draft made it.
+
+### 4e. What this is not
+
+Not full structured events (`{ type, params }` with a formatter registry per
+line). That would mean 89 formatters plus a registry to replace 89 template
+strings — the "right" design for a greenfield engine, and over-engineering
+here. The recap timeline already provides structured events for the views that
+need them (`replay.ts:262-269` carries `senderId`, `summary` and `timestamp`
+separately). Keep the strings; fix what is baked into them.
+
+### 4f. Two related notes
+
+- **The other string paths are fine.** The recap/timeline regenerates its
+  strings from `commandHistory` on every build, re-resolving `senderUsername`
+  first (`replay.ts:301`), so it is already live. Push copy is generated at
+  send time and delivered — inherently a snapshot, correctly so.
+- **A perspective is baked in too, not just a name.**
+  `WorldDominationLogic.ts:355` stores `you lost ${attackerLosses}` in the
+  *shared* history every player reads, so an opponent sees "you lost 2" about
+  someone else's losses. Pre-existing and out of scope here, but it is the same
+  class of mistake — freezing a viewer-dependent value into a shared string —
+  and worth a **croupier** look while this area is open.
+
+---
+
+## 5. Implementation plan — the rename itself (option A)
 
 Phase 1 is option 0, scoped in §3a: re-key the DTOs, its own PR, no user-facing
 change. What follows assumes it has landed.
 
-### 4a. Verify first
+### 5a. Verify first
 
 Clerk's `username` must be enabled as an instance attribute or
 `user.update({ username })` fails with `form_param_unknown`. `/signup` mounts
 Clerk's own `<SignUp />`, so the attribute set is dashboard-controlled and not
 visible in this repo. **Check before writing code.**
 
-### 4b. The write — client-side, no API route
+### 5b. The write — client-side, no API route
 
 Use the `useProfilePicture` precedent (`utils/hooks/useProfilePicture.tsx:32-44`),
 **not** `/api/user/claim`. Claim is server-side because it juggles a placeholder
@@ -256,7 +380,7 @@ Zero API code. Clerk returns `form_identifier_exists` for a taken handle, which
 surfaces as a sentence the player can act on — the same
 `clerkErrorMessage`-shaped handling `ClaimAccountForm` already does.
 
-### 4c. What must be reused
+### 5c. What must be reused
 
 Per AGENTS.md's component-reuse rule, none of this is new:
 
@@ -274,7 +398,7 @@ Per AGENTS.md's component-reuse rule, none of this is new:
 - **Preview text**: `profileHeading` / `personalName` / `publicHandle`. Never
   re-derive "which name shows here".
 
-### 4d. The one extraction worth making
+### 5d. The one extraction worth making
 
 `join/JoinForm.tsx:340-365` is **already** a display-name field: label +
 `ag-input` + `maxLength={MAX_GUEST_NAME_LENGTH}` + `isValidGuestName` gate +
@@ -287,14 +411,14 @@ optional `onReroll`, `label`) and use it in both. Note the shared piece is the
 to Clerk. A `useDisplayName` hook would have one call site, which AGENTS.md
 rule 3 says is not yet a shared piece.
 
-### 4e. Sweep-up (small, same PR)
+### 5e. Sweep-up (small, same PR)
 
 - Set a username on the claim path so claimed guests stop being invisible (§1c).
 - Route `UserInviteList`'s three raw `friend.user.username` reads through
   `displayName()`/`publicHandle()`.
 - Delete `usernameListToUserIdList` — dead code.
 
-### 4f. Not needed
+### 5f. Not needed
 
 No Mongo migration. No backfill. No new collection. No new API route — in
 either phase. Nothing about dynamic names touches storage, because storage
@@ -302,7 +426,7 @@ never held a name in the first place.
 
 ---
 
-## 5. Handoffs
+## 6. Handoffs
 
 Per AGENTS.md's review-crew boundaries, these are outside this document:
 
