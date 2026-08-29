@@ -1300,6 +1300,20 @@ describe("Operations Expert (§11)", () => {
         expect(outcome.validMove).toBe(false);
     });
 
+    it("rejects the flight when paying with an event card rather than a city card", async () => {
+        const state = baseState(["u1"]);
+        const ps = state.players.get("u1")!; // starts at Atlanta, which has a station
+        ps.role = 'opsExpert';
+        ps.hand = [EVENT_CARD_AIRLIFT];
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await cmd({ kind: 'opsExpertFlight', destination: idFor("Tokyo"), cardId: EVENT_CARD_AIRLIFT }).Execute(game);
+
+        expect(outcome.validMove).toBe(false);
+        expect(ps.city).toBe(ATLANTA_CITY_ID);
+        expect(ps.hand).toEqual([EVENT_CARD_AIRLIFT]);
+    });
+
     it("resets the once-per-turn flight when her turn comes back around", () => {
         const state = baseState(["u1", "u2"]);
         const ps = state.players.get("u1")!;

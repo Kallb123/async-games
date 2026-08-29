@@ -18,6 +18,10 @@ export interface IOutbreakPlayerStateResponse {
     // (§2, §21.6 step 10).
     contingencyCard: number | null;
     actionsLeft: number;
+    // Operations Expert (§11): whether her once-per-turn station-to-anywhere
+    // flight has been spent this turn. Public like actionsLeft (§2), so the
+    // action picker can offer the flight only while it's still available.
+    opsExpertFlightUsed: boolean;
     // Running totals for the end-of-game charts — see IOutbreakPlayerState.
     cubesTreated: number;
     timesTravelled: number;

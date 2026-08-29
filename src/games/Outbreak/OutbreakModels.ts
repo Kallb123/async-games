@@ -440,6 +440,7 @@ export function gameStateToModel(
             role: ps.role,
             contingencyCard: ps.contingencyCard,
             actionsLeft: ps.actionsLeft,
+            opsExpertFlightUsed: ps.opsExpertFlightUsed,
             cubesTreated: ps.cubesTreated,
             timesTravelled: ps.timesTravelled,
         };

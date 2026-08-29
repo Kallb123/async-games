@@ -15,6 +15,7 @@ import {
     cardColor,
     cardName,
     isEventCardId,
+    roleDef,
 } from '@/games/Outbreak/board';
 import { stationCityIds } from '@/games/Outbreak/rules';
 import { OutbreakPlayEvent } from '@/utils/apiModels/GameLogic';
@@ -164,7 +165,7 @@ export default function OutbreakEventTray({
                             <span className="ag-icon-box">🧑‍⚕️</span>
                             <span className="ag-build-main">
                                 <span className="ag-build-name">{username === myUsername ? 'You' : username}</span>
-                                <span className="ag-build-cost">{CITIES[p.city].name}</span>
+                                <span className="ag-build-cost">{[roleDef(p.role)?.name, CITIES[p.city].name].filter(Boolean).join(' · ')}</span>
                             </span>
                             <span className="ag-build-tag">Pick</span>
                         </button>,
