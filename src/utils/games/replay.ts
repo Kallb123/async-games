@@ -1,6 +1,6 @@
 import { IGameData } from "../mongodb/GameData";
 import { UNKNOWN_PLAYER_NAME } from "../users/clerk";
-import { IHistoryEntry, resolveStoredHistory } from "./history";
+import { IHistoryEntry, resolveHistory } from "./history";
 import { IGameCommand, IGameType, ICommandOutcome } from "../apiModels/GameLogic";
 import { deserializeJSON } from "../apiModels/Serialisable";
 import { runCommand } from "./commandPipeline";
@@ -277,7 +277,7 @@ export async function buildTimeline(
             currentTurn: state.currentTurn,
             complete: state.complete,
             winner: state.winner,
-            history: resolveStoredHistory(state.gameState.history, historyNames),
+            history: resolveHistory(state.gameState.history, historyNames),
             command: command
                 ? {
                       senderId: command.senderId,
@@ -353,7 +353,7 @@ export async function buildTimeline(
     // beyond what the replayed commands produced. Append them to every snapshot
     // so the setup steps stay visible throughout recap/planning.
     const persistedHistory = gameData.gameState.history ?? [];
-    const setupHistory = resolveStoredHistory(persistedHistory.slice(state.gameState.history.length), historyNames);
+    const setupHistory = resolveHistory(persistedHistory.slice(state.gameState.history.length), historyNames);
 
     const resolvedPlannedCommands: unknown[] = [];
     if (!gameOver && plannedCommands.length) {

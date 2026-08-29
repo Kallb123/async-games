@@ -59,13 +59,13 @@ describe("publicGameState", () => {
         expect(result.history).toEqual([{ text: "Alice rolled a 6", actorId: "user-1" }]);
     });
 
-    it("still resolves a line stored before its game was converted", () => {
+    it("names a player it cannot resolve rather than shipping their id", () => {
         const state = makeGameState();
-        state.history = ["user-1 rolled a 6"];
+        state.history = [{ text: "{{user-gone}} rolled a 6" }];
 
         const result = publicGameState(state, NAMES);
 
-        expect(result.history).toEqual([{ text: "Alice rolled a 6" }]);
+        expect(result.history).toEqual([{ text: "Unknown player rolled a 6" }]);
     });
 });
 

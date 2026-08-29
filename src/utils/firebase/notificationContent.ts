@@ -6,7 +6,7 @@ import { formatElapsedTime } from '@/utils/games/TurnTimer';
 import { nameList } from '@/utils/ui/players';
 import { gameNotificationImage, PushNotification } from './pushNotification';
 import { truncate } from '@/utils/ui/text';
-import { resolveStoredHistory } from "@/utils/games/history";
+import { resolveHistory } from "@/utils/games/history";
 
 // Every piece of user-visible push copy in the app is written here rather than
 // inline in the route that sends it. Three routes can hand a player their turn
@@ -74,7 +74,7 @@ async function describeWhatHappened(
 
     // Straight off the stored log, so the {{userId}} tokens in it still have to
     // be resolved — this copy is read by a player, not by the engine.
-    const latestHistory = resolveStoredHistory(gameData.gameState.history.slice(0, 1), userIdNameMap)[0];
+    const latestHistory = resolveHistory(gameData.gameState.history.slice(0, 1), userIdNameMap)[0];
     return latestHistory ? sentence(latestHistory.text) : null;
 }
 

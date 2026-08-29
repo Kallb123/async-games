@@ -38,7 +38,6 @@ import {
     totalScore,
 } from "./board";
 import type { ICommandOutcome, IGameCommand } from "@/utils/apiModels/gameCommand";
-import { IHistoryEntry } from "@/utils/games/history";
 
 // ─── Minimal in-memory game harness ─────────────────────────────────────────
 // The commands only ever touch the plain IGameData-shaped object handed to
@@ -785,7 +784,7 @@ describe("the Long Haul bonus (§7)", () => {
 
         await play(game, claim(routeId, Array(route.length).fill('red')));
 
-        expect((game.gameState.history[0] as IHistoryEntry).text).toContain(`longest run now ${route.length}`);
+        expect(game.gameState.history[0].text).toContain(`longest run now ${route.length}`);
     });
 });
 

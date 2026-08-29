@@ -3,14 +3,13 @@ import { GameEndReason, IGameDataResponse, IGameResponse, uuidString } from "../
 import { UserDirectory, userIdListToUsernameList } from "../users/clerk";
 import { IGameCommand, IGameType } from "../apiModels/GameLogic";
 import { actionableTurnFilter } from "../games/TurnTimer";
-import { IHistoryEntry, StoredHistoryEntry, resolveStoredHistory } from "../games/history";
+import { IHistoryEntry, resolveHistory } from "../games/history";
 
 export interface IGameState {
     turnOrder: string[],
     // Newest first. Player mentions are stored as {{userId}} tokens and
-    // resolved on the way out — see utils/games/history.ts. `string` is the
-    // pre-conversion shape, still on disk for the games not yet converted.
-    history: StoredHistoryEntry[],
+    // resolved on the way out — see utils/games/history.ts.
+    history: IHistoryEntry[],
     commandHistory: IGameCommand[]
 }
 
@@ -34,7 +33,7 @@ export function publicGameState(
     gameState: IGameState,
     userIdNameMap: { [key: string]: string }
 ): IGameDataResponse['gameState'] {
-    return { turnOrder: gameState.turnOrder, history: resolveStoredHistory(gameState.history, userIdNameMap) };
+    return { turnOrder: gameState.turnOrder, history: resolveHistory(gameState.history, userIdNameMap) };
 }
 
 export interface IGameData {
@@ -105,9 +104,9 @@ export var GameDataSchema = new Schema<IGameDataDocument> ({
     missedTurnCounts: { type: Schema.Types.Map, of: Number, default: () => new Map() },
     gameState: {
         turnOrder: [String],
-        // Mixed rather than a { text, actorId } subdocument only until every
-        // game has been converted — the unconverted ones still write a string.
-        history: [Schema.Types.Mixed],
+        // _id: false — a log line is identified by its position, and giving
+        // every one of them an ObjectId only pads the document.
+        history: [{ _id: false, text: String, actorId: String }],
         commandHistory: [
             Schema.Types.Mixed
             // {

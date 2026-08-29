@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { historyText, resolveHistory, resolveStoredHistory, userToken } from "./history";
+import { playerHistory, resolveHistory, userToken } from "./history";
 import { UNKNOWN_PLAYER_NAME } from "@/utils/ui/players";
 
 const NAMES = { user_a: "Alice", user_b: "Bob" };
@@ -33,6 +33,20 @@ describe("resolveHistory", () => {
             .toEqual([{ text: "{{user_b}} won" }]);
     });
 
+    it("copies the fields it knows and nothing else", () => {
+        // What a Mongoose subdocument looks like to a spread: internals as own
+        // properties, the fields themselves on the prototype.
+        const stored = Object.assign(
+            Object.create({ text: "{{user_a}} won", actorId: "user_a" }),
+            { $__parent: { specificGameState: { secretCode: [3, 1, 4, 1] } } },
+        );
+
+        const resolved = resolveHistory([stored], NAMES);
+
+        expect(resolved).toEqual([{ text: "Alice won", actorId: "user_a" }]);
+        expect(JSON.stringify(resolved)).not.toContain("secretCode");
+    });
+
     it("names an id it cannot resolve rather than leaking it", () => {
         // A guest swept seven days after their last game.
         expect(resolveHistory([{ text: "{{user_gone}} passed" }], NAMES))
@@ -40,31 +54,9 @@ describe("resolveHistory", () => {
     });
 });
 
-describe("resolveStoredHistory", () => {
-    it("resolves a line stored before its game was converted", () => {
-        expect(resolveStoredHistory(["user_a rolled a 6"], NAMES))
-            .toEqual([{ text: "Alice rolled a 6" }]);
-    });
-
-    it("takes both shapes in one log", () => {
-        expect(resolveStoredHistory([{ text: "{{user_b}} won", actorId: "user_b" }, "user_a rolled a 6"], NAMES))
-            .toEqual([{ text: "Bob won", actorId: "user_b" }, { text: "Alice rolled a 6" }]);
-    });
-
-    it("prefers the longest matching id in a legacy line", () => {
-        expect(resolveStoredHistory(["user_ab won"], { user_a: "Alice", user_ab: "Abe" }))
-            .toEqual([{ text: "Abe won" }]);
-    });
-
-    it("does not rescan a name substituted into a legacy line", () => {
-        expect(resolveStoredHistory(["user_a won"], { user_a: "user_b", user_b: "Bob" }))
-            .toEqual([{ text: "user_b won" }]);
-    });
-});
-
-describe("historyText", () => {
-    it("reads either shape", () => {
-        expect(historyText("Alice won")).toBe("Alice won");
-        expect(historyText({ text: "Alice won" })).toBe("Alice won");
+describe("playerHistory", () => {
+    it("writes the actor's mention and records who they are", () => {
+        expect(playerHistory("user_a", "rolled a 6"))
+            .toEqual({ text: "{{user_a}} rolled a 6", actorId: "user_a" });
     });
 });

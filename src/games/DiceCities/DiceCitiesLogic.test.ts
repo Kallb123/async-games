@@ -9,7 +9,6 @@ import {
 import { BANK_TOTAL_COINS, DiceCitiesCardIds, DiceCitiesCards, STARTING_PLAYER_COINS } from "./cards";
 import { buildInitialDiceCitiesState } from "./DiceCitiesModels";
 import type { IDiceCitiesGameData, IDiceCitiesGameState, IDiceCitiesPlayerState } from "./DiceCitiesModels";
-import { IHistoryEntry } from "@/utils/games/history";
 
 // ─── Minimal in-memory game harness ────────────────────────────────────────
 // The bank only cares about coins moving, so these states carry just the cards
@@ -115,7 +114,7 @@ describe("Dice Cities bank supply", () => {
         expect(roller.money).toBe(2);
         expect(roller.totalCoinsEarned).toBe(2);
         expect(gs.bankMoney).toBe(0);
-        expect(game.gameState.history.some(h => (h as IHistoryEntry).text.includes("The bank ran out of coins - 3 coins"))).toBe(true);
+        expect(game.gameState.history.some(h => h.text.includes("The bank ran out of coins - 3 coins"))).toBe(true);
     });
 
     it("pays nothing at all once the bank is empty", async () => {
