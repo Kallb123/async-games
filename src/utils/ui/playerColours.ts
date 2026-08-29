@@ -19,3 +19,12 @@ export function playerColourFor(username: string | null | undefined, usernames: 
     const index = username ? usernames.indexOf(username) : -1;
     return index >= 0 ? playerColour(index) : NEUTRAL_PLAYER_COLOUR;
 }
+
+// The colour for a player identified by their stable Clerk userId, following
+// the game's userIdList order (parallel to usernameList, so the swatch matches
+// playerColourFor's). Prefer this on any board that keys players by id — unlike
+// the name-based version, a rename can't shift a player's swatch.
+export function playerColourForId(userId: string | null | undefined, userIdList: string[]): string {
+    const index = userId ? userIdList.indexOf(userId) : -1;
+    return index >= 0 ? playerColour(index) : NEUTRAL_PLAYER_COLOUR;
+}

@@ -14,6 +14,15 @@ export function opponents(game: IGameResponse, me: string | null | undefined, em
     return nameList(game.usernameList.filter(u => u !== me), emptyLabel);
 }
 
+// Same summary, but identifies "you" by your stable Clerk userId rather than
+// your display name — reading the parallel userIdList/usernameList to filter by
+// id and show the name. A rename can't make you count as your own opponent, and
+// two players sharing a display name are still told apart.
+export function opponentsById(game: IGameResponse, myId: string | null | undefined, emptyLabel = "solo"): string {
+    const names = game.usernameList.filter((_, i) => game.userIdList[i] !== myId);
+    return nameList(names, emptyLabel);
+}
+
 // Any user the app has to put a name to — a Clerk user, a profile DTO, a
 // friend row. Every field is optional so all of them fit, and every resolver
 // below is the answer to one question about this shape.
