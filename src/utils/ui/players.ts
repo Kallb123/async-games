@@ -43,7 +43,7 @@ export function isGuest(user: NamedUser): boolean {
 // anything anyone picked (docs/account-less-play.md §5), so a guest has no
 // handle to show — every caller here treats "no handle" as "show none",
 // never as "show the account id".
-function publicHandle(user: NamedUser | null | undefined): string | null {
+export function publicHandle(user: NamedUser | null | undefined): string | null {
     if (!user || isGuest(user)) return null;
     return user.username || null;
 }
