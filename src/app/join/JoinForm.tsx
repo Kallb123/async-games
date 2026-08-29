@@ -16,7 +16,7 @@ import DisplayNameField from "@/components/ui/DisplayNameField";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { JOIN_CODE_LENGTH, normaliseJoinCode, readJoinCode } from "@/utils/games/joinCode";
 import { invitedYouTo, lobbyPath, seatsLeftLabel } from "@/utils/games/lobby";
-import { isValidGuestName, randomGuestName } from "@/utils/games/guestName";
+import { MAX_GUEST_NAME_LENGTH, isValidGuestName, randomGuestName } from "@/utils/games/guestName";
 import { readResumeTicket } from "@/utils/users/resumeLink";
 import { useEnterStartedGame } from "@/utils/hooks/useEnterStartedGame";
 import ResumeLinkOffer from "@/components/ui/ResumeLinkOffer";
@@ -50,7 +50,6 @@ function JoinButton({ joining, disabled }: { joining: boolean; disabled: boolean
     <button
       type="submit"
       className="ag-btn ag-btn--primary ag-btn--block"
-      style={{ marginTop: 12 }}
       disabled={disabled}
     >
       {joining ? 'Joining…' : 'Join game'}
@@ -335,18 +334,18 @@ function JoinScreen({ initiallySignedIn, initialName, initialDie }: JoinScreenPr
 
     return (
       <AuthScreen title={title} subtitle={subtitle}>
-        <form onSubmit={handleGuestSubmit} className="ag-section" style={{ width: "100%" }}>
+        <form onSubmit={handleGuestSubmit} className="ag-section ag-stack" style={{ width: "100%" }}>
           <JoinCodeField code={code} onChange={setCode} />
           <DisplayNameField
             id="guest-name"
             label="Your username"
             value={name}
             onChange={setName}
+            maxLength={MAX_GUEST_NAME_LENGTH}
             placeholder="Your name"
             disabled={joining}
             dieValue={nameDie}
             onReroll={rerollName}
-            style={{ marginTop: 12 }}
           />
           <JoinButton joining={joining} disabled={joining || !normaliseJoinCode(code) || !isValidGuestName(name.trim())} />
         </form>
@@ -375,7 +374,7 @@ function JoinScreen({ initiallySignedIn, initialName, initialDie }: JoinScreenPr
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="ag-section">
+      <form onSubmit={handleSubmit} className="ag-section ag-stack">
         <JoinCodeField code={code} onChange={setCode} />
         <JoinButton joining={joining} disabled={joining || !normaliseJoinCode(code)} />
       </form>

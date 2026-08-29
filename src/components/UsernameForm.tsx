@@ -1,11 +1,9 @@
 'use client'
 
 import { useState } from "react";
-import { useUser } from "@clerk/nextjs";
-import { useToast } from "@/components/ToastContext";
 import ActionButton from "@/components/ui/ActionButton";
 import DisplayNameField from "@/components/ui/DisplayNameField";
-import { clerkErrorMessage } from "@/utils/users/clerkErrors";
+import { useClerkUserSave } from "@/utils/hooks/useClerkUserSave";
 import { MAX_USERNAME_LENGTH, USERNAME_RULE, isValidUsername } from "@/utils/users/username";
 
 // Changing the handle a player is known and invited by. A username is one
@@ -21,35 +19,26 @@ export default function UsernameForm({ onSaved }: {
     /** Closes the editor once the new handle is live. */
     onSaved?: () => void;
 }) {
-    const { user } = useUser();
-    const { showToast } = useToast();
+    // The guard, the reload that makes the new handle current everywhere it
+    // shows, the toasts and the in-flight flag are the same four things a
+    // profile picture needs, so they live in the shared hook.
+    const { user, isSaving, save } = useClerkUserSave();
     const current = user?.username ?? '';
     const [username, setUsername] = useState(current);
-    const [saving, setSaving] = useState(false);
 
     const next = username.trim();
     const canSave = !!user && next !== current && isValidUsername(next);
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        if (saving || !canSave) return;
-        setSaving(true);
+        if (!canSave) return;
 
-        try {
-            await user.update({ username: next });
-            // Every name on screen is resolved from the signed-in user, so
-            // re-read it before saying the change landed. The handle is
-            // already saved by this point, so a failure here is a stale
-            // header, not a failed rename — don't report it as one.
-            await user.reload().catch(error => console.error('Failed to reload the user', error));
-            showToast(`You're @${next} now.`, 'success', 'Username changed');
-            onSaved?.();
-        } catch (error) {
-            console.error('Failed to change the username', error);
-            showToast(clerkErrorMessage(error, "Couldn't change your username. Please try again."), 'danger');
-        } finally {
-            setSaving(false);
-        }
+        const saved = await save(user => user.update({ username: next }), {
+            success: `You're @${next} now.`,
+            title: 'Username changed',
+            failure: "Couldn't change your username. Please try again.",
+        });
+        if (saved) onSaved?.();
     };
 
     return (
@@ -61,7 +50,7 @@ export default function UsernameForm({ onSaved }: {
                 onChange={setUsername}
                 maxLength={MAX_USERNAME_LENGTH}
                 placeholder="yourname"
-                disabled={saving}
+                disabled={isSaving}
             />
             <p className="ag-hint" style={{ margin: 0 }}>
                 This is how friends find and invite you. {USERNAME_RULE}
@@ -69,7 +58,7 @@ export default function UsernameForm({ onSaved }: {
             <ActionButton
                 type="submit"
                 className="ag-btn ag-btn--primary ag-btn--block"
-                pending={saving}
+                pending={isSaving}
                 pendingLabel="Saving…"
                 disabled={!canSave}
             >

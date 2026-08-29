@@ -1,8 +1,6 @@
 'use client'
 
-import { CSSProperties } from "react";
 import DieFace from "@/components/ui/DieFace";
-import { MAX_GUEST_NAME_LENGTH } from "@/utils/games/guestName";
 
 interface DisplayNameFieldProps {
     /** Ties the label to the input — unique to the screen using it. */
@@ -10,8 +8,8 @@ interface DisplayNameFieldProps {
     label: string;
     value: string;
     onChange: (value: string) => void;
-    /** Defaults to the guest-name cap; a handle field passes its own. */
-    maxLength?: number;
+    /** Each caller's own cap — a display name and a handle differ. */
+    maxLength: number;
     placeholder?: string;
     disabled?: boolean;
     /**
@@ -21,8 +19,6 @@ interface DisplayNameFieldProps {
      */
     dieValue?: number;
     onReroll?: () => void;
-    /** Spacing for the block, when it isn't the first thing in its form. */
-    style?: CSSProperties;
 }
 
 /**
@@ -36,11 +32,10 @@ interface DisplayNameFieldProps {
  * submitting stay with the form, and only the field itself is shared.
  */
 export default function DisplayNameField({
-    id, label, value, onChange, maxLength = MAX_GUEST_NAME_LENGTH,
-    placeholder, disabled, dieValue, onReroll, style,
+    id, label, value, onChange, maxLength, placeholder, disabled, dieValue, onReroll,
 }: DisplayNameFieldProps) {
     return (
-        <div style={style}>
+        <div>
             <label htmlFor={id} className="ag-section-label ag-field-label">{label}</label>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <input

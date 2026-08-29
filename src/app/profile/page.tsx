@@ -118,6 +118,13 @@ export default function Profile() {
     }
 
     const guest = !!user && isGuest(user);
+    // A guest is not offered the handle editor: theirs is the account id
+    // createGuest() minted and publicHandle shows none, so a handle would be
+    // one nobody sees until they claim the account — which mints them a real
+    // one anyway. This is what we offer, not a control: the write is the
+    // browser's own call to Clerk, so nothing server-side refuses a guest who
+    // makes it themselves (see the locksmith's note in docs/dynamic-names.md).
+    const canEditUsername = !!user && !guest;
     // Null name while Clerk is still loading you, so the header sits as a
     // placeholder instead of showing "Y" for a stand-in "You".
     const heading = profileHeading(user, "You");
@@ -137,18 +144,15 @@ export default function Profile() {
             </div>
 
             {/* Identity — your own avatar is the way in to changing your
-                picture, and the controls under it the way in to the rest.
-                A guest has no handle to edit: theirs is the account id
-                createGuest() minted, and publicHandle shows none, so the
-                option arrives when they claim the account. */}
+                picture, and the controls under it the way in to the rest. */}
             <ProfileIdentity
                 {...heading}
                 imageUrl={profileImageUrl(user)}
                 onAvatarClick={picture.openPicker}
                 avatarBusy={picture.isSaving}
-                action={
-                    <div style={{ display: "flex", gap: 12 }}>
-                        {user && !guest && (
+                action={(canEditUsername || picture.hasPicture) && (
+                    <>
+                        {canEditUsername && (
                             <button
                                 type="button"
                                 className="ag-link-muted"
@@ -167,8 +171,8 @@ export default function Profile() {
                                 Remove photo
                             </button>
                         )}
-                    </div>
-                }
+                    </>
+                )}
             />
             {picture.fileInput}
 
