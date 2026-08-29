@@ -88,10 +88,10 @@ const CITY_DEFS: Omit<OutbreakCityDef, 'id'>[] = [
     // Baghdad and Karachi, not read off the art.
     { name: 'Riyadh', color: 'black', x: 460, y: 250, labelDir: 'w' },
     { name: 'Karachi', color: 'black', x: 513, y: 188, labelDir: 'w' },
-    { name: 'Delhi', color: 'black', x: 597, y: 180, labelDir: 's' },
+    { name: 'Delhi', color: 'black', x: 547, y: 167, labelDir: 's' },
     { name: 'Mumbai', color: 'black', x: 522, y: 225, labelDir: 's' },
     { name: 'Chennai', color: 'black', x: 558, y: 256, labelDir: 'w' },
-    { name: 'Kolkata', color: 'black', x: 547, y: 167, labelDir: 'e' },
+    { name: 'Kolkata', color: 'black', x: 597, y: 180, labelDir: 'e' },
     // Red — East/Southeast Asia & Oceania (36-47)
     { name: 'Beijing', color: 'red', x: 630, y: 121, labelDir: 'n' },
     { name: 'Seoul', color: 'red', x: 679, y: 119, labelDir: 'n' },
