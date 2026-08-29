@@ -54,7 +54,6 @@ function shortfall(cost: Cost, res: Record<SAC_Resource, number>): string | null
 
 interface SettlementsAndCitiesActionsProps {
     gs: ISACSpecificGameStateResponse;
-    myUsername: string;
     myUserId: string;
     boardMode: SACBoardMode;
     setBoardMode: (mode: SACBoardMode) => void;
@@ -66,7 +65,7 @@ interface SettlementsAndCitiesActionsProps {
 
 export default function SettlementsAndCitiesActions({
     gs,
-    myUsername,
+    myUserId,
     boardMode,
     setBoardMode,
     submitCommand,
@@ -90,8 +89,8 @@ export default function SettlementsAndCitiesActions({
     useCloseRequest(showMonopolyModal, () => setShowMonopolyModal(false));
     useCloseRequest(showTradeModal, () => setShowTradeModal(false));
 
-    const myState = gs.playerStates[myUsername];
-    const myDevCards = gs.playerDevCards?.[myUsername];
+    const myState = gs.playerStates[myUserId];
+    const myDevCards = gs.playerDevCards?.[myUserId];
     if (!myState) return null;
 
     const phase = gs.phase;
@@ -193,11 +192,11 @@ export default function SettlementsAndCitiesActions({
     // The trade ratio the bank gives for a resource depends on the harbours the
     // player has a settlement/city on: a matching 2:1 dock, a generic 3:1 dock,
     // else the default 4:1. Mirrors SACMaritimeTrade.Execute so the UI only ever
-    // offers trades the engine will accept. (Vertex owners arrive as usernames.)
+    // offers trades the engine will accept. (Vertex owners arrive as userIds.)
     const myHarbors = gs.harbors.filter(h =>
         h.vertices.some(vid => {
             const v = gs.vertices[vid];
-            return v?.owner === myUsername && v.building !== null;
+            return v?.owner === myUserId && v.building !== null;
         }),
     );
     const has3to1Dock = myHarbors.some(h => h.type === '3to1');
@@ -342,7 +341,7 @@ export default function SettlementsAndCitiesActions({
     // be played at any point on your own main turn (one per turn). Playable cards
     // (Knight / Road Building / Year of Plenty / Monopoly) get a Play button;
     // hidden Victory Points and cards bought this turn are shown as passive notes.
-    const myNewDevCards = gs.playerNewDevCards?.[myUsername];
+    const myNewDevCards = gs.playerNewDevCards?.[myUserId];
     const canPlayDevCards = !isSetup && !specialBuild && !pendingRobber && pendingRoadBuilding === 0 && !playedDevCard;
     const heldPlayable = SAC_DEV_CARD_ORDER.filter(
         c => SAC_DEV_CARD_META[c].playable && (myDevCards?.[c] ?? 0) > 0,

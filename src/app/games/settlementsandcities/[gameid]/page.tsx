@@ -23,7 +23,7 @@ import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand, type SubmitCommand } from "@/utils/hooks/useSubmitCommand";
-import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
+import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
 import {
     SACPlaceSettlementSetup,
@@ -93,21 +93,14 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     // Only the live active player can act; reviewing a past turn is read-only.
     const isMyTurn = nav.isLive && user?.id === gameData?.currentTurn;
     const myUsername = currentUsername(user);
+    const myUserId = user?.id ?? '';
 
-    // Map username → color
+    // owner userId → colour, following the persistent userIdList ordering.
     const usernameList = gameData?.usernameList ?? [];
-    function usernameToColor(username: string | null): string {
-        if (!username) return '#888';
-        const idx = usernameList.indexOf(username);
-        return PLAYER_COLOURS[idx >= 0 ? idx % PLAYER_COLOURS.length : 0];
-    }
-
-    // Build username → userId from playerStates (each has a userId field)
-    const usernameToUserId: Record<string, string> = {};
-    if (gs?.playerStates) {
-        for (const [uname, ps] of Object.entries(gs.playerStates)) {
-            usernameToUserId[uname] = ps.userId;
-        }
+    const userIdList = gameData?.userIdList ?? [];
+    function colorForOwner(owner: string | null): string {
+        if (!owner) return '#888';
+        return playerColourForId(owner, userIdList);
     }
 
     // Compute valid placements for board interaction
@@ -134,18 +127,18 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             for (let vid = 0; vid < BOARD_TOPOLOGY.numVertices; vid++) {
                 if (!isValidSettlementVertex(vid, vertices as any)) continue;
                 const connectedByRoad = BOARD_TOPOLOGY.vertexEdges[vid].some(
-                    eid => edges[eid].hasRoad && edges[eid].owner === myUsername
+                    eid => edges[eid].hasRoad && edges[eid].owner === myUserId
                 );
                 if (connectedByRoad) validVertices.add(vid);
             }
         } else if (boardMode === 'placeCity') {
             for (let vid = 0; vid < BOARD_TOPOLOGY.numVertices; vid++) {
                 const v = vertices[vid];
-                if (v.building === 'settlement' && v.owner === myUsername) validVertices.add(vid);
+                if (v.building === 'settlement' && v.owner === myUserId) validVertices.add(vid);
             }
         } else if (boardMode === 'placeRoad') {
             for (let eid = 0; eid < BOARD_TOPOLOGY.numEdges; eid++) {
-                if (isValidRoadEdge(eid, myUsername, vertices as any, edges as any)) validEdges.add(eid);
+                if (isValidRoadEdge(eid, myUserId, vertices as any, edges as any)) validEdges.add(eid);
             }
         } else if (boardMode === 'moveRobber') {
             for (let hid = 0; hid < (gs.hexes?.length ?? 0); hid++) {
@@ -191,17 +184,17 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
         if (!isMyTurn || !gs || boardMode !== 'moveRobber') return;
 
         // Find eligible adjacent players (those with settlements/cities on adjacent vertices with resources)
-        const adjacentUsernames = new Set<string>();
+        const adjacentOwnerIds = new Set<string>();
         for (const vid of BOARD_TOPOLOGY.hexVertices[hexId]) {
             const v = gs.vertices[vid];
-            if (v.owner && v.owner !== myUsername && v.building) {
+            if (v.owner && v.owner !== myUserId && v.building) {
                 const ps = gs.playerStates[v.owner];
-                if ((ps?.resourceCount ?? 0) > 0) adjacentUsernames.add(v.owner);
+                if ((ps?.resourceCount ?? 0) > 0) adjacentOwnerIds.add(v.owner);
             }
         }
 
-        const stealFrom = adjacentUsernames.size > 0
-            ? usernameToUserId[Array.from(adjacentUsernames)[0]] ?? null
+        const stealFrom = adjacentOwnerIds.size > 0
+            ? Array.from(adjacentOwnerIds)[0]
             : null;
 
         setTappedSpot({ kind: 'hex', id: hexId });
@@ -214,7 +207,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     // The tapped spot only wears its ghost piece while the command is in flight,
     // so this clears itself as soon as the command resolves.
     const pendingSpot = submitting && tappedSpot
-        ? { ...tappedSpot, colour: usernameToColor(myUsername) }
+        ? { ...tappedSpot, colour: colorForOwner(myUserId) }
         : null;
 
     const displayedWinner = nav.displayedWinner;
@@ -268,19 +261,19 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     // ── Scoreboard entries ───────────────────────────────────────────────────
     const victoryTarget = gs?.victoryTarget ?? 10;
     const scoreEntries: ScoreEntry[] = gs
-        ? usernameList.flatMap((username, i): ScoreEntry[] => {
-            const ps = gs.playerStates?.[username];
+        ? userIdList.flatMap((userId, i): ScoreEntry[] => {
+            const ps = gs.playerStates?.[userId];
             if (!ps) return [];
-            const isMe = username === myUsername;
-            const isActive = username === currentTurnUsername && !complete;
+            const isMe = userId === myUserId;
+            const isActive = userId === displayedCurrentTurn && !complete;
             const totalCards = ps.resourceCount;
             let sub: React.ReactNode;
-            if (gs.longestRoadOwner === username) sub = '🛣️ LR';
-            else if (gs.largestArmyOwner === username) sub = '⚔️ LA';
+            if (gs.longestRoadOwner === userId) sub = '🛣️ LR';
+            else if (gs.largestArmyOwner === userId) sub = '⚔️ LA';
             else sub = `${totalCards} cards`;
             return [{
-                id: username,
-                name: isMe ? 'You' : username,
+                id: userId,
+                name: isMe ? 'You' : ps.username,
                 color: PLAYER_COLOURS[i % PLAYER_COLOURS.length],
                 sub,
                 score: <>{ps.visibleVP}<span className="ag-score-vp-target">/{victoryTarget}</span></>,
@@ -291,9 +284,9 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
         : [];
 
     // ── Your hand ────────────────────────────────────────────────────────────
-    const myState = gs?.playerStates?.[myUsername];
-    const myDevCards = gs?.playerDevCards?.[myUsername];
-    const myNewDevCards = gs?.playerNewDevCards?.[myUsername];
+    const myState = gs?.playerStates?.[myUserId];
+    const myDevCards = gs?.playerDevCards?.[myUserId];
+    const myNewDevCards = gs?.playerNewDevCards?.[myUserId];
     const myDevCount = myDevCards ? Object.values(myDevCards).reduce((s, n) => s + n, 0) : 0;
     const myNewDevCount = myNewDevCards ? Object.values(myNewDevCards).reduce((s, n) => s + n, 0) : 0;
     const myHandTotal = myState?.resourceCount ?? 0;
@@ -364,7 +357,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                             edges={gs.edges}
                             harbors={gs.harbors}
                             robberHexIndex={gs.robberHexIndex}
-                            usernameToColor={usernameToColor}
+                            colorForOwner={colorForOwner}
                             onVertexClick={isMyTurn && !complete && !submitting ? handleVertexClick : undefined}
                             onEdgeClick={isMyTurn && !complete && !submitting ? handleEdgeClick : undefined}
                             onHexClick={isMyTurn && !complete && !submitting ? handleHexClick : undefined}
@@ -424,8 +417,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                     {isMyTurn && !complete && (
                         <SettlementsAndCitiesActions
                             gs={gs}
-                            myUsername={myUsername}
-                            myUserId={user?.id ?? ''}
+                            myUserId={myUserId}
                             boardMode={boardMode}
                             setBoardMode={setBoardMode}
                             submitCommand={submitCommand}

@@ -93,42 +93,42 @@ describe("Settlements & Cities' response", () => {
     it("gives the viewer their own resources and everyone else a hand size", () => {
         const response = sacStateToResponse(sacState(), NAMES, "u1");
 
-        expect(response.playerStates.Alice.resources).toEqual({ lumber: 2, wool: 1, grain: 0, brick: 0, ore: 0 });
-        expect(response.playerStates.Alice.resourceCount).toBe(3);
+        expect(response.playerStates.u1.resources).toEqual({ lumber: 2, wool: 1, grain: 0, brick: 0, ore: 0 });
+        expect(response.playerStates.u1.resourceCount).toBe(3);
 
         // Hand size is public in Catan — it's what the robber and the
         // seven-discard are played around — so Bob's total still comes through.
-        expect(response.playerStates.Bob.resources).toBeUndefined();
-        expect(response.playerStates.Bob.resourceCount).toBe(4);
+        expect(response.playerStates.u2.resources).toBeUndefined();
+        expect(response.playerStates.u2.resourceCount).toBe(4);
     });
 
     it("sends dev card identities for the viewer alone, and a count for the rest", () => {
         const response = sacStateToResponse(sacState(), NAMES, "u1");
 
-        expect(Object.keys(response.playerDevCards)).toEqual(["Alice"]);
-        expect(Object.keys(response.playerNewDevCards)).toEqual(["Alice"]);
+        expect(Object.keys(response.playerDevCards)).toEqual(["u1"]);
+        expect(Object.keys(response.playerNewDevCards)).toEqual(["u1"]);
         // Buying is done in the open even though the card drawn isn't, so the
         // count covers playable and just-bought cards together: Bob's 1 knight
         // + 2 victory points + 1 just-bought road building.
-        expect(response.playerStates.Bob.devCardCount).toBe(4);
+        expect(response.playerStates.u2.devCardCount).toBe(4);
     });
 
     it("keeps an opponent's hidden victory points out of the payload", () => {
         const wire = JSON.parse(JSON.stringify(sacStateToResponse(sacState(), NAMES, "u1")));
 
-        expect(wire.playerDevCards.Bob).toBeUndefined();
-        expect(wire.playerStates.Bob.resources).toBeUndefined();
+        expect(wire.playerDevCards.u2).toBeUndefined();
+        expect(wire.playerStates.u2.resources).toBeUndefined();
     });
 
     it("shows nobody's hand when nobody in particular is asking", () => {
         const response = sacStateToResponse(sacState(), NAMES, null);
 
-        expect(response.playerStates.Alice.resources).toBeUndefined();
-        expect(response.playerStates.Bob.resources).toBeUndefined();
+        expect(response.playerStates.u1.resources).toBeUndefined();
+        expect(response.playerStates.u2.resources).toBeUndefined();
         expect(response.playerDevCards).toEqual({});
         expect(response.playerNewDevCards).toEqual({});
         // The counts the recap's resource deltas are built from survive.
-        expect(response.playerStates.Alice.resourceCount).toBe(3);
-        expect(response.playerStates.Bob.resourceCount).toBe(4);
+        expect(response.playerStates.u1.resourceCount).toBe(3);
+        expect(response.playerStates.u2.resourceCount).toBe(4);
     });
 });

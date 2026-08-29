@@ -51,7 +51,8 @@ interface SettlementsAndCitiesBoardProps {
     edges: ISACEdgeResponse[];
     harbors: ISACHarborResponse[];
     robberHexIndex: number;
-    usernameToColor: (username: string | null) => string;
+    // owner userId (as carried on vertices/edges) → colour.
+    colorForOwner: (owner: string | null) => string;
     // Interactive callbacks – undefined when board is view-only
     onVertexClick?: (vertexId: number) => void;
     onEdgeClick?: (edgeId: number) => void;
@@ -76,7 +77,7 @@ export default function SettlementsAndCitiesBoard({
     edges,
     harbors,
     robberHexIndex,
-    usernameToColor,
+    colorForOwner,
     onVertexClick,
     onEdgeClick,
     onHexClick,
@@ -204,7 +205,7 @@ export default function SettlementsAndCitiesBoard({
                         <line
                             className={ghost ? 'ag-svg-ghost' : undefined}
                             x1={x1} y1={y1} x2={x2} y2={y2}
-                            stroke={ghost ? pendingSpot!.colour : (edge.hasRoad ? usernameToColor(edge.owner) : '#ffe000')}
+                            stroke={ghost ? pendingSpot!.colour : (edge.hasRoad ? colorForOwner(edge.owner) : '#ffe000')}
                             strokeWidth={edge.hasRoad || ghost ? 6 : 7}
                             strokeLinecap="round"
                             strokeOpacity={isValid && !edge.hasRoad && !ghost ? 0.75 : 1}
@@ -283,7 +284,7 @@ export default function SettlementsAndCitiesBoard({
                             key="b"
                             x={vx - 7} y={vy - 7}
                             width={14} height={14}
-                            fill={usernameToColor(vertex.owner)}
+                            fill={colorForOwner(vertex.owner)}
                             stroke="#fff"
                             strokeWidth={1.5}
                             rx={2}
@@ -293,8 +294,8 @@ export default function SettlementsAndCitiesBoard({
                 } else if (vertex.building === 'city') {
                     parts.push(
                         <g key="b" style={{ pointerEvents: 'none' }}>
-                            <rect x={vx - 9} y={vy - 9} width={18} height={18} fill={usernameToColor(vertex.owner)} stroke="#fff" strokeWidth={1.5} rx={3} />
-                            <rect x={vx - 5} y={vy - 14} width={10} height={8} fill={usernameToColor(vertex.owner)} stroke="#fff" strokeWidth={1} rx={1} />
+                            <rect x={vx - 9} y={vy - 9} width={18} height={18} fill={colorForOwner(vertex.owner)} stroke="#fff" strokeWidth={1.5} rx={3} />
+                            <rect x={vx - 5} y={vy - 14} width={10} height={8} fill={colorForOwner(vertex.owner)} stroke="#fff" strokeWidth={1} rx={1} />
                         </g>
                     );
                 }
