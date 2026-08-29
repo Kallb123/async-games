@@ -22,7 +22,7 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
-import { abandonedGameStatus } from "@/utils/ui/players";
+import { abandonedGameStatus, nameForUserId } from "@/utils/ui/players";
 import MatchHistory from "@/components/games/MatchHistory";
 
 const PHASE_LABEL: Record<IWorldDominationSpecificGameStateResponse['phase'], string> = {
@@ -157,17 +157,11 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     const displayedWinner = nav.displayedWinner;
     const displayedCurrentTurn = nav.displayedCurrentTurn;
 
-    const playerName = (userId?: string): string => {
-        const playerStates = gs?.playerStates;
-        if (!playerStates) return userId ?? '';
-        return Object.values(playerStates).find(p => p.userId === userId)?.username ?? userId ?? '';
-    };
+    const playerName = (userId?: string): string => nameForUserId(gameData, userId);
     const getWinnerDisplayName = (): string => playerName(displayedWinner);
     const getForfeitedByDisplayName = (): string => playerName(gameData?.forfeitedBy);
 
-    const currentTurnUsername = gs
-        ? Object.values(gs.playerStates).find(p => p.userId === displayedCurrentTurn)?.username ?? displayedCurrentTurn ?? ''
-        : displayedCurrentTurn ?? '';
+    const currentTurnUsername = playerName(displayedCurrentTurn);
 
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, getForfeitedByDisplayName());

@@ -30,7 +30,7 @@ import { IOutbreakInfectionPhaseOutcome, OutbreakAction, OutbreakPlayEvent } fro
 import { HAND_LIMIT, IOutbreakInfectionLogEntry, OutbreakMoveType, getLegalMoves, infectionRateFor, stationCityIds } from "@/games/Outbreak/rules";
 import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, EVENT_CARD_AIRLIFT, EVENT_CARD_GOVERNMENT_GRANT, MAX_RESEARCH_STATIONS } from "@/games/Outbreak/board";
 import { playerColour } from "@/utils/ui/playerColours";
-import { abandonedGameStatus } from "@/utils/ui/players";
+import { abandonedGameStatus, nameForUserId } from "@/utils/ui/players";
 
 // What the map is being used to pick right now: a movement destination, or
 // the destination/target an in-flight event card still needs. One state
@@ -213,9 +213,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
         : boardTarget.kind === 'airlift' && boardTarget.targetUserId !== undefined ? 'Choose a destination'
         : null;
 
-    const currentTurnUsername = gs
-        ? Object.values(gs.playerStates).find(p => p.userId === displayedCurrentTurn)?.username ?? displayedCurrentTurn
-        : displayedCurrentTurn;
+    const currentTurnUsername = nameForUserId(gameData, displayedCurrentTurn);
 
     const abandoned = abandonedGameStatus(complete, gameData?.endReason);
 

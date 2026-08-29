@@ -21,7 +21,7 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { landmarkCount } from "@/games/DiceCities/ui";
 import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
-import { abandonedGameStatus } from "@/utils/ui/players";
+import { abandonedGameStatus, nameForUserId } from "@/utils/ui/players";
 import MatchHistory from "@/components/games/MatchHistory";
 
 // Sentinel used as "current turn" while reviewing a past turn, so no player's
@@ -78,11 +78,10 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const isMyTurn = nav.isLive && !!user?.id && user.id === displayedCurrentTurn && !complete;
 
     const leaderLandmarks = players.reduce((m, p) => Math.max(m, landmarkCount(p)), 0);
-    const playerName = (userId?: string): string =>
-        players.find(p => p.userId === userId)?.username ?? userId ?? "";
+    const playerName = (userId?: string): string => nameForUserId(gameData, userId);
     const getWinnerDisplayName = (): string => playerName(displayedWinner);
     const getForfeitedByDisplayName = (): string => playerName(gameData?.forfeitedBy);
-    const currentTurnUsername = players.find(p => p.userId === displayedCurrentTurn)?.username ?? "";
+    const currentTurnUsername = playerName(displayedCurrentTurn);
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, getForfeitedByDisplayName());
     const hasRolled = displayed?.hasRolled ?? false;

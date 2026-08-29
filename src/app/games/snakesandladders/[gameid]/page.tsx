@@ -27,7 +27,7 @@ import { ISnakesAndLaddersDiceRollOutcome, SnakesAndLaddersRequestDiceRoll } fro
 import { SL_REROLL_PARAM } from "@/games/SnakesAndLadders/ui";
 import { rematchFlag } from "@/utils/ui/rematch";
 import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
-import { abandonedGameStatus } from "@/utils/ui/players";
+import { abandonedGameStatus, nameForUserId } from "@/utils/ui/players";
 import MatchHistory from "@/components/games/MatchHistory";
 
 export default function GameSnakesAndLadders({ params }: { params: Promise<{ gameid: uuidString }> }) {
@@ -102,11 +102,10 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     const displayedWinner = nav.displayedWinner;
     const leaderPosition = players.reduce((m, p) => Math.max(m, p.position), 0);
 
-    const playerName = (userId?: string): string =>
-        players.find(p => p.userId === userId)?.username ?? userId ?? "";
+    const playerName = (userId?: string): string => nameForUserId(gameData, userId);
     const getWinnerDisplayName = (): string => playerName(displayedWinner);
     const getForfeitedByDisplayName = (): string => playerName(gameData?.forfeitedBy);
-    const currentTurnUsername = players.find(p => p.userId === displayedCurrentTurn)?.username ?? "";
+    const currentTurnUsername = playerName(displayedCurrentTurn);
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, getForfeitedByDisplayName());
 

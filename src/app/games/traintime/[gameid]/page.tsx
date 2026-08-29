@@ -39,7 +39,7 @@ import { TrainTimeClaimRoute, TrainTimeDrawTickets, TrainTimeKeepTickets } from 
 import { TRACK_PALETTE } from "@/games/TrainTime/ui";
 import { playerColour, playerColourForId } from "@/utils/ui/playerColours";
 import { pluralize } from "@/utils/ui/text";
-import { abandonedGameStatus } from "@/utils/ui/players";
+import { abandonedGameStatus, nameForUserId } from "@/utils/ui/players";
 import MatchHistory from "@/components/games/MatchHistory";
 
 // Trains at or below this leave a player one big route from ending the game —
@@ -116,10 +116,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
         [claimContext, isMyTurn, gs?.myDrawsThisTurn],
     );
 
-    const playerName = (userId?: string): string => {
-        if (!userId || !gs) return userId ?? '';
-        return Object.values(gs.playerStates).find(p => p.userId === userId)?.username ?? userId;
-    };
+    const playerName = (userId?: string): string => nameForUserId(gameData, userId);
     const currentTurnUsername = playerName(displayedCurrentTurn);
     const displayedWinner = nav.displayedWinner;
     const currentUserWon = complete && !!user?.id && user.id === displayedWinner;

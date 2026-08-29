@@ -24,7 +24,7 @@ import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand, type SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
-import { abandonedGameStatus } from "@/utils/ui/players";
+import { abandonedGameStatus, nameForUserId } from "@/utils/ui/players";
 import {
     SACPlaceSettlementSetup,
     SACPlaceRoadSetup,
@@ -95,12 +95,11 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     const myUserId = user?.id ?? '';
 
     // owner userId → colour, following the persistent userIdList ordering.
+    // playerColourForId already answers a null/unknown owner with the neutral
+    // ink token, so no local grey fallback is needed.
     const usernameList = gameData?.usernameList ?? [];
     const userIdList = gameData?.userIdList ?? [];
-    function colorForOwner(owner: string | null): string {
-        if (!owner) return '#888';
-        return playerColourForId(owner, userIdList);
-    }
+    const colorForOwner = (owner: string | null): string => playerColourForId(owner, userIdList);
 
     // Compute valid placements for board interaction
     const validVertices = new Set<number>();
@@ -212,17 +211,11 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     const displayedWinner = nav.displayedWinner;
     const displayedCurrentTurn = nav.displayedCurrentTurn;
 
-    const playerName = (userId?: string): string => {
-        const playerStates = gs?.playerStates;
-        if (!playerStates) return userId ?? '';
-        return Object.values(playerStates).find(p => p.userId === userId)?.username ?? userId ?? '';
-    };
+    const playerName = (userId?: string): string => nameForUserId(gameData, userId);
     const getWinnerDisplayName = (): string => playerName(displayedWinner);
     const getForfeitedByDisplayName = (): string => playerName(gameData?.forfeitedBy);
 
-    const currentTurnUsername = gs
-        ? Object.values(gs.playerStates).find(p => p.userId === displayedCurrentTurn)?.username ?? displayedCurrentTurn ?? ''
-        : displayedCurrentTurn ?? '';
+    const currentTurnUsername = playerName(displayedCurrentTurn);
 
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, getForfeitedByDisplayName());
