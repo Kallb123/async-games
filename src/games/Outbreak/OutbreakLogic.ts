@@ -47,6 +47,7 @@ import {
 } from "@/games/Outbreak/rules";
 import { shuffle } from "@/utils/games/shuffle";
 import { pluralize } from "@/utils/ui/text";
+import { playerHistory, userToken } from "@/utils/games/history";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  OUTBREAK
@@ -390,7 +391,7 @@ export class OutbreakGameType implements IGameType {
         outbreakData.winner = '';
         outbreakData.endReason = 'teamwin';
         outbreakData.currentTurn = '';
-        outbreakData.gameState.history.unshift('All four diseases are cured — the team wins!');
+        outbreakData.gameState.history.unshift({ text: 'All four diseases are cured — the team wins!' });
         return true;
     }
 }
@@ -517,7 +518,7 @@ export class OutbreakAction implements IGameCommand {
         if (historyLine === null) return INVALID;
 
         ps.actionsLeft -= 1;
-        outbreakData.gameState.history.unshift(`${this.senderUsername} ${historyLine}`);
+        outbreakData.gameState.history.unshift(playerHistory(this.senderId, historyLine));
 
         // Never ends the turn itself, even on the fourth action (§21.4): only
         // OutbreakEndTurn (and, past the hand limit, OutbreakDiscard) may —
@@ -563,7 +564,7 @@ function endInTeamLoss(outbreakData: IOutbreakGameData, reason: string): void {
     outbreakData.winner = '';
     outbreakData.endReason = 'teamloss';
     outbreakData.currentTurn = '';
-    outbreakData.gameState.history.unshift(`The team loses — ${reason}.`);
+    outbreakData.gameState.history.unshift({ text: `The team loses — ${reason}.` });
 }
 
 // Writes a resolved cube placement back onto game state — cities, cubesLeft,
@@ -587,16 +588,16 @@ function applyPlacementResult(
     if (result.cubesLeft) gs.cubesLeft = result.cubesLeft;
     gs.outbreaks += result.outbreaks;
 
-    outbreakData.gameState.history.unshift(
-        result.outbreaks > 0
+    outbreakData.gameState.history.unshift({
+        text: result.outbreaks > 0
             ? describeOutbreak(result.outbreakChain.map(step => CITIES[step.city].name).join(', '))
             : describeInfected(),
-    );
+    });
 
     // Medic (§11, §16): this placement may have just put `color` — already
     // cured, but not yet eradicated — into a city she's already standing in.
     for (const note of applyMedicAutoClearForColor(gs, color)) {
-        outbreakData.gameState.history.unshift(note);
+        outbreakData.gameState.history.unshift({ text: note });
     }
 
     if (result.cubeExhausted) {
@@ -632,7 +633,7 @@ function resolveInfectPhase(outbreakData: IOutbreakGameData): IOutbreakInfection
     // reducing the rate or protecting individual cities.
     if (gs.oneQuietNightActive) {
         gs.oneQuietNightActive = false;
-        outbreakData.gameState.history.unshift('One Quiet Night — the Infect Cities phase is skipped');
+        outbreakData.gameState.history.unshift({ text: 'One Quiet Night — the Infect Cities phase is skipped' });
         log.push({ kind: 'quietNight' });
         return log;
     }
@@ -704,7 +705,7 @@ function resolveEpidemic(
 
     // 1 — INCREASE: advance the infection rate track one space (§9.1 step 1).
     gs.infectionRateIndex = Math.min(gs.infectionRateIndex + 1, INFECTION_RATE_TRACK.length - 1);
-    outbreakData.gameState.history.unshift(`Epidemic! The infection rate rises to ${infectionRateFor(gs.infectionRateIndex)}`);
+    outbreakData.gameState.history.unshift({ text: `Epidemic! The infection rate rises to ${infectionRateFor(gs.infectionRateIndex)}` });
     const entry: IOutbreakInfectionLogEntry = { kind: 'epidemic', rateAfter: infectionRateFor(gs.infectionRateIndex) };
 
     // 2 — INFECT: draw the *bottom* infection card, placing 3 cubes on the
@@ -725,7 +726,7 @@ function resolveEpidemic(
 
         if (gs.cures[color] === 'eradicated') {
             entry.outcome = 'eradicated';
-            outbreakData.gameState.history.unshift(`Epidemic draws ${CITIES[cityId].name}, already eradicated`);
+            outbreakData.gameState.history.unshift({ text: `Epidemic draws ${CITIES[cityId].name}, already eradicated` });
         } else {
             // Quarantine Specialist (§11, §16): her protection covers an
             // epidemic's Infect step exactly as it does ordinary infection.
@@ -752,7 +753,7 @@ function resolveEpidemic(
     const order = recordedOrder ?? shuffle(gs.infectionDiscard);
     gs.infectionDeck = [...order, ...gs.infectionDeck];
     gs.infectionDiscard = [];
-    outbreakData.gameState.history.unshift(`Epidemic! The infection discard pile is reshuffled onto the deck`);
+    outbreakData.gameState.history.unshift({ text: `Epidemic! The infection discard pile is reshuffled onto the deck` });
 
     return { order, entry };
 }
@@ -802,7 +803,7 @@ export class OutbreakEndTurn implements IGameCommand {
         let intensifyIndex = 0;
         for (let i = 0; i < CARDS_DRAWN_PER_TURN; i++) {
             if (isPlayerDeckEmptyLoss(gs.playerDeck.length)) {
-                endInTeamLoss(outbreakData, `${this.senderUsername} had to draw with the player deck empty`);
+                endInTeamLoss(outbreakData, `${userToken(this.senderId)} had to draw with the player deck empty`);
                 return infectionPhaseOutcome(true, infectionLog);
             }
 
@@ -824,14 +825,14 @@ export class OutbreakEndTurn implements IGameCommand {
             }
         }
         if (cardsDrawn > 0) {
-            outbreakData.gameState.history.unshift(`${this.senderUsername} drew ${cardsDrawn} card${cardsDrawn === 1 ? '' : 's'}`);
+            outbreakData.gameState.history.unshift(playerHistory(this.senderId, `drew ${cardsDrawn} card${cardsDrawn === 1 ? '' : 's'}`));
         }
 
         // Hand limit (§9, §16): over it, the turn pauses for OutbreakDiscard
         // rather than infecting yet — the discard step comes before Phase 3.
         if (ps.hand.length > HAND_LIMIT) {
             gs.phase = 'discard';
-            outbreakData.gameState.history.unshift(`${this.senderUsername} must discard down to ${HAND_LIMIT} cards`);
+            outbreakData.gameState.history.unshift(playerHistory(this.senderId, `must discard down to ${HAND_LIMIT} cards`));
             return infectionPhaseOutcome(false, infectionLog);
         }
 
@@ -877,9 +878,10 @@ export class OutbreakDiscard implements IGameCommand {
         for (const id of chosen) ps.hand.splice(ps.hand.indexOf(id), 1);
         gs.playerDiscard.push(...chosen);
 
-        outbreakData.gameState.history.unshift(
-            `${this.senderUsername} discarded ${chosen.length} card${chosen.length === 1 ? '' : 's'} down to the hand limit`,
-        );
+        outbreakData.gameState.history.unshift(playerHistory(
+            this.senderId,
+            `discarded ${chosen.length} card${chosen.length === 1 ? '' : 's'} down to the hand limit`,
+        ));
 
         // The check above already guarantees the hand is exactly at the
         // limit, so this always finishes the draw phase — sharing the same
@@ -1127,7 +1129,7 @@ export class OutbreakPlayEvent implements IGameCommand {
             if (gs.phase !== 'forecast') return INVALID;
             const historyLine = applyForecastOrder(outbreakData, this.cardIds);
             if (historyLine === null) return INVALID;
-            outbreakData.gameState.history.unshift(`${this.senderUsername} ${historyLine}`);
+            outbreakData.gameState.history.unshift(playerHistory(this.senderId, historyLine));
             const { turnOver, infectionLog } = maybeFinishDrawPhase(outbreakData, ps);
             return infectionPhaseOutcome(turnOver, infectionLog);
         }
@@ -1137,7 +1139,7 @@ export class OutbreakPlayEvent implements IGameCommand {
             const historyLine = applyRetrieve(gs, ps, this.cardId);
             if (historyLine === null) return INVALID;
             ps.actionsLeft -= 1;
-            outbreakData.gameState.history.unshift(`${this.senderUsername} ${historyLine}`);
+            outbreakData.gameState.history.unshift(playerHistory(this.senderId, historyLine));
             return { validMove: true, turnOver: false };
         }
 
@@ -1146,7 +1148,7 @@ export class OutbreakPlayEvent implements IGameCommand {
         if (!eventPlayableInPhase(gs.phase)) return INVALID;
         const historyLine = applyPlayEvent(outbreakData, ps, this);
         if (historyLine === null) return INVALID;
-        outbreakData.gameState.history.unshift(`${this.senderUsername} ${historyLine}`);
+        outbreakData.gameState.history.unshift(playerHistory(this.senderId, historyLine));
         const { turnOver, infectionLog } = maybeFinishDrawPhase(outbreakData, ps);
         return infectionPhaseOutcome(turnOver, infectionLog);
     }
