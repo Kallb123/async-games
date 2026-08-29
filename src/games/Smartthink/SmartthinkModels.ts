@@ -70,7 +70,8 @@ export function CreateSmartthinkSoloGameData(userId: string, username: string, t
         missedTurnCounts: new Map(),
         gameState: {
             turnOrder: [userId],
-            history: [`Setup: ${SMARTTHINK_COMPUTER_USERNAME} set the secret code`],
+            // The computer is not a player, so this line has no actor to record.
+            history: [{ text: `Setup: ${SMARTTHINK_COMPUTER_USERNAME} set the secret code` }],
             commandHistory: []
         },
         complete: false,
