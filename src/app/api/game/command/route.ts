@@ -41,16 +41,19 @@ function readCommand(body: string): IGameCommand | null {
 }
 
 /**
- * The name to write into this game's history for the player taking their turn.
+ * The name to record on this move for the player taking their turn.
+ *
+ * History no longer freezes a name — it stores a {{userId}} token and resolves
+ * it per request (utils/games/history.ts) — but the name recorded on the
+ * command still matters: it titles the move in the recap timeline, and it is
+ * the only name left for a guest whose Clerk account has since been swept
+ * (buildTimeline falls back to it, see replay.ts).
  *
  * A display name is worth a Clerk lookup; it is not worth the turn. Clerk
  * rate-limiting or timing out here would 500 the request *before* Execute and
- * trySave, so the move would be lost rather than merely misnamed — and an
- * unresolvable id would freeze "Unknown player rolled a 6" into prose the live
- * board never regenerates. Both degrade to the last name this game recorded
- * for them instead. Nothing is stuck with a degraded name for long: every
- * replayed view (recap, timeline, planning) re-resolves it from today's
- * directory, and their next turn tries Clerk again.
+ * trySave, so the move would be lost rather than merely misnamed. Both degrade
+ * to the last name this game recorded for them instead, and their next turn
+ * tries Clerk again.
  */
 async function senderName(gameData: IGameData, userId: string): Promise<string> {
   try {
@@ -125,13 +128,13 @@ export async function POST(request: NextRequest) {
   stripRecordedRandomness(commandRequest);
 
   // The client supplies the move, never the name on it. `senderUsername` is
-  // the name Execute writes into `gameState.history` — prose every opponent
-  // reads on the board, and the body of their "your turn" push for a game
-  // with no recap adapter — so a client that named itself could put any text
-  // it liked in front of another player, and a guest's client named them by
-  // the random account id createGuest() minted rather than the name they
-  // typed. Resolved here from the authenticated caller instead, the same way
-  // the game's usernameList resolves them.
+  // recorded on the command and read back by every replayed view — the recap
+  // timeline's title for this move, and the name a swept guest's moves keep —
+  // so a client that named itself could put any text it liked in front of
+  // another player, and a guest's client named them by the random account id
+  // createGuest() minted rather than the name they typed. Resolved here from
+  // the authenticated caller instead, the same way the game's usernameList
+  // resolves them.
   commandRequest.senderUsername = await senderName(gameData, userId);
 
   // Checks whether the turn should be progressed and actions it if so

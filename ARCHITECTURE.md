@@ -212,7 +212,7 @@ interface IGameData {
     timerWarningNotificationSent: boolean;
     gameState: {
         turnOrder: string[];         // user IDs, decided at creation
-        history: string[];           // newest-first human-readable log
+        history: IHistoryEntry[];    // newest-first log; { text, actorId? }
         commandHistory: IGameCommand[]; // every move, stored as Schema.Types.Mixed
     };
     complete: boolean;
@@ -341,7 +341,9 @@ interface IGameCommand {
 
 `Execute` is the heart of the rules. It **validates** the move against current
 state and returns `{ validMove: false }` if illegal (nothing is mutated), or
-mutates `specificGameState`, appends to `gameState.history`, and returns
+mutates `specificGameState`, appends to `gameState.history` (via
+`playerHistory`, so the line names its player by `{{userId}}` token rather than
+by a name that can change — see `src/utils/games/history.ts`), and returns
 `{ validMove: true, turnOver: bool }`. Subclasses extend `ICommandOutcome` to
 carry extra data back to the client (e.g. dice results, Mastermind peg feedback).
 
