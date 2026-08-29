@@ -355,7 +355,8 @@ export class WorldDominationAttack implements IGameCommand {
         riskData.gameState.history.unshift(playerHistory(
             this.senderId,
             `attacked ${TERRITORIES[this.toTerritoryId].name} from ${TERRITORIES[this.fromTerritoryId].name}: ` +
-            `[${attackerDice.join(',')}] vs [${defenderDice.join(',')}] — you lost ${attackerLosses}, defender lost ${defenderLosses}` +
+            `[${attackerDice.join(',')}] vs [${defenderDice.join(',')}] — lost ${attackerLosses}, ` +
+            `${defenderId ? userToken(defenderId) : 'the defender'} lost ${defenderLosses}` +
             (conquered ? ', conquered!' : '') +
             (defenderEliminated ? ` — ${userToken(defenderEliminated)} eliminated!` : ''),
         ));
