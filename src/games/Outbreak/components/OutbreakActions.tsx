@@ -466,6 +466,10 @@ export default function OutbreakActions({ gs, myUsername, moveMode, setMoveMode,
 
     return (
         <div className="ag-actionsheet">
+            <div className="ag-hand-head">
+                <span className="ag-hand-title">Actions</span>
+                <span className="ag-hand-note">{me.actionsLeft} remaining</span>
+            </div>
             <div className="ag-build-list">
                 {/* ── Movement ─────────────────────────────────────────────── */}
                 <MoveTypeRows movesByType={movesByType} onPick={setMoveMode} />
