@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from "react";
-import { useUser } from "@clerk/nextjs";
+import { useUser, useReverification } from "@clerk/nextjs";
+import { isReverificationCancelledError } from "@clerk/nextjs/errors";
 import { useToast } from "@/components/ToastContext";
 import { clerkErrorMessage } from "@/utils/users/clerkErrors";
 
@@ -28,6 +29,12 @@ interface SaveCopy {
  * already landed, so a failure there is a stale screen, not a failed save,
  * and reporting it as one would be a lie.
  *
+ * Sensitive writes — changing a username is one — need recent verification,
+ * so Clerk rejects a stale session with a reverification hint the second time
+ * around ("You need to provide additional verification…"). Running every write
+ * through useReverification turns that hint into Clerk's own step-up modal and
+ * retries the write once it's satisfied, instead of surfacing it as a failure.
+ *
  * Returns whether the write landed, so a caller can close its editor on the
  * way out.
  */
@@ -35,16 +42,24 @@ export function useClerkUserSave() {
     const { user } = useUser();
     const { showToast } = useToast();
     const [isSaving, setIsSaving] = useState(false);
+    // Passing `user` through rather than closing over it keeps the fetcher
+    // honest about needing one, and lets the guard below own the null check.
+    const runWrite = useReverification(
+        (write: (user: ClerkUser) => Promise<unknown>, target: ClerkUser) => write(target),
+    );
 
     const save = async (write: (user: ClerkUser) => Promise<unknown>, copy: SaveCopy): Promise<boolean> => {
         if (!user || isSaving) return false;
         setIsSaving(true);
         try {
-            await write(user);
+            await runWrite(write, user);
             await user.reload().catch(error => console.error('Failed to reload the user', error));
             showToast(copy.success, 'success', copy.title);
             return true;
         } catch (error) {
+            // Closing the reverification modal is a deliberate "not now", not a
+            // failed save — leave the field as it was without a scary toast.
+            if (isReverificationCancelledError(error)) return false;
             console.error('Failed to save the Clerk user', error);
             // Clerk's own sentence when it wrote one ("That username is
             // taken."), which is always more use than the caller's fallback.
