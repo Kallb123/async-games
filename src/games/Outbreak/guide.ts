@@ -17,6 +17,10 @@ export const guide: GameGuide = {
             body: "Spend 4 actions moving between cities, treating disease, building research stations, sharing knowledge, or curing a disease — then draw 2 player cards and infect cities equal to the current infection rate.",
         },
         {
+            heading: "Outbreaks",
+            body: "When a card is drawn and a city infected, it may have up to 3 disease cubes on it before an Outbreak happens, which places cubes on all adjacent cities.",
+        },
+        {
             heading: "Roles",
             body: "Everyone is dealt a role with a rule-breaking ability nobody else has. Tap your role name any time to see what only you can do.",
         },
