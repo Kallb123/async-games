@@ -414,8 +414,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                         playerStates={gs.playerStates}
                         userIdList={userIdList}
                         myUserId={myUserId}
-                        currentTurnUserId={displayedCurrentTurn}
-                        complete={complete}
+                        activeUserId={complete ? null : displayedCurrentTurn}
                         onCardTap={handleCardTap}
                         highlightedCityId={highlightedCityId}
                     />

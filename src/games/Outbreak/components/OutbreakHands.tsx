@@ -12,10 +12,9 @@ interface OutbreakHandsProps {
     userIdList: string[];
     myUserId: string;
     /** Whose turn the board is showing — the turn under review, not
-     *  necessarily the live one. Drives the "now"/"next" markers. */
-    currentTurnUserId: string;
-    /** A finished game has no current or next player to mark. */
-    complete?: boolean;
+     *  necessarily the live one, and null once the game is over. Drives the
+     *  "now"/"next" markers. */
+    activeUserId: string | null;
     /** Tapping a city card rings that city on the board. */
     onCardTap?: (cityId: number) => void;
     highlightedCityId?: number | null;
@@ -38,8 +37,7 @@ export default function OutbreakHands({
     playerStates,
     userIdList,
     myUserId,
-    currentTurnUserId,
-    complete = false,
+    activeUserId,
     onCardTap,
     highlightedCityId = null,
 }: OutbreakHandsProps) {
@@ -47,7 +45,7 @@ export default function OutbreakHands({
 
     // Turn markers follow the real seating order, whatever order the panels
     // are drawn in — the seat after the current one, wrapping at the table.
-    const activeSeat = complete ? -1 : userIdList.indexOf(currentTurnUserId);
+    const activeSeat = activeUserId ? userIdList.indexOf(activeUserId) : -1;
     const nextUserId = activeSeat >= 0 && userIdList.length > 1
         ? userIdList[(activeSeat + 1) % userIdList.length]
         : null;
@@ -59,7 +57,7 @@ export default function OutbreakHands({
                 const ps = playerStates[userId];
                 if (!ps) return null;
                 const isMe = userId === myUserId;
-                const isActive = userId === currentTurnUserId && !complete;
+                const isActive = userId === activeUserId;
                 const role = roleDef(ps.role);
                 const cardCount = ps.hand.length + (ps.contingencyCard !== null ? 1 : 0);
 
