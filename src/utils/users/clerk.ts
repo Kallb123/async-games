@@ -324,8 +324,6 @@ export async function userIdListToImageMap(userIdList: string[]): Promise<Map<st
 export interface UserDto {
     userId: string;
     username: string | null;
-    firstName: string | null;
-    lastName: string | null;
     imageUrl: string | null;
     // Mirrors Clerk's own shape, so the DTO satisfies NamedUser and a screen
     // resolves a name from it through the same players.ts helpers it uses on
@@ -340,13 +338,19 @@ export interface UserDto {
 // one route's payload can't get a different answer from another's — the
 // friends list and the profile screen were two copies, and only one of them
 // knew about guests.
+//
+// It carries no real name. Clerk's firstName/lastName reached other players
+// through this until display names landed, and nothing needs them now: a
+// player is their display name and their handle, and a name they gave to sign
+// up is not something to hand to everyone they play against.
 export function toUserDto(user: User): UserDto {
     return {
         userId: user.id,
         username: user.username,
-        firstName: user.firstName,
-        lastName: user.lastName,
         imageUrl: profileImageUrl(user),
+        // chosenName rather than the raw metadata: it also answers for a guest
+        // minted before display names had a field, whose name is still in the
+        // Clerk `firstName` this DTO no longer carries.
         publicMetadata: { guest: isGuest(user), displayName: chosenName(user) ?? undefined },
     };
 }

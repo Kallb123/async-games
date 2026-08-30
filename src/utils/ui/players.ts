@@ -43,7 +43,8 @@ export function nameForUserId(
 export interface NamedUser {
     username?: string | null;
     // A guest's join-screen name, for guests minted before it had a field of
-    // its own — never a real name. See readableName's last line.
+    // its own — never a real name. Read only by `chosenName`, and only for a
+    // user with no handle.
     firstName?: string | null;
     id?: string | null;
     publicMetadata?: {
@@ -116,7 +117,13 @@ export function publicHandle(user: NamedUser | null | undefined): string | null 
 // and rate-limited rather than being whatever the browser sent.
 export function chosenName(user: NamedUser | null | undefined): string | null {
     const chosen = user?.publicMetadata?.displayName;
-    return typeof chosen === 'string' && chosen.trim() ? chosen.trim() : null;
+    if (typeof chosen === 'string' && chosen.trim()) return chosen.trim();
+    // The legacy home of the same thing. A guest minted before display names
+    // had a field of their own has their join-screen name in `firstName` —
+    // which is a name they typed, not a real one. Gated on having no handle,
+    // because that is the only population it can be true of: a registered
+    // player's Clerk first name is never reached here and never travels.
+    return publicHandle(user) ? null : (user?.firstName?.trim() || null);
 }
 
 // The name to use for a user in copy another person reads (push notifications,
@@ -129,19 +136,12 @@ export function chosenName(user: NamedUser | null | undefined): string | null {
 // (docs/dynamic-names.md §1a): a handle is how you are *found*, a display name
 // is what you are *called*.
 //
-// `firstName` sits last and is only ever reached by someone with no handle at
-// all — a guest, whose join-screen name lives there (docs/account-less-play.md
-// step 14), or a player who claimed a guest account before the claim route
-// began minting handles. For them it *is* the name they typed, so it is the
-// right answer; for everyone else the handle above it means it is never read
-// as a name at all.
-//
 // Never falls back to a raw user id unless a caller asks for one — a
 // notification saying "user_2abc… is waiting" is worse than one saying
 // "Someone is waiting".
 export function readableName(user: NamedUser | null | undefined, fallback = "Someone"): string {
     if (!user) return fallback;
-    return chosenName(user) || publicHandle(user) || user.firstName || fallback;
+    return chosenName(user) || publicHandle(user) || fallback;
 }
 
 // The name a signed-in user acts under, with their id as the last resort a

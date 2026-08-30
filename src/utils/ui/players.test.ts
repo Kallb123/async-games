@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { currentUsername, displayName, finishedGameCopy, personalName, profileHeading, publicHandle, readableName, seatOrderFrom } from './players';
+import { chosenName, currentUsername, displayName, finishedGameCopy, personalName, profileHeading, publicHandle, readableName, seatOrderFrom } from './players';
 
 describe('readableName', () => {
     it('prefers the display name a player chose over their handle', () => {
@@ -12,10 +12,20 @@ describe('readableName', () => {
     });
 
     it("never shows a registered player's leftover Clerk first name", () => {
-        // firstName is only the legacy home of a *guest's* typed name. A
-        // registered player who still has one from Clerk's signup form is
-        // known by their handle until they choose a display name.
+        // firstName is only the legacy home of a *guest's* typed name, and is
+        // read only for a user with no handle. A registered player who still
+        // has one from Clerk's signup form is known by their handle until they
+        // choose a display name — and their real name never travels.
         expect(readableName({ username: 'dave', firstName: 'David' })).toBe('dave');
+        expect(chosenName({ username: 'dave', firstName: 'David' })).toBeNull();
+    });
+
+    it('still names a guest minted before display names had a field', () => {
+        expect(readableName({
+            username: 'guest_abc123',
+            firstName: 'Dave',
+            publicMetadata: { guest: true },
+        })).toBe('Dave');
     });
 
     it('falls back to the fallback for a real player with neither', () => {
