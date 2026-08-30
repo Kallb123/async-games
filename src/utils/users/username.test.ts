@@ -24,7 +24,7 @@ describe('isValidUsername', () => {
     });
 
     it('rejects what a display name allows but a handle does not', () => {
-        // isValidGuestName takes all of these; a Clerk handle takes none of
+        // isValidDisplayName takes all of these; a Clerk handle takes none of
         // them, which is why the two validators are separate rules.
         for (const handle of ['Dave Smith', "O'Brien", 'dave.smith', 'ダンダン']) {
             expect(isValidUsername(handle)).toBe(false);
