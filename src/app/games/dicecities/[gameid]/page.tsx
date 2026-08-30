@@ -6,6 +6,7 @@ import { useState } from "react";
 import { IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import GameShell from "@/components/ui/GameShell";
+import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
@@ -123,6 +124,22 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
         })
         : [];
 
+    // The same sheet either way: on your turn the dice and the build step, off
+    // it the market alone (readOnly), so the cards on offer and what they cost
+    // can be read while you wait. Reviewing a past turn has nothing to wait for.
+    const showActions = isMyTurn && !!boardPlayer && controlsCurrentTurn === boardPlayer.userId;
+    const waiting = nav.isLive && !complete && !showActions && !!myState;
+    const turnSheet = displayed && boardPlayer && (
+        <DiceCitiesActions
+            gameState={displayed}
+            myState={boardPlayer}
+            opponents={opponents}
+            submitCommand={controlsSubmit}
+            pendingTarget={controlsPendingTarget}
+            readOnly={!showActions}
+        />
+    );
+
     const menuOptions: GameOption[] = [
         ...(recap.hasRecap ? [{
             key: 'recap',
@@ -187,15 +204,9 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
                 />
             )}
 
-            {isMyTurn && boardPlayer && controlsCurrentTurn === boardPlayer.userId && (
-                <DiceCitiesActions
-                    gameState={displayed!}
-                    myState={boardPlayer}
-                    opponents={opponents}
-                    submitCommand={controlsSubmit}
-                    pendingTarget={controlsPendingTarget}
-                />
-            )}
+            {showActions ? turnSheet
+                : waiting ? <ReadOnlyPanel waitingFor={currentTurnUsername}>{turnSheet}</ReadOnlyPanel>
+                : null}
 
             <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} userIdList={userIdList} />
 

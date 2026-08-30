@@ -1576,6 +1576,33 @@ a.ag-list-row, a.ag-list-row-main {
     margin: 8px 0 0;
 }
 
+/* ---- Read-only panels (what you can look at while you wait) ---- */
+/* Off your turn a game still shows you your hand and the face-up cards — the
+   same panels it shows on your turn, wrapped in ReadOnlyPanel's disabled
+   fieldset. These rules undo the browser's fieldset chrome so those panels sit
+   exactly where they always do, and dim the block as a whole so it reads as
+   one thing that is off rather than a screen of individually greyed-out
+   controls. */
+.ag-readonly {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    opacity: 0.85;
+}
+/* Disabled here means "not your turn", not "this one is out of reach", so the
+   controls inside keep their own colour — a card you cannot read is no use to
+   the player waiting to plan their next move. The element selector outranks
+   every per-game :disabled rule, whatever order the file ends up in. */
+.ag-readonly button:disabled { opacity: 1; cursor: default; }
+.ag-readonly-note {
+    margin: 0;
+    padding: 12px 16px 0;
+    font: 600 11px var(--ag-font);
+    color: var(--ag-ink-soft);
+    text-align: center;
+}
+
 /* Highlighted inline notice (e.g. the Special Build Phase banner). */
 .ag-callout {
     background: color-mix(in oklch, var(--ag-gold) 16%, var(--ag-surface));

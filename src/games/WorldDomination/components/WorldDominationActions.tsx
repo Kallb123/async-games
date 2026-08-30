@@ -47,10 +47,15 @@ interface WorldDominationActionsProps {
     /** The `target` of the in-flight command, so the tapped button alone shows as
      *  processing. Null when nothing is in flight. */
     pendingTarget: string | null;
+    /**
+     * Off your turn only the card hand is worth showing — every control below
+     * it needs a turn to be any use. `ReadOnlyPanel` makes what is left inert.
+     */
+    readOnly?: boolean;
 }
 
 export default function WorldDominationActions({
-    gs, myUserId, selFrom, selTo, setSelFrom, setSelTo, submitCommand, pendingTarget,
+    gs, myUserId, selFrom, selTo, setSelFrom, setSelTo, submitCommand, pendingTarget, readOnly = false,
 }: WorldDominationActionsProps) {
     const me = gs.playerStates[myUserId];
     const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
@@ -131,6 +136,11 @@ export default function WorldDominationActions({
             )}
         </div>
     ) : null;
+
+    // Waiting players get the hand and nothing else: the cards they hold are
+    // what next turn gets planned around, and a 5th card is a set they will
+    // have to cash in the moment the turn comes round.
+    if (readOnly) return cardHand;
 
     // ── Setup / Reinforce: place armies on the board ────────────────────────────
     if (gs.phase === 'setup' || gs.phase === 'reinforce' || (gs.phase === 'attack' && gs.reinforcementsRemaining > 0)) {

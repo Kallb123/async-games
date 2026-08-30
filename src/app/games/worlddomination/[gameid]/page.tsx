@@ -9,6 +9,7 @@ import { ADJACENCY, TERRITORIES, isAdjacent, connectedThroughOwnedTerritories } 
 import WorldDominationBoard from "@/games/WorldDomination/components/WorldDominationBoard";
 import WorldDominationActions from "@/games/WorldDomination/components/WorldDominationActions";
 import GameShell from "@/components/ui/GameShell";
+import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
@@ -228,6 +229,26 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     ];
     const optionsMenu = gs ? <GameOptionsMenu options={menuOptions} /> : undefined;
 
+    // The same sheet either way: on your turn the phase controls, off it the
+    // cards in your hand to plan the next one against (readOnly drops the
+    // controls, ReadOnlyPanel takes what is left out of play).
+    // A hand is the only thing the sheet has to show off-turn, so an empty one
+    // means there is nothing to wait over.
+    const waiting = nav.isLive && !isMyTurn && !complete && (gs?.playerStates?.[myUserId]?.cardCount ?? 0) > 0;
+    const turnSheet = gs && !complete && (
+        <WorldDominationActions
+            gs={gs}
+            myUserId={myUserId}
+            selFrom={selFrom}
+            selTo={selTo}
+            setSelFrom={setSelFrom}
+            setSelTo={setSelTo}
+            submitCommand={submitCommand}
+            pendingTarget={pendingTarget}
+            readOnly={!isMyTurn}
+        />
+    );
+
     let placementPrompt: string | null = null;
     if (gs && isMyTurn && !complete) {
         if (gs.phase === 'setup' || gs.phase === 'reinforce' || (gs.phase === 'attack' && gs.reinforcementsRemaining > 0)) {
@@ -287,18 +308,9 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
                         />
                     </div>
 
-                    {isMyTurn && !complete && (
-                        <WorldDominationActions
-                            gs={gs}
-                            myUserId={myUserId}
-                            selFrom={selFrom}
-                            selTo={selTo}
-                            setSelFrom={setSelFrom}
-                            setSelTo={setSelTo}
-                            submitCommand={submitCommand}
-                            pendingTarget={pendingTarget}
-                        />
-                    )}
+                    {isMyTurn ? turnSheet
+                        : waiting ? <ReadOnlyPanel waitingFor={currentTurnUsername}>{turnSheet}</ReadOnlyPanel>
+                        : null}
 
                     <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} userIdList={userIdList} />
 

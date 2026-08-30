@@ -53,6 +53,9 @@ out. A second copy is the signal to extract the first one.
   boards (World Domination, Outbreak) share `BoardZoom`, `ClickableMapNode`,
   `MapLabel` and `MapEdges` (the adjacency layer, which draws cross-map edges
   as labelled stubs off each edge rather than a line across the whole board).
+  `ReadOnlyPanel` is how a game screen shows a waiting player the panels they
+  can look at but not act on — their hand, the face-up cards, the market — by
+  making the turn sheet inert rather than growing a second read-only copy of it.
 - `src/utils/ui/` — pure presentation helpers: `games.ts` (per-game metadata:
   name, art, accent, players), `avatar.ts` (deterministic avatar colours),
   `players.ts` (opponent summaries), `mapEdges.ts` (the wrap geometry `MapEdges`

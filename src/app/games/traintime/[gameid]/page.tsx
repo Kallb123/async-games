@@ -22,6 +22,7 @@ import TrainTimeTicketSheet from "@/games/TrainTime/components/TrainTimeTicketSh
 import TrainTimeTicketPanel, { TrainTimeTicketGroup } from "@/games/TrainTime/components/TrainTimeTicketPanel";
 import TrainTimeScoreSheet, { TrainTimeScoreRow } from "@/games/TrainTime/components/TrainTimeScoreSheet";
 import GameShell from "@/components/ui/GameShell";
+import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
@@ -292,6 +293,26 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
         }))
         : [];
 
+    // The same turn sheet either way: on your turn it is the thing you play
+    // with, off it the hand and the face-up cards to plan against (readOnly
+    // drops the picker, ReadOnlyPanel takes the rest out of play).
+    const waiting = nav.isLive && !isMyTurn && !complete && !!me;
+    const turnSheet = gs && (
+        <TrainTimeActions
+            gs={gs}
+            myUserId={myUserId}
+            action={action}
+            setAction={setAction}
+            selectedRouteId={selectedRouteId}
+            onClaim={() => setClaiming(true)}
+            claimableCount={claimableRoutes.size}
+            onDrawTickets={() => submitCommand(new TrainTimeDrawTickets(), undefined, 'tickets')}
+            submitCommand={submitCommand}
+            pendingTarget={pendingTarget}
+            readOnly={!isMyTurn}
+        />
+    );
+
     let boardTag: string | null = null;
     if (gs && isMyTurn && !complete) {
         if (ticketChoice) boardTag = `🎫 keep at least ${gs.myTicketsToKeep}`;
@@ -431,20 +452,10 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                             onKeep={keepTickets}
                             pending={pendingTarget === 'keep-tickets'}
                         />
-                    ) : isMyTurn && (
-                        <TrainTimeActions
-                            gs={gs}
-                            myUserId={myUserId}
-                            action={action}
-                            setAction={setAction}
-                            selectedRouteId={selectedRouteId}
-                            onClaim={() => setClaiming(true)}
-                            claimableCount={claimableRoutes.size}
-                            onDrawTickets={() => submitCommand(new TrainTimeDrawTickets(), undefined, 'tickets')}
-                            submitCommand={submitCommand}
-                            pendingTarget={pendingTarget}
-                        />
-                    )}
+                    ) : isMyTurn ? turnSheet
+                    : waiting ? (
+                        <ReadOnlyPanel waitingFor={currentTurnUsername}>{turnSheet}</ReadOnlyPanel>
+                    ) : null}
 
                     {recapAvailable && (
                         <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} userIdList={userIdList} />

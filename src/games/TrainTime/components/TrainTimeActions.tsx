@@ -33,17 +33,24 @@ interface TrainTimeActionsProps {
     onDrawTickets: () => void;
     submitCommand: SubmitCommand;
     pendingTarget: string | null;
+    /**
+     * Off your turn the same two panels stay on screen to be read rather than
+     * used: the picker and its commit button go, and `ReadOnlyPanel` makes
+     * what is left inert.
+     */
+    readOnly?: boolean;
 }
 
 /**
- * The active player's turn sheet: the face-up row, their hand, and the
- * one-action picker beneath it. Exactly one of the three actions happens per
- * turn (design doc §5), so the picker chooses which and the single big button
- * commits it.
+ * The player's turn sheet: the face-up row, their hand, and — on their turn —
+ * the one-action picker beneath it. Exactly one of the three actions happens
+ * per turn (design doc §5), so the picker chooses which and the single big
+ * button commits it. Waiting players get the first two panels alone, so their
+ * cards and the market are still there to plan against.
  */
 export default function TrainTimeActions({
     gs, myUserId, action, setAction, selectedRouteId, onClaim, claimableCount, onDrawTickets,
-    submitCommand, pendingTarget,
+    submitCommand, pendingTarget, readOnly = false,
 }: TrainTimeActionsProps) {
     const me = gs.playerStates[myUserId];
     if (!me) return null;
@@ -71,7 +78,7 @@ export default function TrainTimeActions({
         <>
             <div className="ag-hand">
                 <div className="ag-hand-head">
-                    <span className="ag-hand-title">{midDraw ? 'Pick 2 · one more card' : 'Face up · take 2'}</span>
+                    <span className="ag-hand-title">{readOnly ? 'Face up' : midDraw ? 'Pick 2 · one more card' : 'Face up · take 2'}</span>
                     {/* The supply counts, the one place they're shown: how
                         deep the carriage deck still is, and whether Action C
                         has any tickets left to offer. */}
@@ -107,21 +114,28 @@ export default function TrainTimeActions({
                         ?
                     </button>
                 </div>
-                <p className="ag-action-hint">
-                    {midDraw
-                        ? 'A Loco can’t be the second pick — it costs a whole turn.'
-                        : 'Tap a card, or the deck for a blind draw. Taking a face-up Loco ends the turn there.'}
-                </p>
+                {!readOnly && (
+                    <p className="ag-action-hint">
+                        {midDraw
+                            ? 'A Loco can’t be the second pick — it costs a whole turn.'
+                            : 'Tap a card, or the deck for a blind draw. Taking a face-up Loco ends the turn there.'}
+                    </p>
+                )}
             </div>
 
             <div className="ag-hand">
                 <div className="ag-hand-head">
                     <span className="ag-hand-title">Your hand · {hand.length}</span>
-                    {midDraw
-                        ? <span className="ag-hand-note">one more card ends your turn</span>
-                        : selectedRoute
-                            ? <span className="ag-tt-payable">✓ {routeName(selectedRoute)} payable</span>
-                            : <span className="ag-hand-note">{pluralize(claimableCount, 'route')} claimable</span>}
+                    {/* What is claimable is only worked out on the turn that
+                        could claim it, so off-turn the head says what the hand
+                        is worth instead of a count that would read as zero. */}
+                    {readOnly
+                        ? <span className="ag-hand-note">{me.trains} trains left</span>
+                        : midDraw
+                            ? <span className="ag-hand-note">one more card ends your turn</span>
+                            : selectedRoute
+                                ? <span className="ag-tt-payable">✓ {routeName(selectedRoute)} payable</span>
+                                : <span className="ag-hand-note">{pluralize(claimableCount, 'route')} claimable</span>}
                 </div>
                 <div className="ag-tt-hand">
                     {HAND_ORDER.filter(colour => hand.includes(colour)).map(colour => {
@@ -139,85 +153,89 @@ export default function TrainTimeActions({
                             </div>
                         );
                     })}
-                    {hand.length === 0 && <span className="ag-hand-note">No cards yet — draw two.</span>}
-                </div>
-            </div>
-
-            <div className="ag-actionsheet">
-                <div className="ag-tt-actions">
-                    <button
-                        type="button"
-                        className={`ag-tt-action${chosen === 'draw' ? ' ag-tt-action--on' : ''}`}
-                        disabled={nothingToDraw}
-                        onClick={() => setAction('draw')}
-                    >
-                        <div className="ag-tt-action-glyph">🃏</div>
-                        Draw cards
-                    </button>
-                    <button
-                        type="button"
-                        className={`ag-tt-action${chosen === 'claim' ? ' ag-tt-action--on' : ''}`}
-                        disabled={midDraw || claimableCount === 0}
-                        onClick={() => setAction('claim')}
-                    >
-                        <div className="ag-tt-action-glyph">🚂</div>
-                        Claim route
-                    </button>
-                    <button
-                        type="button"
-                        className={`ag-tt-action${chosen === 'tickets' ? ' ag-tt-action--on' : ''}`}
-                        disabled={midDraw || ticketsLeft === 0}
-                        onClick={() => setAction('tickets')}
-                    >
-                        <div className="ag-tt-action-glyph">🎫</div>
-                        Draw tickets
-                    </button>
-                </div>
-
-                <div className="ag-btn-row" style={{ marginTop: 9 }}>
-                    {chosen === 'tickets' ? (
-                        <ActionButton
-                            className="ag-btn ag-btn--primary ag-btn--block"
-                            pending={pendingTarget === 'tickets'}
-                            pendingLabel="Drawing…"
-                            onClick={onDrawTickets}
-                        >
-                            Draw {pluralize(ticketsLeft, 'ticket')} →
-                        </ActionButton>
-                    ) : chosen === 'draw' ? (
-                        <ActionButton
-                            className="ag-btn ag-btn--primary ag-btn--block"
-                            disabled={deckEmpty}
-                            pending={pendingTarget === 'draw-deck-0'}
-                            pendingLabel="Drawing…"
-                            onClick={() => draw('deck')}
-                        >
-                            Draw from the deck →
-                        </ActionButton>
-                    ) : (
-                        <button
-                            type="button"
-                            className={`ag-btn ${selectedRoute ? 'ag-btn--primary' : 'ag-btn--light'} ag-btn--block`}
-                            disabled={!selectedRoute}
-                            onClick={onClaim}
-                        >
-                            {selectedRoute ? `Claim ${routeName(selectedRoute)} →` : 'Tap a highlighted route'}
-                        </button>
+                    {hand.length === 0 && (
+                        <span className="ag-hand-note">{readOnly ? 'No cards yet.' : 'No cards yet — draw two.'}</span>
                     )}
                 </div>
-
-                {nothingToDraw && (
-                    <ActionButton
-                        className="ag-btn ag-btn--light ag-btn--block"
-                        style={{ marginTop: 10 }}
-                        pending={pendingTarget === 'pass'}
-                        pendingLabel="Passing…"
-                        onClick={() => submitCommand(new TrainTimePassTurn(), undefined, 'pass')}
-                    >
-                        Pass — nothing left to draw
-                    </ActionButton>
-                )}
             </div>
+
+            {!readOnly && (
+                <div className="ag-actionsheet">
+                    <div className="ag-tt-actions">
+                        <button
+                            type="button"
+                            className={`ag-tt-action${chosen === 'draw' ? ' ag-tt-action--on' : ''}`}
+                            disabled={nothingToDraw}
+                            onClick={() => setAction('draw')}
+                        >
+                            <div className="ag-tt-action-glyph">🃏</div>
+                            Draw cards
+                        </button>
+                        <button
+                            type="button"
+                            className={`ag-tt-action${chosen === 'claim' ? ' ag-tt-action--on' : ''}`}
+                            disabled={midDraw || claimableCount === 0}
+                            onClick={() => setAction('claim')}
+                        >
+                            <div className="ag-tt-action-glyph">🚂</div>
+                            Claim route
+                        </button>
+                        <button
+                            type="button"
+                            className={`ag-tt-action${chosen === 'tickets' ? ' ag-tt-action--on' : ''}`}
+                            disabled={midDraw || ticketsLeft === 0}
+                            onClick={() => setAction('tickets')}
+                        >
+                            <div className="ag-tt-action-glyph">🎫</div>
+                            Draw tickets
+                        </button>
+                    </div>
+
+                    <div className="ag-btn-row" style={{ marginTop: 9 }}>
+                        {chosen === 'tickets' ? (
+                            <ActionButton
+                                className="ag-btn ag-btn--primary ag-btn--block"
+                                pending={pendingTarget === 'tickets'}
+                                pendingLabel="Drawing…"
+                                onClick={onDrawTickets}
+                            >
+                                Draw {pluralize(ticketsLeft, 'ticket')} →
+                            </ActionButton>
+                        ) : chosen === 'draw' ? (
+                            <ActionButton
+                                className="ag-btn ag-btn--primary ag-btn--block"
+                                disabled={deckEmpty}
+                                pending={pendingTarget === 'draw-deck-0'}
+                                pendingLabel="Drawing…"
+                                onClick={() => draw('deck')}
+                            >
+                                Draw from the deck →
+                            </ActionButton>
+                        ) : (
+                            <button
+                                type="button"
+                                className={`ag-btn ${selectedRoute ? 'ag-btn--primary' : 'ag-btn--light'} ag-btn--block`}
+                                disabled={!selectedRoute}
+                                onClick={onClaim}
+                            >
+                                {selectedRoute ? `Claim ${routeName(selectedRoute)} →` : 'Tap a highlighted route'}
+                            </button>
+                        )}
+                    </div>
+
+                    {nothingToDraw && (
+                        <ActionButton
+                            className="ag-btn ag-btn--light ag-btn--block"
+                            style={{ marginTop: 10 }}
+                            pending={pendingTarget === 'pass'}
+                            pendingLabel="Passing…"
+                            onClick={() => submitCommand(new TrainTimePassTurn(), undefined, 'pass')}
+                        >
+                            Pass — nothing left to draw
+                        </ActionButton>
+                    )}
+                </div>
+            )}
         </>
     );
 }

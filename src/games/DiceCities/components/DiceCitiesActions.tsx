@@ -34,6 +34,12 @@ interface DiceCitiesActionsProps {
      *  shows as processing. Null when nothing is in flight — which also means it
      *  doubles as "is the sheet busy?", since every command here carries one. */
     pendingTarget: string | null;
+    /**
+     * Off your turn the market is all that is left of the sheet — the dice and
+     * the build buttons need a turn to be any use. `ReadOnlyPanel` makes what
+     * is left inert.
+     */
+    readOnly?: boolean;
 }
 
 // The unlock command for each of the four win-condition landmarks, keyed by the
@@ -45,7 +51,7 @@ const LANDMARK_UNLOCK: Record<string, new () => IGameCommand> = {
     oneReroll: DiceCitiesRequestUnlockRadioTower,
 };
 
-export default function DiceCitiesActions({ gameState, myState, opponents, submitCommand, pendingTarget }: DiceCitiesActionsProps) {
+export default function DiceCitiesActions({ gameState, myState, opponents, submitCommand, pendingTarget, readOnly = false }: DiceCitiesActionsProps) {
     // A command is in flight — disable the sheet so a double-tap can't fire two
     // commands before the first response lands.
     const busy = pendingTarget !== null;
@@ -106,6 +112,85 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
     };
 
     const pass = () => send(new DiceCitiesRequestPassTurn(), "endTurn");
+
+    // ── The market, shared by the build step and the waiting view ───────────
+    // What is on offer and what it costs is public, so a player waiting for
+    // their turn reads it here — and it is the very block they build from once
+    // the dice come round to them.
+    const buyable = [...gameState.bankCards].sort(
+        (a, b) => DiceCitiesCards[a.card].rollNumber[0] - DiceCitiesCards[b.card].rollNumber[0],
+    );
+    const unbuiltLandmarks = LANDMARKS.filter((l) => !myState[l.flag]);
+    const marketSheet = (
+        <>
+            <div className="ag-dc-market-head">
+                <span className="ag-dc-market-title">{readOnly ? 'Market' : 'Market · build one'}</span>
+                <CoinPill amount={gameState.bankMoney} label="in bank" pill />
+                <CoinPill amount={myState.money} pill />
+            </div>
+
+            <div className="ag-dc-market-grid ag-pending-group">
+                {buyable.map((cc) => {
+                    const card = DiceCitiesCards[cc.card];
+                    const disabled = purchaseDisabled(card, cc.amount, myState) || busy;
+                    const pending = pendingTarget === `build:${cc.card}`;
+                    return (
+                        <div
+                            key={cc.card}
+                            className={`ag-dc-market-card${pending ? ' ag-pending-skin' : ''}`}
+                            style={{ borderTopColor: ACTIVATION_META[activationFor(card)].color }}
+                        >
+                            <div className="ag-dc-market-card-top">
+                                <CardArt card={card} className="ag-dc-market-icon" />
+                                {pending
+                                    ? <PendingTag label="Building" />
+                                    : <span className="ag-dc-market-roll">🎲 {rollLabel(card)}</span>}
+                            </div>
+                            <div className="ag-dc-market-name">{card.title}</div>
+                            <div className="ag-dc-market-yield">{yieldLabel(card)} · ×{cc.amount} left</div>
+                            <button
+                                className="ag-dc-build-btn"
+                                disabled={disabled}
+                                onClick={() => buyCard(cc.card as uuidString)}
+                            >
+                                Build · {card.cost}🪙
+                            </button>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {unbuiltLandmarks.length > 0 && (
+                <div className="ag-dc-landmark-buys ag-pending-group">
+                    {unbuiltLandmarks.map(({ cardId, flag }) => {
+                        const card = DiceCitiesCards[cardId];
+                        const disabled = card.cost > myState.money || busy;
+                        const pending = pendingTarget === `landmark:${flag}`;
+                        return (
+                            <button
+                                key={cardId}
+                                className={`ag-build-row ag-dc-landmark-buy${pending ? ' ag-pending-skin' : ''}`}
+                                disabled={disabled}
+                                onClick={() => unlockLandmark(flag as string)}
+                            >
+                                <CardArt card={card} className="ag-icon-box ag-dc-landmark-buy-icon" />
+                                <span className="ag-build-main">
+                                    <span className="ag-build-name">Landmark · {card.title}</span>
+                                    <span className="ag-build-cost">{card.text}</span>
+                                </span>
+                                {pending
+                                    ? <PendingTag label="Building" />
+                                    : <span className="ag-build-tag">{card.cost}🪙</span>}
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+        </>
+    );
+
+    // Off your turn that market is the whole sheet.
+    if (readOnly) return <div className="ag-actionsheet ag-dc-market">{marketSheet}</div>;
 
     // ── Pending selections take over the sheet until resolved ────────────────
     if (gameState.awaitingTSSelection) {
@@ -229,11 +314,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
 
     // ── Post-roll: dice result + market ──────────────────────────────────────
     const total = roll ? roll.roll1 + (roll.roll2 ?? 0) : null;
-    const buyable = [...gameState.bankCards].sort(
-        (a, b) => DiceCitiesCards[a.card].rollNumber[0] - DiceCitiesCards[b.card].rollNumber[0],
-    );
     const canReroll = myState.oneReroll && !gameState.hasReRolled;
-    const unbuiltLandmarks = LANDMARKS.filter((l) => !myState[l.flag]);
 
     return (
         <div className="ag-dc-post">
@@ -260,69 +341,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
             )}
 
             <div className="ag-actionsheet ag-dc-market">
-                <div className="ag-dc-market-head">
-                    <span className="ag-dc-market-title">Market · build one</span>
-                    <CoinPill amount={gameState.bankMoney} label="in bank" pill />
-                    <CoinPill amount={myState.money} pill />
-                </div>
-
-                <div className="ag-dc-market-grid ag-pending-group">
-                    {buyable.map((cc) => {
-                        const card = DiceCitiesCards[cc.card];
-                        const disabled = purchaseDisabled(card, cc.amount, myState) || busy;
-                        const pending = pendingTarget === `build:${cc.card}`;
-                        return (
-                            <div
-                                key={cc.card}
-                                className={`ag-dc-market-card${pending ? ' ag-pending-skin' : ''}`}
-                                style={{ borderTopColor: ACTIVATION_META[activationFor(card)].color }}
-                            >
-                                <div className="ag-dc-market-card-top">
-                                    <CardArt card={card} className="ag-dc-market-icon" />
-                                    {pending
-                                        ? <PendingTag label="Building" />
-                                        : <span className="ag-dc-market-roll">🎲 {rollLabel(card)}</span>}
-                                </div>
-                                <div className="ag-dc-market-name">{card.title}</div>
-                                <div className="ag-dc-market-yield">{yieldLabel(card)} · ×{cc.amount} left</div>
-                                <button
-                                    className="ag-dc-build-btn"
-                                    disabled={disabled}
-                                    onClick={() => buyCard(cc.card as uuidString)}
-                                >
-                                    Build · {card.cost}🪙
-                                </button>
-                            </div>
-                        );
-                    })}
-                </div>
-
-                {unbuiltLandmarks.length > 0 && (
-                    <div className="ag-dc-landmark-buys ag-pending-group">
-                        {unbuiltLandmarks.map(({ cardId, flag }) => {
-                            const card = DiceCitiesCards[cardId];
-                            const disabled = card.cost > myState.money || busy;
-                            const pending = pendingTarget === `landmark:${flag}`;
-                            return (
-                                <button
-                                    key={cardId}
-                                    className={`ag-build-row ag-dc-landmark-buy${pending ? ' ag-pending-skin' : ''}`}
-                                    disabled={disabled}
-                                    onClick={() => unlockLandmark(flag as string)}
-                                >
-                                    <CardArt card={card} className="ag-icon-box ag-dc-landmark-buy-icon" />
-                                    <span className="ag-build-main">
-                                        <span className="ag-build-name">Landmark · {card.title}</span>
-                                        <span className="ag-build-cost">{card.text}</span>
-                                    </span>
-                                    {pending
-                                        ? <PendingTag label="Building" />
-                                        : <span className="ag-build-tag">{card.cost}🪙</span>}
-                                </button>
-                            );
-                        })}
-                    </div>
-                )}
+                {marketSheet}
 
                 {canReroll && (
                     <ActionButton
