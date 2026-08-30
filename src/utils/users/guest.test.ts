@@ -26,7 +26,6 @@ describe('createGuest', () => {
         await createGuest('Dave');
 
         expect(createUser).toHaveBeenCalledWith(expect.objectContaining({
-            firstName: 'Dave',
             skipPasswordRequirement: true,
             // The name they typed goes in the same field a registered player
             // sets from their profile, so claiming an account keeps the name
@@ -41,6 +40,17 @@ describe('createGuest', () => {
 
         const usernames = createUser.mock.calls.map(([params]) => params.username);
         expect(new Set(usernames).size).toBe(2);
+    });
+
+    it('holds no real name for a guest', async () => {
+        // A guest's typed name is a display name, not a first name — the app
+        // stopped keeping Clerk's name fields at all, and writing one here
+        // would be the last place still doing it.
+        await createGuest('Dave');
+
+        const [params] = createUser.mock.calls[0];
+        expect(params).not.toHaveProperty('firstName');
+        expect(params).not.toHaveProperty('lastName');
     });
 
     it('mints a username publicHandle will recognise as an account id', async () => {

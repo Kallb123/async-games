@@ -432,7 +432,7 @@ second copy of `useProfilePicture`'s save — the same guard, reload, toast pair
 and in-flight flag around one write to the signed-in Clerk user. Those four
 things now live in `src/utils/hooks/useClerkUserSave.tsx`, and both callers are
 a two-line `save(...)`. **PR 5.2's display-name editor is its third caller** —
-`save(u => u.update({ firstName }), ...)` — so it should not hand-roll the
+`save(...)` — so it should not hand-roll the
 sequence either.
 
 ### 5e. The §1c defects go first, not here
@@ -575,14 +575,13 @@ So the display name is `publicMetadata.displayName`, a field of our own. The
 consequences, all of them improvements:
 
 - **A handle seeds it, so nothing has to backfill.** The order is
-  `chosenName → publicHandle → firstName`, so a player who has chosen nothing
-  is known by their username, exactly as before this PR — and the day they pick
-  a display name it takes over. Nobody's name changes on deploy.
-- **`firstName` is only ever reached by someone with no handle at all** — a
-  guest, whose join-screen name lives there, or a player who claimed a guest
-  account before §1c's fix minted them a handle. For them it *is* the name they
-  typed. For everyone else the handle above it means it is never read as a name,
-  and `fullName` goes back to meaning a real name.
+  `chosenName → publicHandle`, so a player who has chosen nothing is known by
+  their username, exactly as before this PR — and the day they pick a display
+  name it takes over. Nobody's name changes on deploy.
+- **Clerk's `firstName`/`lastName` then went entirely** (see below). The one
+  read left is inside `chosenName`, for a guest minted before the display-name
+  field existed, and it is gated on the user having no handle — the only
+  population it can be true of.
 - **It has a route, so the name the whole table reads is server-validated.**
   `publicMetadata` is writable only from the Backend API, so
   `POST /api/user/displayname` exists — with `isValidDisplayName` and a rate
@@ -593,9 +592,9 @@ consequences, all of them improvements:
   list and push at the table. `docs/account-less-play.md` §14 had already
   settled that a player does not name themselves in front of others without the
   server having a say; this keeps that true.
-- **A guest is minted with one** (`createGuest` writes `publicMetadata.displayName`
-  alongside `firstName`), so a guest and an account are named by one rule rather
-  than two, and claiming keeps the name they have been playing under.
+- **A guest is minted with one** (`createGuest` writes
+  `publicMetadata.displayName`), so a guest and an account are named by one rule
+  rather than two, and claiming keeps the name they have been playing under.
 
 The handle keeps its browser-side write: Clerk enforces uniqueness on it,
 answers `form_identifier_exists` in a sentence worth showing, and can step a
@@ -668,6 +667,21 @@ refused: losing that race leaves both names as they were.
     also makes room for its own suffix now rather than appending past the
     length cap, since what it returns is stored as a display name and has to
     clear the same rule a typed one does.
+
+**Real names went with it.** Once a display name existed, nothing needed
+Clerk's `firstName`/`lastName`: they came out of `UserDto` (so no real name
+travels to another player at all), out of the profile subtitle and the
+friends-row title, and out of `createGuest`, which had been storing a guest's
+typed name in a field called *first name*. `fullName` is gone. A friends row is
+now "Dave (@dave)" — the name they chose and the handle you invite them by,
+which is what that row was for — and just "dave" for someone who has chosen no
+display name, since printing the handle twice says nothing.
+
+The one read that survives is the legacy guest path described above. It can be
+deleted outright once no guest minted before this PR remains: they are swept
+`GUEST_SWEEP_DAYS` after their last game concludes (§8), so a release cycle
+past that window makes `NamedUser.firstName` and the `publicHandle(user) ?`
+line in `chosenName` a two-line deletion with nothing to migrate.
 
 **On impersonation.** §2 listed it as option C's one real cost — "a non-unique
 display name can freely copy someone else's" — and §5.3 is the mitigation. It is

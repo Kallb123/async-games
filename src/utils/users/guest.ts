@@ -74,19 +74,16 @@ export function isGuestPlaceholderEmail(emailAddress: string): boolean {
 // rather than two, and claiming an account keeps the name they have been
 // playing under without moving it.
 //
-// It also goes into `firstName`, which is where it used to live alone. That is
-// what Clerk's own dashboard and emails show, and it is the last thing
-// `readableName` falls back to for a user with no handle — which is every
-// guest, since their username is the meaningless account id above. Writing
-// both means a guest minted before display names existed is named the same way
-// as one minted after, with no backfill.
+// Not into `firstName`, which is where it used to live: that is a *first name*
+// as far as Clerk and everything reading it is concerned, and the app no
+// longer holds real names at all. `chosenName` still reads it for a guest
+// minted before this, and nothing else ever will.
 export async function createGuest(displayName: string): Promise<GuestTicket> {
     const client = await clerkClient();
     const username = generateGuestUsername();
     const user = await client.users.createUser({
         username,
         emailAddress: [generateGuestEmail(username)],
-        firstName: displayName,
         skipPasswordRequirement: true,
         publicMetadata: { guest: true, displayName },
     });

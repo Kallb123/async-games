@@ -4,6 +4,7 @@ import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameResultModel } from '@/utils/mongodb/GameResultData';
 import { isGuestPlaceholderEmail } from '@/utils/users/guest';
 import { availableUsernameFrom } from '@/utils/users/clerk';
+import { readableName } from '@/utils/ui/players';
 import { clerkErrorMessage } from '@/utils/users/clerkErrors';
 import { clientIp, consumeRateLimit } from '@/utils/rateLimit';
 import { readJsonBody } from '@/utils/api/requestBody';
@@ -62,10 +63,14 @@ export async function POST(request: NextRequest) {
         // minted, so they're unfindable by usersByUsername and silently dropped
         // from invite pickers. Claiming is the moment they become a real,
         // invitable account, so mint them a real handle from the display name
-        // they've been playing under (their firstName) and set it in the same
-        // updateUser pass as the password. Derived before any write below, so a
-        // failed lookup leaves nothing half-claimed behind.
-        const username = await availableUsernameFrom(user.firstName ?? '');
+        // they've been playing under and set it in the same updateUser pass as
+        // the password. Derived before any write below, so a failed lookup
+        // leaves nothing half-claimed behind.
+        //
+        // Through readableName rather than off a field: a guest has no handle,
+        // so this is their chosen name — wherever it is stored, including the
+        // `firstName` a guest minted before display names still keeps it in.
+        const username = await availableUsernameFrom(readableName(user, ''));
 
         // Marked verified here the same way guest.ts's own placeholder is:
         // there is no inbox to prove ownership of on this account yet, and

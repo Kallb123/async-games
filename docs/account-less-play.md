@@ -811,13 +811,14 @@ up: `userIdListToUsernameList`/`Map` and `readableName`/`currentUsername` all
 gained the one `publicMetadata.guest` branch that prefers `firstName` for a
 guest, rather than a second name field threaded through every response DTO.
 (Display names later gave every player a name of their own to be seen under —
-`docs/dynamic-names.md` §5 — so the branch is gone: `readableName` reads
-`publicMetadata.displayName` first for guest and registered player alike, and
-`createGuest` writes the typed name there as well as to `firstName`. A guest's
-`firstName` is still the last thing it falls back to, which is only ever
-reached by someone with no handle — that is, by a guest. What else survives is
-`publicHandle`, which still refuses to hand back a guest's account id as a
-handle.)
+`docs/dynamic-names.md` §5 — so the branch is gone: a guest's typed name goes
+into `publicMetadata.displayName`, the same field a registered player sets from
+their profile, and `readableName` reads it for both alike. The app no longer
+keeps Clerk's `firstName`/`lastName` at all; `chosenName` still reads
+`firstName` for a guest minted before that field existed, gated on having no
+handle so it can never surface a registered player's real name. What else
+survives is `publicHandle`, which still refuses to hand back a guest's account
+id as a handle.)
 
 That choke point only holds if nothing reads `user.username` around it, and
 plenty did. `IGameCommand.senderUsername` was the worst of them: **the client
