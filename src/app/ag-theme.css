@@ -415,6 +415,12 @@ a.ag-list-row, a.ag-list-row-main {
     color: var(--ag-terracotta-deep);
     vertical-align: 1px;
 }
+/* The same badge for something merely pending rather than happening — "up
+   next" beside the "playing now" it defers to. */
+.ag-tag--quiet {
+    background: var(--ag-surface-2);
+    color: var(--ag-ink-soft);
+}
 
 /* ---- Prominent "your move" turn card ---- */
 .ag-turn-card {
@@ -1423,6 +1429,22 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-hand {
     border-top: 1px solid var(--ag-line);
     padding: 12px 16px 8px;
+}
+/* A table where every seat's hand is on show (Outbreak) needs the viewer's own
+   row findable without reading the titles, and needs to say whose turn it is
+   this far down the page. The two cues are deliberately different so they
+   compose on your own turn: the tint is identity, the left bar is turn state.
+   `.ag-score-pill--me` is the same idea one component up. */
+.ag-hand--me { background: color-mix(in oklch, var(--ag-terracotta) 7%, transparent); }
+.ag-hand--active { box-shadow: inset 3px 0 0 var(--ag-terracotta); }
+/* The player's swatch, matching their pawn on the board and their scoreboard
+   pill. Sits inside the uppercase title, so it aligns to the text, not the box. */
+.ag-hand-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    margin-right: 6px;
 }
 .ag-hand-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
 .ag-hand-title {
@@ -3266,6 +3288,10 @@ button.ag-tt-ticket { cursor: pointer; }
     color: var(--ag-on-dark);
     box-shadow: 0 0 0 2px oklch(0.6 0.15 25);
 }
+.ag-game--outbreak .ag-hand--me { background: color-mix(in oklch, var(--ob-crimson) 8%, transparent); }
+.ag-game--outbreak .ag-hand--active { box-shadow: inset 3px 0 0 var(--ob-crimson); }
+.ag-game--outbreak .ag-tag { background: color-mix(in oklch, var(--ob-crimson) 14%, var(--ag-surface)); color: var(--ob-crimson-deep); }
+.ag-game--outbreak .ag-tag--quiet { background: var(--ag-surface-2); color: var(--ag-ink-soft); }
 .ag-game--outbreak .ag-btn--primary {
     background: var(--ob-crimson);
     color: var(--ag-on-dark);
