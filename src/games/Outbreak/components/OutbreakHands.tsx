@@ -12,6 +12,10 @@ interface OutbreakHandsProps {
      *  necessarily turn order. Only drives each seat's colour dot, so it
      *  matches the pawn colours on the board and the scoreboard. */
     userIdList: string[];
+    /** Player seats in the real turn order (`gameState.turnOrder`), drawn at
+     *  random at setup and not necessarily the same as userIdList. Drives
+     *  seating and the "now"/"next" markers below. */
+    turnOrder: string[];
     myUserId: string;
     /** Whose turn the board is showing — the turn under review, not
      *  necessarily the live one, and null once the game is over. Drives the
@@ -38,6 +42,7 @@ interface OutbreakHandsProps {
 export default function OutbreakHands({
     playerStates,
     userIdList,
+    turnOrder,
     myUserId,
     activeUserId,
     onCardTap,
@@ -45,11 +50,8 @@ export default function OutbreakHands({
 }: OutbreakHandsProps) {
     const [infoRole, setInfoRole] = useState<OutbreakRoleDef | null>(null);
 
-    // playerStates is keyed in `gameState.turnOrder` order server-side (see
-    // gameStateToModel in OutbreakModels.ts) — the real running order, which
-    // is drawn at random at setup and so need not match userIdList's join
-    // order. Turn markers and seating both follow this, not userIdList.
-    const turnOrder = Object.keys(playerStates);
+    // Turn markers and seating follow the real turn order, not userIdList's
+    // join order (they need not match — see the prop docs above).
     const activeSeat = activeUserId ? turnOrder.indexOf(activeUserId) : -1;
     const nextUserId = activeSeat >= 0 && turnOrder.length > 1
         ? turnOrder[(activeSeat + 1) % turnOrder.length]

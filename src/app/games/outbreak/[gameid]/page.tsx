@@ -101,6 +101,10 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     const myUserId = user?.id ?? '';
     const usernameList = gameData?.usernameList ?? [];
     const userIdList = gameData?.userIdList ?? [];
+    // Outbreak's running order is drawn at random at setup (see
+    // OutbreakModels.ts's CreateGame) and need not match userIdList's join
+    // order — OutbreakHands needs the real one for seating and turn markers.
+    const turnOrder = gameData?.gameState?.turnOrder ?? [];
     const me = gs?.playerStates[myUserId];
 
     // What the board is targeting right now, if anything — reset whenever the
@@ -413,6 +417,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                     <OutbreakHands
                         playerStates={gs.playerStates}
                         userIdList={userIdList}
+                        turnOrder={turnOrder}
                         myUserId={myUserId}
                         activeUserId={complete ? null : displayedCurrentTurn}
                         onCardTap={handleCardTap}
