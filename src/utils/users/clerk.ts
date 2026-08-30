@@ -1,6 +1,7 @@
 import { clerkClient, User } from "@clerk/nextjs/server";
-import { isGuest, readableName, UNKNOWN_PLAYER_NAME } from "@/utils/ui/players";
+import { chosenName, isGuest, publicHandle, readableName, UNKNOWN_PLAYER_NAME } from "@/utils/ui/players";
 import { profileImageUrl } from "@/utils/ui/avatar";
+import { sameName } from "@/utils/users/sameName";
 import { MIN_USERNAME_LENGTH, slugifyUsername } from "@/utils/users/username";
 
 // Shown for a userId Clerk can't resolve (a deleted account, most likely
@@ -148,16 +149,77 @@ export async function forEachClerkUser(visit: (user: User) => Promise<void>): Pr
 // Shown for a user Clerk still has but who has no name of any kind to show.
 export const NO_NAME_PLAYER_NAME = "No username";
 
-// The one place every resolver below turns a looked-up user into a name, so
-// they can't drift apart — including what to show when the lookup found
-// nobody, which is the half that used to get re-pasted. `readableName` owns
-// the preference order itself (including inverting it for a guest, whose
-// Clerk username is the random account id createGuest() minted rather than
-// anything they chose), so the server and the client resolve the same user to
-// the same string — which matters, because a screen compares the name it
-// resolves for you against the usernameList this builds.
+// The one place a single looked-up user becomes a name, so no resolver below
+// re-derives it — including what to show when the lookup found nobody, which
+// is the half that used to get re-pasted. `readableName` owns the preference
+// order itself (the display name they chose, then the handle they are invited
+// by — never the random account id createGuest() minted for a guest), so this
+// is the same answer the client gets for the same user.
+//
+// It is the answer for *one* user, which is why almost nothing calls it
+// directly: a name is only ambiguous next to the other names on screen, so
+// `namesFor` below is what every resolver actually goes through.
 function nameOf(user: User | undefined): string {
     return user ? readableName(user, NO_NAME_PLAYER_NAME) : UNKNOWN_PLAYER_NAME;
+}
+
+/**
+ * The names for a whole set of users at once, keyed by id. Every resolver
+ * below goes through this rather than naming users one at a time, because a
+ * set is the only level at which "two players called Dave" is visible at all.
+ *
+ * A display name is free text, and since it became the name everyone sees
+ * (docs/dynamic-names.md §5.1) two players at one table really can both be
+ * Dave — leaving a seat list, a turn banner and every history line naming
+ * either of them. So where a name repeats within the set, each copy is tagged
+ * with the handle behind it — "Dave (@dave)", "Dave (@daveb)" — the one thing
+ * about them Clerk guarantees differs. A name nobody shares is left alone,
+ * which is almost always.
+ *
+ * Nobody in a colliding group keeps the bare name. A player who has no handle
+ * to be tagged with — a guest, whose Clerk username is the account id
+ * createGuest() minted and would be worse to show than the collision, or a
+ * player who claimed a guest account before handles were minted — gets a
+ * number instead, assigned in userId order so it is the same on every request.
+ * Leaving one of them bare was the first version of this, and it had the tell
+ * exactly backwards: the player who could not be tagged read as the "real"
+ * one, which is precisely the wrong answer when they are the one who renamed
+ * themselves to match somebody else.
+ *
+ * Hands back the lookup rather than the map so the "Clerk didn't know this id"
+ * answer stays here with the rest of the naming rules, instead of every caller
+ * re-adding the same fallback.
+ */
+function namesFor(users: User[]): (userId: string) => string {
+    // One entry per id, so a user who appears twice in the list is one player
+    // rather than a collision with themselves.
+    const seats = [...new Map(users.map(user => [user.id, user])).values()]
+        .map(user => ({ id: user.id, name: nameOf(user), handle: publicHandle(user) }));
+
+    const uses = new Map<string, number>();
+    seats.forEach(({ name }) => uses.set(sameName(name), (uses.get(sameName(name)) ?? 0) + 1));
+
+    // Assigned in userId order rather than in the order Clerk happened to
+    // return, so a numbered player keeps their number between requests instead
+    // of swapping it with the other Dave every time the list is rebuilt.
+    const tags = new Map<string, string>();
+    const numbered = new Map<string, number>();
+    for (const { id, name, handle } of [...seats].sort((a, b) => a.id.localeCompare(b.id))) {
+        const key = sameName(name);
+        if ((uses.get(key) ?? 0) < 2) continue;
+        if (handle) {
+            tags.set(id, `${name} (@${handle})`);
+            continue;
+        }
+        const nth = (numbered.get(key) ?? 0) + 1;
+        numbered.set(key, nth);
+        tags.set(id, `${name} (${nth})`);
+    }
+
+    const names = new Map(seats.map(({ id, name }) => [id, tags.get(id) ?? name]));
+    // nameOf's own answer for a user Clerk didn't hand back, so "we don't know
+    // this id" stays worded in exactly one place.
+    return userId => names.get(userId) ?? nameOf(undefined);
 }
 
 /**
@@ -181,11 +243,15 @@ export async function buildUserDirectory(userIds: (string | null | undefined)[])
     const wanted = [...new Set(userIds.filter((id): id is string => !!id))];
     const users = await usersById(wanted);
     const byId = new Map(users.map(user => [user.id, user]));
+    // Resolved against the whole screen's worth of ids, so two players called
+    // Dave are told apart wherever they turn up together — in one game's seat
+    // list, or in two rows of the same list of games.
+    const nameFor = namesFor(users);
 
     return {
         name(userId) {
             if (!userId) return "";
-            return nameOf(byId.get(userId));
+            return nameFor(userId);
         },
         imageUrl(userId) {
             const user = byId.get(userId);
@@ -194,27 +260,33 @@ export async function buildUserDirectory(userIds: (string | null | undefined)[])
     };
 }
 
+// The one Clerk trip behind every list-shaped name lookup below. The three
+// that follow are the same names in a different container, so they go through
+// this rather than each making their own round trip and re-deriving the names.
 export async function userIdListToUsernameList(userIdList: string[]): Promise<string[]> {
+    const nameFor = namesFor(await usersById(userIdList));
+    return userIdList.map(nameFor);
+}
+
+// The same names without the collision tags — for the one caller comparing
+// them against a name a player is *about to type*, where "Dave" has to read as
+// taken even when the two Daves already at the table are showing as
+// "Dave (@dave)" and "Dave (@daveb)". A different rule, not a different
+// container, which is why it doesn't go through the list resolver above.
+export async function userIdListToUntaggedNameList(userIdList: string[]): Promise<string[]> {
     const users = await usersById(userIdList);
-    return userIdList.map(userId => nameOf(users.find(u => u.id === userId)));
+    return userIdList.map(userId => nameOf(users.find(user => user.id === userId)));
 }
 
 export async function userIdListToUsernameMap(userIdList: string[]): Promise<Map<string, string>> {
-    const users = await usersById(userIdList);
-    const usernameMap: Map<string, string> = new Map;
-    userIdList.forEach(userId => {
-        usernameMap.set(userId, nameOf(users.find(u => u.id === userId)));
-    });
-    return usernameMap;
+    const usernameList = await userIdListToUsernameList(userIdList);
+    return new Map(userIdList.map((userId, i) => [userId, usernameList[i]]));
 }
 
 // Same lookup as userIdListToUsernameMap, but as the plain { [userId]: username }
 // object the replay engine (buildTimeline/buildEventFeed/buildAllEvents) takes.
 export async function userIdListToUserIdNameMap(userIdList: string[]): Promise<{ [key: string]: string }> {
-    const usernameMap = await userIdListToUsernameMap(userIdList);
-    const userIdNameMap: { [key: string]: string } = {};
-    usernameMap.forEach((username, id) => { userIdNameMap[id] = username; });
-    return userIdNameMap;
+    return Object.fromEntries(await userIdListToUsernameMap(userIdList));
 }
 
 // Both shapes every CreateDataResponse needs, from one Clerk lookup: the
@@ -226,18 +298,18 @@ export async function userIdListToNamesAndMap(userIdList: string[]): Promise<{
     userIdNameMap: { [key: string]: string }
 }> {
     const usernameList = await userIdListToUsernameList(userIdList);
-    const userIdNameMap: { [key: string]: string } = {};
-    userIdList.forEach((userId, i) => { userIdNameMap[userId] = usernameList[i]; });
-    return { usernameList, userIdNameMap };
+    return {
+        usernameList,
+        userIdNameMap: Object.fromEntries(userIdList.map((userId, i) => [userId, usernameList[i]])),
+    };
 }
 
 // Same { [userId]: username } shape as userIdListToUserIdNameMap, but built from
 // users a route has already fetched — routes that notify players hold the Clerk
 // user list already, so this saves a second round trip to Clerk.
 export function userListToUserIdNameMap(users: User[]): { [key: string]: string } {
-    const userIdNameMap: { [key: string]: string } = {};
-    users.forEach(user => { userIdNameMap[user.id] = nameOf(user); });
-    return userIdNameMap;
+    const nameFor = namesFor(users);
+    return Object.fromEntries(users.map(user => [user.id, nameFor(user.id)]));
 }
 
 // Profile pictures for a set of users, keyed by user id — null for anyone who
@@ -252,28 +324,33 @@ export async function userIdListToImageMap(userIdList: string[]): Promise<Map<st
 export interface UserDto {
     userId: string;
     username: string | null;
-    firstName: string | null;
-    lastName: string | null;
     imageUrl: string | null;
     // Mirrors Clerk's own shape, so the DTO satisfies NamedUser and a screen
     // resolves a name from it through the same players.ts helpers it uses on
     // a Clerk user. A guest's username is the random account id createGuest()
     // minted, so "is this a guest?" is not something a screen can work out
-    // from the rest of the fields.
-    publicMetadata: { guest: boolean };
+    // from the rest of the fields — and the display name they chose is ours
+    // rather than one of Clerk's attributes, so it has to travel too.
+    publicMetadata: { guest: boolean; displayName?: string };
 }
 
 // The one Clerk-user-to-client projection, so a screen naming a player from
 // one route's payload can't get a different answer from another's — the
 // friends list and the profile screen were two copies, and only one of them
 // knew about guests.
+//
+// It carries no real name. Clerk's firstName/lastName reached other players
+// through this until display names landed, and nothing needs them now: a
+// player is their display name and their handle, and a name they gave to sign
+// up is not something to hand to everyone they play against.
 export function toUserDto(user: User): UserDto {
     return {
         userId: user.id,
         username: user.username,
-        firstName: user.firstName,
-        lastName: user.lastName,
         imageUrl: profileImageUrl(user),
-        publicMetadata: { guest: isGuest(user) },
+        // chosenName rather than the raw metadata: it also answers for a guest
+        // minted before display names had a field, whose name is still in the
+        // Clerk `firstName` this DTO no longer carries.
+        publicMetadata: { guest: isGuest(user), displayName: chosenName(user) ?? undefined },
     };
 }

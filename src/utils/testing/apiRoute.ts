@@ -58,6 +58,7 @@ export async function resetApiRouteStubs() {
 
     signedInUserId = null;
     clerkUsers = [];
+    metadataWrites.length = 0;
     games.clear();
     clearAfterCallbacks();
     sentPushes.length = 0;
@@ -65,6 +66,12 @@ export async function resetApiRouteStubs() {
 }
 
 // ---------------------------------------------------------------- Clerk
+
+/**
+ * The metadata writes routes made this test, oldest first — for asserting what
+ * a route stored without reaching back into the stubbed user.
+ */
+export const metadataWrites: { userId: string, publicMetadata?: Record<string, unknown> }[] = [];
 
 /** The `@clerk/nextjs/server` a route sees. Pass to `vi.mock`. */
 export function clerkStub() {
@@ -86,6 +93,26 @@ export function clerkStub() {
                     // caller not passing one — a stub that answers with more
                     // than Clerk would is wrong in the direction that hides it.
                     return { data: selected.slice(offset, offset + limit) };
+                },
+                // Merges the bag's top-level keys and treats a null value as
+                // "remove this key" — enough to catch a route clobbering
+                // `guest` or `unlocked` on its way past, which a stub that
+                // replaced the whole bag would let through. Clerk itself merges
+                // at every depth, so a route that ever writes a nested object
+                // needs more than this before its test means anything.
+                updateUserMetadata: async (userId: string, params: { publicMetadata?: Record<string, unknown> }) => {
+                    const user = clerkUsers.find(known => known.id === userId);
+                    if (!user) throw new Error(`updateUserMetadata: no such user ${userId}`);
+                    metadataWrites.push({ userId, ...params });
+                    if (params.publicMetadata) {
+                        const merged: Record<string, unknown> = { ...user.publicMetadata };
+                        for (const [key, value] of Object.entries(params.publicMetadata)) {
+                            if (value === null) delete merged[key];
+                            else merged[key] = value;
+                        }
+                        (user as { publicMetadata: Record<string, unknown> }).publicMetadata = merged;
+                    }
+                    return user;
                 }
             }
         })

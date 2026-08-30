@@ -119,7 +119,7 @@ Also worth deleting while in the file: **`usernameListToUserIdList`
 | **0** | **Re-key DTOs by `userId`** (prerequisite, not a user-facing option) | Nothing directly — it unblocks the rest | Removes a mutable key that is a latent bug today. Storage is already id-based, so **no migration**. `playerByUserId` already exists with 37 call sites. Net *deletes* translation code. Makes A safe and B/C possible. | Touches six games' render paths, which is where regressions hide. Slightly less readable raw JSON (§3a). Should land as its own PR. | ✅ **Do first** |
 | **0b** | **Tokenise history strings** (prerequisite, §4) | Nothing directly — history lines stop lying after a rename | Mechanism already ships in 2 games, so this is mostly *consolidation*: replaces a byte-identical duplicated helper and a naive substring replace. Also kills `MatchHistory`'s `startsWith` actor guess (§4c). Schema change is **free today** while history is test data. | 89 write sites to touch, though mechanically. Raw Mongo history becomes less readable. Changes a persisted field's shape — cheap now, expensive later. | ✅ **Do while free** |
 | **A** | **Editable Clerk username** — `user.update({ username })` | One name, changeable, still globally unique | Zero new storage, zero new API routes. Propagates automatically through `nameOf`. Clerk enforces uniqueness and availability. Fixes §1c defects as a side effect. | Frees the old handle for someone else to claim → invite-by-handle can resolve to a different person (**locksmith**, §7). Needs `username` enabled as a Clerk instance attribute — verify first. | ✅ **Then this** |
-| **B** | **Secondary display name** — editable `firstName`, shown to everyone | A friendly non-unique name; handle stays fixed | Familiar (Twitter/X). Non-unique means no "name taken" friction. Field already exists — no schema change. | Requires flipping `readableName`'s order. **Blocked until option 0 lands**, or non-unique names collapse board state (§3). Handle still unchangeable, so the original ask is only half met. | ⚠️ Viable after 0 |
+| **B** | **Secondary display name** — an editable name of our own, shown to everyone (this document said `firstName`; see §6 PR 5 for why it isn't) | A friendly non-unique name; handle stays fixed | Familiar (Twitter/X). Non-unique means no "name taken" friction. Field already exists — no schema change. | Requires flipping `readableName`'s order. **Blocked until option 0 lands**, or non-unique names collapse board state (§3). Handle still unchangeable, so the original ask is only half met. | ⚠️ Viable after 0 |
 | **C** | **Both tiers** — handle *and* display name (Discord/GitHub) | Changeable `@handle` plus a separate display name | The model users expect from Discord/GitHub. Most flexible. After option 0 the technical objection dissolves, leaving a **product** decision rather than an engineering one. | Two editors and two validation rules. Impersonation surface is wider than A: a non-unique display name can freely copy someone else's. | ⚠️ Product call, after 0 |
 | **D** | **Per-game / per-lobby nickname** | A different name per table | Fun; sidesteps global uniqueness (per-lobby `uniqueGuestName` already exists). | `GameData` deliberately stores **no** names. Needs a second lookup path beside `buildUserDirectory` and a per-game override in all 8 `gameStateToModel`s. Duplicates `nameOf` once per game. Impersonation risk inside a game. | ❌ Over-engineered |
 | **E** | **Own Mongo `Profile` collection** | Names owned by us, not Clerk | Full control; could hold name history. | Duplicates the entire directory layer (`buildUserDirectory`, the four `userIdListTo*` helpers, `toUserDto`). Invents a Clerk↔Mongo sync problem that **cannot exist today**. Breaks the "no user records in Mongo" rule. | ❌ Over-engineered |
@@ -432,7 +432,7 @@ second copy of `useProfilePicture`'s save — the same guard, reload, toast pair
 and in-flight flag around one write to the signed-in Clerk user. Those four
 things now live in `src/utils/hooks/useClerkUserSave.tsx`, and both callers are
 a two-line `save(...)`. **PR 5.2's display-name editor is its third caller** —
-`save(u => u.update({ firstName }), ...)` — so it should not hand-roll the
+`save(...)` — so it should not hand-roll the
 sequence either.
 
 ### 5e. The §1c defects go first, not here
@@ -549,13 +549,157 @@ survivable.
 
 | # | Commit | Notes |
 |---|---|---|
-| 5.1 | Show a player's display name instead of their handle | Flips `readableName`'s order (`players.ts:64`) to `firstName` → `username`. **This is the whole behaviour change** (§1a). It also makes guests and registered users consistent, since guests already resolve by `firstName` — so this commit *removes* the guest special-case rather than adding a second one. |
+| 5.1 | Show a player's display name instead of their handle | Flips `readableName`'s order (`players.ts:64`) to display name → `username`. **This is the whole behaviour change** (§1a). It also makes guests and registered users consistent, since guests already resolve by a typed name — so this commit *removes* the guest special-case rather than adding a second one. |
 | 5.2 | Let a player edit their display name | Reuses `DisplayNameField` from 4.1. Both fields now sit on `/profile`: handle (unique, how you are invited) and display name (free text, what people see). |
 | 5.3 | Disambiguate duplicate display names in a game | Two players called "Dave" are now distinct but look identical. Show the handle as a tiebreak where a seat list would otherwise repeat a name. Scope depends on how it actually looks — worth deferring until 5.1 is on screen. |
 | 5.4 | Add the "What's new" line | Player-visible. |
 
 **Review:** `croupier` on 5.1 (it changes what name every response carries),
 `caveman` on 5.2, `rulebook` on 5.4.
+
+**The one thing that changed from the plan: the display name is not
+`firstName`.** §2's option B named Clerk's `firstName` as the field, on the
+grounds that it already exists. It exists as a *first name*, which is a
+different thing:
+
+- Clerk's own signup form collects it under that label, and `fullName` reads it
+  as half of a real name — so a player calling themselves "Dave the Destroyer"
+  would have had a profile subtitle reading "Dave the Destroyer Smith".
+- Flipping the resolver onto it would have published, on deploy, whatever real
+  name every existing player gave at signup. They typed it to identify
+  themselves, not to be called it in front of strangers.
+- Clerk's hosted account UI would still call it First name, teaching the
+  opposite vocabulary to the profile screen.
+
+So the display name is `publicMetadata.displayName`, a field of our own. The
+consequences, all of them improvements:
+
+- **A handle seeds it, so nothing has to backfill.** The order is
+  `chosenName → publicHandle`, so a player who has chosen nothing is known by
+  their username, exactly as before this PR — and the day they pick a display
+  name it takes over. Nobody's name changes on deploy.
+- **Clerk's `firstName`/`lastName` then went entirely** (see below). The one
+  read left is inside `chosenName`, for a guest minted before the display-name
+  field existed, and it is gated on the user having no handle — the only
+  population it can be true of.
+- **It has a route, so the name the whole table reads is server-validated.**
+  `publicMetadata` is writable only from the Backend API, so
+  `POST /api/user/displayname` exists — with `isValidDisplayName` and a rate
+  limit on it. That closes something the `firstName` design left open and §7
+  had accepted for the handle: `user.update({ firstName })` is the browser's
+  own call to Clerk, so the form's validation would have been a suggestion and
+  dev-tools could have sent a thousand characters of anything into every seat
+  list and push at the table. `docs/account-less-play.md` §14 had already
+  settled that a player does not name themselves in front of others without the
+  server having a say; this keeps that true.
+- **A guest is minted with one** (`createGuest` writes
+  `publicMetadata.displayName`), so a guest and an account are named by one rule
+  rather than two, and claiming keeps the name they have been playing under.
+
+The handle keeps its browser-side write: Clerk enforces uniqueness on it,
+answers `form_identifier_exists` in a sentence worth showing, and can step a
+player up to re-verify first — all three lost if the server wrote it. `NameForm`
+therefore makes two writes, handle first, because it is the half that can be
+refused: losing that race leaves both names as they were.
+
+**Three further notes from building it**, none of which changed the plan above:
+
+- **The fallback goes through `publicHandle`, not `user.username`.** Written
+  as `firstName || username` the flip would have handed a guest with no typed
+  name the random account id `createGuest()` minted — the exact thing the guest
+  special-case existed to prevent. `publicHandle` already answers "the handle
+  this player chose, or none", so the special-case is *replaced* by it rather
+  than deleted.
+  `personalName` fell out as a consequence: it existed only to invert
+  `readableName`'s order, and with the order flipped it is that function plus
+  a null, so it became a two-line wrapper instead of a second copy of the
+  preference order.
+- **5.2 is one form, not two.** `UsernameForm` became `NameForm` and grew the
+  display-name field above the handle, writing whichever halves changed in one
+  `user.update`. Two editors would have meant two toggles, two collapsing
+  sections and two copies of the submit — and they are one question asked at
+  two levels of formality. It is `useClerkUserSave`'s third caller, as §5d
+  predicted. `DisplayNameField` gained a `hint` slot, which both callers now
+  use to state the rule the field enforces instead of silently disabling Save.
+  Whoever has no handle to fall back on — a guest, or a player claimed before
+  §1c's fix minted them one — is the one who cannot blank their display name;
+  everyone else can clear it and go back to their handle.
+  The rule itself moved out from under `utils/games/guestName.ts` into
+  `utils/users/displayName.ts`, the sibling of the handle rule PR 4 un-stranded
+  for the same reason: it stopped being a guest's rule the moment it became
+  every player's, and a rule named for guests is how a second one gets written
+  for everybody else.
+- **5.3 lives at the resolver, not the screen.** A collision is only visible
+  across a *set* of players, and no screen holds one — `clerk.ts` does, four
+  times over. So `namesFor(users)` resolves a whole set at once and tags a
+  repeated name with the handle behind it, and `buildUserDirectory`,
+  `userIdListToUsernameList`/`Map` and `userListToUserIdNameMap` all go
+  through it, as do the two sites that were still naming a roster one player
+  at a time (the game-over push, the frozen `actorUsername` on a reaction). No
+  board page learned a second way to name a player. Three consequences worth
+  writing down:
+  - **The tag is scoped to what the reader is looking at**, because that is
+    the only place ambiguity exists. A game response tags within that game's
+    seats; `buildUserDirectory` tags across the whole screen it was built for,
+    so two Daves in two different rows of your games list are told apart too.
+    The same player can therefore read as "Dave" on one screen and
+    "Dave (@dave)" on another. That is the disambiguator doing its job, not a
+    disagreement — nothing compares the strings, since every identity
+    comparison goes by `userId`.
+  - **Collisions are counted on what a reader sees**, not on the bytes —
+    `sameName` folds case, spacing, punctuation, accents, compatibility forms
+    and the Cyrillic, Greek and small-capital letters drawn the same way as
+    Latin ones. Without that last part the mitigation is defeated by one
+    keystroke: `Dаve` with a Cyrillic `а` is a different string and the same
+    name, so two seat rows would render identically and neither would be
+    tagged. Each name is still displayed exactly as its owner wrote it; the
+    fold is only ever a comparison key.
+  - **Nobody in a colliding group keeps the bare name.** The first version
+    tagged only players who had a handle, which put the tell exactly backwards:
+    a guest renaming themselves to match a registered player left the *victim*
+    as "Dave (@dave)" and the impostor as a clean "Dave". A player with no
+    handle now gets a number instead, assigned in userId order so it is stable
+    between requests.
+  - **The lobby's guest-name uniquifier reads the untagged names**
+    (`userIdListToUntaggedNameList`), because it compares against a name a
+    player is *about to type*: "Dave" has to read as taken even when the two
+    Daves already seated are showing as "Dave (@dave)" and "Dave (@daveb)". It
+    also makes room for its own suffix now rather than appending past the
+    length cap, since what it returns is stored as a display name and has to
+    clear the same rule a typed one does.
+
+**Real names went with it.** Once a display name existed, nothing needed
+Clerk's `firstName`/`lastName`: they came out of `UserDto` (so no real name
+travels to another player at all), out of the profile subtitle and the
+friends-row title, and out of `createGuest`, which had been storing a guest's
+typed name in a field called *first name*. `fullName` is gone. A friends row is
+now "Dave (@dave)" — the name they chose and the handle you invite them by,
+which is what that row was for — and just "dave" for someone who has chosen no
+display name, since printing the handle twice says nothing.
+
+The one read that survives is the legacy guest path described above. It can be
+deleted outright once no guest minted before this PR remains: they are swept
+`GUEST_SWEEP_DAYS` after their last game concludes (§8), so a release cycle
+past that window makes `NamedUser.firstName` and the `publicHandle(user) ?`
+line in `chosenName` a two-line deletion with nothing to migrate.
+
+**On impersonation.** §2 listed it as option C's one real cost — "a non-unique
+display name can freely copy someone else's" — and §5.3 is the mitigation. It is
+worth being plain about what that mitigation is and is not. It does not prevent
+the copy: any player may take any name. It guarantees that where a name is
+shared, *every* player carrying it is marked, by their handle or by a number, on
+every surface that names them. Refusing the rename instead would mean the route
+enumerating the caller's live games to know what "taken" even means, and would
+still leave the two players who were already there. Marking at the resolver is
+both cheaper and more complete — it covers names stored before the rule existed,
+and a table a player joins after renaming.
+- **`publicHandle` stopped trusting the guest flag.** `/api/user/claim` clears
+  `publicMetadata.guest`, but the handle it mints only started being minted in
+  PR 1. So a player who claimed before that carries a `guest_<uuid>` account id
+  with no flag on it — and with `readableName` now falling back to the handle,
+  and 5.3 tagging with it, that id had two fresh routes onto other players'
+  screens. `publicHandle` now recognises the minted shape itself, which closes
+  both and puts their profile in a state the new editor can fix.
 
 ### Sequencing summary
 
@@ -598,6 +742,16 @@ Per AGENTS.md's review-crew boundaries, these are outside this document:
   `PATCH /v1/me` to Clerk, so no code in this repo is on that path and *every*
   server-side policy on a rename is unimplementable without first inventing
   `POST /api/user/username`.
+
+  **That premise expired when PR 5 landed.** The display name needed a route —
+  `publicMetadata` is writable only from the Backend API — so
+  `POST /api/user/displayname` now exists and shows what one costs: a file and
+  a test file. The argument for leaving a *handle* change in the browser is
+  therefore no longer "there is nowhere to put a policy". It is the three
+  things Clerk does on that write and would stop doing if the server made it:
+  enforce uniqueness, answer `form_identifier_exists` in a sentence worth
+  showing a player, and step them up to re-verify a sensitive field. That is a
+  narrower objection, and an honest one.
 
   - **Handle recycling is real and accepted.** Nothing persisted is keyed by
     handle — PR 2 saw to that — so an existing friendship or seat cannot

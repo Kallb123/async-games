@@ -12,6 +12,7 @@ vi.mock('@clerk/nextjs/server', () => ({
 
 // Safe as a plain import: vitest hoists the vi.mock above it.
 import { createGuest, deleteGuest, isGuestPlaceholderEmail, unclaimedGuestsOf } from './guest';
+import { isGuestPlaceholderUsername } from '@/utils/ui/players';
 
 describe('createGuest', () => {
     beforeEach(() => {
@@ -25,9 +26,11 @@ describe('createGuest', () => {
         await createGuest('Dave');
 
         expect(createUser).toHaveBeenCalledWith(expect.objectContaining({
-            firstName: 'Dave',
             skipPasswordRequirement: true,
-            publicMetadata: { guest: true },
+            // The name they typed goes in the same field a registered player
+            // sets from their profile, so claiming an account keeps the name
+            // they have been playing under rather than moving it.
+            publicMetadata: { guest: true, displayName: 'Dave' },
         }));
     });
 
@@ -37,6 +40,28 @@ describe('createGuest', () => {
 
         const usernames = createUser.mock.calls.map(([params]) => params.username);
         expect(new Set(usernames).size).toBe(2);
+    });
+
+    it('holds no real name for a guest', async () => {
+        // A guest's typed name is a display name, not a first name — the app
+        // stopped keeping Clerk's name fields at all, and writing one here
+        // would be the last place still doing it.
+        await createGuest('Dave');
+
+        const [params] = createUser.mock.calls[0];
+        expect(params).not.toHaveProperty('firstName');
+        expect(params).not.toHaveProperty('lastName');
+    });
+
+    it('mints a username publicHandle will recognise as an account id', async () => {
+        // The two halves of one contract: guest.ts mints the shape, players.ts
+        // matches it. Without this, a guest who claims their account (which
+        // clears publicMetadata.guest) starts showing their account id as a
+        // handle the moment either side drifts.
+        await createGuest('Dave');
+
+        const [{ username }] = createUser.mock.calls[0];
+        expect(isGuestPlaceholderUsername(username)).toBe(true);
     });
 
     it('gives every guest a throwaway email address matching their username', async () => {

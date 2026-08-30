@@ -810,6 +810,15 @@ step 12 mints — so the id→name choke point (§1) is where this actually show
 up: `userIdListToUsernameList`/`Map` and `readableName`/`currentUsername` all
 gained the one `publicMetadata.guest` branch that prefers `firstName` for a
 guest, rather than a second name field threaded through every response DTO.
+(Display names later gave every player a name of their own to be seen under —
+`docs/dynamic-names.md` §5 — so the branch is gone: a guest's typed name goes
+into `publicMetadata.displayName`, the same field a registered player sets from
+their profile, and `readableName` reads it for both alike. The app no longer
+keeps Clerk's `firstName`/`lastName` at all; `chosenName` still reads
+`firstName` for a guest minted before that field existed, gated on having no
+handle so it can never surface a registered player's real name. What else
+survives is `publicHandle`, which still refuses to hand back a guest's account
+id as a handle.)
 
 That choke point only holds if nothing reads `user.username` around it, and
 plenty did. `IGameCommand.senderUsername` was the worst of them: **the client
@@ -834,15 +843,21 @@ the recap of the game they played, which is why replay treats the placeholder
 as a miss rather than a name.
 
 On the read side, `clerk.ts`'s `nameOf` now delegates to `readableName`
-rather than re-declaring the preference order, so the `usernameList` the
-server builds and the `currentUsername` a screen compares against it can't
-disagree. `toUserDto` is the one Clerk-user-to-client projection behind both
+rather than re-declaring the preference order, so the server and a screen put
+the same name to the same player. (Display names later added one deliberate
+difference: the server resolves a table at a time and tags a name two players
+share — `docs/dynamic-names.md` §5.3 — which a screen naming one user in
+isolation can't see. Nothing compares the two strings; identity comparisons go
+by `userId`.) `toUserDto` is the one Clerk-user-to-client projection behind both
 the profile and friends payloads, and it carries `publicMetadata.guest` for
 exactly this reason: a guest's username tells a screen nothing, so "is this a
 guest?" has to travel with the rest.
 
 **A guest's name is only ever resolved from their id — never read off a field
-the client filled in.**
+the client filled in.** That holds for a registered player's name too, since
+display names landed: `publicMetadata` is writable only from the Backend API,
+so `POST /api/user/displayname` is the one way a name reaches other players,
+and it validates and meters what it is given.
 
 This is the app's first public write endpoint, so per-IP rate limiting lands
 here too — a small Mongo-backed fixed-window counter (`src/utils/rateLimit.ts`),

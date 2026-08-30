@@ -14,17 +14,17 @@ interface ProfileIdentityProps extends ProfileHeading {
     onAvatarClick?: () => void;
     /** Shows a spinner over the avatar while the new picture is saving. */
     avatarBusy?: boolean;
-    /** Controls rendered under the name — e.g. "Edit username", "Remove photo". */
+    /** Controls rendered under the name — e.g. "Edit name", "Remove photo". */
     action?: ReactNode;
 }
 
-// Avatar + display name + "@handle · Full Name" header. Shared by a
+// Avatar + display name + "@handle" header. Shared by a
 // player's own profile and a friend's read-only profile; only your own
 // passes the editing props, so a friend's avatar stays a plain badge.
 // With no name yet the whole header is a placeholder — silhouette badge and
 // skeleton lines — rather than a stand-in word and its initial.
 export default function ProfileIdentity({
-    name, handle, noHandleLabel = "No username", imageUrl, fullName, onAvatarClick, avatarBusy, action,
+    name, handle, noHandleLabel = "No username", imageUrl, onAvatarClick, avatarBusy, action,
 }: ProfileIdentityProps) {
     const avatar = <Avatar name={name} imageUrl={imageUrl} size={64} ring="var(--ag-terracotta)" />;
 
@@ -53,7 +53,7 @@ export default function ProfileIdentity({
                         <>
                             <div style={{ font: "800 24px/1.1 var(--ag-font)", color: "var(--ag-ink)" }}>{name}</div>
                             <div style={{ font: "500 12px var(--ag-font)", color: "var(--ag-ink-soft)" }}>
-                                {handle ? `@${handle}` : noHandleLabel}{fullName ? ` · ${fullName}` : ""}
+                                {handle ? `@${handle}` : noHandleLabel}
                             </div>
                         </>
                     )

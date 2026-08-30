@@ -31,6 +31,11 @@ export const GUEST_SWEEP_DAYS = 7;
 // §3), so a guest can't just be handed the name they'll display under — that
 // is a per-lobby concern for whoever mints the guest (step 14). This is only
 // the account identifier, and a random one is enough not to collide.
+//
+// The shape matters as well as the uniqueness: `isGuestPlaceholderUsername`
+// (ui/players.ts) recognises an account id by it, which is what stops one
+// being shown as a handle after a claim clears the publicMetadata flag.
+// guest.test.ts holds the two together.
 function generateGuestUsername(): string {
     return `guest_${randomUUID().replace(/-/g, "")}`;
 }
@@ -63,20 +68,24 @@ export function isGuestPlaceholderEmail(emailAddress: string): boolean {
 // dropping that flag off the same user — the id never changes.
 //
 // `displayName` is the name they typed at the lobby's join screen (step 14),
-// already validated and suffixed for per-lobby uniqueness by the caller —
-// stored as `firstName` rather than `username`, since username is the
-// unrelated, meaningless account id above and every name-resolution choke
-// point (userIdListToUsernameList/Map, readableName, currentUsername) knows
-// to prefer firstName for a guest.
+// already validated and suffixed for per-lobby uniqueness by the caller. It
+// goes into `publicMetadata.displayName` — the same field a registered player
+// sets from their profile, so a guest and an account are named by one rule
+// rather than two, and claiming an account keeps the name they have been
+// playing under without moving it.
+//
+// Not into `firstName`, which is where it used to live: that is a *first name*
+// as far as Clerk and everything reading it is concerned, and the app no
+// longer holds real names at all. `chosenName` still reads it for a guest
+// minted before this, and nothing else ever will.
 export async function createGuest(displayName: string): Promise<GuestTicket> {
     const client = await clerkClient();
     const username = generateGuestUsername();
     const user = await client.users.createUser({
         username,
         emailAddress: [generateGuestEmail(username)],
-        firstName: displayName,
         skipPasswordRequirement: true,
-        publicMetadata: { guest: true },
+        publicMetadata: { guest: true, displayName },
     });
     const { token } = await client.signInTokens.createSignInToken({
         userId: user.id,

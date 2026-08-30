@@ -5,11 +5,12 @@ import { dbConnect } from '@/utils/mongodb/mongodb';
 import { IInvitationDataDocument, InvitationModel } from '@/utils/mongodb/InvitationData';
 import { OPEN_SEAT_CLAIM_FILTER, isOpenSeat, isSeatedAt, notSeatedFilter, openSeats, pendingSeatFor } from '@/utils/games/lobby';
 import { normaliseJoinCode } from '@/utils/games/joinCode';
-import { isValidGuestName, uniqueGuestName } from '@/utils/games/guestName';
+import { uniqueGuestName } from '@/utils/games/guestName';
+import { isValidDisplayName } from '@/utils/users/displayName';
 import { acceptSeat } from '@/utils/games/startGame';
 import { createGuest, deleteGuest } from '@/utils/users/guest';
 import { buildResumeHref } from '@/utils/users/resumeLink';
-import { userIdListToUsernameList } from '@/utils/users/clerk';
+import { userIdListToUntaggedNameList } from '@/utils/users/clerk';
 import { clientIp, consumeRateLimit } from '@/utils/rateLimit';
 
 export interface ILobbyJoinRequest {
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
         // convenience, it's the whole flow — nobody types a code into a site
         // they've never heard of (docs/account-less-play.md §4/§14).
         const guestName = (name ?? '').trim();
-        if (!isValidGuestName(guestName)) {
+        if (!isValidDisplayName(guestName)) {
             return NextResponse.json({}, { status: 400, statusText: "Invalid name" });
         }
 
@@ -90,7 +91,7 @@ export async function POST(request: NextRequest) {
         // a guest could just as easily match them — so two "Dave"s in the
         // same lobby stay tellable apart (§5).
         const seatedIds = [lobby.senderId, ...lobby.userIdList.filter(entry => !isOpenSeat(entry)).map(entry => entry.userId)];
-        const displayName = uniqueGuestName(guestName, await userIdListToUsernameList(seatedIds));
+        const displayName = uniqueGuestName(guestName, await userIdListToUntaggedNameList(seatedIds));
 
         const guest = await createGuest(displayName);
         const claimed = await claimOpenSeat(guest.userId);

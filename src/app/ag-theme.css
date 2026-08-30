@@ -702,6 +702,9 @@ a.ag-list-row, a.ag-list-row-main {
 /* A hint under something centred — the control it explains sits in the middle
    of the column, so the copy does too. */
 .ag-hint--center { text-align: center; }
+/* A hint whose container already spaces what comes after it — a field inside
+   an `.ag-form-card`, whose flex gap sits under the whole field. */
+.ag-hint--tight { margin-bottom: 0; }
 
 .ag-disabled-hint {
     font: 500 11px/1.4 var(--ag-font);

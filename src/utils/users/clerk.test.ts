@@ -73,3 +73,112 @@ describe('Clerk user lookups', () => {
         expect(await userIdListToUsernameList(['user_guest_1'])).toEqual(['Dave']);
     });
 });
+
+describe('telling two players with the same display name apart', () => {
+    beforeEach(() => {
+        getUserList.mockReset();
+    });
+
+    // A seated player as Clerk hands them back: the name they chose lives in
+    // publicMetadata, and `displayName: null` is somebody still going by their
+    // handle.
+    const seat = (id: string, displayName: string | null, username: string | null, guest = false) =>
+        ({ id, username, publicMetadata: { guest, ...(displayName ? { displayName } : {}) } });
+
+    const seated = (...users: ReturnType<typeof seat>[]) => {
+        getUserList.mockResolvedValue({ data: users });
+        return userIdListToUsernameList(users.map(u => u.id));
+    };
+
+    it('leaves a name nobody else is using alone', async () => {
+        expect(await seated(seat('user_1', 'Dave', 'dave'), seat('user_2', 'Alice', 'alice')))
+            .toEqual(['Dave', 'Alice']);
+    });
+
+    it('tags both Daves with the handle behind them', async () => {
+        expect(await seated(seat('user_1', 'Dave', 'dave'), seat('user_2', 'Dave', 'daveb')))
+            .toEqual(['Dave (@dave)', 'Dave (@daveb)']);
+    });
+
+    it('leaves the odd one out alone while tagging the pair', async () => {
+        expect(await seated(
+            seat('user_1', 'Dave', 'dave'),
+            seat('user_2', 'Dave', 'daveb'),
+            seat('user_3', 'Alice', 'alice'),
+        )).toEqual(['Dave (@dave)', 'Dave (@daveb)', 'Alice']);
+    });
+
+    it('numbers a colliding guest rather than showing their account id', async () => {
+        // Nobody in the group keeps the bare name. Leaving the guest bare made
+        // the tell exactly backwards: the player who could not be tagged read
+        // as the real one, which is the wrong answer when they are the one who
+        // renamed themselves to match.
+        expect(await seated(
+            seat('user_1', 'Dave', 'dave'),
+            seat('user_guest_1', 'Dave', 'guest_abc123', true),
+        )).toEqual(['Dave (@dave)', 'Dave (1)']);
+    });
+
+    it('numbers two colliding guests, neither of whom has a handle', async () => {
+        expect(await seated(
+            seat('user_guest_1', 'Dave', 'guest_abc123', true),
+            seat('user_guest_2', 'Dave', 'guest_def456', true),
+        )).toEqual(['Dave (1)', 'Dave (2)']);
+    });
+
+    it('gives a numbered player the same number on every request', async () => {
+        // Numbered in userId order rather than in the order Clerk answered, or
+        // two guests would swap numbers between one screen and the next.
+        const first = await seated(
+            seat('user_guest_2', 'Dave', 'guest_def456', true),
+            seat('user_guest_1', 'Dave', 'guest_abc123', true),
+        );
+        expect(first).toEqual(['Dave (2)', 'Dave (1)']);
+    });
+
+    it('tags names a reader cannot tell apart, whatever the bytes say', async () => {
+        // A Cyrillic "а" renders as a Latin one, so this is one name to
+        // everybody reading the seat list and has to be counted as one.
+        expect(await seated(
+            seat('user_1', 'Dave', 'dave'),
+            seat('user_2', 'D\u0430ve', 'daveb'),
+        )).toEqual(['Dave (@dave)', 'D\u0430ve (@daveb)']);
+    });
+
+    it('does not make a player collide with themselves', async () => {
+        getUserList.mockResolvedValue({ data: [seat('user_1', 'Dave', 'dave'), seat('user_1', 'Dave', 'dave')] });
+
+        expect(await userIdListToUsernameList(['user_1'])).toEqual(['Dave']);
+    });
+
+    it('falls back to the handle of a player who set no display name', async () => {
+        expect(await seated(seat('user_1', null, 'dave'), seat('user_2', 'Amy', 'amy')))
+            .toEqual(['dave', 'Amy']);
+    });
+
+    it('tags a collision a reader would see, not one strcmp would', async () => {
+        // "dave" beside "Dave" is two rows a seat list renders as the same
+        // person, so the count folds case — and each tag still carries the
+        // name as its owner wrote it.
+        expect(await seated(seat('user_1', null, 'dave'), seat('user_2', 'Dave', 'daveb')))
+            .toEqual(['dave (@dave)', 'Dave (@daveb)']);
+    });
+
+    it('names a guest minted before display names by their firstName', async () => {
+        getUserList.mockResolvedValue({
+            data: [{ id: 'user_guest_1', username: 'guest_abc123', firstName: 'Dave', publicMetadata: { guest: true } }],
+        });
+
+        expect(await userIdListToUsernameList(['user_guest_1'])).toEqual(['Dave']);
+    });
+
+    it('never tags with the account id of a guest who claimed their account', async () => {
+        // publicMetadata.guest is cleared by /api/user/claim, but a player who
+        // claimed before the claim route started minting handles still carries
+        // a guest_<uuid> username. It was never a handle they chose.
+        expect(await seated(
+            seat('user_1', 'Dave', 'dave'),
+            seat('user_2', 'Dave', 'guest_2f81c0d4a9b34e6789012345678901ab'),
+        )).toEqual(['Dave (@dave)', 'Dave (1)']);
+    });
+});

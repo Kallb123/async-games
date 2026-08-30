@@ -5,13 +5,10 @@ import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { usePathname, notFound } from 'next/navigation';
 import { isDevDeployment } from "@/utils/devEnvironment";
+import { displayName } from "@/utils/ui/players";
+import type { UserDto } from "@/utils/users/clerk";
 
-interface PublicUser {
-  id: string;
-  username: string | null;
-  firstName: string | null;
-  lastName: string | null;
-}
+
 
 // The push test bench: every player, tap one to fire a test notification at
 // their devices. Dev deployments only — /api/notifyuser answers 404 off one, so
@@ -31,7 +28,7 @@ function UsersTestBench() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
   useAuthGuard();
-  const { data } = useRefreshableData<{ users: PublicUser[] }>('/api/users');
+  const { data } = useRefreshableData<{ users: UserDto[] }>('/api/users');
   const users = data?.users ?? [];
     
   const handleNotify = async (userId: string, e: React.MouseEvent<HTMLLIElement>) => {
@@ -66,7 +63,7 @@ function UsersTestBench() {
       <div>
         <ul>
             {users.map((userMap) => (
-                <li key={userMap.id} onClick={(e) => handleNotify(userMap.id, e)}>{userMap.firstName} {userMap.lastName} ({userMap.username})</li>
+                <li key={userMap.userId} onClick={(e) => handleNotify(userMap.userId, e)}>{displayName(userMap)}</li>
             ))}
         </ul>
       </div>

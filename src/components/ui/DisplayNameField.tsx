@@ -1,5 +1,6 @@
 'use client'
 
+import { ReactNode } from "react";
 import DieFace from "@/components/ui/DieFace";
 
 interface DisplayNameFieldProps {
@@ -12,6 +13,8 @@ interface DisplayNameFieldProps {
     maxLength: number;
     placeholder?: string;
     disabled?: boolean;
+    /** The note under the field: what this name is for, and what it may be. */
+    hint?: ReactNode;
     /**
      * The dice button beside the field. Both or neither: the caller owns the
      * face it shows, because /join draws the first one on the server so the
@@ -22,17 +25,19 @@ interface DisplayNameFieldProps {
 }
 
 /**
- * A "what are you called?" text field: label, `ag-input`, and an optional
- * dice button that rerolls it to a random name. Shared by the guest join
- * form (the name a seat is taken under) and the profile handle editor —
- * the same field asked twice, so it is written once.
+ * A "what are you called?" text field: label, `ag-input`, an optional note
+ * under it, and an optional dice button that rerolls it to a random name.
+ * Shared by the guest join form (the name a seat is taken under) and the two
+ * fields of the profile name editor — the same field asked three times, so it
+ * is written once.
  *
- * Presentational only. Neither caller's name goes to the same place — /join
- * posts it to the join API, /profile writes it to Clerk — so validating and
- * submitting stay with the form, and only the field itself is shared.
+ * Presentational only. No two of those names go to the same place or answer to
+ * the same rule — /join posts one to the join API, /profile writes two to
+ * Clerk — so validating and submitting stay with the form, and only the field
+ * itself is shared.
  */
 export default function DisplayNameField({
-    id, label, value, onChange, maxLength, placeholder, disabled, dieValue, onReroll,
+    id, label, value, onChange, maxLength, placeholder, disabled, hint, dieValue, onReroll,
 }: DisplayNameFieldProps) {
     return (
         <div>
@@ -63,6 +68,9 @@ export default function DisplayNameField({
                     </button>
                 )}
             </div>
+            {/* Tight: the card's own gap sits under the whole field, so the
+                note keeps only the space that separates it from the input. */}
+            {hint && <p className="ag-hint ag-hint--tight">{hint}</p>}
         </div>
     );
 }

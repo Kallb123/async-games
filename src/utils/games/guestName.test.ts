@@ -1,32 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_GUEST_NAME_LENGTH, isValidGuestName, randomGuestName, uniqueGuestName } from './guestName';
-
-describe('isValidGuestName', () => {
-    it('accepts an ordinary name', () => {
-        expect(isValidGuestName('Dave')).toBe(true);
-    });
-
-    it('accepts letters, digits, spaces and name punctuation', () => {
-        for (const name of ["O'Brien", 'Anne-Marie', 'Player 2', 'José', 'ダン']) {
-            expect(isValidGuestName(name)).toBe(true);
-        }
-    });
-
-    it('rejects an empty name', () => {
-        expect(isValidGuestName('')).toBe(false);
-    });
-
-    it('rejects a name over the length limit', () => {
-        expect(isValidGuestName('a'.repeat(MAX_GUEST_NAME_LENGTH))).toBe(true);
-        expect(isValidGuestName('a'.repeat(MAX_GUEST_NAME_LENGTH + 1))).toBe(false);
-    });
-
-    it('rejects markup-shaped or control characters', () => {
-        for (const name of ['<script>', 'Dave;drop', 'Dave\n', 'Dave\t', 'a/b']) {
-            expect(isValidGuestName(name)).toBe(false);
-        }
-    });
-});
+import { randomGuestName, uniqueGuestName } from './guestName';
+import { MAX_DISPLAY_NAME_LENGTH, isValidDisplayName } from '@/utils/users/displayName';
 
 describe('uniqueGuestName', () => {
     it('leaves a name alone when nobody else has it', () => {
@@ -44,12 +18,32 @@ describe('uniqueGuestName', () => {
     it('is empty-list safe', () => {
         expect(uniqueGuestName('Dave', [])).toBe('Dave');
     });
+
+    it('keeps a suffixed name inside the display-name rule', () => {
+        // What it returns is stored as the guest's display name, so a guest
+        // taking the longest allowed name must not be seated under one their
+        // own profile editor would then refuse to save.
+        const longest = 'a'.repeat(MAX_DISPLAY_NAME_LENGTH);
+        const suffixed = uniqueGuestName(longest, [longest]);
+
+        expect(suffixed).not.toBe(longest);
+        expect(isValidDisplayName(suffixed)).toBe(true);
+    });
+
+    it('still counts up when the suffix has eaten into the name', () => {
+        const longest = 'a'.repeat(MAX_DISPLAY_NAME_LENGTH);
+        const taken = [longest, uniqueGuestName(longest, [longest])];
+
+        const third = uniqueGuestName(longest, taken);
+        expect(taken).not.toContain(third);
+        expect(isValidDisplayName(third)).toBe(true);
+    });
 });
 
 describe('randomGuestName', () => {
-    it('always produces a valid guest name', () => {
+    it('always produces a valid display name', () => {
         for (let i = 0; i < 100; i++) {
-            expect(isValidGuestName(randomGuestName())).toBe(true);
+            expect(isValidDisplayName(randomGuestName())).toBe(true);
         }
     });
 

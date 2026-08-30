@@ -1,6 +1,6 @@
 import { currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
-import { forEachClerkUser, isUnlockedUser } from '@/utils/users/clerk';
+import { forEachClerkUser, isUnlockedUser, toUserDto, UserDto } from '@/utils/users/clerk';
 
 export async function GET(request: NextRequest) {
   console.log(`GET ${request.nextUrl.pathname}`);
@@ -16,14 +16,9 @@ export async function GET(request: NextRequest) {
   // Every user, a page at a time. A bare `getUserList()` answers with Clerk's
   // default ten, so the picker this feeds only ever offered the ten users who
   // happened to come back first.
-  const users: { id: string, username: string | null, firstName: string | null, lastName: string | null }[] = [];
+  const users: UserDto[] = [];
   await forEachClerkUser(async user => {
-    users.push({
-      id: user.id,
-      username: user.username,
-      firstName: user.firstName,
-      lastName: user.lastName
-    });
+    users.push(toUserDto(user));
   });
 
   return NextResponse.json({success: true, users});

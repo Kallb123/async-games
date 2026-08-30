@@ -1,40 +1,40 @@
-// A guest-typed display name is text a real player sees, so this is the one
-// floor it has to clear before a lobby seat can be claimed under it — length
-// and character set, not moderation (docs/account-less-play.md §8). Callers
-// pass an already-trimmed name; whitespace-only input reads as too short.
-export const MIN_GUEST_NAME_LENGTH = 1;
-export const MAX_GUEST_NAME_LENGTH = 20;
-
-// Letters (any script), digits, spaces and the handful of marks real names
-// actually use — nothing that reads as markup or control text.
-const VALID_GUEST_NAME = /^[\p{L}\p{N} '.-]+$/u;
-
-export function isValidGuestName(name: string): boolean {
-    return name.length >= MIN_GUEST_NAME_LENGTH
-        && name.length <= MAX_GUEST_NAME_LENGTH
-        && VALID_GUEST_NAME.test(name);
-}
+// What a guest is called at the table they join under, and how that name is
+// picked. The rule such a name has to clear is not here: it is every player's
+// rule now, so it lives in users/displayName.ts beside the handle rule, and
+// guestName.test.ts holds this module to it.
+import { MAX_DISPLAY_NAME_LENGTH } from "@/utils/users/displayName";
 
 // "Dave" -> "Dave", or "Dave (2)", "Dave (3)"... against names already
 // seated at the lobby: display names aren't unique the way Clerk usernames
 // are (docs/account-less-play.md §5), and two guests both typing "Dave"
 // would otherwise be indistinguishable in the same seat list.
+//
+// What comes out is stored as the guest's display name, so it has to clear the
+// same rule a typed one does — the suffix is made room for rather than added
+// on top, or a guest who took the longest allowed name would be seated under
+// one their own profile editor then refused to save.
 export function uniqueGuestName(name: string, takenNames: string[]): string {
     const taken = new Set(takenNames);
     if (!taken.has(name)) {
         return name;
     }
     let suffix = 2;
-    while (taken.has(`${name} (${suffix})`)) {
-        suffix++;
+    let suffixed = withSuffix(name, suffix);
+    while (taken.has(suffixed)) {
+        suffixed = withSuffix(name, ++suffix);
     }
-    return `${name} (${suffix})`;
+    return suffixed;
+}
+
+function withSuffix(name: string, suffix: number): string {
+    const tail = ` (${suffix})`;
+    return `${name.slice(0, MAX_DISPLAY_NAME_LENGTH - tail.length).trim()}${tail}`;
 }
 
 // Adjective+Animal, e.g. "AgitatedApe" — what a guest's name field
 // auto-populates with before they've typed their own, and what the dice
 // button beside it rerolls to. Kept short by design: every combination
-// clears MAX_GUEST_NAME_LENGTH, so the result is always a valid guest name.
+// clears MAX_DISPLAY_NAME_LENGTH, so the result is always a valid name.
 const GUEST_NAME_ADJECTIVES = [
     'Agitated', 'Amiable', 'Awkward', 'Ancient', 'Bouncy', 'Brave', 'Bold', 'Breezy',
     'Curious', 'Clumsy', 'Cheeky', 'Chill', 'Daring', 'Dizzy', 'Dapper', 'Drowsy',

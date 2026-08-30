@@ -16,7 +16,8 @@ import DisplayNameField from "@/components/ui/DisplayNameField";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { JOIN_CODE_LENGTH, normaliseJoinCode, readJoinCode } from "@/utils/games/joinCode";
 import { invitedYouTo, lobbyPath, seatsLeftLabel } from "@/utils/games/lobby";
-import { MAX_GUEST_NAME_LENGTH, isValidGuestName, randomGuestName } from "@/utils/games/guestName";
+import { randomGuestName } from "@/utils/games/guestName";
+import { DISPLAY_NAME_RULE, MAX_DISPLAY_NAME_LENGTH, isValidDisplayName } from "@/utils/users/displayName";
 import { readResumeTicket } from "@/utils/users/resumeLink";
 import { useEnterStartedGame } from "@/utils/hooks/useEnterStartedGame";
 import ResumeLinkOffer from "@/components/ui/ResumeLinkOffer";
@@ -272,7 +273,7 @@ function JoinScreen({ initiallySignedIn, initialName, initialDie }: JoinScreenPr
     e.preventDefault();
     const joinCode = normaliseJoinCode(code);
     const guestName = name.trim();
-    if (!joinCode || !isValidGuestName(guestName) || joining || !signIn || !setActive) return;
+    if (!joinCode || !isValidDisplayName(guestName) || joining || !signIn || !setActive) return;
     setJoining(true);
 
     try {
@@ -336,18 +337,24 @@ function JoinScreen({ initiallySignedIn, initialName, initialDie }: JoinScreenPr
       <AuthScreen title={title} subtitle={subtitle}>
         <form onSubmit={handleGuestSubmit} className="ag-section ag-stack" style={{ width: "100%" }}>
           <JoinCodeField code={code} onChange={setCode} />
+          {/* "Display name", not "username": since display names landed this
+              is the name other players see, and the handle they'd be invited
+              by is a separate field on their profile if they ever claim the
+              account. Teaching a guest the other vocabulary here would only
+              have to be untaught later. */}
           <DisplayNameField
             id="guest-name"
-            label="Your username"
+            label="Display name"
             value={name}
             onChange={setName}
-            maxLength={MAX_GUEST_NAME_LENGTH}
+            maxLength={MAX_DISPLAY_NAME_LENGTH}
             placeholder="Your name"
             disabled={joining}
+            hint={DISPLAY_NAME_RULE}
             dieValue={nameDie}
             onReroll={rerollName}
           />
-          <JoinButton joining={joining} disabled={joining || !normaliseJoinCode(code) || !isValidGuestName(name.trim())} />
+          <JoinButton joining={joining} disabled={joining || !normaliseJoinCode(code) || !isValidDisplayName(name.trim())} />
         </form>
       </AuthScreen>
     );

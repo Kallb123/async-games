@@ -12,7 +12,12 @@ type ClerkUser = NonNullable<ReturnType<typeof useUser>['user']>;
 
 /** What the player is told, either way the write goes. */
 interface SaveCopy {
-    success: string;
+    /**
+     * Omit to land the write without a toast — for a caller making this write
+     * one of two and reporting both itself, where two confirmations for one
+     * press would be one too many.
+     */
+    success?: string;
     /** Heading on the success toast, when it wants one. */
     title?: string;
     /** Shown when Clerk has nothing more specific to say. */
@@ -54,7 +59,7 @@ export function useClerkUserSave() {
         try {
             await runWrite(write, user);
             await user.reload().catch(error => console.error('Failed to reload the user', error));
-            showToast(copy.success, 'success', copy.title);
+            if (copy.success) showToast(copy.success, 'success', copy.title);
             return true;
         } catch (error) {
             // Closing the reverification modal is a deliberate "not now", not a
