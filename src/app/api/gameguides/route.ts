@@ -1,6 +1,7 @@
 import { auth, clerkClient, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { readJsonBody } from '@/utils/api/requestBody';
+import { GAME_GUIDES } from '@/utils/ui/gameGuides';
 import { getSeenGameGuides, withGameGuideSeen } from '@/utils/users/gameGuideProgress';
 
 // GET: which games' guides this account has already been auto-shown.
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await readJsonBody<{ game: string }>(request);
-    if (!body.game || typeof body.game !== 'string') {
+    if (!body.game || typeof body.game !== 'string' || !(body.game in GAME_GUIDES)) {
         return NextResponse.json({}, { status: 400, statusText: 'Missing game' });
     }
 
