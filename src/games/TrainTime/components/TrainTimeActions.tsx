@@ -74,6 +74,14 @@ export default function TrainTimeActions({
         submitCommand(command, undefined, `draw-${source}-${marketIndex}`);
     }
 
+    // What the hand is up against, in its head. What is claimable is only
+    // worked out on the turn that could claim it, so off-turn this says what
+    // the hand is worth instead of a count that would read as zero.
+    let handNote = <span className="ag-hand-note">{pluralize(claimableCount, 'route')} claimable</span>;
+    if (readOnly) handNote = <span className="ag-hand-note">{me.trains} trains left</span>;
+    else if (midDraw) handNote = <span className="ag-hand-note">one more card ends your turn</span>;
+    else if (selectedRoute) handNote = <span className="ag-tt-payable">✓ {routeName(selectedRoute)} payable</span>;
+
     return (
         <>
             <div className="ag-hand">
@@ -126,16 +134,7 @@ export default function TrainTimeActions({
             <div className="ag-hand">
                 <div className="ag-hand-head">
                     <span className="ag-hand-title">Your hand · {hand.length}</span>
-                    {/* What is claimable is only worked out on the turn that
-                        could claim it, so off-turn the head says what the hand
-                        is worth instead of a count that would read as zero. */}
-                    {readOnly
-                        ? <span className="ag-hand-note">{me.trains} trains left</span>
-                        : midDraw
-                            ? <span className="ag-hand-note">one more card ends your turn</span>
-                            : selectedRoute
-                                ? <span className="ag-tt-payable">✓ {routeName(selectedRoute)} payable</span>
-                                : <span className="ag-hand-note">{pluralize(claimableCount, 'route')} claimable</span>}
+                    {handNote}
                 </div>
                 <div className="ag-tt-hand">
                     {HAND_ORDER.filter(colour => hand.includes(colour)).map(colour => {

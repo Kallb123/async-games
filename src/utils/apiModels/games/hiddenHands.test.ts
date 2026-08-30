@@ -6,21 +6,99 @@ import {
     makeState as makeWorldDominationState,
     player as worldDominationPlayer,
 } from "@/games/WorldDomination/testFixtures";
+import { gameStateToModel as trainTimeStateToModel } from "@/games/TrainTime/TrainTimeModels";
+import { buildInitialTrainTimeState } from "@/games/TrainTime/board";
 import { gameStateToResponse as sacStateToResponse } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import type { ISACSpecificGameState } from "@/games/SettlementsAndCities/board";
 import { makeState as makeSacState, player as sacPlayer } from "@/games/SettlementsAndCities/testFixtures";
 
-// The two games this guards were both sending every player's hidden hand to
+// Two of the games this guards were once sending every player's hidden hand to
 // every player: World Domination shipped each player's territory cards, and
 // Settlements & Cities shipped each player's resource composition and dev card
 // identities. Both are dealt face down by their own design docs, and both UIs
 // only ever rendered a *count* for opponents — so the leak was invisible on
-// screen and visible to anyone reading the response.
+// screen and visible to anyone reading the response. Train Time is here for
+// the same reason one step earlier: its hand is now on screen for its owner at
+// every moment of the game, so the redaction that keeps it theirs alone is
+// worth a guard of its own.
 //
 // These assert on the serialised response as well as the shape, because the
 // question is what a client can read off the wire, not what the typings say.
 
 const NAMES = { u1: "Alice", u2: "Bob" };
+
+// ─── Train Time ──────────────────────────────────────────────────────────────
+
+// Train Time's redaction is keyed on the viewer, not on whose turn it is —
+// which is what lets the board keep a waiting player's own hand on screen
+// between their turns. Asking as each player in turn is the guard: key it on
+// the mover instead and one of these two halves fails.
+
+function trainTimeState() {
+    const state = buildInitialTrainTimeState(["u1", "u2"]);
+    // Kept tickets as well as the pending deal, so the "who can see which
+    // tickets" question is asked of a mid-game hand, not just the setup one.
+    state.playerStates.get("u1")!.tickets = state.playerStates.get("u1")!.pendingTickets.splice(0, 1);
+    state.playerStates.get("u2")!.tickets = state.playerStates.get("u2")!.pendingTickets.splice(0, 1);
+    return state;
+}
+
+describe("Train Time's response", () => {
+    it("gives each viewer their own hand and everyone else a count", () => {
+        const state = trainTimeState();
+        const alice = state.playerStates.get("u1")!;
+        const bob = state.playerStates.get("u2")!;
+
+        const asAlice = trainTimeStateToModel(state, NAMES, "u1");
+        expect(asAlice.myHand).toEqual(alice.hand);
+        expect(asAlice.playerStates.u2.handCount).toBe(bob.hand.length);
+
+        const asBob = trainTimeStateToModel(state, NAMES, "u2");
+        expect(asBob.myHand).toEqual(bob.hand);
+        expect(asBob.playerStates.u1.handCount).toBe(alice.hand.length);
+    });
+
+    it("keeps an opponent's cards and tickets off the wire", () => {
+        const state = trainTimeState();
+        const wire = JSON.parse(JSON.stringify(trainTimeStateToModel(state, NAMES, "u1")));
+
+        // Nothing but the counts: no hand array, and tickets stay face down
+        // until the game is scored (§10), which this one isn't.
+        expect(wire.playerStates.u2.hand).toBeUndefined();
+        expect(wire.playerStates.u2.tickets).toBeUndefined();
+        expect(wire.playerStates.u1.hand).toBeUndefined();
+        expect(wire.playerStates.u1.tickets).toBeUndefined();
+        expect(wire.playerStates.u2.ticketCount).toBe(state.playerStates.get("u2")!.tickets.length);
+
+        // The viewer's own, and only the viewer's own.
+        const ownTicketIds = state.playerStates.get("u1")!.tickets;
+        expect(wire.myTickets.map((t: { id: number }) => t.id)).toEqual(ownTicketIds);
+        expect(wire.myPendingTickets.map((t: { id: number }) => t.id))
+            .toEqual(state.playerStates.get("u1")!.pendingTickets);
+    });
+
+    it("shows nobody's hand when nobody in particular is asking", () => {
+        // Recap and result replays build snapshots with no viewer; the counts
+        // they narrate from still have to be right.
+        const state = trainTimeState();
+        const response = trainTimeStateToModel(state, NAMES, null);
+
+        expect(response.myHand).toEqual([]);
+        expect(response.myTickets).toEqual([]);
+        expect(response.myPendingTickets).toEqual([]);
+        expect(response.playerStates.u1.handCount).toBe(state.playerStates.get("u1")!.hand.length);
+        expect(response.playerStates.u2.handCount).toBe(state.playerStates.get("u2")!.hand.length);
+    });
+
+    it("reveals every player's tickets once the game is scored", () => {
+        const state = trainTimeState();
+        state.gameOver = true;
+
+        const response = trainTimeStateToModel(state, NAMES, "u1");
+        expect(response.playerStates.u2.tickets?.map(t => t.id))
+            .toEqual(state.playerStates.get("u2")!.tickets);
+    });
+});
 
 // ─── World Domination ────────────────────────────────────────────────────────
 

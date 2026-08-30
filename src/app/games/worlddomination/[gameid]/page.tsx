@@ -231,10 +231,8 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
 
     // The same sheet either way: on your turn the phase controls, off it the
     // cards in your hand to plan the next one against (readOnly drops the
-    // controls, ReadOnlyPanel takes what is left out of play).
-    // A hand is the only thing the sheet has to show off-turn, so an empty one
-    // means there is nothing to wait over.
-    const waiting = nav.isLive && !isMyTurn && !complete && (gs?.playerStates?.[myUserId]?.cardCount ?? 0) > 0;
+    // controls, ReadOnlyPanel takes what is left out of play). A player holding
+    // no cards gets an empty sheet, which renders as nothing.
     const turnSheet = gs && !complete && (
         <WorldDominationActions
             gs={gs}
@@ -308,9 +306,9 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
                         />
                     </div>
 
-                    {isMyTurn ? turnSheet
-                        : waiting ? <ReadOnlyPanel waitingFor={currentTurnUsername}>{turnSheet}</ReadOnlyPanel>
-                        : null}
+                    {nav.isLive && !complete && (
+                        <ReadOnlyPanel readOnly={!isMyTurn}>{turnSheet}</ReadOnlyPanel>
+                    )}
 
                     <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} userIdList={userIdList} />
 

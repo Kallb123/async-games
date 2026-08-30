@@ -1595,13 +1595,6 @@ a.ag-list-row, a.ag-list-row-main {
    the player waiting to plan their next move. The element selector outranks
    every per-game :disabled rule, whatever order the file ends up in. */
 .ag-readonly button:disabled { opacity: 1; cursor: default; }
-.ag-readonly-note {
-    margin: 0;
-    padding: 12px 16px 0;
-    font: 600 11px var(--ag-font);
-    color: var(--ag-ink-soft);
-    text-align: center;
-}
 
 /* Highlighted inline notice (e.g. the Special Build Phase banner). */
 .ag-callout {

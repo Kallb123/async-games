@@ -126,17 +126,16 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
 
     // The same sheet either way: on your turn the dice and the build step, off
     // it the market alone (readOnly), so the cards on offer and what they cost
-    // can be read while you wait. Reviewing a past turn has nothing to wait for.
-    const showActions = isMyTurn && !!boardPlayer && controlsCurrentTurn === boardPlayer.userId;
-    const waiting = nav.isLive && !complete && !showActions && !!myState;
-    const turnSheet = displayed && boardPlayer && (
+    // can be read while you wait. It is the viewer's own row either way — a
+    // spectator with no row of their own gets no sheet at all.
+    const turnSheet = displayed && myState && (
         <DiceCitiesActions
             gameState={displayed}
-            myState={boardPlayer}
+            myState={myState}
             opponents={opponents}
             submitCommand={controlsSubmit}
             pendingTarget={controlsPendingTarget}
-            readOnly={!showActions}
+            readOnly={!isMyTurn}
         />
     );
 
@@ -204,9 +203,9 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
                 />
             )}
 
-            {showActions ? turnSheet
-                : waiting ? <ReadOnlyPanel waitingFor={currentTurnUsername}>{turnSheet}</ReadOnlyPanel>
-                : null}
+            {nav.isLive && !complete && (
+                <ReadOnlyPanel readOnly={!isMyTurn}>{turnSheet}</ReadOnlyPanel>
+            )}
 
             <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} userIdList={userIdList} />
 

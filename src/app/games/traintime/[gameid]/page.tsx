@@ -296,7 +296,6 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     // The same turn sheet either way: on your turn it is the thing you play
     // with, off it the hand and the face-up cards to plan against (readOnly
     // drops the picker, ReadOnlyPanel takes the rest out of play).
-    const waiting = nav.isLive && !isMyTurn && !complete && !!me;
     const turnSheet = gs && (
         <TrainTimeActions
             gs={gs}
@@ -452,10 +451,9 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                             onKeep={keepTickets}
                             pending={pendingTarget === 'keep-tickets'}
                         />
-                    ) : isMyTurn ? turnSheet
-                    : waiting ? (
-                        <ReadOnlyPanel waitingFor={currentTurnUsername}>{turnSheet}</ReadOnlyPanel>
-                    ) : null}
+                    ) : nav.isLive && !complete && (
+                        <ReadOnlyPanel readOnly={!isMyTurn}>{turnSheet}</ReadOnlyPanel>
+                    )}
 
                     {recapAvailable && (
                         <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} userIdList={userIdList} />
