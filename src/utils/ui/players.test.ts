@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { currentUsername, displayName, finishedGameCopy, fullName, personalName, profileHeading, publicHandle, readableName, seatOrderFrom } from './players';
+import { currentUsername, displayName, finishedGameCopy, personalName, profileHeading, publicHandle, readableName, seatOrderFrom } from './players';
 
 describe('readableName', () => {
     it('prefers the display name a player chose over their handle', () => {
@@ -11,10 +11,11 @@ describe('readableName', () => {
         expect(readableName({ username: 'dave' })).toBe('dave');
     });
 
-    it("never shows a registered player's first name to anyone", () => {
-        // firstName is what Clerk collected at signup, not a name they chose
-        // to be called — their handle stands in until they pick one.
-        expect(readableName({ username: 'dave', firstName: 'David', lastName: 'Smith' })).toBe('dave');
+    it("never shows a registered player's leftover Clerk first name", () => {
+        // firstName is only the legacy home of a *guest's* typed name. A
+        // registered player who still has one from Clerk's signup form is
+        // known by their handle until they choose a display name.
+        expect(readableName({ username: 'dave', firstName: 'David' })).toBe('dave');
     });
 
     it('falls back to the fallback for a real player with neither', () => {
@@ -130,85 +131,58 @@ describe('personalName', () => {
     });
 });
 
-describe('fullName', () => {
-    it('joins the real name a registered player gave', () => {
-        expect(fullName({ username: 'dave', firstName: 'David', lastName: 'Smith' })).toBe('David Smith');
-    });
-
-    it('is empty for a guest, whose firstName is a display name not a real one', () => {
-        expect(fullName({
-            username: 'guest_abc123',
-            firstName: 'Dave',
-            publicMetadata: { guest: true },
-        })).toBe('');
-    });
-
-    it('is empty when there is no name and no user', () => {
-        expect(fullName({ username: 'dave', firstName: null, lastName: null })).toBe('');
-        expect(fullName(null)).toBe('');
-    });
-});
-
 describe('displayName', () => {
-    it('pairs the real name with the handle', () => {
-        expect(displayName({ username: 'dave', firstName: 'David', lastName: 'Smith' })).toBe('David Smith (dave)');
+    it('pairs the name they chose with the handle you invite them by', () => {
+        expect(displayName({ username: 'dave', publicMetadata: { displayName: 'Dave the Destroyer' } }))
+            .toBe('Dave the Destroyer (@dave)');
     });
 
-    it('is the handle alone when they gave no real name', () => {
-        expect(displayName({ username: 'dave', firstName: null, lastName: null })).toBe('dave');
+    it('is the handle alone when they chose no display name', () => {
+        // Not "dave (@dave)": the handle is already the name they go by.
+        expect(displayName({ username: 'dave' })).toBe('dave');
     });
 
     it('never prints the word "null" for a player with no handle', () => {
-        expect(displayName({ username: null, firstName: 'David', lastName: 'Smith' })).toBe('David Smith');
-        expect(displayName({ username: null, firstName: null, lastName: null })).toBe('Player');
+        expect(displayName({ username: null, publicMetadata: { displayName: 'Dave' } })).toBe('Dave');
+        expect(displayName({ username: null, firstName: null })).toBe('Player');
     });
 
     it('is the name a guest typed, not their account username', () => {
         expect(displayName({
             username: 'guest_abc123',
-            firstName: 'Dave',
-            publicMetadata: { guest: true },
+            publicMetadata: { guest: true, displayName: 'Dave' },
         })).toBe('Dave');
     });
 });
 
 describe('profileHeading', () => {
-    it('heads a registered player with their name, handle and real name', () => {
+    it('heads a registered player with the name they chose and their handle', () => {
         expect(profileHeading({
             username: 'dave',
-            firstName: 'David',
-            lastName: 'Smith',
             publicMetadata: { displayName: 'Dave the Destroyer' },
         }, 'You')).toEqual({
             name: 'Dave the Destroyer',
             handle: 'dave',
             noHandleLabel: undefined,
-            fullName: 'David Smith',
         });
     });
 
     it('heads a player who chose no display name with their handle', () => {
-        // Their own header shows what everyone else sees, which until they
-        // choose a display name is the handle — never the first name Clerk
-        // collected, which stays where it belongs in the real-name line.
-        expect(profileHeading({ username: 'dave', firstName: 'David', lastName: 'Smith' }, 'You')).toEqual({
+        expect(profileHeading({ username: 'dave' }, 'You')).toEqual({
             name: 'dave',
             handle: 'dave',
             noHandleLabel: undefined,
-            fullName: 'David Smith',
         });
     });
 
     it('heads a guest with the name they typed and says what they are', () => {
         expect(profileHeading({
             username: 'guest_abc123',
-            firstName: 'Dave',
-            publicMetadata: { guest: true },
+            publicMetadata: { guest: true, displayName: 'Dave' },
         }, 'You')).toEqual({
             name: 'Dave',
             handle: null,
             noHandleLabel: 'Guest account',
-            fullName: '',
         });
     });
 
@@ -217,7 +191,6 @@ describe('profileHeading', () => {
             name: null,
             handle: null,
             noHandleLabel: undefined,
-            fullName: '',
         });
     });
 });

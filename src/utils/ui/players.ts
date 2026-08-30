@@ -42,8 +42,9 @@ export function nameForUserId(
 // below is the answer to one question about this shape.
 export interface NamedUser {
     username?: string | null;
+    // A guest's join-screen name, for guests minted before it had a field of
+    // its own — never a real name. See readableName's last line.
     firstName?: string | null;
-    lastName?: string | null;
     id?: string | null;
     publicMetadata?: {
         // A guest's Clerk username is the random account id createGuest()
@@ -96,16 +97,6 @@ export function isGuestPlaceholderUsername(username: string | null | undefined):
 export function publicHandle(user: NamedUser | null | undefined): string | null {
     if (!user || isGuest(user)) return null;
     return isGuestPlaceholderUsername(user.username) ? null : (user.username || null);
-}
-
-// The real name a registered player gave Clerk at signup, e.g. "David Smith"
-// — "" when they gave none. This is the one place `firstName` is read as what
-// Clerk sells it as. A guest's firstName is the display name they typed at the
-// join screen rather than a legal name, and it is already what names them, so
-// a guest has no separate full name to show alongside it.
-export function fullName(user: NamedUser | null | undefined): string {
-    if (!user || isGuest(user)) return "";
-    return [user.firstName, user.lastName].filter(name => name).join(" ");
 }
 
 // The name a player chose to be seen under, or null if they never chose one.
@@ -174,14 +165,15 @@ export function personalName(user: NamedUser | null | undefined, fallback = ""):
     return readableName(user, fallback) || null;
 }
 
-// "David Smith (dave)" for a friends-list row, falling back to whichever half
-// exists — a guest has only the name they typed, and nobody has the literal
-// word "null", which is what interpolating an unset username used to print.
+// "Dave (@dave)" for a friends-list row: the name they chose to be seen under,
+// and the handle you invite them by — which is the only thing that tells two
+// friends called Dave apart. A guest has no handle, so theirs is just the
+// name; and a player who has chosen no display name is already known by their
+// handle, so it isn't printed twice.
 export function displayName(user: NamedUser): string {
     const handle = publicHandle(user);
-    const real = fullName(user);
-    if (real && handle) return `${real} (${handle})`;
-    return real || readableName(user, "Player");
+    const name = readableName(user, "Player");
+    return handle && handle !== name ? `${name} (@${handle})` : name;
 }
 
 /** The three lines ProfileIdentity heads a profile with. */
@@ -192,21 +184,17 @@ export interface ProfileHeading {
     handle: string | null;
     /** Subtitle when there is no handle: what they are, not what they lack. */
     noHandleLabel?: string;
-    /** The real name they gave, "" when they gave none. */
-    fullName: string;
 }
 
 // A profile header — your own or a friend's — from the one user it is about,
 // so the two screens that show one can't drift apart on what a guest sees. A
-// guest has no handle they chose and no real name beyond the one already
-// heading the screen, so their subtitle says what they are rather than what
-// they are missing.
+// guest has no handle they chose, so their subtitle says what they are rather
+// than what they are missing.
 export function profileHeading(user: NamedUser | null | undefined, fallback: string): ProfileHeading {
     return {
         name: personalName(user, fallback),
         handle: publicHandle(user),
         noHandleLabel: user && isGuest(user) ? "Guest account" : undefined,
-        fullName: fullName(user),
     };
 }
 
