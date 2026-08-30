@@ -24,14 +24,17 @@ import TrainTimeScoreSheet, { TrainTimeScoreRow } from "@/games/TrainTime/compon
 import GameShell from "@/components/ui/GameShell";
 import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
+import GameGuideModal from "@/components/ui/GameGuideModal";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import Stat from "@/components/ui/Stat";
+import { guide as trainTimeGuide } from "@/games/TrainTime/guide";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
+import { useGameGuide } from "@/utils/hooks/useGameGuide";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
@@ -78,6 +81,10 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     // Games dealt before the starting snapshot existed can't be replayed, so
     // they never offer the review controls.
     const recapAvailable = gameData?.recapAvailable ?? false;
+
+    // The "how to play" popup: shown automatically the first time this account
+    // opens a Train Time match, and on demand from the game-options menu.
+    const gameGuide = useGameGuide('traintime');
 
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
@@ -235,6 +242,12 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
             active: showLog,
             onClick: () => setShowLog(v => !v),
         },
+        {
+            key: 'guide',
+            label: 'Game guide',
+            icon: '📖',
+            onClick: gameGuide.openGuide,
+        },
         ...(!complete ? [{
             key: 'end',
             label: 'End game',
@@ -344,6 +357,8 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
             className="ag-game--traintime"
         >
             <FcmTokenComp />
+
+            {gameGuide.open && <GameGuideModal guide={trainTimeGuide} onClose={gameGuide.closeGuide} />}
 
             {/* The claim sheet is a screen of its own (design 14b): its dark
                 route header runs straight off the top bar, with the standings
