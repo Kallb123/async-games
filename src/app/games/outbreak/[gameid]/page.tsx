@@ -11,6 +11,7 @@ import OutbreakInfectionDiscard from "@/games/Outbreak/components/OutbreakInfect
 import OutbreakEventTray, { OutbreakEventTargeting } from "@/games/Outbreak/components/OutbreakEventTray";
 import OutbreakEndTurnScreen from "@/games/Outbreak/components/OutbreakEndTurnScreen";
 import OutbreakInfectionRateScale from "@/games/Outbreak/components/OutbreakInfectionRateScale";
+import OutbreakRoleIntro from "@/games/Outbreak/components/OutbreakRoleIntro";
 import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
@@ -307,6 +308,8 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     return (
         <GameShell title="Outbreak" subtitle={subtitle} right={optionsMenu} syncing={submitting} className="ag-game--outbreak">
             <FcmTokenComp />
+
+            {me && <OutbreakRoleIntro gameId={gameId} myUserId={myUserId} role={me.role} />}
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 
