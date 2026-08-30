@@ -44,6 +44,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Outbreak has a game guide",
+                detail: "Not sure what a phase does or which cube pile to worry about? A game guide now opens the first time you join an Outbreak match, and any time after that from the ⋮ menu at the top of the board.",
+                game: "outbreak",
+            },
+            {
                 title: "Your cards stay on screen between your turns",
                 detail: "Waiting for someone else to move used to leave you looking at the board and nothing else. Your hand, the face-up cards and what's left in the deck now stay put in Train Time, the market in Dice Cities and the cards you're holding in World Domination — greyed out until it's your go, so you can plan the move but not make it early.",
             },
@@ -59,10 +64,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Tapping back to your games starts right away",
                 detail: "Heading home used to leave the tap looking like it hadn't registered for a moment while the page worked out what to show you. It now shows straight away and fills in as it's ready, so nothing feels stuck.",
-            },
-            {
-                title: "Rows grow into the space they need",
-                detail: "A placeholder row can only guess how tall the real thing will be, so when your games arrived the list used to snap to its real size and shunt everything under your thumb. Each row now slides from the placeholder's height to its own — up or down — so the page settles instead of hopping.",
             },
         ],
     },

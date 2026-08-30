@@ -12,8 +12,10 @@ import OutbreakEventTray, { OutbreakEventTargeting } from "@/games/Outbreak/comp
 import OutbreakEndTurnScreen from "@/games/Outbreak/components/OutbreakEndTurnScreen";
 import OutbreakInfectionRateScale from "@/games/Outbreak/components/OutbreakInfectionRateScale";
 import OutbreakRoleIntro from "@/games/Outbreak/components/OutbreakRoleIntro";
+import { guide as outbreakGuide } from "@/games/Outbreak/guide";
 import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
+import GameGuideModal from "@/components/ui/GameGuideModal";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import Stat from "@/components/ui/Stat";
@@ -23,6 +25,7 @@ import MatchHistory from "@/components/games/MatchHistory";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
+import { useGameGuide } from "@/utils/hooks/useGameGuide";
 import { SubmitCommand, useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
@@ -93,6 +96,11 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     // before the board whenever it's our turn and something happened while
     // we were away.
     const recap = useTurnRecap(gameId);
+
+    // The "how to play" popup: shown automatically the first time this
+    // account opens an Outbreak match, and on demand from the game-options
+    // menu — see useGameGuide.
+    const gameGuide = useGameGuide('outbreak');
 
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
@@ -275,6 +283,12 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
             active: showLog,
             onClick: () => setShowLog(v => !v),
         },
+        {
+            key: 'guide',
+            label: 'Game guide',
+            icon: '📖',
+            onClick: gameGuide.openGuide,
+        },
         ...(!complete ? [{
             key: 'end',
             label: 'End game',
@@ -313,7 +327,12 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
         <GameShell title="Outbreak" subtitle={subtitle} right={optionsMenu} syncing={submitting} className="ag-game--outbreak">
             <FcmTokenComp />
 
-            {me && <OutbreakRoleIntro gameId={gameId} myUserId={myUserId} role={me.role} />}
+            {/* Game guide before role guide — a player needs to know the game
+                before their role in it (see useGameGuide's `loaded`/`open`
+                docs), so the role welcome waits for this one to have
+                answered and to not be showing. */}
+            {me && gameGuide.loaded && !gameGuide.open && <OutbreakRoleIntro gameId={gameId} myUserId={myUserId} role={me.role} />}
+            {gameGuide.open && <GameGuideModal guide={outbreakGuide} onClose={gameGuide.closeGuide} />}
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 
