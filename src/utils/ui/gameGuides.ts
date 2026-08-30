@@ -19,11 +19,13 @@ export interface GameGuide {
 }
 
 import { guide as outbreakGuide } from "@/games/Outbreak/guide";
+import { guide as diceCitiesGuide } from "@/games/DiceCities/guide";
 
 // Keyed by the same url slug as GAME_META. Not every game has a guide yet —
 // callers look it up with guideForGame and handle a miss.
 export const GAME_GUIDES: Record<string, GameGuide> = {
     outbreak: outbreakGuide,
+    dicecities: diceCitiesGuide,
 };
 
 export function guideForGame(url: string): GameGuide | undefined {
