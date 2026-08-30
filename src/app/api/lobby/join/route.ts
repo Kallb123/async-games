@@ -10,7 +10,7 @@ import { isValidDisplayName } from '@/utils/users/displayName';
 import { acceptSeat } from '@/utils/games/startGame';
 import { createGuest, deleteGuest } from '@/utils/users/guest';
 import { buildResumeHref } from '@/utils/users/resumeLink';
-import { userIdListToUsernameList } from '@/utils/users/clerk';
+import { userIdListToUntaggedNameList } from '@/utils/users/clerk';
 import { clientIp, consumeRateLimit } from '@/utils/rateLimit';
 
 export interface ILobbyJoinRequest {
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
         // a guest could just as easily match them — so two "Dave"s in the
         // same lobby stay tellable apart (§5).
         const seatedIds = [lobby.senderId, ...lobby.userIdList.filter(entry => !isOpenSeat(entry)).map(entry => entry.userId)];
-        const displayName = uniqueGuestName(guestName, await userIdListToUsernameList(seatedIds));
+        const displayName = uniqueGuestName(guestName, await userIdListToUntaggedNameList(seatedIds));
 
         const guest = await createGuest(displayName);
         const claimed = await claimOpenSeat(guest.userId);

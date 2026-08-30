@@ -11,7 +11,7 @@ import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNoti
 import { buildReactionNotification } from '@/utils/firebase/notificationContent';
 import { isValidReaction } from '@/utils/reactions';
 import { isDuplicateKeyError } from '@/utils/mongodb/duplicateKey';
-import { readableName } from '@/utils/ui/players';
+import { readableName, UNKNOWN_PLAYER_NAME } from '@/utils/ui/players';
 
 export interface IGetReactionParams {
     gameid: string;
@@ -74,11 +74,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
         commandId: event.commandId,
         actorId: userId,
         // The name is frozen onto the reaction here — it is pushed to the
-        // player reacted to and rendered back on their profile — so it goes
-        // through the same resolver everything else that names a player does.
-        // Spelled out inline, it had no guest branch, and a guest reacting was
-        // stored and pushed as their random account username.
-        actorUsername: readableName(thisUser, userId),
+        // player reacted to and rendered back on their profile — so it is
+        // taken from the map naming this game's players rather than resolved
+        // again on its own. Spelled out inline, it had no guest branch, and a
+        // guest reacting was stored and pushed as their random account
+        // username; resolved one user at a time, it would be the one name in
+        // the feed missing the handle that tells two Daves apart.
+        // The map names every id it was given, so a miss comes back as the
+        // "Clerk didn't know them" placeholder rather than as undefined — and
+        // freezing *that* onto a stored reaction, when currentUser() is right
+        // here holding the answer, is the one case worth resolving alone.
+        actorUsername: userIdNameMap[userId] === UNKNOWN_PLAYER_NAME
+            ? readableName(thisUser, userId)
+            : userIdNameMap[userId],
         recipientId: event.actorId,
         reaction,
         timestamp: (new Date()).toISOString()

@@ -1,8 +1,7 @@
 import { User } from '@clerk/nextjs/server';
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildGameLostNotification, buildGameWonNotification, buildTeamResultNotification } from '@/utils/firebase/notificationContent';
-import { readableName } from '@/utils/ui/players';
-import { usersById } from '@/utils/users/clerk';
+import { userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
 import { unclaimedGuestsOf } from '@/utils/users/guest';
 import { IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
 import { recordGameResult } from '@/utils/mongodb/GameResultData';
@@ -129,14 +128,18 @@ async function announceGameOver(gameData: IGameDataDocument): Promise<void> {
 
     const winnerUser = userList.find(u => u.id === gameData.winner);
     const losers = userList.filter(u => u.id !== gameData.winner);
+    // Named as a table rather than one at a time: "You beat Dave and Dave" is
+    // the sentence a per-user resolver writes when two players at the same
+    // game share a display name.
+    const nameOf = userListToUserIdNameMap(userList);
 
     if (winnerUser) {
         await sendPushToUsers([winnerUser], push,
-            buildGameWonNotification(gameData, losers.map(u => readableName(u))),
+            buildGameWonNotification(gameData, losers.map(u => nameOf[u.id])),
             { channel: 'gameOver' });
     }
 
     await sendPushToUsers(losers, push,
-        buildGameLostNotification(gameData, winnerUser ? readableName(winnerUser) : ''),
+        buildGameLostNotification(gameData, winnerUser ? nameOf[winnerUser.id] : ''),
         { channel: 'gameOver' });
 }
