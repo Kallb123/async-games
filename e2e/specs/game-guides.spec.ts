@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { clearGames, clerkUserId, logBrowserErrors } from '../helpers';
 
 // Proves the game-guide feature (src/utils/ui/gameGuides.ts) actually reaches
@@ -10,9 +10,26 @@ import { clearGames, clerkUserId, logBrowserErrors } from '../helpers';
 //
 // One parameterised test rather than four near-identical files: only the
 // slug, display name and expected guide title change between games.
-const GAMES = [
+const GAMES: {
+  slug: string;
+  name: string;
+  guideTitle: string;
+  /** Extra setup-form steps needed before inviting, if any (see below). */
+  beforeInvite?: (page: Page) => Promise<void>;
+}[] = [
   { slug: 'dicecities', name: 'Dice Cities', guideTitle: 'How to play Dice Cities' },
-  { slug: 'settlementsandcities', name: 'Settlements & Cities', guideTitle: 'How to play Settlements & Cities' },
+  {
+    slug: 'settlementsandcities',
+    name: 'Settlements & Cities',
+    guideTitle: 'How to play Settlements & Cities',
+    // The base ruleset seats 3+ (computePlayerBounds in expansions.ts) — only
+    // Traders & Raiders and Explorers & Pirates natively support 2 — and this
+    // suite only has two persistent test accounts to invite between, so turn
+    // on Traders & Raiders to make a 2-player match valid.
+    beforeInvite: async (page) => {
+      await page.getByRole('button', { name: 'Toggle Traders & Raiders' }).click();
+    },
+  },
   { slug: 'worlddomination', name: 'World Domination', guideTitle: 'How to play World Domination' },
   { slug: 'traintime', name: 'Train Time', guideTitle: 'How to play Train Time' },
 ];
@@ -40,6 +57,7 @@ for (const game of GAMES) {
 
     // Player one sets up the match and invites player two by username.
     await one.goto(`/newgame/${game.slug}`);
+    if (game.beforeInvite) await game.beforeInvite(one);
     const usernameInput = one.getByPlaceholder('Add by username or email');
     await usernameInput.fill(playerTwoUsername);
     await usernameInput.press('Enter');
@@ -59,7 +77,11 @@ for (const game of GAMES) {
     await one.goto(new URL(two.url()).pathname);
     await clerkUserId(one);
 
-    await expect(one.getByText(game.name)).toBeVisible();
+    // Exact match: the guide modal's own title ("How to play <name>") also
+    // contains the game's display name as a substring, so a plain getByText
+    // for the topbar would ambiguously match both whenever the guide has
+    // auto-opened underneath it.
+    await expect(one.getByText(game.name, { exact: true })).toBeVisible();
 
     // Auto-show is a once-per-account flag (useGameGuide) on real Clerk
     // accounts these tests reuse across runs, so this account may or may not
