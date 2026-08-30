@@ -320,16 +320,17 @@ export interface OutbreakRoleDef {
 }
 
 // All seven, dealt one per seat at random (§6 step 5) — see rules.ts's
-// dealRoles. contingencyPlanner has no observable effect yet: its retrieval
-// ability has nothing to retrieve until event cards exist (§21.6 step 10).
+// dealRoles. `ability` is read by players (OutbreakRoleInfoPopup), so it is
+// written in their language: what the role lets you do at the table, with no
+// GDD section references and no pronouns for whoever was dealt it.
 export const ROLES: OutbreakRoleDef[] = [
-    { id: 'medic', name: 'Medic', ability: 'Treat Disease clears every cube of a colour in one action, cured or not. Cured cubes vanish automatically from any city she enters or is in.' },
-    { id: 'scientist', name: 'Scientist', ability: 'Discovers a cure with 4 cards of a colour instead of 5.' },
-    { id: 'researcher', name: 'Researcher', ability: 'A card leaving her hand during Share Knowledge — given by her, or taken from her — need not match the shared city.' },
-    { id: 'dispatcher', name: 'Dispatcher', ability: "May move another player's pawn using her own hand, or move any pawn to a city already occupied by another pawn." },
-    { id: 'opsExpert', name: 'Operations Expert', ability: 'Builds a research station without discarding a card. Once per turn, flies from a station to any city by discarding any city card.' },
-    { id: 'quarantineSpecialist', name: 'Quarantine Specialist', ability: 'Prevents all cube placement and outbreaks in her city and every adjacent city.' },
-    { id: 'contingencyPlanner', name: 'Contingency Planner', ability: 'Recovers a discarded event card for later use (§21.6 step 10).' },
+    { id: 'medic', name: 'Medic', ability: 'Treating a disease clears every cube of that colour from the city at once, not just one. Once a disease is cured, its cubes vanish from any city the Medic is in or moves into — no action needed.' },
+    { id: 'scientist', name: 'Scientist', ability: 'Needs only 4 cards of a colour to discover its cure, instead of 5.' },
+    { id: 'researcher', name: 'Researcher', ability: 'When sharing knowledge, the Researcher can give away any city card — and a teammate can take any card — rather than only the card matching the city they are both standing in.' },
+    { id: 'dispatcher', name: 'Dispatcher', ability: "Can move a teammate's pawn as if it were their own, spending their own actions and cards — or send any pawn straight to a city where another pawn is standing." },
+    { id: 'opsExpert', name: 'Operations Expert', ability: 'Builds a research station without discarding a card. Once a turn, can fly from a research station to any city by discarding any city card, not just the matching one.' },
+    { id: 'quarantineSpecialist', name: 'Quarantine Specialist', ability: "No disease cubes are added and no outbreaks happen in the Quarantine Specialist's city, or in any city next to it. Cubes already there stay put." },
+    { id: 'contingencyPlanner', name: 'Contingency Planner', ability: 'Can spend an action to take an event card back out of the discard pile and keep it to one side. The stored card does not count towards the hand limit, and leaves the game for good once played.' },
 ];
 
 export function roleDef(roleId: OutbreakRoleId | null): OutbreakRoleDef | null {
