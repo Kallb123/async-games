@@ -12,6 +12,14 @@ import { useCallback, useEffect, useState } from 'react';
  * about yet never flashes the guide open and then closed, and there is no
  * "call setState from an effect" cascade to worry about.
  *
+ * `loaded` (`seen !== null`) is exposed so a screen with its own first-visit
+ * popup — Outbreak's role welcome — can wait for it before deciding whether
+ * to show *itself*, rather than flashing open and being yanked shut a moment
+ * later when this guide's auto-show turns out to be pending. You need to know
+ * the game before your role in it, so the game guide always goes first: hold
+ * the role welcome back for as long as `!loaded || open` says this one either
+ * hasn't answered yet or has the floor.
+ *
  * Dismissing only marks the guide seen the first time — reopening it from the
  * menu afterwards is just a look, not a fresh "first visit" to record.
  */
@@ -33,8 +41,9 @@ export function useGameGuide(gameUrl: string) {
         return () => { cancelled = true; };
     }, []);
 
+    const loaded = seen !== null;
     const alreadySeen = seen?.includes(gameUrl) ?? true;
-    const autoShow = seen !== null && !alreadySeen && !autoShowDismissed;
+    const autoShow = loaded && !alreadySeen && !autoShowDismissed;
     const open = manualOpen || autoShow;
 
     const markSeen = useCallback(() => {
@@ -54,5 +63,5 @@ export function useGameGuide(gameUrl: string) {
         markSeen();
     }, [markSeen]);
 
-    return { open, openGuide, closeGuide };
+    return { open, loaded, openGuide, closeGuide };
 }

@@ -327,7 +327,11 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
         <GameShell title="Outbreak" subtitle={subtitle} right={optionsMenu} syncing={submitting} className="ag-game--outbreak">
             <FcmTokenComp />
 
-            {me && <OutbreakRoleIntro gameId={gameId} myUserId={myUserId} role={me.role} />}
+            {/* Game guide before role guide — a player needs to know the game
+                before their role in it (see useGameGuide's `loaded`/`open`
+                docs), so the role welcome waits for this one to have
+                answered and to not be showing. */}
+            {me && gameGuide.loaded && !gameGuide.open && <OutbreakRoleIntro gameId={gameId} myUserId={myUserId} role={me.role} />}
             {gameGuide.open && <GameGuideModal guide={outbreakGuide} onClose={gameGuide.closeGuide} />}
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}

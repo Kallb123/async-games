@@ -31,7 +31,7 @@ export default function OutbreakRoleIntro({ gameId, myUserId, role }: OutbreakRo
     return (
         <OutbreakRoleInfoPopup
             role={def}
-            intro={`Welcome to the crew! You’ve been dealt the ${def.name} — here’s what only you can do:`}
+            intro={`Welcome to the crew! You’ve been dealt the ${def.name} — here’s what only you can do. Forgot it? Tap your role name (ⓘ) in your hand to see this again any time.`}
             onClose={dismiss}
         />
     );
