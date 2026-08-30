@@ -14,7 +14,7 @@ interface ProfileIdentityProps extends ProfileHeading {
     onAvatarClick?: () => void;
     /** Shows a spinner over the avatar while the new picture is saving. */
     avatarBusy?: boolean;
-    /** Controls rendered under the name — e.g. "Edit username", "Remove photo". */
+    /** Controls rendered under the name — e.g. "Edit name", "Remove photo". */
     action?: ReactNode;
 }
 

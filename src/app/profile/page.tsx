@@ -10,7 +10,7 @@ import RecentFormSection from "@/components/ui/RecentFormSection";
 import ReactionPicker from "@/components/ui/ReactionPicker";
 import ListSection from "@/components/ui/ListSection";
 import CollapsingSection from "@/components/ui/CollapsingSection";
-import UsernameForm from "@/components/UsernameForm";
+import NameForm from "@/components/NameForm";
 import { IFriendRequestResponse } from "@/utils/mongodb/FriendshipData";
 import { formatRelativeTime } from "@/utils/ui/time";
 import { FRIEND_EVENTS } from "@/utils/hooks/usePushEvents";
@@ -43,7 +43,7 @@ export default function Profile() {
     const now = useNowToTheMinute();
     const picture = useProfilePicture();
 
-    const [editingUsername, setEditingUsername] = useState(false);
+    const [editingName, setEditingName] = useState(false);
     const [inviteUsername, setInviteUsername] = useState("");
     const [isSending, setIsSending] = useState(false);
     const [showAdd, setShowAdd] = useState(false);
@@ -118,13 +118,6 @@ export default function Profile() {
     }
 
     const guest = !!user && isGuest(user);
-    // A guest is not offered the handle editor: theirs is the account id
-    // createGuest() minted and publicHandle shows none, so a handle would be
-    // one nobody sees until they claim the account — which mints them a real
-    // one anyway. This is what we offer, not a control: the write is the
-    // browser's own call to Clerk, so nothing server-side refuses a guest who
-    // makes it themselves (see the locksmith's note in docs/dynamic-names.md).
-    const canEditUsername = !!user && !guest;
     // Null name while Clerk is still loading you, so the header sits as a
     // placeholder instead of showing "Y" for a stand-in "You".
     const heading = profileHeading(user, "You");
@@ -150,17 +143,18 @@ export default function Profile() {
                 imageUrl={profileImageUrl(user)}
                 onAvatarClick={picture.openPicker}
                 avatarBusy={picture.isSaving}
-                action={(canEditUsername || picture.hasPicture) && (
+                action={!!user && (
                     <>
-                        {canEditUsername && (
-                            <button
-                                type="button"
-                                className="ag-link-muted"
-                                onClick={() => setEditingUsername(v => !v)}
-                            >
-                                {editingUsername ? "Cancel" : "Edit username"}
-                            </button>
-                        )}
+                        {/* Everyone signed in can change what they are called.
+                            A guest gets only the display-name half of the
+                            editor, which NameForm decides for itself. */}
+                        <button
+                            type="button"
+                            className="ag-link-muted"
+                            onClick={() => setEditingName(v => !v)}
+                        >
+                            {editingName ? "Cancel" : "Edit name"}
+                        </button>
                         {picture.hasPicture && (
                             <button
                                 type="button"
@@ -176,12 +170,14 @@ export default function Profile() {
             />
             {picture.fileInput}
 
-            <CollapsingSection collapsed={!editingUsername}>
-                {/* Keyed on the handle in play so reopening the editor starts
-                    from the current one rather than whatever was last typed. */}
-                {editingUsername && (
-                    <UsernameForm key={publicHandle(user) ?? ''} onSaved={() => setEditingUsername(false)} />
-                )}
+            <CollapsingSection collapsed={!editingName}>
+                {/* Unmounted when closed, which is all the resetting it needs:
+                    reopening builds a fresh form from the names in play. It is
+                    deliberately *not* keyed on those names — NameForm saves the
+                    handle before the display name, and a key would remount it
+                    between the two, resetting the half-saved form under its own
+                    submit and throwing away what the player typed. */}
+                {editingName && <NameForm onSaved={() => setEditingName(false)} />}
             </CollapsingSection>
 
             {/* Honest stats */}

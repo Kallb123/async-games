@@ -231,12 +231,17 @@ Key modelling decisions:
 - **State is a single mutable snapshot.** Commands mutate `specificGameState` in
   place; the game does *not* keep a board-per-turn. Per-turn boards are
   reconstructed by replay when needed.
-- **User identity is never stored beyond a Clerk `userId`.** Usernames are
+- **User identity is never stored beyond a Clerk `userId`.** Names are
   resolved on demand via `src/utils/users/clerk.ts` helpers
   (`userIdListToUsernameList/Map`) when building responses. This is
-  load-bearing rather than tidy: a player can change their username from
-  `/profile` (`src/components/UsernameForm.tsx`), so a stored one goes stale
-  and anything keyed by one collides the moment two players share a name.
+  load-bearing rather than tidy: a player can change both the display name
+  everyone sees them under (`publicMetadata.displayName`, written by
+  `POST /api/user/displayname`) and the handle they are invited by, from
+  `/profile` (`src/components/NameForm.tsx`), so a stored name goes stale — and
+  a display name is free text, so anything keyed by one collides the moment two
+  players both call themselves Dave. Names are therefore resolved a whole set at a time
+  (`namesFor`), which is also what lets a repeated one be tagged with the
+  handle behind it rather than printed twice.
 
 ### Response shaping
 
