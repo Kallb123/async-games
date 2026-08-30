@@ -1,20 +1,36 @@
 import { describe, expect, it } from 'vitest';
-import { currentUsername, displayName, finishedGameCopy, fullName, personalName, profileHeading, readableName, seatOrderFrom } from './players';
+import { currentUsername, displayName, finishedGameCopy, fullName, personalName, profileHeading, publicHandle, readableName, seatOrderFrom } from './players';
 
 describe('readableName', () => {
-    it('prefers a real player\'s username', () => {
-        expect(readableName({ username: 'dave', firstName: 'David' })).toBe('dave');
+    it('prefers the display name a player chose over their handle', () => {
+        expect(readableName({ username: 'dave', publicMetadata: { displayName: 'Dave the Destroyer' } }))
+            .toBe('Dave the Destroyer');
     });
 
-    it('falls back to a real player\'s first name', () => {
-        expect(readableName({ username: null, firstName: 'David' })).toBe('David');
+    it('goes by the handle of a player who chose no display name', () => {
+        expect(readableName({ username: 'dave' })).toBe('dave');
+    });
+
+    it("never shows a registered player's first name to anyone", () => {
+        // firstName is what Clerk collected at signup, not a name they chose
+        // to be called — their handle stands in until they pick one.
+        expect(readableName({ username: 'dave', firstName: 'David', lastName: 'Smith' })).toBe('dave');
     });
 
     it('falls back to the fallback for a real player with neither', () => {
         expect(readableName({ username: null, firstName: null })).toBe('Someone');
     });
 
-    it('shows a guest by the name they typed, not their account username', () => {
+    it('shows a guest the name they typed, not their account username', () => {
+        expect(readableName({
+            username: 'guest_abc123',
+            publicMetadata: { guest: true, displayName: 'Dave' },
+        })).toBe('Dave');
+    });
+
+    it('names a guest minted before display names by their firstName', () => {
+        // The last resort, and only ever reached by someone with no handle:
+        // for them firstName really is the name they typed at the join screen.
         expect(readableName({
             username: 'guest_abc123',
             firstName: 'Dave',
@@ -32,17 +48,44 @@ describe('readableName', () => {
     });
 });
 
+describe('publicHandle', () => {
+    it('gives the handle a registered player chose', () => {
+        expect(publicHandle({ username: 'dave', firstName: 'David' })).toBe('dave');
+    });
+
+    it('gives a guest none rather than their account id', () => {
+        expect(publicHandle({ username: 'guest_abc123', publicMetadata: { guest: true } })).toBeNull();
+    });
+
+    it('gives none for a claimed guest whose username is still an account id', () => {
+        // /api/user/claim clears publicMetadata.guest, so the flag alone would
+        // call this a chosen handle. A player who claimed before the claim
+        // route started minting one still carries the minted account id.
+        expect(publicHandle({
+            username: 'guest_2f81c0d4a9b34e6789012345678901ab',
+            firstName: 'Dave',
+        })).toBeNull();
+    });
+
+    it('leaves a handle somebody actually picked alone', () => {
+        expect(publicHandle({ username: 'guest_dave', firstName: 'Dave' })).toBe('guest_dave');
+    });
+});
+
 describe('currentUsername', () => {
-    it('prefers a real player\'s username', () => {
+    it('prefers the display name a player chose over their handle', () => {
+        expect(currentUsername({ username: 'dave', id: 'user_1', publicMetadata: { displayName: 'Dave' } })).toBe('Dave');
+    });
+
+    it('goes by the handle of a player who chose no display name', () => {
         expect(currentUsername({ username: 'dave', firstName: 'David', id: 'user_1' })).toBe('dave');
     });
 
     it('shows a guest by the name they typed, not their account username', () => {
         expect(currentUsername({
             username: 'guest_abc123',
-            firstName: 'Dave',
             id: 'user_guest_1',
-            publicMetadata: { guest: true },
+            publicMetadata: { guest: true, displayName: 'Dave' },
         })).toBe('Dave');
     });
 
@@ -57,19 +100,18 @@ describe('currentUsername', () => {
 });
 
 describe('personalName', () => {
-    it("prefers a registered player's first name over their handle", () => {
-        expect(personalName({ username: 'dave', firstName: 'David' })).toBe('David');
+    it("shows a player the same name everyone else sees them under", () => {
+        expect(personalName({ username: 'dave', publicMetadata: { displayName: 'Dave' } })).toBe('Dave');
     });
 
-    it('falls back to the handle when they gave no first name', () => {
-        expect(personalName({ username: 'dave', firstName: null })).toBe('dave');
+    it('falls back to the handle when they chose no display name', () => {
+        expect(personalName({ username: 'dave', firstName: 'David' })).toBe('dave');
     });
 
     it('shows a guest the name they typed, never their account username', () => {
         expect(personalName({
             username: 'guest_abc123',
-            firstName: 'Dave',
-            publicMetadata: { guest: true },
+            publicMetadata: { guest: true, displayName: 'Dave' },
         })).toBe('Dave');
     });
 
@@ -132,8 +174,25 @@ describe('displayName', () => {
 
 describe('profileHeading', () => {
     it('heads a registered player with their name, handle and real name', () => {
+        expect(profileHeading({
+            username: 'dave',
+            firstName: 'David',
+            lastName: 'Smith',
+            publicMetadata: { displayName: 'Dave the Destroyer' },
+        }, 'You')).toEqual({
+            name: 'Dave the Destroyer',
+            handle: 'dave',
+            noHandleLabel: undefined,
+            fullName: 'David Smith',
+        });
+    });
+
+    it('heads a player who chose no display name with their handle', () => {
+        // Their own header shows what everyone else sees, which until they
+        // choose a display name is the handle — never the first name Clerk
+        // collected, which stays where it belongs in the real-name line.
         expect(profileHeading({ username: 'dave', firstName: 'David', lastName: 'Smith' }, 'You')).toEqual({
-            name: 'David',
+            name: 'dave',
             handle: 'dave',
             noHandleLabel: undefined,
             fullName: 'David Smith',

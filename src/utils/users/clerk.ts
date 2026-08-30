@@ -1,5 +1,5 @@
 import { clerkClient, User } from "@clerk/nextjs/server";
-import { isGuest, readableName, UNKNOWN_PLAYER_NAME } from "@/utils/ui/players";
+import { chosenName, isGuest, readableName, UNKNOWN_PLAYER_NAME } from "@/utils/ui/players";
 import { profileImageUrl } from "@/utils/ui/avatar";
 import { MIN_USERNAME_LENGTH, slugifyUsername } from "@/utils/users/username";
 
@@ -259,8 +259,9 @@ export interface UserDto {
     // resolves a name from it through the same players.ts helpers it uses on
     // a Clerk user. A guest's username is the random account id createGuest()
     // minted, so "is this a guest?" is not something a screen can work out
-    // from the rest of the fields.
-    publicMetadata: { guest: boolean };
+    // from the rest of the fields — and the display name they chose is ours
+    // rather than one of Clerk's attributes, so it has to travel too.
+    publicMetadata: { guest: boolean; displayName?: string };
 }
 
 // The one Clerk-user-to-client projection, so a screen naming a player from
@@ -274,6 +275,6 @@ export function toUserDto(user: User): UserDto {
         firstName: user.firstName,
         lastName: user.lastName,
         imageUrl: profileImageUrl(user),
-        publicMetadata: { guest: isGuest(user) },
+        publicMetadata: { guest: isGuest(user), displayName: chosenName(user) ?? undefined },
     };
 }

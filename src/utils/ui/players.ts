@@ -45,19 +45,46 @@ export interface NamedUser {
     firstName?: string | null;
     lastName?: string | null;
     id?: string | null;
-    // A guest's Clerk username is the random account id createGuest() minted
-    // (docs/account-less-play.md §5), not something anyone chose to be seen
-    // under — their firstName carries the name they actually typed at join
-    // time (step 14), so every resolver below inverts its usual
-    // username-first order for a guest.
-    publicMetadata?: { guest?: boolean };
+    publicMetadata?: {
+        // A guest's Clerk username is the random account id createGuest()
+        // minted (docs/account-less-play.md §5), not something anyone chose to
+        // be seen under. Every resolver below therefore treats a guest as
+        // having no handle at all, rather than showing the account id as one.
+        guest?: boolean;
+        // The name a player chose to be seen under — ours, not one of Clerk's
+        // own attributes. See `chosenName` below for why it isn't `firstName`.
+        displayName?: string;
+    };
 }
 
 // The one place "is this user a guest?" gets asked — clerk.ts's own
 // name-resolution helpers (userIdListToUsernameList/Map) reuse this rather
 // than re-declaring the same publicMetadata check a second time.
+//
+// Deliberately narrow: this is the authorisation question (may they host a
+// game?), and /api/user/claim clears the flag the moment a guest claims their
+// account. "Is that username a real handle?" is a different question with a
+// different answer — see below.
 export function isGuest(user: NamedUser): boolean {
     return user.publicMetadata?.guest === true;
+}
+
+// The shape createGuest() mints a guest's Clerk username under: `guest_` and
+// a UUID with its hyphens stripped. Matched here rather than beside the
+// minting code because guest.ts is server-only and this question gets asked
+// on both sides — and matched by shape rather than by the
+// `publicMetadata.guest` flag on purpose. The flag is cleared when a guest
+// claims their account, but the account id only became a *real* handle at
+// claim time once /api/user/claim started minting one, so a player who
+// claimed before that still carries `guest_<uuid>` with no flag on it. It was
+// never a handle they chose, and it must never be shown as one.
+//
+// Narrow enough that a handle somebody actually picked can't trip it: the
+// 32 hex digits are the part nobody types on purpose.
+const GUEST_PLACEHOLDER_USERNAME = /^guest_[0-9a-f]{32}$/;
+
+export function isGuestPlaceholderUsername(username: string | null | undefined): boolean {
+    return !!username && GUEST_PLACEHOLDER_USERNAME.test(username);
 }
 
 // The handle a player is publicly known by: their Clerk username, which is
@@ -68,47 +95,83 @@ export function isGuest(user: NamedUser): boolean {
 // never as "show the account id".
 export function publicHandle(user: NamedUser | null | undefined): string | null {
     if (!user || isGuest(user)) return null;
-    return user.username || null;
+    return isGuestPlaceholderUsername(user.username) ? null : (user.username || null);
 }
 
-// The real name a registered player gave, e.g. "David Smith" — "" when they
-// gave none. A guest's firstName is the display name they typed at the join
-// screen rather than a legal name, and it is already what every resolver here
-// names them by, so a guest has no separate full name to show alongside it.
+// The real name a registered player gave Clerk at signup, e.g. "David Smith"
+// — "" when they gave none. This is the one place `firstName` is read as what
+// Clerk sells it as. A guest's firstName is the display name they typed at the
+// join screen rather than a legal name, and it is already what names them, so
+// a guest has no separate full name to show alongside it.
 export function fullName(user: NamedUser | null | undefined): string {
     if (!user || isGuest(user)) return "";
     return [user.firstName, user.lastName].filter(name => name).join(" ");
 }
 
-// The name to use for a user in copy another person reads (push notifications,
-// "X is waiting on you"), and the name a player acts under in a game. Never
-// falls back to a raw user id unless a caller asks for one — a notification
-// saying "user_2abc… is waiting" is worse than one saying "Someone is waiting".
-export function readableName(user: NamedUser | null | undefined, fallback = "Someone"): string {
-    if (!user) return fallback;
-    if (isGuest(user)) return user.firstName || fallback;
-    return user.username || user.firstName || fallback;
+// The name a player chose to be seen under, or null if they never chose one.
+//
+// It is `publicMetadata.displayName` rather than Clerk's `firstName`, and the
+// difference matters: `firstName` is a *first name*. Clerk's own signup form
+// asks for one under that label, `fullName` below reads it as half of a real
+// name, and a player who set theirs to "Dave the Destroyer" would have their
+// profile subtitle read "Dave the Destroyer Smith". Borrowing the field would
+// also have published, on deploy, whatever real name every existing player
+// gave at signup — something they typed to identify themselves, not to be
+// called in front of strangers. So the display name is a field of our own.
+//
+// Only the server may write it (Clerk's rule for publicMetadata), which is
+// why it has a route — `POST /api/user/displayname` — where a handle change
+// has none: it is the one name the whole table reads, so it gets validated
+// and rate-limited rather than being whatever the browser sent.
+export function chosenName(user: NamedUser | null | undefined): string | null {
+    const chosen = user?.publicMetadata?.displayName;
+    return typeof chosen === 'string' && chosen.trim() ? chosen.trim() : null;
 }
 
-// The username a signed-in user acts under (as command sender or game player).
-// Same resolution as readableName — this is the same name the server resolves
-// for them in usernameList, which is what a client compares against — with
-// their id as the last resort a screen needs and a push notification doesn't.
+// The name to use for a user in copy another person reads (push notifications,
+// "X is waiting on you"), and the name a player acts under in a game.
+//
+// The name they chose comes first, and their handle stands in until they
+// choose one — so a new player is known by their username without anything
+// having to seed a copy of it, and the day they pick a display name it simply
+// takes over. That is the whole of the display-name feature
+// (docs/dynamic-names.md §1a): a handle is how you are *found*, a display name
+// is what you are *called*.
+//
+// `firstName` sits last and is only ever reached by someone with no handle at
+// all — a guest, whose join-screen name lives there (docs/account-less-play.md
+// step 14), or a player who claimed a guest account before the claim route
+// began minting handles. For them it *is* the name they typed, so it is the
+// right answer; for everyone else the handle above it means it is never read
+// as a name at all.
+//
+// Never falls back to a raw user id unless a caller asks for one — a
+// notification saying "user_2abc… is waiting" is worse than one saying
+// "Someone is waiting".
+export function readableName(user: NamedUser | null | undefined, fallback = "Someone"): string {
+    if (!user) return fallback;
+    return chosenName(user) || publicHandle(user) || user.firstName || fallback;
+}
+
+// The name a signed-in user acts under, with their id as the last resort a
+// screen needs and a push notification doesn't. Same resolution as
+// readableName, so a screen naming you agrees with the server naming you to
+// everyone else — near enough: the server resolves a whole table at once and
+// tags a name two players share (clerk.ts's namesFor), which one user in
+// isolation can't know about. Nothing compares the two, and nothing should:
+// identity comparisons go by userId (docs/dynamic-names.md §3).
 export function currentUsername(user: NamedUser | null | undefined): string {
     return readableName(user, user?.id ?? "");
 }
 
 // The name to head a screen *about* a person with — their own profile, the
-// badge in the top bar, the "you" chip in an invite list. Inverts
-// readableName's order on purpose: this is the friendly name, so the real
-// first name they gave comes before the handle they sign in with. A guest
-// only ever has the former, since publicHandle gives them none.
-//
-// Null until the caller actually has a user, so a badge shows a silhouette
-// rather than an initial taken from the fallback word.
+// badge in the top bar, the "you" chip in an invite list. The same name
+// everyone else sees them under, since readableName's order flipped; what it
+// adds is the null, so a badge shows a silhouette while Clerk is still
+// loading rather than an initial taken from the fallback word.
 export function personalName(user: NamedUser | null | undefined, fallback = ""): string | null {
     if (!user) return null;
-    return user.firstName || publicHandle(user) || fallback || null;
+    return readableName(user, fallback) || null;
 }
 
 // "David Smith (dave)" for a friends-list row, falling back to whichever half
