@@ -8,7 +8,9 @@ import OutbreakRoleInfoPopup from './OutbreakRoleInfoPopup';
 
 interface OutbreakHandsProps {
     playerStates: { [userId: string]: IOutbreakPlayerStateResponse };
-    /** Player seats in turn order (userIds). */
+    /** Every player id, in the app's stable seat order (join order) — not
+     *  necessarily turn order. Only drives each seat's colour dot, so it
+     *  matches the pawn colours on the board and the scoreboard. */
     userIdList: string[];
     myUserId: string;
     /** Whose turn the board is showing — the turn under review, not
@@ -43,17 +45,20 @@ export default function OutbreakHands({
 }: OutbreakHandsProps) {
     const [infoRole, setInfoRole] = useState<OutbreakRoleDef | null>(null);
 
-    // Turn markers follow the real seating order, whatever order the panels
-    // are drawn in — the seat after the current one, wrapping at the table.
-    const activeSeat = activeUserId ? userIdList.indexOf(activeUserId) : -1;
-    const nextUserId = activeSeat >= 0 && userIdList.length > 1
-        ? userIdList[(activeSeat + 1) % userIdList.length]
+    // playerStates is keyed in `gameState.turnOrder` order server-side (see
+    // gameStateToModel in OutbreakModels.ts) — the real running order, which
+    // is drawn at random at setup and so need not match userIdList's join
+    // order. Turn markers and seating both follow this, not userIdList.
+    const turnOrder = Object.keys(playerStates);
+    const activeSeat = activeUserId ? turnOrder.indexOf(activeUserId) : -1;
+    const nextUserId = activeSeat >= 0 && turnOrder.length > 1
+        ? turnOrder[(activeSeat + 1) % turnOrder.length]
         : null;
 
     return (
         <>
             {infoRole && <OutbreakRoleInfoPopup role={infoRole} onClose={() => setInfoRole(null)} />}
-            {seatOrderFrom(userIdList, myUserId).map(userId => {
+            {seatOrderFrom(turnOrder, myUserId).map(userId => {
                 const ps = playerStates[userId];
                 if (!ps) return null;
                 const isMe = userId === myUserId;
