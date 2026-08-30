@@ -71,10 +71,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
-                title: "Changing your username a second time works",
-                detail: "The first time you took a new username it stuck, but a second change stopped with a message about needing extra verification. Now it asks you to confirm it's you, then makes the change — so your handle is yours to keep tweaking.",
-            },
-            {
                 title: "Map connections that go round the world stay off the map",
                 detail: "On the World Domination and Outbreak boards, the routes that cross from one side of the world to the other — Alaska to Kamchatka, San Francisco to Tokyo — used to be drawn as a long line straight across the whole map, over everything in the way. Each now heads off its own edge with a label naming where it comes out on the far side.",
             },
@@ -90,6 +86,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "The name a guest picks is the name everyone sees",
                 detail: "Take a seat as a guest and the name you typed now follows you everywhere — the move you just made, the recap of what you missed, stepping back through the turns, your profile, the reaction you send someone and the “you won” line. They used to show the jumble of letters your account was filed under instead.",
+            },
+            {
+                title: "Your badge no longer flashes a stranger's initial",
+                detail: "For a moment before your profile loaded, the little circle on the home page and your profile showed a “T” or a “Y” — the first letter of the words standing in for your name. You now get a plain silhouette until your real initials or photo are ready.",
             },
         ],
     },
