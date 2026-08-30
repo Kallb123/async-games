@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { currentUsername, displayName, finishedGameCopy, fullName, personalName, profileHeading, readableName } from './players';
+import { currentUsername, displayName, finishedGameCopy, fullName, personalName, profileHeading, readableName, seatOrderFrom } from './players';
 
 describe('readableName', () => {
     it('prefers a real player\'s username', () => {
@@ -181,5 +181,22 @@ describe('finishedGameCopy', () => {
     it('has nothing to add to a game that simply ended', () => {
         // The two screens word "nobody won" differently, so this is theirs to fill in.
         expect(finishedGameCopy({ winner: '', endReason: 'ended' })).toBeNull();
+    });
+});
+
+describe('seatOrderFrom', () => {
+    const seats = ['a', 'b', 'c', 'd'];
+
+    it('starts the list at the viewer and keeps the turn cycle running from there', () => {
+        expect(seatOrderFrom(seats, 'c')).toEqual(['c', 'd', 'a', 'b']);
+    });
+
+    it('leaves the list alone when the viewer already sits first', () => {
+        expect(seatOrderFrom(seats, 'a')).toEqual(seats);
+    });
+
+    it('leaves the list alone for someone who is not seated', () => {
+        expect(seatOrderFrom(seats, 'zzz')).toEqual(seats);
+        expect(seatOrderFrom(seats, null)).toEqual(seats);
     });
 });

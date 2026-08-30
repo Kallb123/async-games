@@ -198,3 +198,15 @@ export function abandonedGameStatus(
 ): ReturnType<typeof abandonedGameCopy> | null {
     return complete && endReason === 'abandoned' ? abandonedGameCopy(forfeitedName) : null;
 }
+
+// The seating order as the viewer reads it: their own seat first, then the
+// players who follow them, wrapping back round. Rotating (rather than pulling
+// the viewer out and prepending) keeps the true turn cycle intact — the rows
+// after yours are still the ones who play before it comes back to you — and a
+// viewer's own seat never moves, so the list is stable for them between turns.
+// A viewer who isn't seated (a spectator, an unresolved id) gets the list as-is.
+export function seatOrderFrom(userIdList: string[], viewerId: string | null | undefined): string[] {
+    const seat = viewerId ? userIdList.indexOf(viewerId) : -1;
+    if (seat <= 0) return userIdList;
+    return [...userIdList.slice(seat), ...userIdList.slice(0, seat)];
+}
