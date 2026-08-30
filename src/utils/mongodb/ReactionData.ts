@@ -3,8 +3,12 @@ import { Document, Model, Schema, model, models } from "mongoose";
 // One reaction dropped on a recap action. `eventId` is the recap event's own
 // id (see IGameEvent in utils/games/recap.ts) — unique per game, which is what
 // the "one reaction per action" rule is enforced on (see the index below).
-// `recipientId` is the action's original actor, who gets notified. This store
-// is write-and-notify only for now; a later user page will read it back out.
+// `recipientId` is the action's original actor, who gets notified.
+//
+// `actorUsername` is the sender's name captured when they reacted, used for the
+// push notification sent then. The reactions page resolves the sender's name
+// live from `actorId` instead (see /api/reactions), so a rename shows through;
+// the stored copy is kept only as a fallback for a sender Clerk no longer knows.
 export interface IReactionData {
     reactionId: `${string}-${string}-${string}-${string}-${string}`,
     gameId: string,
