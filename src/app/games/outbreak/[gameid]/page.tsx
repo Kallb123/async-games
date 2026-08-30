@@ -30,7 +30,7 @@ import { IOutbreakInfectionPhaseOutcome, OutbreakAction, OutbreakPlayEvent } fro
 import { HAND_LIMIT, IOutbreakInfectionLogEntry, OutbreakMoveType, getLegalMoves, infectionRateFor, stationCityIds } from "@/games/Outbreak/rules";
 import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, EVENT_CARD_AIRLIFT, EVENT_CARD_GOVERNMENT_GRANT, MAX_RESEARCH_STATIONS } from "@/games/Outbreak/board";
 import { playerColour } from "@/utils/ui/playerColours";
-import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
+import { abandonedGameStatus, nameForUserId } from "@/utils/ui/players";
 
 // What the map is being used to pick right now: a movement destination, or
 // the destination/target an in-flight event card still needs. One state
@@ -97,9 +97,10 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     const complete = nav.displayedComplete;
     const displayedCurrentTurn = nav.displayedCurrentTurn;
     const isMyTurn = nav.isLive && !!user && user.id === displayedCurrentTurn && !complete;
-    const myUsername = currentUsername(user);
+    const myUserId = user?.id ?? '';
     const usernameList = gameData?.usernameList ?? [];
-    const me = gs?.playerStates[myUsername];
+    const userIdList = gameData?.userIdList ?? [];
+    const me = gs?.playerStates[myUserId];
 
     // What the board is targeting right now, if anything — reset whenever the
     // turn changes so a stale pick from a previous player never lingers into
@@ -212,9 +213,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
         : boardTarget.kind === 'airlift' && boardTarget.targetUserId !== undefined ? 'Choose a destination'
         : null;
 
-    const currentTurnUsername = gs
-        ? Object.values(gs.playerStates).find(p => p.userId === displayedCurrentTurn)?.username ?? displayedCurrentTurn
-        : displayedCurrentTurn;
+    const currentTurnUsername = nameForUserId(gameData, displayedCurrentTurn);
 
     const abandoned = abandonedGameStatus(complete, gameData?.endReason);
 
@@ -236,14 +235,14 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     }
 
     const scoreEntries: ScoreEntry[] = gs
-        ? usernameList.flatMap((username, i): ScoreEntry[] => {
-            const ps = gs.playerStates[username];
+        ? userIdList.flatMap((userId, i): ScoreEntry[] => {
+            const ps = gs.playerStates[userId];
             if (!ps) return [];
-            const isMe = username === myUsername;
+            const isMe = userId === myUserId;
             const isActive = ps.userId === displayedCurrentTurn && !complete;
             return [{
-                id: username,
-                name: isMe ? 'You' : username,
+                id: userId,
+                name: isMe ? 'You' : ps.username,
                 color: playerColour(i),
                 sub: isActive ? `${ps.actionsLeft} actions · ${CITIES[ps.city].name}` : CITIES[ps.city].name,
                 score: ps.hand.length,
@@ -335,7 +334,8 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                     gameId={gameId}
                     gameUrl="outbreak"
                     usernameList={usernameList}
-                    myUsername={myUsername}
+                    userIdList={userIdList}
+                    myUserId={myUserId}
                     turnTimer={gameData?.turnTimer}
                 />
             )}
@@ -346,7 +346,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                         <OutbreakBoard
                             cities={gs.cities}
                             playerStates={gs.playerStates}
-                            usernameList={usernameList}
+                            userIdList={userIdList}
                             validCities={validCities}
                             onCityClick={isMyTurn && !complete && !submitting ? handleCityClick : undefined}
                             boardTag={boardTag}
@@ -370,8 +370,8 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                     {isMyTurn && !complete && (gs.phase === 'actions' || gs.phase === 'discard') && (
                         <OutbreakEventTray
                             gs={gs}
-                            myUsername={myUsername}
-                            usernameList={usernameList}
+                            myUserId={myUserId}
+                            userIdList={userIdList}
                             submitCommand={submitCommand}
                             pendingTarget={pendingTarget}
                             targeting={eventTargeting}
@@ -383,7 +383,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                     {isMyTurn && !complete && (
                         <OutbreakActions
                             gs={gs}
-                            myUsername={myUsername}
+                            myUserId={myUserId}
                             moveMode={boardTarget?.kind === 'move' ? boardTarget.type : null}
                             setMoveMode={m => setBoardTarget(m ? { kind: 'move', type: m } : null)}
                             opsFlightActive={boardTarget?.kind === 'opsFlight'}
@@ -409,18 +409,18 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
 
                     <OutbreakHands
                         playerStates={gs.playerStates}
-                        usernameList={usernameList}
-                        myUsername={myUsername}
+                        userIdList={userIdList}
+                        myUserId={myUserId}
                         onCardTap={handleCardTap}
                         highlightedCityId={highlightedCityId}
                     />
 
                     {recapAvailable && (
-                        <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} usernames={usernameList} />
+                        <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} userIdList={userIdList} />
                     )}
 
                     {showLog && (
-                        <MatchHistory entries={nav.displayedHistory} usernames={usernameList} />
+                        <MatchHistory entries={nav.displayedHistory} userIdList={userIdList} />
                     )}
                 </>
             )}

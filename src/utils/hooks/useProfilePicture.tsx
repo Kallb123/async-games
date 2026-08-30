@@ -1,8 +1,8 @@
 'use client'
 
-import { useRef, useState } from "react";
-import { useUser } from "@clerk/nextjs";
+import { useRef } from "react";
 import { useToast } from "@/components/ToastContext";
+import { useClerkUserSave } from "@/utils/hooks/useClerkUserSave";
 import { profileImageUrl } from "@/utils/ui/avatar";
 
 // What Clerk's image endpoint accepts, and the size it caps an upload at.
@@ -20,29 +20,19 @@ const MAX_BYTES = 10 * 1024 * 1024;
 // Returns the hidden file input to render, so a caller only has to place it and
 // wire `openPicker` to whatever the player clicks.
 export function useProfilePicture() {
-    const { user } = useUser();
     const { showToast } = useToast();
     const inputRef = useRef<HTMLInputElement>(null);
-    const [isSaving, setIsSaving] = useState(false);
+    // The guard, the reload that makes the new picture current on every avatar
+    // on screen, the toasts and the in-flight flag are all the same four things
+    // a username change needs, so they live in the shared hook.
+    const { user, isSaving, save: saveToClerk } = useClerkUserSave();
 
-    const save = async (file: File | null, successMessage: string) => {
-        if (!user || isSaving) return;
-        setIsSaving(true);
-        try {
-            await user.setProfileImage({ file });
-            // Re-read the user so `imageUrl`/`hasImage` are current: every
-            // avatar on screen renders from them. The picture is already saved
-            // by this point, so a failure here is a stale avatar, not a failed
-            // upload — don't report it as one.
-            await user.reload().catch(error => console.error('Failed to reload the user', error));
-            showToast(successMessage, 'success', 'Profile picture');
-        } catch (error) {
-            console.error('Failed to update the profile picture', error);
-            showToast('Could not update your picture. Please try again.', 'danger');
-        } finally {
-            setIsSaving(false);
-        }
-    };
+    const save = (file: File | null, successMessage: string) =>
+        saveToClerk(user => user.setProfileImage({ file }), {
+            success: successMessage,
+            title: 'Profile picture',
+            failure: 'Could not update your picture. Please try again.',
+        });
 
     const handleFile = (file: File) => {
         if (!ACCEPTED_TYPES.includes(file.type)) {

@@ -3,7 +3,7 @@
 import { IGameResponse } from "@/utils/apiModels/GameDataApi";
 import { useRouter } from "next/navigation";
 import { gamePath, metaForGame } from "@/utils/ui/games";
-import { currentUsername, opponents } from "@/utils/ui/players";
+import { opponentsById } from "@/utils/ui/players";
 import GameThumb from "@/components/ui/GameThumb";
 import { accentVar } from "@/utils/ui/colours";
 import CollapsingSection from "@/components/ui/CollapsingSection";
@@ -24,7 +24,7 @@ export default function MyTurnList({ games, isLoading, isRefreshing }: MyTurnLis
     const router = useRouter();
     const now = useNowToTheMinute();
 
-    const myUsername = currentUsername(user);
+    const myUserId = user?.id;
 
     const count = games.length;
 
@@ -52,7 +52,7 @@ export default function MyTurnList({ games, isLoading, isRefreshing }: MyTurnLis
                         : <div style={{ width: 52 }} />}
                     <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="ag-turn-card-title">{game.friendlyName}</div>
-                        <div className="ag-turn-card-sub">vs {opponents(game, myUsername)}</div>
+                        <div className="ag-turn-card-sub">vs {opponentsById(game, myUserId)}</div>
                     </div>
                 </div>
                 <div className="ag-turn-card-cta" style={{ color: accent }}>

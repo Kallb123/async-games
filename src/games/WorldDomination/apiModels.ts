@@ -2,7 +2,7 @@ import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
 import type { WorldDominationCardType, WorldDominationPhase } from "./board";
 
 export interface IWorldDominationTerritoryResponse {
-    owner: string | null; // username
+    owner: string | null; // owning player's stable userId (resolve via playerStates)
     armies: number;
 }
 
@@ -43,7 +43,7 @@ export interface IWorldDominationPendingOccupationResponse {
 }
 
 export interface IWorldDominationLastBattleResponse {
-    attackerId: string;
+    attackerId: string; // attacking player's stable userId (resolve via playerStates)
     fromTerritoryId: number;
     toTerritoryId: number;
     attackerDice: number[];
@@ -51,12 +51,14 @@ export interface IWorldDominationLastBattleResponse {
     attackerLosses: number;
     defenderLosses: number;
     conquered: boolean;
-    defenderEliminated: string | null; // username of an eliminated defender, if any
+    defenderEliminated: string | null; // userId of an eliminated defender, if any
 }
 
 export interface IWorldDominationSpecificGameStateResponse {
     territories: IWorldDominationTerritoryResponse[];
-    playerStates: { [username: string]: IWorldDominationPlayerStateResponse };
+    // Keyed by the player's stable Clerk userId; each value carries the username
+    // for display. Territory owners and last-battle ids above are userIds too.
+    playerStates: { [userId: string]: IWorldDominationPlayerStateResponse };
     phase: WorldDominationPhase;
     reinforcementsRemaining: number;
     pendingOccupation: IWorldDominationPendingOccupationResponse | null;

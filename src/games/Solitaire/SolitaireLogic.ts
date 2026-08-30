@@ -5,6 +5,7 @@ import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels
 import { serializable } from "@/utils/apiModels/Serialisable";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import { ICard, rankLabel, suitSymbol } from "@/utils/games/Cards";
+import { playerHistory } from "@/utils/games/history";
 import {
     canDraw,
     canPlaceOnFoundation,
@@ -112,7 +113,7 @@ export class SolitaireDraw implements IGameCommand {
             const drawn = state.stock.splice(state.stock.length - n, n).map(card => ({ ...card, faceUp: true }));
             state.waste.push(...drawn);
             state.moves++;
-            gameData.gameState.history.unshift(`${this.senderUsername} drew ${n === 1 ? 'a card' : `${n} cards`} from the stock`);
+            gameData.gameState.history.unshift(playerHistory(this.senderId, `drew ${n === 1 ? 'a card' : `${n} cards`} from the stock`));
         } else {
             // Recycle: the whole waste pile is picked up and turned over to
             // become the new stock, preserving draw order (doc §4.3).
@@ -123,7 +124,7 @@ export class SolitaireDraw implements IGameCommand {
             if (state.stockRecycleCount > STOCK_RECYCLE_FREE_COUNT) {
                 state.score += STOCK_RECYCLE_PENALTY;
             }
-            gameData.gameState.history.unshift(`${this.senderUsername} recycled the waste pile back into the stock`);
+            gameData.gameState.history.unshift(playerHistory(this.senderId, `recycled the waste pile back into the stock`));
         }
 
         markDirty(gameData);
@@ -238,9 +239,10 @@ export class SolitaireMoveCard implements IGameCommand {
         const destLabel = this.destination.zone === 'foundation'
             ? `to the ${suitSymbol(this.destination.suit)} foundation`
             : `to column ${this.destination.column + 1}`;
-        gameData.gameState.history.unshift(
-            `${this.senderUsername} moved ${rankLabel(mover.rank)}${suitSymbol(mover.suit)}${run.length > 1 ? ` +${run.length - 1}` : ''} ${destLabel}`
-        );
+        gameData.gameState.history.unshift(playerHistory(
+            this.senderId,
+            `moved ${rankLabel(mover.rank)}${suitSymbol(mover.suit)}${run.length > 1 ? ` +${run.length - 1}` : ''} ${destLabel}`
+        ));
 
         markDirty(gameData);
         return { turnOver: false, validMove: true, scoreDelta };
@@ -284,7 +286,7 @@ export class SolitaireUndo implements IGameCommand {
         state.foundationToTableauCount = snapshot.foundationToTableauCount;
         state.undoCount++;
 
-        gameData.gameState.history.unshift(`${this.senderUsername} undid their last move`);
+        gameData.gameState.history.unshift(playerHistory(this.senderId, `undid their last move`));
 
         markDirty(gameData);
         return { turnOver: false, validMove: true };
@@ -381,9 +383,9 @@ export class SolitaireAutoSolve implements IGameCommand {
         // The stagnation/iteration caps above exist precisely so this can stop
         // short of a win - don't claim victory when it didn't actually get there.
         const summary = foundationCardCount(state.foundations) === 52
-            ? `${this.senderUsername} auto-solved the rest of the game`
-            : `${this.senderUsername} auto-played as far as it could`;
-        gameData.gameState.history.unshift(summary);
+            ? `auto-solved the rest of the game`
+            : `auto-played as far as it could`;
+        gameData.gameState.history.unshift(playerHistory(this.senderId, summary));
         markDirty(gameData);
         return { turnOver: false, validMove: true };
     }

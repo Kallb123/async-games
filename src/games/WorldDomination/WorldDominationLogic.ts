@@ -15,6 +15,7 @@ import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels
 import { serializable } from "@/utils/apiModels/Serialisable";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
+import { playerHistory, userToken } from "@/utils/games/history";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  WORLD DOMINATION
@@ -57,7 +58,7 @@ function worldDominationAdvanceSetup(riskData: IWorldDominationGameData): void {
         gs.phase = 'reinforce';
         riskData.currentTurn = first;
         gs.reinforcementsRemaining = computeReinforcement(first, gs.territories);
-        riskData.gameState.history.unshift(`Setup complete — ${first} begins Turn 1`);
+        riskData.gameState.history.unshift({ text: `Setup complete — ${userToken(first)} begins Turn 1` });
         return;
     }
 
@@ -76,7 +77,7 @@ function riskEndTurn(riskData: IWorldDominationGameData): void {
     if (ps?.conqueredTerritoryThisTurn && gs.cardDeck.length > 0) {
         const card = gs.cardDeck.pop()!;
         ps.cards.push(card);
-        riskData.gameState.history.unshift(`${riskData.currentTurn} drew a World Domination card`);
+        riskData.gameState.history.unshift(playerHistory(riskData.currentTurn, `drew a World Domination card`));
     }
     if (ps) ps.conqueredTerritoryThisTurn = false;
     gs.fortifyUsed = false;
@@ -166,9 +167,10 @@ export class WorldDominationDeployArmies implements IGameCommand {
         gs.reinforcementsRemaining -= this.count;
         ps.totalArmiesDeployed += this.count;
 
-        riskData.gameState.history.unshift(
-            `${this.senderUsername} placed ${this.count} arm${this.count === 1 ? 'y' : 'ies'} on ${TERRITORIES[this.territoryId].name}`
-        );
+        riskData.gameState.history.unshift(playerHistory(
+            this.senderId,
+            `placed ${this.count} arm${this.count === 1 ? 'y' : 'ies'} on ${TERRITORIES[this.territoryId].name}`,
+        ));
 
         if (gs.reinforcementsRemaining === 0) {
             if (gs.phase === 'setup') {
@@ -232,7 +234,7 @@ export class WorldDominationCashInCards implements IGameCommand {
             bonusText = ` (+2 bonus armies on ${TERRITORIES[matchingCard.territoryId].name})`;
         }
 
-        riskData.gameState.history.unshift(`${this.senderUsername} cashed in a card set for ${value} armies${bonusText}`);
+        riskData.gameState.history.unshift(playerHistory(this.senderId, `cashed in a card set for ${value} armies${bonusText}`));
         return { validMove: true, turnOver: false };
     }
 
@@ -350,12 +352,14 @@ export class WorldDominationAttack implements IGameCommand {
             attackerDice, defenderDice, attackerLosses, defenderLosses, conquered, defenderEliminated,
         };
 
-        riskData.gameState.history.unshift(
-            `${this.senderUsername} attacked ${TERRITORIES[this.toTerritoryId].name} from ${TERRITORIES[this.fromTerritoryId].name}: ` +
-            `[${attackerDice.join(',')}] vs [${defenderDice.join(',')}] — you lost ${attackerLosses}, defender lost ${defenderLosses}` +
+        riskData.gameState.history.unshift(playerHistory(
+            this.senderId,
+            `attacked ${TERRITORIES[this.toTerritoryId].name} from ${TERRITORIES[this.fromTerritoryId].name}: ` +
+            `[${attackerDice.join(',')}] vs [${defenderDice.join(',')}] — lost ${attackerLosses}, ` +
+            `${defenderId ? userToken(defenderId) : 'the defender'} lost ${defenderLosses}` +
             (conquered ? ', conquered!' : '') +
-            (defenderEliminated ? ` — ${defenderEliminated} eliminated!` : '')
-        );
+            (defenderEliminated ? ` — ${userToken(defenderEliminated)} eliminated!` : ''),
+        ));
 
         const outcome: IWorldDominationAttackOutcome = {
             validMove: true,
@@ -398,9 +402,7 @@ export class WorldDominationOccupyTerritory implements IGameCommand {
         gs.territories[toTerritoryId].armies = this.armies;
         gs.pendingOccupation = null;
 
-        riskData.gameState.history.unshift(
-            `${this.senderUsername} moved ${this.armies} armies into ${TERRITORIES[toTerritoryId].name}`
-        );
+        riskData.gameState.history.unshift(playerHistory(this.senderId, `moved ${this.armies} armies into ${TERRITORIES[toTerritoryId].name}`));
         return { validMove: true, turnOver: false };
     }
 
@@ -433,7 +435,7 @@ export class WorldDominationEndAttackPhase implements IGameCommand {
         if (!ps || ps.cards.length >= MUST_CASH_IN_THRESHOLD) return INVALID;
 
         gs.phase = 'fortify';
-        riskData.gameState.history.unshift(`${this.senderUsername} ended their attacks`);
+        riskData.gameState.history.unshift(playerHistory(this.senderId, `ended their attacks`));
         return { validMove: true, turnOver: false };
     }
 
@@ -476,9 +478,10 @@ export class WorldDominationFortify implements IGameCommand {
         to.armies += this.armies;
         gs.fortifyUsed = true;
 
-        riskData.gameState.history.unshift(
-            `${this.senderUsername} fortified ${TERRITORIES[this.toTerritoryId].name} with ${this.armies} armies from ${TERRITORIES[this.fromTerritoryId].name}`
-        );
+        riskData.gameState.history.unshift(playerHistory(
+            this.senderId,
+            `fortified ${TERRITORIES[this.toTerritoryId].name} with ${this.armies} armies from ${TERRITORIES[this.fromTerritoryId].name}`,
+        ));
         return { validMove: true, turnOver: true };
     }
 
@@ -506,7 +509,7 @@ export class WorldDominationSkipFortify implements IGameCommand {
 
         if (gs.phase !== 'fortify' || gs.fortifyUsed) return INVALID;
 
-        riskData.gameState.history.unshift(`${this.senderUsername} skipped fortifying`);
+        riskData.gameState.history.unshift(playerHistory(this.senderId, `skipped fortifying`));
         return { validMove: true, turnOver: true };
     }
 

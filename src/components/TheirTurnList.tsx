@@ -3,7 +3,7 @@
 import { IGameResponse } from "@/utils/apiModels/GameDataApi";
 import Link from "next/link";
 import { useState } from "react";
-import { currentUsername, opponents } from "@/utils/ui/players";
+import { opponentsById } from "@/utils/ui/players";
 import { gamePath } from "@/utils/ui/games";
 import ListSection from "@/components/ui/ListSection";
 import type { RefreshableState } from "@/utils/hooks/useRefreshableData";
@@ -21,7 +21,7 @@ export default function TheirTurnList({ games, isLoading, isRefreshing }: TheirT
     const { showToast } = useToast();
     const now = useNowToTheMinute();
     const [nudgedGameIds, setNudgedGameIds] = useState(new Set<string>());
-    const myUsername = currentUsername(user);
+    const myUserId = user?.id;
 
     const handleNudge = (gameId: string, opponentName: string) => {
         setNudgedGameIds(prev => new Set(prev).add(gameId));
@@ -63,7 +63,7 @@ export default function TheirTurnList({ games, isLoading, isRefreshing }: TheirT
         >
             {games.map((game) => {
                 const timeLeft = formatRemainingTimeShort(game.lastTurnTimestamp, game.turnTimer, now);
-                const opponentName = game.currentTurnUsername || opponents(game, myUsername, "them");
+                const opponentName = game.currentTurnUsername || opponentsById(game, myUserId, "them");
                 const alreadyNudged = nudgedGameIds.has(game.gameId);
                 return (
                     <div key={game.gameId} className="ag-list-row">

@@ -5,10 +5,10 @@ import OutbreakCardChip from './OutbreakCardChip';
 import OutbreakRoleInfoPopup from './OutbreakRoleInfoPopup';
 
 interface OutbreakHandsProps {
-    playerStates: { [username: string]: IOutbreakPlayerStateResponse };
-    /** Player seats in turn order. */
-    usernameList: string[];
-    myUsername: string;
+    playerStates: { [userId: string]: IOutbreakPlayerStateResponse };
+    /** Player seats in turn order (userIds). */
+    userIdList: string[];
+    myUserId: string;
     /** Tapping a city card rings that city on the board. */
     onCardTap?: (cityId: number) => void;
     highlightedCityId?: number | null;
@@ -21,24 +21,24 @@ interface OutbreakHandsProps {
  * the same wrapper Settlements & Cities and Train Time use for a single
  * "your hand" — looped, since a co-op table needs every hand at once.
  */
-export default function OutbreakHands({ playerStates, usernameList, myUsername, onCardTap, highlightedCityId = null }: OutbreakHandsProps) {
+export default function OutbreakHands({ playerStates, userIdList, myUserId, onCardTap, highlightedCityId = null }: OutbreakHandsProps) {
     const [infoRole, setInfoRole] = useState<OutbreakRoleDef | null>(null);
 
     return (
         <>
             {infoRole && <OutbreakRoleInfoPopup role={infoRole} onClose={() => setInfoRole(null)} />}
-            {usernameList.map(username => {
-                const ps = playerStates[username];
+            {userIdList.map(userId => {
+                const ps = playerStates[userId];
                 if (!ps) return null;
-                const isMe = username === myUsername;
+                const isMe = userId === myUserId;
                 const role = roleDef(ps.role);
                 const cardCount = ps.hand.length + (ps.contingencyCard !== null ? 1 : 0);
 
                 return (
-                    <div className="ag-hand" key={username}>
+                    <div className="ag-hand" key={userId}>
                         <div className="ag-hand-head">
                             <span className="ag-hand-title">
-                                {isMe ? 'Your hand' : `${username}’s hand`} · {cardCount} card{cardCount !== 1 ? 's' : ''}
+                                {isMe ? 'Your hand' : `${ps.username}’s hand`} · {cardCount} card{cardCount !== 1 ? 's' : ''}
                             </span>
                             {role && (
                                 <button

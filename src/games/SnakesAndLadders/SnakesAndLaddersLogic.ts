@@ -4,6 +4,7 @@ import type { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
 import { serializable } from "@/utils/apiModels/Serialisable";
 import { DiceRoll } from "@/utils/games/DiceRoll";
+import { playerHistory } from "@/utils/games/history";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 
 export const SNAKES_AND_LADDERS_LADDERS: Record<number, number> = {
@@ -149,16 +150,15 @@ export class SnakesAndLaddersRequestDiceRoll implements IGameCommand {
         const extraRoll = slGameData.specificGameState.reRollOnSix === true && roll === 6 && newPosition < 100;
         slGameData.specificGameState.hasRolled = !extraRoll;
 
-        const senderUsername = this.senderUsername;
         const again = extraRoll ? " and rolls again" : "";
         if (landedOnSnake) {
-            slGameData.gameState.history.unshift(`${senderUsername} rolled a ${roll} and slid down a snake to square ${newPosition}${again}`);
+            slGameData.gameState.history.unshift(playerHistory(this.senderId, `rolled a ${roll} and slid down a snake to square ${newPosition}${again}`));
         } else if (landedOnLadder) {
-            slGameData.gameState.history.unshift(`${senderUsername} rolled a ${roll} and climbed a ladder to square ${newPosition}${again}`);
+            slGameData.gameState.history.unshift(playerHistory(this.senderId, `rolled a ${roll} and climbed a ladder to square ${newPosition}${again}`));
         } else if (rawPosition > 100) {
-            slGameData.gameState.history.unshift(`${senderUsername} rolled a ${roll} but needs exactly ${100 - playerState.position} to win – no move${again}`);
+            slGameData.gameState.history.unshift(playerHistory(this.senderId, `rolled a ${roll} but needs exactly ${100 - playerState.position} to win – no move${again}`));
         } else {
-            slGameData.gameState.history.unshift(`${senderUsername} rolled a ${roll} and moved to square ${newPosition}${again}`);
+            slGameData.gameState.history.unshift(playerHistory(this.senderId, `rolled a ${roll} and moved to square ${newPosition}${again}`));
         }
 
         const outcome: ISnakesAndLaddersDiceRollOutcome = {

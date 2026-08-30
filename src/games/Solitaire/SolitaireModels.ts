@@ -4,7 +4,7 @@ import { Model, Schema, models } from "mongoose";
 import { ISolitaireGameDataResponse, ISolitaireGameStateResponse } from "./apiModels";
 import { uuidString, GameResultStatGroup } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
-import { userIdListToUsernameList } from "@/utils/users/clerk";
+import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { v4 as uuidv4 } from 'uuid';
 import { SolitaireGameType } from "@/utils/apiModels/GameLogic";
 import { UNLIMITED_TURN_TIMER } from "@/utils/games/TurnTimer";
@@ -49,7 +49,7 @@ SolitaireInvitationSchema.methods.CreateGame = async function(invite: ISolitaire
         missedTurnCounts: new Map(),
         gameState: {
             turnOrder: userIdList,
-            history: [`Dealt a new ${drawMode === 'DRAW_3' ? 'Draw-3' : 'Draw-1'} game`],
+            history: [{ text: `Dealt a new ${drawMode === 'DRAW_3' ? 'Draw-3' : 'Draw-1'} game` }],
             commandHistory: []
         },
         complete: false,
@@ -130,12 +130,15 @@ SolitaireGameDataSchema.methods.CreateDataResponse = async function(_viewerId: s
 
     const gameDataDocument: ISolitaireGameData = this as ISolitaireGameData;
 
+    const { usernameList, userIdNameMap } = await userIdListToNamesAndMap(gameDataDocument.userIdList);
+
     return {
         gameType: gameDataDocument.gameType,
-        usernameList: await userIdListToUsernameList(gameDataDocument.userIdList),
+        usernameList,
+        userIdList: gameDataDocument.userIdList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
-        gameState: publicGameState(gameDataDocument.gameState),
+        gameState: publicGameState(gameDataDocument.gameState, userIdNameMap),
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
         specificGameState: gameStateToModel(gameDataDocument.specificGameState)

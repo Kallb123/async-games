@@ -12,7 +12,7 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useToast } from "@/components/ToastContext";
 import AuthScreen from "@/components/ui/AuthScreen";
 import BackLink from "@/components/ui/BackLink";
-import DieFace from "@/components/ui/DieFace";
+import DisplayNameField from "@/components/ui/DisplayNameField";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { JOIN_CODE_LENGTH, normaliseJoinCode, readJoinCode } from "@/utils/games/joinCode";
 import { invitedYouTo, lobbyPath, seatsLeftLabel } from "@/utils/games/lobby";
@@ -50,7 +50,6 @@ function JoinButton({ joining, disabled }: { joining: boolean; disabled: boolean
     <button
       type="submit"
       className="ag-btn ag-btn--primary ag-btn--block"
-      style={{ marginTop: 12 }}
       disabled={disabled}
     >
       {joining ? 'Joining…' : 'Join game'}
@@ -335,34 +334,19 @@ function JoinScreen({ initiallySignedIn, initialName, initialDie }: JoinScreenPr
 
     return (
       <AuthScreen title={title} subtitle={subtitle}>
-        <form onSubmit={handleGuestSubmit} className="ag-section" style={{ width: "100%" }}>
+        <form onSubmit={handleGuestSubmit} className="ag-section ag-stack" style={{ width: "100%" }}>
           <JoinCodeField code={code} onChange={setCode} />
-          <div style={{ marginTop: 12 }}>
-            <label htmlFor="guest-name" className="ag-section-label ag-field-label">Your username</label>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input
-                id="guest-name"
-                className="ag-input"
-                type="text"
-                autoComplete="off"
-                maxLength={MAX_GUEST_NAME_LENGTH}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Your name"
-                style={{ flex: 1 }}
-              />
-              <button
-                type="button"
-                className="ag-die-btn"
-                onClick={rerollName}
-                disabled={joining}
-                aria-label="Shuffle to a new random name"
-                title="Shuffle to a new random name"
-              >
-                <DieFace value={nameDie} size={32} />
-              </button>
-            </div>
-          </div>
+          <DisplayNameField
+            id="guest-name"
+            label="Your username"
+            value={name}
+            onChange={setName}
+            maxLength={MAX_GUEST_NAME_LENGTH}
+            placeholder="Your name"
+            disabled={joining}
+            dieValue={nameDie}
+            onReroll={rerollName}
+          />
           <JoinButton joining={joining} disabled={joining || !normaliseJoinCode(code) || !isValidGuestName(name.trim())} />
         </form>
       </AuthScreen>
@@ -390,7 +374,7 @@ function JoinScreen({ initiallySignedIn, initialName, initialDie }: JoinScreenPr
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="ag-section">
+      <form onSubmit={handleSubmit} className="ag-section ag-stack">
         <JoinCodeField code={code} onChange={setCode} />
         <JoinButton joining={joining} disabled={joining || !normaliseJoinCode(code)} />
       </form>

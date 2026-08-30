@@ -11,7 +11,9 @@ import { mapEdgeGeometry } from '@/utils/ui/mapEdges';
 
 interface WorldDominationBoardProps {
     territories: IWorldDominationTerritoryResponse[];
-    usernameToColor: (username: string | null) => string;
+    // owner userId (as carried on territories) → colour / display name.
+    colorForOwner: (owner: string | null) => string;
+    nameForOwner: (owner: string) => string;
     onTerritoryClick?: (territoryId: number) => void;
     /** Territories the current tap target can legally be (highlighted ring). */
     validTerritories: Set<number>;
@@ -26,7 +28,8 @@ const EDGE_LIST = edgeListFrom(ADJACENCY);
 
 export default function WorldDominationBoard({
     territories,
-    usernameToColor,
+    colorForOwner,
+    nameForOwner,
     onTerritoryClick,
     validTerritories,
     selectedTerritoryId = null,
@@ -78,7 +81,7 @@ export default function WorldDominationBoard({
                     {/* Territories */}
                     {territories.map((t, id) => {
                         const def = TERRITORIES[id];
-                        const color = usernameToColor(t.owner);
+                        const color = colorForOwner(t.owner);
                         const isValid = validTerritories.has(id);
                         const isSelected = selectedTerritoryId === id;
                         const radius = 8.5 + Math.min(3, Math.floor(t.armies / 8));
@@ -88,7 +91,7 @@ export default function WorldDominationBoard({
                                 x={def.x} y={def.y} radius={radius}
                                 isValid={isValid} isSelected={isSelected}
                                 onClick={onTerritoryClick && (() => onTerritoryClick(id))}
-                                title={<>{def.name} — {t.owner ?? 'unclaimed'} · {t.armies} armies</>}
+                                title={<>{def.name} — {t.owner ? nameForOwner(t.owner) : 'unclaimed'} · {t.armies} armies</>}
                             >
                                 <circle cx={def.x} cy={def.y} r={radius} fill={color} stroke="#fff" strokeWidth={1.3} />
                                 <text x={def.x} y={def.y + 3.2} textAnchor="middle" fontSize={9} fontWeight={800} fill="#fff">

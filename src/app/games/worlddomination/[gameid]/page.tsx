@@ -21,8 +21,8 @@ import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
-import { PLAYER_COLOURS } from "@/utils/ui/playerColours";
-import { abandonedGameStatus, currentUsername } from "@/utils/ui/players";
+import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
+import { abandonedGameStatus, nameForUserId } from "@/utils/ui/players";
 import MatchHistory from "@/components/games/MatchHistory";
 
 const PHASE_LABEL: Record<IWorldDominationSpecificGameStateResponse['phase'], string> = {
@@ -59,13 +59,13 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
     const isMyTurn = nav.isLive && user?.id === gameData?.currentTurn && !complete;
-    const myUsername = currentUsername(user);
+    const myUserId = user?.id ?? '';
 
     const usernameList = gameData?.usernameList ?? [];
-    function usernameToColor(username: string | null): string {
-        if (!username) return '#888';
-        const idx = usernameList.indexOf(username);
-        return PLAYER_COLOURS[idx >= 0 ? idx % PLAYER_COLOURS.length : 0];
+    const userIdList = gameData?.userIdList ?? [];
+    function colorForOwner(owner: string | null): string {
+        if (!owner) return '#888';
+        return playerColourForId(owner, userIdList);
     }
 
     // Selecting territories is a live-only interaction; drop any in-progress
@@ -83,17 +83,17 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
         const deploying = gs.phase === 'setup' || gs.phase === 'reinforce'
             || (gs.phase === 'attack' && gs.reinforcementsRemaining > 0);
         if (deploying) {
-            territories.forEach((t, id) => { if (t.owner === myUsername) s.add(id); });
+            territories.forEach((t, id) => { if (t.owner === myUserId) s.add(id); });
             return s;
         }
 
         if (gs.phase === 'attack' && !gs.pendingOccupation) {
             if (selFrom === null) {
-                territories.forEach((t, id) => { if (t.owner === myUsername && t.armies >= 2) s.add(id); });
+                territories.forEach((t, id) => { if (t.owner === myUserId && t.armies >= 2) s.add(id); });
             } else if (selTo === null) {
                 ADJACENCY[selFrom].forEach(id => {
                     const t = territories[id];
-                    if (t.owner && t.owner !== myUsername) s.add(id);
+                    if (t.owner && t.owner !== myUserId) s.add(id);
                 });
             }
             return s;
@@ -101,18 +101,18 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
 
         if (gs.phase === 'fortify' && !gs.fortifyUsed) {
             if (selFrom === null) {
-                territories.forEach((t, id) => { if (t.owner === myUsername && t.armies >= 2) s.add(id); });
+                territories.forEach((t, id) => { if (t.owner === myUserId && t.armies >= 2) s.add(id); });
             } else if (selTo === null) {
                 territories.forEach((t, id) => {
-                    if (id !== selFrom && t.owner === myUsername
-                        && connectedThroughOwnedTerritories(selFrom, id, myUsername, territories)) {
+                    if (id !== selFrom && t.owner === myUserId
+                        && connectedThroughOwnedTerritories(selFrom, id, myUserId, territories)) {
                         s.add(id);
                     }
                 });
             }
         }
         return s;
-    }, [gs, isMyTurn, selFrom, selTo, myUsername]);
+    }, [gs, isMyTurn, selFrom, selTo, myUserId]);
 
     function handleTerritoryClick(id: number) {
         if (!gs || !isMyTurn) return;
@@ -121,17 +121,17 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
         const deploying = gs.phase === 'setup' || gs.phase === 'reinforce'
             || (gs.phase === 'attack' && gs.reinforcementsRemaining > 0);
         if (deploying) {
-            if (t.owner === myUsername) setSelFrom(id);
+            if (t.owner === myUserId) setSelFrom(id);
             return;
         }
 
         if (gs.phase === 'attack') {
             if (gs.pendingOccupation) return;
             if (selFrom === null) {
-                if (t.owner === myUsername && t.armies >= 2) setSelFrom(id);
+                if (t.owner === myUserId && t.armies >= 2) setSelFrom(id);
             } else if (selTo === null) {
-                if (t.owner !== myUsername && isAdjacent(selFrom, id)) setSelTo(id);
-            } else if (t.owner === myUsername && t.armies >= 2) {
+                if (t.owner !== myUserId && isAdjacent(selFrom, id)) setSelTo(id);
+            } else if (t.owner === myUserId && t.armies >= 2) {
                 setSelFrom(id);
                 setSelTo(null);
             }
@@ -141,13 +141,13 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
         if (gs.phase === 'fortify') {
             if (gs.fortifyUsed) return;
             if (selFrom === null) {
-                if (t.owner === myUsername && t.armies >= 2) setSelFrom(id);
+                if (t.owner === myUserId && t.armies >= 2) setSelFrom(id);
             } else if (selTo === null) {
-                if (t.owner === myUsername && id !== selFrom
-                    && connectedThroughOwnedTerritories(selFrom, id, myUsername, gs.territories)) {
+                if (t.owner === myUserId && id !== selFrom
+                    && connectedThroughOwnedTerritories(selFrom, id, myUserId, gs.territories)) {
                     setSelTo(id);
                 }
-            } else if (t.owner === myUsername && t.armies >= 2) {
+            } else if (t.owner === myUserId && t.armies >= 2) {
                 setSelFrom(id);
                 setSelTo(null);
             }
@@ -157,17 +157,11 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     const displayedWinner = nav.displayedWinner;
     const displayedCurrentTurn = nav.displayedCurrentTurn;
 
-    const playerName = (userId?: string): string => {
-        const playerStates = gs?.playerStates;
-        if (!playerStates) return userId ?? '';
-        return Object.values(playerStates).find(p => p.userId === userId)?.username ?? userId ?? '';
-    };
+    const playerName = (userId?: string): string => nameForUserId(gameData, userId);
     const getWinnerDisplayName = (): string => playerName(displayedWinner);
     const getForfeitedByDisplayName = (): string => playerName(gameData?.forfeitedBy);
 
-    const currentTurnUsername = gs
-        ? Object.values(gs.playerStates).find(p => p.userId === displayedCurrentTurn)?.username ?? displayedCurrentTurn ?? ''
-        : displayedCurrentTurn ?? '';
+    const currentTurnUsername = playerName(displayedCurrentTurn);
 
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, getForfeitedByDisplayName());
@@ -189,18 +183,18 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
 
     // ── Scoreboard ────────────────────────────────────────────────────────────
     const scoreEntries: ScoreEntry[] = gs
-        ? usernameList.flatMap((username, i): ScoreEntry[] => {
-            const ps = gs.playerStates?.[username];
+        ? userIdList.flatMap((userId, i): ScoreEntry[] => {
+            const ps = gs.playerStates?.[userId];
             if (!ps) return [];
-            const isMe = username === myUsername;
-            const isActive = username === currentTurnUsername && !complete;
+            const isMe = userId === myUserId;
+            const isActive = userId === displayedCurrentTurn && !complete;
             let sub: React.ReactNode;
             if (ps.eliminated) sub = '💀 out';
             else if (isActive) sub = PHASE_LABEL[gs.phase];
             else sub = `🃏 ${ps.cardCount}`;
             return [{
-                id: username,
-                name: isMe ? 'You' : username,
+                id: userId,
+                name: isMe ? 'You' : ps.username,
                 color: PLAYER_COLOURS[i % PLAYER_COLOURS.length],
                 sub,
                 score: ps.territoryCount,
@@ -272,7 +266,8 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
                     gameId={gameId}
                     gameUrl="worlddomination"
                     usernameList={usernameList}
-                    myUsername={myUsername}
+                    userIdList={userIdList}
+                    myUserId={myUserId}
                     turnTimer={gameData?.turnTimer}
                 />
             )}
@@ -282,7 +277,8 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
                     <div className="ag-board-area">
                         <WorldDominationBoard
                             territories={gs.territories}
-                            usernameToColor={usernameToColor}
+                            colorForOwner={colorForOwner}
+                            nameForOwner={playerName}
                             onTerritoryClick={isMyTurn && !complete && !submitting ? handleTerritoryClick : undefined}
                             validTerritories={validTerritories}
                             selectedTerritoryId={selFrom}
@@ -294,7 +290,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
                     {isMyTurn && !complete && (
                         <WorldDominationActions
                             gs={gs}
-                            myUsername={myUsername}
+                            myUserId={myUserId}
                             selFrom={selFrom}
                             selTo={selTo}
                             setSelFrom={setSelFrom}
@@ -304,10 +300,10 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
                         />
                     )}
 
-                    <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} usernames={usernameList} />
+                    <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} userIdList={userIdList} />
 
                     {showLog && (
-                        <MatchHistory entries={nav.displayedHistory} usernames={usernameList} oldestFirst />
+                        <MatchHistory entries={nav.displayedHistory} userIdList={userIdList} oldestFirst />
                     )}
                 </>
             )}

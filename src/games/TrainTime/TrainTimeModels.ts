@@ -10,10 +10,11 @@ import {
     formatPerTurnChart,
 } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
-import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
+import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { shuffle } from "@/utils/games/shuffle";
 import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
 import { TrainTimeGameType } from "@/utils/apiModels/GameLogic";
+import { userToken } from "@/utils/games/history";
 import {
     ITrainTimeGameDataResponse,
     ITrainTimeSpecificGameStateResponse,
@@ -62,9 +63,8 @@ TrainTimeInvitationSchema.methods.CreateGame = async function(
     // "The most experienced traveller goes first" doesn't translate to async
     // play, so the running order is simply drawn at random.
     const turnOrder = shuffle(userIdList);
-    const usernameMap = await userIdListToUsernameMap(userIdList);
     const history = [
-        `Setup: running order is ${turnOrder.map(u => usernameMap.get(u) ?? u).join(' → ')}`,
+        { text: `Setup: running order is ${turnOrder.map(userToken).join(' → ')}` },
     ];
 
     const specificGameState = buildInitialTrainTimeState(turnOrder);
@@ -218,16 +218,15 @@ TrainTimeGameDataSchema.methods.CreateDataResponse = async function(viewerId: st
     console.log('CreateDataResponse: Train Time game');
 
     const doc: ITrainTimeGameData = this as ITrainTimeGameData;
-    const usernameList = await userIdListToUsernameList(doc.userIdList);
-    const userIdNameMap: { [key: string]: string } = {};
-    doc.userIdList.forEach((userId, i) => { userIdNameMap[userId] = usernameList[i]; });
+    const { usernameList, userIdNameMap } = await userIdListToNamesAndMap(doc.userIdList);
 
     return {
         gameType: doc.gameType,
         usernameList,
+        userIdList: doc.userIdList,
         turnTimer: doc.turnTimer,
         currentTurn: doc.currentTurn,
-        gameState: publicGameState(doc.gameState),
+        gameState: publicGameState(doc.gameState, userIdNameMap),
         complete: doc.complete,
         winner: doc.winner,
         endReason: doc.endReason,
@@ -247,7 +246,7 @@ export function gameStateToModel(
     const playerStates: ITrainTimeSpecificGameStateResponse['playerStates'] = {};
     for (const [userId, ps] of playerStatesSource) {
         const username = userIdNameMap[userId] ?? userId;
-        playerStates[username] = {
+        playerStates[userId] = {
             userId,
             username,
             handCount: ps.hand.length,
@@ -267,13 +266,13 @@ export function gameStateToModel(
 
     const viewer = viewerId ? playerStatesSource.get(viewerId) : undefined;
 
-    const toUsername = (userId: string | null) => (userId ? userIdNameMap[userId] ?? userId : null);
-
     return {
         market: [...gs.market],
         deckCount: gs.deck.length,
         discardCount: gs.discard.length,
-        routeOwners: gs.routeOwners.map(toUsername),
+        // Route owners and the final-round queue stay keyed by the stable userId;
+        // the client resolves a name from playerStates when it needs one.
+        routeOwners: gs.routeOwners.map(owner => owner ?? null),
         playerStates,
         myDrawsThisTurn: viewerId ? drawsTakenBy(gs, viewerId) : 0,
         ticketDeckCount: gs.ticketDeck.length,
@@ -283,7 +282,7 @@ export function gameStateToModel(
             ? Math.min(ticketsToKeep(viewer), viewer.pendingTickets.length)
             : 0,
         finalRoundPending: gs.finalRoundPending
-            ? gs.finalRoundPending.map(userId => toUsername(userId) as string)
+            ? [...gs.finalRoundPending]
             : null,
         scored: gs.gameOver,
         myHand: viewer ? [...viewer.hand] : [],
@@ -395,8 +394,8 @@ export function formatTrainTimeCharts(
     usernameById: Map<string, string>,
 ): GameResultChart[] {
     return compactCharts(
-        formatPerTurnChart(stats.pointsPerTurn, usernameById, "Route points per turn", "Points"),
-        formatPerTurnChart(stats.longestRunPerTurn, usernameById, "Longest run per turn", "Track"),
+        formatPerTurnChart(stats.pointsPerTurn, "Route points per turn", "Points"),
+        formatPerTurnChart(stats.longestRunPerTurn, "Longest run per turn", "Track"),
     );
 }
 

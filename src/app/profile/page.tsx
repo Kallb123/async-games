@@ -9,6 +9,8 @@ import ProfileIdentity from "@/components/ui/ProfileIdentity";
 import RecentFormSection from "@/components/ui/RecentFormSection";
 import ReactionPicker from "@/components/ui/ReactionPicker";
 import ListSection from "@/components/ui/ListSection";
+import CollapsingSection from "@/components/ui/CollapsingSection";
+import UsernameForm from "@/components/UsernameForm";
 import { IFriendRequestResponse } from "@/utils/mongodb/FriendshipData";
 import { formatRelativeTime } from "@/utils/ui/time";
 import { FRIEND_EVENTS } from "@/utils/hooks/usePushEvents";
@@ -16,7 +18,7 @@ import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { useNowToTheMinute } from "@/utils/hooks/useNow";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useProfilePicture } from "@/utils/hooks/useProfilePicture";
-import { displayName, isGuest, profileHeading } from "@/utils/ui/players";
+import { displayName, isGuest, personalName, profileHeading, publicHandle } from "@/utils/ui/players";
 import { profileImageUrl } from "@/utils/ui/avatar";
 import type { IGameStats, IRecentMatch } from "@/app/api/stats/route";
 import type { IReceivedReaction } from "@/app/api/reactions/route";
@@ -41,6 +43,7 @@ export default function Profile() {
     const now = useNowToTheMinute();
     const picture = useProfilePicture();
 
+    const [editingUsername, setEditingUsername] = useState(false);
     const [inviteUsername, setInviteUsername] = useState("");
     const [isSending, setIsSending] = useState(false);
     const [showAdd, setShowAdd] = useState(false);
@@ -115,6 +118,13 @@ export default function Profile() {
     }
 
     const guest = !!user && isGuest(user);
+    // A guest is not offered the handle editor: theirs is the account id
+    // createGuest() minted and publicHandle shows none, so a handle would be
+    // one nobody sees until they claim the account — which mints them a real
+    // one anyway. This is what we offer, not a control: the write is the
+    // browser's own call to Clerk, so nothing server-side refuses a guest who
+    // makes it themselves (see the locksmith's note in docs/dynamic-names.md).
+    const canEditUsername = !!user && !guest;
     // Null name while Clerk is still loading you, so the header sits as a
     // placeholder instead of showing "Y" for a stand-in "You".
     const heading = profileHeading(user, "You");
@@ -133,24 +143,46 @@ export default function Profile() {
                 </div>
             </div>
 
-            {/* Identity — your own avatar is the way in to changing your picture */}
+            {/* Identity — your own avatar is the way in to changing your
+                picture, and the controls under it the way in to the rest. */}
             <ProfileIdentity
                 {...heading}
                 imageUrl={profileImageUrl(user)}
                 onAvatarClick={picture.openPicker}
                 avatarBusy={picture.isSaving}
-                action={picture.hasPicture && (
-                    <button
-                        type="button"
-                        className="ag-link-muted"
-                        onClick={picture.removePicture}
-                        disabled={picture.isSaving}
-                    >
-                        Remove photo
-                    </button>
+                action={(canEditUsername || picture.hasPicture) && (
+                    <>
+                        {canEditUsername && (
+                            <button
+                                type="button"
+                                className="ag-link-muted"
+                                onClick={() => setEditingUsername(v => !v)}
+                            >
+                                {editingUsername ? "Cancel" : "Edit username"}
+                            </button>
+                        )}
+                        {picture.hasPicture && (
+                            <button
+                                type="button"
+                                className="ag-link-muted"
+                                onClick={picture.removePicture}
+                                disabled={picture.isSaving}
+                            >
+                                Remove photo
+                            </button>
+                        )}
+                    </>
                 )}
             />
             {picture.fileInput}
+
+            <CollapsingSection collapsed={!editingUsername}>
+                {/* Keyed on the handle in play so reopening the editor starts
+                    from the current one rather than whatever was last typed. */}
+                {editingUsername && (
+                    <UsernameForm key={publicHandle(user) ?? ''} onSaved={() => setEditingUsername(false)} />
+                )}
+            </CollapsingSection>
 
             {/* Honest stats */}
             <div className="ag-section">
@@ -246,7 +278,7 @@ export default function Profile() {
                             className="ag-list-row-main"
                             style={{ display: "flex", alignItems: "center", gap: 12 }}
                         >
-                            <Avatar name={friend.user.username} imageUrl={friend.user.imageUrl} size={36} />
+                            <Avatar name={personalName(friend.user)} imageUrl={friend.user.imageUrl} size={36} />
                             <div className="ag-list-row-main">
                                 <div className="ag-list-row-title">{displayName(friend.user)}</div>
                                 <div className="ag-list-row-sub">
@@ -279,9 +311,9 @@ export default function Profile() {
             >
                 {incomingRequests.map((request) => (
                     <div key={request.friendshipId} className="ag-list-row">
-                        <Avatar name={request.user.username} imageUrl={request.user.imageUrl} size={36} />
+                        <Avatar name={personalName(request.user)} imageUrl={request.user.imageUrl} size={36} />
                         <div className="ag-list-row-main">
-                            <div className="ag-list-row-title">{request.user.username}</div>
+                            <div className="ag-list-row-title">{displayName(request.user)}</div>
                             <div className="ag-list-row-sub">wants to be friends · {moment(request.timestamp).fromNow()}</div>
                         </div>
                         <button type="button" className="ag-pill-action ag-pill-action--accept" onClick={() => handleAccept(request.friendshipId)}>Accept</button>
@@ -300,9 +332,9 @@ export default function Profile() {
             >
                 {outgoingRequests.map((request) => (
                     <div key={request.friendshipId} className="ag-list-row">
-                        <Avatar name={request.user.username} imageUrl={request.user.imageUrl} size={36} />
+                        <Avatar name={personalName(request.user)} imageUrl={request.user.imageUrl} size={36} />
                         <div className="ag-list-row-main">
-                            <div className="ag-list-row-title">{request.user.username}</div>
+                            <div className="ag-list-row-title">{displayName(request.user)}</div>
                             <div className="ag-list-row-sub">waiting to accept · {moment(request.timestamp).fromNow()}</div>
                         </div>
                         <button type="button" className="ag-link-muted" onClick={() => handleRemove(request.friendshipId, 'Friend request cancelled.')}>Cancel</button>

@@ -38,7 +38,7 @@ function Stepper({ value, min, max, onChange }: { value: number; min: number; ma
 
 interface WorldDominationActionsProps {
     gs: IWorldDominationSpecificGameStateResponse;
-    myUsername: string;
+    myUserId: string;
     selFrom: number | null;
     selTo: number | null;
     setSelFrom: (id: number | null) => void;
@@ -50,9 +50,9 @@ interface WorldDominationActionsProps {
 }
 
 export default function WorldDominationActions({
-    gs, myUsername, selFrom, selTo, setSelFrom, setSelTo, submitCommand, pendingTarget,
+    gs, myUserId, selFrom, selTo, setSelFrom, setSelTo, submitCommand, pendingTarget,
 }: WorldDominationActionsProps) {
-    const me = gs.playerStates[myUsername];
+    const me = gs.playerStates[myUserId];
     const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
 
     // Every stepper starts over when the thing it counts against changes: a new

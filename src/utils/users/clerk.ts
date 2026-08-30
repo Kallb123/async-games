@@ -1,12 +1,17 @@
 import { clerkClient, User } from "@clerk/nextjs/server";
-import { isGuest, readableName } from "@/utils/ui/players";
+import { isGuest, readableName, UNKNOWN_PLAYER_NAME } from "@/utils/ui/players";
 import { profileImageUrl } from "@/utils/ui/avatar";
+import { MIN_USERNAME_LENGTH, slugifyUsername } from "@/utils/users/username";
 
 // Shown for a userId Clerk can't resolve (a deleted account, most likely
 // today) instead of silently dropping it. Every caller below zips this
 // result back up against the userId list it was given by position, so a
 // dropped entry would shift every name after it onto the wrong seat.
-export const UNKNOWN_PLAYER_NAME = "Unknown player";
+//
+// Declared alongside the other name resolvers in ui/players, so that code which
+// can't import this server-only module — the history token resolver, which
+// reaches client bundles through useTurnNavigation — falls back to the same
+// string. Import it from there.
 
 // The invite-only gate (docs/account-less-play.md §5/§8): a user can sign in
 // without being allowed to use the app yet. Every route that lets someone
@@ -68,6 +73,29 @@ async function usersByFilter(
 
 export function usersByUsername(usernameList: string[]): Promise<User[]> {
     return usersByFilter(usernameList, username => ({ username }));
+}
+
+// A handle derived from `name` that no current Clerk user holds — slugged to
+// Clerk's charset, padded to its minimum length, and suffixed with a number
+// when the base slug is already taken. Best-effort against a concurrent claim
+// of the same handle (Clerk still enforces uniqueness on the write itself), so
+// an ordinary claim lands a clean handle instead of failing on the first
+// collision. Falls back to "player" when a name has no usable characters at all
+// (e.g. a non-Latin script the slug charset can't represent).
+export async function availableUsernameFrom(name: string): Promise<string> {
+    let base = slugifyUsername(name) || "player";
+    while (base.length < MIN_USERNAME_LENGTH) base += "0";
+
+    for (let suffix = 0; suffix < 100; suffix++) {
+        const candidate = suffix === 0 ? base : `${base}${suffix}`;
+        const existing = await usersByUsername([candidate]);
+        if (!existing.some(user => user.username?.toLowerCase() === candidate.toLowerCase())) {
+            return candidate;
+        }
+    }
+    // A hundred people already share this slug — vanishingly unlikely, but take
+    // a unique fallback rather than loop or hand back a known-taken handle.
+    return `${base}${Date.now()}`;
 }
 
 export function usersById(userIdList: string[]): Promise<User[]> {
@@ -189,6 +217,20 @@ export async function userIdListToUserIdNameMap(userIdList: string[]): Promise<{
     return userIdNameMap;
 }
 
+// Both shapes every CreateDataResponse needs, from one Clerk lookup: the
+// usernameList it sends, and the { [userId]: username } map it resolves its
+// board state and history tokens with. Every game built both by hand from the
+// same list and zipped them back up by index.
+export async function userIdListToNamesAndMap(userIdList: string[]): Promise<{
+    usernameList: string[],
+    userIdNameMap: { [key: string]: string }
+}> {
+    const usernameList = await userIdListToUsernameList(userIdList);
+    const userIdNameMap: { [key: string]: string } = {};
+    userIdList.forEach((userId, i) => { userIdNameMap[userId] = usernameList[i]; });
+    return { usernameList, userIdNameMap };
+}
+
 // Same { [userId]: username } shape as userIdListToUserIdNameMap, but built from
 // users a route has already fetched — routes that notify players hold the Clerk
 // user list already, so this saves a second round trip to Clerk.
@@ -234,17 +276,4 @@ export function toUserDto(user: User): UserDto {
         imageUrl: profileImageUrl(user),
         publicMetadata: { guest: isGuest(user) },
     };
-}
-
-export async function usernameListToUserIdList(usernameList: string[]): Promise<string[]> {
-    const users = await usersByUsername(usernameList);
-    const userIdList: string[] = [];
-    usernameList.forEach(username => {
-        const user = users.find(u => u.username === username);
-        if (!user) {
-            return;
-        }
-        userIdList.push(user.id);
-    });
-    return userIdList;
 }

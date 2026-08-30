@@ -6,10 +6,10 @@ import { IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse, IDiceCitiesP
 import { uuidString, GameResultStatGroup, GameResultChart, formatPerTurnChart, compactCharts, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
-import { userIdListToUsernameList, userIdListToUsernameMap } from "@/utils/users/clerk";
+import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { DiceCitiesGameType } from "@/utils/apiModels/GameLogic";
-import { DiceRoll } from "@/utils/games/DiceRoll";
 import { LANDMARKS } from "./ui";
+import { rollOffTurnOrder } from "@/utils/games/rollOff";
 
 export interface DiceCitiesInvitationRequest extends IInvitationRequest {
     enabledDocks: boolean,
@@ -29,42 +29,6 @@ export interface IDiceCitiesInvitationDataModel extends Model<IDiceCitiesInvitat
 // Model methods
 }
 
-function SortUsersByRoll(userIdList: string[], usernameMap: Map<string, string>, turnOrder: string[], history: string[], dieToRoll: number) {
-    // Get turn order
-    // Roll for each user
-    let turnRolls = userIdList.map((userId) => {
-        return {userId, diceRoll: DiceRoll(dieToRoll)};
-    });
-    let distinctRolls: Map<number, string[]> = new Map;
-    // Make lists of users that rolled each value
-    turnRolls.forEach(turnRoll => {
-        const lookup = distinctRolls.get(turnRoll.diceRoll);
-        if (lookup) {
-            lookup.push(turnRoll.userId);
-        } else {
-            distinctRolls.set(turnRoll.diceRoll, [turnRoll.userId]);
-        }
-    });
-    // Sort in descending order, so highest roll is first
-    const sortedRolls = [...distinctRolls.keys()].sort((a, b) => b-a);
-    // Consider each list of users
-    sortedRolls.forEach(roll => {
-        const usersInRoll = distinctRolls.get(roll);
-        if (!usersInRoll) {
-            return;
-        }
-        if (usersInRoll.length > 1) {
-            // Need to re-roll these users
-            const usernamesInRoll = usersInRoll.map(userId => usernameMap.get(userId));
-            history.push(`Setup: ${usernamesInRoll.join(" & ")} rolled a ${roll} and are re-rolling`);
-            SortUsersByRoll(usersInRoll, usernameMap, turnOrder, history, dieToRoll);
-        } else {
-            turnOrder.push(usersInRoll[0]);
-            // The first player settled into turnOrder is the roll-off winner.
-            history.push(`Setup: ${usernameMap.get(usersInRoll[0])} rolled a ${roll}${turnOrder.length === 1 ? " and goes first" : ""}`);
-        }
-    });
-}
 
 // Builds the deterministic starting specificGameState for a Dice Cities game.
 // Used both at game creation and by the replay engine to reconstruct historical
@@ -128,12 +92,7 @@ DiceCitiesInvitationSchema.methods.CreateGame = async function(invite: IDiceCiti
 
     const gameType = new DiceCitiesGameType();
 
-    const turnOrder: string[] = [];
-    const history: string[] = [];
-
-    const usernameMap = await userIdListToUsernameMap(userIdList);
-
-    SortUsersByRoll(userIdList, usernameMap, turnOrder, history, 6);
+    const { turnOrder, history } = rollOffTurnOrder(userIdList);
 
     const gameData: IDiceCitiesGameData = {
         gameId: uuidv4() as uuidString,
@@ -259,18 +218,15 @@ DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(_viewerId: 
 
     const gameDataDocument: IDiceCitiesGameData = this as IDiceCitiesGameData;
 
-    const usernameList = await userIdListToUsernameList(gameDataDocument.userIdList);
-    const userIdNameMap: { [key: string]: string} = {};
-    (gameDataDocument.userIdList as string[]).forEach((userId: string, i: number) => {
-        userIdNameMap[userId] = usernameList[i];
-    });
+    const { usernameList, userIdNameMap } = await userIdListToNamesAndMap(gameDataDocument.userIdList);
 
     return {
         gameType: gameDataDocument.gameType,
         usernameList,
+        userIdList: gameDataDocument.userIdList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
-        gameState: publicGameState(gameDataDocument.gameState),
+        gameState: publicGameState(gameDataDocument.gameState, userIdNameMap),
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
         endReason: gameDataDocument.endReason,
@@ -284,7 +240,7 @@ DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(_viewerId: 
 export function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap: { [key: string]: string}) : IDiceCitiesGameStateResponse {
     const playerStates: { [key: string]: IDiceCitiesPlayerStateResponse; } = {};
     for (const [userId, playerStateModel] of gameState.playerStates) {
-        playerStates[userIdNameMap[userId]] = {
+        playerStates[userId] = {
             userId,
             username: userIdNameMap[userId],
             cards: playerStateModel.cards.map(cardCount => {
@@ -391,5 +347,5 @@ export function formatDiceCitiesResultStats(stats: IDiceCitiesGameResultStats, u
 // Renders coinsPerTurn as GameResult charts: one entry per turn, keyed by
 // username, for the result page's coins/turn chart.
 export function formatDiceCitiesCharts(stats: IDiceCitiesGameResultStats, usernameById: Map<string, string>): GameResultChart[] {
-    return compactCharts(formatPerTurnChart(stats.coinsPerTurn, usernameById, "Coins per turn", "Coins"));
+    return compactCharts(formatPerTurnChart(stats.coinsPerTurn, "Coins per turn", "Coins"));
 }

@@ -2,6 +2,10 @@ import { ICompletedGame, IGameResponse } from "@/utils/apiModels/GameDataApi";
 
 // "Alice", "Alice & Bob", "Alice & 2 others" — the one way the app names a
 // group of players, wherever it has to fit them into a line of text.
+// Shown for a userId Clerk can't resolve (a deleted account, most likely
+// today) instead of silently dropping it — see clerk.ts, which re-exports this.
+export const UNKNOWN_PLAYER_NAME = "Unknown player";
+
 export function nameList(names: string[], emptyLabel = "solo"): string {
     if (names.length === 0) return emptyLabel;
     if (names.length === 1) return names[0];
@@ -10,8 +14,27 @@ export function nameList(names: string[], emptyLabel = "solo"): string {
 }
 
 // Human-readable summary of who you're playing against, excluding yourself.
-export function opponents(game: IGameResponse, me: string | null | undefined, emptyLabel = "solo"): string {
-    return nameList(game.usernameList.filter(u => u !== me), emptyLabel);
+// Identifies "you" by your stable Clerk userId rather than your display name —
+// reading the parallel userIdList/usernameList to filter by id and show the
+// name. A rename can't make you count as your own opponent, and two players
+// sharing a display name are still told apart.
+export function opponentsById(game: IGameResponse, myId: string | null | undefined, emptyLabel = "solo"): string {
+    const names = game.usernameList.filter((_, i) => game.userIdList[i] !== myId);
+    return nameList(names, emptyLabel);
+}
+
+// The display name for one player in a game, resolved by their stable userId
+// through the response's parallel userIdList/usernameList. The one place a board
+// page turns a userId (a winner, the current turn, an owner) back into a name —
+// so no screen re-scans playerStates for the username it already ships. Falls
+// back to the id itself when it isn't one of the game's players (or the game
+// hasn't loaded), which is what every caller wants for an unknown reference.
+export function nameForUserId(
+    game: { userIdList: string[]; usernameList: string[] } | null | undefined,
+    userId: string | null | undefined,
+): string {
+    const index = game && userId ? game.userIdList.indexOf(userId) : -1;
+    return index >= 0 ? game!.usernameList[index] : (userId ?? "");
 }
 
 // Any user the app has to put a name to — a Clerk user, a profile DTO, a
@@ -43,7 +66,7 @@ export function isGuest(user: NamedUser): boolean {
 // anything anyone picked (docs/account-less-play.md §5), so a guest has no
 // handle to show — every caller here treats "no handle" as "show none",
 // never as "show the account id".
-function publicHandle(user: NamedUser | null | undefined): string | null {
+export function publicHandle(user: NamedUser | null | undefined): string | null {
     if (!user || isGuest(user)) return null;
     return user.username || null;
 }

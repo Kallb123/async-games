@@ -7,6 +7,7 @@ import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels
 import { serializable } from "@/utils/apiModels/Serialisable";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
+import { playerHistory, userToken } from "@/utils/games/history";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  SETTLEMENTS AND CITIES
@@ -195,7 +196,7 @@ function sacStartSpecialBuild(sacData: ISettlementsAndCitiesGameData): boolean {
     gs.specialBuildQueue = queue;
     gs.specialBuildMainPlayer = sacData.currentTurn;
     sacData.currentTurn = queue[0];
-    sacData.gameState.history.unshift('Special Build Phase — other players may build & trade with the bank');
+    sacData.gameState.history.unshift({ text: 'Special Build Phase — other players may build & trade with the bank' });
     return true;
 }
 
@@ -326,9 +327,7 @@ export class SACPlaceSettlementSetup implements IGameCommand {
         gs.pendingRoadSetup = true;
         gs.lastSetupSettlementVertex = this.vertexId;
 
-        sacData.gameState.history.unshift(
-            `${this.senderUsername} placed a settlement (setup)`
-        );
+        sacData.gameState.history.unshift(playerHistory(this.senderId, `placed a settlement (setup)`));
         return { validMove: true, turnOver: false };
     }
 
@@ -368,7 +367,7 @@ export class SACPlaceRoadSetup implements IGameCommand {
         gs.pendingRoadSetup = false;
         gs.lastSetupSettlementVertex = null;
 
-        sacData.gameState.history.unshift(`${this.senderUsername} placed a road (setup)`);
+        sacData.gameState.history.unshift(playerHistory(this.senderId, `placed a road (setup)`));
         return { validMove: true, turnOver: true };
     }
 
@@ -408,7 +407,7 @@ export class SACPlayKnight implements IGameCommand {
 
         sacUpdateLargestArmy(sacData);
 
-        sacData.gameState.history.unshift(`${this.senderUsername} played a Knight card`);
+        sacData.gameState.history.unshift(playerHistory(this.senderId, `played a Knight card`));
         return { validMove: true, turnOver: false };
     }
 
@@ -459,7 +458,7 @@ export class SACRollDice implements IGameCommand {
         gs.lastRollDie2 = die2;
 
         if (roll === 7) {
-            sacData.gameState.history.unshift(`${this.senderUsername} rolled a ${roll}`);
+            sacData.gameState.history.unshift(playerHistory(this.senderId, `rolled a ${roll}`));
             const rollerPs = gs.playerStates.get(this.senderId);
             if (rollerPs) rollerPs.robberUses++;
             // Discard phase: auto-discard for all players with >7 cards. The
@@ -500,12 +499,10 @@ export class SACRollDice implements IGameCommand {
                 const resourceList = Object.entries(resources)
                     .map(([resource, amount]) => `${amount} ${resource}`)
                     .join(', ');
-                return `${userId} received ${resourceList}`;
+                return `${userToken(userId)} received ${resourceList}`;
             }).join('; ');
 
-            sacData.gameState.history.unshift(
-                `${this.senderUsername} rolled a ${roll}${summary ? `: ${summary}` : ''}`
-            );
+            sacData.gameState.history.unshift(playerHistory(this.senderId, `rolled a ${roll}${summary ? `: ${summary}` : ''}`));
         }
 
         gs.hasRolled = true;
@@ -573,15 +570,13 @@ export class SACMoveRobber implements IGameCommand {
                     thief.resources[stolen]++;
                     thief.resourcesGathered++;
                 }
-                sacData.gameState.history.unshift(
-                    `${this.senderUsername} moved the robber and stole a resource`
-                );
+                sacData.gameState.history.unshift(playerHistory(this.senderId, `moved the robber and stole a resource`));
             }
         } else if (adjacentUserIds.size > 0) {
             // Must specify someone to steal from
             return { validMove: false, turnOver: false };
         } else {
-            sacData.gameState.history.unshift(`${this.senderUsername} moved the robber`);
+            sacData.gameState.history.unshift(playerHistory(this.senderId, `moved the robber`));
         }
 
         gs.robberHexIndex = this.hexId;
@@ -641,7 +636,7 @@ export class SACBuildRoad implements IGameCommand {
         ps.remainingRoads--;
 
         sacUpdateLongestRoad(sacData);
-        sacData.gameState.history.unshift(`${this.senderUsername} built a road`);
+        sacData.gameState.history.unshift(playerHistory(this.senderId, `built a road`));
         return { validMove: true, turnOver: false };
     }
 
@@ -695,7 +690,7 @@ export class SACBuildSettlement implements IGameCommand {
         gs.vertices[this.vertexId].building = 'settlement';
         gs.vertices[this.vertexId].owner = this.senderId;
 
-        sacData.gameState.history.unshift(`${this.senderUsername} built a settlement`);
+        sacData.gameState.history.unshift(playerHistory(this.senderId, `built a settlement`));
         return { validMove: true, turnOver: false };
     }
 
@@ -741,7 +736,7 @@ export class SACBuildCity implements IGameCommand {
 
         gs.vertices[this.vertexId].building = 'city';
 
-        sacData.gameState.history.unshift(`${this.senderUsername} built a city`);
+        sacData.gameState.history.unshift(playerHistory(this.senderId, `built a city`));
         return { validMove: true, turnOver: false };
     }
 
@@ -784,7 +779,7 @@ export class SACBuyDevCard implements IGameCommand {
         ps.newDevCards[card]++;
         ps.devCardsBought++;
 
-        sacData.gameState.history.unshift(`${this.senderUsername} bought a development card`);
+        sacData.gameState.history.unshift(playerHistory(this.senderId, `bought a development card`));
         return { validMove: true, turnOver: false };
     }
 
@@ -819,7 +814,7 @@ export class SACPlayRoadBuilding implements IGameCommand {
         gs.playedDevCard = true;
         gs.pendingRoadBuilding = 2;
 
-        sacData.gameState.history.unshift(`${this.senderUsername} played Road Building`);
+        sacData.gameState.history.unshift(playerHistory(this.senderId, `played Road Building`));
         return { validMove: true, turnOver: false };
     }
 
@@ -858,9 +853,7 @@ export class SACPlayYearOfPlenty implements IGameCommand {
         ps.resources[this.resource2]++;
         ps.resourcesGathered += 2;
 
-        sacData.gameState.history.unshift(
-            `${this.senderUsername} played Year of Plenty (+${this.resource1}, +${this.resource2})`
-        );
+        sacData.gameState.history.unshift(playerHistory(this.senderId, `played Year of Plenty (+${this.resource1}, +${this.resource2})`));
         return { validMove: true, turnOver: false };
     }
 
@@ -904,9 +897,7 @@ export class SACPlayMonopoly implements IGameCommand {
         ps.resources[this.resource] += total;
         ps.resourcesGathered += total;
 
-        sacData.gameState.history.unshift(
-            `${this.senderUsername} played Monopoly on ${this.resource} (+${total})`
-        );
+        sacData.gameState.history.unshift(playerHistory(this.senderId, `played Monopoly on ${this.resource} (+${total})`));
         return { validMove: true, turnOver: false };
     }
 
@@ -957,9 +948,7 @@ export class SACMaritimeTrade implements IGameCommand {
         ps.resources[this.offerResource] -= ratio;
         ps.resources[this.wantResource]++;
 
-        sacData.gameState.history.unshift(
-            `${this.senderUsername} traded ${ratio}x ${this.offerResource} → 1x ${this.wantResource}`
-        );
+        sacData.gameState.history.unshift(playerHistory(this.senderId, `traded ${ratio}x ${this.offerResource} → 1x ${this.wantResource}`));
         return { validMove: true, turnOver: false };
     }
 
@@ -991,11 +980,10 @@ export class SACEndTurn implements IGameCommand {
         // Main turn requires a roll first; a special-build turn does not.
         if (!gs.specialBuildActive && !gs.hasRolled) return { validMove: false, turnOver: false };
 
-        sacData.gameState.history.unshift(
-            gs.specialBuildActive
-                ? `${this.senderUsername} finished their special build`
-                : `${this.senderUsername} ended their turn`
-        );
+        sacData.gameState.history.unshift(playerHistory(
+            this.senderId,
+            gs.specialBuildActive ? `finished their special build` : `ended their turn`,
+        ));
         return { validMove: true, turnOver: true };
     }
 

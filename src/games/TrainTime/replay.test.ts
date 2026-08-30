@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildTimeline, computePerTurnStat } from "@/utils/games/replay";
-import { UNKNOWN_PLAYER_NAME } from "@/utils/users/clerk";
+import { UNKNOWN_PLAYER_NAME } from "@/utils/ui/players";
 import { buildEventFeed } from "@/utils/games/recap";
 import { deserializeJSON } from "@/utils/apiModels/Serialisable";
 import {
@@ -206,7 +206,7 @@ describe("Train Time replay", () => {
         expect(played.every((c) => c!.senderUsername === NAMES[c!.senderId as keyof typeof NAMES])).toBe(true);
         // And the prose replay regenerates says the same, since it is written
         // from the command as Execute sees it.
-        const history = timeline.snapshots[timeline.currentIndex].history.join("\n");
+        const history = timeline.snapshots[timeline.currentIndex].history.map(entry => entry.text).join("\n");
         expect(history).not.toContain("guest_3f2ab9c14d");
         expect(history).toContain("Alice");
     });
@@ -226,7 +226,7 @@ describe("Train Time replay", () => {
 
         expect(theirs.length).toBeGreaterThan(0);
         expect(theirs.every((command) => command!.senderUsername === "Alice")).toBe(true);
-        expect(timeline.snapshots[timeline.currentIndex].history.join("\n")).not.toContain(UNKNOWN_PLAYER_NAME);
+        expect(timeline.snapshots[timeline.currentIndex].history.map(entry => entry.text).join("\n")).not.toContain(UNKNOWN_PLAYER_NAME);
     });
 
     it("shapes in the viewer's own hand and nobody else's", async () => {

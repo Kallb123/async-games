@@ -114,7 +114,7 @@ describe("Dice Cities bank supply", () => {
         expect(roller.money).toBe(2);
         expect(roller.totalCoinsEarned).toBe(2);
         expect(gs.bankMoney).toBe(0);
-        expect(game.gameState.history.some(h => h.includes("The bank ran out of coins - 3 coins"))).toBe(true);
+        expect(game.gameState.history.some(h => h.text.includes("The bank ran out of coins - 3 coins"))).toBe(true);
     });
 
     it("pays nothing at all once the bank is empty", async () => {

@@ -4,6 +4,7 @@ import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
 import { deserializeJSON, serializable } from "@/utils/apiModels/Serialisable";
+import { playerHistory, userToken } from "@/utils/games/history";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { mongoMap } from "@/utils/games/mongoMaps";
 import { DiceCitiesCardIds, DiceCitiesCards } from "@/games/DiceCities/cards";
@@ -124,8 +125,7 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
 
         currentPlayerState!.lastDiceSelection = this.doubleDice ? 2 : 1;
 
-        const senderUsername = this.senderUsername;
-        dcGameData.gameState.history.unshift(`${senderUsername} rolled a ${totalRoll}${outcome.roll2 ? ` (${outcome.roll1} and ${outcome.roll2})` : ""}`);
+        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `rolled a ${totalRoll}${outcome.roll2 ? ` (${outcome.roll1} and ${outcome.roll2})` : ""}`));
 
         // TODO: Maybe end turn if nothin available to buy?
         return outcome;
@@ -235,8 +235,7 @@ export class DiceCitiesRequestCardPurchase implements IGameCommand {
         }
 
         dcGameData.specificGameState.hasRolled = false;
-        const senderUsername = this.senderUsername;
-        dcGameData.gameState.history.unshift(`${senderUsername} bought a ${cardObject.title}`);
+        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `bought a ${cardObject.title}`));
         return {
             turnOver: true,
             validMove: true
@@ -271,8 +270,7 @@ export class DiceCitiesRequestPassTurn implements IGameCommand {
             }
         }
         dcGameData.specificGameState.hasRolled = false;
-        const senderUsername = this.senderUsername;
-        dcGameData.gameState.history.unshift(`${senderUsername} passed their turn`);
+        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `passed their turn`));
         return {
             turnOver: true,
             validMove: true
@@ -337,8 +335,7 @@ export class DiceCitiesRequestUnlockTrainStation implements IGameCommand {
         currentPlayerState.doubleUnlocked = true;
 
         dcGameData.specificGameState.hasRolled = false;
-        const senderUsername = this.senderUsername;
-        dcGameData.gameState.history.unshift(`${senderUsername} bought a ${cardObject.title}`);
+        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `bought a ${cardObject.title}`));
         return {
             turnOver: true,
             validMove: true
@@ -403,8 +400,7 @@ export class DiceCitiesRequestUnlockShoppingMall implements IGameCommand {
         currentPlayerState.bonusDiningAndStore = true;
 
         dcGameData.specificGameState.hasRolled = false;
-        const senderUsername = this.senderUsername;
-        dcGameData.gameState.history.unshift(`${senderUsername} bought a ${cardObject.title}`);
+        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `bought a ${cardObject.title}`));
         return {
             turnOver: true,
             validMove: true
@@ -469,8 +465,7 @@ export class DiceCitiesRequestUnlockAmusementPark implements IGameCommand {
         currentPlayerState.rerollDoubles = true;
 
         dcGameData.specificGameState.hasRolled = false;
-        const senderUsername = this.senderUsername;
-        dcGameData.gameState.history.unshift(`${senderUsername} bought a ${cardObject.title}`);
+        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `bought a ${cardObject.title}`));
         return {
             turnOver: true,
             validMove: true
@@ -535,8 +530,7 @@ export class DiceCitiesRequestUnlockRadioTower implements IGameCommand {
         currentPlayerState.oneReroll = true;
 
         dcGameData.specificGameState.hasRolled = false;
-        const senderUsername = this.senderUsername;
-        dcGameData.gameState.history.unshift(`${senderUsername} bought a ${cardObject.title}`);
+        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `bought a ${cardObject.title}`));
         return {
             turnOver: true,
             validMove: true
@@ -604,8 +598,7 @@ export class DiceCitiesRequestTvStationSelection implements IGameCommand {
         rollerState.money += amountToSteal;
         rollerState.totalCoinsEarned += amountToSteal;
 
-        const senderUsername = this.senderUsername;
-        dcGameData.gameState.history.unshift(`${senderUsername} stole ${amountToSteal} coins from ${this.selectedUserName || this.selectedUser}`);
+        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `stole ${amountToSteal} coins from ${userToken(selectedUserId)}`));
         dcGameData.specificGameState.awaitingTSSelection = false;
         if (!dcGameData.specificGameState.awaitingBCSelectionOwn && !dcGameData.specificGameState.awaitingBCSelectionOpponent) {
             dcGameData.specificGameState.hasRolled = true;
@@ -716,9 +709,10 @@ export class DiceCitiesRequestBusinessCenterOwnSelection implements IGameCommand
         removeCardFromPlayerState(dcGameData.specificGameState.bcSelectedOpponentCard, selectedOpponentState);
         addCardToPlayerState(dcGameData.specificGameState.bcSelectedOpponentCard, rollerState);
 
-        const senderUsername = this.senderUsername;
-        const selectedOpponentUsername = dcGameData.specificGameState.bcSelectedOpponent;
-        dcGameData.gameState.history.unshift(`${senderUsername} stole a ${selectedOpponentCard.title} for a ${selectedOwnCard.title} coins from ${selectedOpponentUsername}`);
+        dcGameData.gameState.history.unshift(playerHistory(
+            this.senderId,
+            `stole a ${selectedOpponentCard.title} for a ${selectedOwnCard.title} coins from ${userToken(dcGameData.specificGameState.bcSelectedOpponent)}`
+        ));
         dcGameData.specificGameState.bcSelectedOpponent = "";
         dcGameData.specificGameState.bcSelectedOpponent = "";
         dcGameData.specificGameState.bcSelectedOpponentCard = NIL_UUID as uuidString;
@@ -834,9 +828,10 @@ export class DiceCitiesRequestBusinessCenterOpponentSelection implements IGameCo
         removeCardFromPlayerState(this.selectedCard, opponentState);
         addCardToPlayerState(this.selectedCard, rollerState);
 
-        const senderUsername = this.senderUsername;
-        const selectedOpponentUsername = dcGameData.specificGameState.bcSelectedOpponent;
-        dcGameData.gameState.history.unshift(`${senderUsername} stole a ${selectedOpponentCard.title} for a ${selectedOwnCard.title} coins from ${selectedOpponentUsername}`);
+        dcGameData.gameState.history.unshift(playerHistory(
+            this.senderId,
+            `stole a ${selectedOpponentCard.title} for a ${selectedOwnCard.title} coins from ${userToken(dcGameData.specificGameState.bcSelectedOpponent)}`
+        ));
         dcGameData.specificGameState.bcSelectedOpponent = "";
         dcGameData.specificGameState.bcSelectedOpponent = "";
         dcGameData.specificGameState.bcSelectedOpponentCard = NIL_UUID as uuidString;
@@ -920,8 +915,7 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
         this.recordedRoll2 = outcome.roll2;
         let totalRoll = doubleDice && outcome.roll2 ? outcome.roll1 + outcome.roll2 : outcome.roll1;
 
-        const senderUsername = this.senderUsername;
-        dcGameData.gameState.history.unshift(`${senderUsername} re-rolled for a ${totalRoll}${outcome.roll2 ? ` (${outcome.roll1} and ${outcome.roll2})` : ""}`);
+        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `re-rolled for a ${totalRoll}${outcome.roll2 ? ` (${outcome.roll1} and ${outcome.roll2})` : ""}`));
         return outcome;
     }
 
@@ -1099,7 +1093,7 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean, recorded
         });
     });
     if (bankShortfall > 0) {
-        dcGameData.gameState.history.unshift(`The bank ran out of coins - ${bankShortfall} coin${bankShortfall === 1 ? "" : "s"} of income went unpaid`);
+        dcGameData.gameState.history.unshift({ text: `The bank ran out of coins - ${bankShortfall} coin${bankShortfall === 1 ? "" : "s"} of income went unpaid` });
     }
     // Award purple cards
     const stadiumCard = DiceCitiesCards[DiceCitiesCardIds.STADIUM];

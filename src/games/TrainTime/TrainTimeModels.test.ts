@@ -77,7 +77,7 @@ describe("Train Time Mongoose schema", () => {
         expect(alice).toEqual(state.playerStates.get("u1"));
 
         const response = gameStateToModel(replayed, Object.fromEntries(NAMES), "u1");
-        const ps = response.playerStates.Alice;
+        const ps = response.playerStates.u1;
         expect(totalScore(ps)).toBe(7);
         expect(ps.trains).toBe(TRAINS_PER_PLAYER - 4);
         expect(ps.routesClaimed).toBe(1);
@@ -114,12 +114,12 @@ describe("Train Time result charts", () => {
         ...overrides,
     });
 
-    it("plots the points race and the Long Haul race, keyed by username", () => {
+    it("plots the points race and the Long Haul race, keyed by userId", () => {
         const charts = formatTrainTimeCharts(stats(), NAMES);
 
         expect(charts.map(c => c.title)).toEqual(["Route points per turn", "Longest run per turn"]);
-        expect(charts[0].turns).toEqual([{ Alice: 0, Bob: 4 }, { Alice: 7, Bob: 4 }]);
-        expect(charts[1].turns[1]).toEqual({ Alice: 4, Bob: 3 });
+        expect(charts[0].turns).toEqual([{ u1: 0, u2: 4 }, { u1: 7, u2: 4 }]);
+        expect(charts[1].turns[1]).toEqual({ u1: 4, u2: 3 });
     });
 
     it("plots nothing for a game that couldn't be replayed", () => {

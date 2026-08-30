@@ -8,13 +8,6 @@ import { playerByUserId } from "@/games/SettlementsAndCities/SettlementsAndCitie
 
 type SACState = ISACSpecificGameStateResponse;
 
-// The response labels road/army owners and player keys by username; map one back
-// to a userId (for affectedIds) via the playerStates lookup.
-function userIdForUsername(state: SACState | undefined, username: string | null): string | undefined {
-    if (!username || !state?.playerStates) return undefined;
-    return state.playerStates[username]?.userId;
-}
-
 // Hand *size* is public, and it's all these deltas need — the response only
 // carries a hand's composition for the viewer.
 function totalResources(ps: ISACPlayerStateResponse | undefined): number {
@@ -36,10 +29,15 @@ function bonusChangeEvent(
     command: IGameCommand,
     key: "longestRoadOwner" | "largestArmyOwner"
 ): IGameEvent | null {
+    // Owners are userIds; the previous holder loses the bonus. Resolve their
+    // display name for the copy through whichever snapshot still lists them.
     const before = prev[key];
     const after = next[key];
     if (!after || after === before) return null;
-    const lostBy = userIdForUsername(next, before);
+    const lostBy = before ?? undefined;
+    const lostByName = lostBy
+        ? (playerByUserId(next, lostBy)?.username ?? playerByUserId(prev, lostBy)?.username)
+        : undefined;
     const isRoad = key === "longestRoadOwner";
     return {
         id: `${command.id}-${key}`,
@@ -50,7 +48,7 @@ function bonusChangeEvent(
         type: isRoad ? "sac_longest_road" : "sac_largest_army",
         glyph: isRoad ? "🛣️" : "⚔️",
         title: `${command.senderUsername} claimed ${isRoad ? "the Longest Road" : "the Largest Army"}`,
-        detail: before ? `taken from ${before} · +2 VP` : "+2 VP",
+        detail: lostByName ? `taken from ${lostByName} · +2 VP` : "+2 VP",
         affectedIds: lostBy ? [lostBy] : undefined,
     };
 }

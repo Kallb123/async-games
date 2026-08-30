@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { ReactionModel, IReactionDataDocument } from '@/utils/mongodb/ReactionData';
-import { userIdListToUserIdNameMap, userIdListToImageMap } from '@/utils/users/clerk';
+import { userIdListToUserIdNameMap, buildUserDirectory } from '@/utils/users/clerk';
+import { UNKNOWN_PLAYER_NAME } from '@/utils/ui/players';
 import { buildAllEvents } from '@/utils/games/recap';
 import { metaForGame } from '@/utils/ui/games';
 
@@ -12,7 +13,10 @@ const RECEIVED_REACTIONS_LIMIT = 5;
 // One reaction someone else sent to the signed-in user, with enough context
 // to render it without a follow-up request: who sent it, which game, a
 // human-readable summary of the action it landed on (re-derived by replay —
-// ReactionData only stores the eventId), and the reaction itself.
+// ReactionData only stores the eventId), and the reaction itself. The sender's
+// name and picture are resolved live from Clerk (like match history), not read
+// from the copy frozen onto the reaction when it was sent, so a player who
+// later changes their username shows their current one here.
 export interface IReceivedReaction {
     reactionId: string;
     gameId: string;
@@ -65,7 +69,13 @@ export async function GET(request: NextRequest) {
         eventTitlesByGame.set(gameId, new Map(events.map((e) => [e.id, { title: e.title, detail: e.detail }])));
     }
 
-    const actorImages = await userIdListToImageMap(Array.from(new Set(received.map((r) => r.actorId))));
+    // Name and picture of everyone who reacted, resolved live from Clerk in one
+    // lookup — the sender's *current* name, not the copy frozen onto the reaction
+    // when it was sent, so renaming yourself updates the reactions you've left
+    // (the same way turn history resolves its `{{userId}}` tokens). The stored
+    // actorUsername stays only as a fallback for a sender Clerk no longer knows
+    // (e.g. a swept guest), which is better than "Unknown player".
+    const actors = await buildUserDirectory(received.map((r) => r.actorId));
 
     const reactions: IReceivedReaction[] = received.map((r) => {
         const gameData = gameById.get(r.gameId);
@@ -73,13 +83,14 @@ export async function GET(request: NextRequest) {
             ? metaForGame({ url: gameData.gameType.url, friendlyName: gameData.gameType.friendlyName })
             : undefined;
         const event = eventTitlesByGame.get(r.gameId)?.get(r.eventId);
+        const liveName = actors.name(r.actorId);
         return {
             reactionId: r.reactionId,
             gameId: r.gameId,
             gameUrl: gameData?.gameType.url ?? "",
             gameName: meta?.name ?? gameData?.gameType.friendlyName ?? "a game",
-            actorUsername: r.actorUsername,
-            actorImageUrl: actorImages.get(r.actorId) ?? null,
+            actorUsername: liveName === UNKNOWN_PLAYER_NAME ? r.actorUsername : liveName,
+            actorImageUrl: actors.imageUrl(r.actorId),
             reaction: r.reaction,
             timestamp: r.timestamp,
             eventTitle: event?.title ?? null,

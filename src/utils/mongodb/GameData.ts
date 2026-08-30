@@ -1,12 +1,15 @@
 import { Document, Model, Schema, model, models } from "mongoose";
 import { GameEndReason, IGameDataResponse, IGameResponse, uuidString } from "../apiModels/GameDataApi";
-import { UserDirectory, userIdListToUsernameList } from "../users/clerk";
+import { UserDirectory, userIdListToNamesAndMap } from "../users/clerk";
 import { IGameCommand, IGameType } from "../apiModels/GameLogic";
 import { actionableTurnFilter } from "../games/TurnTimer";
+import { IHistoryEntry, resolveHistory } from "../games/history";
 
 export interface IGameState {
     turnOrder: string[],
-    history: string[],
+    // Newest first. Player mentions are stored as {{userId}} tokens and
+    // resolved on the way out — see utils/games/history.ts.
+    history: IHistoryEntry[],
     commandHistory: IGameCommand[]
 }
 
@@ -22,13 +25,15 @@ export interface IGameState {
 // spread properties, so `gameState: doc.gameState` type-checks and ships
 // everything. Every CreateDataResponse goes through here instead.
 //
-// `history` is a parameter because games whose log records userIds swap them
-// for usernames on the way out (see World Domination and Settlements & Cities).
+// The name map is required rather than optional because history is stored with
+// {{userId}} tokens in place of names (utils/games/history.ts): a response built
+// without it would ship the raw ids. Every CreateDataResponse already resolves
+// its players, so there is nothing extra to fetch.
 export function publicGameState(
     gameState: IGameState,
-    history: string[] = gameState.history
+    userIdNameMap: { [key: string]: string }
 ): IGameDataResponse['gameState'] {
-    return { turnOrder: gameState.turnOrder, history };
+    return { turnOrder: gameState.turnOrder, history: resolveHistory(gameState.history, userIdNameMap) };
 }
 
 export interface IGameData {
@@ -99,7 +104,9 @@ export var GameDataSchema = new Schema<IGameDataDocument> ({
     missedTurnCounts: { type: Schema.Types.Map, of: Number, default: () => new Map() },
     gameState: {
         turnOrder: [String],
-        history: [String],
+        // _id: false — a log line is identified by its position, and giving
+        // every one of them an ObjectId only pads the document.
+        history: [{ _id: false, text: String, actorId: String }],
         commandHistory: [
             Schema.Types.Mixed
             // {
@@ -117,6 +124,29 @@ export var GameDataSchema = new Schema<IGameDataDocument> ({
     endReason: String,
     forfeitedBy: String
 }, {discriminatorKey: 'kind', optimisticConcurrency: true});
+
+// Heal a game whose history predates the tokenised { text, actorId } shape.
+//
+// Such a log is on disk as a bare `string[]`. Mongoose can't cast a string to
+// the history subdocument, so the getter reads back an empty array — which the
+// tokenisation change relied on ("rebuilds its log from the next turn") — but
+// the uncast primitives stay behind on the path and make the *next* save throw
+// a ValidationError ("Tried to set nested object field ... to primitive value"),
+// which surfaced as a 500 on the first command played in any pre-existing game.
+//
+// Reassigning the path drops those primitives so the document saves cleanly.
+// The legacy strings are unrecoverable through the document API by this point
+// (the cast already dropped them), so this discards the old log rather than
+// migrating it — the deal docs/dynamic-names.md §4d takes deliberately. Only an
+// empty resolved history can be poisoned: a converted game's entries are all
+// objects and read back intact, so a game mid-log is left untouched.
+GameDataSchema.post('init', function(this: IGameDataDocument) {
+    const history = this.gameState?.history;
+    if (history && history.length === 0) {
+        this.gameState.history = [];
+    }
+});
+
 GameDataSchema.methods.CreateResponse = function(directory: UserDirectory): IGameResponse {
     console.log("CreateResponse: Generic game");
 
@@ -130,6 +160,7 @@ GameDataSchema.methods.CreateResponse = function(directory: UserDirectory): IGam
         gameType: gameDataDocument.gameType.gameType,
         friendlyName: gameDataDocument.gameType.friendlyName,
         usernameList,
+        userIdList: gameDataDocument.userIdList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
         currentTurnUsername: currentTurnIndex >= 0 ? usernameList[currentTurnIndex] : "",
@@ -150,12 +181,15 @@ GameDataSchema.methods.CreateDataResponse = async function(_viewerId: string | n
 
     const gameDataDocument: IGameData = this as IGameData;
 
+    const { usernameList, userIdNameMap } = await userIdListToNamesAndMap(gameDataDocument.userIdList);
+
     return {
         gameType: gameDataDocument.gameType,
-        usernameList: await userIdListToUsernameList(gameDataDocument.userIdList),
+        usernameList,
+        userIdList: gameDataDocument.userIdList,
         turnTimer: gameDataDocument.turnTimer,
         currentTurn: gameDataDocument.currentTurn,
-        gameState: publicGameState(gameDataDocument.gameState),
+        gameState: publicGameState(gameDataDocument.gameState, userIdNameMap),
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
         endReason: gameDataDocument.endReason,

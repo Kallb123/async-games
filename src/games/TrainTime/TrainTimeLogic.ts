@@ -30,6 +30,7 @@ import type { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
 import { serializable } from "@/utils/apiModels/Serialisable";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
+import { playerHistory } from "@/utils/games/history";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  TRAIN TIME
@@ -99,7 +100,7 @@ function boardIsDeadlocked(trainData: ITrainTimeGameData): boolean {
  * because the command route asks CheckGameOver first — by the time
  * CheckEndTurn runs, the game-over decision has already been made.
  */
-function finishTurn(trainData: ITrainTimeGameData, senderId: string, senderUsername: string): void {
+function finishTurn(trainData: ITrainTimeGameData, senderId: string): void {
     const gs = trainData.specificGameState;
     gs.drawsThisTurn = 0;
     gs.drawTurnOwner = null;
@@ -114,15 +115,16 @@ function finishTurn(trainData: ITrainTimeGameData, senderId: string, senderUsern
     if (sender && sender.trains <= FINAL_ROUND_TRAIN_THRESHOLD) {
         // Everyone, the trigger included, gets exactly one more turn.
         gs.finalRoundPending = [...trainData.gameState.turnOrder];
-        trainData.gameState.history.unshift(
-            `${senderUsername} is down to ${sender.trains} trains — last lap, everyone gets one more turn`,
-        );
+        trainData.gameState.history.unshift(playerHistory(
+            senderId,
+            `is down to ${sender.trains} trains — last lap, everyone gets one more turn`,
+        ));
         return;
     }
 
     if (boardIsDeadlocked(trainData)) {
         gs.gameOver = true;
-        trainData.gameState.history.unshift('No route left is short enough for anyone to build — the game ends here');
+        trainData.gameState.history.unshift({ text: 'No route left is short enough for anyone to build — the game ends here' });
     }
 }
 
@@ -148,10 +150,10 @@ function awardLongHaul(trainData: ITrainTimeGameData): void {
     // Scoring runs with no sender and no username map, so — like the
     // final-scores line below it — this reports the fact rather than the name.
     // Who actually banked it is on the final score sheet.
-    trainData.gameState.history.unshift(
-        `Long Haul bonus (+${LONG_HAUL_BONUS}) for the longest run of track — ${pluralize(longest, 'train')}, `
-        + `${winners.length === 1 ? 'claimed outright' : `shared by ${winners.length} players`}`,
-    );
+    trainData.gameState.history.unshift({
+        text: `Long Haul bonus (+${LONG_HAUL_BONUS}) for the longest run of track — ${pluralize(longest, 'train')}, `
+            + `${winners.length === 1 ? 'claimed outright' : `shared by ${winners.length} players`}`,
+    });
 }
 
 // ─── Game type ──────────────────────────────────────────────────────────────
@@ -201,11 +203,11 @@ export class TrainTimeGameType implements IGameType {
         // every other game in the app represents "nobody won outright".
         trainData.winner = winners.length === 1 ? winners[0] : '';
         trainData.currentTurn = '';
-        trainData.gameState.history.unshift(
-            winners.length === 1
+        trainData.gameState.history.unshift({
+            text: winners.length === 1
                 ? `Final scores are in — ${bestTotal} points wins it`
                 : `Final scores are in — a ${bestTotal}-point tie`,
-        );
+        });
         markDirty(gameData);
         return true;
     }
@@ -272,18 +274,17 @@ export class TrainTimeDrawCarriageCard implements IGameCommand {
         gs.drawsThisTurn = drawnSoFar + 1;
         gs.drawTurnOwner = this.senderId;
 
-        trainData.gameState.history.unshift(
-            this.source === 'market'
-                ? `${this.senderUsername} took the face-up ${drawn}`
-                : `${this.senderUsername} drew from the deck`,
-        );
+        trainData.gameState.history.unshift(playerHistory(
+            this.senderId,
+            this.source === 'market' ? `took the face-up ${drawn}` : `drew from the deck`,
+        ));
 
         // The turn ends on the second card, on the Engine tax, or early if
         // there is simply nothing left anywhere to take.
         const turnOver = engineTax
             || gs.drawsThisTurn >= CARDS_DRAWN_PER_TURN
             || cardsAvailable(gs) === 0;
-        if (turnOver) finishTurn(trainData, this.senderId, this.senderUsername);
+        if (turnOver) finishTurn(trainData, this.senderId);
 
         markDirty(gameData);
         return { validMove: true, turnOver };
@@ -345,11 +346,12 @@ export class TrainTimeClaimRoute implements IGameCommand {
         const bestRival = Math.max(0, ...[...runs].filter(([id]) => id !== this.senderId).map(([, run]) => run));
         const leadNote = myRun > bestRival ? ` — longest run now ${myRun}` : '';
 
-        trainData.gameState.history.unshift(
-            `${this.senderUsername} claimed ${routeName(route)} (${route.length} track, +${points})${leadNote}`,
-        );
+        trainData.gameState.history.unshift(playerHistory(
+            this.senderId,
+            `claimed ${routeName(route)} (${route.length} track, +${points})${leadNote}`,
+        ));
 
-        finishTurn(trainData, this.senderId, this.senderUsername);
+        finishTurn(trainData, this.senderId);
         markDirty(gameData);
         return { validMove: true, turnOver: true };
     }
@@ -386,9 +388,10 @@ export class TrainTimeDrawTickets implements IGameCommand {
         // Three, or whatever is left — the deck is never reshuffled (§5).
         ps.pendingTickets = gs.ticketDeck.splice(0, TICKETS_DRAWN_PER_TURN);
 
-        trainData.gameState.history.unshift(
-            `${this.senderUsername} drew ${pluralize(ps.pendingTickets.length, 'destination ticket')}`,
-        );
+        trainData.gameState.history.unshift(playerHistory(
+            this.senderId,
+            `drew ${pluralize(ps.pendingTickets.length, 'destination ticket')}`,
+        ));
 
         // The turn isn't over until they say which ones they're keeping.
         markDirty(gameData);
@@ -443,9 +446,10 @@ export class TrainTimeKeepTickets implements IGameCommand {
         gs.ticketDeck.push(...offered.filter(id => !keep.includes(id)));
         ps.pendingTickets = [];
 
-        trainData.gameState.history.unshift(
-            `${this.senderUsername} kept ${keep.length} of ${pluralize(offered.length, 'destination ticket')}`,
-        );
+        trainData.gameState.history.unshift(playerHistory(
+            this.senderId,
+            `kept ${keep.length} of ${pluralize(offered.length, 'destination ticket')}`,
+        ));
 
         if (setupChoice) {
             // Their opening hand of tickets is settled; the turn itself is
@@ -454,7 +458,7 @@ export class TrainTimeKeepTickets implements IGameCommand {
             return { validMove: true, turnOver: false };
         }
 
-        finishTurn(trainData, this.senderId, this.senderUsername);
+        finishTurn(trainData, this.senderId);
         markDirty(gameData);
         return { validMove: true, turnOver: true };
     }
@@ -498,8 +502,8 @@ export class TrainTimePassTurn implements IGameCommand {
         const ctx = claimContextFor(trainData, this.senderId, ps);
         if (ROUTES.some(route => canClaimRoute(route, ctx))) return INVALID;
 
-        trainData.gameState.history.unshift(`${this.senderUsername} had no legal move and passed`);
-        finishTurn(trainData, this.senderId, this.senderUsername);
+        trainData.gameState.history.unshift(playerHistory(this.senderId, `had no legal move and passed`));
+        finishTurn(trainData, this.senderId);
         markDirty(gameData);
         return { validMove: true, turnOver: true };
     }
