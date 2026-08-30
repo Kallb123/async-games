@@ -1666,6 +1666,17 @@ a.ag-list-row, a.ag-list-row-main {
 }
 .ag-modal .modal-footer > * { margin: 0; }
 
+/* ---- Game guide popup ---- */
+.ag-guide-section { margin-bottom: 14px; }
+.ag-guide-section:last-child { margin-bottom: 0; }
+.ag-guide-section-title {
+    font: 800 11px var(--ag-font);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ag-ink-soft);
+    margin-bottom: 4px;
+}
+
 /* ---- Maritime trade picker ---- */
 .ag-trade-section { margin-bottom: 14px; }
 .ag-trade-label {
