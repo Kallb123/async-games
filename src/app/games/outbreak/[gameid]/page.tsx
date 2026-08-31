@@ -314,7 +314,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     }
 
     return (
-        <GameShell title="Outbreak" subtitle={subtitle} options={gs ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList }} className="ag-game--outbreak">
+        <GameShell title="Outbreak" subtitle={subtitle} options={gs ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList }} chat={{ gameId, userIdList, usernameList }} className="ag-game--outbreak">
             <FcmTokenComp />
 
             {/* Game guide before role guide — a player needs to know the game

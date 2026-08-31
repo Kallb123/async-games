@@ -1243,6 +1243,7 @@ a.ag-list-row, a.ag-list-row-main {
     z-index: 20;
 }
 .ag-game-topbar-btn {
+    position: relative;
     width: 34px;
     height: 34px;
     flex: none;
@@ -1256,6 +1257,18 @@ a.ag-list-row, a.ag-list-row-main {
     font: 700 15px var(--ag-font);
     cursor: pointer;
     text-decoration: none;
+}
+/* The unread dot on the 💬 chat button — a message from someone else has
+   landed since this browser last opened the thread. */
+.ag-topbar-dot {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ag-gold);
+    box-shadow: 0 0 0 2px var(--ag-dark);
 }
 .ag-game-topbar-btn:hover { background: rgba(255, 255, 255, 0.22); color: inherit; }
 .ag-game-topbar-btn--on { background: var(--ag-terracotta); }
@@ -1768,6 +1781,16 @@ a.ag-list-row, a.ag-list-row-main {
 }
 .ag-log .ag-hand-title { margin-bottom: 9px; }
 .ag-log-empty { font: 500 12px var(--ag-font); color: var(--ag-ink-soft); padding: 2px; }
+
+/* ---- In-game chat ----
+   The thread is the match-history timeline — the same `.ag-log` wrapper and
+   compact `RecapTimeline` — with a composer under it (docs/in-game-chat.md §6).
+   All that is new is the composer row and the first-load skeleton; everything
+   above them is the log's own styling. */
+.ag-chat-composer { display: flex; gap: 8px; margin-top: 12px; }
+.ag-chat-composer .ag-input { flex: 1; min-width: 0; }
+.ag-chat-composer .ag-btn { flex: none; }
+.ag-chat-skeleton { display: flex; flex-direction: column; gap: 12px; padding: 4px 2px; }
 
 /* ---- Turn review / planning dock ----
    The scrubber the player steps back through the match with. It's the war-room

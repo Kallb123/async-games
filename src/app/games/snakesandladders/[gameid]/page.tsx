@@ -192,7 +192,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     }
 
     return (
-        <GameShell title="Snakes & Ladders" subtitle={subtitle} options={boardState ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true }}>
+        <GameShell title="Snakes & Ladders" subtitle={subtitle} options={boardState ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true }} chat={{ gameId, userIdList, usernameList }}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
