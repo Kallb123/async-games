@@ -14,6 +14,19 @@ test.afterAll(async ({ request }) => {
   await clearGames(request);
 });
 
+// The board's auto-show guide depends on an async `/api/gameguides` fetch
+// (useGameGuide) that fires on mount. Without waiting for it, a still-in-
+// flight request can resolve moments after checkGuideFromMenu below decides
+// the guide isn't up, popping it open right as the next click lands and
+// jamming every following interaction behind its modal backdrop (a Bootstrap
+// modal's backdrop blocks clicks on whatever's underneath, even though that
+// content is still Playwright-"visible"). Callers set this up around
+// whatever navigation mounts the board — a hard nav or a client-side route
+// change alike — so it's already listening before the request can fire.
+function gameGuideResponse(page: Page) {
+  return page.waitForResponse((res) => res.url().includes('/api/gameguides'), { timeout: 30_000 }).catch(() => {});
+}
+
 // Opens the game guide from the ⋮ menu on `page` and confirms it shows the
 // right title, then closes it again. Shared by every game below — only how
 // each one's board is reached differs; the guide check itself never does.
@@ -80,8 +93,10 @@ for (const game of TWO_PLAYER_GAMES) {
     // Player one follows the same game directly, the way a push notification
     // link would take them there — a hard navigation, so wait for Clerk to
     // finish booting before touching the page.
+    const guidesReady = gameGuideResponse(one);
     await one.goto(new URL(two.url()).pathname);
     await clerkUserId(one);
+    await guidesReady;
 
     // Exact match: the guide modal's own title ("How to play <name>") also
     // contains the game's display name as a substring, so a plain getByText
@@ -165,7 +180,9 @@ test('Settlements & Cities: game guide opens from the options menu and closes', 
 
   // The host's lobby notices the game started and carries them to the same
   // board, the way it does for any lobby.
+  const guidesReady = gameGuideResponse(host);
   await host.waitForURL(/\/games\/settlementsandcities\/.+/, { timeout: 30_000 });
+  await guidesReady;
 
   await expect(host.getByText('Settlements & Cities', { exact: true })).toBeVisible();
   await checkGuideFromMenu(host, 'How to play Settlements & Cities');
