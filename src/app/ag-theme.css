@@ -268,6 +268,22 @@ button {
     padding: 0;
     white-space: nowrap;
 }
+/* A section action that is a single "?" — an explainer for the section, not a
+   link out of it. Drawn as a circle so one character still reads as a control
+   and is big enough to hit with a thumb. */
+.ag-section-action--help {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 99px;
+    border: 1.5px solid color-mix(in oklch, var(--ag-terracotta) 40%, transparent);
+    line-height: 1;
+}
+.ag-section-action--help:hover {
+    background: color-mix(in oklch, var(--ag-terracotta) 12%, var(--ag-surface));
+}
 
 /* ---- Avatars ---- */
 .ag-avatar {
@@ -1666,10 +1682,10 @@ a.ag-list-row, a.ag-list-row-main {
 }
 .ag-modal .modal-footer > * { margin: 0; }
 
-/* ---- Game guide popup ---- */
-.ag-guide-section { margin-bottom: 14px; }
-.ag-guide-section:last-child { margin-bottom: 0; }
-.ag-guide-section-title {
+/* ---- Explainer popup (the game guide, the notifications help sheet) ---- */
+.ag-info-section { margin-bottom: 14px; }
+.ag-info-section:last-child { margin-bottom: 0; }
+.ag-info-section-title {
     font: 800 11px var(--ag-font);
     letter-spacing: 0.05em;
     text-transform: uppercase;

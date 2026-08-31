@@ -44,6 +44,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Settings says whether this device will really get notifications",
+                detail: "Allowing notifications was only half of it: a phone can allow them and still quietly fail to sign itself up, and nothing told you. Settings now says where this device stands, with a Try again button if it didn't work — and a ? that explains everything which can stop a notification arriving, including the Android battery and category settings that block them without asking.",
+            },
+            {
                 title: "Every game has a game guide",
                 detail: "Not sure what a phase does or which pile to worry about? A game guide now opens the first time you join a match of Dice Cities, Settlements & Cities, Train Time, World Domination or Outbreak, and any time after that from the ⋮ menu at the top of the board.",
             },
@@ -59,10 +63,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Open a seat in Outbreak for anyone with the code",
                 detail: "Setting up an Outbreak game now lets you leave seats open and share a code, so a friend can grab one and play as a guest without an account — the same way the other games already work.",
                 game: "outbreak",
-            },
-            {
-                title: "Tapping back to your games starts right away",
-                detail: "Heading home used to leave the tap looking like it hadn't registered for a moment while the page worked out what to show you. It now shows straight away and fills in as it's ready, so nothing feels stuck.",
             },
         ],
     },
