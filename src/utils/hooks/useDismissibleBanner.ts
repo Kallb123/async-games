@@ -1,37 +1,21 @@
 'use client'
-import { useState } from 'react';
+import { useStoredValue } from '@/utils/hooks/useStoredValue';
 
 /**
- * A banner the user can wave away for good, remembered per browser.
+ * A banner the user can wave away for good, remembered per browser by
+ * `useStoredValue`, which owns the storage access and its swallowed throw —
+ * including making a dismissal stick for the session when the store refuses
+ * to keep it.
  *
- * Storage can throw (private mode, blocked site data), and the worst case of
- * guessing wrong is the banner reappearing on the next visit — not worth
- * failing over, so every access is swallowed.
- *
- * Shared by the offers in `BottomBanner`: each passes its own key, and both get
- * the same "dismissed stays dismissed" behaviour without a second copy of the
- * try/catch.
+ * Shared by the offers in `BottomBanner` and by Outbreak's role welcome: each
+ * passes its own key, and all of them get the same "dismissed stays dismissed"
+ * behaviour without a second copy of the plumbing.
  */
 export function useDismissibleBanner(storageKey: string) {
-    const [dismissed, setDismissed] = useState(() => {
-        if (typeof window === 'undefined') {
-            return true;
-        }
-        try {
-            return window.localStorage.getItem(storageKey) === '1';
-        } catch {
-            return false;
-        }
-    });
+    const [stored, store] = useStoredValue(storageKey);
 
-    const dismiss = () => {
-        try {
-            window.localStorage.setItem(storageKey, '1');
-        } catch {
-            // Storage blocked — it stays dismissed for this session only.
-        }
-        setDismissed(true);
+    return {
+        dismissed: stored === '1',
+        dismiss: () => store('1'),
     };
-
-    return { dismissed, dismiss };
 }

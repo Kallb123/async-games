@@ -8,7 +8,7 @@ import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { IGameCommand } from "@/utils/apiModels/GameLogic";
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import GameShell from "@/components/ui/GameShell";
-import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
+import { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import SnakesAndLaddersBoard from "@/games/SnakesAndLadders/components/SnakesAndLaddersBoard";
@@ -28,13 +28,11 @@ import { SL_REROLL_PARAM } from "@/games/SnakesAndLadders/ui";
 import { rematchFlag } from "@/utils/ui/rematch";
 import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, nameForUserId } from "@/utils/ui/players";
-import MatchHistory from "@/components/games/MatchHistory";
 
 export default function GameSnakesAndLadders({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
     const { user } = useAuthGuard();
-    const [showLog, setShowLog] = useState(false);
     // The post-roll payoff screen lives here (not in the actions component) so
     // it survives the roll advancing the turn to the next player.
     const [rollResult, setRollResult] = useState<RollResult | null>(null);
@@ -171,13 +169,6 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
             icon: '🔁',
             onClick: recap.reshow,
         }] : []),
-        {
-            key: 'history',
-            label: 'Turn history',
-            icon: '📜',
-            active: showLog,
-            onClick: () => setShowLog(v => !v),
-        },
         ...(!complete ? [{
             key: 'end',
             label: 'End game',
@@ -186,7 +177,6 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
             onClick: endGame,
         }] : []),
     ];
-    const optionsMenu = boardState ? <GameOptionsMenu options={menuOptions} /> : undefined;
 
     // Recap intro: a standalone welcome-back screen shown before the board when
     // it's our turn and moves happened while we were away.
@@ -202,7 +192,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     }
 
     return (
-        <GameShell title="Snakes & Ladders" subtitle={subtitle} right={optionsMenu} syncing={submitting}>
+        <GameShell title="Snakes & Ladders" subtitle={subtitle} options={boardState ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true }}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
@@ -261,10 +251,6 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
                     />
                 }
             />
-
-            {showLog && (
-                <MatchHistory entries={nav.displayedHistory} userIdList={userIdList} oldestFirst />
-            )}
         </GameShell>
     );
 }

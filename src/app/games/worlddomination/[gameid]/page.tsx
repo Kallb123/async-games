@@ -2,7 +2,7 @@
 import { use } from "react";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { IWorldDominationGameDataResponse, IWorldDominationSpecificGameStateResponse } from "@/games/WorldDomination/apiModels";
 import { ADJACENCY, TERRITORIES, isAdjacent, connectedThroughOwnedTerritories } from "@/games/WorldDomination/board";
@@ -10,7 +10,7 @@ import WorldDominationBoard from "@/games/WorldDomination/components/WorldDomina
 import WorldDominationActions from "@/games/WorldDomination/components/WorldDominationActions";
 import GameShell from "@/components/ui/GameShell";
 import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
-import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
+import { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameGuideModal from "@/components/ui/GameGuideModal";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
@@ -27,7 +27,6 @@ import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, nameForUserId } from "@/utils/ui/players";
-import MatchHistory from "@/components/games/MatchHistory";
 
 const PHASE_LABEL: Record<IWorldDominationSpecificGameStateResponse['phase'], string> = {
     setup: 'Setup',
@@ -40,7 +39,6 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
     const { user } = useAuthGuard();
-    const [showLog, setShowLog] = useState(false);
 
     const { gameid } = use(params);
     const gameId = gameid;
@@ -220,13 +218,6 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
             onClick: recap.reshow,
         }] : []),
         {
-            key: 'history',
-            label: 'Turn history',
-            icon: '📜',
-            active: showLog,
-            onClick: () => setShowLog(v => !v),
-        },
-        {
             key: 'guide',
             label: 'Game guide',
             icon: '📖',
@@ -240,7 +231,6 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
             onClick: endGame,
         }] : []),
     ];
-    const optionsMenu = gs ? <GameOptionsMenu options={menuOptions} /> : undefined;
 
     // The same sheet either way: on your turn the phase controls, off it the
     // cards in your hand to plan the next one against (readOnly drops the
@@ -285,7 +275,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     }
 
     return (
-        <GameShell title="World Domination" subtitle={subtitle} right={optionsMenu} syncing={submitting}>
+        <GameShell title="World Domination" subtitle={subtitle} options={gs ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true }}>
             <FcmTokenComp />
 
             {gameGuide.open && <GameGuideModal guide={worldDominationGuide} onClose={gameGuide.closeGuide} />}
@@ -326,10 +316,6 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
                     )}
 
                     <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} userIdList={userIdList} />
-
-                    {showLog && (
-                        <MatchHistory entries={nav.displayedHistory} userIdList={userIdList} oldestFirst />
-                    )}
                 </>
             )}
         </GameShell>

@@ -37,7 +37,7 @@ routes, one shared panel and one push channel, hung off things already built:
 | Push → refetch on the client | `src/utils/hooks/usePushEvents.ts`, `useRefreshableData.ts` | `CHAT_EVENTS`, and the two loading flags the panel renders with. |
 | Shared game chrome | `src/components/ui/GameShell.tsx` | Where the chat button and panel mount — **once**, not once per game. See §6. |
 | The thread's rows | `src/components/ui/RecapTimeline.tsx`, `src/components/games/MatchHistory.tsx` | The message list. A chat thread is the recap timeline at a third size, not new markup. See §6. |
-| Per-browser storage | `src/utils/hooks/useDismissibleBanner.ts` | The unread read-marker, once its swallowed `localStorage` access is extracted. See §6. |
+| Per-browser storage | `src/utils/hooks/useStoredValue.ts` | The unread read-marker: get/set one string, the `localStorage` throw swallowed. See §6. |
 | Name resolution | the game response the board already holds (`usernameList` / `userIdList`) | No name is stored on a message, and none is resolved by the chat route either — see §5. |
 
 One piece of history worth knowing: `notificationPreferences.ts` opens with a

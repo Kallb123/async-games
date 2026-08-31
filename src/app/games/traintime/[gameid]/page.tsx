@@ -23,7 +23,7 @@ import TrainTimeTicketPanel, { TrainTimeTicketGroup } from "@/games/TrainTime/co
 import TrainTimeScoreSheet, { TrainTimeScoreRow } from "@/games/TrainTime/components/TrainTimeScoreSheet";
 import GameShell from "@/components/ui/GameShell";
 import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
-import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
+import { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameGuideModal from "@/components/ui/GameGuideModal";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
@@ -44,7 +44,6 @@ import { TRACK_PALETTE } from "@/games/TrainTime/ui";
 import { playerColour, playerColourForId } from "@/utils/ui/playerColours";
 import { pluralize } from "@/utils/ui/text";
 import { abandonedGameStatus, nameForUserId } from "@/utils/ui/players";
-import MatchHistory from "@/components/games/MatchHistory";
 
 // Trains at or below this leave a player one big route from ending the game —
 // the standings ring them so everybody can see the clock running down.
@@ -54,7 +53,6 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
     const { user } = useAuthGuard();
-    const [showLog, setShowLog] = useState(false);
     const [showTickets, setShowTickets] = useState(false);
 
     const { gameid } = use(params);
@@ -236,13 +234,6 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
             onClick: recap.reshow,
         }] : []),
         {
-            key: 'history',
-            label: 'Turn history',
-            icon: '📜',
-            active: showLog,
-            onClick: () => setShowLog(v => !v),
-        },
-        {
             key: 'guide',
             label: 'Game guide',
             icon: '📖',
@@ -352,8 +343,10 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
             subtitle={subtitle}
             right={claimSheetRoute
                 ? <button type="button" className="ag-game-topbar-btn" aria-label="Close" onClick={() => setClaiming(false)}>✕</button>
-                : gs ? <GameOptionsMenu options={menuOptions} /> : undefined}
+                : undefined}
+            options={gs ? menuOptions : undefined}
             syncing={submitting}
+            log={{ entries: nav.displayedHistory, userIdList }}
             className="ag-game--traintime"
         >
             <FcmTokenComp />
@@ -472,10 +465,6 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
 
                     {recapAvailable && (
                         <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} userIdList={userIdList} />
-                    )}
-
-                    {showLog && (
-                        <MatchHistory entries={nav.displayedHistory} userIdList={userIdList} />
                     )}
                 </>
             )}

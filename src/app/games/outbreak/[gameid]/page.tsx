@@ -14,14 +14,13 @@ import OutbreakInfectionRateScale from "@/games/Outbreak/components/OutbreakInfe
 import OutbreakRoleIntro from "@/games/Outbreak/components/OutbreakRoleIntro";
 import { guide as outbreakGuide } from "@/games/Outbreak/guide";
 import GameShell from "@/components/ui/GameShell";
-import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
+import { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameGuideModal from "@/components/ui/GameGuideModal";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import Stat from "@/components/ui/Stat";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
-import MatchHistory from "@/components/games/MatchHistory";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
@@ -55,7 +54,6 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
     const { user } = useAuthGuard();
-    const [showLog, setShowLog] = useState(false);
     const [showInfectionScale, setShowInfectionScale] = useState(false);
 
     const { gameid } = use(params);
@@ -277,13 +275,6 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
             onClick: recap.reshow,
         }] : []),
         {
-            key: 'history',
-            label: 'Turn history',
-            icon: '📜',
-            active: showLog,
-            onClick: () => setShowLog(v => !v),
-        },
-        {
             key: 'guide',
             label: 'Game guide',
             icon: '📖',
@@ -297,7 +288,6 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
             onClick: endGame,
         }] : []),
     ];
-    const optionsMenu = gs ? <GameOptionsMenu options={menuOptions} /> : undefined;
 
     // Recap intro: a standalone welcome-back screen shown before the board
     // when it's our turn and moves happened while we were away.
@@ -324,7 +314,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     }
 
     return (
-        <GameShell title="Outbreak" subtitle={subtitle} right={optionsMenu} syncing={submitting} className="ag-game--outbreak">
+        <GameShell title="Outbreak" subtitle={subtitle} options={gs ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList }} className="ag-game--outbreak">
             <FcmTokenComp />
 
             {/* Game guide before role guide — a player needs to know the game
@@ -466,10 +456,6 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
 
                     {recapAvailable && (
                         <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} userIdList={userIdList} />
-                    )}
-
-                    {showLog && (
-                        <MatchHistory entries={nav.displayedHistory} userIdList={userIdList} />
                     )}
                 </>
             )}
