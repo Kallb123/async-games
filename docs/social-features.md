@@ -10,6 +10,14 @@ user, `GameResult` storage (the structural foundation from §5), and match
 history on user profiles. These form the backbone for Tier 2 features (profiles,
 stats) and later phases.
 
+**Status update (2026-08-31): Tier 1 is done.** In-game chat has shipped
+(`docs/in-game-chat.md`) — the flagship, most-requested Tier 1 feature and the
+last one outstanding. With nudges, reactions, rich turn notifications (the
+"your move" push now says what actually happened, §8) and the rematch surface
+already live, every Tier 1 presence & re-engagement feature is now built.
+Chat closes it: a per-game thread on the board, notified over the existing FCM
+bus. The row moves into §1's "what already exists" table below.
+
 The framing that runs through the whole document: async play is *lonely by
 default*. There's no shared session, no lobby, no "you're both online right
 now" moment — two people might touch the same game hours or days apart. Social
@@ -34,6 +42,7 @@ rule, and it applies to server models and API contracts too).
 | **Notification preferences** | `src/utils/mongodb/UserProfile.ts`, `src/app/api/user/preferences/**` | Built. Per-user toggles for notification channels (push, in-app, etc.) and event-type batching. Checked before sending. |
 | **Turn nudges** | `src/utils/mongodb/GameData.ts`, `src/app/api/game/nudge/**` | Built. One-tap "your move!" nudge per turn, limited to 1 per opponent per turn cycle. Sends `TurnNudge` FCM event. |
 | **Turn/action reactions** | `src/utils/mongodb/GameData.ts`, `src/app/api/game/reaction/**` | Built. Emoji reactions on turns. Append-only per-turn store, sent in `TurnReaction` FCM event. |
+| **In-game chat** | `src/utils/mongodb/ChatMessageData.ts`, `src/app/api/game/[gameid]/chat/**`, `src/components/games/GameChat.tsx` | Built. Per-game message thread on the board (Tier 1's flagship — §2). Flat collection keyed by `gameId`, membership-gated routes, `ChatMessage` FCM event throttled per recipient. Guests chat too — see [`docs/in-game-chat.md`](./in-game-chat.md). |
 | **Match history & GameResult** | `src/utils/mongodb/GameResult.ts`, `src/app/api/user/history/**` | Built. Durable, append-only record written on game-over (command pipeline + timeout cron). Survives game deletion; powers profiles, stats, and head-to-head. |
 | **User profiles** | `src/app/users/[userId]/page.tsx`, `src/app/api/user/[userId]/**` | In progress. Public profile page with match history, per-game W/L stats, streaks. Built on `GameResult` store. |
 | **Turn recap / "since you were last here"** | `docs/turn-recap-and-planning.md`, `docs/since-you-were-last-here.md`, `src/utils/games/replay.ts` | Recap engine built; per-player "what happened while away" screen is planned. |
@@ -137,7 +146,7 @@ security) or shipping something users hate.
 | Friends activity / rematch surface | Low | **S–M** | Low | Not started | Last-action data already aggregated; mostly a new screen + one query. |
 | Match history feed | Low–Med | **M** | Med | ✓ Built | Durable `GameResult` record written on game-over. Survives game deletion. |
 | Player profiles | Medium | **M** | Med | In progress | Profile page + stats read model built on `GameResult` store. Risk: privacy defaults. |
-| In-game messaging (friends-only) | Medium | **M** | Med | Not started | New `Message` model, thread UI, unread state, new event. Risk: read/unread correctness, notification spam, light moderation. |
+| In-game messaging | Medium | **M** | Med | ✓ Built | Per-game (not friends-only) — everyone in the game, guests included. `ChatMessage` model, thread on the board, `ChatMessage` event throttled per recipient. See `docs/in-game-chat.md`. |
 | Stats & head-to-head | Med–High | **M–L** | Med–High | **Aggregate store + write path on game-over.** Risk: correctness, back-fill, keeping it in sync as the source of truth is game docs. |
 | Spectating / share links | Medium | **M** | Med | Read-only tokenised view + response shaping that leaks no private state. Risk: **authz** — must not expose hidden info (e.g. Smartthink secret code, opponents' hands). |
 | Blocking / reporting / moderation | Med–High | **M–L** | High | Cross-cutting: touches messaging, invites, matchmaking, and every user-facing list. Risk: security + must be retrofitted everywhere at once. |

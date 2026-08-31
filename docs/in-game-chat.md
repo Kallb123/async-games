@@ -4,7 +4,11 @@ A per-game message thread: the players in one game can talk to each other from
 the board screen, and a message reaches the others as a push notification the
 way a nudge or a reaction does.
 
-This is the planning document. Nothing here is built yet. Read
+This was the planning document. **It is now implemented** — phase 1 (§10)
+shipped in full across the seven commits §11 lays out, so read it for the *why*,
+and treat the code as the current state where the two disagree. Phase 2's polish
+(older-message paging, server-side read markers, a "somebody messaged" recap
+line) and phase 3's moderation are deliberately still ahead. Read
 [`AGENTS.md`](../AGENTS.md) first — the component-reuse rule shapes most of the
 decisions below — and [`ARCHITECTURE.md`](../ARCHITECTURE.md) §5–§8 for the data
 model, the response-shaping contract and the push plumbing this leans on.
