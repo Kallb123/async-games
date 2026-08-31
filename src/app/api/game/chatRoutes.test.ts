@@ -8,8 +8,9 @@
 // What this guards is the review docs/in-game-chat.md §5 asks for: chat as pure
 // access control. Who may read this thread, who may post to it, what a bad body
 // does — and that a message comes back carrying a senderId and *no* name (the
-// guard against the frozen-name trap §3 avoids creeping back in), with no push
-// sent, because the notification is commit 6, not this one.
+// guard against the frozen-name trap §3 avoids creeping back in). On top of
+// that, the §7 push: it reaches the other players and never the sender, it is
+// throttled per recipient, and a push that fails can't lose the stored message.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -20,9 +21,10 @@ vi.mock('@/utils/firebase/pushNotification', async () => (await import('@/utils/
 vi.mock('@/utils/rateLimit', async () => (await import('@/utils/testing/apiRoute')).rateLimitStub());
 
 import { consumeRateLimit } from '@/utils/rateLimit';
+import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 import {
     ANN, BOB, get, jsonPost, rawPost, resetApiRouteStubs, seedChatMessage, seedSnakesAndLadders,
-    sentPushes, signIn, storedChatMessages
+    sentPushes, signIn, storedChatMessages, stubClerkUsers
 } from '@/utils/testing/apiRoute';
 import { GET as readChat, POST as postChat } from './[gameid]/chat/route';
 
@@ -170,13 +172,56 @@ describe('POST /api/game/[gameid]/chat', () => {
         expect(stored[0]).toMatchObject({ senderId: ANN.id, text: 'gg', gameId: 'game_1' });
     });
 
-    it('sends no push — the notification is a later commit', async () => {
+    it('pushes the message to the other players, but never the sender', async () => {
         signIn(ANN);
+        stubClerkUsers(BOB);
         seedSnakesAndLadders();
 
-        await postChatTo('game_1', { text: 'hello' });
+        await postChatTo('game_1', { text: 'your move' });
 
+        expect(sentPushes).toHaveLength(1);
+        const push = sentPushes[0];
+        // Every player but the sender — Ann posted it, so Ann is not told.
+        expect(push.userIds).toEqual([BOB.id]);
+        expect(push.userIds).not.toContain(ANN.id);
+        expect(push.options?.channel).toBe('chat');
+        expect(push.data.event).toBe('ChatMessage');
+        expect(push.data.gameId).toBe('game_1');
+        // The message itself is the body; the title names the sender and game.
+        expect(push.notification.body).toBe('your move');
+        expect(push.notification.title).toBe('ann in Snakes and Ladders');
+    });
+
+    it('throttles the buzz per recipient, but still stores the message', async () => {
+        signIn(ANN);
+        stubClerkUsers(BOB);
+        seedSnakesAndLadders();
+        // The message limit ('chat') stays open; the per-recipient buzz
+        // ('chatPush') is spent, so the line lands silently (§7).
+        vi.mocked(consumeRateLimit).mockImplementation(async (action) => action !== 'chatPush');
+
+        const response = await postChatTo('game_1', { text: 'and another' });
+
+        expect(response.status).toBe(200);
+        expect(storedChatMessages('game_1')).toHaveLength(1);
         expect(sentPushes).toHaveLength(0);
+        // One chat push per player per game per ten minutes (§7).
+        expect(vi.mocked(consumeRateLimit)).toHaveBeenCalledWith('chatPush', `game_1:${BOB.id}`, 1, 10 * 60_000);
+    });
+
+    it('keeps the message even when the push blows up', async () => {
+        // The push happens because of the message, never the other way round: a
+        // Firebase or Clerk wobble must not turn a stored line into a 500 (§7).
+        signIn(ANN);
+        stubClerkUsers(BOB);
+        seedSnakesAndLadders();
+        vi.mocked(sendPushToUsers).mockRejectedValueOnce(new Error('FCM is down'));
+
+        const response = await postChatTo('game_1', { text: 'still here' });
+
+        expect(response.status).toBe(200);
+        expect((await response.json()).message.text).toBe('still here');
+        expect(storedChatMessages('game_1')).toHaveLength(1);
     });
 
     it('lets a player post to a game that has already finished', async () => {

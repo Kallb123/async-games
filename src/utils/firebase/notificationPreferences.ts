@@ -3,11 +3,13 @@ import { User } from '@clerk/nextjs/server';
 // Every channel here must have something that actually sends on it — a toggle
 // that changes nothing is worse than no toggle, because a player who turns it
 // off and keeps getting the pushes concludes the whole screen is a lie. `chat`
-// used to sit in this list with no sender behind it.
+// once sat in this list with no sender behind it and was removed for it; it is
+// back now that a message actually pushes on it (the chat POST route).
 export const ALL_NOTIFICATION_CHANNELS = [
     'yourTurn',
     'turnNudge',
     'playerReaction',
+    'chat',
     'friendInvite',
     'gameInvite',
     'turnExpiringSoon',
@@ -28,6 +30,7 @@ const DEFAULT_PREFERENCES: NotificationPreferences = {
         yourTurn: true,
         turnNudge: true,
         playerReaction: true,
+        chat: true,
         friendInvite: true,
         gameInvite: true,
         turnExpiringSoon: true,
@@ -44,6 +47,7 @@ export const NOTIFICATION_CHANNELS: {
     { key: 'turnExpiringSoon', label: "Turn expiring", description: "When one of your turns is about to time out" },
     { key: 'turnNudge', label: "Turn nudges", description: "When a player nudges you to take your turn" },
     { key: 'playerReaction', label: "Reactions", description: "When a player reacts to a turn" },
+    { key: 'chat', label: "Chat messages", description: "When someone messages you in one of your games" },
     { key: 'gameOver', label: "Game results", description: "When one of your games finishes" },
     { key: 'gameInvite', label: "Game invites", description: "When someone invites you to a game" },
     { key: 'friendInvite', label: "Friend requests", description: "When someone sends you a friend request" },
@@ -64,6 +68,7 @@ export function getNotificationPreferences(user: User): NotificationPreferences 
             yourTurn: channels.yourTurn ?? DEFAULT_PREFERENCES.channels.yourTurn,
             turnNudge: channels.turnNudge ?? DEFAULT_PREFERENCES.channels.turnNudge,
             playerReaction: channels.playerReaction ?? DEFAULT_PREFERENCES.channels.playerReaction,
+            chat: channels.chat ?? DEFAULT_PREFERENCES.channels.chat,
             friendInvite: channels.friendInvite ?? DEFAULT_PREFERENCES.channels.friendInvite,
             gameInvite: channels.gameInvite ?? DEFAULT_PREFERENCES.channels.gameInvite,
             turnExpiringSoon: channels.turnExpiringSoon ?? DEFAULT_PREFERENCES.channels.turnExpiringSoon,
