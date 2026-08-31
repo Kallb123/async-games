@@ -142,11 +142,3 @@ function buildGeometry(route: TrainTimeRouteDef): RouteGeometry {
 
 // The map never changes, so every route's geometry is built once at module load.
 export const ROUTE_GEOMETRY: RouteGeometry[] = ROUTES.map(buildGeometry);
-
-/** Offset + anchor for a city's name label, keyed by which side it sits on. */
-export const CITY_LABEL_OFFSET: Record<'n' | 's' | 'e' | 'w', { dx: number; dy: number; anchor: 'start' | 'middle' | 'end' }> = {
-    n: { dx: 0, dy: -14, anchor: 'middle' },
-    s: { dx: 0, dy: 24, anchor: 'middle' },
-    e: { dx: 13, dy: 6, anchor: 'start' },
-    w: { dx: -13, dy: 6, anchor: 'end' },
-};

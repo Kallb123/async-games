@@ -1,9 +1,9 @@
 'use client'
 import React from 'react';
 import BoardZoom from '@/components/ui/BoardZoom';
-import MapLabel from '@/components/ui/MapLabel';
+import MapLabelLayer from '@/components/ui/MapLabelLayer';
 import { BOARD_VIEWBOX, CITIES, ROUTES, routeName } from '@/games/TrainTime/board';
-import { CITY_LABEL_OFFSET, ROUTE_GEOMETRY, TRACK_PALETTE } from '@/games/TrainTime/ui';
+import { ROUTE_GEOMETRY, TRACK_PALETTE } from '@/games/TrainTime/ui';
 
 interface TrainTimeBoardProps {
     /** Owning player's stable userId per route id, null where unclaimed. */
@@ -29,6 +29,13 @@ interface TrainTimeBoardProps {
 const TRACK_WIDTH = 10;
 const CLAIMED_TRACK_WIDTH = 13;
 
+const CITY_RADIUS = 7;
+const TICKET_CITY_RADIUS = 9;
+const TICKET_HALO_RADIUS = 18;
+const LABEL_OFFSET = 14;
+const LABEL_FONT_SIZE = 17;
+const TICKET_LABEL_FONT_SIZE = 19;
+
 /**
  * The Train Time map, drawn as a printed rail chart on parchment: 36 cities
  * joined by 100 runs of dashed track, one dash per train space, inked in the
@@ -47,6 +54,10 @@ export default function TrainTimeBoard({
     onRouteClick,
     boardTag = null,
 }: TrainTimeBoardProps) {
+    // A ticket end draws bigger and bolder, so work it out once for the dot and
+    // its name rather than asking the same question in both loops.
+    const drawn = CITIES.map(city => ({ city, onTicket: !!highlightedCities?.has(city.id) }));
+
     return (
         <div className="ag-board-frame ag-tt-frame">
             {boardTag && <div className="ag-board-tag">{boardTag}</div>}
@@ -88,47 +99,52 @@ export default function TrainTimeBoard({
                         );
                     })}
 
-                    {CITIES.map(city => {
-                        const label = CITY_LABEL_OFFSET[city.labelDir];
-                        // A ticket end: brass halo, filled dot, its name pulled forward.
-                        const onTicket = !!highlightedCities?.has(city.id);
-                        return (
-                            <g key={city.id}>
-                                {onTicket && (
-                                    <circle
-                                        cx={city.x}
-                                        cy={city.y}
-                                        r={18}
-                                        fill="var(--tt-brass)"
-                                        fillOpacity={0.3}
-                                        stroke="var(--tt-brass)"
-                                        strokeWidth={3}
-                                    />
-                                )}
+                    {drawn.map(({ city, onTicket }) => (
+                        <React.Fragment key={city.id}>
+                            {onTicket && (
                                 <circle
                                     cx={city.x}
                                     cy={city.y}
-                                    r={onTicket ? 9 : 7}
-                                    fill={onTicket ? 'var(--tt-brass)' : '#fdfbf6'}
-                                    stroke="oklch(0.42 0.04 40)"
-                                    strokeWidth={2.4}
+                                    r={TICKET_HALO_RADIUS}
+                                    fill="var(--tt-brass)"
+                                    fillOpacity={0.3}
+                                    stroke="var(--tt-brass)"
+                                    strokeWidth={3}
                                 />
-                                <MapLabel
-                                    x={city.x + label.dx}
-                                    y={city.y + label.dy}
-                                    textAnchor={label.anchor}
-                                    fontSize={onTicket ? 19 : 17}
-                                    fontWeight={onTicket ? 800 : 700}
-                                    fill={onTicket ? 'var(--tt-ink)' : 'oklch(0.4 0.04 45)'}
-                                    stroke="oklch(0.96 0.024 85)"
-                                    strokeWidth={4.5}
-                                    strokeLinejoin="round"
-                                >
-                                    {city.name}
-                                </MapLabel>
-                            </g>
-                        );
-                    })}
+                            )}
+                            <circle
+                                cx={city.x}
+                                cy={city.y}
+                                r={onTicket ? TICKET_CITY_RADIUS : CITY_RADIUS}
+                                fill={onTicket ? 'var(--tt-brass)' : '#fdfbf6'}
+                                stroke="oklch(0.42 0.04 40)"
+                                strokeWidth={2.4}
+                            />
+                        </React.Fragment>
+                    ))}
+
+                    {/* City names last, laid out together so that none of the 36
+                        lands on another name, on a station dot, or off the map —
+                        a ticket end's name is pulled forward as it always was.
+                        The brass ticket halo is deliberately not fenced off: it
+                        is translucent, and a name has always read across it. */}
+                    <MapLabelLayer
+                        labels={drawn.map(({ city, onTicket }) => ({
+                            key: city.id,
+                            x: city.x, y: city.y,
+                            text: city.name,
+                            dir: city.labelDir,
+                            radius: TICKET_CITY_RADIUS,
+                            fontSize: onTicket ? TICKET_LABEL_FONT_SIZE : LABEL_FONT_SIZE,
+                            fontWeight: onTicket ? 800 : 700,
+                            fill: onTicket ? 'var(--tt-ink)' : 'oklch(0.4 0.04 45)',
+                        }))}
+                        width={BOARD_VIEWBOX.width} height={BOARD_VIEWBOX.height}
+                        offset={LABEL_OFFSET}
+                        stroke="oklch(0.96 0.024 85)"
+                        strokeWidth={4.5}
+                        strokeLinejoin="round"
+                    />
                 </svg>
             </BoardZoom>
         </div>

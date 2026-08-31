@@ -3,11 +3,12 @@ import React from 'react';
 import BoardZoom from '@/components/ui/BoardZoom';
 import ClickableMapNode from '@/components/ui/ClickableMapNode';
 import MapEdges from '@/components/ui/MapEdges';
-import MapLabel from '@/components/ui/MapLabel';
+import MapLabelLayer from '@/components/ui/MapLabelLayer';
 import type { IWorldDominationTerritoryResponse } from '@/games/WorldDomination/apiModels';
 import { TERRITORIES, ADJACENCY, CONTINENT_ORDER, CONTINENTS, continentLabelAnchor, BOARD_VIEWBOX } from '@/games/WorldDomination/board';
 import { edgeListFrom } from '@/utils/games/adjacencyGraph';
-import { mapEdgeGeometry } from '@/utils/ui/mapEdges';
+import { mapEdgeGeometry, wrapEdgeLabelRects } from '@/utils/ui/mapEdges';
+import { circleRect } from '@/utils/ui/mapLabels';
 
 interface WorldDominationBoardProps {
     territories: IWorldDominationTerritoryResponse[];
@@ -25,6 +26,16 @@ interface WorldDominationBoardProps {
 }
 
 const EDGE_LIST = edgeListFrom(ADJACENCY);
+const CONTINENT_LABEL_OFFSET = 16;
+
+// The wrapping edges' own labels sit at the map edges and never move, so the
+// continent names have to be laid out around them too.
+const WRAP_LABEL_RECTS = wrapEdgeLabelRects(TERRITORIES, EDGE_LIST, BOARD_VIEWBOX.width);
+
+/** A territory's circle grows a little with the army stack it has to hold. */
+function territoryRadius(armies: number): number {
+    return 8.5 + Math.min(3, Math.floor(armies / 8));
+}
 
 export default function WorldDominationBoard({
     territories,
@@ -47,22 +58,6 @@ export default function WorldDominationBoard({
                         preserveAspectRatio="xMidYMid slice"
                     />
 
-                    {/* Continent name + bonus labels (outlined so they read over the map art) */}
-                    {CONTINENT_ORDER.map(cid => {
-                        const c = CONTINENTS[cid];
-                        const anchor = continentLabelAnchor(cid);
-                        return (
-                            <MapLabel
-                                key={cid}
-                                x={anchor.x + 10} y={anchor.y + 16}
-                                textAnchor="start" letterSpacing="0.04em"
-                                fill={c.color}
-                            >
-                                {c.name.toUpperCase()} +{c.bonus}
-                            </MapLabel>
-                        );
-                    })}
-
                     {/* Adjacency lines (cross-map edges wrap round the globe) */}
                     <MapEdges nodes={TERRITORIES} edges={EDGE_LIST} width={BOARD_VIEWBOX.width} />
 
@@ -84,7 +79,7 @@ export default function WorldDominationBoard({
                         const color = colorForOwner(t.owner);
                         const isValid = validTerritories.has(id);
                         const isSelected = selectedTerritoryId === id;
-                        const radius = 8.5 + Math.min(3, Math.floor(t.armies / 8));
+                        const radius = territoryRadius(t.armies);
                         return (
                             <ClickableMapNode
                                 key={id}
@@ -100,6 +95,25 @@ export default function WorldDominationBoard({
                             </ClickableMapNode>
                         );
                     })}
+
+                    {/* Continent name + bonus labels, outlined so they read over
+                        the map art and laid out last so none of them lands on a
+                        territory circle, another continent's name, or the edge
+                        of the board. */}
+                    <MapLabelLayer
+                        labels={CONTINENT_ORDER.map(cid => {
+                            const c = CONTINENTS[cid];
+                            const anchor = continentLabelAnchor(cid);
+                            return { key: cid, x: anchor.x, y: anchor.y, text: `${c.name.toUpperCase()} +${c.bonus}`, dir: 'se' as const, fill: c.color };
+                        })}
+                        obstacles={[
+                            ...WRAP_LABEL_RECTS,
+                            ...territories.map((t, id) => circleRect(TERRITORIES[id].x, TERRITORIES[id].y, territoryRadius(t.armies))),
+                        ]}
+                        width={BOARD_VIEWBOX.width} height={BOARD_VIEWBOX.height}
+                        offset={CONTINENT_LABEL_OFFSET}
+                        letterSpacingEm={0.04}
+                    />
                 </svg>
             </BoardZoom>
         </div>

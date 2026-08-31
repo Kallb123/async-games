@@ -3,14 +3,49 @@ import React from 'react';
 import BoardZoom from '@/components/ui/BoardZoom';
 import ClickableMapNode from '@/components/ui/ClickableMapNode';
 import MapEdges from '@/components/ui/MapEdges';
-import MapLabel from '@/components/ui/MapLabel';
+import MapLabelLayer from '@/components/ui/MapLabelLayer';
 import type { IOutbreakPlayerStateResponse, IOutbreakCityResponse } from '@/games/Outbreak/apiModels';
-import { ADJACENCY, BOARD_VIEWBOX, CITIES, CITY_LABEL_OFFSET, DISEASE_COLORS, DISEASE_COLOR_DEFS } from '@/games/Outbreak/board';
+import { ADJACENCY, BOARD_VIEWBOX, CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS } from '@/games/Outbreak/board';
 import { edgeListFrom } from '@/utils/games/adjacencyGraph';
+import { wrapEdgeLabelRects } from '@/utils/ui/mapEdges';
+import { type Rect } from '@/utils/ui/mapLabels';
 import { playerColourForId } from '@/utils/ui/playerColours';
 
 const EDGE_LIST = edgeListFrom(ADJACENCY);
 const NODE_RADIUS = 7;
+const LABEL_FONT_SIZE = 6;
+const LABEL_OFFSET = NODE_RADIUS + 4;
+
+// The markers crowding a node: a research station and the pawns standing in the
+// city sit above it, the disease-cube chips below. Their boxes are worked out
+// once per city and used twice — to draw them, and to tell the label layer what
+// it has to keep the 48 city names off.
+const STATION_SIZE = 8;
+const CUBE_SIZE = 8;
+const CUBE_PITCH = CUBE_SIZE + 1;
+const PAWN_RADIUS = 3;
+
+function stationRect(x: number, y: number): Rect {
+    return { x: x + 2, y: y - NODE_RADIUS - 7, width: STATION_SIZE, height: STATION_SIZE };
+}
+
+function pawnRect(x: number, y: number, count: number): Rect {
+    const diameter = PAWN_RADIUS * 2;
+    return { x: x - (count * diameter) / 2, y: y - NODE_RADIUS - 4 - PAWN_RADIUS, width: count * diameter, height: diameter };
+}
+
+function cubeRect(x: number, y: number, count: number): Rect {
+    return {
+        x: x - (count * CUBE_PITCH) / 2,
+        y: y + NODE_RADIUS + 3,
+        width: count * CUBE_PITCH - (CUBE_PITCH - CUBE_SIZE),
+        height: CUBE_SIZE,
+    };
+}
+
+// The wrapping edges' own labels sit at the map edges and never move, so their
+// boxes are fixed too — the city names have to dodge them all the same.
+const WRAP_LABEL_RECTS = wrapEdgeLabelRects(CITIES, EDGE_LIST, BOARD_VIEWBOX.width);
 
 interface OutbreakBoardProps {
     cities: IOutbreakCityResponse[];
@@ -42,6 +77,24 @@ export default function OutbreakBoard({ cities, playerStates, userIdList, validC
         pawnsByCity.set(cityId, [...(pawnsByCity.get(cityId) ?? []), userId]);
     });
 
+    const drawn = CITIES.flatMap(def => {
+        const state = cities[def.id];
+        if (!state) return [];
+        const cubeColors = DISEASE_COLORS.filter(c => state.cubes[c] > 0);
+        const pawns = pawnsByCity.get(def.id) ?? [];
+        return [{
+            def, state, cubeColors, pawns,
+            station: state.station ? stationRect(def.x, def.y) : null,
+            pawnRow: pawns.length > 0 ? pawnRect(def.x, def.y, pawns.length) : null,
+            cubes: cubeColors.length > 0 ? cubeRect(def.x, def.y, cubeColors.length) : null,
+        }];
+    });
+
+    const markers: Rect[] = [
+        ...WRAP_LABEL_RECTS,
+        ...drawn.flatMap(city => [city.station, city.pawnRow, city.cubes].filter((rect): rect is Rect => rect !== null)),
+    ];
+
     return (
         <div className="ag-board-frame ag-outbreak-frame">
             {boardTag && <div className="ag-board-tag">{boardTag}</div>}
@@ -59,20 +112,15 @@ export default function OutbreakBoard({ cities, playerStates, userIdList, validC
                         edges (San Francisco ↔ Tokyo, etc.) wrap round the globe. */}
                     <MapEdges nodes={CITIES} edges={EDGE_LIST} width={BOARD_VIEWBOX.width} strokeOpacity={0.35} />
 
-                    {CITIES.map(def => {
-                        const state = cities[def.id];
-                        if (!state) return null;
-                        const isValid = validCities.has(def.id);
+                    {drawn.map(({ def, state, cubeColors, pawns, station, pawnRow, cubes }) => {
                         const isHighlighted = def.id === highlightedCityId;
                         const colorHex = DISEASE_COLOR_DEFS[def.color].hex;
-                        const cubeColors = DISEASE_COLORS.filter(c => state.cubes[c] > 0);
-                        const pawns = pawnsByCity.get(def.id) ?? [];
 
                         return (
                             <ClickableMapNode
                                 key={def.id}
                                 x={def.x} y={def.y} radius={NODE_RADIUS}
-                                isValid={isValid}
+                                isValid={validCities.has(def.id)}
                                 isHighlighted={isHighlighted}
                                 onClick={onCityClick && (() => onCityClick(def.id))}
                                 title={<>
@@ -86,66 +134,46 @@ export default function OutbreakBoard({ cities, playerStates, userIdList, validC
                                     className={isHighlighted ? 'ag-map-node-pulse' : undefined}
                                 />
 
-                                {(() => {
-                                    const label = CITY_LABEL_OFFSET[def.labelDir];
-                                    return (
-                                        <MapLabel
-                                            x={def.x + label.dx} y={def.y + label.dy}
-                                            textAnchor={label.anchor}
-                                            fontSize={6} fontWeight={700}
-                                        >
-                                            {def.name}
-                                        </MapLabel>
-                                    );
-                                })()}
-
-                                {state.station && (
+                                {station && (
                                     <rect
-                                        x={def.x + 2} y={def.y - NODE_RADIUS - 7}
-                                        width={8} height={8} rx={1.5}
+                                        x={station.x} y={station.y} width={station.width} height={station.height} rx={1.5}
                                         fill="#fff" stroke={colorHex} strokeWidth={1.3}
                                     />
                                 )}
 
-                                {cubeColors.length > 0 && (() => {
-                                    const w = 8;
-                                    const startX = def.x - (cubeColors.length * (w + 1)) / 2;
-                                    return (
-                                        <g>
-                                            {cubeColors.map((color, i) => (
-                                                <g key={color} transform={`translate(${startX + i * (w + 1)}, ${def.y + NODE_RADIUS + 3})`}>
-                                                    <rect width={w} height={w} rx={1.5} fill={DISEASE_COLOR_DEFS[color].hex} stroke="#fff" strokeWidth={0.8} />
-                                                    <text x={w / 2} y={w - 1.5} textAnchor="middle" fontSize={6.5} fontWeight={800} fill="#fff">
-                                                        {state.cubes[color]}
-                                                    </text>
-                                                </g>
-                                            ))}
-                                        </g>
-                                    );
-                                })()}
+                                {cubes && cubeColors.map((color, i) => (
+                                    <g key={color} transform={`translate(${cubes.x + i * CUBE_PITCH}, ${cubes.y})`}>
+                                        <rect width={CUBE_SIZE} height={CUBE_SIZE} rx={1.5} fill={DISEASE_COLOR_DEFS[color].hex} stroke="#fff" strokeWidth={0.8} />
+                                        <text x={CUBE_SIZE / 2} y={CUBE_SIZE - 1.5} textAnchor="middle" fontSize={6.5} fontWeight={800} fill="#fff">
+                                            {state.cubes[color]}
+                                        </text>
+                                    </g>
+                                ))}
 
-                                {pawns.length > 0 && (() => {
-                                    const d = 6;
-                                    const startX = def.x - (pawns.length * d) / 2;
-                                    return (
-                                        <g>
-                                            {pawns.map((userId, i) => (
-                                                <circle
-                                                    key={userId}
-                                                    cx={startX + i * d + d / 2}
-                                                    cy={def.y - NODE_RADIUS - 4}
-                                                    r={3}
-                                                    fill={playerColourForId(userId, userIdList)}
-                                                    stroke="#fff"
-                                                    strokeWidth={1}
-                                                />
-                                            ))}
-                                        </g>
-                                    );
-                                })()}
+                                {pawnRow && pawns.map((userId, i) => (
+                                    <circle
+                                        key={userId}
+                                        cx={pawnRow.x + i * PAWN_RADIUS * 2 + PAWN_RADIUS}
+                                        cy={pawnRow.y + PAWN_RADIUS}
+                                        r={PAWN_RADIUS}
+                                        fill={playerColourForId(userId, userIdList)}
+                                        stroke="#fff"
+                                        strokeWidth={1}
+                                    />
+                                ))}
                             </ClickableMapNode>
                         );
                     })}
+
+                    {/* City names last, so a name reads over its neighbours'
+                        cubes and pawns rather than under them. */}
+                    <MapLabelLayer
+                        labels={drawn.map(({ def }) => ({ key: def.id, x: def.x, y: def.y, text: def.name, dir: def.labelDir, radius: NODE_RADIUS }))}
+                        obstacles={markers}
+                        width={BOARD_VIEWBOX.width} height={BOARD_VIEWBOX.height}
+                        offset={LABEL_OFFSET}
+                        fontSize={LABEL_FONT_SIZE} fontWeight={700}
+                    />
                 </svg>
             </BoardZoom>
         </div>

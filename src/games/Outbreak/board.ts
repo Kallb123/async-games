@@ -26,7 +26,7 @@ export const DISEASE_COLOR_DEFS: Record<OutbreakDiseaseColor, OutbreakDiseaseCol
     red: { id: 'red', name: 'Red', region: 'East/Southeast Asia & Oceania', hex: '#ed362d' },
 };
 
-/** Which side of its node a city's name label sits on (see CITY_LABEL_OFFSET), hand-picked to keep the 48 labels off the printed routes and each other on this densely-packed map. */
+/** The side of its node a city's name label prefers, hand-picked to keep the 48 labels off the printed routes. `MapLabelLayer` moves one off its preferred side only when a neighbour or a marker has taken it. */
 export type OutbreakLabelDir = 'n' | 's' | 'e' | 'w';
 
 export interface OutbreakCityDef {
@@ -180,14 +180,6 @@ export function cityIdsForColor(color: OutbreakDiseaseColor): number[] {
 }
 
 export const BOARD_VIEWBOX = { width: 800, height: 460 };
-
-/** Offset + anchor for a city's name label, keyed by labelDir — same shape as TrainTime's CITY_LABEL_OFFSET, sized for this board's 7px node radius and 6px label text. */
-export const CITY_LABEL_OFFSET: Record<OutbreakLabelDir, { dx: number; dy: number; anchor: 'start' | 'middle' | 'end' }> = {
-    n: { dx: 0, dy: -10, anchor: 'middle' },
-    s: { dx: 0, dy: 15, anchor: 'middle' },
-    e: { dx: 10, dy: 2.5, anchor: 'start' },
-    w: { dx: -10, dy: 2.5, anchor: 'end' },
-};
 
 // §6 steps 4-5: the first research station, and every pawn's starting city.
 export const ATLANTA_CITY_ID = CITIES.find(c => c.name === 'Atlanta')!.id;
