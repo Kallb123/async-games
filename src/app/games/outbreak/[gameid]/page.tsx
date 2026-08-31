@@ -346,7 +346,28 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                             onClick={() => setShowInfectionScale(v => !v)}
                             pressed={showInfectionScale}
                         />
-                        <Stat value={DISEASE_COLORS.reduce((sum, c) => sum + gs.cubesLeft[c], 0)} label="Cubes left" />
+                        {/* Cubes left is a per-colour supply, not one pool: the
+                            game is lost the moment a single colour runs out
+                            (rules.ts isCubeExhaustionLoss), so the tile shows
+                            the four counts in their own colours rather than a
+                            total that hides the one about to hit zero. */}
+                        <Stat
+                            value={
+                                <span className="ag-ob-cubetally">
+                                    {DISEASE_COLORS.map(color => (
+                                        <span
+                                            key={color}
+                                            className="ag-ob-cubetally-n"
+                                            style={{ color: DISEASE_COLOR_DEFS[color].inkHex }}
+                                            aria-label={`${DISEASE_COLOR_DEFS[color].name}: ${gs.cubesLeft[color]}`}
+                                        >
+                                            {gs.cubesLeft[color]}
+                                        </span>
+                                    ))}
+                                </span>
+                            }
+                            label="Cubes left"
+                        />
                     </div>
                     {showInfectionScale && <OutbreakInfectionRateScale infectionRateIndex={gs.infectionRateIndex} />}
                 </>
