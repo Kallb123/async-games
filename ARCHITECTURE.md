@@ -661,6 +661,13 @@ game — is documented fully in
   guest form starts out holding — its random Adjective+Animal name, the die
   face beside it — is drawn on the server and passed down too, because server
   HTML and the browser's first render have to agree on it.
+- **Admin tooling.** A third flag, `publicMetadata.admin`, gates the support
+  screen at `/admin` and every route under `/api/admin/**` (`requireAdmin` in
+  `src/utils/api/adminRequest.ts`; `isAdmin` in `src/utils/ui/players.ts` is the
+  predicate both sides share). Today it holds guest-account recovery: an
+  unclaimed guest has no email and no password, so a guest who loses both their
+  session cookie and the resume link shown once at sign-up can only be let back
+  in by hand — see [`docs/admin-tools.md`](./docs/admin-tools.md).
 - User records themselves live in **Clerk**, not MongoDB. The app only stores
   Clerk `userId`s and resolves display names on demand.
 
@@ -943,6 +950,7 @@ one-liner fails with a message naming the exact file and line to add.
 - [`docs/profile-pictures.md`](./docs/profile-pictures.md) — how a player's avatar is resolved, and the roadmap for uploads/unlockables.
 - [`docs/account-less-play.md`](./docs/account-less-play.md) — plan for Jackbox-style join-by-code lobbies and guest players: what the five identity choke points cost, and the commit-by-commit build order.
 - [`docs/games/`](./docs/games/) — per-game rules notes (Smartthink, Settlements & Cities).
+- [`docs/admin-tools.md`](./docs/admin-tools.md) — the `/admin` support screen: who counts as an admin, and how a guest who lost their resume link is let back in.
 - [`docs/environments.md`](./docs/environments.md) — the dev/production split (Clerk instances, databases, env vars) and how to take Clerk to production.
 - [`docs/robustness-review.md`](./docs/robustness-review.md) — a sweep for the ways the app breaks under conditions the happy path never tries, with every finding recorded against its fix status (including the two deliberately left).
 - [`docs/email-theme.md`](./docs/email-theme.md) — the design system restated for email (hex palette, type, table-based components), for styling Clerk's transactional emails.

@@ -13,12 +13,39 @@ const GUEST_TICKET_TTL_SECONDS = 60;
 // than consumed on arrival. It only needs to outlive the guest account it
 // signs back into, and §8 already gives that a number: a week after their
 // last game concludes. No point minting a link that outlasts the principal.
-const GUEST_RESUME_TICKET_TTL_SECONDS = 7 * 24 * 60 * 60;
+export const GUEST_RESUME_TICKET_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 export interface GuestTicket {
     userId: string;
     ticket: string;
     resumeTicket: string;
+}
+
+// The one place a sign-in token is minted, so the immediate ticket, the resume
+// link handed out at sign-up and the replacement an admin mints later
+// (docs/admin-tools.md) are the same mechanism with three lifetimes rather
+// than three copies of the same Clerk call.
+async function mintSignInToken(userId: string, expiresInSeconds: number): Promise<string> {
+    const client = await clerkClient();
+    const { token } = await client.signInTokens.createSignInToken({ userId, expiresInSeconds });
+    return token;
+}
+
+/**
+ * A fresh resume link ticket for a guest who no longer has theirs — the tab
+ * closed, the session cookie gone, and the link that was shown once never
+ * saved (docs/admin-tools.md).
+ *
+ * Deliberately the same TTL as the link they were given at sign-up: it is the
+ * same link, re-minted, and the window is already bounded by the guest
+ * account it signs back into (GUEST_SWEEP_DAYS).
+ *
+ * A sign-in token *is* the account, so the caller must have established that
+ * the target is a guest — an unclaimed account with no credentials of its own,
+ * for whom this link is the designed way in — and never a registered one.
+ */
+export function createResumeTicket(userId: string): Promise<string> {
+    return mintSignInToken(userId, GUEST_RESUME_TICKET_TTL_SECONDS);
 }
 
 // An unclaimed guest is swept this long after their last game concludes
@@ -87,15 +114,11 @@ export async function createGuest(displayName: string): Promise<GuestTicket> {
         skipPasswordRequirement: true,
         publicMetadata: { guest: true, displayName },
     });
-    const { token } = await client.signInTokens.createSignInToken({
+    return {
         userId: user.id,
-        expiresInSeconds: GUEST_TICKET_TTL_SECONDS,
-    });
-    const { token: resumeToken } = await client.signInTokens.createSignInToken({
-        userId: user.id,
-        expiresInSeconds: GUEST_RESUME_TICKET_TTL_SECONDS,
-    });
-    return { userId: user.id, ticket: token, resumeTicket: resumeToken };
+        ticket: await mintSignInToken(user.id, GUEST_TICKET_TTL_SECONDS),
+        resumeTicket: await createResumeTicket(user.id),
+    };
 }
 
 // The other half of a guest claim that lost the race for a seat (step 14):

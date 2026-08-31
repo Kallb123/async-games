@@ -65,6 +65,7 @@ export async function resetApiRouteStubs() {
     signedInUserId = null;
     clerkUsers = [];
     metadataWrites.length = 0;
+    mintedSignInTokens.length = 0;
     games.clear();
     clearAfterCallbacks();
     sentPushes.length = 0;
@@ -78,6 +79,13 @@ export async function resetApiRouteStubs() {
  * a route stored without reaching back into the stubbed user.
  */
 export const metadataWrites: { userId: string, publicMetadata?: Record<string, unknown> }[] = [];
+
+/**
+ * The Clerk sign-in tokens routes minted this test, oldest first — a ticket is
+ * a way into an account, so what a route minted and for whom is the assertion
+ * worth having (see the guest resume link, docs/admin-tools.md).
+ */
+export const mintedSignInTokens: { userId: string, expiresInSeconds?: number }[] = [];
 
 /** The `@clerk/nextjs/server` a route sees. Pass to `vi.mock`. */
 export function clerkStub() {
@@ -119,6 +127,15 @@ export function clerkStub() {
                         (user as { publicMetadata: Record<string, unknown> }).publicMetadata = merged;
                     }
                     return user;
+                }
+            },
+            signInTokens: {
+                createSignInToken: async ({ userId, expiresInSeconds }: { userId: string, expiresInSeconds?: number }) => {
+                    mintedSignInTokens.push({ userId, expiresInSeconds });
+                    // Shaped like the real token only in being opaque and
+                    // per-user: a test asserts which account a link signs in,
+                    // which is the whole of what it can check from outside.
+                    return { token: `ticket_${userId}_${mintedSignInTokens.length}` };
                 }
             }
         })
@@ -302,6 +319,12 @@ function findOneFromStore(filter: Record<string, unknown>) {
 }
 
 // ---------------------------------------------------------------- Requests
+
+/** A GET of `path`, query string and all — for a route that reads its own
+ *  `nextUrl.searchParams`. */
+export function get(path: string): NextRequest {
+    return new nextServer.NextRequest(`https://async.games${path}`);
+}
 
 /** A POST of `body` as JSON, the way the client sends one. */
 export function jsonPost(path: string, body: unknown): NextRequest {
