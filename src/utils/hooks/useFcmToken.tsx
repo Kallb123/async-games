@@ -6,6 +6,7 @@ import { getNativePushToken } from '../firebase/nativePush';
 import { isNativeShell } from '../native';
 import { useIsAuthorised } from './useAuthGuard';
 import { useNotificationPermission } from './useNotificationPermission';
+import { REQUEST_TIMEOUT_MS } from './fetchWithSessionRetry';
 
 /**
  * How far this device has got towards actually being able to receive a push.
@@ -115,12 +116,17 @@ const useFcmToken = () => {
       }
 
       try {
+        // Timed out rather than left open: a request that stalls (a phone
+        // moving between cell and wifi) would otherwise leave this device
+        // reporting 'registering' forever, which is now something the player
+        // is looking at.
         const response = await fetch('/api/notificationtoken', {
           method: "POST",
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({token: currentToken})
+          body: JSON.stringify({token: currentToken}),
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
         });
 
         if (!response.ok) {

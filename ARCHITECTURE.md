@@ -70,6 +70,7 @@ src/
 │       ├── friends/            # friends system
 │       ├── cron/turntimer/     # turn-timer enforcement (external cron target)
 │       ├── notifyuser/  notificationtoken/       # push plumbing
+│       ├── notificationtest/                     # "does push work?" self-test
 │       └── dev/  unlock/  users/  utils/         # misc
 │
 ├── components/                 # cross-game React components
@@ -483,12 +484,18 @@ with the `CRON_SECRET` bearer header. See the README for setup.
 Push is the mechanism that makes async play feel live.
 
 **Server → device.** `src/utils/firebase/pushNotification.ts` exposes
-`sendPushToUsers(users, data, notification?)`. It collects each user's stored FCM
-tokens (from Clerk `privateMetadata.notificationTokens`) and sends via
-`firebase-admin`. `data` always carries an `event` field; omitting `notification`
-sends a **silent data-only** message used to refresh client state. The admin SDK
-is initialised in `src/utils/firebase/adminFirebase.ts` from `FIREBASE_*` env
-vars.
+`sendPushToUsers(users, data, notification, options)`. It collects each user's
+stored FCM tokens (from Clerk `privateMetadata.notificationTokens`), drops the
+users whose preferences have `options.channel` switched off, and sends via
+`firebase-admin`. Both the notification and the channel are **required**: a
+data-only message displays nothing on arrival, and WebKit revokes a push
+subscription after three of those, so the signature is what stops the silent
+refresh pushes (#303) being written again. Every message also carries a
+`webpush` block asking the browser's push service for `Urgency: high` and a
+one-day `TTL` — without it a normal-urgency push can sit unopened until an
+Android phone next wakes on its own, and a stale one can arrive up to four
+weeks later. The admin SDK is initialised in
+`src/utils/firebase/adminFirebase.ts` from `FIREBASE_*` env vars.
 
 **What the pushes say.** Every piece of user-visible push copy is built by
 `src/utils/firebase/notificationContent.ts`, never written inline at the call
@@ -517,9 +524,20 @@ two. On the delivery side `useCapacitorPush` stands in for both the foreground
 is Android's, drawn with the `ic_stat_notify` silhouette and tint named in
 `AndroidManifest.xml`.
 
-**Token registration.** On the client, `useFcmToken` (`src/utils/hooks/`) requests
-notification permission, gets an FCM token, and POSTs it to
+**Token registration.** On the client, `useFcmToken` (`src/utils/hooks/`) gets an
+FCM token for a device whose viewer is signed in and has *already* granted
+permission (it never asks — see `NotificationOffer`), and POSTs it to
 `/api/notificationtoken`, which stores it in the user's Clerk private metadata.
+It reports how far that got as a `PushRegistrationState`, because permission
+only covers whether a notification may be *shown*: being issued a token and
+being stored server-side are two further steps that can fail on their own, and
+used to fail into a console log. `NotificationStatus` says which step a device
+reached and offers a retry, and `NotificationTestButton` proves the whole path
+by sending a real push to the caller's own devices via
+`/api/notificationtest` — the production-safe counterpart of the dev-only,
+any-user `/api/notifyuser`. Its push is the one the service worker displays
+even when a window is visible (`NOTIFICATION_TEST_EVENT`), since the person who
+pressed the button is by definition looking at the app.
 Each stored token (`TimedToken`) keeps the time it was first registered
 (`timestamp`), the last time that device re-registered (`lastSeen`), and a
 `device` summary parsed from the request's user-agent header by

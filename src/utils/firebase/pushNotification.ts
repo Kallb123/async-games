@@ -39,6 +39,27 @@ export function gameNotificationImage(gameTypeUrl: string): string | undefined {
     return art ? `${APP_BASE_URL}${art}` : undefined;
 }
 
+/**
+ * The `data.event` of the "does push work at all?" push behind Settings' Test
+ * button (`/api/notificationtest`).
+ *
+ * The one push the service worker displays even when the app is open. Every
+ * other push is deliberately not shown then — the screen updates instead —
+ * which would make a test button press look like a failure every time, since
+ * the person pressing it is by definition looking at the app.
+ *
+ * `public/firebase-messaging-sw.js` has to carry the same string as a literal
+ * (a static worker can't import from here); `serviceWorker.test.ts` holds the
+ * two together.
+ */
+export const NOTIFICATION_TEST_EVENT = 'NotificationTest';
+
+// How long a push is worth delivering for. FCM's web default is four weeks,
+// which is far past the point where "your move" is news: a phone that has been
+// off for a day comes back to a turn it can still take, one that has been off
+// for a month comes back to a game the turn timer has long since moved on.
+const WEB_PUSH_TTL_SECONDS = 24 * 60 * 60;
+
 export interface SendPushOptions {
     /** Which notification channel this push belongs to. The push is skipped for
      *  any user whose preferences disable that channel, or who has turned
@@ -112,6 +133,23 @@ export async function sendPushToUsers(
                     body: notification.body,
                     imageUrl: notification.imageUrl
                 }
+            };
+            // Web push travels through the browser's own push service, which
+            // is free to sit on a normal-urgency message until the device next
+            // wakes for some other reason — minutes to hours on an Android
+            // phone in Doze. Every push this app sends is a turn, an invite or
+            // a result that is worth waking a phone for, so all of them say so.
+            //
+            // Headers are the whole of the useful webpush config here:
+            // `webpush.notification` and `webpush.fcmOptions.link` would both
+            // be inert, because `firebase-messaging-sw.js` strips the
+            // notification payload and builds the notification — and handles
+            // the tap, off `data.link` — itself.
+            message.webpush = {
+                headers: {
+                    Urgency: 'high',
+                    TTL: `${WEB_PUSH_TTL_SECONDS}`,
+                },
             };
             if (notification.imageUrl) {
                 message.apns = { fcmOptions: { imageUrl: notification.imageUrl } };

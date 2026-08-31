@@ -44,7 +44,13 @@ let clerkUsers: User[] = [];
 const games = new Map<string, StoredGame>();
 
 /** Every push a request sent, in the order it sent them. */
-export const sentPushes: { userIds: string[], notification: PushNotification, options?: SendPushOptions }[] = [];
+export const sentPushes: {
+    userIds: string[],
+    /** The `data` payload — `event`, the `link` a tap follows, and the ids. */
+    data: Record<string, string>,
+    notification: PushNotification,
+    options?: SendPushOptions
+}[] = [];
 
 /**
  * Clears every stub's state and re-arms the game store's seam. Call from
@@ -171,8 +177,14 @@ export async function pushNotificationStub() {
     const actual = await vi.importActual<typeof import('@/utils/firebase/pushNotification')>('@/utils/firebase/pushNotification');
     return {
         ...actual,
-        sendPushToUsers: vi.fn(async (users: User[], _data: unknown, notification: PushNotification, options?: SendPushOptions) => {
-            sentPushes.push({ userIds: users.map(user => user.id), notification, options });
+        sendPushToUsers: vi.fn(async (users: User[], data: Record<string, string>, notification: PushNotification, options?: SendPushOptions) => {
+            sentPushes.push({ userIds: users.map(user => user.id), data, notification, options });
+            // The real one answers how many devices it reached, and a route can
+            // branch on that (/api/notificationtest reports it to the player),
+            // so the stub counts the stored tokens rather than answering
+            // undefined and making every such route look like it sent nothing.
+            return users.reduce((reached, user) =>
+                reached + ((user.privateMetadata?.notificationTokens as unknown[] | undefined)?.length ?? 0), 0);
         })
     };
 }

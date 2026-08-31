@@ -44,8 +44,8 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
-                title: "Settings says whether this device will really get notifications",
-                detail: "Allowing notifications was only half of it: a phone can allow them and still quietly fail to sign itself up, and nothing told you. Settings now says where this device stands, with a Try again button if it didn't work — and a ? that explains everything which can stop a notification arriving, including the Android battery and category settings that block them without asking.",
+                title: "Check your notifications actually work",
+                detail: "Allowing notifications was only half of it: a phone can allow them and still quietly fail to sign itself up, and nothing told you. Settings now says where this device stands, has a Send a test notification button that tells you exactly what became of it, and a ? explaining everything which can stop one arriving — including the Android battery and per-app settings that block them without asking.",
             },
             {
                 title: "Every game has a game guide",

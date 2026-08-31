@@ -20,7 +20,7 @@ const SECTIONS: InfoSection[] = [
     },
     {
         heading: "If they stop arriving",
-        body: "Open Async Games once on the device that has gone quiet — that re-registers it, and is usually the whole fix. Then check it appears under Your devices, and that the notification you're expecting is switched on above.",
+        body: "Open Async Games once on the device that has gone quiet — that re-registers it, and is usually the whole fix. Then check it appears under Your devices, that the notification you're expecting is switched on, and press Send a test notification to see whether one can get through.",
     },
     {
         heading: "Your phone can hold them back",
@@ -28,11 +28,11 @@ const SECTIONS: InfoSection[] = [
     },
     {
         heading: "Your phone can also switch them off",
-        body: "Android keeps its own notification settings per app and per category, and an app is never told when one of them is turned off — so notifications can look allowed here and be blocked there. Check Settings › Apps › Async Games › Notifications (or your browser's, if you use the site rather than the app) and make sure the categories are on, including any called Miscellaneous or Default.",
+        body: "Android keeps its own notification settings per app and per category, and an app is never told when one of them is switched off — so notifications can look allowed here and be blocked there. Check Settings › Apps › Notifications for whichever app you play in, and turn every category back on. If you use the site in Chrome rather than the installed app, Chrome adds a switch per website: look for asyncgames.com in Chrome's own notification settings.",
     },
     {
         heading: "Nothing shows while you're looking",
-        body: "A notification isn't shown if you already have Async Games open — the screen just updates instead. That's deliberate, and it means the best test of your setup is to close the app and get someone to take their turn.",
+        body: "A notification isn't shown if you already have Async Games open — the screen just updates instead. That's deliberate. The one exception is the test notification below, which always shows, so pressing it tells you something even with the app in front of you.",
     },
 ];
 

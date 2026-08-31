@@ -218,3 +218,15 @@ export function buildFriendAcceptedNotification(accepterName: string): PushNotif
         body: `You're now friends — challenge them to a game!`
     };
 }
+
+/**
+ * The "does push actually work on this phone?" push, from Settings' Test button
+ * and the dev bench's per-user one. Says which of the two it is, so a player
+ * who finds one in their tray an hour later knows nothing is wrong.
+ */
+export function buildTestNotification(): PushNotification {
+    return {
+        title: "Notifications are working",
+        body: "You asked for a test from Settings — a turn, an invite or a result will arrive just like this."
+    };
+}

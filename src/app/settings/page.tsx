@@ -13,6 +13,7 @@ import InstallOffer from "@/components/ui/InstallOffer";
 import NotificationOffer from "@/components/ui/NotificationOffer";
 import NotificationHelp from "@/components/ui/NotificationHelp";
 import NotificationStatus from "@/components/ui/NotificationStatus";
+import NotificationTestButton from "@/components/ui/NotificationTestButton";
 import ClaimAccountForm from "@/components/ClaimAccountForm";
 import { isGuest } from "@/utils/ui/players";
 import { NotificationChannel, NOTIFICATION_CHANNELS } from "@/utils/firebase/notificationPreferences";
@@ -204,6 +205,15 @@ export default function Settings() {
                                 ariaLabel={`Toggle ${channel.label} notifications`}
                             />
                         ))}
+                    </div>
+                )}
+
+                {/* Last, because it tests what everything above it configured —
+                    and the only thing on this screen that proves the whole path
+                    rather than reporting the app's opinion of it. */}
+                {hasPrefPermission && (
+                    <div style={{ marginTop: 12 }}>
+                        <NotificationTestButton />
                     </div>
                 )}
             </Section>
