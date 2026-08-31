@@ -34,14 +34,19 @@ import { clearAfterCallbacks } from '@/utils/testing/afterStub';
 type GameData = typeof import('@/utils/mongodb/GameData');
 let mongo: typeof import('@/utils/mongodb/mongodb');
 let gameData: GameData;
+let chatMessageData: typeof import('@/utils/mongodb/ChatMessageData');
 let nextServer: typeof import('next/server');
 
 /** A stored game, as the database would hold it: plain, with a version. */
 type StoredGame = Record<string, unknown> & { gameId: string, __v: number };
 
+/** A stored chat message, as the ChatMessage collection would hold it. */
+type StoredChatMessage = { messageId: string, gameId: string, senderId: string, text: string, timestamp: string };
+
 let signedInUserId: string | null = null;
 let clerkUsers: User[] = [];
 const games = new Map<string, StoredGame>();
+const chatMessages: StoredChatMessage[] = [];
 
 /** Every push a request sent, in the order it sent them. */
 export const sentPushes: {
@@ -60,6 +65,7 @@ export const sentPushes: {
 export async function resetApiRouteStubs() {
     mongo = await import('@/utils/mongodb/mongodb');
     gameData = await import('@/utils/mongodb/GameData');
+    chatMessageData = await import('@/utils/mongodb/ChatMessageData');
     nextServer = await import('next/server');
 
     signedInUserId = null;
@@ -67,9 +73,14 @@ export async function resetApiRouteStubs() {
     metadataWrites.length = 0;
     mintedSignInTokens.length = 0;
     games.clear();
+    chatMessages.length = 0;
     clearAfterCallbacks();
     sentPushes.length = 0;
     vi.spyOn(gameData.GameDataModel, 'findOne').mockImplementation(findOneFromStore as GameData['GameDataModel']['findOne']);
+    vi.spyOn(chatMessageData.ChatMessageModel, 'find').mockImplementation(findChatFromStore as typeof chatMessageData.ChatMessageModel.find);
+    // new ChatMessageModel(...).save() lands in the store, so the chat route's
+    // POST writes somewhere a later GET (or a test) can read it back.
+    vi.spyOn(chatMessageData.ChatMessageModel.prototype, 'save').mockImplementation(saveChatToStore);
 }
 
 // ---------------------------------------------------------------- Clerk
@@ -316,6 +327,73 @@ function findOneFromStore(filter: Record<string, unknown>) {
     const stored = games.get(gameId);
     // Enough of a Query for the callers, which all end in .exec().
     return { exec: async () => (stored ? hydrate(stored) : null) };
+}
+
+// ---------------------------------------------------------------- Chat
+
+/** Puts a message in the chat store, as if it had been posted earlier. */
+export function seedChatMessage(message: StoredChatMessage) {
+    chatMessages.push(message);
+}
+
+/** The chat messages the store now holds for a game, oldest-first — what a
+ *  later request (or a test) would read. */
+export function storedChatMessages(gameId: string): StoredChatMessage[] {
+    return chatMessages.filter(message => message.gameId === gameId);
+}
+
+// The one read the chat route makes: find({ gameId }).sort({ timestamp: -1 })
+// .limit(N).exec(). A chainable stand-in for a Query, honouring the sort and
+// limit the route asks for so the "newest N, then reversed" slice is real.
+function findChatFromStore(filter: Record<string, unknown>) {
+    const gameId = filter?.gameId;
+    if (typeof gameId !== 'string' || Object.keys(filter).length !== 1) {
+        throw new Error(`The test chat store only looks messages up by gameId, not ${JSON.stringify(filter)}`);
+    }
+    let results = chatMessages.filter(message => message.gameId === gameId);
+    const query = {
+        // Honours each sort key in order, so a tiebreaker (the route sorts
+        // { timestamp: -1, messageId: -1 }) is exercised, not silently dropped.
+        // JS's own sort is stable, Mongo's is not, so a test that seeds a tie
+        // and asserts an order is only meaningful because the tiebreaker settles
+        // it here the way the index does in production.
+        sort: (spec: Record<string, 1 | -1>) => {
+            const keys = Object.entries(spec);
+            results = [...results].sort((a, b) => {
+                for (const [key, direction] of keys) {
+                    const left = (a as Record<string, string>)[key];
+                    const right = (b as Record<string, string>)[key];
+                    if (left < right) return -direction;
+                    if (left > right) return direction;
+                }
+                return 0;
+            });
+            return query;
+        },
+        limit: (count: number) => {
+            results = results.slice(0, count);
+            return query;
+        },
+        // Hydrated the way the game store hydrates a game — real documents of
+        // the model, so the route reads a UUID `messageId` back the way a real
+        // one would, not the plain string the store keeps for easy assertions.
+        exec: async () => results.map(message => chatMessageData.ChatMessageModel.hydrate(message)),
+    };
+    return query;
+}
+
+// new ChatMessageModel(...).save(): flatten the document down to what the
+// collection stores (a string messageId, whatever the schema cast it to) and
+// keep it. `this` is the document, so this must stay a plain function.
+function saveChatToStore(this: import('@/utils/mongodb/ChatMessageData').IChatMessageDataDocument) {
+    chatMessages.push({
+        messageId: String(this.messageId),
+        gameId: this.gameId,
+        senderId: this.senderId,
+        text: this.text,
+        timestamp: this.timestamp,
+    });
+    return Promise.resolve(this);
 }
 
 // ---------------------------------------------------------------- Requests
