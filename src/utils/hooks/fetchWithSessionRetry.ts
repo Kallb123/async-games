@@ -16,7 +16,10 @@ const AUTH_RETRY_DELAY_MS = 1000;
 //
 // Generous, because the slowest legitimate response here is a cold serverless
 // instance opening its first Mongo connection.
-const REQUEST_TIMEOUT_MS = 20000;
+// Exported because it is the app's answer to "how long is too long", not this
+// helper's: the POSTs that can't use this helper (it only does GETs) still have
+// to time out, and a second number would drift from this one.
+export const REQUEST_TIMEOUT_MS = 20000;
 
 /**
  * Fetches `input`, retrying once after a short delay if the response is a

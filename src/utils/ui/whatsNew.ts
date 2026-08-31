@@ -44,6 +44,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Check your notifications actually work",
+                detail: "Allowing notifications was only half of it: a phone can allow them and still quietly fail to sign itself up, and nothing told you. Settings now says where this device stands, has a Send a test notification button that tells you exactly what became of it, and a ? explaining everything which can stop one arriving — including the Android battery and per-app settings that block them without asking.",
+            },
+            {
                 title: "Every game has a game guide",
                 detail: "Not sure what a phase does or which pile to worry about? A game guide now opens the first time you join a match of Dice Cities, Settlements & Cities, Train Time, World Domination or Outbreak, and any time after that from the ⋮ menu at the top of the board.",
             },
@@ -60,16 +64,16 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 detail: "Setting up an Outbreak game now lets you leave seats open and share a code, so a friend can grab one and play as a guest without an account — the same way the other games already work.",
                 game: "outbreak",
             },
-            {
-                title: "Tapping back to your games starts right away",
-                detail: "Heading home used to leave the tap looking like it hadn't registered for a moment while the page worked out what to show you. It now shows straight away and fills in as it's ready, so nothing feels stuck.",
-            },
         ],
     },
     {
         label: "Bug fixes",
         icon: "🔧",
         items: [
+            {
+                title: "Notifications no longer go missing when the app is open",
+                detail: "With Async Games open — on any screen, in any game — an arriving notification was quietly dropped instead of shown, so a turn could come round with nothing to tell you about it. They now appear whether you're in the app or not.",
+            },
             {
                 title: "Going home keeps you signed in",
                 detail: "Coming back to the home page sometimes showed the sign-in page for visitors instead of your games — and pressing Sign in let you straight through, because you had never actually been signed out. Home now shows your games whenever you're signed in.",
@@ -86,10 +90,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Train Time's scores read properly when you look back",
                 detail: "Stepping back through a Train Time match showed every score, train count and route tally as “NaN”. Reviewing a turn now shows the standings exactly as they stood at the time — and the points and longest-run graphs on a finished match are filled in again.",
                 game: "traintime",
-            },
-            {
-                title: "The name a guest picks is the name everyone sees",
-                detail: "Take a seat as a guest and the name you typed now follows you everywhere — the move you just made, the recap of what you missed, stepping back through the turns, your profile, the reaction you send someone and the “you won” line. They used to show the jumble of letters your account was filed under instead.",
             },
         ],
     },

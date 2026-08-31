@@ -11,6 +11,9 @@ import DevTools from "@/components/DevTools";
 import NotificationDeviceList from "@/components/NotificationDeviceList";
 import InstallOffer from "@/components/ui/InstallOffer";
 import NotificationOffer from "@/components/ui/NotificationOffer";
+import NotificationHelp from "@/components/ui/NotificationHelp";
+import NotificationStatus from "@/components/ui/NotificationStatus";
+import NotificationTestButton from "@/components/ui/NotificationTestButton";
 import ClaimAccountForm from "@/components/ClaimAccountForm";
 import { isGuest } from "@/utils/ui/players";
 import { NotificationChannel, NOTIFICATION_CHANNELS } from "@/utils/firebase/notificationPreferences";
@@ -39,7 +42,7 @@ export default function Settings() {
     const { signOut } = useClerk();
     const router = useRouter();
     const { showToast } = useToast();
-    const { fcmToken } = useFcmToken();
+    const { fcmToken, registration, retryRegistration } = useFcmToken();
     const installMethod = useInstallPrompt();
     // Native shell only — the version of the wrapper, which is not the version
     // of the site it is showing.
@@ -144,7 +147,7 @@ export default function Settings() {
             </div>
 
             {/* Notifications */}
-            <Section label="Notifications">
+            <Section label="Notifications" action={<NotificationHelp />}>
                 {/* The same offer the bottom banner makes, for anyone who
                     dismissed it. Hidden in a browser that cannot receive push. */}
                 {(permission === 'default' || permission === 'denied') && (
@@ -163,8 +166,15 @@ export default function Settings() {
                     </div>
                 )}
 
+                {/* Allowed to show notifications is not the same as able to
+                    receive them — see `NotificationStatus`. Above the switches
+                    because it is the precondition for all of them. */}
                 {hasPrefPermission && (
-                    <div className="ag-list" aria-describedby={prefs && !prefs.enabled ? "notifications-paused-hint" : undefined}>
+                    <NotificationStatus registration={registration} onRetry={retryRegistration} />
+                )}
+
+                {hasPrefPermission && (
+                    <div className="ag-list" style={{ marginTop: 12 }} aria-describedby={prefs && !prefs.enabled ? "notifications-paused-hint" : undefined}>
                         <OptionToggleRow
                             title="All notifications"
                             description="Pause everything, or choose per channel below"
@@ -195,6 +205,15 @@ export default function Settings() {
                                 ariaLabel={`Toggle ${channel.label} notifications`}
                             />
                         ))}
+                    </div>
+                )}
+
+                {/* Last, because it tests what everything above it configured —
+                    and the only thing on this screen that proves the whole path
+                    rather than reporting the app's opinion of it. */}
+                {hasPrefPermission && (
+                    <div style={{ marginTop: 12 }}>
+                        <NotificationTestButton />
                     </div>
                 )}
             </Section>

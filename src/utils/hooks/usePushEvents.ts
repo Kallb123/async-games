@@ -16,6 +16,13 @@ import { useEffect, useRef } from 'react';
  * What they covered is covered without push: `refreshOnVisible` for a tab
  * coming back, and `pollWhileWatching` for a screen somebody is sitting on
  * waiting for something to change.
+ *
+ * The other half of that invariant is the service worker's, and it used not to
+ * hold: the Firebase SDK shows nothing at all while any window of the app is
+ * visible, so a push arriving to an open app displayed nothing however good its
+ * notification was. `firebase-messaging-sw.js` now displays every push itself,
+ * app open or not — so an event reaching a listener below really does mean the
+ * player was told.
  */
 
 /**

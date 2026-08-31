@@ -1,5 +1,10 @@
-importScripts('https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.5.0/firebase-messaging-compat.js');
+// Kept in step with the `firebase` version in package.json by
+// src/utils/firebase/serviceWorker.test.ts. A worker running an SDK several
+// majors behind the page's is a wire format nobody tested together — and the
+// compat bundles are the ones to use here, because a classic service worker
+// (no `type: 'module'`) cannot import the modular build.
+importScripts('https://www.gstatic.com/firebasejs/12.12.1/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/12.12.1/firebase-messaging-compat.js');
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -14,6 +19,47 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 
+/**
+ * Shows the notification a payload asks for.
+ *
+ * Every push the server sends carries a title and a body — `sendPushToUsers`
+ * requires a notification precisely so this can never bail without showing
+ * one — but a push we somehow can't render is still worth a generic row,
+ * because a push that displays nothing counts against the app (see
+ * usePushEvents).
+ */
+function showPushNotification(data) {
+    const { title, body, image, icon, tag, ...rest } = data;
+    return self.registration.showNotification(title || 'Async Games', {
+        body: body || 'Something happened in one of your games.',
+        icon: image || '/icons/icon-192.png', // the app's own mark, for pushes that carry no game art
+        data: rest,
+        // Replace rather than stack: a week away used to mean a column of "Your
+        // move in Train Time" for the same game. The server sets this per kind
+        // and per game (see `tagFor`), so a nudge still arrives beside a turn;
+        // the fallback is only for a payload that somehow arrives without one.
+        tag: tag || 'async-games',
+        // ...but still alert for the replacement, otherwise the newer one lands
+        // silently and the player never learns their turn came round again.
+        renotify: true,
+    });
+}
+
+/**
+ * The push's payload with the `notification` fields folded in beside the `data`
+ * ones — the flat shape `showPushNotification` reads. Undefined for a push
+ * carrying no readable JSON at all (a probe, or a push from something that
+ * isn't us), which is left to the SDK to make what it can of.
+ */
+function readPushData(event) {
+    try {
+        const payload = event.data.json();
+        return { ...payload.data, ...payload.notification };
+    } catch {
+        return undefined;
+    }
+}
+
 class CustomPushEvent extends Event {
     constructor(data) {
         super('push');
@@ -23,22 +69,47 @@ class CustomPushEvent extends Event {
     }
 }
 
-/*
- * Overrides push notification data, to avoid having 'notification' key and firebase blocking
- * the message handler from being called
+/**
+ * Every push shows a notification, whether or not the app is on screen — and
+ * then carries on to the Firebase SDK, so a page that is open still hears about
+ * it and refreshes (`onMessage` → `dispatchPushEvent` → `usePushEvents`).
+ *
+ * Displaying here is not a preference, it is the only place it can happen: the
+ * SDK's own push handler returns early the moment any window of the app is
+ * visible (`hasVisibleClients` in @firebase/messaging), forwarding the payload
+ * to the page and showing nothing at all. So a player with the app open used to
+ * get no notification — not the game they were looking at, not the other three —
+ * and on iOS a push that displays nothing is a "silent push", three of which
+ * cost the app its push subscription outright.
+ *
+ * The `notification` key is still folded into `data` before the SDK sees the
+ * payload, and now for one reason only: it is what stops the SDK showing a
+ * *second* notification of its own in the no-visible-window case. Display
+ * belongs to this file alone — which is also why there is no
+ * `onBackgroundMessage` handler here any more, and why serviceWorker.test.ts
+ * holds this file to exactly one `showNotification` call.
+ *
+ * (The native Android shell is a separate road with the same gap: a push
+ * arriving while the APK is in the foreground is handed to `useCapacitorPush`
+ * and never reaches the tray. Closing that needs a local-notification plugin
+ * and a notification channel, neither of which exists yet.)
  */
-self.addEventListener('push', (e) => {
-    // Skip if event is our own custom event
-    if (e.custom) return;
+self.addEventListener('push', (event) => {
+    // Our own re-dispatch, below — it has already been shown.
+    if (event.custom) return;
 
-    // Kep old event data to override
-    const oldData = e.data;
+    const data = readPushData(event);
+    if (data) {
+        event.waitUntil(showPushNotification(data));
+    }
 
-    // Create a new event to dispatch, pull values from notification key and put it in data key,
-    // and then remove notification key
+    // Keep the old event's data to override.
+    const oldData = event.data;
+
+    // A new event to dispatch, with the values under `notification` moved into
+    // `data` and the `notification` key removed.
     const newEvent = new CustomPushEvent({
         data: {
-            ehheh: oldData.json(),
             json() {
                 const newData = oldData.json();
                 newData.data = {
@@ -49,42 +120,21 @@ self.addEventListener('push', (e) => {
                 return newData;
             },
         },
-        waitUntil: e.waitUntil.bind(e),
+        waitUntil: event.waitUntil.bind(event),
     });
 
-    // Stop event propagation
-    e.stopImmediatePropagation();
+    // Stop event propagation.
+    event.stopImmediatePropagation();
 
-    // Dispatch the new wrapped event
+    // Dispatch the new wrapped event.
     dispatchEvent(newEvent);
 });
 
-const messaging = firebase.messaging();
-
-messaging.onBackgroundMessage((payload) => {
-    console.log('[firebase-messaging-sw.js] Received background message ', payload);
-
-    const { title, body, image, icon, tag, ...restPayload } = payload.data;
-    // Always show something. Every push the server sends carries a title and a
-    // body — `sendPushToUsers` requires a notification precisely so this can
-    // never bail without showing one — but a push we somehow can't render is
-    // still worth a generic row, because a push that displays nothing counts
-    // against the app (see usePushEvents).
-    const notificationOptions = {
-        body: body || 'Something happened in one of your games.',
-        icon: image || '/icons/icon-192.png', // the app's own mark, for pushes that carry no game art
-        data: restPayload,
-        // Replace rather than stack: a week away used to mean a column of "Your
-        // move in Train Time" for the same game. The server sets this per kind
-        // and per game (see `tagFor`), so a nudge still arrives beside a turn;
-        // the fallback is only for a payload that somehow arrives without one.
-        tag: tag || 'async-games',
-        // ...but still alert for the replacement, otherwise the newer one lands
-        // silently and the player never learns their turn came round again.
-        renotify: true,
-    };
-    return self.registration.showNotification(title || 'Async Games', notificationOptions);
-});
+// Registered for its side effect, not for anything we call on it: this is what
+// puts the SDK's own push handler in place, and that handler is what posts an
+// arriving push to the open page so `onMessage` fires there. Without it the app
+// would still show notifications and would stop refreshing itself.
+firebase.messaging();
 
 self.addEventListener('notificationclick', (event) => {
     // close notification after click
