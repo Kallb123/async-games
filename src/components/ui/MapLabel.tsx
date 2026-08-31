@@ -1,7 +1,12 @@
 'use client'
 import React from 'react';
 
-interface MapLabelProps {
+/** Exported because a caller laying labels out needs them as numbers before
+ *  anything is drawn — see `MapLabelLayer`. */
+export const MAP_LABEL_FONT_SIZE = 9;
+export const MAP_LABEL_FONT_WEIGHT = 800;
+
+export interface MapLabelProps {
     x: number;
     y: number;
     textAnchor?: 'start' | 'middle' | 'end';
@@ -23,7 +28,7 @@ interface MapLabelProps {
  * TrainTime's and Outbreak's cities.
  */
 export default function MapLabel({
-    x, y, textAnchor = 'middle', fontSize = 9, fontWeight = 800,
+    x, y, textAnchor = 'middle', fontSize = MAP_LABEL_FONT_SIZE, fontWeight = MAP_LABEL_FONT_WEIGHT,
     fill = '#fff', stroke = 'rgba(0,0,0,0.6)', strokeWidth = 3,
     strokeLinejoin, letterSpacing, children,
 }: MapLabelProps) {

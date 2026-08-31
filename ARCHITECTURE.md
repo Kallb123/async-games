@@ -710,10 +710,14 @@ description or theme colour is exactly what those two files exist to prevent.
     `ListSection` (one holding an animated `ag-list`, its `SkeletonRow`
     placeholders and its empty message). The node-and-edge map boards (World
     Domination, Outbreak) share a kit here too: `BoardZoom`, `ClickableMapNode`,
-    `MapLabel`, and `MapEdges` (the adjacency lines, with cross-map edges drawn
-    as labelled stubs off each map edge rather than a line across the board).
+    `MapLabel`, `MapEdges` (the adjacency lines, with cross-map edges drawn
+    as labelled stubs off each map edge rather than a line across the board) and
+    `MapLabelLayer` (every name a board prints on its art, placed in one pass so
+    that no two names, and no name and marker, overlap — Train Time shares this
+    one as well).
   - `src/utils/ui/` — pure helpers: `games.ts` (per-game metadata: name, art,
-    accent, players), `avatar.ts`, `players.ts`.
+    accent, players), `avatar.ts`, `players.ts`, `mapEdges.ts` and
+    `mapLabels.ts` (the two bits of board geometry the map kit above draws).
   - `src/utils/hooks/` — shared stateful logic (`usePlayerList`, the invite
     picker; `useTurnNavigation`; `useNow`/`useNowToTheMinute`, the shared clock).
 - **Reading the clock.** Components never call `Date.now()` while rendering — not

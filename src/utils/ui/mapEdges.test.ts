@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapEdgeGeometry } from './mapEdges';
+import { mapEdgeGeometry, wrapEdgeLabels, wrapEdgeLabelRects, WRAP_LABEL_FONT_SIZE } from './mapEdges';
 import { TERRITORIES, ADJACENCY as WD_ADJACENCY, BOARD_VIEWBOX as WD_VIEWBOX } from '@/games/WorldDomination/board';
 import { CITIES, ADJACENCY as OB_ADJACENCY, BOARD_VIEWBOX as OB_VIEWBOX } from '@/games/Outbreak/board';
 import { edgeListFrom } from '@/utils/games/adjacencyGraph';
@@ -69,6 +69,69 @@ describe('mapEdgeGeometry', () => {
             ['Manila', 'San Francisco'],
             ['San Francisco', 'Tokyo'],
         ]);
+    });
+});
+
+describe('wrapEdgeLabels', () => {
+    const nodes = [
+        { name: 'Alaska', x: 60, y: 100 },
+        { name: 'Kamchatka', x: 740, y: 140 },
+        { name: 'Peru', x: 200, y: 300 },
+    ];
+
+    it('labels only the wrapping edges, one at each map edge', () => {
+        const labels = wrapEdgeLabels(nodes, [[0, 1], [0, 2]], WIDTH);
+        expect(labels).toHaveLength(2);
+        expect(labels.map(l => l.textAnchor)).toEqual(['start', 'end']);
+    });
+
+    it('names the node round the other side, with the arrow pointing off its own edge', () => {
+        const [left, right] = wrapEdgeLabels(nodes, [[0, 1]], WIDTH);
+        // The left-hand stub leaves through x = 0, so it names the node that
+        // re-enters on the right, and vice versa.
+        expect(left.text).toBe('← Kamchatka');
+        expect(left.x).toBeLessThan(WIDTH / 2);
+        expect(right.text).toBe('Alaska →');
+        expect(right.x).toBeGreaterThan(WIDTH / 2);
+    });
+
+    it('reads the same however the edge pair is ordered', () => {
+        expect(wrapEdgeLabels(nodes, [[1, 0]], WIDTH)).toEqual(wrapEdgeLabels(nodes, [[0, 1]], WIDTH));
+    });
+
+    it('sits both labels at the height the stubs leave the map', () => {
+        const { wrapY } = mapEdgeGeometry(nodes[0], nodes[1], WIDTH);
+        wrapEdgeLabels(nodes, [[0, 1]], WIDTH).forEach(label => {
+            expect(label.y).toBeLessThan(wrapY!);
+            expect(wrapY! - label.y).toBeLessThan(WRAP_LABEL_FONT_SIZE);
+        });
+    });
+
+    it('gives every label on a real board a distinct key, even where one node wraps twice', () => {
+        // San Francisco is the near side of two wrapping edges (↔ Tokyo and
+        // ↔ Manila), so its wording alone does not identify its label.
+        const labels = wrapEdgeLabels(CITIES, edgeListFrom(OB_ADJACENCY), OB_VIEWBOX.width);
+        expect(labels.filter(l => l.text === 'San Francisco →').length).toBeGreaterThan(1);
+        expect(new Set(labels.map(l => l.key)).size).toBe(labels.length);
+    });
+});
+
+describe('wrapEdgeLabelRects', () => {
+    it('boxes each label where it is drawn, inside the board', () => {
+        const nodes = [{ name: 'Alaska', x: 60, y: 100 }, { name: 'Kamchatka', x: 740, y: 140 }];
+        const [left, right] = wrapEdgeLabelRects(nodes, [[0, 1]], WIDTH);
+        expect(left.x).toBeGreaterThanOrEqual(0);
+        expect(right.x + right.width).toBeLessThanOrEqual(WIDTH);
+        expect(left.height).toBe(WRAP_LABEL_FONT_SIZE);
+    });
+
+    it('gives one box per label on both real boards', () => {
+        [[CITIES, OB_ADJACENCY, OB_VIEWBOX.width], [TERRITORIES, WD_ADJACENCY, WD_VIEWBOX.width]].forEach(([nodes, adjacency, width]) => {
+            const typedNodes = nodes as { name: string; x: number; y: number }[];
+            const edges = edgeListFrom(adjacency as number[][]);
+            expect(wrapEdgeLabelRects(typedNodes, edges, width as number))
+                .toHaveLength(wrapEdgeLabels(typedNodes, edges, width as number).length);
+        });
     });
 });
 

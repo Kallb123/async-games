@@ -6,6 +6,7 @@
 // other, not a line slashing across the whole board. This turns one edge into
 // the one or two segments that draw it, and pixels stay here rather than in
 // `adjacencyGraph.ts`, which knows only graph structure.
+import { textRect, type Rect } from "@/utils/ui/mapLabels";
 
 /** Span/width above which an edge is taken to go round the back of the globe.
  *  On today's boards the wrap edges are 79-83% of the width and the longest
@@ -64,4 +65,54 @@ export function mapEdgeGeometry(a: Point, b: Point, width: number): MapEdgeGeome
         ],
         wrapY,
     };
+}
+
+/** Font size the wrap stubs' labels draw at, and how far above the stub they sit. */
+export const WRAP_LABEL_FONT_SIZE = 6;
+const WRAP_LABEL_LIFT = 3;
+const WRAP_LABEL_INSET = 3;
+
+export interface MapWrapLabel {
+    /** Stable per edge and side: one node can be the far side of several
+     *  wrapping edges (San Francisco is Tokyo's and Manila's), so the text
+     *  alone does not identify a label. */
+    key: string;
+    x: number;
+    y: number;
+    /** Names the node round the other side of the map, with an arrow. */
+    text: string;
+    textAnchor: 'start' | 'end';
+}
+
+/**
+ * The pair of labels each wrapping edge needs — one at each map edge its stubs
+ * leave through, naming the node on the far side. Position and wording live
+ * here rather than in `MapEdges` so a board's label layer can be told to keep
+ * its own names off them.
+ */
+export function wrapEdgeLabels(
+    nodes: { name: string; x: number; y: number }[],
+    edges: [number, number][],
+    width: number,
+): MapWrapLabel[] {
+    return edges.flatMap(([a, b]) => {
+        const { wrapY } = mapEdgeGeometry(nodes[a], nodes[b], width);
+        if (wrapY === undefined) return [];
+        const [left, right] = nodes[a].x <= nodes[b].x ? [nodes[a], nodes[b]] : [nodes[b], nodes[a]];
+        const y = wrapY - WRAP_LABEL_LIFT;
+        return [
+            { key: `${left.name}-${right.name}-start`, x: WRAP_LABEL_INSET, y, text: `← ${right.name}`, textAnchor: 'start' as const },
+            { key: `${left.name}-${right.name}-end`, x: width - WRAP_LABEL_INSET, y, text: `${left.name} →`, textAnchor: 'end' as const },
+        ];
+    });
+}
+
+/** Those labels as obstacle boxes, for a board's `MapLabelLayer`. */
+export function wrapEdgeLabelRects(
+    nodes: { name: string; x: number; y: number }[],
+    edges: [number, number][],
+    width: number,
+): Rect[] {
+    return wrapEdgeLabels(nodes, edges, width)
+        .map(label => textRect(label.x, label.y, label.text, WRAP_LABEL_FONT_SIZE, label.textAnchor));
 }

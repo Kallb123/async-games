@@ -158,9 +158,11 @@ export function territoryIdsForContinent(continentId: WorldDominationContinentId
     return TERRITORIES.filter(t => t.continentId === continentId).map(t => t.id);
 }
 
-// Top-left anchor (with padding) for a continent's name+bonus label, derived
-// from the schematic x/y positions above rather than hand-maintained
-// separately.
+// The point a continent's name+bonus label hangs off — up and left of its
+// territories, so the name sits south-east of it — derived from the schematic
+// x/y positions above rather than hand-maintained separately. It is where the
+// label would *like* to be, not where it lands: `MapLabelLayer` moves it if a
+// territory circle, another continent's name or the edge of the board is there.
 const CONTINENT_PADDING = 34;
 export function continentLabelAnchor(continentId: WorldDominationContinentId): { x: number; y: number } {
     const territories = TERRITORIES.filter(t => t.continentId === continentId);
