@@ -1,6 +1,6 @@
 import { readJsonBody } from '@/utils/api/requestBody';
 import { auth, currentUser } from '@clerk/nextjs/server';
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
@@ -155,30 +155,37 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
     // back-and-forth doesn't buzz a phone once a line. The message is stored and
     // shown on the poll either way; only the buzz is suppressed.
     //
-    // Wrapped so nothing here can undo a message that already saved: a push
-    // happens *because* of a message, never the other way round. sendPushToUsers
-    // already swallows its own transport failure; this guards the lookups around
-    // it (usersById, the throttle) so a Clerk or limiter wobble can't turn a
-    // stored line into an error the sender sees (docs/in-game-chat.md §7).
-    try {
-        const recipientIds = gameData.userIdList.filter((id) => id !== userId);
-        const notify: string[] = [];
-        for (const id of recipientIds) {
-            if (await consumeRateLimit('chatPush', `${gameid}:${id}`, 1, 10 * 60_000)) {
-                notify.push(id);
+    // Run after the response has flushed, like the command route's "your move"
+    // push: the Clerk lookups and the FCM fan-out are the slowest part of this
+    // request and none of it is anything the sender is waiting on (they just
+    // want the line stored — the client refetches rather than rendering the
+    // return value). The whole block is guarded, so nothing here can undo a
+    // message that already saved: a push happens *because* of a message, never
+    // the other way round. sendPushToUsers already swallows its own transport
+    // failure; this catches the lookups around it (usersById, currentUser, the
+    // throttle) so a Clerk or limiter wobble stays a missing buzz, not a failed
+    // request (docs/in-game-chat.md §7).
+    after(async () => {
+        try {
+            const recipientIds = gameData.userIdList.filter((id) => id !== userId);
+            const notify: string[] = [];
+            for (const id of recipientIds) {
+                if (await consumeRateLimit('chatPush', `${gameid}:${id}`, 1, 10 * 60_000)) {
+                    notify.push(id);
+                }
             }
+            if (notify.length) {
+                const senderName = readableName(await currentUser());
+                await sendPushToUsers(await usersById(notify), {
+                    event: 'ChatMessage',
+                    gameId: gameid,
+                    link: gameNotificationLink(gameData.gameType.url, gameid),
+                }, buildChatNotification(senderName, gameData, message), { channel: 'chat' });
+            }
+        } catch (error) {
+            console.error(`Failed to send chat push for game ${gameid}`, error);
         }
-        if (notify.length) {
-            const senderName = readableName(await currentUser());
-            await sendPushToUsers(await usersById(notify), {
-                event: 'ChatMessage',
-                gameId: gameid,
-                link: gameNotificationLink(gameData.gameType.url, gameid),
-            }, buildChatNotification(senderName, gameData, message), { channel: 'chat' });
-        }
-    } catch (error) {
-        console.error(`Failed to send chat push for game ${gameid}`, error);
-    }
+    });
 
     // The stored message, for the route test to assert on. The client refetches
     // rather than rendering this directly — one source of truth, no optimistic

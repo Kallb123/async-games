@@ -22,6 +22,7 @@ vi.mock('@/utils/rateLimit', async () => (await import('@/utils/testing/apiRoute
 
 import { consumeRateLimit } from '@/utils/rateLimit';
 import { sendPushToUsers } from '@/utils/firebase/pushNotification';
+import { runAfterCallbacks } from '@/utils/testing/afterStub';
 import {
     ANN, BOB, get, jsonPost, rawPost, resetApiRouteStubs, seedChatMessage, seedSnakesAndLadders,
     sentPushes, signIn, storedChatMessages, stubClerkUsers
@@ -178,6 +179,9 @@ describe('POST /api/game/[gameid]/chat', () => {
         seedSnakesAndLadders();
 
         await postChatTo('game_1', { text: 'your move' });
+        // The push is scheduled with after(), so it runs once the response has
+        // flushed — the sender waits on none of it (§7). Drive that work here.
+        await runAfterCallbacks();
 
         expect(sentPushes).toHaveLength(1);
         const push = sentPushes[0];
@@ -201,6 +205,7 @@ describe('POST /api/game/[gameid]/chat', () => {
         vi.mocked(consumeRateLimit).mockImplementation(async (action) => action !== 'chatPush');
 
         const response = await postChatTo('game_1', { text: 'and another' });
+        await runAfterCallbacks();
 
         expect(response.status).toBe(200);
         expect(storedChatMessages('game_1')).toHaveLength(1);
@@ -211,7 +216,8 @@ describe('POST /api/game/[gameid]/chat', () => {
 
     it('keeps the message even when the push blows up', async () => {
         // The push happens because of the message, never the other way round: a
-        // Firebase or Clerk wobble must not turn a stored line into a 500 (§7).
+        // Firebase or Clerk wobble must not turn a stored line into a 500, and
+        // must not escape the after() callback either (§7).
         signIn(ANN);
         stubClerkUsers(BOB);
         seedSnakesAndLadders();
@@ -221,6 +227,11 @@ describe('POST /api/game/[gameid]/chat', () => {
 
         expect(response.status).toBe(200);
         expect((await response.json()).message.text).toBe('still here');
+        expect(storedChatMessages('game_1')).toHaveLength(1);
+        // The scheduled push rejects, but its guard swallows it — running the
+        // post-response work resolves rather than throwing, and the stored
+        // message is untouched.
+        await expect(runAfterCallbacks()).resolves.toBe(1);
         expect(storedChatMessages('game_1')).toHaveLength(1);
     });
 
