@@ -19,7 +19,7 @@ export function recordGuestMoved(): void {
     if (readStoredValue(STORAGE_KEY) === '1') return;
     // Writing nudges every mounted useGuestMoved (the bottom banner), so the
     // offer can appear without a page reload — even if the store refused the
-    // write and it lasts only for this tab's session.
+    // write and the flag lasts only as long as this page.
     writeStoredValue(STORAGE_KEY, '1');
 }
 
