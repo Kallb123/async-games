@@ -275,7 +275,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     }
 
     return (
-        <GameShell title="World Domination" subtitle={subtitle} options={gs ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true }}>
+        <GameShell title="World Domination" subtitle={subtitle} options={gs ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true }} chat={{ gameId, userIdList, usernameList }}>
             <FcmTokenComp />
 
             {gameGuide.open && <GameGuideModal guide={worldDominationGuide} onClose={gameGuide.closeGuide} />}

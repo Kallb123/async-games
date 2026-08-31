@@ -4,6 +4,17 @@ import Link from 'next/link';
 import BackArrow from '@/components/ui/BackArrow';
 import GameOptionsMenu, { GameOption } from '@/components/ui/GameOptionsMenu';
 import MatchHistory, { MatchHistoryProps } from '@/components/games/MatchHistory';
+import GameChat from '@/components/games/GameChat';
+import { useGameChat } from '@/utils/hooks/useGameChat';
+
+/** What a game hands `GameShell`'s `chat` prop: the game and its roster. The
+ *  roster pair (parallel arrays, seat order) is how a message gets a name and a
+ *  colour, since the response carries only `senderId` (docs/in-game-chat.md §5). */
+export interface GameShellChat {
+    gameId: string;
+    userIdList: string[];
+    usernameList: string[];
+}
 
 interface GameShellProps {
     /** Game name shown in the top bar. */
@@ -24,6 +35,10 @@ interface GameShellProps {
     /** The game's match-history log, behind the shell's own toggle. Omitted
      *  renders neither the toggle nor the panel. */
     log?: MatchHistoryProps;
+    /** The game's chat thread. Omitted — or a single-seat game, where the roster
+     *  has fewer than two players — renders no 💬 button and no panel, which is
+     *  how Solitaire gets no chat without being named here. */
+    chat?: GameShellChat;
     /** Extra class on the shell root, for a game that re-tints the chrome
      *  (Train Time's oxblood-and-brass rail livery). */
     className?: string;
@@ -45,9 +60,21 @@ interface GameShellProps {
  * options menu from `options` rather than taking a finished one — a row it owns
  * has to go in a list it can reach. This used to be three pasted pieces in each
  * of the eight board screens.
+ *
+ * It owns the chat thread the same way: a game passes its roster in `chat` and
+ * gets the 💬 button (with its unread dot) and the panel below the board. The
+ * fetch lives here, in `useGameChat`, and not in the panel, because the dot has
+ * to know about messages while the panel is shut. A game with fewer than two
+ * players passes no `chat`, or a roster too short to talk to, and gets neither.
  */
-export default function GameShell({ title, subtitle, backHref = '/', options, right, syncing = false, log, className = '', children }: GameShellProps) {
+export default function GameShell({ title, subtitle, backHref = '/', options, right, syncing = false, log, chat, className = '', children }: GameShellProps) {
     const [showLog, setShowLog] = useState(false);
+    const [showChat, setShowChat] = useState(false);
+
+    // A game with fewer than two players (Solitaire) has no thread to read, so
+    // the hook mounts but never fetches, and no button or panel renders.
+    const hasChat = !!chat && chat.userIdList.length >= 2;
+    const chatState = useGameChat(chat?.gameId ?? '', showChat, hasChat);
 
     const shellOptions: GameOption[] = log ? [{
         key: 'history',
@@ -71,10 +98,35 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
                         SENDING
                     </span>
                 )}
+                {hasChat && (
+                    <button
+                        type="button"
+                        className={`ag-game-topbar-btn${showChat ? ' ag-game-topbar-btn--on' : ''}`}
+                        onClick={() => setShowChat(v => !v)}
+                        aria-label="Chat"
+                        aria-pressed={showChat}
+                    >
+                        💬
+                        {/* An unread dot can't be seen inside a closed kebab menu,
+                            which is why chat is a button and not a menu row. */}
+                        {chatState.hasUnread && <span className="ag-topbar-dot" aria-hidden />}
+                    </button>
+                )}
                 {right ?? (options && <GameOptionsMenu options={[...shellOptions, ...options]} />)}
             </div>
             {children}
             {log && showLog && <MatchHistory {...log} />}
+            {hasChat && showChat && chat && (
+                <GameChat
+                    messages={chatState.messages}
+                    isLoading={chatState.isLoading}
+                    isRefreshing={chatState.isRefreshing}
+                    sending={chatState.sending}
+                    send={chatState.send}
+                    userIdList={chat.userIdList}
+                    usernameList={chat.usernameList}
+                />
+            )}
         </div>
     );
 }

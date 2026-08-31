@@ -57,8 +57,15 @@ const NO_EVENTS: readonly string[] = [];
 export function useRefreshableData<T>(
     url: string,
     events: readonly string[] = NO_EVENTS,
-    options: Pick<PushEventsOptions, 'pollWhileWatching'> = {}
+    options: Pick<PushEventsOptions, 'pollWhileWatching'> & {
+        /** Skip fetching entirely while false — for a hook that mounts before it
+         *  has an endpoint worth reading (the chat shell on a single-seat game,
+         *  which has no thread). `data` stays null and `isLoading` stays true, so
+         *  a caller that only renders once enabled never sees a stale flag. */
+        enabled?: boolean;
+    } = {}
 ): RefreshableData<T> {
+    const { pollWhileWatching, enabled = true } = options;
     const { isAuthorised } = useIsAuthorised();
     const [data, setData] = useState<T | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -79,7 +86,7 @@ export function useRefreshableData<T>(
     }, []);
 
     const refresh = useCallback(async () => {
-        if (!isAuthorised) {
+        if (!isAuthorised || !enabled) {
             return;
         }
         if (inFlightRef.current) {
@@ -117,13 +124,13 @@ export function useRefreshableData<T>(
                 setIsRefreshing(false);
             }
         }
-    }, [url, isAuthorised]);
+    }, [url, isAuthorised, enabled]);
 
     useEffect(() => {
         refresh();
     }, [refresh]);
 
-    usePushEvents(events, refresh, { refreshOnVisible: true, ...options });
+    usePushEvents(events, refresh, { refreshOnVisible: true, pollWhileWatching });
 
     return { data, isLoading, isRefreshing, status, refresh };
 }

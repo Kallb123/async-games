@@ -60,6 +60,14 @@ export const FRIEND_EVENTS = ['FriendInvite', 'FriendAccepted'] as const;
 export const COMPLETED_GAME_EVENTS = ['GameOver'] as const;
 
 /**
+ * Push events that mean a new chat message has landed in a game the player is
+ * in — just `ChatMessage`, sent by `/api/game/[gameid]/chat` to the other
+ * players. The board's chat hook re-reads the thread on it, so a closed panel
+ * still learns there is something unread while its shell stays mounted.
+ */
+export const CHAT_EVENTS = ['ChatMessage'] as const;
+
+/**
  * Everything that changes the home screen: an invite arriving, the turn moving,
  * a game finishing. One set because the dashboard is now one read — see
  * `buildDashboard` for why its five lists are no longer five subscriptions.

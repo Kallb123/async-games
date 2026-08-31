@@ -324,7 +324,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     }
 
     return (
-        <GameShell title="Settlements & Cities" subtitle={subtitle} options={gs ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true }}>
+        <GameShell title="Settlements & Cities" subtitle={subtitle} options={gs ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true }} chat={{ gameId, userIdList, usernameList }}>
             <FcmTokenComp />
 
             {gameGuide.open && <GameGuideModal guide={settlementsAndCitiesGuide} onClose={gameGuide.closeGuide} />}

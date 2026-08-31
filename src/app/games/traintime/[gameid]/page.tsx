@@ -347,6 +347,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
             options={gs ? menuOptions : undefined}
             syncing={submitting}
             log={{ entries: nav.displayedHistory, userIdList }}
+            chat={{ gameId, userIdList, usernameList }}
             className="ag-game--traintime"
         >
             <FcmTokenComp />

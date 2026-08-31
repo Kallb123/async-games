@@ -179,7 +179,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     }
 
     return (
-        <GameShell title="Dice Cities" subtitle={subtitle} options={displayed ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList }}>
+        <GameShell title="Dice Cities" subtitle={subtitle} options={displayed ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList }} chat={{ gameId, userIdList, usernameList }}>
             <FcmTokenComp />
 
             {gameGuide.open && <GameGuideModal guide={diceCitiesGuide} onClose={gameGuide.closeGuide} />}
