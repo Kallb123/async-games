@@ -11,8 +11,10 @@ import WorldDominationActions from "@/games/WorldDomination/components/WorldDomi
 import GameShell from "@/components/ui/GameShell";
 import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
+import GameGuideModal from "@/components/ui/GameGuideModal";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
+import { guide as worldDominationGuide } from "@/games/WorldDomination/guide";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
@@ -20,6 +22,7 @@ import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
+import { useGameGuide } from "@/utils/hooks/useGameGuide";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
@@ -56,6 +59,10 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     const nav = useTurnNavigation<IWorldDominationSpecificGameStateResponse>(gameId, live);
     const recap = useTurnRecap(gameId);
     const { endGame } = useEndGame(gameId);
+
+    // The "how to play" popup: shown automatically the first time this account
+    // opens a World Domination match, and on demand from the game-options menu.
+    const gameGuide = useGameGuide('worlddomination');
 
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
@@ -219,6 +226,12 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
             active: showLog,
             onClick: () => setShowLog(v => !v),
         },
+        {
+            key: 'guide',
+            label: 'Game guide',
+            icon: '📖',
+            onClick: gameGuide.openGuide,
+        },
         ...(!complete ? [{
             key: 'end',
             label: 'End game',
@@ -274,6 +287,8 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     return (
         <GameShell title="World Domination" subtitle={subtitle} right={optionsMenu} syncing={submitting}>
             <FcmTokenComp />
+
+            {gameGuide.open && <GameGuideModal guide={worldDominationGuide} onClose={gameGuide.closeGuide} />}
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 

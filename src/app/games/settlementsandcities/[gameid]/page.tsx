@@ -13,8 +13,10 @@ import SettlementsAndCitiesBoard from "@/games/SettlementsAndCities/components/S
 import SettlementsAndCitiesActions, { SACBoardMode } from "@/games/SettlementsAndCities/components/SettlementsAndCitiesActions";
 import GameShell from "@/components/ui/GameShell";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
+import GameGuideModal from "@/components/ui/GameGuideModal";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
+import { guide as settlementsAndCitiesGuide } from "@/games/SettlementsAndCities/guide";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
@@ -22,6 +24,7 @@ import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
+import { useGameGuide } from "@/utils/hooks/useGameGuide";
 import { useSubmitCommand, type SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, nameForUserId } from "@/utils/ui/players";
@@ -87,6 +90,10 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     // show the recap intro before the board. Dismissing (or the CTA) reveals it.
     const recap = useTurnRecap(gameId);
     const { endGame } = useEndGame(gameId);
+
+    // The "how to play" popup: shown automatically the first time this account
+    // opens a Settlements & Cities match, and on demand from the game-options menu.
+    const gameGuide = useGameGuide('settlementsandcities');
 
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
@@ -297,6 +304,12 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             active: showLog,
             onClick: () => setShowLog(v => !v),
         },
+        {
+            key: 'guide',
+            label: 'Game guide',
+            icon: '📖',
+            onClick: gameGuide.openGuide,
+        },
         ...(!complete ? [{
             key: 'end',
             label: 'End game',
@@ -323,6 +336,8 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     return (
         <GameShell title="Settlements & Cities" subtitle={subtitle} right={optionsMenu} syncing={submitting}>
             <FcmTokenComp />
+
+            {gameGuide.open && <GameGuideModal guide={settlementsAndCitiesGuide} onClose={gameGuide.closeGuide} />}
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 

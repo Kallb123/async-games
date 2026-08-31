@@ -44,9 +44,8 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
-                title: "Outbreak has a game guide",
-                detail: "Not sure what a phase does or which cube pile to worry about? A game guide now opens the first time you join an Outbreak match, and any time after that from the ⋮ menu at the top of the board.",
-                game: "outbreak",
+                title: "Every game has a game guide",
+                detail: "Not sure what a phase does or which pile to worry about? A game guide now opens the first time you join a match of Dice Cities, Settlements & Cities, Train Time, World Domination or Outbreak, and any time after that from the ⋮ menu at the top of the board.",
             },
             {
                 title: "Your cards stay on screen between your turns",

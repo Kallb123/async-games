@@ -8,10 +8,12 @@ import { uuidString } from "@/utils/apiModels/GameDataApi";
 import GameShell from "@/components/ui/GameShell";
 import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
 import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
+import GameGuideModal from "@/components/ui/GameGuideModal";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import DiceCitiesBoard from "@/games/DiceCities/components/DiceCitiesBoard";
 import DiceCitiesActions from "@/games/DiceCities/components/DiceCitiesActions";
+import { guide as diceCitiesGuide } from "@/games/DiceCities/guide";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
@@ -19,6 +21,7 @@ import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
+import { useGameGuide } from "@/utils/hooks/useGameGuide";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { landmarkCount } from "@/games/DiceCities/ui";
 import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
@@ -56,6 +59,10 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     // show the recap intro before the board. Dismissing (or the CTA) reveals it.
     const recap = useTurnRecap(gameId);
     const { endGame } = useEndGame(gameId);
+
+    // The "how to play" popup: shown automatically the first time this account
+    // opens a Dice Cities match, and on demand from the game-options menu.
+    const gameGuide = useGameGuide('dicecities');
 
     const displayed = nav.displayedState;
     const complete = nav.displayedComplete;
@@ -153,6 +160,12 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
             active: showLog,
             onClick: () => setShowLog(v => !v),
         },
+        {
+            key: 'guide',
+            label: 'Game guide',
+            icon: '📖',
+            onClick: gameGuide.openGuide,
+        },
         ...(!complete ? [{
             key: 'end',
             label: 'End game',
@@ -179,6 +192,8 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     return (
         <GameShell title="Dice Cities" subtitle={subtitle} right={optionsMenu} syncing={submitting}>
             <FcmTokenComp />
+
+            {gameGuide.open && <GameGuideModal guide={diceCitiesGuide} onClose={gameGuide.closeGuide} />}
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 
