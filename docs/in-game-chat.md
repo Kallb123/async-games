@@ -37,7 +37,7 @@ routes, one shared panel and one push channel, hung off things already built:
 | Shared game chrome | `src/components/ui/GameShell.tsx` | Where the chat button and panel mount — **once**, not once per game. See §6. |
 | The thread's rows | `src/components/ui/RecapTimeline.tsx`, `src/components/games/MatchHistory.tsx` | The message list. A chat thread is the recap timeline at a third size, not new markup. See §6. |
 | Per-browser storage | `src/utils/hooks/useDismissibleBanner.ts` | The unread read-marker, once its swallowed `localStorage` access is extracted. See §6. |
-| Name resolution | `src/utils/users/clerk.ts` (`userIdListToUserIdNameMap`) | One Clerk call per response; no name is ever stored on a message. |
+| Name resolution | the game response the board already holds (`usernameList` / `userIdList`) | No name is stored on a message, and none is resolved by the chat route either — see §5. |
 
 One piece of history worth knowing: `notificationPreferences.ts` opens with a
 comment saying a `chat` channel used to sit in the list **with nothing sending
@@ -97,12 +97,14 @@ in `CreateDataResponse`:
 
 Three properties fall out of the schema:
 
-- **No `senderUsername`.** Names are resolved live from Clerk on the way out
-  (`ARCHITECTURE.md` §5, `docs/dynamic-names.md`): a player who renames renames
-  everywhere, including in messages they sent last week. `ReactionData` freezes
-  a name only because it needs one to build a push for a *recipient* it may not
-  otherwise resolve; the chat push is built from `currentUser()`, who is right
-  there.
+- **No `senderUsername`.** A message stores who sent it, never what they were
+  called (`ARCHITECTURE.md` §5, `docs/dynamic-names.md`): a player who renames
+  renames everywhere, including in messages they sent last week. The name is put
+  back on at the very last moment — by the client, from the roster the board
+  already holds (§5) — so chat resolves no names of its own at all.
+  `ReactionData` freezes a name only because it needs one to build a push for a
+  *recipient* it may not otherwise resolve; the chat push is built from
+  `currentUser()`, who is right there.
 - **The index is the read.** One query — `find({ gameId }).sort({ timestamp: -1
   }).limit(N)` — served entirely by `{ gameId: 1, timestamp: -1 }`.
 - **`messageId` is a v4 UUID**, so the client has a stable React key and an
@@ -167,20 +169,35 @@ folder shape as the existing `[gameid]/reaction` and `[gameid]/recap` routes.
 2. `dbConnect()`, load the game by `gameId` — 404 if missing.
 3. **`gameData.userIdList.includes(userId)` — 403 otherwise.** This is the whole
    access control for chat, so it is the line to get right.
-4. Read the newest `CHAT_PAGE_SIZE = 50` messages, reverse to oldest-first.
-5. Resolve the roster once with `userIdListToUserIdNameMap(gameData.userIdList)`
-   — every sender is a player, so there is no second Clerk call.
+4. Read the newest `CHAT_PAGE_SIZE = 50` messages, reverse to oldest-first, and
+   return them. **No name resolution here** — see below.
 
 ```ts
 export interface IChatMessageResponse {
     messageId: string;
-    senderId: string;    // stable key: the client colours by seat, not by name
-    senderName: string;  // resolved live
+    senderId: string;    // the client already knows this game's roster
     text: string;
     timestamp: string;
 }
 export interface IChatResponse { success: boolean; messages: IChatMessageResponse[]; }
 ```
+
+**Why the response carries no `senderName`.** The obvious version of this route
+resolves the roster with `userIdListToUserIdNameMap(gameData.userIdList)`, the
+way every `CreateDataResponse` does. That is an uncached Clerk lookup per
+request — and this endpoint is *polled* every 10 seconds while the panel is
+open, per watching player, which would make a quiet conversation the app's
+chattiest Clerk caller.
+
+It buys nothing, because the board screen already has the answer: `usernameList`
+and `userIdList` come back from `/api/game/[gameid]` positionally aligned, and
+the client hands both to the panel (§6). Every sender is a player in this game,
+so the roster names all of them. The poll is then one indexed Mongo query and no
+Clerk call at all, and names still track a rename — the game response resolves
+them live and refetches on its own events.
+
+This is not the frozen-name trap §3 avoids: nothing is *stored*, and nothing
+stale is sent. The name simply arrives by the road it was already travelling.
 
 Note for a croupier pass: the response carries nothing from `specificGameState`
 and nothing derived from it. Chat lives in its own collection precisely so it
@@ -233,8 +250,10 @@ same picture as a match history:
   are the same component". A chat thread is the third size: `dotColour` from
   `playerColourForId(senderId, userIdList)` — so a player is one colour on the
   board, the scoreboard, the log and the thread — `title` the message text, and
-  `detail` the sender's name and `formatRelativeTime(timestamp,
-  useNowToTheMinute())`, which is precisely the call `TurnRecap` already makes.
+  `detail` the sender's name (`nameForUserId`-style lookup across the
+  `userIdList` / `usernameList` pair the panel is handed, since the response
+  carries no name — §5) and `formatRelativeTime(timestamp, useNowToTheMinute())`,
+  which is precisely the call `TurnRecap` already makes.
   No `Avatar`: the GET carries no image URL, so every badge would fall back to
   initials, and the coloured dot is already how this app says whose line it is;
 - the composer: an `.ag-input` and an `.ag-btn ag-btn--primary`, disabled while
@@ -303,8 +322,9 @@ optional props, and the second one is what makes this change a net deletion:
 ```tsx
 interface GameShellProps {
     …
-    /** The game's chat thread. Omitted (or a single-seat game) renders none. */
-    chat?: { gameId: string; userIdList: string[] };
+    /** The game's chat thread. Omitted (or a single-seat game) renders none.
+     *  The roster pair is how a message gets a name and a colour (§5). */
+    chat?: { gameId: string; userIdList: string[]; usernameList: string[] };
     /** The match-history log, behind the shell's own toggle. */
     log?: { entries: IHistoryEntry[]; userIdList?: string[]; oldestFirst?: boolean };
 }
@@ -323,13 +343,14 @@ interface GameShellProps {
 - the `log` toggle as a `GameOption`, and `<MatchHistory>` below the children —
   the same markup, moved once instead of pasted eight times.
 
-Nothing chat-shaped renders when `chat` is absent or `userIdList.length < 2` —
+All three values are already in scope on every board screen. Nothing
+chat-shaped renders when `chat` is absent or `userIdList.length < 2` —
 which is how Solitaire gets no chat button without Solitaire being named
 anywhere. Solitaire still passes `log`, so it is **seven** chat wirings and
 eight log wirings. Per screen:
 
 ```tsx
-<GameShell … chat={{ gameId, userIdList }} log={{ entries: nav.displayedHistory, userIdList }}>
+<GameShell … chat={{ gameId, userIdList, usernameList }} log={{ entries: nav.displayedHistory, userIdList }}>
 ```
 
 and each screen deletes its `showLog` state, its history menu row and its render
@@ -391,6 +412,38 @@ question, and it reuses the limiter rather than adding a scheduler.
 Every push here carries a real notification, so it does not touch the
 "data-only pushes cost an iOS player their subscription" invariant documented in
 `usePushEvents.ts`.
+
+### What the toggle turns off — and what it doesn't
+
+Worth stating plainly, because the answer is a design property rather than an
+accident: **turning the `chat` channel off costs a player the interruption, not
+the messages.**
+
+`isChannelEnabled` is checked inside `sendPushToUsers`, per recipient, at send
+time. The message is stored either way, and every read path is independent of
+push:
+
+- opening the board fetches the thread — `useGameChat` mounts in `GameShell`,
+  so the GET fires on every board open whatever the preferences say;
+- returning to the tab refetches it — `useRefreshableData` always passes
+  `refreshOnVisible: true`; it is hardcoded, not a caller option;
+- an open panel polls every ten seconds (`pollWhileWatching`), which needs no
+  push at all.
+
+So a muted player still sees the unread dot when they next open that game, and
+still watches a live conversation if they sit in it.
+
+This is not only the muted-player path. Because the push above is throttled to
+one per recipient per game per ten minutes, **the poll is the primary liveness
+mechanism for an open thread even with the channel on** — during a
+back-and-forth, everyone's open panel is being kept current by the poll and by
+nothing else. Push's job is strictly "you are not looking at this screen".
+
+The real gap is that a muted player gets no signal *outside* the board screen:
+the dashboard shows no unread count, so they find messages by opening the game.
+Defensible for someone who deliberately muted it, and it is the strongest
+argument for pulling phase 2's server-side read marker forward — that, not the
+transport, is what would give a muted player a passive signal.
 
 ---
 
@@ -470,7 +523,8 @@ standing beside a shell that has just learned to own a panel.
   Deliberately not in phase 1 — fifty messages is a long conversation for a
   game, and a cursor nobody has hit the end of is speculative work.
 - Server-side read markers, which is what an unread count on the dashboard
-  game rows would need.
+  game rows would need — and the one thing that would give a player who has
+  muted the channel a signal outside the board screen (§7).
 - A "somebody messaged" line in the "since you were last here" recap.
 
 **Phase 3 — only if the product goes there.** Blocking, reporting and anything
@@ -488,8 +542,9 @@ decision is waiting on.
   over-length, non-string, blank-line collapsing). A route test in the
   `src/app/api/game/gameRoutes.test.ts` style covering: a non-player gets 403 on
   both verbs, an over-length body gets 400, the rate limit gets 429, a guest
-  gets refused, a stored message comes back with the sender's *current* name
-  (rename between the POST and the GET), and the sender gets no push.
+  gets refused, a stored message comes back carrying a `senderId` and **no**
+  name (the guard against the frozen-name trap creeping back in), and the sender
+  gets no push.
 - **Reviews**, per `AGENTS.md`: `locksmith` and `gremlin` on the routes,
   `caveman` on the panel and the `GameShell` change, `rulebook` on the
   registry/upkeep edits (channel list, `usePushEvents`, account deletion,
