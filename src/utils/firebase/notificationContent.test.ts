@@ -8,6 +8,7 @@ const buildEventFeed = vi.hoisted(() => vi.fn());
 vi.mock('@/utils/games/recap', () => ({ buildEventFeed }));
 
 import {
+    buildChatNotification,
     buildFriendAcceptedNotification,
     buildFriendInviteNotification,
     buildGameInviteNotification,
@@ -186,6 +187,19 @@ describe('other push copy', () => {
     it('puts the time left in the expiry warning title', () => {
         const push = buildTurnExpiringNotification(game(), '10 minutes');
         expect(push.title).toBe('⏳ 10 minutes left in Snakes and Ladders');
+    });
+
+    it('names the sender and game, with the message itself as the body', () => {
+        const push = buildChatNotification('Priya', game(), 'good game, well played');
+        expect(push.title).toBe('Priya in Snakes and Ladders');
+        expect(push.body).toBe('good game, well played');
+    });
+
+    it('truncates a long message the way every game push does', () => {
+        const push = buildChatNotification('Priya', game(), 'x'.repeat(200));
+        // Bounded by MAX_BODY_LENGTH (140) via the shared truncate — a runaway
+        // line never becomes a wall of text on the platforms that wrap.
+        expect(push.body!.length).toBeLessThanOrEqual(140);
     });
 
     it('says which move a reaction landed on', () => {
