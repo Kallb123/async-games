@@ -6,7 +6,7 @@ import { useState } from "react";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ISmartthinkGameDataResponse } from "@/games/Smartthink/apiModels";
 import GameShell from "@/components/ui/GameShell";
-import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
+import { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import SmartthinkBoard from "@/games/Smartthink/components/SmartthinkBoard";
@@ -20,7 +20,6 @@ import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import type { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
 import { SMARTTHINK_CODE_LENGTH } from "@/games/Smartthink/ui";
 import { abandonedGameStatus } from "@/utils/ui/players";
-import MatchHistory from "@/components/games/MatchHistory";
 
 const PLAYER_COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c"];
 const emptyGuess = (): (number | null)[] => Array(SMARTTHINK_CODE_LENGTH).fill(null);
@@ -30,7 +29,6 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
     console.log(`GET ${pathName}`);
     const { user } = useAuthGuard();
     const [currentGuess, setCurrentGuess] = useState<(number | null)[]>(emptyGuess());
-    const [showLog, setShowLog] = useState(false);
 
     const { gameid } = use(params);
     const gameId = gameid;
@@ -111,13 +109,6 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
     const showCurrentRow = isMyTurn && isCodeBreaker && (displayed?.secretCodeSet ?? false);
 
     const menuOptions: GameOption[] = [
-        {
-            key: 'history',
-            label: 'Turn history',
-            icon: '📜',
-            active: showLog,
-            onClick: () => setShowLog(v => !v),
-        },
         ...(!complete ? [{
             key: 'end',
             label: 'End game',
@@ -126,10 +117,9 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
             onClick: endGame,
         }] : []),
     ];
-    const optionsMenu = displayed ? <GameOptionsMenu options={menuOptions} /> : undefined;
 
     return (
-        <GameShell title="Smartthink" subtitle={subtitle} right={optionsMenu} syncing={submitting}>
+        <GameShell title="Smartthink" subtitle={subtitle} options={displayed ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true }}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
@@ -170,10 +160,6 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
             )}
 
             <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} userIdList={userIdList} />
-
-            {showLog && (
-                <MatchHistory entries={nav.displayedHistory} userIdList={userIdList} oldestFirst />
-            )}
         </GameShell>
     );
 }

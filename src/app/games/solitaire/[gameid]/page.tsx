@@ -1,11 +1,11 @@
 'use client'
-import { use, useState } from "react";
+import { use } from "react";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { usePathname } from "next/navigation";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { SolitaireDraw, SolitaireMoveCard, SolitaireUndo, SolitaireAutoSolve } from "@/utils/apiModels/GameLogic";
 import GameShell from "@/components/ui/GameShell";
-import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
+import { GameOption } from "@/components/ui/GameOptionsMenu";
 import Stat from "@/components/ui/Stat";
 import ActionButton from "@/components/ui/ActionButton";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
@@ -18,13 +18,11 @@ import { ISolitaireGameDataResponse } from "@/games/Solitaire/apiModels";
 import { SolitaireZoneRef, getLegalMoves, hasHiddenTableauCards, foundationCardCount, formatDuration } from "@/games/Solitaire/rules";
 import SolitaireBoard from "@/games/Solitaire/components/SolitaireBoard";
 import SolitaireVictoryScreen from "@/games/Solitaire/components/SolitaireVictoryScreen";
-import MatchHistory from "@/components/games/MatchHistory";
 
 export default function GameSolitaire({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
     const { user } = useAuthGuard();
-    const [showLog, setShowLog] = useState(false);
     const { showToast } = useToast();
 
     const { gameid } = use(params);
@@ -79,13 +77,6 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
     }
 
     const menuOptions: GameOption[] = [
-        {
-            key: 'history',
-            label: 'Turn history',
-            icon: '📜',
-            active: showLog,
-            onClick: () => setShowLog(v => !v),
-        },
         ...(!complete ? [{
             key: 'end',
             label: 'End game',
@@ -94,10 +85,9 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
             onClick: endGame,
         }] : []),
     ];
-    const optionsMenu = state ? <GameOptionsMenu options={menuOptions} /> : undefined;
 
     return (
-        <GameShell title="Solitaire" subtitle={subtitle} right={optionsMenu} syncing={submitting}>
+        <GameShell title="Solitaire" subtitle={subtitle} options={state ? menuOptions : undefined} syncing={submitting} log={{ entries: gameData?.gameState?.history ?? [] }}>
             <FcmTokenComp />
 
             {state && (
@@ -160,10 +150,6 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
             )}
 
             {state && complete && <SolitaireVictoryScreen state={state} elapsedSeconds={elapsedSeconds} />}
-
-            {showLog && (
-                <MatchHistory entries={gameData?.gameState?.history ?? []} />
-            )}
         </GameShell>
     );
 }

@@ -12,7 +12,7 @@ import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER, type SACSpotKind } from "@/games
 import SettlementsAndCitiesBoard from "@/games/SettlementsAndCities/components/SettlementsAndCitiesBoard";
 import SettlementsAndCitiesActions, { SACBoardMode } from "@/games/SettlementsAndCities/components/SettlementsAndCitiesActions";
 import GameShell from "@/components/ui/GameShell";
-import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
+import { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameGuideModal from "@/components/ui/GameGuideModal";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
@@ -36,7 +36,6 @@ import {
     SACBuildCity,
     SACMoveRobber,
 } from "@/utils/apiModels/GameLogic";
-import MatchHistory from "@/components/games/MatchHistory";
 
 const RESOURCE_ORDER: SAC_Resource[] = ['lumber', 'wool', 'grain', 'brick', 'ore'];
 const RESOURCE_EMOJI: Record<SAC_Resource, string> = {
@@ -59,7 +58,6 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     const [boardMode, setBoardMode] = useState<SACBoardMode>('idle');
     // The board spot we last tapped; only meaningful while its command is in flight.
     const [tappedSpot, setTappedSpot] = useState<{ kind: SACSpotKind; id: number } | null>(null);
-    const [showLog, setShowLog] = useState(false);
 
     const { gameid } = use(params);
     const gameId = gameid;
@@ -298,13 +296,6 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             onClick: recap.reshow,
         }] : []),
         {
-            key: 'history',
-            label: 'Turn history',
-            icon: '📜',
-            active: showLog,
-            onClick: () => setShowLog(v => !v),
-        },
-        {
             key: 'guide',
             label: 'Game guide',
             icon: '📖',
@@ -318,7 +309,6 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             onClick: endGame,
         }] : []),
     ];
-    const optionsMenu = gs ? <GameOptionsMenu options={menuOptions} /> : undefined;
 
     // Recap intro: a standalone welcome-back screen shown before the board when
     // it's our turn and moves happened while we were away.
@@ -334,7 +324,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     }
 
     return (
-        <GameShell title="Settlements & Cities" subtitle={subtitle} right={optionsMenu} syncing={submitting}>
+        <GameShell title="Settlements & Cities" subtitle={subtitle} options={gs ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true }}>
             <FcmTokenComp />
 
             {gameGuide.open && <GameGuideModal guide={settlementsAndCitiesGuide} onClose={gameGuide.closeGuide} />}
@@ -435,10 +425,6 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
 
                     {recapAvailable && (
                         <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} userIdList={userIdList} />
-                    )}
-
-                    {showLog && (
-                        <MatchHistory entries={nav.displayedHistory} userIdList={userIdList} oldestFirst />
                     )}
                 </>
             )}

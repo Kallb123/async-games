@@ -2,12 +2,11 @@
 import { use } from "react";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
 import { IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import GameShell from "@/components/ui/GameShell";
 import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
-import GameOptionsMenu, { GameOption } from "@/components/ui/GameOptionsMenu";
+import { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameGuideModal from "@/components/ui/GameGuideModal";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
@@ -26,7 +25,6 @@ import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { landmarkCount } from "@/games/DiceCities/ui";
 import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, nameForUserId } from "@/utils/ui/players";
-import MatchHistory from "@/components/games/MatchHistory";
 
 // Sentinel used as "current turn" while reviewing a past turn, so no player's
 // interactive controls activate.
@@ -37,7 +35,6 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
     const { user } = useAuthGuard();
-    const [showLog, setShowLog] = useState(false);
 
     const { gameid } = use(params);
     const gameId = gameid;
@@ -154,13 +151,6 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
             onClick: recap.reshow,
         }] : []),
         {
-            key: 'history',
-            label: 'Turn history',
-            icon: '📜',
-            active: showLog,
-            onClick: () => setShowLog(v => !v),
-        },
-        {
             key: 'guide',
             label: 'Game guide',
             icon: '📖',
@@ -174,7 +164,6 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
             onClick: endGame,
         }] : []),
     ];
-    const optionsMenu = displayed ? <GameOptionsMenu options={menuOptions} /> : undefined;
 
     // Recap intro: a standalone welcome-back screen shown before the board when
     // it's our turn and moves happened while we were away.
@@ -190,7 +179,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     }
 
     return (
-        <GameShell title="Dice Cities" subtitle={subtitle} right={optionsMenu} syncing={submitting}>
+        <GameShell title="Dice Cities" subtitle={subtitle} options={displayed ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList }}>
             <FcmTokenComp />
 
             {gameGuide.open && <GameGuideModal guide={diceCitiesGuide} onClose={gameGuide.closeGuide} />}
@@ -223,10 +212,6 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
             )}
 
             <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} userIdList={userIdList} />
-
-            {showLog && (
-                <MatchHistory entries={nav.displayedHistory} userIdList={userIdList} />
-            )}
         </GameShell>
     );
 }
