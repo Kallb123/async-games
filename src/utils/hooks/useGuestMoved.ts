@@ -1,38 +1,12 @@
 'use client'
-import { useSyncExternalStore } from 'react';
+import { readStoredValue, useStoredValue, writeStoredValue } from '@/utils/hooks/useStoredValue';
 
-// Persisted per browser, same reasoning as useDismissibleBanner: it only has
-// to survive navigating off the board so the claim-account offer
-// (docs/account-less-play.md step 16) can wait for it, and losing it to a
-// blocked/cleared store just means asking a session later than ideal — not
-// worth failing over.
+// Persisted per browser by useStoredValue, which owns the swallowed storage
+// access. It only has to survive navigating off the board so the
+// claim-account offer (docs/account-less-play.md step 16) can wait for it, and
+// losing it to a blocked/cleared store just means asking a session later than
+// ideal — not worth failing over.
 const STORAGE_KEY = 'ag-guest-moved';
-
-// The browser fires no event when this changes, so the store is nudged by
-// hand from recordGuestMoved — the only place that sets it — the same shape
-// useNotificationPermission's store uses so every mounted listener (the
-// bottom banner) picks up the change without a page reload.
-const listeners = new Set<() => void>();
-
-function subscribe(onChange: () => void) {
-    listeners.add(onChange);
-    return () => {
-        listeners.delete(onChange);
-    };
-}
-
-function getSnapshot(): boolean {
-    try {
-        return window.localStorage.getItem(STORAGE_KEY) === '1';
-    } catch {
-        return false;
-    }
-}
-
-// The server can't know this either way; every consumer renders as "not yet"
-// until the first post-hydration snapshot, same bargain useNotificationPermission
-// and useInstallPrompt make.
-const getServerSnapshot = (): boolean => false;
 
 /**
  * Records that the signed-in guest has taken their first turn somewhere in
@@ -42,17 +16,16 @@ const getServerSnapshot = (): boolean => false;
  * again after the first turn costs nothing.
  */
 export function recordGuestMoved(): void {
-    try {
-        if (window.localStorage.getItem(STORAGE_KEY) === '1') return;
-        window.localStorage.setItem(STORAGE_KEY, '1');
-    } catch {
-        // Storage blocked — nothing to persist, but still nudge listeners so
-        // the offer can appear for the rest of this tab's session.
-    }
-    listeners.forEach(listener => listener());
+    if (readStoredValue(STORAGE_KEY) === '1') return;
+    // Writing nudges every mounted useGuestMoved (the bottom banner), so the
+    // offer can appear without a page reload — even if the store refused the
+    // write and it lasts only for this tab's session.
+    writeStoredValue(STORAGE_KEY, '1');
 }
 
 /** Whether the signed-in guest has taken a turn yet, this browser. */
 export function useGuestMoved(): boolean {
-    return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+    const [moved] = useStoredValue(STORAGE_KEY);
+
+    return moved === '1';
 }
