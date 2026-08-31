@@ -10,8 +10,9 @@ decisions below — and [`ARCHITECTURE.md`](../ARCHITECTURE.md) §5–§8 for th
 model, the response-shaping contract and the push plumbing this leans on.
 
 **Out of scope, deliberately:** moderation, profanity filtering, blocking and
-reporting. See §9 for the one existing repo decision that touches this, and what
-this plan does about it.
+reporting. §9 records the two decisions the owner has settled — guests chat, and
+Outbreak gets chat — each of which corrects something the repo's docs currently
+say. §11 breaks the whole build into commits.
 
 ---
 
@@ -462,46 +463,55 @@ Named so a reviewer can check them off rather than wonder:
 
 ---
 
-## 9. Guests
+## 9. Two decisions, settled
 
-`docs/account-less-play.md` §8 records a decision this plan has to answer to:
+Both of these were open questions on the first draft of this plan. The owner has
+answered both, and the answers are recorded here because each one overturns
+something already written down elsewhere in the repo — so each carries a doc to
+correct (see §11's last commit).
+
+### Guests are in
+
+`docs/account-less-play.md` §8 says:
 
 > per [`docs/social-features.md`](./social-features.md) §7 — never open a text
 > channel to strangers before blocking and reporting exist — guest seats stay
 > out of any future chat feature until that work is done.
 
-Moderation is out of scope here, so that work is still not done. **Phase 1
-therefore honours the existing decision the cheap way: a guest account can read
-the thread but not post**, with the composer replaced by the existing
-`ClaimAccountOffer` — claim your account and you can talk. `isGuest(user)`
-answers it in both places: on the client for the composer, and on the POST route
-for the gate that actually holds. It is the one place that question is asked
-(`src/utils/ui/players.ts`), so neither end re-reads `publicMetadata.guest`
-itself.
+**Decided: guests chat like anyone else.** A guest is not a stranger who found
+their way to a table; they got there because somebody at that table shared a
+join code with them. The principle §7 states — don't open a text channel to
+strangers before blocking and reporting exist — is untouched by this, because it
+was written about open matchmaking. It simply never applied to a seat somebody
+was invited into.
 
-This is a decision to *confirm*, not one to assume. A guest reaches a table only
-by a join code the host shared with them, so they are a stranger to the app
-rather than to the people at the table — which is arguably not the case §8 was
-written about. If the owner would rather guests could talk, it is one condition
-to delete in each place; the plan takes the conservative reading because
-overturning a written decision is not this PR's to make silently.
+So there is no `isGuest` branch anywhere in this feature: no guest check on the
+POST route, no `ClaimAccountOffer` standing in for the composer, no
+guest-specific copy. That is a smaller implementation than the one it replaces,
+which is usually the sign of the right call.
 
-### Outbreak
+Two consequences to carry out rather than assume:
+
+- `docs/account-less-play.md` §8 is now wrong and gets amended to point here.
+- The claim-your-account nudge stays exactly where it already is
+  (`BottomBanner`). Chat is not the place to sell an account upgrade.
+
+### Outbreak is in
 
 `OutbreakHands.tsx` says the game's "shared table, shared brain" pillar means
-"there is no chat window telling teammates what you're holding" — which is why
-every hand is public there. A general chat window is exactly the thing that
-comment says Outbreak does without.
+"there is no chat window telling teammates what you're holding", which is why
+every hand is public there.
 
-Recommendation: **ship chat in Outbreak anyway, and update that comment.** The
-pillar it protects is that the *board* shows everything, so a player never has
-to be told what is in a hand — and that stays true. Players in a co-op game will
-coordinate in WhatsApp regardless; the honest position is that the board is not
-trying to prevent table talk, only to make it unnecessary. If the owner disagrees,
-`GameShell` simply isn't given `chat` on that one screen — a one-line opt-out,
-which is another reason the wiring is a prop rather than something automatic.
+**Decided: Outbreak gets chat like every other game.** The pillar that comment
+protects is that the *board* shows everything, so a player never has to be told
+what is in a hand — and that stays true with a chat panel next to it. A co-op
+table will coordinate somewhere regardless; the board's job is to make that
+coordination unnecessary, not to prevent it.
 
----
+Consequence: that comment gets rewritten in the same PR, so the next person
+reading it isn't told the app has no chat window while the chat window is
+sitting one component away. The `GameShell` opt-out (just don't pass `chat`)
+stays available for any game that ever does want it, but no game uses it.
 
 ## 10. Phases
 
@@ -509,13 +519,9 @@ which is another reason the wiring is a prop rather than something automatic.
 routes, §6 panel + hook + the two `GameShell` props (chat on seven screens, the
 log moved off all eight) + the `useStoredValue` extraction, §7 push and channel.
 This is the whole feature as described above; it is not worth shipping half of
-it, since a chat nobody is notified about is a chat nobody uses.
-
-The one part that could reasonably be split out is folding the existing
-`showLog` markup into `GameShell` — it touches all eight board screens and none
-of it is chat. Split it if the diff is unreviewable, but split it *forwards*
-(land the `log` prop first, then chat on top), never by leaving the eight copies
-standing beside a shell that has just learned to own a panel.
+it, since a chat nobody is notified about is a chat nobody uses. §11 breaks it
+into the seven commits that build it, and says where it can be cut if the diff
+turns out too wide to review in one go.
 
 **Phase 2 — the polish, once phase 1 has been used.**
 
@@ -528,12 +534,129 @@ standing beside a shell that has just learned to own a panel.
 - A "somebody messaged" line in the "since you were last here" recap.
 
 **Phase 3 — only if the product goes there.** Blocking, reporting and anything
-moderation-shaped. Out of scope for this work, and the gate that §9's guest
-decision is waiting on.
+moderation-shaped. Out of scope for this work. Note that nothing in §9 is
+waiting on it any more: the reason to gate a text channel is open matchmaking
+between strangers, which this app does not have.
 
 ---
 
-## 11. Definition of done (phase 1)
+## 11. The commits
+
+Seven commits, in this order. Each one builds, type-checks, lints and leaves the
+app working — nothing here is a half-landed state that the next commit has to
+rescue. The gates and reviewers named per commit are the ones from §12.
+
+### 1. `Move the turn-history log into the game shell`
+
+`GameShell` gains the `log?` prop, renders `MatchHistory` below its children and
+owns the toggle as a `GameOption`; all eight board screens drop their `showLog`
+state, their history menu row and their render block.
+
+No chat in this commit at all. It goes first because it is the mechanism chat
+needs (§6) and because landing it alone makes it reviewable as what it is: a
+~24-piece deletion with no behaviour change. If any of this PR gets bounced,
+this part still deserves to land.
+
+*Gates: build, tsc, lint. Reviewer: `caveman`.*
+
+### 2. `Remember one thing per browser, in one place`
+
+Extract `useStoredValue(storageKey)` out of `useDismissibleBanner` — get/set a
+string with the `localStorage` throw swallowed — and move `useDismissibleBanner`
+and `useGuestMoved` onto it.
+
+Also no chat, also no behaviour change. It comes before the panel so the unread
+marker in commit 5 is a *use* of a shared hook rather than a third copy of the
+try/catch that arrives with it (§6).
+
+*Gates: build, tsc, lint. Reviewer: `caveman`.*
+
+### 3. `Store a chat message`
+
+`src/utils/mongodb/ChatMessageData.ts` (§3), `src/utils/chat.ts` with
+`MAX_MESSAGE_LENGTH` / `normaliseMessage` (§4), `src/utils/chat.test.ts`, and
+the account-deletion step in `src/app/api/user/delete/route.ts` (§3).
+
+Nothing reads or writes a message yet, which is deliberate: the model arrives
+with the rule that keeps it from outliving its game, rather than that rule
+arriving later as a fix. The unit test is the first thing in the feature that
+proves anything.
+
+*Gates: build, tsc, lint, `npm test`. Reviewer: `gremlin` (the deletion path).*
+
+### 4. `Read and write a game's chat over the API`
+
+`src/app/api/game/[gameid]/chat/route.ts` — both handlers, the membership gates,
+the `chat` rate limit — plus its route tests (§12).
+
+**No push yet.** The endpoint stores and returns messages and nothing else, so
+this commit can be reviewed as pure access control: who may read this thread,
+who may post to it, and what a bad body does. That is the review this feature
+most needs, and mixing a notification into it would bury it.
+
+*Gates: build, tsc, lint, `npm test`. Reviewers: `locksmith` and `gremlin`.*
+
+### 5. `Show the chat thread on the board`
+
+`GameChat`, `useGameChat`, `CHAT_EVENTS` in `usePushEvents.ts`, the `chat` prop
+on `GameShell` with its 💬 button and unread dot, the seven board-screen
+wirings, and the composer CSS in `ag-theme.css` (§6).
+
+At the end of this commit the feature works: players can talk, and an open
+thread stays live on the poll. It is silent when you are not looking, which is
+what commit 6 is for — and a good state to actually use for a day before adding
+the buzz.
+
+*Gates: build, tsc, lint. Reviewer: `caveman` (the reuse in §6 is the whole
+point of this commit).*
+
+### 6. `Tell players when someone messages them`
+
+The `ChatMessage` push and the `chat` channel (§7): `buildChatNotification` in
+`notificationContent.ts`, the channel in `ALL_NOTIFICATION_CHANNELS`, the
+defaults, the explicit key list in `getNotificationPreferences`, the Settings
+row, and the send + per-recipient throttle at the end of the POST handler.
+
+The commit that puts the sender behind the switch `notificationPreferences.ts`
+says was removed for not having one.
+
+*Gates: build, tsc, lint, `npm test` (the route test gains the "sender gets no
+push" and throttle cases). Reviewers: `rulebook` (channel wiring is a registry)
+and `gremlin` (a push failure must not lose the message).*
+
+### 7. `Say what's new, and correct the docs that said chat wouldn't happen`
+
+- `src/utils/ui/whatsNew.ts` — one *Enhancements* line (§12).
+- `ARCHITECTURE.md` §5 (the `ChatMessage` collection) and §8 (the `chat`
+  channel).
+- `docs/account-less-play.md` §8 — amend the "guest seats stay out of any future
+  chat feature" paragraph to point at §9's decision.
+- `src/games/Outbreak/components/OutbreakHands.tsx` — rewrite the "there is no
+  chat window" line, per §9.
+- `docs/social-features.md` §1 — in-game messaging moves into the "what already
+  exists" table, and Tier 1 is done.
+- This document — a status line at the top saying it shipped, as
+  `since-you-were-last-here.md` has.
+
+Docs-only, and last, so every line of it describes something already true in the
+same PR.
+
+*Gates: build, tsc, lint. Reviewer: `rulebook`.*
+
+### If it has to be split
+
+Two clean cuts. **After 2** — the two prep commits are a standalone
+"tidy the game shell" PR that stands on its own merits. **After 6** — the
+feature works and the docs follow, though not for long: a player-visible change
+without its What's new line is exactly what `AGENTS.md` asks not to happen, so
+7 should follow within the day rather than becoming a someday.
+
+What must *not* be split: 5 from 4 for long (an endpoint nothing calls), or 6
+from 5 for long (a chat nobody is told about is a chat nobody uses).
+
+---
+
+## 12. Definition of done (phase 1)
 
 - `npm run build`, `npx tsc --noEmit`, `npm run lint` (`--max-warnings 0`) all
   clean. The engine is untouched, but run `npm test` anyway — it is four
@@ -541,10 +664,11 @@ decision is waiting on.
 - **Tests.** `src/utils/chat.test.ts` over `normaliseMessage` (empty, blank,
   over-length, non-string, blank-line collapsing). A route test in the
   `src/app/api/game/gameRoutes.test.ts` style covering: a non-player gets 403 on
-  both verbs, an over-length body gets 400, the rate limit gets 429, a guest
-  gets refused, a stored message comes back carrying a `senderId` and **no**
-  name (the guard against the frozen-name trap creeping back in), and the sender
-  gets no push.
+  both verbs, an over-length body gets 400, the rate limit gets 429, a stored
+  message comes back carrying a `senderId` and **no** name (the guard against the
+  frozen-name trap creeping back in), and the sender gets no push. A guest posts
+  like anyone else, so there is nothing guest-shaped to test — which is the point
+  of §9.
 - **Reviews**, per `AGENTS.md`: `locksmith` and `gremlin` on the routes,
   `caveman` on the panel and the `GameShell` change, `rulebook` on the
   registry/upkeep edits (channel list, `usePushEvents`, account deletion,
@@ -552,11 +676,10 @@ decision is waiting on.
   `RecapTimeline`, the single fetch in the shell, the dropped optimistic append
   and the `useStoredValue` extraction are its findings; the implementation
   should not quietly undo them.
-- **Docs.** `ARCHITECTURE.md` §5 gains `ChatMessage` beside `GameResult` in the
-  data-model section, and §8 gains the `chat` channel. This document gets a
-  status line at the top saying it shipped, as `since-you-were-last-here.md`
-  does.
-- **What's new.** One line in *Enhancements* — something like *"Talk to your
-  opponents"* / *"Every game now has a chat thread: tap 💬 on the board to say
-  something, and the others get a nudge on their phone."* — with the oldest line
-  dropped if the group runs past five.
+- **Docs and What's new.** All of it lands in §11's commit 7 — `ARCHITECTURE.md`
+  §5 and §8, the two documents §9's decisions overturn, the Outbreak comment,
+  `social-features.md`'s table, and a status line at the top of this file as
+  `since-you-were-last-here.md` has. The What's new line goes in *Enhancements*:
+  something like *"Talk to your opponents — every game now has a chat thread:
+  tap 💬 on the board to say something, and the others get a nudge on their
+  phone."*, with the oldest line dropped if the group runs past five.
