@@ -10,13 +10,15 @@ user, `GameResult` storage (the structural foundation from §5), and match
 history on user profiles. These form the backbone for Tier 2 features (profiles,
 stats) and later phases.
 
-**Status update (2026-08-31): Tier 1 is done.** In-game chat has shipped
-(`docs/in-game-chat.md`) — the flagship, most-requested Tier 1 feature and the
-last one outstanding. With nudges, reactions, rich turn notifications (the
-"your move" push now says what actually happened, §8) and the rematch surface
-already live, every Tier 1 presence & re-engagement feature is now built.
-Chat closes it: a per-game thread on the board, notified over the existing FCM
-bus. The row moves into §1's "what already exists" table below.
+**Status update (2026-08-31): in-game chat has shipped.** The flagship,
+most-requested Tier 1 feature (`docs/in-game-chat.md`) — a per-game thread on
+the board, notified over the existing FCM bus — and the last of Tier 1's
+presence & messaging features to land. Nudges, reactions, rich turn
+notifications (the "your move" push now says what actually happened, §8) and now
+chat are all live, so Tier 1's conversation-and-presence goal is essentially
+met. The one item still open is the friends "who to play" activity surface — its
+rematch half already shipped via `GameFinishBanner`. The chat row moves into
+§1's "what already exists" table below.
 
 The framing that runs through the whole document: async play is *lonely by
 default*. There's no shared session, no lobby, no "you're both online right
@@ -38,7 +40,7 @@ rule, and it applies to server models and API contracts too).
 | **Friends** — request / accept / remove, list with incoming/outgoing | `src/utils/mongodb/FriendshipData.ts`, `src/app/api/friends/**` | Built. Flat `requester/recipient/accepted` record; list endpoint already aggregates each friend's **last action timestamp** across their games. |
 | **User directory** | `src/app/users/page.tsx`, `src/app/api/users/` | Built. Browse users to friend / invite. |
 | **Game invitations** | `src/utils/mongodb/InvitationData.ts`, `src/app/api/newgame/**`, `src/app/api/invite/**` | Built. Per-game invite → all-accept → `CreateGame()`. |
-| **Push notifications** | `src/utils/firebase/pushNotification.ts`, `FirebaseForeground.tsx` | Built. `sendPushToUsers()` + a `window` `CustomEvent` fan-out. Events: `NewInvite`, `InviteAccepted`, `GameStart`, `YourTurn`, `TurnExpiringSoon`, `GameOver`, `TurnNudge`, `TurnReaction`. |
+| **Push notifications** | `src/utils/firebase/pushNotification.ts`, `FirebaseForeground.tsx` | Built. `sendPushToUsers()` + a `window` `CustomEvent` fan-out. Events: `NewInvite`, `InviteAccepted`, `GameStart`, `YourTurn`, `TurnExpiringSoon`, `GameOver`, `TurnNudge`, `TurnReaction`, `ChatMessage`. |
 | **Notification preferences** | `src/utils/mongodb/UserProfile.ts`, `src/app/api/user/preferences/**` | Built. Per-user toggles for notification channels (push, in-app, etc.) and event-type batching. Checked before sending. |
 | **Turn nudges** | `src/utils/mongodb/GameData.ts`, `src/app/api/game/nudge/**` | Built. One-tap "your move!" nudge per turn, limited to 1 per opponent per turn cycle. Sends `TurnNudge` FCM event. |
 | **Turn/action reactions** | `src/utils/mongodb/GameData.ts`, `src/app/api/game/reaction/**` | Built. Emoji reactions on turns. Append-only per-turn store, sent in `TurnReaction` FCM event. |
@@ -142,8 +144,8 @@ security) or shipping something users hate.
 |---|---|---|---|---|---|
 | Reactions / nudges | Low | **S** | Low | ✓ Built | New FCM event + tiny append-only store or a counter. No engine contact. |
 | Notification preferences | Low | **S** | Low | ✓ Built | Per-user channel toggles checked before push. Reduces notification spam. |
-| Rich turn notifications | Low–Med | **S** | Low | Not started | Reuses the recap event model; only changes notification *strings*, not shapes. |
-| Friends activity / rematch surface | Low | **S–M** | Low | Not started | Last-action data already aggregated; mostly a new screen + one query. |
+| Rich turn notifications | Low–Med | **S** | Low | ✓ Built | The "your move" push reuses the recap engine to say what actually happened (`ARCHITECTURE.md` §8), not just "your turn". |
+| Friends activity / rematch surface | Low | **S–M** | Low | Partly built | Rematch (play-again) shipped via `GameFinishBanner` + `rematch.ts`; the friends last-action "who to play" screen is still just a new screen + one query. |
 | Match history feed | Low–Med | **M** | Med | ✓ Built | Durable `GameResult` record written on game-over. Survives game deletion. |
 | Player profiles | Medium | **M** | Med | In progress | Profile page + stats read model built on `GameResult` store. Risk: privacy defaults. |
 | In-game messaging | Medium | **M** | Med | ✓ Built | Per-game (not friends-only) — everyone in the game, guests included. `ChatMessage` model, thread on the board, `ChatMessage` event throttled per recipient. See `docs/in-game-chat.md`. |

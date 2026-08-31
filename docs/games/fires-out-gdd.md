@@ -379,8 +379,11 @@ a d8 to solve it again.
   as an option, not as the entry point.
 * **Crew planning is out of band.** §14.2's quarterback problem and the crew
   discussion the Specialists exist to provoke both assume a table talking. The
-  app has no chat, so the board must carry it: everyone's banked AP, every
-  Specialist's ability, and the whole crew's positions visible on every screen.
+  app now has a chat thread on every board (`docs/in-game-chat.md`), but planning
+  must never *depend* on it: the board carries everything a crew needs to
+  coordinate — everyone's banked AP, every Specialist's ability, and the whole
+  crew's positions visible on every screen — so a silent table plays exactly as
+  well as a chatty one.
 * **Two of §14.5's three weaknesses simply vanish.** Async play removes
   downtime entirely — there is no waiting at a table — and analysis paralysis
   stops being a group cost when thinking happens on your own time. Only Family
@@ -578,7 +581,8 @@ The timeline endpoint clamps planned `senderId`s to the caller, so planning a
 crewmate's figure needs the same per-game route opt-in Outbreak describes
 (`outbreak-gdd.md` §21.5). Fires Out qualifies for the same reason: 17.3 already
 requires every crewmate's AP, Specialist and position to be visible to everyone,
-because the app has no chat. Nothing about a planned crewmate turn is hidden
+so coordination never depends on the board's chat thread
+(`docs/in-game-chat.md`). Nothing about a planned crewmate turn is hidden
 from the planner in live play either.
 
 ### 17.6 The commits

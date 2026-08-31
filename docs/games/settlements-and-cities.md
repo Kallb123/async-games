@@ -663,17 +663,16 @@ tries to recover them — chat threads, haggling rounds, counter-counter-offers 
 becomes exactly the "ridiculous UI" worry.
 
 It would also be **building someone else's feature, badly.** Free text between
-players is already a planned, separately-sized piece of work —
-`docs/social-features.md` Tier 1, *"In-game messaging / turn notes"* — and it
-carries its own hard dependencies (blocking, reporting, profanity handling; see
-that document's *Cross-cutting: Safety & moderation*). A `chat` notification
-channel is already reserved in `notificationPreferences.ts` for it, with no
-sender anywhere in the codebase. Trading must not smuggle a chat box in through
-the side door.
+players is its own, separately-sized piece of work —
+`docs/social-features.md` Tier 1, *"In-game messaging"* — and it has since
+shipped as a general per-game chat thread on every board
+(`docs/in-game-chat.md`), sending on the `chat` notification channel
+`notificationPreferences.ts` reserves for it. Trading must not grow a *second*,
+bespoke chat box in through the side door.
 
-If messaging ships later, the two compose exactly as they should: **messaging
-carries the persuasion, trading carries the settlement.** That is a better split
-than a bespoke haggling thread would ever be.
+Messaging and trading compose exactly as they should: **messaging carries the
+persuasion, trading carries the settlement.** That is a better split than a
+bespoke haggling thread would ever be.
 
 What replaces negotiation in the meantime is a **market, not a conversation**:
 
@@ -691,9 +690,9 @@ What replaces negotiation in the meantime is a **market, not a conversation**:
   nudge pill's local set. Only standing offers need `declinedBy` persisted.
 * **No free text anywhere in this feature.**
 
-Until messaging exists, a group that genuinely wants to haggle already has
-WhatsApp. Conceding that gracefully beats shipping half a chat client inside a
-board-game screen.
+A group that genuinely wants to haggle has the game's own chat thread now — or
+WhatsApp. Either beats shipping a second, half-built chat client inside the
+trading screen.
 
 ### 10.7 Deadlines without a clock and without a cron
 

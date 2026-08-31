@@ -472,8 +472,10 @@ subsection of this document as they land:
 * **Airlift needs no consent.** There is nobody to ask in real time, and the
   moved player can see where they were put. Co-op means no adversarial use.
 * **Discussion is out of band.** §2's "shared table, shared brain" pillar rests
-  on players talking. The app has no chat; open hands and a legible board are
-  what carry it (see step 5 and step 11 below).
+  on players talking. The app now has a chat thread on every board
+  (`docs/in-game-chat.md`), but the pillar must not lean on it: open hands and a
+  legible board are what carry it, so a silent table plays as well as a chatty
+  one (see step 5 and step 11 below).
 * **A player who drops out ends the game for everybody**, as in every other game
   here — the cron's abandon path already does this, and co-op gives it a cleaner
   reading than usual: the team lost.
@@ -1031,8 +1033,9 @@ retrieve/spend-from-storage split, Forecast's two-step flow — including the
 not-a-permutation rejection and the phase-restore/hand-limit-duck
 interaction — and the phase gating itself.
 
-**11 — The board screen, second pass.** The pieces that make a co-op table work
-without a chat window: every player's hand rendered for everyone
+**11 — The board screen, second pass.** The pieces that let a co-op table work
+even without a chat window (there is one now — `docs/in-game-chat.md` — but the
+board never has to depend on it): every player's hand rendered for everyone
 (`ag-hand`/`ag-hand-card`, already shared by Settlements & Cities and Train
 Time), the infection discard pile as a first-class panel rather than a footnote,
 the event-card tray, and the history in `ag-log`. Turn navigation lands here
