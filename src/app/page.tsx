@@ -1,14 +1,17 @@
 import { auth } from "@clerk/nextjs/server";
-import Dashboard from "@/components/Dashboard";
-import Landing from "@/components/Landing";
+import HomeScreen from "@/components/HomeScreen";
 
 /**
  * Home is two screens — the dashboard for a player, the public landing page
  * for everyone else — and the browser can't tell which it is until Clerk has
- * loaded. Deciding it here, from the session cookie the middleware has already
- * read, means neither screen flashes the other first: a visitor with no
- * account used to watch the dashboard's skeletons load and then get replaced
- * by the landing page.
+ * loaded. Reading the session cookie the middleware has already seen means
+ * neither screen flashes the other first: a visitor with no account used to
+ * watch the dashboard's skeletons load and then get replaced by the landing
+ * page.
+ *
+ * `HomeScreen` owns the choice from here, because the cookie can be wrong in
+ * both directions — see the note there. This decides the first paint; Clerk
+ * gets the final say.
  *
  * `auth()` makes this route dynamic, which is what lets the first paint be the
  * right screen — including its server-rendered content, rather than an empty
@@ -17,5 +20,5 @@ import Landing from "@/components/Landing";
 export default async function Home() {
   const { userId } = await auth();
 
-  return userId ? <Dashboard /> : <Landing />;
+  return <HomeScreen signedInOnServer={!!userId} />;
 }
