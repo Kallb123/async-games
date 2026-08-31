@@ -56,6 +56,11 @@ export interface NamedUser {
         // The name a player chose to be seen under — ours, not one of Clerk's
         // own attributes. See `chosenName` below for why it isn't `firstName`.
         displayName?: string;
+        // Whoever runs the app, for the support tooling under `/admin`
+        // (docs/admin-tools.md). Set by hand on a Clerk user, and read here
+        // rather than derived from anything, so there is one answer to "may
+        // this person use the admin routes?" on both sides of the wire.
+        admin?: boolean;
     };
 }
 
@@ -69,6 +74,18 @@ export interface NamedUser {
 // different answer — see below.
 export function isGuest(user: NamedUser): boolean {
     return user.publicMetadata?.guest === true;
+}
+
+// Whether this user runs the app — the gate on the support tooling under
+// `/admin` (docs/admin-tools.md), asked the same way `isGuest` is.
+//
+// `publicMetadata` is writable only through Clerk's Backend API, so a browser
+// can no more grant itself this than it can grant itself `unlocked`. It is
+// still only a hint on the client: every `/api/admin/*` route checks it
+// server-side for itself (`requireAdmin`), and the screen's own check just
+// decides whether to draw the link.
+export function isAdmin(user: NamedUser | null | undefined): boolean {
+    return user?.publicMetadata?.admin === true;
 }
 
 // The shape createGuest() mints a guest's Clerk username under: `guest_` and

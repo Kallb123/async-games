@@ -8,6 +8,7 @@ import BackLink from "@/components/ui/BackLink";
 import Section from "@/components/ui/Section";
 import LegalLinks from "@/components/ui/LegalLinks";
 import DevTools from "@/components/DevTools";
+import AdminLink from "@/components/AdminLink";
 import NotificationDeviceList from "@/components/NotificationDeviceList";
 import InstallOffer from "@/components/ui/InstallOffer";
 import NotificationOffer from "@/components/ui/NotificationOffer";
@@ -266,6 +267,7 @@ export default function Settings() {
             </Section>
 
             <div className="ag-footer">
+                <AdminLink />
                 <DevTools />
                 <LegalLinks />
                 <div className="ag-hint ag-hint--center">
