@@ -1,18 +1,16 @@
 // `public/firebase-messaging-sw.js` is a static file: it can't import from the
-// app, so the two things it shares with the app are copied into it by hand. A
-// copy nobody checks is a copy that drifts, and both of these drift silently —
-// the app keeps working, notifications just stop being delivered or stop being
-// shown, which is the one failure mode nobody notices until a player complains.
+// app, so what it shares with the app is copied into it by hand, and what it
+// promises the app it promises in prose. Both drift silently — the app keeps
+// working, notifications just stop arriving, or start arriving twice, which is
+// the failure mode nobody notices until a player complains.
 //
-// So this holds the worker to its two contracts. It reads the file rather than
-// executing it: a service worker needs `self`, `importScripts` and a live push
-// event, none of which exist here, and the parts worth testing are the two
-// literals.
+// So this holds the worker to the contracts it can't state in code. It reads
+// the file rather than executing it: a service worker needs `self`,
+// `importScripts` and a live push event, none of which exist here.
 
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { NOTIFICATION_TEST_EVENT } from './pushNotification';
 import packageJson from '../../../package.json';
 
 const worker = readFileSync(join(process.cwd(), 'public/firebase-messaging-sw.js'), 'utf8');
@@ -46,11 +44,18 @@ describe('the messaging service worker', () => {
         }
     });
 
-    // The worker shows this one push even when a window is visible, which is
-    // what makes the Test button on Settings show something to the person who
-    // pressed it. Renaming the event server-side without renaming it here would
-    // leave that button silently doing nothing.
-    it('knows the test push by the name the server sends', () => {
-        expect(worker).toContain(`const TEST_EVENT = '${NOTIFICATION_TEST_EVENT}'`);
+    // The worker displays every push from its own `push` listener, because the
+    // SDK won't when a window is visible. The failure mode of that arrangement
+    // is *two* notifications per push — an `onBackgroundMessage` handler, or the
+    // SDK's own display, showing one beside ours — and a player who gets
+    // everything twice turns notifications off. One call site, no second path.
+    it('has exactly one place that shows a notification', () => {
+        expect(worker.match(/showNotification\(/g)).toHaveLength(1);
+    });
+
+    // The other half of that: the SDK only skips its own display because the
+    // payload it is handed has no `notification` key left on it.
+    it('takes the notification key off the payload the SDK sees', () => {
+        expect(worker).toContain('delete newData.notification');
     });
 });

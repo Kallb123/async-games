@@ -71,6 +71,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Notifications no longer go missing when the app is open",
+                detail: "With Async Games open — on any screen, in any game — an arriving notification was quietly dropped instead of shown, so a turn could come round with nothing to tell you about it. They now appear whether you're in the app or not.",
+            },
+            {
                 title: "Going home keeps you signed in",
                 detail: "Coming back to the home page sometimes showed the sign-in page for visitors instead of your games — and pressing Sign in let you straight through, because you had never actually been signed out. Home now shows your games whenever you're signed in.",
             },
@@ -86,10 +90,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Train Time's scores read properly when you look back",
                 detail: "Stepping back through a Train Time match showed every score, train count and route tally as “NaN”. Reviewing a turn now shows the standings exactly as they stood at the time — and the points and longest-run graphs on a finished match are filled in again.",
                 game: "traintime",
-            },
-            {
-                title: "The name a guest picks is the name everyone sees",
-                detail: "Take a seat as a guest and the name you typed now follows you everywhere — the move you just made, the recap of what you missed, stepping back through the turns, your profile, the reaction you send someone and the “you won” line. They used to show the jumble of letters your account was filed under instead.",
             },
         ],
     },

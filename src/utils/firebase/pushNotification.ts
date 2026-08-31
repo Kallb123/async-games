@@ -43,14 +43,11 @@ export function gameNotificationImage(gameTypeUrl: string): string | undefined {
  * The `data.event` of the "does push work at all?" push behind Settings' Test
  * button (`/api/notificationtest`).
  *
- * The one push the service worker displays even when the app is open. Every
- * other push is deliberately not shown then — the screen updates instead —
- * which would make a test button press look like a failure every time, since
- * the person pressing it is by definition looking at the app.
- *
- * `public/firebase-messaging-sw.js` has to carry the same string as a literal
- * (a static worker can't import from here); `serviceWorker.test.ts` holds the
- * two together.
+ * An event of its own rather than borrowing `YourTurn`: it gives the test its
+ * own notification `tag` (see `tagFor`), so pressing the button can't collapse
+ * a real turn notification the player hasn't read yet, and nothing on any
+ * screen listens for it. The worker needs no special case for it — every push
+ * is displayed now, app open or not.
  */
 export const NOTIFICATION_TEST_EVENT = 'NotificationTest';
 

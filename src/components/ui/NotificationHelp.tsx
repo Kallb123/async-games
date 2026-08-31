@@ -31,8 +31,8 @@ const SECTIONS: InfoSection[] = [
         body: "Android keeps its own notification settings per app and per category, and an app is never told when one of them is switched off — so notifications can look allowed here and be blocked there. Check Settings › Apps › Notifications for whichever app you play in, and turn every category back on. If you use the site in Chrome rather than the installed app, Chrome adds a switch per website: look for asyncgames.com in Chrome's own notification settings.",
     },
     {
-        heading: "Nothing shows while you're looking",
-        body: "A notification isn't shown if you already have Async Games open — the screen just updates instead. That's deliberate. The one exception is the test notification below, which always shows, so pressing it tells you something even with the app in front of you.",
+        heading: "They arrive even when you're in the app",
+        body: "A notification shows whether or not you have Async Games open, so you may get one for a game you're already looking at — the screen updates too. That's on purpose: a notification that only appears when the app is closed is impossible to test and easy to miss.",
     },
 ];
 

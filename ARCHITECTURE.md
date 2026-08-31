@@ -522,7 +522,21 @@ bridge instead and hands back a registration token of exactly the same kind, and
 two. On the delivery side `useCapacitorPush` stands in for both the foreground
 `onMessage` and the service worker's click handler; the tray notification itself
 is Android's, drawn with the `ic_stat_notify` silhouette and tint named in
-`AndroidManifest.xml`.
+`AndroidManifest.xml`. One gap remains on that road: a push arriving while the
+APK is in the *foreground* is handed to the app instead of the tray and so
+displays nothing — closing it needs a local-notification plugin and a
+notification channel.
+
+**Every push is displayed, app open or not.** `public/firebase-messaging-sw.js`
+shows the notification from its own `push` listener rather than leaving it to
+the SDK, because the SDK's handler returns early — showing nothing — the moment
+any window of the app is visible (`hasVisibleClients`). That silence was a bug
+against the rule `usePushEvents` states: every event a screen reacts to came
+from a push the player was also *told* about. The worker still folds the
+`notification` key into `data` before handing the payload on, which is now what
+stops the SDK adding a second notification beside ours; `serviceWorker.test.ts`
+holds the file to exactly one `showNotification` call for that reason, and to
+the same major version of the SDK as the app.
 
 **Token registration.** On the client, `useFcmToken` (`src/utils/hooks/`) gets an
 FCM token for a device whose viewer is signed in and has *already* granted
@@ -535,9 +549,7 @@ used to fail into a console log. `NotificationStatus` says which step a device
 reached and offers a retry, and `NotificationTestButton` proves the whole path
 by sending a real push to the caller's own devices via
 `/api/notificationtest` — the production-safe counterpart of the dev-only,
-any-user `/api/notifyuser`. Its push is the one the service worker displays
-even when a window is visible (`NOTIFICATION_TEST_EVENT`), since the person who
-pressed the button is by definition looking at the app.
+any-user `/api/notifyuser`.
 Each stored token (`TimedToken`) keeps the time it was first registered
 (`timestamp`), the last time that device re-registered (`lastSeen`), and a
 `device` summary parsed from the request's user-agent header by

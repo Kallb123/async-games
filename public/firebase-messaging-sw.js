@@ -19,12 +19,6 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 
-// The `data.event` of the test push from Settings — the string is
-// NOTIFICATION_TEST_EVENT in src/utils/firebase/pushNotification.ts, and a
-// literal here because a static worker can't import it. serviceWorker.test.ts
-// fails if the two drift apart.
-const TEST_EVENT = 'NotificationTest';
-
 /**
  * Shows the notification a payload asks for.
  *
@@ -52,16 +46,15 @@ function showPushNotification(data) {
 }
 
 /**
- * The payload of `e`, flattened the same way the handler below flattens one,
- * if this push is the test — and undefined for every other push, including one
+ * The push's payload with the `notification` fields folded in beside the `data`
+ * ones — the flat shape `showPushNotification` reads. Undefined for a push
  * carrying no readable JSON at all (a probe, or a push from something that
- * isn't us). Anything unreadable falls through to the SDK exactly as before.
+ * isn't us), which is left to the SDK to make what it can of.
  */
-function readTestPush(e) {
+function readPushData(event) {
     try {
-        const payload = e.data.json();
-        const data = { ...payload.data, ...payload.notification };
-        return data.event === TEST_EVENT ? data : undefined;
+        const payload = event.data.json();
+        return { ...payload.data, ...payload.notification };
     } catch {
         return undefined;
     }
@@ -76,35 +69,47 @@ class CustomPushEvent extends Event {
     }
 }
 
-/*
- * Overrides push notification data, to avoid having 'notification' key and firebase blocking
- * the message handler from being called
+/**
+ * Every push shows a notification, whether or not the app is on screen — and
+ * then carries on to the Firebase SDK, so a page that is open still hears about
+ * it and refreshes (`onMessage` → `dispatchPushEvent` → `usePushEvents`).
+ *
+ * Displaying here is not a preference, it is the only place it can happen: the
+ * SDK's own push handler returns early the moment any window of the app is
+ * visible (`hasVisibleClients` in @firebase/messaging), forwarding the payload
+ * to the page and showing nothing at all. So a player with the app open used to
+ * get no notification — not the game they were looking at, not the other three —
+ * and on iOS a push that displays nothing is a "silent push", three of which
+ * cost the app its push subscription outright.
+ *
+ * The `notification` key is still folded into `data` before the SDK sees the
+ * payload, and now for one reason only: it is what stops the SDK showing a
+ * *second* notification of its own in the no-visible-window case. Display
+ * belongs to this file alone — which is also why there is no
+ * `onBackgroundMessage` handler here any more, and why serviceWorker.test.ts
+ * holds this file to exactly one `showNotification` call.
+ *
+ * (The native Android shell is a separate road with the same gap: a push
+ * arriving while the APK is in the foreground is handed to `useCapacitorPush`
+ * and never reaches the tray. Closing that needs a local-notification plugin
+ * and a notification channel, neither of which exists yet.)
  */
-self.addEventListener('push', (e) => {
-    // Skip if event is our own custom event
-    if (e.custom) return;
+self.addEventListener('push', (event) => {
+    // Our own re-dispatch, below — it has already been shown.
+    if (event.custom) return;
 
-    // The test push is shown here and goes no further. Below this point the
-    // payload is handed to the Firebase SDK, which — when any window of the app
-    // is visible — forwards it to the page and displays nothing at all. That is
-    // the right answer for a turn (the screen updates instead) and the wrong
-    // one for a button whose entire job is to make a notification appear, since
-    // whoever pressed it is looking at the app by definition.
-    const testPush = readTestPush(e);
-    if (testPush) {
-        e.stopImmediatePropagation();
-        e.waitUntil(showPushNotification(testPush));
-        return;
+    const data = readPushData(event);
+    if (data) {
+        event.waitUntil(showPushNotification(data));
     }
 
-    // Kep old event data to override
-    const oldData = e.data;
+    // Keep the old event's data to override.
+    const oldData = event.data;
 
-    // Create a new event to dispatch, pull values from notification key and put it in data key,
-    // and then remove notification key
+    // A new event to dispatch, with the values under `notification` moved into
+    // `data` and the `notification` key removed.
     const newEvent = new CustomPushEvent({
         data: {
-            ehheh: oldData.json(),
             json() {
                 const newData = oldData.json();
                 newData.data = {
@@ -115,22 +120,21 @@ self.addEventListener('push', (e) => {
                 return newData;
             },
         },
-        waitUntil: e.waitUntil.bind(e),
+        waitUntil: event.waitUntil.bind(event),
     });
 
-    // Stop event propagation
-    e.stopImmediatePropagation();
+    // Stop event propagation.
+    event.stopImmediatePropagation();
 
-    // Dispatch the new wrapped event
+    // Dispatch the new wrapped event.
     dispatchEvent(newEvent);
 });
 
-const messaging = firebase.messaging();
-
-messaging.onBackgroundMessage((payload) => {
-    console.log('[firebase-messaging-sw.js] Received background message ', payload);
-    return showPushNotification(payload.data);
-});
+// Registered for its side effect, not for anything we call on it: this is what
+// puts the SDK's own push handler in place, and that handler is what posts an
+// arriving push to the open page so `onMessage` fires there. Without it the app
+// would still show notifications and would stop refreshing itself.
+firebase.messaging();
 
 self.addEventListener('notificationclick', (event) => {
     // close notification after click

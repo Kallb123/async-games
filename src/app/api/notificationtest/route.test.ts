@@ -84,13 +84,13 @@ describe('POST /api/notificationtest', () => {
         expect(sentPushes[0].options?.channel).toBe('yourTurn');
     });
 
-    it('sends it as the event the service worker shows over an open app', async () => {
+    it('sends it under its own event, with somewhere to go', async () => {
         withDevices(1);
 
         await sendTest();
 
-        // The worker keys its show-it-anyway case off this event name;
-        // serviceWorker.test.ts holds the worker to the same constant.
+        // Its own event, so the test's notification has its own tag and can't
+        // replace an unread turn notification.
         expect(sentPushes[0].data.event).toBe(NOTIFICATION_TEST_EVENT);
         // And it carries somewhere to go, or the tap does nothing.
         expect(sentPushes[0].data.link).toBeTruthy();
