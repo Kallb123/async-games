@@ -35,6 +35,8 @@ routes, one shared panel and one push channel, hung off things already built:
 | Notification preferences | `src/utils/firebase/notificationPreferences.ts` | A new `chat` channel and its Settings row. |
 | Push → refetch on the client | `src/utils/hooks/usePushEvents.ts`, `useRefreshableData.ts` | `CHAT_EVENTS`, and the two loading flags the panel renders with. |
 | Shared game chrome | `src/components/ui/GameShell.tsx` | Where the chat button and panel mount — **once**, not once per game. See §6. |
+| The thread's rows | `src/components/ui/RecapTimeline.tsx`, `src/components/games/MatchHistory.tsx` | The message list. A chat thread is the recap timeline at a third size, not new markup. See §6. |
+| Per-browser storage | `src/utils/hooks/useDismissibleBanner.ts` | The unread read-marker, once its swallowed `localStorage` access is extracted. See §6. |
 | Name resolution | `src/utils/users/clerk.ts` (`userIdListToUserIdNameMap`) | One Clerk call per response; no name is ever stored on a message. |
 
 One piece of history worth knowing: `notificationPreferences.ts` opens with a
@@ -48,9 +50,9 @@ before the switch goes back.
 
 - A 💬 button in the in-game top bar, on every multiplayer game. A dot on it
   when there are messages the player hasn't seen.
-- Tapping it opens the thread over the board: messages oldest-first, each with
-  its sender's name in that player's seat colour, a relative timestamp, and a
-  composer at the bottom.
+- Tapping it opens the thread below the board, where the match-history log
+  opens: messages oldest-first, each dotted in its sender's seat colour, with
+  the sender's name and a relative timestamp, and a composer at the bottom.
 - Sending pushes a notification to the other players — "Ann in Train Time",
   body: the message — throttled per recipient so a conversation doesn't buzz a
   phone once per line (§5).
@@ -112,11 +114,16 @@ Messages must not outlive their game.
 
 - **Account deletion** (`src/app/api/user/delete/route.ts`): that route already
   deletes every game the user was in (`GameDataModel.deleteMany({ userIdList:
-  userId })`). Collect those `gameId`s *before* the delete and add
-  `ChatMessageModel.deleteMany({ gameId: { $in: gameIds } })` beside the
-  existing `ReactionModel` line. That covers every message the user sent **and**
-  every message anyone sent to them, because chat only exists inside games they
-  were a player of — so no `senderId` index is needed.
+  userId })`). Chat is keyed by *game*, and the existing `ReactionModel` line
+  beside it is keyed by *user* (`{ $or: [{ actorId }, { recipientId }] }`), so
+  this is a new step rather than one more line of the same shape: read the
+  user's `gameId`s (`GameDataModel.find({ userIdList: userId })`, projected to
+  `gameId`) **before** the games are deleted, then
+  `ChatMessageModel.deleteMany({ gameId: { $in: gameIds } })`.
+  Worth the extra read: it takes every message in those games, not just the
+  departing player's, so nobody's half of a conversation is left orphaned in a
+  collection whose game no longer exists. Keying it by `senderId` instead would
+  be one line and would leave exactly that behind.
 - There is no other path that deletes a game today. If one is added, it deletes
   chat too; note it in that route rather than sweeping later.
 
@@ -151,8 +158,12 @@ folder shape as the existing `[gameid]/reaction` and `[gameid]/recap` routes.
 
 ### `GET /api/game/[gameid]/chat`
 
-1. `auth()` — 401 if not signed in (401, not 400, so `fetchWithSessionRetry`
-   can retry a cookie-refresh race, per `[gameid]/route.ts`).
+1. `auth()` — 401 if not signed in. The convention is split: follow
+   `[gameid]/route.ts`, which returns 401 with a comment explaining why
+   (`fetchWithSessionRetry` retries a 401, and only a 401, so a tab whose
+   session cookie is still refreshing recovers instead of bouncing home). The
+   sibling `[gameid]/reaction/route.ts` returns 400 and is the outlier; a GET
+   the board polls wants the retryable code.
 2. `dbConnect()`, load the game by `gameId` — 404 if missing.
 3. **`gameData.userIdList.includes(userId)` — 403 otherwise.** This is the whole
    access control for chat, so it is the line to get right.
@@ -191,8 +202,9 @@ the replay adapters or the recap feed.
    already accepts.
 6. Save the message.
 7. Push to the other players (§7), guarded by its own limit.
-8. Return `{ success: true, message: IChatMessageResponse }` so the client can
-   render the sent line without a refetch.
+8. Return `{ success: true, message: IChatMessageResponse }` — the stored
+   message, for the route test to assert on. The client refetches rather than
+   rendering it directly; see §6 on why there is no optimistic append.
 
 Both handlers are membership-gated and both take the `gameid` from the path, so
 neither trusts a `gameId` in the body. Worth a `locksmith` and a `gremlin` pass
@@ -204,91 +216,146 @@ before it merges, per `AGENTS.md`.
 
 ### The panel: `src/components/games/GameChat.tsx`
 
-Sits beside `MatchHistory` and `TurnRecap` — game-agnostic components that every
-board screen shows. It owns:
+Sits beside `MatchHistory` and `TurnRecap` — the game-agnostic components every
+board screen shows — and is **presentational**: it is handed
+`{ messages, isLoading, isRefreshing, send }` and owns no fetching of its own
+(see "where it mounts" below). `RefreshableState` in `useRefreshableData.ts` is
+declared for exactly this: "a presentational component handed data someone else
+fetched".
 
-- `useGameChat(gameId, { open })` (below) for data and sending;
-- the message list: one row per message, `Avatar` for the sender, the sender's
-  name tinted by `playerColourForId(senderId, userIdList)` (the same helper the
-  scoreboard and `MatchHistory` colour by, so a player is one colour everywhere),
-  `formatRelativeTime` from `src/utils/ui/time.ts` with `useNowToTheMinute()`
-  for the timestamp;
-- the composer: a `.ag-input` and an `.ag-btn ag-btn--primary`, disabled while
+It is the `MatchHistory` shape plus a composer, because a chat thread is the
+same picture as a match history:
+
+- the `.ag-log` block with an `.ag-hand-title` ("Chat"), and `.ag-log-empty`
+  when there is nothing yet — the same wrapper `MatchHistory` uses;
+- the rows are **`RecapTimeline`** (`compact`), whose own comment says the
+  recap list and the match history "are the same picture at two sizes, so they
+  are the same component". A chat thread is the third size: `dotColour` from
+  `playerColourForId(senderId, userIdList)` — so a player is one colour on the
+  board, the scoreboard, the log and the thread — `title` the message text, and
+  `detail` the sender's name and `formatRelativeTime(timestamp,
+  useNowToTheMinute())`, which is precisely the call `TurnRecap` already makes.
+  No `Avatar`: the GET carries no image URL, so every badge would fall back to
+  initials, and the coloured dot is already how this app says whose line it is;
+- the composer: an `.ag-input` and an `.ag-btn ag-btn--primary`, disabled while
   empty, over-length or sending;
-- the empty state, in the `.ag-log-empty` idiom;
-- `Skeleton` on first load and `Refreshable` around the list on a refetch —
-  the `isLoading` / `isRefreshing` split `useRefreshableData` exists to give.
+- `Skeleton` on first load, `Refreshable` around the rows on a refetch — the
+  `isLoading` / `isRefreshing` split `useRefreshableData` exists to give.
 
 Message text is rendered as text. React escapes it; nothing here goes near
 `dangerouslySetInnerHTML`.
 
-New CSS is a small `.ag-chat-*` block appended to `ag-theme.css`, in `--ag-*`
-tokens, next to `.ag-log`. No inline styles for colour, spacing or surfaces.
+That leaves almost no new CSS: one composer flex row (and, if the compact
+timeline reads too tall for a conversation, a `.ag-chat` type tweak beside
+`.ag-log` in `ag-theme.css`, in `--ag-*` tokens). If a `.ag-chat-*` block starts
+growing past that, the row has stopped being a timeline row and the reuse should
+be re-argued rather than quietly abandoned.
+
+**The thread renders inline**, where `MatchHistory` renders — in `GameShell`'s
+children, below the board. Nothing in `ag-theme.css` does panel-over-board
+today, so floating it means inventing positioning and scrim CSS for one screen.
+If it later has to float, the sheet to reuse is `InfoModal`'s `.ag-modal`, not a
+new one.
 
 ### The hook: `src/utils/hooks/useGameChat.ts`
 
 ```ts
-useRefreshableData<IChatResponse>(`/api/game/${gameId}/chat`, CHAT_EVENTS, {
-    pollWhileWatching: open,
-});
+export function useGameChat(gameId: string, open: boolean) {
+    const { data, isLoading, isRefreshing, refresh } =
+        useRefreshableData<IChatResponse>(`/api/game/${gameId}/chat`, CHAT_EVENTS,
+            { pollWhileWatching: open });
+    …
+}
 ```
 
-plus a `send(text)` that POSTs, appends the returned message optimistically and
-refreshes. `pollWhileWatching` is gated on the panel being open, for the reason
-`useGameData` gates its own polling on waiting for an opponent: a closed panel
-has nothing to wait for, and every tick is a request per watching player. A
-message arriving while the panel is shut still lands as a push, which is what
-`CHAT_EVENTS` refetches on.
+`send(text)` POSTs and then `await refresh()`. **No optimistic append:**
+`useRefreshableData` owns `data` and exposes no setter, so an optimistic list
+means a second copy of the messages inside this hook, merged with the hook's own
+and rendering the sent line twice until the refetch reconciles it. A refetch
+after a POST the player just waited on is imperceptible and has one source of
+truth. (§5's POST response still returns the stored message — for the route test
+to assert on, not for the client to render.)
 
-`CHAT_EVENTS = ['ChatMessage'] as const` goes in `usePushEvents.ts` beside the
-other event groups.
+`pollWhileWatching` is gated on the panel being open, for the reason `useGameData`
+gates its own polling on waiting for an opponent: a closed thread has nothing to
+wait for, and every tick is a request per watching player. `CHAT_EVENTS =
+['ChatMessage'] as const` goes in `usePushEvents.ts` beside the other event
+groups, and covers the closed panel — as long as the hook is still mounted,
+which is why it lives in the shell and not in the panel.
 
-### Where it mounts: `GameShell`, once
+### Where it mounts: `GameShell`, once — and the log with it
 
 This is the part to get right, and the reason to look at `showLog` first: the
-"turn history" toggle is hand-rolled in **eight** game screens — a `useState`, a
-`GameOption` row and a render block in each. Chat must not become the ninth
-copy of that shape.
+"turn history" toggle is hand-rolled in **eight** game screens, and it is three
+pasted pieces each — a `useState`, a `history` `GameOption` row, and a
+`{showLog && <MatchHistory …/>}` block:
 
-So `GameShell` — the shared in-game chrome every board already wraps itself in,
-and used by nothing else — grows one optional prop:
+```
+outbreak 58/283/450 · snakesandladders 37/178/265 · worlddomination 43/226/330
+settlementsandcities 62/304/440 · dicecities 40/160/227 · solitaire 27/86/164
+traintime 57/242/477 · smartthink 33/118/174
+```
+
+Chat must not become the ninth copy of that shape. So `GameShell` — the shared
+in-game chrome every board wraps itself in, and used by nothing else — grows two
+optional props, and the second one is what makes this change a net deletion:
 
 ```tsx
 interface GameShellProps {
     …
-    /** The game's chat thread. Omitted (or a single-seat game) renders no chat. */
+    /** The game's chat thread. Omitted (or a single-seat game) renders none. */
     chat?: { gameId: string; userIdList: string[] };
+    /** The match-history log, behind the shell's own toggle. */
+    log?: { entries: IHistoryEntry[]; userIdList?: string[]; oldestFirst?: boolean };
 }
 ```
 
-`GameShell` renders the 💬 top-bar button (left of the existing `right` slot,
-reusing `.ag-game-topbar-btn` and its `--on` state) and the panel when open. It
-holds only `open`; `GameChat` owns the fetching, so the shell stays the dumb
-frame it is today. Nothing renders when `chat` is absent or
-`userIdList.length < 2` — which is how Solitaire gets no chat without naming
-Solitaire anywhere.
+`GameShell` then owns:
 
-Every board screen already has both values in scope. The wiring per game is one
-prop:
+- `useGameChat(gameId, open)` — **one** fetch, feeding both the thread and the
+  unread dot. The dot has to know about messages while the panel is shut, so the
+  hook cannot live inside the panel;
+- the 💬 top-bar button, reusing `.ag-game-topbar-btn` and its `--on` state. It
+  is a button rather than a `GameOptionsMenu` row (the documented home for
+  top-bar actions) for one reason worth writing down: **an unread dot cannot be
+  seen inside a closed kebab menu.** The log toggle has no badge and stays a
+  menu row;
+- the `log` toggle as a `GameOption`, and `<MatchHistory>` below the children —
+  the same markup, moved once instead of pasted eight times.
+
+Nothing chat-shaped renders when `chat` is absent or `userIdList.length < 2` —
+which is how Solitaire gets no chat button without Solitaire being named
+anywhere. Solitaire still passes `log`, so it is **seven** chat wirings and
+eight log wirings. Per screen:
 
 ```tsx
-<GameShell … chat={{ gameId, userIdList }}>
+<GameShell … chat={{ gameId, userIdList }} log={{ entries: nav.displayedHistory, userIdList }}>
 ```
 
-Eight screens, one line each, no new state and no new menu row in any of them.
+and each screen deletes its `showLog` state, its history menu row and its render
+block.
+
+If folding the log in makes the PR too wide to review, it is a clean follow-up —
+but then say so here, because a `GameShell` that owns a chat panel *next to*
+eight hand-rolled log panels is the exact smell this section opens by naming.
 
 ### Unread marker
 
-The dot on the button needs "what has this player already seen". Phase 1 keeps
-it in `localStorage` under `ag-chat-read:<gameId>` (an ISO timestamp, written
-when the panel opens); unread = messages newer than it from somebody else.
+The dot needs "what has this player already seen". Phase 1 keeps it in
+`localStorage` under `ag-chat-read:<gameId>` (an ISO timestamp written when the
+panel opens); unread = messages newer than it, from somebody else.
 
-Per-device, and that is the known cost: read on your phone, the dot lingers on
-your laptop. The alternative is a server-side read marker — a fourth small
-collection or a `Map` on the game — and it is not worth one before anyone has
-asked, because the badge is a nicety and the push already did the telling. §10
-records what a server-side marker would unlock (an unread count on the
-dashboard), for when that is the thing being asked for.
+`localStorage` access throws in private mode and with site data blocked, and
+that try/catch is already written twice — `useDismissibleBanner` and
+`useGuestMoved`. This would be the third, so **extract first**: generalise
+`useDismissibleBanner` into a `useStoredValue(storageKey)` hook (get/set a
+string, throws swallowed), and have the banner and `useGuestMoved` (both storing
+`'1'`) and the chat marker (an ISO) share it. One try/catch in the repo.
+
+Per-device is the known cost: read on your phone, the dot lingers on your
+laptop. A server-side marker is a fourth collection for a badge nobody has asked
+for yet, and the push already did the telling — §10 records what it would
+unlock, for when that is the thing being asked for.
 
 ---
 
@@ -353,9 +420,11 @@ Named so a reviewer can check them off rather than wonder:
 Moderation is out of scope here, so that work is still not done. **Phase 1
 therefore honours the existing decision the cheap way: a guest account can read
 the thread but not post**, with the composer replaced by the existing
-`ClaimAccountOffer` — claim your account and you can talk. `isGuest(user)` on
-the client for the composer, `user.publicMetadata.guest !== true` on the POST
-route for the gate that actually holds.
+`ClaimAccountOffer` — claim your account and you can talk. `isGuest(user)`
+answers it in both places: on the client for the composer, and on the POST route
+for the gate that actually holds. It is the one place that question is asked
+(`src/utils/ui/players.ts`), so neither end re-reads `publicMetadata.guest`
+itself.
 
 This is a decision to *confirm*, not one to assume. A guest reaches a table only
 by a join code the host shared with them, so they are a stranger to the app
@@ -384,10 +453,16 @@ which is another reason the wiring is a prop rather than something automatic.
 ## 10. Phases
 
 **Phase 1 — the thread.** §3 model + deletion wiring, §4 validation module, §5
-routes, §6 panel + hook + `GameShell` prop + the eight one-line wirings, §7 push
-and channel. This is the whole feature as described above; it is not worth
-shipping half of it, since a chat nobody is notified about is a chat nobody
-uses.
+routes, §6 panel + hook + the two `GameShell` props (chat on seven screens, the
+log moved off all eight) + the `useStoredValue` extraction, §7 push and channel.
+This is the whole feature as described above; it is not worth shipping half of
+it, since a chat nobody is notified about is a chat nobody uses.
+
+The one part that could reasonably be split out is folding the existing
+`showLog` markup into `GameShell` — it touches all eight board screens and none
+of it is chat. Split it if the diff is unreviewable, but split it *forwards*
+(land the `log` prop first, then chat on top), never by leaving the eight copies
+standing beside a shell that has just learned to own a panel.
 
 **Phase 2 — the polish, once phase 1 has been used.**
 
@@ -412,13 +487,16 @@ decision is waiting on.
 - **Tests.** `src/utils/chat.test.ts` over `normaliseMessage` (empty, blank,
   over-length, non-string, blank-line collapsing). A route test in the
   `src/app/api/game/gameRoutes.test.ts` style covering: a non-player gets 403 on
-  both verbs, an over-length body gets 400, the rate limit gets 429, a stored
-  message comes back with the sender's *current* name, and the sender gets no
-  push.
+  both verbs, an over-length body gets 400, the rate limit gets 429, a guest
+  gets refused, a stored message comes back with the sender's *current* name
+  (rename between the POST and the GET), and the sender gets no push.
 - **Reviews**, per `AGENTS.md`: `locksmith` and `gremlin` on the routes,
   `caveman` on the panel and the `GameShell` change, `rulebook` on the
   registry/upkeep edits (channel list, `usePushEvents`, account deletion,
-  What's new).
+  What's new). This plan has had one `caveman` pass already — §6's reuse of
+  `RecapTimeline`, the single fetch in the shell, the dropped optimistic append
+  and the `useStoredValue` extraction are its findings; the implementation
+  should not quietly undo them.
 - **Docs.** `ARCHITECTURE.md` §5 gains `ChatMessage` beside `GameResult` in the
   data-model section, and §8 gains the `chat` channel. This document gets a
   status line at the top saying it shipped, as `since-you-were-last-here.md`
