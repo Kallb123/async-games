@@ -1,12 +1,16 @@
 import { readJsonBody } from '@/utils/api/requestBody';
-import { auth } from '@clerk/nextjs/server';
-import { NextRequest, NextResponse } from 'next/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { ChatMessageModel, IChatMessageDataDocument } from '@/utils/mongodb/ChatMessageData';
 import { normaliseMessage } from '@/utils/chat';
 import { consumeRateLimit } from '@/utils/rateLimit';
+import { usersById } from '@/utils/users/clerk';
+import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
+import { buildChatNotification } from '@/utils/firebase/notificationContent';
+import { readableName } from '@/utils/ui/players';
 
 export interface IChatParams {
     gameid: string;
@@ -95,8 +99,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IC
 // as the GET; on top of it, a bad body is a 400 (normaliseMessage), and a flood
 // is a 429. Deliberately *not* requireLiveGame: "gg" after the last turn is the
 // most obvious message in an async game, and a finished game's document is not
-// deleted (docs/in-game-chat.md §5). No push here — that is commit 6; this one
-// stores and returns the message and nothing else.
+// deleted (docs/in-game-chat.md §5). Once stored, the message pushes to the
+// other players — throttled per recipient, and never able to undo the write it
+// follows (see the send below).
 export async function POST(request: NextRequest, { params }: { params: Promise<IChatParams> }) {
     console.log(`POST ${request.nextUrl.pathname}`);
 
@@ -143,6 +148,44 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
         timestamp: (new Date()).toISOString(),
     });
     await messageDoc.save();
+
+    // Tell the other players — never the sender, who is looking at the thread
+    // they just posted in. Throttled per recipient (docs/in-game-chat.md §7):
+    // at most one chat push per player per game per ten minutes, so a
+    // back-and-forth doesn't buzz a phone once a line. The message is stored and
+    // shown on the poll either way; only the buzz is suppressed.
+    //
+    // Run after the response has flushed, like the command route's "your move"
+    // push: the Clerk lookups and the FCM fan-out are the slowest part of this
+    // request and none of it is anything the sender is waiting on (they just
+    // want the line stored — the client refetches rather than rendering the
+    // return value). The whole block is guarded, so nothing here can undo a
+    // message that already saved: a push happens *because* of a message, never
+    // the other way round. sendPushToUsers already swallows its own transport
+    // failure; this catches the lookups around it (usersById, currentUser, the
+    // throttle) so a Clerk or limiter wobble stays a missing buzz, not a failed
+    // request (docs/in-game-chat.md §7).
+    after(async () => {
+        try {
+            const recipientIds = gameData.userIdList.filter((id) => id !== userId);
+            const notify: string[] = [];
+            for (const id of recipientIds) {
+                if (await consumeRateLimit('chatPush', `${gameid}:${id}`, 1, 10 * 60_000)) {
+                    notify.push(id);
+                }
+            }
+            if (notify.length) {
+                const senderName = readableName(await currentUser());
+                await sendPushToUsers(await usersById(notify), {
+                    event: 'ChatMessage',
+                    gameId: gameid,
+                    link: gameNotificationLink(gameData.gameType.url, gameid),
+                }, buildChatNotification(senderName, gameData, message), { channel: 'chat' });
+            }
+        } catch (error) {
+            console.error(`Failed to send chat push for game ${gameid}`, error);
+        }
+    });
 
     // The stored message, for the route test to assert on. The client refetches
     // rather than rendering this directly — one source of truth, no optimistic

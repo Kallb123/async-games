@@ -197,6 +197,17 @@ export function buildTeamResultNotification(gameData: IGameData, won: boolean): 
         : gamePush(gameData, `Your team lost ${friendlyName}`, `It got away from you after ${moves} moves. Try again?`);
 }
 
+/**
+ * Someone sent a message in a game you're in. Unlike a turn notification, the
+ * message itself is the body — there is nothing better to say than what was
+ * said — so it goes through the same `truncate` every game push uses, carrying
+ * the game's own artwork. The name is the sender's, resolved by the route from
+ * `currentUser()`, never stored on the message (docs/in-game-chat.md §3, §7).
+ */
+export function buildChatNotification(senderName: string, gameData: IGameData, text: string): PushNotification {
+    return gamePush(gameData, `${senderName} in ${gameData.gameType.friendlyName}`, text);
+}
+
 /** Someone reacted to one of your moves in the recap feed. */
 export function buildReactionNotification(actorName: string, reaction: string, eventTitle: string): PushNotification {
     return {
