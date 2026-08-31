@@ -17,13 +17,20 @@ export interface OutbreakDiseaseColorDef {
     region: string;
     /** Accent for cubes, the region legend, and cure/eradication markers. */
     hex: string;
+    /**
+     * The same colour darkened enough to be read as text on a light surface —
+     * `hex` is picked to be a cube on the map, and blue and yellow especially
+     * are far too pale for a number printed on the cream `--ag-surface`. Use
+     * this wherever the colour has to *say* something rather than fill a shape.
+     */
+    inkHex: string;
 }
 
 export const DISEASE_COLOR_DEFS: Record<OutbreakDiseaseColor, OutbreakDiseaseColorDef> = {
-    blue: { id: 'blue', name: 'Blue', region: 'North America & Europe', hex: '#0c97e2' },
-    yellow: { id: 'yellow', name: 'Yellow', region: 'South America & Africa', hex: '#fdcd0d' },
-    black: { id: 'black', name: 'Black', region: 'Middle East & Central/South Asia', hex: '#2b2b2b' },
-    red: { id: 'red', name: 'Red', region: 'East/Southeast Asia & Oceania', hex: '#ed362d' },
+    blue: { id: 'blue', name: 'Blue', region: 'North America & Europe', hex: '#0c97e2', inkHex: '#0a6094' },
+    yellow: { id: 'yellow', name: 'Yellow', region: 'South America & Africa', hex: '#fdcd0d', inkHex: '#846000' },
+    black: { id: 'black', name: 'Black', region: 'Middle East & Central/South Asia', hex: '#2b2b2b', inkHex: '#2b2b2b' },
+    red: { id: 'red', name: 'Red', region: 'East/Southeast Asia & Oceania', hex: '#ed362d', inkHex: '#c0261d' },
 };
 
 /** The side of its node a city's name label prefers, hand-picked to keep the 48 labels off the printed routes. `MapLabelLayer` moves one off its preferred side only when a neighbour or a marker has taken it. */

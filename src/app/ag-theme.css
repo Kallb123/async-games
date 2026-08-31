@@ -3345,6 +3345,14 @@ button.ag-tt-ticket { cursor: pointer; }
 .ag-game--outbreak .ag-stat-row { background: var(--ob-navy-2); padding: 0 12px 10px; }
 .ag-game--outbreak .ag-stat { background: var(--ag-surface); border-radius: 9px; }
 
+/* ---- Cubes-left tile: one count per colour rather than a single total ---- */
+/* Four numbers share the space one big one had, so they drop a few sizes and
+   lean on colour to say which supply is which — the region legend under the
+   board is what names the colours. The numbers use each colour's `inkHex`
+   (board.ts), not the cube `hex`, or blue and yellow would be unreadable here. */
+.ag-ob-cubetally { display: flex; gap: 6px; }
+.ag-ob-cubetally-n { font: 800 16px var(--ag-font); font-variant-numeric: tabular-nums; }
+
 /* ---- Infection-rate drawer: the escalation scale behind the stat ---- */
 /* Sits under the stat row on the same navy panel, so tapping the stat reads
    as opening a slice out of it — the Train Time ticket-drawer move. */
