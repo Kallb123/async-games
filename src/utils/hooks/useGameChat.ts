@@ -70,10 +70,17 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean): Ga
     // since last time stays marked as new for as long as this viewing stays
     // open. `undefined` means "not captured for this viewing yet".
     //
+    // `boundaryLatest` is the newest message that existed at the same moment —
+    // once a poll brings in something newer than that, the whole divider clears
+    // rather than sitting there stale: a player watching the thread live and
+    // seeing a message arrive doesn't need "new since last time" pointed out to
+    // them, they just watched it happen.
+    //
     // Adjusted directly during render (not in an effect, which would setState
     // synchronously and trigger a cascading render — react-hooks/set-state-in-
     // effect) — the same `loadedFor`-style comparison `useTurnRecap` uses.
     const [readBoundary, setReadBoundary] = useState<string | null | undefined>(undefined);
+    const [boundaryLatest, setBoundaryLatest] = useState<string | null>(null);
     const [wasOpen, setWasOpen] = useState(open);
     if (open !== wasOpen) {
         setWasOpen(open);
@@ -90,6 +97,7 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean): Ga
     // captures the correct boundary instead.
     if (open && readBoundary === undefined && !isLoading && data !== null) {
         setReadBoundary(readAt);
+        setBoundaryLatest(latest);
     }
 
     const messages: GameChatMessage[] = useMemo(() => rawMessages.map((message) => ({
@@ -100,8 +108,9 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean): Ga
         unread: myId !== undefined
             && message.senderId !== myId
             && readBoundary !== undefined
+            && latest === boundaryLatest
             && (readBoundary === null || message.timestamp > readBoundary),
-    })), [rawMessages, myId, readBoundary]);
+    })), [rawMessages, myId, readBoundary, latest, boundaryLatest]);
 
     // While the panel is open, advance the marker to the newest message — and
     // keep advancing it as the poll brings more in — so the dot never lights for

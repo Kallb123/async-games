@@ -1,5 +1,5 @@
 'use client'
-import React, { useState } from 'react';
+import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import RecapTimeline from '@/components/ui/RecapTimeline';
 import Refreshable from '@/components/ui/Refreshable';
 import Skeleton from '@/components/ui/Skeleton';
@@ -38,9 +38,55 @@ interface GameChatProps {
 //
 // Message text is rendered as text — React escapes it; nothing here goes near
 // dangerouslySetInnerHTML.
+// Slack that still counts as "at the bottom" — a player doesn't have to be
+// pixel-perfect for new messages to keep following them.
+const SCROLL_BOTTOM_SLACK = 32;
+
 export default function GameChat({ messages, isLoading, isRefreshing, sending, send, onClose, userIdList, usernameList }: GameChatProps) {
     const now = useNowToTheMinute();
     const [draft, setDraft] = useState('');
+
+    // Follows the thread to its newest message when the player is already
+    // looking at the bottom of it, the way a chat app is expected to; leaves the
+    // scroll position alone if they've scrolled up to read history. Read via a
+    // plain DOM listener rather than React state, since scroll position doesn't
+    // need to drive a render — only whether the *next* one should jump.
+    const isAtBottomRef = useRef(true);
+    const listRef = useRef<HTMLOListElement | null>(null);
+    const handleListScroll = useCallback(() => {
+        const node = listRef.current;
+        if (node) {
+            isAtBottomRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < SCROLL_BOTTOM_SLACK;
+        }
+    }, []);
+    // React 19 detaches by running the returned cleanup rather than calling this
+    // again with null (see useBannerHeight, which does the same for a native
+    // observer) — so the listener is scoped to the node that was actually
+    // passed in, not whatever `listRef.current` happens to hold by then.
+    const attachListRef = useCallback((node: HTMLOListElement | null) => {
+        if (!node) return;
+        listRef.current = node;
+        node.addEventListener('scroll', handleListScroll, { passive: true });
+        return () => {
+            listRef.current = null;
+            node.removeEventListener('scroll', handleListScroll);
+        };
+    }, [handleListScroll]);
+    // Applied in a layout effect, before paint, so a jump to the newest message
+    // never shows as a visible snap after the new content has already rendered.
+    // Keyed on the newest message's id, not the `messages` array itself: that
+    // array gets a new identity on every poll response (`useGameChat`'s
+    // `useMemo` recomputes it from a fresh `data` object each time), including
+    // the idle ticks where nothing actually changed — keying on it would force
+    // a scrollHeight read and scrollTop write every ten seconds the panel sits
+    // open, not just when a message arrives.
+    const newestMessageId = messages.length ? messages[messages.length - 1].messageId : null;
+    useLayoutEffect(() => {
+        const node = listRef.current;
+        if (node && isAtBottomRef.current) {
+            node.scrollTop = node.scrollHeight;
+        }
+    }, [newestMessageId]);
 
     const trimmed = draft.trim();
     const canSend = trimmed.length > 0 && trimmed.length <= MAX_MESSAGE_LENGTH && !sending;
@@ -72,6 +118,7 @@ export default function GameChat({ messages, isLoading, isRefreshing, sending, s
             ) : (
                 <Refreshable isRefreshing={isRefreshing}>
                     <RecapTimeline
+                        ref={attachListRef}
                         compact
                         events={messages.map((message, index) => ({
                             id: message.messageId,
