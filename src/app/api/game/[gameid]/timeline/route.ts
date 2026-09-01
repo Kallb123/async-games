@@ -12,8 +12,9 @@ export interface IGetTimelineParams {
 }
 
 // Returns the full reconstructed timeline for a game: the initial state, one
-// snapshot per real turn (recap), and — when `plannedCommands` are supplied —
-// additional snapshots for the hypothetical planned turns (planning mode).
+// snapshot per real played command (recap) — a turn spanning several commands
+// shows as several snapshots — and, when `plannedCommands` are supplied,
+// additional snapshots for the hypothetical planned commands (planning mode).
 export async function POST(request: NextRequest, { params }: { params: Promise<IGetTimelineParams> }) {
     console.log(`POST ${request.nextUrl.pathname}`);
 

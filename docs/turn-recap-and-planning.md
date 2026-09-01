@@ -3,15 +3,17 @@
 Three related features let players move off the live game state, and a fourth
 reads the same history after the fact:
 
-- **Turn recap** — step backward through the *actual* turns of a game and see the
-  exact board as it looked at each past turn.
+- **Turn recap** — step backward through a game's *actual* played actions (one
+  step per command, not per turn — a turn spanning several commands, like
+  Settlements & Cities' roll/build/build/end, shows as several steps) and see
+  the exact board as it looked after each.
 - **"Since you were last here"** — the per-player catch-up card shown when you
   open a game on your turn: the opponents' moves that happened while you were
   away, as a semantic event feed rather than a board. See
   [`since-you-were-last-here.md`](./since-you-were-last-here.md) for its design.
-- **Planning mode** — from the current state, queue *hypothetical* future turns,
-  step forward/back through them, then return to the live game. (Currently only
-  Snakes & Ladders.)
+- **Planning mode** — from the current state, queue *hypothetical* future
+  actions, step forward/back through them, then return to the live game.
+  (Currently only Snakes & Ladders.)
 - **Per-turn result charts** — the turn-by-turn lines on a finished game's
   result page (coins, resources, points…). Replay is what makes them possible:
   the numbers were never stored per turn, so they're recomputed once when the
@@ -32,7 +34,7 @@ persisted:   gameState.commandHistory = [cmd0, cmd1, cmd2, …]   (the moves)
 on request:  buildTimeline() → start from the initial state, run Execute() for
              each command in order, snapshotting after each
                     │
-returned:    [ board@initial, board@turn1, board@turn2, … ]     (computed, not stored)
+returned:    [ board@initial, board@cmd1, board@cmd2, … ]      (computed, not stored)
 ```
 
 Recap uses the real `commandHistory`. Planning appends the player's hypothetical
@@ -43,7 +45,7 @@ commands after it. Same engine, two inputs.
 | Piece | File | Role |
 |---|---|---|
 | Replay engine | `src/utils/games/replay.ts` | `buildTimeline(gameData, userIdNameMap, plannedCommands?, onStep?, viewerId?)` reconstructs the timeline; per-game `IReplayAdapter`s provide the initial state + response conversion |
-| Timeline API | `src/app/api/game/[gameid]/timeline/route.ts` | `POST` returns the snapshots (recap history + optional planned turns) |
+| Timeline API | `src/app/api/game/[gameid]/timeline/route.ts` | `POST` returns the snapshots (recap history + optional planned actions) |
 | Navigation hook | `src/utils/hooks/useTurnNavigation.ts` | Owns view index / mode, fetches the timeline, exposes step/return/plan actions |
 | Controls | `src/components/games/TurnNavControls.tsx` | Game-agnostic ⏮ ◀ ▶ / "Back to live game" / (planning) controls |
 | Recap engine | `src/utils/games/recap.ts` | `buildEventFeed(gameData, userIdNameMap, forUserId)` replays the timeline through a per-game `IRecapAdapter` and windows the events to "since your last turn" |

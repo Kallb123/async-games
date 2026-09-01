@@ -76,9 +76,10 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
             callback?.(r);
         }, target);
 
-    // Turn review steps back through the real turns of the match; the board,
-    // the hands and the log all render whichever point is being viewed. The
-    // crew planner (§21.6 step 13) is what turns planning on — until then
+    // Turn review steps back through the match's real actions (one per played
+    // command, not one per turn); the board, the hands and the log all render
+    // whichever point is being viewed. The crew planner (§21.6 step 13) is
+    // what turns planning on — until then
     // OutbreakActions never appears while reviewing, so canPlan stays false.
     const nav = useTurnNavigation<IOutbreakSpecificGameStateResponse>(gameId, {
         specificGameState: gameData?.specificGameState,

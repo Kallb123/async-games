@@ -704,8 +704,10 @@ Because state is a single mutable snapshot, per-turn boards don't exist — they
 **recomputed by replaying `commandHistory`** from a fresh initial state.
 `src/utils/games/replay.ts`'s `buildTimeline()` mirrors the command pipeline
 (`Execute → CheckGameOver → CheckEndTurn`) but never persists or notifies,
-producing an array of per-turn snapshots. Planning appends hypothetical commands
-on top of the real history using the same engine.
+producing an array of snapshots — one per *command*, not one per turn, since a
+turn is often several commands (a Settlements & Cities turn rolls, builds,
+builds, then ends — four commands, one turn). Planning appends hypothetical
+commands on top of the real history using the same engine.
 
 Determinism is preserved by **recording RNG outcomes** into the command the first
 time it executes (e.g. `recordedRoll`), so replays reproduce the original result.
