@@ -6,6 +6,7 @@ import { deadTokensByUser, PushTarget } from './revokedTokens';
 import { getNotificationPreferences, isChannelEnabled, NotificationChannel } from './notificationPreferences';
 import { gamePath, metaForGame } from '@/utils/ui/games';
 import { APP_BASE_URL } from '@/utils/app';
+import { ANDROID_NOTIFICATION_CHANNEL_ID } from './notificationChannel';
 
 export interface PushNotification {
     title: string;
@@ -148,9 +149,19 @@ export async function sendPushToUsers(
                     TTL: `${WEB_PUSH_TTL_SECONDS}`,
                 },
             };
+            // Every Android push carries the same channel, whether Android
+            // ends up drawing it itself (backgrounded or killed app) or the
+            // native shell draws it for the foreground case it's handed
+            // instead (`useCapacitorPush`, `nativePush.ts`) — one channel
+            // either way, see `notificationChannel.ts`.
+            message.android = {
+                notification: {
+                    channelId: ANDROID_NOTIFICATION_CHANNEL_ID,
+                    imageUrl: notification.imageUrl,
+                },
+            };
             if (notification.imageUrl) {
                 message.apns = { fcmOptions: { imageUrl: notification.imageUrl } };
-                message.android = { notification: { imageUrl: notification.imageUrl } };
             }
             return message;
         }));
