@@ -1807,9 +1807,10 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-chat-composer .ag-btn { flex: none; }
 .ag-chat-skeleton { display: flex; flex-direction: column; gap: 12px; padding: 4px 2px; }
 
-/* "Load earlier" sits above the first row, sized down from a full .ag-btn — a
-   thread's own paging control, not a page-level action. */
-.ag-chat-load-earlier { display: flex; width: 100%; margin-bottom: 10px; padding: 8px; font-size: 12px; }
+/* "Load earlier" sits above the first row, sized down from a full .ag-btn (full
+   width already comes from .ag-btn--block) — a thread's own paging control, not
+   a page-level action. */
+.ag-chat-load-earlier { margin-bottom: 10px; padding: 8px; font-size: 12px; }
 
 /* Title and its own ✕ on one row, mirroring the top-bar 💬 toggle so the panel
    can be dismissed from itself. The title carries the log's 9px margin, so the

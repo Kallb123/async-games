@@ -127,7 +127,7 @@ export default function GameChat({ messages, isLoading, isRefreshing, sending, s
                     {hasMoreEarlier && (
                         <button
                             type="button"
-                            className="ag-btn ag-btn--ghost ag-chat-load-earlier"
+                            className="ag-btn ag-btn--ghost ag-btn--block ag-chat-load-earlier"
                             onClick={() => loadEarlier()}
                             disabled={loadingEarlier}
                         >
