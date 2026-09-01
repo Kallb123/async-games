@@ -25,6 +25,15 @@ export interface GameChat {
     /** POSTs `text`, then refetches. Returns false on a rejected or failed send
      *  so the composer can keep what the player typed. */
     send: (text: string) => Promise<boolean>;
+    /** True when there are messages older than the oldest one in `messages` —
+     *  drives the panel's "Load earlier" control. */
+    hasMoreEarlier: boolean;
+    /** True while a `loadEarlier` fetch is in flight. */
+    loadingEarlier: boolean;
+    /** Fetches the CHAT_PAGE_SIZE messages before the oldest one currently
+     *  loaded, and prepends them. A no-op while one is already in flight or
+     *  there is nothing earlier to load. */
+    loadEarlier: () => Promise<void>;
 }
 
 /**
@@ -47,6 +56,20 @@ export interface GameChat {
  * The read marker lives on the server (`data.readAt`), not in `localStorage`:
  * reading the thread on one device clears the dot on every other one. See
  * docs/in-game-chat.md §13.6.
+ *
+ * Older pages (`loadEarlier`) are the one piece of state this hook owns for
+ * itself rather than taking from `useRefreshableData` — deliberately, and only
+ * here. `useRefreshableData` owns `data` and hands out no setter, which is
+ * exactly why there is no optimistic append above: a second copy of the *live*
+ * window would drift from the poll's own copy the moment the two disagreed.
+ * An older page cannot drift, because it never changes once fetched — nothing
+ * edits or deletes a chat message, so a page of history fetched with `before`
+ * is immutable, and it is disjoint from the polled window by construction (its
+ * newest message is strictly older than the polled window's oldest). There is
+ * therefore no reconciliation to get wrong: the live fetch stays the single
+ * source of truth for the tail, and `olderMessages` is only ever appended to at
+ * the front, then reset when `gameId` changes. See docs/in-game-chat.md §13.7
+ * commit 5.
  */
 export function useGameChat(gameId: string, open: boolean, enabled: boolean): GameChat {
     const { user } = useUser();
@@ -61,6 +84,48 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean): Ga
     // every render and defeat the `messages` useMemo below.
     const rawMessages = useMemo(() => data?.messages ?? [], [data]);
     const latest = rawMessages.length ? rawMessages[rawMessages.length - 1] : null;
+
+    // Earlier pages, oldest-first, prepended to the polled window — see the
+    // "why no reconciliation" note above. Reset on a `gameId` change the same
+    // render-time-comparison way `wasOpen` resets `unreadCutoffId` below,
+    // rather than in an effect (react-hooks/set-state-in-effect).
+    const [olderMessages, setOlderMessages] = useState<IChatMessageResponse[]>([]);
+    const [olderHasMore, setOlderHasMore] = useState(false);
+    const [loadingEarlier, setLoadingEarlier] = useState(false);
+    const [olderGameId, setOlderGameId] = useState(gameId);
+    if (gameId !== olderGameId) {
+        setOlderGameId(gameId);
+        setOlderMessages([]);
+        setOlderHasMore(false);
+    }
+    // Before any earlier page has been fetched, "is there more?" is exactly
+    // what the live GET already answered; once at least one has, it's what
+    // that page itself answered — the two never both apply.
+    const hasMoreEarlier = olderMessages.length > 0 ? olderHasMore : (data?.hasMore ?? false);
+
+    const loadEarlier = useCallback(async () => {
+        const oldest = olderMessages.length > 0 ? olderMessages[0] : rawMessages[0];
+        if (loadingEarlier || !oldest) {
+            return;
+        }
+        setLoadingEarlier(true);
+        try {
+            const response = await fetch(`/api/game/${gameId}/chat?before=${encodeURIComponent(oldest.timestamp)}`, {
+                signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+            });
+            if (!response.ok) {
+                console.error(`Failed to load earlier chat messages: ${response.status}`);
+                return;
+            }
+            const body = await response.json() as IChatResponse;
+            setOlderMessages((prev) => [...body.messages, ...prev]);
+            setOlderHasMore(body.hasMore);
+        } catch (error) {
+            console.error('Failed to load earlier chat messages', error);
+        } finally {
+            setLoadingEarlier(false);
+        }
+    }, [gameId, loadingEarlier, olderMessages, rawMessages]);
 
     // The boundary this *viewing* of the panel treats as "already read" — every
     // message *after* the one `unreadCutoffId` names, by position in
@@ -121,10 +186,14 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean): Ga
     }
 
     const messages: GameChatMessage[] = useMemo(() => {
-        // Not captured yet (still loading, or the panel is shut) — nothing is
-        // markable as new.
+        // Older pages predate the polled window entirely, so nothing in them
+        // can be "new since this viewing" — they're always unread: false.
+        const older: GameChatMessage[] = olderMessages.map((message) => ({ ...message, unread: false }));
+
+        // Not captured yet (still loading, or the panel is shut) — nothing in
+        // the live window is markable as new either.
         if (unreadCutoffId === undefined) {
-            return rawMessages.map((message) => ({ ...message, unread: false }));
+            return [...older, ...rawMessages.map((message) => ({ ...message, unread: false }))];
         }
         // `null` means "no boundary" (never read before): everything counts as
         // after it. A real id that's rolled off the loaded page (paged out by
@@ -133,14 +202,14 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean): Ga
         // timestamp version had at that edge.
         const cutoffIndex = unreadCutoffId === null ? -1
             : rawMessages.findIndex((message) => message.messageId === unreadCutoffId);
-        return rawMessages.map((message, index) => ({
+        return [...older, ...rawMessages.map((message, index) => ({
             ...message,
             // `myId` is momentarily undefined before Clerk resolves; treating
             // that as "not mine" would flag the viewer's own already-read
             // messages as unread for a render.
             unread: myId !== undefined && message.senderId !== myId && index > cutoffIndex,
-        }));
-    }, [rawMessages, myId, unreadCutoffId]);
+        }))];
+    }, [rawMessages, olderMessages, myId, unreadCutoffId]);
 
     // While the panel is open, advance the marker to the newest message — and
     // keep advancing it as the poll brings more in — so the dot never lights for
@@ -205,5 +274,5 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean): Ga
         }
     }, [gameId, refresh]);
 
-    return { messages, isLoading, isRefreshing, sending, hasUnread, send };
+    return { messages, isLoading, isRefreshing, sending, hasUnread, send, hasMoreEarlier, loadingEarlier, loadEarlier };
 }

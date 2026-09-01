@@ -6,7 +6,7 @@ import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { ChatMessageModel, IChatMessageDataDocument } from '@/utils/mongodb/ChatMessageData';
 import { ChatReadModel } from '@/utils/mongodb/ChatReadData';
-import { normaliseMessage } from '@/utils/chat';
+import { normaliseMessage, normaliseReadAt } from '@/utils/chat';
 import { consumeRateLimit } from '@/utils/rateLimit';
 import { usersById } from '@/utils/users/clerk';
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
@@ -39,6 +39,10 @@ export interface IChatResponse {
     success: boolean;
     messages: IChatMessageResponse[];
     readAt: string | null;   // this viewer's own marker; null if they never opened the thread. Nobody else's is ever in here (§13.2).
+    // True when there are messages older than the oldest one in this response —
+    // whether this is the live window or an earlier page fetched with `before`.
+    // Drives the panel's "Load earlier" control (§13.7 commit 5).
+    hasMore: boolean;
 }
 
 function toResponse(message: IChatMessageDataDocument): IChatMessageResponse {
@@ -52,8 +56,9 @@ function toResponse(message: IChatMessageDataDocument): IChatMessageResponse {
     };
 }
 
-// The one query chat makes: the newest CHAT_PAGE_SIZE messages in this game,
-// then reversed to oldest-first for the thread. Membership is the whole of the
+// The one query chat makes: the newest CHAT_PAGE_SIZE messages in this game (or,
+// with `?before=`, the newest CHAT_PAGE_SIZE *older than* that cursor), then
+// reversed to oldest-first for the thread. Membership is the whole of the
 // access control — a player in the game may read it, nobody else may.
 export async function GET(request: NextRequest, { params }: { params: Promise<IChatParams> }) {
     console.log(`GET ${request.nextUrl.pathname}`);
@@ -69,6 +74,20 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IC
         return NextResponse.json({}, { status: 401, statusText: "Not signed in" });
     }
 
+    // `before` loads an earlier page of the thread (docs/in-game-chat.md §13.7
+    // commit 5): the client sends the oldest timestamp it already has, and gets
+    // the CHAT_PAGE_SIZE messages immediately before it. Reuses normaliseReadAt
+    // rather than a second copy of "is this a well-formed ISO timestamp" — the
+    // read marker and a paging cursor are the same shape of value.
+    const beforeParam = request.nextUrl.searchParams.get('before');
+    let before: string | null = null;
+    if (beforeParam !== null) {
+        before = normaliseReadAt(beforeParam);
+        if (before === null) {
+            return NextResponse.json({}, { status: 400, statusText: "Invalid before" });
+        }
+    }
+
     await dbConnect();
 
     const { gameid } = await params;
@@ -81,28 +100,34 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IC
         return NextResponse.json({}, { status: 403, statusText: "Not a player in this game" });
     }
 
-    const newest: IChatMessageDataDocument[] = await ChatMessageModel
+    const page: IChatMessageDataDocument[] = await ChatMessageModel
         // messageId is a deterministic tiebreaker: two messages written in the
         // same millisecond compare equal on timestamp alone, and their order
         // among the tie would otherwise be unspecified — swapping between polls
         // and, at the page boundary, flipping in and out of the window. The
         // { gameId: 1, timestamp: -1 } index still leads the scan; only a
         // same-ms tie is settled in memory, and there are only ever a handful.
-        .find({ gameId: gameid })
+        .find(before === null ? { gameId: gameid } : { gameId: gameid, timestamp: { $lt: before } })
         .sort({ timestamp: -1, messageId: -1 })
-        .limit(CHAT_PAGE_SIZE)
+        // One extra, never returned, so hasMore is known without a second
+        // count query — the same "fetch N+1" a limit-based cursor always uses.
+        .limit(CHAT_PAGE_SIZE + 1)
         .exec();
 
+    const hasMore = page.length > CHAT_PAGE_SIZE;
+    const newest = hasMore ? page.slice(0, CHAT_PAGE_SIZE) : page;
     const messages = newest.reverse().map(toResponse);
 
     // The caller's own marker, from the same indexed lookup the read route
     // writes ({ gameId: 1, userId: 1 }) — never another player's (§13.2), and
     // riding this GET rather than a separate request means the dot and the
-    // messages it's counting can never disagree (§13.4).
+    // messages it's counting can never disagree (§13.4). An earlier page is
+    // never what the marker or the unread dot is about, but there is exactly
+    // one caller and one shape for this response either way.
     const marker = await ChatReadModel.findOne({ gameId: gameid, userId }).exec();
     const readAt = marker?.readAt ?? null;
 
-    return NextResponse.json({ success: true, messages, readAt } satisfies IChatResponse);
+    return NextResponse.json({ success: true, messages, readAt, hasMore } satisfies IChatResponse);
 }
 
 // Post a message to a game's thread. Access control is the same membership gate

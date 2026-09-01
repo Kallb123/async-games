@@ -368,14 +368,23 @@ export function storedChatMessages(gameId: string): StoredChatMessage[] {
 }
 
 // The one read the chat route makes: find({ gameId }).sort({ timestamp: -1 })
-// .limit(N).exec(). A chainable stand-in for a Query, honouring the sort and
-// limit the route asks for so the "newest N, then reversed" slice is real.
+// .limit(N).exec(), optionally narrowed to find({ gameId, timestamp: { $lt } })
+// for a `before` page (docs/in-game-chat.md §13.7 commit 5). A chainable
+// stand-in for a Query, honouring the sort and limit the route asks for so the
+// "newest N, then reversed" slice is real.
 function findChatFromStore(filter: Record<string, unknown>) {
     const gameId = filter?.gameId;
-    if (typeof gameId !== 'string' || Object.keys(filter).length !== 1) {
-        throw new Error(`The test chat store only looks messages up by gameId, not ${JSON.stringify(filter)}`);
+    const timestampFilter = filter?.timestamp as { $lt?: string } | undefined;
+    const keys = Object.keys(filter);
+    const shape = keys.length === 1 && keys[0] === 'gameId'
+        || keys.length === 2 && keys.includes('gameId') && keys.includes('timestamp')
+            && typeof timestampFilter === 'object' && timestampFilter !== null
+            && Object.keys(timestampFilter).length === 1 && typeof timestampFilter.$lt === 'string';
+    if (typeof gameId !== 'string' || !shape) {
+        throw new Error(`The test chat store only looks messages up by gameId (and an optional timestamp $lt), not ${JSON.stringify(filter)}`);
     }
-    let results = chatMessages.filter(message => message.gameId === gameId);
+    let results = chatMessages.filter(message => message.gameId === gameId
+        && (timestampFilter === undefined || message.timestamp < timestampFilter.$lt!));
     const query = {
         // Honours each sort key in order, so a tiebreaker (the route sorts
         // { timestamp: -1, messageId: -1 }) is exercised, not silently dropped.

@@ -41,6 +41,11 @@ function readChatFor(gameid: string) {
     return readChat(get(`/api/game/${gameid}/chat`), { params: Promise.resolve({ gameid }) });
 }
 
+/** A GET of an earlier page: the same request, with `?before=` on it. */
+function readChatBefore(gameid: string, before: string) {
+    return readChat(get(`/api/game/${gameid}/chat?before=${encodeURIComponent(before)}`), { params: Promise.resolve({ gameid }) });
+}
+
 /** A POST to one game's chat thread, JSON body and path param. */
 function postChatTo(gameid: string, body: unknown) {
     return postChat(jsonPost(`/api/game/${gameid}/chat`, body), { params: Promise.resolve({ gameid }) });
@@ -86,6 +91,8 @@ describe('GET /api/game/[gameid]/chat', () => {
 
         expect(response.status).toBe(200);
         expect(body.messages).toEqual([]);
+        // A thread shorter than one page — nothing earlier to load.
+        expect(body.hasMore).toBe(false);
         // No marker posted yet: null, not a missing field or a 404 (§13.4).
         expect(body.readAt).toBeNull();
     });
@@ -115,11 +122,13 @@ describe('GET /api/game/[gameid]/chat', () => {
             seedChatMessage({ messageId: `m${i}`, gameId: 'game_1', senderId: ANN.id, text: `msg ${i}`, timestamp: `2026-01-01T00:${minute}:00.000Z` });
         }
 
-        const messages = (await (await readChatFor('game_1')).json()).messages;
+        const body = await (await readChatFor('game_1')).json();
 
-        expect(messages).toHaveLength(50);
-        expect(messages[0].text).toBe('msg 10');
-        expect(messages.at(-1).text).toBe('msg 59');
+        expect(body.messages).toHaveLength(50);
+        expect(body.messages[0].text).toBe('msg 10');
+        expect(body.messages.at(-1).text).toBe('msg 59');
+        // Ten messages (0-9) are older than the oldest one on this page.
+        expect(body.hasMore).toBe(true);
     });
 
     it('orders two messages written in the same millisecond deterministically', async () => {
@@ -176,6 +185,82 @@ describe('GET /api/game/[gameid]/chat', () => {
         signIn(ANN);
 
         expect((await readChatFor('no_such_game')).status).toBe(404);
+    });
+
+    describe('?before=', () => {
+        it('loads the page immediately before the cursor, oldest-first', async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+            for (let i = 0; i < 5; i++) {
+                const minute = String(i).padStart(2, '0');
+                seedChatMessage({ messageId: `m${i}`, gameId: 'game_1', senderId: ANN.id, text: `msg ${i}`, timestamp: `2026-01-01T00:${minute}:00.000Z` });
+            }
+
+            // Ask for what came strictly before msg 2's timestamp.
+            const body = await (await readChatBefore('game_1', '2026-01-01T00:02:00.000Z')).json();
+
+            expect(body.success).toBe(true);
+            expect(body.messages.map((m: { text: string }) => m.text)).toEqual(['msg 0', 'msg 1']);
+            expect(body.hasMore).toBe(false);
+        });
+
+        it('pages a thread longer than one page, and says so with hasMore', async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+            // 120 messages: three pages of 50, 50 and 20.
+            for (let i = 0; i < 120; i++) {
+                const timestamp = new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString();
+                seedChatMessage({ messageId: `m${i}`, gameId: 'game_1', senderId: ANN.id, text: `msg ${i}`, timestamp });
+            }
+
+            const live = await (await readChatFor('game_1')).json();
+            expect(live.messages).toHaveLength(50);
+            expect(live.messages[0].text).toBe('msg 70');
+            expect(live.hasMore).toBe(true);
+
+            const secondPage = await (await readChatBefore('game_1', live.messages[0].timestamp)).json();
+            expect(secondPage.messages).toHaveLength(50);
+            expect(secondPage.messages[0].text).toBe('msg 20');
+            expect(secondPage.messages.at(-1).text).toBe('msg 69');
+            expect(secondPage.hasMore).toBe(true);
+
+            const thirdPage = await (await readChatBefore('game_1', secondPage.messages[0].timestamp)).json();
+            expect(thirdPage.messages).toHaveLength(20);
+            expect(thirdPage.messages[0].text).toBe('msg 0');
+            expect(thirdPage.messages.at(-1).text).toBe('msg 19');
+            // Nothing older than msg 0 — the thread ends here.
+            expect(thirdPage.hasMore).toBe(false);
+        });
+
+        it('answers an empty page, not an error, once the thread runs out', async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+            seedChatMessage({ messageId: 'm1', gameId: 'game_1', senderId: ANN.id, text: 'only one', timestamp: '2026-01-01T00:00:00.000Z' });
+
+            const body = await (await readChatBefore('game_1', '2026-01-01T00:00:00.000Z')).json();
+
+            expect(body.success).toBe(true);
+            expect(body.messages).toEqual([]);
+            expect(body.hasMore).toBe(false);
+        });
+
+        it('rejects a before that is not a date, with a 400', async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+
+            const response = await readChatBefore('game_1', 'not a date');
+
+            expect(response.status).toBe(400);
+        });
+
+        it('still gates on membership with a valid cursor', async () => {
+            signIn({ id: 'user_carol', username: 'carol' });
+            seedSnakesAndLadders();
+
+            const response = await readChatBefore('game_1', '2026-01-01T00:00:00.000Z');
+
+            expect(response.status).toBe(403);
+        });
     });
 });
 

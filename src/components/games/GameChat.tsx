@@ -19,6 +19,13 @@ interface GameChatProps {
     /** POSTs the message; returns false if it was rejected or failed, so the
      *  composer keeps what the player typed. */
     send: (text: string) => Promise<boolean>;
+    /** There are messages older than the oldest one in `messages` — shows the
+     *  "Load earlier" control above the first row. */
+    hasMoreEarlier: boolean;
+    /** True while a `loadEarlier` fetch is in flight — disables the control. */
+    loadingEarlier: boolean;
+    /** Fetches and prepends the previous page of the thread. */
+    loadEarlier: () => Promise<void>;
     /** Closes the thread — the panel's own ✕, mirroring the top-bar 💬 toggle. */
     onClose: () => void;
     /** The game's roster in seat order, parallel arrays. A message carries only
@@ -42,7 +49,7 @@ interface GameChatProps {
 // pixel-perfect for new messages to keep following them.
 const SCROLL_BOTTOM_SLACK = 32;
 
-export default function GameChat({ messages, isLoading, isRefreshing, sending, send, onClose, userIdList, usernameList }: GameChatProps) {
+export default function GameChat({ messages, isLoading, isRefreshing, sending, send, hasMoreEarlier, loadingEarlier, loadEarlier, onClose, userIdList, usernameList }: GameChatProps) {
     const now = useNowToTheMinute();
     const [draft, setDraft] = useState('');
 
@@ -117,6 +124,16 @@ export default function GameChat({ messages, isLoading, isRefreshing, sending, s
                 <div className="ag-log-empty">No messages yet. Say hello.</div>
             ) : (
                 <Refreshable isRefreshing={isRefreshing}>
+                    {hasMoreEarlier && (
+                        <button
+                            type="button"
+                            className="ag-btn ag-btn--ghost ag-chat-load-earlier"
+                            onClick={() => loadEarlier()}
+                            disabled={loadingEarlier}
+                        >
+                            {loadingEarlier ? 'Loading…' : 'Load earlier'}
+                        </button>
+                    )}
                     <RecapTimeline
                         ref={attachListRef}
                         compact
