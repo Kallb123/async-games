@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { ReactionModel } from '@/utils/mongodb/ReactionData';
+import { ChatMessageModel } from '@/utils/mongodb/ChatMessageData';
+import { ChatReadModel, IChatReadDataDocument } from '@/utils/mongodb/ChatReadData';
 import { userIdListToUserIdNameMap } from '@/utils/users/clerk';
 import { buildEventFeed, IGameEvent } from '@/utils/games/recap';
 import { metaForGame } from '@/utils/ui/games';
@@ -28,6 +30,44 @@ export interface IRecapResponse {
     summary?: { headline: string; subline: string };
     events?: IRecapEventResponse[];
     tip?: { glyph: string; text: string } | null;
+    // Messages from other players since the viewer's chat read marker — a
+    // single "who spoke while you were away" line above the timeline, not a
+    // second event feed. Chat has no command and is never replayed
+    // (docs/since-you-were-last-here.md §3, docs/in-game-chat.md §8), so it
+    // stays a field of its own rather than becoming an IGameEvent. Omitted
+    // when there is nothing unread.
+    chat?: { count: number; senders: string[] };
+}
+
+// The recap's "💬 N messages from X" line: messages from other players newer
+// than the viewer's own ChatReadData marker (no marker means nothing has been
+// read yet, so every message from somebody else counts — the same first-time
+// signal the dashboard badge and the board's own dot give, docs/in-game-chat.md
+// §13.5). Resolves no names of its own — senders are looked up in the
+// userIdNameMap the route already built for the roster (§5's rule for the
+// thread applies here too). A failure only decorates the recap, so it's
+// swallowed to "nothing to report" the way dashboard.ts's unreadChatCounts is.
+async function unreadChatSince(
+    gameId: string,
+    userId: string,
+    userIdNameMap: { [key: string]: string },
+): Promise<{ count: number; senders: string[] } | undefined> {
+    try {
+        const marker = await ChatReadModel.findOne({ gameId, userId }).exec() as IChatReadDataDocument | null;
+        const filter = {
+            gameId,
+            senderId: { $ne: userId },
+            ...(marker?.readAt ? { timestamp: { $gt: marker.readAt } } : {}),
+        };
+        const [count, senderIds] = await Promise.all([
+            ChatMessageModel.countDocuments(filter),
+            ChatMessageModel.distinct('senderId', filter) as Promise<string[]>,
+        ]);
+        return count > 0 ? { count, senders: senderIds.map((id) => userIdNameMap[id] ?? id) } : undefined;
+    } catch (error) {
+        console.error(`Failed to read unread chat for game ${gameId}`, error);
+        return undefined;
+    }
 }
 
 // Returns the "since you were last here" recap for the signed-in player: the
@@ -77,6 +117,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IG
             reaction: reactionByEventId.get(event.id) ?? null,
         }));
 
+        const chat = await unreadChatSince(gameid, userId, userIdNameMap);
+
         const response: IRecapResponse = {
             success: true,
             hasRecap: true,
@@ -89,6 +131,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IG
             summary: feed.summary ?? undefined,
             events,
             tip: feed.tip,
+            chat,
         };
         return NextResponse.json(response);
     } catch (error) {

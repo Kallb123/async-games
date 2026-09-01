@@ -361,6 +361,45 @@ Key properties:
   `ChatMessageModel.deleteMany({ gameId: { $in: gameIds } })` — keyed by *game*,
   so it takes every message in those games, not just the departing player's.
 
+### Chat read markers (`ChatRead`)
+
+`src/utils/mongodb/ChatReadData.ts` defines a second small flat collection
+beside `ChatMessage`, one row per player per game (§13, `docs/in-game-chat.md`):
+
+```ts
+interface IChatReadData {
+    gameId: string;
+    userId: string;   // Clerk userId
+    readAt: string;   // ISO — the newest message this player has seen
+}
+```
+
+Key properties:
+
+- **Private, and monotonic.** The only marker a response ever carries is the
+  viewer's own — nothing here tells a player what anyone else has read. It's
+  written by `POST /api/game/[gameid]/chat/read`, a route of its own beside the
+  message `GET`/`POST` under the same `chat/` folder rather than a body flag on
+  either of them, and read back as `readAt` on the sibling `GET`'s response so
+  the board's unread dot and the marker it clears come from one fetch. The
+  write is a clamped `$max` upsert on `{ gameId, userId }` — lexical comparison
+  on an ISO-8601 string is chronological, so two tabs racing (or a request
+  arriving out of order) can never move the marker backwards and re-light a dot
+  the player already cleared.
+- **Two indexes, for the two ways it's read.** `{ gameId: 1, userId: 1 }`
+  (unique — one row per seat) answers "this player, in this game", the board's
+  question; `{ userId: 1 }` answers "every marker this player has", one query
+  for the whole dashboard.
+- **What it powers.** `buildDashboard` (`src/utils/dashboard.ts`) joins it
+  against `ChatMessage` to put an unread count on the home screen's turn cards,
+  and `GET /api/game/[gameid]/recap` joins it the same way to add a
+  `chat: { count, senders }` line above a "since you were last here" recap —
+  "💬 3 messages from Ann & Tom" — resolving senders from the roster map the
+  recap route already builds rather than a lookup of its own.
+- **Markers must not outlive their game**, for the same reason messages must
+  not: the account-deletion route deletes both in the same before-the-games
+  step, on the same `gameId`s.
+
 ## 6. The game engine: command pattern
 
 Game rules are expressed as classes implementing two interfaces. The two

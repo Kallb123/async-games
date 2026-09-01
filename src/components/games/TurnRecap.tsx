@@ -6,6 +6,8 @@ import { formatRelativeTime } from '@/utils/ui/time';
 import { useNowToTheMinute } from '@/utils/hooks/useNow';
 import ReactionPicker from '@/components/ui/ReactionPicker';
 import RecapTimeline from '@/components/ui/RecapTimeline';
+import { nameList } from '@/utils/ui/players';
+import { pluralize } from '@/utils/ui/text';
 
 export interface TurnRecapEvent {
     id: string;
@@ -27,6 +29,10 @@ interface TurnRecapProps {
     since?: string;
     summary: { headline: string; subline: string };
     events: TurnRecapEvent[];
+    /** Messages from other players since the viewer last read the thread — a
+     *  single line above the timeline, not a second timeline. Omit (or a zero
+     *  count) to show nothing. */
+    chat?: { count: number; senders: string[] } | null;
     tip?: { glyph: string; text: string } | null;
     cta: { label: string; onClick: () => void };
     /** Where the header's back control goes. Defaults to the home dashboard. */
@@ -43,7 +49,7 @@ const ACCENT_CLASSES = new Set(['terracotta', 'green', 'gold', 'purple']);
 // welcome-back headline, a player-coloured timeline of what happened while you
 // were away, an optional strategic tip, and a call-to-action into the board.
 // One component, every game — driven entirely by props.
-export default function TurnRecap({ header, since = "Since your last turn", summary, events, tip, cta, backHref = '/', onReact }: TurnRecapProps) {
+export default function TurnRecap({ header, since = "Since your last turn", summary, events, chat, tip, cta, backHref = '/', onReact }: TurnRecapProps) {
     const now = useNowToTheMinute();
     const accentClass = ACCENT_CLASSES.has(header.accent) ? `ag-accent-${header.accent}` : undefined;
     const accentStyle = accentClass ? undefined : { background: header.accent };
@@ -68,6 +74,12 @@ export default function TurnRecap({ header, since = "Since your last turn", summ
             <div className="ag-recap-body">
                 <h1 className="ag-recap-headline">{summary.headline}</h1>
                 <p className="ag-recap-subline">{summary.subline}</p>
+
+                {chat && chat.count > 0 && (
+                    <p className="ag-recap-chat">
+                        💬 {chat.count} {pluralize(chat.count, "message")} from {nameList(chat.senders)}
+                    </p>
+                )}
 
                 <RecapTimeline
                     events={events.map((event) => ({
