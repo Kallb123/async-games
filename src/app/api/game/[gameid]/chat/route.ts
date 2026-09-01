@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { ChatMessageModel, IChatMessageDataDocument } from '@/utils/mongodb/ChatMessageData';
+import { ChatReadModel } from '@/utils/mongodb/ChatReadData';
 import { normaliseMessage } from '@/utils/chat';
 import { consumeRateLimit } from '@/utils/rateLimit';
 import { usersById } from '@/utils/users/clerk';
@@ -37,6 +38,7 @@ export interface IChatMessageResponse {
 export interface IChatResponse {
     success: boolean;
     messages: IChatMessageResponse[];
+    readAt: string | null;   // this viewer's own marker; null if they never opened the thread. Nobody else's is ever in here (§13.2).
 }
 
 function toResponse(message: IChatMessageDataDocument): IChatMessageResponse {
@@ -92,7 +94,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IC
         .exec();
 
     const messages = newest.reverse().map(toResponse);
-    return NextResponse.json({ success: true, messages } satisfies IChatResponse);
+
+    // The caller's own marker, from the same indexed lookup the read route
+    // writes ({ gameId: 1, userId: 1 }) — never another player's (§13.2), and
+    // riding this GET rather than a separate request means the dot and the
+    // messages it's counting can never disagree (§13.4).
+    const marker = await ChatReadModel.findOne({ gameId: gameid, userId }).exec();
+    const readAt = marker?.readAt ?? null;
+
+    return NextResponse.json({ success: true, messages, readAt } satisfies IChatResponse);
 }
 
 // Post a message to a game's thread. Access control is the same membership gate

@@ -35,6 +35,7 @@ type GameData = typeof import('@/utils/mongodb/GameData');
 let mongo: typeof import('@/utils/mongodb/mongodb');
 let gameData: GameData;
 let chatMessageData: typeof import('@/utils/mongodb/ChatMessageData');
+let chatReadData: typeof import('@/utils/mongodb/ChatReadData');
 let nextServer: typeof import('next/server');
 
 /** A stored game, as the database would hold it: plain, with a version. */
@@ -43,10 +44,14 @@ type StoredGame = Record<string, unknown> & { gameId: string, __v: number };
 /** A stored chat message, as the ChatMessage collection would hold it. */
 type StoredChatMessage = { messageId: string, gameId: string, senderId: string, text: string, timestamp: string };
 
+/** A stored read marker, as the ChatRead collection would hold it. */
+type StoredChatReadMarker = { gameId: string, userId: string, readAt: string };
+
 let signedInUserId: string | null = null;
 let clerkUsers: User[] = [];
 const games = new Map<string, StoredGame>();
 const chatMessages: StoredChatMessage[] = [];
+const chatReadMarkers: StoredChatReadMarker[] = [];
 
 /** Every push a request sent, in the order it sent them. */
 export const sentPushes: {
@@ -66,6 +71,7 @@ export async function resetApiRouteStubs() {
     mongo = await import('@/utils/mongodb/mongodb');
     gameData = await import('@/utils/mongodb/GameData');
     chatMessageData = await import('@/utils/mongodb/ChatMessageData');
+    chatReadData = await import('@/utils/mongodb/ChatReadData');
     nextServer = await import('next/server');
 
     signedInUserId = null;
@@ -74,6 +80,7 @@ export async function resetApiRouteStubs() {
     mintedSignInTokens.length = 0;
     games.clear();
     chatMessages.length = 0;
+    chatReadMarkers.length = 0;
     clearAfterCallbacks();
     sentPushes.length = 0;
     vi.spyOn(gameData.GameDataModel, 'findOne').mockImplementation(findOneFromStore as GameData['GameDataModel']['findOne']);
@@ -81,6 +88,8 @@ export async function resetApiRouteStubs() {
     // new ChatMessageModel(...).save() lands in the store, so the chat route's
     // POST writes somewhere a later GET (or a test) can read it back.
     vi.spyOn(chatMessageData.ChatMessageModel.prototype, 'save').mockImplementation(saveChatToStore);
+    vi.spyOn(chatReadData.ChatReadModel, 'findOne').mockImplementation(findOneChatReadFromStore as typeof chatReadData.ChatReadModel.findOne);
+    vi.spyOn(chatReadData.ChatReadModel, 'findOneAndUpdate').mockImplementation(findOneAndUpdateChatReadFromStore as typeof chatReadData.ChatReadModel.findOneAndUpdate);
 }
 
 // ---------------------------------------------------------------- Clerk
@@ -394,6 +403,62 @@ function saveChatToStore(this: import('@/utils/mongodb/ChatMessageData').IChatMe
         timestamp: this.timestamp,
     });
     return Promise.resolve(this);
+}
+
+// ---------------------------------------------------------------- Chat read markers
+
+/** Puts a read marker in the store, as if a player had already read up to it. */
+export function seedChatReadMarker(marker: StoredChatReadMarker) {
+    chatReadMarkers.push(marker);
+}
+
+/** One player's marker for one game, as a later request would read it. */
+export function storedChatReadMarker(gameId: string, userId: string): string | undefined {
+    return chatReadMarkers.find(marker => marker.gameId === gameId && marker.userId === userId)?.readAt;
+}
+
+// The one read the read-marker route and the chat GET make: this player, this
+// game — served by the { gameId: 1, userId: 1 } unique index in production.
+function findOneChatReadFromStore(filter: Record<string, unknown>) {
+    const gameId = filter?.gameId;
+    const userId = filter?.userId;
+    if (typeof gameId !== 'string' || typeof userId !== 'string' || Object.keys(filter).length !== 2) {
+        throw new Error(`The test chat-read store only looks markers up by gameId and userId, not ${JSON.stringify(filter)}`);
+    }
+    const found = chatReadMarkers.find(marker => marker.gameId === gameId && marker.userId === userId);
+    return { exec: async () => (found ? chatReadData.ChatReadModel.hydrate(found) : null) };
+}
+
+// findOneAndUpdate({ gameId, userId }, { $max: { readAt } }, { upsert: true }):
+// the one write the read-marker route makes. Applies $max the way Mongo does —
+// a lexical comparison, which for ISO-8601 is chronological — so the "never
+// moves backwards" behaviour the route relies on is real here too, not assumed.
+function findOneAndUpdateChatReadFromStore(
+    filter: Record<string, unknown>,
+    update: { $max?: { readAt?: string } },
+    options?: { upsert?: boolean }
+) {
+    return {
+        exec: async () => {
+            const gameId = filter?.gameId;
+            const userId = filter?.userId;
+            if (typeof gameId !== 'string' || typeof userId !== 'string') {
+                throw new Error(`The test chat-read store only updates markers by gameId and userId, not ${JSON.stringify(filter)}`);
+            }
+            const readAt = update.$max?.readAt;
+            let marker = chatReadMarkers.find(m => m.gameId === gameId && m.userId === userId);
+            if (!marker) {
+                if (!options?.upsert) {
+                    return null;
+                }
+                marker = { gameId, userId, readAt: readAt! };
+                chatReadMarkers.push(marker);
+            } else if (readAt !== undefined && readAt > marker.readAt) {
+                marker.readAt = readAt;
+            }
+            return chatReadData.ChatReadModel.hydrate(marker);
+        }
+    };
 }
 
 // ---------------------------------------------------------------- Requests

@@ -82,4 +82,14 @@ describe('normaliseReadAt', () => {
         expect(normaliseReadAt('not a date')).toBeNull();
         expect(normaliseReadAt('gg wp')).toBeNull();
     });
+
+    it('rejects a year outside the ordinary four-digit range', () => {
+        // Date happily parses these, but toISOString() gives them a sign and
+        // extra digits (the ECMA-262 "extended year" form), which sorts
+        // lexically *before* every ordinary timestamp — backwards for both the
+        // route's clamp-to-now compare and Mongo's $max. Reject rather than
+        // canonicalise something the fixed-width form can't represent.
+        expect(normaliseReadAt('10000-01-01')).toBeNull();
+        expect(normaliseReadAt('-000001-01-01')).toBeNull();
+    });
 });
