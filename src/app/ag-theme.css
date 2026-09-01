@@ -2833,6 +2833,32 @@ a.ag-list-row, a.ag-list-row-main {
 }
 .ag-recap-timeline--compact .ag-recap-event-title { font: 700 12.5px/1.35 var(--ag-font); }
 
+/* ---- Unread divider (in-game chat thread) ----
+   Marks where messages new since the panel was last opened begin. Sits in the
+   card column, clear of the dot rail, so the rail's connecting line simply
+   stops rather than crossing it. */
+.ag-recap-divider {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    list-style: none;
+    padding-left: 22px;
+}
+.ag-recap-divider::before,
+.ag-recap-divider::after {
+    content: "";
+    flex: 1;
+    height: 1.5px;
+    background: var(--ag-danger);
+}
+.ag-recap-divider-label {
+    font: 700 10.5px var(--ag-font);
+    color: var(--ag-danger);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+}
+
 /* ---- Reaction picker (recap timeline) ---- */
 /* Trigger/sent state reuse .ag-pill-action; the popup shell and text rows
    reuse .ag-gom-menu / .ag-gom-item. Only the emoji row below is new. */

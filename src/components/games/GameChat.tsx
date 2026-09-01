@@ -8,10 +8,10 @@ import { nameForUserId } from '@/utils/ui/players';
 import { formatRelativeTime } from '@/utils/ui/time';
 import { useNowToTheMinute } from '@/utils/hooks/useNow';
 import { MAX_MESSAGE_LENGTH } from '@/utils/chat';
-import type { IChatMessageResponse } from '@/app/api/game/[gameid]/chat/route';
+import type { GameChatMessage } from '@/utils/hooks/useGameChat';
 
 interface GameChatProps {
-    messages: IChatMessageResponse[];
+    messages: GameChatMessage[];
     isLoading: boolean;
     isRefreshing: boolean;
     /** True while a send is in flight — disables the composer. */
@@ -73,7 +73,7 @@ export default function GameChat({ messages, isLoading, isRefreshing, sending, s
                 <Refreshable isRefreshing={isRefreshing}>
                     <RecapTimeline
                         compact
-                        events={messages.map((message) => ({
+                        events={messages.map((message, index) => ({
                             id: message.messageId,
                             dotColour: playerColourForId(message.senderId, userIdList),
                             title: message.text,
@@ -81,6 +81,10 @@ export default function GameChat({ messages, isLoading, isRefreshing, sending, s
                                 nameForUserId({ userIdList, usernameList }, message.senderId),
                                 formatRelativeTime(message.timestamp, now),
                             ].filter(Boolean).join(' · '),
+                            // Marks where the messages new since this panel was last
+                            // opened begin — only on the first of them, so a run of
+                            // several unread lines gets one divider, not one each.
+                            dividerBefore: message.unread && !messages[index - 1]?.unread ? 'New messages' : undefined,
                         }))}
                     />
                 </Refreshable>

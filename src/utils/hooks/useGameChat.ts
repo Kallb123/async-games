@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useRefreshableData } from "./useRefreshableData";
 import { REQUEST_TIMEOUT_MS } from "./fetchWithSessionRetry";
@@ -7,8 +7,14 @@ import { CHAT_EVENTS } from "./usePushEvents";
 import { normaliseMessage } from "@/utils/chat";
 import type { IChatResponse, IChatMessageResponse } from "@/app/api/game/[gameid]/chat/route";
 
+/** A thread message plus whether it's new since this viewing of the panel — see
+ *  `readBoundary` below. */
+export interface GameChatMessage extends IChatMessageResponse {
+    unread: boolean;
+}
+
 export interface GameChat {
-    messages: IChatMessageResponse[];
+    messages: GameChatMessage[];
     isLoading: boolean;
     isRefreshing: boolean;
     /** True while a POST is in flight — the composer disables Send. */
@@ -50,8 +56,41 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean): Ga
     const [sending, setSending] = useState(false);
     const readAt = data?.readAt ?? null;
 
-    const messages = data?.messages ?? [];
-    const latest = messages.length ? messages[messages.length - 1].timestamp : null;
+    // Memoized so its identity is stable across renders where `data` itself
+    // hasn't changed — otherwise the `?? []` fallback would make it a new array
+    // every render and defeat the `messages` useMemo below.
+    const rawMessages = useMemo(() => data?.messages ?? [], [data]);
+    const latest = rawMessages.length ? rawMessages[rawMessages.length - 1].timestamp : null;
+
+    // The boundary this *viewing* of the panel treats as "already read", frozen
+    // at whatever the marker was when the panel opened. The effect below starts
+    // advancing the real marker (`readAt`) the moment the panel opens, so if the
+    // unread styling followed `readAt` live it would clear within one poll of
+    // opening — using the frozen boundary instead means a message that arrived
+    // since last time stays marked as new for as long as this viewing stays
+    // open. `undefined` means "not captured for this viewing yet".
+    //
+    // Adjusted directly during render (not in an effect, which would setState
+    // synchronously and trigger a cascading render — react-hooks/set-state-in-
+    // effect) — the same `loadedFor`-style comparison `useTurnRecap` uses.
+    const [readBoundary, setReadBoundary] = useState<string | null | undefined>(undefined);
+    const [wasOpen, setWasOpen] = useState(open);
+    if (open !== wasOpen) {
+        setWasOpen(open);
+        if (!open) {
+            setReadBoundary(undefined);
+        }
+    }
+    if (open && readBoundary === undefined && !isLoading) {
+        setReadBoundary(readAt);
+    }
+
+    const messages: GameChatMessage[] = useMemo(() => rawMessages.map((message) => ({
+        ...message,
+        unread: message.senderId !== myId
+            && readBoundary !== undefined
+            && (readBoundary === null || message.timestamp > readBoundary),
+    })), [rawMessages, myId, readBoundary]);
 
     // While the panel is open, advance the marker to the newest message — and
     // keep advancing it as the poll brings more in — so the dot never lights for
@@ -78,8 +117,11 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean): Ga
 
     // Unread: a message that landed after the marker and came from someone else.
     // A browser that has never opened the thread (readAt null) treats every other
-    // player's message as unread, which is the right first-time signal.
-    const hasUnread = messages.some(
+    // player's message as unread, which is the right first-time signal. This one
+    // follows the live marker, not the frozen `readBoundary` above — the topbar
+    // dot should clear the moment the marker does, unlike the panel's own
+    // unread styling.
+    const hasUnread = rawMessages.some(
         (message) => message.senderId !== myId && (readAt === null || message.timestamp > readAt),
     );
 
