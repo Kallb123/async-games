@@ -30,3 +30,36 @@ export function countTurns(commandHistory: readonly IGameCommand[]): number {
     }
     return turns;
 }
+
+export type LengthUnit = "turn" | "move";
+
+/**
+ * The unit a game's length reads best in.
+ *
+ * A solo game (Solitaire) never passes the turn — every command is the one
+ * player's, so the turn count is always 1 and says nothing about how long the
+ * game ran. Moves are the meaningful measure there; for a game with opponents
+ * it's turns. Pass the size of the game's roster (its `userIdList`/`playerIds`).
+ */
+export function lengthUnit(playerCount: number): LengthUnit {
+    return playerCount <= 1 ? "move" : "turn";
+}
+
+export interface GameLength {
+    count: number;
+    unit: LengthUnit;
+}
+
+/**
+ * How long a match ran, as a count and the unit it should be shown in: turns
+ * for a game with opponents (see `countTurns`), moves for a solo game that has
+ * no turns to count (see `lengthUnit`). One place decides both, so every screen
+ * and push that reports a game's length agrees on the number and the word.
+ */
+export function gameLength(commandHistory: readonly IGameCommand[], playerCount: number): GameLength {
+    const unit = lengthUnit(playerCount);
+    return {
+        count: unit === "move" ? commandHistory.length : countTurns(commandHistory),
+        unit,
+    };
+}

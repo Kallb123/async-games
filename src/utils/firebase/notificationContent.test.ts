@@ -168,6 +168,13 @@ describe('other push copy', () => {
         expect(won.body).toBe('You beat Priya in 1 turn. Line up a rematch?');
     });
 
+    it('measures a solo game in moves, since it has no turns to count', () => {
+        // Solitaire: one player, the turn never passes — every command is a move.
+        const commandHistory = Array.from({ length: 87 }, () => ({ senderId: 'u1' })) as unknown as IGameData['gameState']['commandHistory'];
+        const won = buildGameWonNotification(game({ userIdList: ['u1'], gameState: { turnOrder: ['u1'], history: [], commandHistory } } as Partial<IGameData>), []);
+        expect(won.body).toBe('You finished it in 87 moves. Fancy another?');
+    });
+
     it('names the winner and offers a rematch to everyone else', () => {
         const lost = buildGameLostNotification(game({ gameState: { turnOrder: [], history: [], commandHistory: historyOfTurns(34) } } as Partial<IGameData>), 'Priya');
         expect(lost.title).toBe('Priya won Snakes and Ladders');

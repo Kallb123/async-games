@@ -7,7 +7,7 @@ import { nameList } from '@/utils/ui/players';
 import { gameNotificationImage, PushNotification } from './pushNotification';
 import { truncate, pluralize } from '@/utils/ui/text';
 import { resolveHistory } from "@/utils/games/history";
-import { countTurns } from "@/utils/games/turnCount";
+import { gameLength } from "@/utils/games/turnCount";
 
 // Every piece of user-visible push copy in the app is written here rather than
 // inline in the route that sends it. Three routes can hand a player their turn
@@ -148,40 +148,41 @@ export function buildGameInviteNotification(senderName: string, friendlyName: st
     };
 }
 
-// The turn count is a fair (and free) measure of how long the match ran —
-// better than "you won the game" for both sides. Counted from commandHistory
-// rather than read off its length, so a game whose turns take several commands
-// each isn't reported as having run many times longer than it did.
-function turnsPlayed(gameData: IGameData): number {
-    return countTurns(gameData.gameState.commandHistory);
+// How long the match ran — a fair (and free) measure to close on, better than
+// "you won the game" for both sides. Turns for a game with opponents (counted
+// from commandHistory, not read off its length, so a game whose turns take
+// several commands each isn't reported as many times longer than it ran); moves
+// for a solo game that has no turns. Returns the count and the word to match.
+function matchLength(gameData: IGameData) {
+    return gameLength(gameData.gameState.commandHistory, gameData.userIdList.length);
 }
 
 /** Sent to the winner. `opponentNames` excludes the winner themselves. */
 export function buildGameWonNotification(gameData: IGameData, opponentNames: string[]): PushNotification {
-    const turns = turnsPlayed(gameData);
+    const { count, unit } = matchLength(gameData);
 
     return gamePush(
         gameData,
         `🏆 You won ${gameData.gameType.friendlyName}!`,
         opponentNames.length
-            ? `You beat ${nameList(opponentNames)} in ${pluralize(turns, 'turn')}. Line up a rematch?`
-            : `You finished it in ${pluralize(turns, 'turn')}. Fancy another?`
+            ? `You beat ${nameList(opponentNames)} in ${pluralize(count, unit)}. Line up a rematch?`
+            : `You finished it in ${pluralize(count, unit)}. Fancy another?`
     );
 }
 
 /** Sent to everyone who didn't win. `winnerName` is empty for a game with no winner. */
 export function buildGameLostNotification(gameData: IGameData, winnerName: string): PushNotification {
     const friendlyName = gameData.gameType.friendlyName;
-    const turns = turnsPlayed(gameData);
+    const { count, unit } = matchLength(gameData);
 
     if (!winnerName) {
-        return gamePush(gameData, `${friendlyName} is over`, `The game ended after ${pluralize(turns, 'turn')} with no winner.`);
+        return gamePush(gameData, `${friendlyName} is over`, `The game ended after ${pluralize(count, unit)} with no winner.`);
     }
 
     return gamePush(
         gameData,
         `${winnerName} won ${friendlyName}`,
-        `They sealed it after ${pluralize(turns, 'turn')} — challenge them to a rematch.`
+        `They sealed it after ${pluralize(count, unit)} — challenge them to a rematch.`
     );
 }
 
@@ -193,11 +194,11 @@ export function buildGameLostNotification(gameData: IGameData, winnerName: strin
  */
 export function buildTeamResultNotification(gameData: IGameData, won: boolean): PushNotification {
     const friendlyName = gameData.gameType.friendlyName;
-    const turns = turnsPlayed(gameData);
+    const { count, unit } = matchLength(gameData);
 
     return won
-        ? gamePush(gameData, `🏆 Your team won ${friendlyName}!`, `You pulled it off together in ${pluralize(turns, 'turn')}. Another run?`)
-        : gamePush(gameData, `Your team lost ${friendlyName}`, `It got away from you after ${pluralize(turns, 'turn')}. Try again?`);
+        ? gamePush(gameData, `🏆 Your team won ${friendlyName}!`, `You pulled it off together in ${pluralize(count, unit)}. Another run?`)
+        : gamePush(gameData, `Your team lost ${friendlyName}`, `It got away from you after ${pluralize(count, unit)}. Try again?`);
 }
 
 /**
