@@ -62,8 +62,9 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     const { submitCommand, submitting, pendingTarget } = useSubmitCommand<ITrainTimeGameDataResponse>(gameId, user, setGameData, getGameData);
     const { endGame } = useEndGame(gameId);
 
-    // Turn review steps back through the real turns of the match; the board,
-    // the standings and the log all render whichever point is being viewed.
+    // Turn review steps back through the match's real actions (one per played
+    // command, not one per turn); the board, the standings and the log all
+    // render whichever point is being viewed.
     const nav = useTurnNavigation<ITrainTimeSpecificGameStateResponse>(gameId, {
         specificGameState: gameData?.specificGameState,
         currentTurn: gameData?.currentTurn ?? "",

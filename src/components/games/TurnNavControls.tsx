@@ -14,14 +14,17 @@ interface TurnNavControlsProps {
     // (e.g. the game's normal action panel wired to nav.planMove).
     planningActions?: React.ReactNode;
     canPlan?: boolean;
-    /** The game's players in seat order, used to colour the reviewed turn's swatch. */
+    /** The game's players in seat order, used to colour the reviewed action's swatch. */
     userIdList?: string[];
 }
 
 // The war-room scrubber from the design: a dark dock carrying the transport
-// buttons, a turn track showing where in the match you are standing, and a line
-// naming the turn you are looking at. Themed like the rest of the shell — the
-// panel is the app's dark ink, the key control its brass, never stock Bootstrap.
+// buttons, an action track showing where in the match you are standing, and a
+// line naming the action you are looking at. It steps through the game's
+// recorded *commands*, not whole turns — a turn that took four commands (roll,
+// build, build, end) shows as four steps — so the labels below say "action",
+// not "turn". Themed like the rest of the shell — the panel is the app's dark
+// ink, the key control its brass, never stock Bootstrap.
 export default function TurnNavControls({ nav, planningActions, canPlan = true, userIdList = [] }: TurnNavControlsProps) {
     const now = useNowToTheMinute();
 
@@ -30,7 +33,7 @@ export default function TurnNavControls({ nav, planningActions, canPlan = true, 
             <div className="ag-actionsheet">
                 <div className="ag-btn-row">
                     <button type="button" className="ag-btn ag-btn--light" onClick={nav.enterRecap} disabled={nav.loading}>
-                        🕐 Review turns
+                        🕐 Review actions
                     </button>
                     {canPlan && (
                         <button type="button" className="ag-btn ag-btn--light" onClick={nav.enterPlanning} disabled={nav.loading}>
@@ -43,28 +46,30 @@ export default function TurnNavControls({ nav, planningActions, canPlan = true, 
         );
     }
 
-    // How far the viewed turn is from the live current state.
+    // How far the viewed action is from the live current state.
     const delta = nav.viewIndex - nav.currentIndex;
     const relativeLabel =
         delta === 0
-            ? "Current turn"
+            ? "Current action"
             : delta < 0
-              ? `${pluralize(-delta, 'turn')} ago`
-              : `Planning ${pluralize(delta, 'turn')} ahead`;
+              ? `${pluralize(-delta, 'action')} ago`
+              : `Planning ${pluralize(delta, 'action')} ahead`;
 
-    // Secondary absolute position, e.g. "Turn 2 of 5" or "Start of game".
+    // Secondary absolute position, e.g. "Action 2 of 5" or "Start of game". Each
+    // step is one played command, not one turn — a turn spanning several
+    // commands (roll, build, build, end) advances this by several steps.
     const positionLabel = nav.isPlannedView
         ? `Planned move ${delta} of ${nav.plannedCount}`
         : nav.viewIndex === 0
           ? "Start of game"
-          : `Turn ${nav.viewIndex} of ${nav.currentIndex}`;
+          : `Action ${nav.viewIndex} of ${nav.currentIndex}`;
 
     const command = nav.displayedCommand;
     const when = command ? formatRelativeTime(command.timestamp, now) : null;
     const swatch = playerColourForId(command?.senderId, userIdList);
 
     // One tick per point on the timeline, index 0 (the opening position) first.
-    const ticks = Array.from({ length: nav.totalTurns + 1 }, (_, i) =>
+    const ticks = Array.from({ length: nav.totalActions + 1 }, (_, i) =>
         i === nav.viewIndex ? "now" : i > nav.currentIndex ? "planned" : i < nav.viewIndex ? "played" : "ahead"
     );
 
@@ -79,9 +84,9 @@ export default function TurnNavControls({ nav, planningActions, canPlan = true, 
 
                 <div className="ag-review-transport">
                     <button type="button" className="ag-review-btn" onClick={nav.jumpToStart} disabled={!nav.canBack} aria-label="Jump to start of game" title="Jump to start of game">⏮</button>
-                    <button type="button" className="ag-review-btn" onClick={nav.stepBack} disabled={!nav.canBack} aria-label="Previous turn" title="Previous turn">◀</button>
-                    <button type="button" className="ag-review-btn ag-review-btn--key" onClick={nav.stepForward} disabled={!nav.canForward} aria-label="Next turn" title="Next turn">▶</button>
-                    <button type="button" className="ag-review-btn" onClick={nav.jumpToCurrent} disabled={!nav.canForward} aria-label="Jump to current turn" title="Jump to current turn">⏭</button>
+                    <button type="button" className="ag-review-btn" onClick={nav.stepBack} disabled={!nav.canBack} aria-label="Previous action" title="Previous action">◀</button>
+                    <button type="button" className="ag-review-btn ag-review-btn--key" onClick={nav.stepForward} disabled={!nav.canForward} aria-label="Next action" title="Next action">▶</button>
+                    <button type="button" className="ag-review-btn" onClick={nav.jumpToCurrent} disabled={!nav.canForward} aria-label="Jump to current position" title="Jump to current position">⏭</button>
                 </div>
 
                 <div className="ag-review-track" aria-hidden="true">

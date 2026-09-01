@@ -37,9 +37,11 @@ export interface LiveGameView<TState> {
     history: IHistoryEntry[];
 }
 
-// Shared navigation model behind both turn recap (stepping back through actual
-// turns) and planning mode (stepping through hypothetical future turns). Both
-// are driven by the same reconstructed timeline from /api/game/[id]/timeline.
+// Shared navigation model behind both turn recap (stepping back through the
+// game's played actions) and planning mode (stepping through hypothetical
+// future actions). Both step one *command* at a time, not one turn: a turn
+// that took several commands (roll, build, build, end) is several steps here.
+// Both are driven by the same reconstructed timeline from /api/game/[id]/timeline.
 export function useTurnNavigation<TState>(gameId: string, live: LiveGameView<TState>) {
     const [mode, setMode] = useState<NavMode>("live");
     const [snapshots, setSnapshots] = useState<ITurnSnapshot<TState>[]>([]);
@@ -151,7 +153,9 @@ export function useTurnNavigation<TState>(gameId: string, live: LiveGameView<TSt
         // Position within the reconstructed timeline.
         viewIndex,
         currentIndex,
-        totalTurns: maxIndex,
+        // Count of steps in the reconstructed timeline — one per played (or
+        // planned) *command*, not one per turn.
+        totalActions: maxIndex,
         atCurrent: viewIndex === currentIndex,
         isPlannedView: activeSnapshot?.planned ?? false,
         plannedCount: plannedCommands.length,
