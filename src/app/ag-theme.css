@@ -482,10 +482,19 @@ a.ag-list-row, a.ag-list-row-main {
     cursor: pointer;
 }
 
-.ag-turn-card-badge {
+/* The turn timer and the unread-chat badge share this corner: one wrapper
+   positions the pair so they sit side by side rather than landing on each
+   other, whichever of them is present. */
+.ag-turn-card-badges {
     position: absolute;
     top: 12px;
     right: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ag-turn-card-badge {
     background: rgba(255,255,255,0.18);
     border-radius: 99px;
     padding: 5px 11px;
@@ -1834,6 +1843,24 @@ a.ag-list-row, a.ag-list-row-main {
     .ag-chat-panel { animation: none; }
 }
 
+/* Unread chat count — UnreadChatBadge, on the dashboard's turn card and list
+   row. Solid terracotta by default (a light row); --on-dark swaps to the same
+   translucent-white pill .ag-turn-card-badge uses, for a card whose own
+   background is already a colour. */
+.ag-chat-badge {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    gap: 3px;
+    background: var(--ag-terracotta);
+    color: var(--ag-on-dark);
+    border-radius: 99px;
+    padding: 3px 8px;
+    font: 800 11px var(--ag-font);
+    white-space: nowrap;
+}
+.ag-chat-badge--on-dark { background: rgba(255, 255, 255, 0.22); }
+
 /* ---- Turn review / planning dock ----
    The scrubber the player steps back through the match with. It's the war-room
    dock from the design: dark panel, brass transport, and a turn track so the
@@ -2805,6 +2832,32 @@ a.ag-list-row, a.ag-list-row-main {
     box-shadow: none;
 }
 .ag-recap-timeline--compact .ag-recap-event-title { font: 700 12.5px/1.35 var(--ag-font); }
+
+/* ---- Unread divider (in-game chat thread) ----
+   Marks where messages new since the panel was last opened begin. Sits in the
+   card column, clear of the dot rail, so the rail's connecting line simply
+   stops rather than crossing it. */
+.ag-recap-divider {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    list-style: none;
+    padding-left: 22px;
+}
+.ag-recap-divider::before,
+.ag-recap-divider::after {
+    content: "";
+    flex: 1;
+    height: 1.5px;
+    background: var(--ag-danger);
+}
+.ag-recap-divider-label {
+    font: 700 10.5px var(--ag-font);
+    color: var(--ag-danger);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+}
 
 /* ---- Reaction picker (recap timeline) ---- */
 /* Trigger/sent state reuse .ag-pill-action; the popup shell and text rows
