@@ -69,8 +69,11 @@ test('host opens a lobby, a guest joins by code, and the guest name shows in gam
     // Lands on the lobby screen; read the join code the card shows once the
     // invitation has loaded (it renders "····" until then).
     await host.waitForURL(/\/lobby\/.+/);
+    // Default assertion timeout (5s) can be tight for the lobby's first
+    // `/api/lobby/[id]` fetch on a CI runner already a few tests into the run
+    // — give it the same headroom as the other network round trips here.
     const codeEl = host.locator('.ag-joincode');
-    await expect(codeEl).toHaveText(/^[A-HJ-NP-Z2-9]{4}$/);
+    await expect(codeEl).toHaveText(/^[A-HJ-NP-Z2-9]{4}$/, { timeout: 15_000 });
     const joinCode = (await codeEl.textContent())!.trim();
 
     // The guest opens the shared link — code already in the box — and, with no

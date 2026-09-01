@@ -43,7 +43,7 @@ import { TrainTimeClaimRoute, TrainTimeDrawTickets, TrainTimeKeepTickets } from 
 import { TRACK_PALETTE } from "@/games/TrainTime/ui";
 import { playerColour, playerColourForId } from "@/utils/ui/playerColours";
 import { pluralize } from "@/utils/ui/text";
-import { abandonedGameStatus, nameForUserId } from "@/utils/ui/players";
+import { abandonedGameStatus, isPlayersTurn, nameForUserId } from "@/utils/ui/players";
 
 // Trains at or below this leave a player one big route from ending the game —
 // the standings ring them so everybody can see the clock running down.
@@ -89,7 +89,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     const displayedCurrentTurn = nav.displayedCurrentTurn;
     // Reviewing a past turn is read-only, so every interactive path hangs off
     // this rather than off whose turn it is.
-    const isMyTurn = nav.isLive && user?.id === displayedCurrentTurn && !complete;
+    const isMyTurn = isPlayersTurn(nav.isLive, user, displayedCurrentTurn) && !complete;
     const myUserId = user?.id ?? '';
     const usernameList = useMemo(() => gameData?.usernameList ?? [], [gameData?.usernameList]);
     const userIdList = useMemo(() => gameData?.userIdList ?? [], [gameData?.userIdList]);

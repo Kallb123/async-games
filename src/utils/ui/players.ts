@@ -267,6 +267,23 @@ export function abandonedGameStatus(
     return complete && endReason === 'abandoned' ? abandonedGameCopy(forfeitedName) : null;
 }
 
+// Whether it's this viewer's live turn — the guard every game board needs
+// before showing turn actions or wiring up board clicks. Requires `user` to
+// have actually loaded rather than just comparing it to `currentTurn`: before
+// Clerk's user and the game's data have both arrived, `user?.id` and
+// `currentTurn` can both be `undefined`, and a bare `===` reads that as a
+// match — briefly flashing the current player's own action button (a "Roll
+// the die" button a click on which silently does nothing, since
+// useSubmitCommand also refuses to send without a loaded user) before the
+// real data lands and it resolves one way or the other.
+export function isPlayersTurn(
+    isLive: boolean,
+    user: { id?: string | null } | null | undefined,
+    currentTurn: string | null | undefined,
+): boolean {
+    return isLive && !!user?.id && user.id === currentTurn;
+}
+
 // The seating order as the viewer reads it: their own seat first, then the
 // players who follow them, wrapping back round. Rotating (rather than pulling
 // the viewer out and prepending) keeps the true turn cycle intact — the rows

@@ -27,7 +27,7 @@ import { ISnakesAndLaddersDiceRollOutcome, SnakesAndLaddersRequestDiceRoll } fro
 import { SL_REROLL_PARAM } from "@/games/SnakesAndLadders/ui";
 import { rematchFlag } from "@/utils/ui/rematch";
 import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
-import { abandonedGameStatus, nameForUserId } from "@/utils/ui/players";
+import { abandonedGameStatus, isPlayersTurn, nameForUserId } from "@/utils/ui/players";
 
 export default function GameSnakesAndLadders({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
@@ -86,7 +86,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
 
     const boardState = nav.displayedState;
     const complete = nav.displayedComplete;
-    const isMyTurn = nav.isLive && user?.id === gameData?.currentTurn;
+    const isMyTurn = isPlayersTurn(nav.isLive, user, gameData?.currentTurn);
 
     // userId → colour, following the persistent userIdList ordering so a
     // player keeps the same swatch on the board and the scoreboard.

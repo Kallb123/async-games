@@ -12,6 +12,13 @@ import { clearGames, clerkUserId, logBrowserErrors } from '../helpers';
 // email — see readGameSetupRequest), so this needs one more secret than
 // e2e/auth.setup.ts's sign-in credentials: E2E_PLAYER_TWO_USERNAME.
 
+// Runs before every attempt, retries included — a retry re-invites player two
+// from scratch, and a stale invitation left behind by the attempt that just
+// failed would otherwise sit alongside the new one.
+test.beforeEach(async ({ request }) => {
+  await clearGames(request);
+});
+
 test.afterAll(async ({ request }) => {
   await clearGames(request);
 });
