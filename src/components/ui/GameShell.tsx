@@ -1,5 +1,5 @@
 'use client'
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import BackArrow from '@/components/ui/BackArrow';
 import GameOptionsMenu, { GameOption } from '@/components/ui/GameOptionsMenu';
@@ -76,6 +76,20 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
     const hasChat = !!chat && chat.userIdList.length >= 2;
     const chatState = useGameChat(chat?.gameId ?? '', showChat, hasChat);
 
+    // The thread opens below the board, at the bottom of the page — so on a tall
+    // board the 💬 button can flip it on with nothing changing in view, reading
+    // as a dead tap. Bring it into view when it opens (its top, so a later height
+    // change as messages load doesn't move the target). Honour reduced motion,
+    // the way the CSS animations do.
+    const chatPanelRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!showChat || !hasChat) {
+            return;
+        }
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        chatPanelRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+    }, [showChat, hasChat]);
+
     const shellOptions: GameOption[] = log ? [{
         key: 'history',
         label: 'Turn history',
@@ -117,15 +131,17 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
             {children}
             {log && showLog && <MatchHistory {...log} />}
             {hasChat && showChat && chat && (
-                <GameChat
-                    messages={chatState.messages}
-                    isLoading={chatState.isLoading}
-                    isRefreshing={chatState.isRefreshing}
-                    sending={chatState.sending}
-                    send={chatState.send}
-                    userIdList={chat.userIdList}
-                    usernameList={chat.usernameList}
-                />
+                <div ref={chatPanelRef}>
+                    <GameChat
+                        messages={chatState.messages}
+                        isLoading={chatState.isLoading}
+                        isRefreshing={chatState.isRefreshing}
+                        sending={chatState.sending}
+                        send={chatState.send}
+                        userIdList={chat.userIdList}
+                        usernameList={chat.usernameList}
+                    />
+                </div>
             )}
         </div>
     );
