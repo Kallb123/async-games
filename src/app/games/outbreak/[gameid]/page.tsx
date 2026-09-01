@@ -421,6 +421,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                         <OutbreakActions
                             gs={gs}
                             myUserId={myUserId}
+                            userIdList={userIdList}
                             moveMode={boardTarget?.kind === 'move' ? boardTarget.type : null}
                             setMoveMode={m => setBoardTarget(m ? { kind: 'move', type: m } : null)}
                             opsFlightActive={boardTarget?.kind === 'opsFlight'}
