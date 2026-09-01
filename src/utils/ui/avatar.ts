@@ -1,6 +1,8 @@
 // Deterministic avatar colouring so a given person keeps the same badge hue
 // across the whole app.
 
+import { hashString } from './hash';
+
 const PALETTE: { bg: string; fg: string }[] = [
     { bg: "oklch(0.85 0.06 65)", fg: "oklch(0.4 0.07 60)" },   // sand
     { bg: "oklch(0.8 0.06 300)", fg: "oklch(0.4 0.08 300)" },  // violet
@@ -10,18 +12,9 @@ const PALETTE: { bg: string; fg: string }[] = [
     { bg: "oklch(0.86 0.07 95)", fg: "oklch(0.42 0.08 90)" },  // gold
 ];
 
-function hash(seed: string): number {
-    let h = 0;
-    for (let i = 0; i < seed.length; i++) {
-        h = (h << 5) - h + seed.charCodeAt(i);
-        h |= 0;
-    }
-    return Math.abs(h);
-}
-
 export function avatarColor(seed: string | null | undefined): { bg: string; fg: string } {
     if (!seed) return { bg: "oklch(0.88 0.02 60)", fg: "oklch(0.5 0.03 60)" };
-    return PALETTE[hash(seed) % PALETTE.length];
+    return PALETTE[Math.abs(hashString(seed)) % PALETTE.length];
 }
 
 // The letters for someone's badge — empty when we have no name to work from,

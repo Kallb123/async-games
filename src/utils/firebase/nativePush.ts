@@ -3,6 +3,7 @@
 import { PushNotifications, type PermissionStatus, type PushNotificationSchema } from '@capacitor/push-notifications';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { ANDROID_NOTIFICATION_CHANNEL_ID } from './notificationChannel';
+import { hashString } from '@/utils/ui/hash';
 
 /**
  * Push, as the native Android shell does it.
@@ -122,21 +123,6 @@ export async function ensureNotificationChannel(): Promise<void> {
     }
 }
 
-// Folds a string into Android's signed 32-bit local-notification id range
-// (FNV-1a). Not for anything cryptographic — just a stable id from the same
-// `tag` the server already gives each push (`pushNotification.ts`'s `tagFor`),
-// so a second "your move" in one game replaces the first tray row exactly like
-// `renotify`/`tag` do for the web push shown by the service worker, instead of
-// stacking a new row per push.
-function notificationIdForTag(tag: string): number {
-    let hash = 0x811c9dc5;
-    for (let i = 0; i < tag.length; i++) {
-        hash ^= tag.charCodeAt(i);
-        hash = Math.imul(hash, 0x01000193);
-    }
-    return hash | 0;
-}
-
 /**
  * Draws the notification for a push Android handed straight to the app instead
  * of the tray — which is every push while the APK is in the foreground (see
@@ -150,7 +136,11 @@ export async function showForegroundNotification(notification: PushNotificationS
     try {
         await LocalNotifications.schedule({
             notifications: [{
-                id: notificationIdForTag(tag),
+                // The same `tag` the server gives each push (`pushNotification.ts`'s
+                // `tagFor`) folded into a stable id, so a second "your move" in one
+                // game replaces the first tray row exactly like `renotify`/`tag` do
+                // for the web push shown by the service worker, instead of stacking.
+                id: hashString(tag),
                 title: notification.title || 'Async Games',
                 body: notification.body || 'Something happened in one of your games.',
                 channelId: ANDROID_NOTIFICATION_CHANNEL_ID,

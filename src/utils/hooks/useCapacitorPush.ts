@@ -56,11 +56,12 @@ export function useCapacitorPush() {
                 followLink(notification.extra?.link, router);
             }),
         ].map((handle) => handle.catch((error) => {
-            // A shell built before this plugin existed rejects both of these —
-            // and it will, because the app loads the live site, so an APK
-            // installed months ago runs today's code. Its pushes still arrive
-            // in the tray; only the in-app half is missing, which is a reason
-            // to log rather than to leave two rejected promises lying around.
+            // A shell built before a given plugin existed rejects that
+            // listener — and it will, because the app loads the live site, so
+            // an APK installed months ago runs today's code. Its pushes still
+            // arrive in the tray; only the in-app half is missing, which is a
+            // reason to log rather than to leave a rejected promise lying
+            // around, for any of the three above.
             console.error('Native push listeners unavailable in this app build', error);
             return null;
         }));
