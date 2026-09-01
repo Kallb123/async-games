@@ -1812,11 +1812,13 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-chat-close:hover { color: var(--ag-ink); background: rgba(0, 0, 0, 0.03); }
 
 /* The thread opens at the bottom of the page and can be short, so it's easy to
-   miss even once scrolled into view. One background pulse on open marks where it
-   landed — a soft terracotta wash that settles back to the page. It runs once
+   miss even once scrolled into view. A background pulse on open marks where it
+   landed — a soft terracotta wash that settles back to the page. It flashes
+   three times (the iteration count) so it's still going after the smooth scroll
+   settles, not spent before the panel is even on screen. It fires on mount
    because the panel mounts only when opened (GameShell), so there's no class to
    toggle. */
-.ag-chat-panel { animation: ag-chat-open-pulse 1100ms ease-out; }
+.ag-chat-panel { animation: ag-chat-open-pulse 1100ms ease-out 3; }
 @keyframes ag-chat-open-pulse {
     0% { background-color: transparent; }
     28% { background-color: color-mix(in oklch, var(--ag-terracotta) 20%, var(--ag-surface)); }
