@@ -323,6 +323,44 @@ Key properties:
   - `{ playerIds: 1, gameType: 1 }` — per-game stats for a player, and
     head-to-head lookups between two players via `playerIds: { $all: [A, B] }`.
 
+### In-game chat (`ChatMessage`)
+
+`src/utils/mongodb/ChatMessageData.ts` defines a small, flat **`ChatMessage`**
+model — one row per message in a game's chat thread (§8, `docs/in-game-chat.md`).
+Like `GameResult` it is *not* a discriminator, and like `ReactionData` it is a
+per-game social record kept **beside** the game rather than as a field on
+`GameData`.
+
+```ts
+interface IChatMessageData {
+    messageId: uuidString; // v4 — a stable React key and an idempotency handle
+    gameId: string;
+    senderId: string;      // Clerk userId
+    text: string;          // as typed, trimmed; rendered as text, never HTML
+    timestamp: string;     // ISO
+}
+```
+
+Key properties:
+
+- **A separate document, so a message can never race a turn.** `GameData` saves
+  under optimistic concurrency (`trySave` / `VersionError`), so a chat line on
+  the game document could make somebody's *move* lose the write. A message in
+  its own collection cannot collide with a turn, and the command route that
+  loads the whole game on every move never drags an unbounded chat log along.
+- **No `senderUsername`.** A message stores *who* sent it, never what they were
+  called. The name is put back on by the client from the roster the board
+  already holds (`userIdList` / `usernameList`), so a player who renames renames
+  everywhere — the same on-demand-resolution rule the rest of §5 turns on — and
+  the polled read costs no Clerk lookup.
+- **The index is the read.** `{ gameId: 1, timestamp: -1 }` serves the one query
+  chat makes — the newest N messages in a game, oldest-first after a reverse.
+- **Messages must not outlive their game.** There is no field on `GameData` to
+  clean up, so account deletion (`POST /api/user/delete`) reads the user's
+  `gameId`s *before* deleting their games and then
+  `ChatMessageModel.deleteMany({ gameId: { $in: gameIds } })` — keyed by *game*,
+  so it takes every message in those games, not just the departing player's.
+
 ## 6. The game engine: command pattern
 
 Game rules are expressed as classes implementing two interfaces. The two
@@ -592,9 +630,24 @@ and rewrites only the metadata that actually changed.
   never learns which client it is running on.
 
 Common event names: `NewInvite`, `InviteAccepted`, `GameStart`, `YourTurn`,
-`TurnExpiringSoon`, `GameOver`. `YourTurn` is also sent when a game starts, to
-whoever won the roll for turn order — everyone else just gets the silent
-`GameStart` refresh.
+`TurnExpiringSoon`, `GameOver`, `ChatMessage`. `YourTurn` is also sent when a
+game starts, to whoever won the roll for turn order — everyone else just gets
+the silent `GameStart` refresh.
+
+**In-game chat rides this same bus.** `POST /api/game/[gameid]/chat` (§5's
+`ChatMessage` collection) sends a `ChatMessage` push — copy from
+`buildChatNotification` (title `"<sender> in <game>"`, body the message) on the
+`chat` channel — to the other players, and its `link` opens the board so a tap
+also fires the `ChatMessage` window event the open thread listens on. Two things
+about it are worth noting against the invariants above. First, it carries a real
+notification, so it is not one of the silent turn-path pushes WebKit revokes a
+subscription over. Second, it is throttled *per recipient* —
+`consumeRateLimit('chatPush', …, 1, 10 * 60_000)`, at most one chat push per
+player per game per ten minutes — so a back-and-forth doesn't buzz a phone once
+per line; the message is still stored and still shows in the thread, only the
+buzz is suppressed. Turning the `chat` channel off in Settings costs a player
+the interruption, not the messages: every read path (opening the board,
+returning to the tab, the open thread's poll) is independent of push.
 
 **No silent pushes on the turn path.** `TurnTaken` and `TurnExpired` were once
 sent to every player carrying no notification, purely to drive a refetch. WebKit

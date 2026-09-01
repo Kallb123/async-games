@@ -28,10 +28,13 @@ interface OutbreakHandsProps {
 
 /**
  * Every player's hand, rendered for everyone — §2's "shared table, shared
- * brain" pillar means there is no chat window telling teammates what you're
- * holding, so the board has to (§21.6 step 11). One `ag-hand` panel per seat,
- * the same wrapper Settlements & Cities and Train Time use for a single
- * "your hand" — looped, since a co-op table needs every hand at once.
+ * brain" pillar means the board itself shows what everyone is holding, so a
+ * teammate never has to be *told* (§21.6 step 11). The game does now have a chat
+ * window like every other one (see docs/in-game-chat.md §9), but that pillar is
+ * untouched: the board's job is to make coordinating over your hand unnecessary,
+ * not to stop the table talking. One `ag-hand` panel per seat, the same wrapper
+ * Settlements & Cities and Train Time use for a single "your hand" — looped,
+ * since a co-op table needs every hand at once.
  *
  * The stack reads from the viewer outwards: your own hand heads the list and
  * carries the `--me` tint, then the seats that play after you, so finding your

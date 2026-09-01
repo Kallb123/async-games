@@ -2,7 +2,8 @@ import RecapTimeline from "@/components/ui/RecapTimeline";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { IHistoryEntry } from "@/utils/games/history";
 
-interface MatchHistoryProps {
+/** What a game hands `GameShell`'s `log` prop. */
+export interface MatchHistoryProps {
     /** The game's log lines, newest first as the game state stores them. */
     entries: IHistoryEntry[];
     /** The game's players in seat order — a line is dotted in its actor's colour. */

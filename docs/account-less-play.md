@@ -579,10 +579,15 @@ read-only door into a running game.
 **No moderation in scope.** Recorded as a deliberate boundary, with one
 residual: a guest-typed display name is still text a real player sees, so the
 join endpoint should cap its length and character set. That is input
-validation, not moderation. And per
+validation, not moderation. This once read that, per
 [`docs/social-features.md`](./social-features.md) §7 — never open a text
-channel to strangers before blocking and reporting exist — guest seats stay out
-of any future chat feature until that work is done.
+channel to strangers before blocking and reporting exist — guest seats would
+stay out of any future chat feature until that work was done. **That has since
+been decided the other way:** in-game chat has shipped and guests chat like
+anyone else, because §7's rule is about open matchmaking between strangers, and
+a guest is not a stranger — they are someone the host handed a join code to. See
+[`docs/in-game-chat.md`](./in-game-chat.md) §9 for the decision. There is no
+guest branch anywhere in the chat feature as a result.
 
 ---
 

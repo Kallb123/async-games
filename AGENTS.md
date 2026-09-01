@@ -67,7 +67,10 @@ out. A second copy is the signal to extract the first one.
   `players.ts` (opponent summaries), `mapEdges.ts` (the wrap geometry `MapEdges`
   draws), `mapLabels.ts` (the label placement `MapLabelLayer` draws).
 - `src/utils/hooks/` — shared stateful logic, e.g. `usePlayerList` (the
-  "who's playing" invite picker used by every game-setup screen).
+  "who's playing" invite picker used by every game-setup screen), and
+  `useStoredValue` — the one place in the app that touches `localStorage`, so
+  anything remembered per browser (a dismissed banner, a guest's first turn) is
+  a call to it rather than another copy of the swallowed try/catch.
 
 New games should add their metadata to `src/utils/ui/games.ts` and reuse
 `GameSetupLayout`, `UserInviteList`, and `TurnTimerSelect` for their setup

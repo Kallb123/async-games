@@ -44,6 +44,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Talk to your opponents during a game",
+                detail: "Every game now has a chat thread: tap 💬 on the board to say something to the other players, and they get a nudge on their phone. It stays readable after the game ends, so “gg” has somewhere to go — and you can turn the notifications off in Settings if you'd rather just read it when you next open the board.",
+            },
+            {
                 title: "Check your notifications actually work",
                 detail: "Allowing notifications was only half of it: a phone can allow them and still quietly fail to sign itself up, and nothing told you. Settings now says where this device stands, has a Send a test notification button that tells you exactly what became of it, and a ? explaining everything which can stop one arriving — including the Android battery and per-app settings that block them without asking.",
             },
@@ -58,11 +62,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Change the name friends invite you by",
                 detail: "The username you picked when you signed up used to be yours for good, typo and all. Your profile now has an Edit username button — take a new one and it follows you straight away: your friends' invite lists, the games you're already in, and your match history.",
-            },
-            {
-                title: "Open a seat in Outbreak for anyone with the code",
-                detail: "Setting up an Outbreak game now lets you leave seats open and share a code, so a friend can grab one and play as a guest without an account — the same way the other games already work.",
-                game: "outbreak",
             },
         ],
     },
