@@ -138,6 +138,7 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
                         isRefreshing={chatState.isRefreshing}
                         sending={chatState.sending}
                         send={chatState.send}
+                        onClose={() => setShowChat(false)}
                         userIdList={chat.userIdList}
                         usernameList={chat.usernameList}
                     />

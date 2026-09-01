@@ -19,6 +19,8 @@ interface GameChatProps {
     /** POSTs the message; returns false if it was rejected or failed, so the
      *  composer keeps what the player typed. */
     send: (text: string) => Promise<boolean>;
+    /** Closes the thread — the panel's own ✕, mirroring the top-bar 💬 toggle. */
+    onClose: () => void;
     /** The game's roster in seat order, parallel arrays. A message carries only
      *  `senderId` (docs/in-game-chat.md §5), so its name and colour are resolved
      *  here from the roster the board already holds. */
@@ -36,7 +38,7 @@ interface GameChatProps {
 //
 // Message text is rendered as text — React escapes it; nothing here goes near
 // dangerouslySetInnerHTML.
-export default function GameChat({ messages, isLoading, isRefreshing, sending, send, userIdList, usernameList }: GameChatProps) {
+export default function GameChat({ messages, isLoading, isRefreshing, sending, send, onClose, userIdList, usernameList }: GameChatProps) {
     const now = useNowToTheMinute();
     const [draft, setDraft] = useState('');
 
@@ -54,8 +56,11 @@ export default function GameChat({ messages, isLoading, isRefreshing, sending, s
     };
 
     return (
-        <div className="ag-log">
-            <div className="ag-hand-title">Chat</div>
+        <div className="ag-log ag-chat-panel">
+            <div className="ag-chat-head">
+                <div className="ag-hand-title">Chat</div>
+                <button type="button" className="ag-chat-close" onClick={onClose} aria-label="Close chat">✕</button>
+            </div>
             {isLoading ? (
                 <div className="ag-chat-skeleton" aria-hidden>
                     <Skeleton width="70%" height={14} />

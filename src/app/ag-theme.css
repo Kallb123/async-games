@@ -1792,6 +1792,40 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-chat-composer .ag-btn { flex: none; }
 .ag-chat-skeleton { display: flex; flex-direction: column; gap: 12px; padding: 4px 2px; }
 
+/* Title and its own ✕ on one row, mirroring the top-bar 💬 toggle so the panel
+   can be dismissed from itself. The title carries the log's 9px margin, so the
+   row takes it over and the title inside sits flush. */
+.ag-chat-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
+.ag-chat-head .ag-hand-title { margin-bottom: 0; }
+.ag-chat-close {
+    flex: none;
+    border: none;
+    background: transparent;
+    color: var(--ag-ink-soft);
+    font: 700 13px var(--ag-font);
+    line-height: 1;
+    padding: 4px 6px;
+    margin: -4px -6px -4px 0;
+    border-radius: 8px;
+    cursor: pointer;
+}
+.ag-chat-close:hover { color: var(--ag-ink); background: rgba(0, 0, 0, 0.03); }
+
+/* The thread opens at the bottom of the page and can be short, so it's easy to
+   miss even once scrolled into view. One background pulse on open marks where it
+   landed — a soft terracotta wash that settles back to the page. It runs once
+   because the panel mounts only when opened (GameShell), so there's no class to
+   toggle. */
+.ag-chat-panel { animation: ag-chat-open-pulse 1100ms ease-out; }
+@keyframes ag-chat-open-pulse {
+    0% { background-color: transparent; }
+    28% { background-color: color-mix(in oklch, var(--ag-terracotta) 20%, var(--ag-surface)); }
+    100% { background-color: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ag-chat-panel { animation: none; }
+}
+
 /* ---- Turn review / planning dock ----
    The scrubber the player steps back through the match with. It's the war-room
    dock from the design: dark panel, brass transport, and a turn track so the
