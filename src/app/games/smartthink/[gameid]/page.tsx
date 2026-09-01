@@ -51,7 +51,7 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
     const { endGame } = useEndGame(gameId);
     const displayed = nav.displayedState;
     const complete = nav.displayedComplete;
-    const isMyTurn = nav.isLive && user?.id === gameData?.currentTurn && !complete;
+    const isMyTurn = nav.isLive && !!user && user.id === gameData?.currentTurn && !complete;
 
     const state = gameData?.specificGameState;
 

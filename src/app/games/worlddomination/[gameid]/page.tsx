@@ -64,7 +64,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
 
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
-    const isMyTurn = nav.isLive && user?.id === gameData?.currentTurn && !complete;
+    const isMyTurn = nav.isLive && !!user && user.id === gameData?.currentTurn && !complete;
     const myUserId = user?.id ?? '';
 
     const usernameList = gameData?.usernameList ?? [];

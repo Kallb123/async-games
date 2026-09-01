@@ -96,7 +96,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
     // Only the live active player can act; reviewing a past turn is read-only.
-    const isMyTurn = nav.isLive && user?.id === gameData?.currentTurn;
+    const isMyTurn = nav.isLive && !!user && user.id === gameData?.currentTurn;
     const myUserId = user?.id ?? '';
 
     // owner userId → colour, following the persistent userIdList ordering.

@@ -86,7 +86,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
 
     const boardState = nav.displayedState;
     const complete = nav.displayedComplete;
-    const isMyTurn = nav.isLive && user?.id === gameData?.currentTurn;
+    const isMyTurn = nav.isLive && !!user && user.id === gameData?.currentTurn;
 
     // userId → colour, following the persistent userIdList ordering so a
     // player keeps the same swatch on the board and the scoreboard.

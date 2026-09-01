@@ -10,6 +10,14 @@ import { clearGames, clerkUserId, logBrowserErrors } from '../helpers';
 // plumbing too) plus the guide check, not a rules test — each game's own
 // rules deserve their own spec.
 
+// Runs before every attempt, retries included — a retry re-invites player two
+// from scratch, and a stale invitation left behind by the attempt that just
+// failed would otherwise sit alongside the new one, making a `.ag-list-row`
+// lookup by game name match two rows instead of one.
+test.beforeEach(async ({ request }) => {
+  await clearGames(request);
+});
+
 test.afterAll(async ({ request }) => {
   await clearGames(request);
 });
@@ -153,8 +161,11 @@ test('Settlements & Cities: game guide opens from the options menu and closes', 
   await host.getByRole('button', { name: 'Send invites & get code' }).click();
 
   await host.waitForURL(/\/lobby\/.+/);
+  // Default assertion timeout (5s) can be tight for the lobby's first
+  // `/api/lobby/[id]` fetch on a CI runner already a few tests into the run —
+  // give it the same headroom as the other network round trips in this suite.
   const codeEl = host.locator('.ag-joincode');
-  await expect(codeEl).toHaveText(/^[A-HJ-NP-Z2-9]{4}$/);
+  await expect(codeEl).toHaveText(/^[A-HJ-NP-Z2-9]{4}$/, { timeout: 15_000 });
   const joinCode = (await codeEl.textContent())!.trim();
 
   // Player two accepts their named seat — this alone doesn't start the game
