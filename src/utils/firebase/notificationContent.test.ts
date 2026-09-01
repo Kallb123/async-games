@@ -54,6 +54,13 @@ function game(overrides: Partial<IGameData> = {}): IGameData {
 
 const names = { u1: 'Kal', u2: 'Priya' };
 
+// A command history spanning `count` turns. Turns are counted as runs of
+// consecutive same-sender commands, so alternating the sender each time makes
+// every command its own turn — a clean stand-in for a game that ran that long.
+function historyOfTurns(count: number) {
+    return Array.from({ length: count }, (_, i) => ({ senderId: i % 2 === 0 ? 'u1' : 'u2' })) as unknown as IGameData['gameState']['commandHistory'];
+}
+
 describe('your turn notification', () => {
     beforeEach(() => {
         buildEventFeed.mockReset();
@@ -149,15 +156,22 @@ describe('other push copy', () => {
     });
 
     it('tells the winner who they beat and how long it took', () => {
-        const won = buildGameWonNotification(game({ gameState: { turnOrder: [], history: [], commandHistory: new Array(34) } } as Partial<IGameData>), ['Priya']);
+        const won = buildGameWonNotification(game({ gameState: { turnOrder: [], history: [], commandHistory: historyOfTurns(34) } } as Partial<IGameData>), ['Priya']);
         expect(won.title).toBe('🏆 You won Snakes and Ladders!');
-        expect(won.body).toBe('You beat Priya in 34 moves. Line up a rematch?');
+        expect(won.body).toBe('You beat Priya in 34 turns. Line up a rematch?');
+    });
+
+    it('counts turns rather than commands, so a multi-command turn is one turn', () => {
+        // Three commands from the same player in a row are one turn, not three.
+        const commandHistory = [{ senderId: 'u1' }, { senderId: 'u1' }, { senderId: 'u1' }] as unknown as IGameData['gameState']['commandHistory'];
+        const won = buildGameWonNotification(game({ gameState: { turnOrder: [], history: [], commandHistory } } as Partial<IGameData>), ['Priya']);
+        expect(won.body).toBe('You beat Priya in 1 turn. Line up a rematch?');
     });
 
     it('names the winner and offers a rematch to everyone else', () => {
-        const lost = buildGameLostNotification(game({ gameState: { turnOrder: [], history: [], commandHistory: new Array(34) } } as Partial<IGameData>), 'Priya');
+        const lost = buildGameLostNotification(game({ gameState: { turnOrder: [], history: [], commandHistory: historyOfTurns(34) } } as Partial<IGameData>), 'Priya');
         expect(lost.title).toBe('Priya won Snakes and Ladders');
-        expect(lost.body).toContain('34 moves');
+        expect(lost.body).toContain('34 turns');
     });
 
     it('reports a game that ended with no winner', () => {
@@ -167,15 +181,15 @@ describe('other push copy', () => {
     });
 
     it('tells a co-op table it won together', () => {
-        const won = buildTeamResultNotification(game({ gameState: { turnOrder: [], history: [], commandHistory: new Array(34) } } as Partial<IGameData>), true);
+        const won = buildTeamResultNotification(game({ gameState: { turnOrder: [], history: [], commandHistory: historyOfTurns(34) } } as Partial<IGameData>), true);
         expect(won.title).toBe('🏆 Your team won Snakes and Ladders!');
-        expect(won.body).toBe('You pulled it off together in 34 moves. Another run?');
+        expect(won.body).toBe('You pulled it off together in 34 turns. Another run?');
     });
 
     it('tells a co-op table it lost together, naming nobody', () => {
-        const lost = buildTeamResultNotification(game({ gameState: { turnOrder: [], history: [], commandHistory: new Array(34) } } as Partial<IGameData>), false);
+        const lost = buildTeamResultNotification(game({ gameState: { turnOrder: [], history: [], commandHistory: historyOfTurns(34) } } as Partial<IGameData>), false);
         expect(lost.title).toBe('Your team lost Snakes and Ladders');
-        expect(lost.body).toBe('It got away from you after 34 moves. Try again?');
+        expect(lost.body).toBe('It got away from you after 34 turns. Try again?');
     });
 
     it('says how long a nudger has been waiting', () => {

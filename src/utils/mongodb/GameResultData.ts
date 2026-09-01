@@ -17,6 +17,7 @@ import {
 } from "@/games/DiceCities/DiceCitiesModels";
 import type { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
 import { computePerTurnStat } from "@/utils/games/replay";
+import { countTurns } from "@/utils/games/turnCount";
 import {
     ISmartthinkGameData,
     ISmartthinkGameResultStats,
@@ -503,7 +504,7 @@ export async function recordGameResult(
         endReason: gameData.endReason,
         forfeitedBy: gameData.forfeitedBy,
         endedAt: new Date().toISOString(),
-        totalTurns: gameData.gameState.commandHistory.length,
+        totalTurns: countTurns(gameData.gameState.commandHistory),
         unclaimedPlayerIds,
         guestNames,
     };
