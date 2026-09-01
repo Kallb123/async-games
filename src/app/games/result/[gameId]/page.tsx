@@ -12,6 +12,7 @@ import { useGameResult } from "@/utils/hooks/useGameResult";
 import { GAME_META } from "@/utils/ui/games";
 import { finishedGameCopy } from "@/utils/ui/players";
 import { pluralize } from "@/utils/ui/text";
+import { lengthUnit } from "@/utils/games/turnCount";
 import moment from 'moment';
 
 export default function GameResultPage({ params }: { params: Promise<{ gameId: string }> }) {
@@ -48,7 +49,7 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
                             icon={meta ? <GameThumb meta={meta} size={ROW_THUMB_SIZE} radius={ROW_THUMB_RADIUS} /> : undefined}
                             title={meta?.name ?? result.url}
                             sub={<>
-                                {finishedGameCopy(result) ?? "Draw"} · {moment(result.endedAt).fromNow()} · {pluralize(result.totalTurns, 'turn')}
+                                {finishedGameCopy(result) ?? "Draw"} · {moment(result.endedAt).fromNow()} · {pluralize(result.totalTurns, lengthUnit(result.playerIds.length))}
                             </>}
                         />
                     )}

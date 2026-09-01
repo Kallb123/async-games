@@ -17,6 +17,7 @@ import {
 } from "@/games/DiceCities/DiceCitiesModels";
 import type { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
 import { computePerTurnStat } from "@/utils/games/replay";
+import { gameLength } from "@/utils/games/turnCount";
 import {
     ISmartthinkGameData,
     ISmartthinkGameResultStats,
@@ -86,6 +87,9 @@ export interface IGameResultData {
     endReason?: GameEndReason,
     forfeitedBy?: string,
     endedAt: string,
+    // How long the game ran: turns for a game with opponents, moves for a solo
+    // game (Solitaire) that has no turns. Read it back with the matching unit
+    // via lengthUnit(playerIds.length) — see utils/games/turnCount.ts.
     totalTurns: number,
     // A guest still in this game's roster (docs/account-less-play.md §8): a
     // non-empty list means the game is an exhibition match that doesn't count
@@ -503,7 +507,10 @@ export async function recordGameResult(
         endReason: gameData.endReason,
         forfeitedBy: gameData.forfeitedBy,
         endedAt: new Date().toISOString(),
-        totalTurns: gameData.gameState.commandHistory.length,
+        // Turns for a game with opponents; moves for a solo game (Solitaire),
+        // which has no turns to count — read back with the matching unit via
+        // lengthUnit(playerIds.length). See utils/games/turnCount.ts.
+        totalTurns: gameLength(gameData.gameState.commandHistory, gameData.userIdList.length).count,
         unclaimedPlayerIds,
         guestNames,
     };

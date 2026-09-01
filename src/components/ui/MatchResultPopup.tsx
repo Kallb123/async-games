@@ -9,6 +9,7 @@ import { useGameResult } from "@/utils/hooks/useGameResult";
 import { useCloseRequest } from "@/utils/hooks/useCloseRequest";
 import { GAME_META } from "@/utils/ui/games";
 import { pluralize } from "@/utils/ui/text";
+import { lengthUnit } from "@/utils/games/turnCount";
 import type { MatchOutcome } from "@/app/api/stats/route";
 
 const OUTCOME_TITLE: Record<MatchOutcome, string> = { win: "You won", loss: "You lost", draw: "Draw" };
@@ -49,7 +50,7 @@ export default function MatchResultPopup({ gameId, outcome, onClose }: MatchResu
                     : (
                         <>
                             <div className="ag-list-row-sub" style={{ marginBottom: 10 }}>
-                                {moment(result.endedAt).fromNow()} · {pluralize(result.totalTurns, 'turn')}
+                                {moment(result.endedAt).fromNow()} · {pluralize(result.totalTurns, lengthUnit(result.playerIds.length))}
                             </div>
                             {result.stats.length > 0
                                 ? <GameResultStats groups={result.stats} />
