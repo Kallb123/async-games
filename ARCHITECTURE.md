@@ -597,12 +597,14 @@ bridge instead and hands back a registration token of exactly the same kind, and
 `/api/notificationtoken` onwards — the stored `TimedToken`, the device list,
 `sendPushToUsers`, the copy, the `link` a tap follows — there is one path, not
 two. On the delivery side `useCapacitorPush` stands in for both the foreground
-`onMessage` and the service worker's click handler; the tray notification itself
-is Android's, drawn with the `ic_stat_notify` silhouette and tint named in
-`AndroidManifest.xml`. One gap remains on that road: a push arriving while the
-APK is in the *foreground* is handed to the app instead of the tray and so
-displays nothing — closing it needs a local-notification plugin and a
-notification channel.
+`onMessage` and the service worker's click handler; a backgrounded or killed
+app's tray notification is Android's own, drawn with the `ic_stat_notify`
+silhouette and tint named in `AndroidManifest.xml`, on the `game_updates`
+channel every push carries (`notificationChannel.ts`). A push arriving while
+the APK is in the *foreground* is handed to the app instead of the tray, so
+`nativePush.ts` draws that one itself with `@capacitor/local-notifications`
+(`ensureNotificationChannel`, `showForegroundNotification`) on the same
+channel — the plugin that gap needed and PR #431 didn't yet have.
 
 **Every push is displayed, app open or not.** `public/firebase-messaging-sw.js`
 shows the notification from its own `push` listener rather than leaving it to
@@ -663,10 +665,12 @@ and rewrites only the metadata that actually changed.
   after its `event` field. Game pages listen for events like `YourTurn` and
   re-fetch game state — this is how a board updates without a socket.
 - *Native shell:* `useCapacitorPush` does both of those jobs — the OS shows the
-  notification when the app is backgrounded, and delivers it to the listener
-  when it isn't. Both paths dispatch through the same `dispatchPushEvent`
+  notification when the app is backgrounded, and the app shows it itself
+  (`showForegroundNotification`) when it isn't, alongside delivering it to the
+  listener. Both paths dispatch through the same `dispatchPushEvent`
   (`src/utils/firebase/pushEvents.ts`), so a screen listening for `YourTurn`
-  never learns which client it is running on.
+  never learns which client it is running on. A notification tapped from
+  either display draws on the same `followLink` to get the tap into the app.
 
 Common event names: `NewInvite`, `InviteAccepted`, `GameStart`, `YourTurn`,
 `TurnExpiringSoon`, `GameOver`, `ChatMessage`. `YourTurn` is also sent when a

@@ -1,6 +1,8 @@
 'use client'
 
-import { PushNotifications, type PermissionStatus } from '@capacitor/push-notifications';
+import { PushNotifications, type PermissionStatus, type PushNotificationSchema } from '@capacitor/push-notifications';
+import { LocalNotifications } from '@capacitor/local-notifications';
+import { ANDROID_NOTIFICATION_CHANNEL_ID } from './notificationChannel';
 
 /**
  * Push, as the native Android shell does it.
@@ -19,6 +21,14 @@ import { PushNotifications, type PermissionStatus } from '@capacitor/push-notifi
  * list and `sendPushToUsers` all carry on unchanged. Everything native-only
  * lives here; the hooks that use it branch on `isNativeShell`
  * (`src/utils/native.ts`) and are otherwise the same code for both.
+ *
+ * Display is native-only too, for one case: a push arriving while the APK is
+ * in the foreground is handed straight to `useCapacitorPush` instead of the
+ * tray, so showing it is this app's job rather than the OS's — the
+ * `@capacitor/local-notifications` half of this file
+ * (`ensureNotificationChannel`, `showForegroundNotification`). A backgrounded
+ * or killed app still gets the notification drawn by Android itself, same as
+ * ever.
  */
 
 /** The three answers the app's own permission model has room for. */
@@ -87,5 +97,67 @@ export async function getNativePushToken(): Promise<string> {
         await Promise.all(handles.map((handle) => handle.remove())).catch((error) => {
             console.error('Failed to remove push registration listeners', error);
         });
+    }
+}
+
+/**
+ * Creates the Android channel every push is shown on (`notificationChannel.ts`).
+ * A channel has to exist before either display path can use it: `schedule()`
+ * below silently does nothing for an unknown channel, and so does a
+ * backgrounded/killed app's own tray display of a push naming it. Idempotent —
+ * `createChannel` just re-registers the same channel when called again, so
+ * `useCapacitorPush` can call this on every mount rather than tracking whether
+ * it already ran.
+ */
+export async function ensureNotificationChannel(): Promise<void> {
+    try {
+        await LocalNotifications.createChannel({
+            id: ANDROID_NOTIFICATION_CHANNEL_ID,
+            name: 'Game updates',
+            description: 'Turns, invites and results in your games',
+            importance: 4, // heads-up, matching the webpush `Urgency: high` header
+        });
+    } catch (error) {
+        console.error('Failed to create the Android notification channel', error);
+    }
+}
+
+// Folds a string into Android's signed 32-bit local-notification id range
+// (FNV-1a). Not for anything cryptographic — just a stable id from the same
+// `tag` the server already gives each push (`pushNotification.ts`'s `tagFor`),
+// so a second "your move" in one game replaces the first tray row exactly like
+// `renotify`/`tag` do for the web push shown by the service worker, instead of
+// stacking a new row per push.
+function notificationIdForTag(tag: string): number {
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < tag.length; i++) {
+        hash ^= tag.charCodeAt(i);
+        hash = Math.imul(hash, 0x01000193);
+    }
+    return hash | 0;
+}
+
+/**
+ * Draws the notification for a push Android handed straight to the app instead
+ * of the tray — which is every push while the APK is in the foreground (see
+ * `useCapacitorPush`). Mirrors `firebase-messaging-sw.js`'s `showPushNotification`:
+ * same fallback title/body, same replace-not-stack behaviour, and `extra`
+ * carries the push's `data` on so a tap can still follow its `link`
+ * (`localNotificationActionPerformed` in `useCapacitorPush`).
+ */
+export async function showForegroundNotification(notification: PushNotificationSchema): Promise<void> {
+    const tag = typeof notification.data?.tag === 'string' ? notification.data.tag : notification.id;
+    try {
+        await LocalNotifications.schedule({
+            notifications: [{
+                id: notificationIdForTag(tag),
+                title: notification.title || 'Async Games',
+                body: notification.body || 'Something happened in one of your games.',
+                channelId: ANDROID_NOTIFICATION_CHANNEL_ID,
+                extra: notification.data,
+            }],
+        });
+    } catch (error) {
+        console.error('Failed to show a foreground notification', error);
     }
 }

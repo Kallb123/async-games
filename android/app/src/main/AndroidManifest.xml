@@ -55,6 +55,12 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_color"
             android:resource="@color/ag_notification" />
+        <!-- The channel `pushNotification.ts` stamps onto every push
+             (`notificationChannel.ts`), named again here as the fallback FCM
+             uses for a push that somehow arrives with none set. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="game_updates" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

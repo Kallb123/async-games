@@ -60,6 +60,16 @@ const config: CapacitorConfig = {
         SystemBars: {
             style: 'LIGHT',
         },
+        // Draws the notification a push arriving in the foreground gets shown
+        // as (`ensureNotificationChannel`/`showForegroundNotification` in
+        // `src/utils/firebase/nativePush.ts`) with the same mark and tint
+        // Android itself uses for a backgrounded/killed app's own tray
+        // notification (`AndroidManifest.xml`'s `default_notification_icon`/
+        // `_color`), so a player can't tell which path drew theirs.
+        LocalNotifications: {
+            smallIcon: 'ic_stat_notify',
+            iconColor: '#b74b21', // ag_notification (android/app/.../ag_colors.xml)
+        },
     },
 };
 
