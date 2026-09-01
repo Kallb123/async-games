@@ -1,9 +1,11 @@
-// Integration tests over the chat pair — GET and POST /api/game/[gameid]/chat.
+// Integration tests over the chat routes — GET and POST /api/game/[gameid]/chat,
+// and POST /api/game/[gameid]/chat/read.
 //
 // The same setup as gameRoutes.test.ts: everything above the database is the
 // real thing (the handlers, the request/response objects, the membership gate,
-// normaliseMessage, the Mongoose documents), and only Clerk, the connection,
-// the rate limiter and the chat collection are stubbed (utils/testing/apiRoute).
+// normaliseMessage/normaliseReadAt, the Mongoose documents), and only Clerk,
+// the connection, the rate limiter and the chat collections are stubbed
+// (utils/testing/apiRoute).
 //
 // What this guards is the review docs/in-game-chat.md §5 asks for: chat as pure
 // access control. Who may read this thread, who may post to it, what a bad body
@@ -11,6 +13,10 @@
 // guard against the frozen-name trap §3 avoids creeping back in). On top of
 // that, the §7 push: it reaches the other players and never the sender, it is
 // throttled per recipient, and a push that fails can't lose the stored message.
+//
+// The read-marker route adds §13.4's own review: the same access control as
+// its siblings, a monotonic and idempotent `$max` write, and a GET that carries
+// the caller's own marker and nobody else's (§13.2).
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -24,10 +30,11 @@ import { consumeRateLimit } from '@/utils/rateLimit';
 import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 import { runAfterCallbacks } from '@/utils/testing/afterStub';
 import {
-    ANN, BOB, get, jsonPost, rawPost, resetApiRouteStubs, seedChatMessage, seedSnakesAndLadders,
-    sentPushes, signIn, storedChatMessages, stubClerkUsers
+    ANN, BOB, get, jsonPost, rawPost, resetApiRouteStubs, seedChatMessage, seedChatReadMarker, seedSnakesAndLadders,
+    sentPushes, signIn, storedChatMessages, storedChatReadMarker, stubClerkUsers
 } from '@/utils/testing/apiRoute';
 import { GET as readChat, POST as postChat } from './[gameid]/chat/route';
+import { POST as postChatRead } from './[gameid]/chat/read/route';
 
 /** A GET of one game's chat thread, with the path param Next would hand it. */
 function readChatFor(gameid: string) {
@@ -37,6 +44,11 @@ function readChatFor(gameid: string) {
 /** A POST to one game's chat thread, JSON body and path param. */
 function postChatTo(gameid: string, body: unknown) {
     return postChat(jsonPost(`/api/game/${gameid}/chat`, body), { params: Promise.resolve({ gameid }) });
+}
+
+/** A POST to one game's read marker, JSON body and path param. */
+function postChatReadTo(gameid: string, body: unknown) {
+    return postChatRead(jsonPost(`/api/game/${gameid}/chat/read`, body), { params: Promise.resolve({ gameid }) });
 }
 
 /** A POST of a raw (not necessarily JSON) body. */
@@ -70,9 +82,12 @@ describe('GET /api/game/[gameid]/chat', () => {
         seedSnakesAndLadders();
 
         const response = await readChatFor('game_1');
+        const body = await response.json();
 
         expect(response.status).toBe(200);
-        expect((await response.json()).messages).toEqual([]);
+        expect(body.messages).toEqual([]);
+        // No marker posted yet: null, not a missing field or a 404 (§13.4).
+        expect(body.readAt).toBeNull();
     });
 
     it('carries the senderId and no name — nothing frozen onto the wire', async () => {
@@ -134,6 +149,18 @@ describe('GET /api/game/[gameid]/chat', () => {
         const response = await readChatFor('game_1');
 
         expect(response.status).toBe(403);
+    });
+
+    it('carries the caller\'s own marker, and no one else\'s (§13.2)', async () => {
+        signIn(ANN);
+        seedSnakesAndLadders();
+        seedChatReadMarker({ gameId: 'game_1', userId: ANN.id, readAt: '2026-01-01T00:00:00.000Z' });
+        seedChatReadMarker({ gameId: 'game_1', userId: BOB.id, readAt: '2026-06-01T00:00:00.000Z' });
+
+        const body = await (await readChatFor('game_1')).json();
+
+        expect(body.readAt).toBe('2026-01-01T00:00:00.000Z');
+        expect(JSON.stringify(body)).not.toContain('2026-06-01');
     });
 
     it('answers 401, not 400, for a request from nobody', async () => {
@@ -330,6 +357,115 @@ describe('POST /api/game/[gameid]/chat', () => {
         seedSnakesAndLadders();
 
         await postChatTo('game_1', { text: 'probe' });
+
+        expect(vi.mocked(consumeRateLimit)).not.toHaveBeenCalled();
+    });
+});
+
+describe('POST /api/game/[gameid]/chat/read', () => {
+    it('upserts a marker on the first post, then updates it on the second', async () => {
+        signIn(ANN);
+        seedSnakesAndLadders();
+
+        const first = await postChatReadTo('game_1', { readAt: '2026-01-01T00:00:00.000Z' });
+        expect(first.status).toBe(200);
+        expect(storedChatReadMarker('game_1', ANN.id)).toBe('2026-01-01T00:00:00.000Z');
+
+        const second = await postChatReadTo('game_1', { readAt: '2026-01-02T00:00:00.000Z' });
+        expect(second.status).toBe(200);
+        expect(storedChatReadMarker('game_1', ANN.id)).toBe('2026-01-02T00:00:00.000Z');
+    });
+
+    it('never moves the marker backwards — a later, older post leaves the newer one standing', async () => {
+        signIn(ANN);
+        seedSnakesAndLadders();
+
+        await postChatReadTo('game_1', { readAt: '2026-01-05T00:00:00.000Z' });
+        const response = await postChatReadTo('game_1', { readAt: '2026-01-01T00:00:00.000Z' });
+
+        // $max is monotonic: two tabs racing, or a request arriving out of
+        // order, can never re-light a dot the player already cleared (§13.4).
+        expect(response.status).toBe(200);
+        expect(storedChatReadMarker('game_1', ANN.id)).toBe('2026-01-05T00:00:00.000Z');
+    });
+
+    it('clamps a future timestamp to now, rather than storing it as read', async () => {
+        signIn(ANN);
+        seedSnakesAndLadders();
+        const farFuture = '2099-01-01T00:00:00.000Z';
+
+        const response = await postChatReadTo('game_1', { readAt: farFuture });
+
+        expect(response.status).toBe(200);
+        const stored = storedChatReadMarker('game_1', ANN.id);
+        expect(stored).toBeDefined();
+        expect(stored).not.toBe(farFuture);
+        expect(new Date(stored!).getTime()).toBeLessThanOrEqual(Date.now());
+    });
+
+    it('refuses a marker from somebody who is not in the game, and stores nothing', async () => {
+        signIn({ id: 'user_carol', username: 'carol' });
+        seedSnakesAndLadders();
+
+        const response = await postChatReadTo('game_1', { readAt: '2026-01-01T00:00:00.000Z' });
+
+        expect(response.status).toBe(403);
+        expect(storedChatReadMarker('game_1', 'user_carol')).toBeUndefined();
+    });
+
+    it('answers 401, not 400, for a request from nobody', async () => {
+        seedSnakesAndLadders();
+
+        const response = await postChatReadTo('game_1', { readAt: '2026-01-01T00:00:00.000Z' });
+
+        expect(response.status).toBe(401);
+    });
+
+    it('answers 404 for a game that does not exist', async () => {
+        signIn(ANN);
+
+        expect((await postChatReadTo('no_such_game', { readAt: '2026-01-01T00:00:00.000Z' })).status).toBe(404);
+    });
+
+    it.each([
+        ['a missing readAt', {}],
+        ['a non-string readAt', { readAt: 1_756_728_000_000 }],
+        ['a readAt that does not parse as a date', { readAt: 'not a date' }],
+    ])('rejects %s with a 400, and stores nothing', async (_label, body) => {
+        signIn(ANN);
+        seedSnakesAndLadders();
+
+        const response = await postChatReadTo('game_1', body);
+
+        expect(response.status).toBe(400);
+        expect(storedChatReadMarker('game_1', ANN.id)).toBeUndefined();
+    });
+
+    it('answers 400 for a body that is not JSON', async () => {
+        signIn(ANN);
+        seedSnakesAndLadders();
+
+        expect((await postChatRead(rawPost('/api/game/game_1/chat/read', 'not json at all'), { params: Promise.resolve({ gameid: 'game_1' }) })).status).toBe(400);
+    });
+
+    it('refuses once the rate limit is spent, and stores nothing', async () => {
+        signIn(ANN);
+        seedSnakesAndLadders();
+        vi.mocked(consumeRateLimit).mockResolvedValueOnce(false);
+
+        const response = await postChatReadTo('game_1', { readAt: '2026-01-01T00:00:00.000Z' });
+
+        expect(response.status).toBe(429);
+        expect(storedChatReadMarker('game_1', ANN.id)).toBeUndefined();
+        // Sixty per five minutes, per player per game (§13.4).
+        expect(vi.mocked(consumeRateLimit)).toHaveBeenCalledWith('chatRead', `game_1:${ANN.id}`, 60, 5 * 60_000);
+    });
+
+    it("rate-limits only after the membership gate, so a stranger can't probe it", async () => {
+        signIn({ id: 'user_carol', username: 'carol' });
+        seedSnakesAndLadders();
+
+        await postChatReadTo('game_1', { readAt: '2026-01-01T00:00:00.000Z' });
 
         expect(vi.mocked(consumeRateLimit)).not.toHaveBeenCalled();
     });

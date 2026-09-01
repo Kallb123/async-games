@@ -7,6 +7,7 @@ import { IInvitationDataDocument, InvitationModel } from '@/utils/mongodb/Invita
 import { FriendshipModel } from '@/utils/mongodb/FriendshipData';
 import { ReactionModel } from '@/utils/mongodb/ReactionData';
 import { ChatMessageModel } from '@/utils/mongodb/ChatMessageData';
+import { ChatReadModel } from '@/utils/mongodb/ChatReadData';
 
 // Deletes the signed-in player's account: everything of theirs in Mongo, then
 // the Clerk user itself. Clerk holds the account details, the registered device
@@ -29,22 +30,25 @@ export async function POST(request: NextRequest) {
 
     // Chat is keyed by game, not by user, so it can't ride along with the
     // per-user deletes below: read this player's game ids first, while the games
-    // still exist, then take every message in those games — not just this
-    // player's, so nobody's half of a conversation is orphaned in a collection
-    // whose game is gone (docs/in-game-chat.md §3). There is no other path that
-    // deletes a game today; if one is added it deletes chat too.
+    // still exist, then take every message and read marker in those games — not
+    // just this player's, so nobody's half of a conversation (or their read
+    // marker) is orphaned in a collection whose game is gone (docs/in-game-chat.md
+    // §3, §13.3). There is no other path that deletes a game today; if one is
+    // added it deletes chat too.
     //
-    // The chat delete runs *before* the games, and that order is load-bearing.
+    // The chat deletes run *before* the games, and that order is load-bearing.
     // Every other delete here is keyed by userId, so each is idempotent and a
-    // failed request can be retried whole. This one depends on a prior read of a
-    // collection it then deletes: if the games went first and Mongo failed
-    // between the two deletes, the retry's re-read would find the games already
-    // gone, return no ids, and leave every message in them orphaned for good.
-    // Deleting chat first makes a partial failure recoverable — the retry
-    // re-reads the still-present ids and the game delete runs again harmlessly.
+    // failed request can be retried whole. These depend on a prior read of a
+    // collection the games delete then invalidates: if the games went first and
+    // Mongo failed between the deletes, the retry's re-read would find the games
+    // already gone, return no ids, and leave every message and marker in them
+    // orphaned for good. Deleting chat first makes a partial failure recoverable
+    // — the retry re-reads the still-present ids and the game delete runs again
+    // harmlessly.
     const playersGames = await GameDataModel.find({ userIdList: userId }, { gameId: 1 }).exec();
     const gameIds = playersGames.map(game => game.gameId);
     await ChatMessageModel.deleteMany({ gameId: { $in: gameIds } }).exec();
+    await ChatReadModel.deleteMany({ gameId: { $in: gameIds } }).exec();
 
     // Games: a game without one of its players cannot be played on or replayed,
     // so both the live game and its recorded result go, for everyone in it.
