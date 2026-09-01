@@ -8,6 +8,7 @@ import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, MAX_RESEARCH_STATIONS, Outb
 import { HAND_LIMIT, OutbreakMoveType, cureCardsRequired, getLegalMoves, opsExpertBuildsFree, stationCityIds } from '@/games/Outbreak/rules';
 import { OutbreakAction, OutbreakDiscard, OutbreakEndTurn, OutbreakPlayEvent } from '@/utils/apiModels/GameLogic';
 import { useResettingState } from '@/utils/hooks/useResettingState';
+import { playerColourForId } from '@/utils/ui/playerColours';
 
 const MOVE_DEFS: { type: OutbreakMoveType; icon: string; name: string; hint: string }[] = [
     { type: 'drive', icon: '🚗', name: 'Drive / Ferry', hint: 'Move to a connected city' },
@@ -90,10 +91,12 @@ function MoveTypeRows({ movesByType, onPick }: {
 
 // The "pick a pawn" sheet the Dispatcher's two abilities share (§11): whose
 // pawn to move with her hand, and which pawn to send to a shared city. Each
-// row names a player and the city their pawn stands in.
-function PlayerPickerSheet({ hint, players, tagLabel, onPick, onCancel }: {
+// row names a player and the city their pawn stands in, with the icon boxed
+// in that player's pawn colour so the sheet matches the board.
+function PlayerPickerSheet({ hint, players, userIdList, tagLabel, onPick, onCancel }: {
     hint: string;
     players: { userId: string; username: string; city: number; role: OutbreakRoleId | null }[];
+    userIdList: string[];
     tagLabel: string;
     onPick: (userId: string) => void;
     onCancel: () => void;
@@ -109,7 +112,7 @@ function PlayerPickerSheet({ hint, players, tagLabel, onPick, onCancel }: {
                         className="ag-build-row"
                         onClick={() => onPick(p.userId)}
                     >
-                        <span className="ag-icon-box">🧑‍⚕️</span>
+                        <span className="ag-icon-box" style={{ background: playerColourForId(p.userId, userIdList) }}>🧑‍⚕️</span>
                         <span className="ag-build-main">
                             <span className="ag-build-name">{p.username}</span>
                             <span className="ag-build-cost">{[roleDef(p.role)?.name, CITIES[p.city].name].filter(Boolean).join(' · ')}</span>
@@ -126,6 +129,9 @@ function PlayerPickerSheet({ hint, players, tagLabel, onPick, onCancel }: {
 interface OutbreakActionsProps {
     gs: IOutbreakSpecificGameStateResponse;
     myUserId: string;
+    /** Every player id, in the app's stable seat order — drives the Dispatcher
+     *  player picker's colours so they match the pawns on the board. */
+    userIdList: string[];
     /** The movement kind currently being targeted on the board, if any. */
     moveMode: OutbreakMoveType | null;
     setMoveMode: (m: OutbreakMoveType | null) => void;
@@ -151,7 +157,7 @@ interface OutbreakActionsProps {
     pendingTarget: string | null;
 }
 
-export default function OutbreakActions({ gs, myUserId, moveMode, setMoveMode, opsFlightActive, onStartOpsFlight, dispatchBoard, onStartDispatchMove, onStartDispatchRelocate, onCancelBoardTarget, submitCommand, pendingTarget }: OutbreakActionsProps) {
+export default function OutbreakActions({ gs, myUserId, userIdList, moveMode, setMoveMode, opsFlightActive, onStartOpsFlight, dispatchBoard, onStartDispatchMove, onStartDispatchRelocate, onCancelBoardTarget, submitCommand, pendingTarget }: OutbreakActionsProps) {
     const [relocating, setRelocating] = useState(false);
     // Operations Expert (§11): picking which city card pays for her flight,
     // before the map lights up for the destination.
@@ -397,6 +403,7 @@ export default function OutbreakActions({ gs, myUserId, moveMode, setMoveMode, o
             <PlayerPickerSheet
                 hint="🧭 Dispatcher — whose pawn do you want to move?"
                 players={others}
+                userIdList={userIdList}
                 tagLabel="Move"
                 onPick={moverUserId => setDispatch({ stage: 'moveType', moverUserId })}
                 onCancel={() => setDispatch(null)}
@@ -434,6 +441,7 @@ export default function OutbreakActions({ gs, myUserId, moveMode, setMoveMode, o
             <PlayerPickerSheet
                 hint="🧭 Dispatcher — which pawn do you want to send to a teammate?"
                 players={everyone}
+                userIdList={userIdList}
                 tagLabel="Send"
                 onPick={moverUserId => { setDispatch(null); onStartDispatchRelocate(moverUserId); }}
                 onCancel={() => setDispatch(null)}
