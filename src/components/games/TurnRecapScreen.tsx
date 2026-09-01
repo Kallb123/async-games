@@ -30,6 +30,7 @@ export default function TurnRecapScreen({ recap, cta, onDismiss, onReact }: Turn
                 dotColour: event.dotColour,
                 reaction: event.reaction,
             }))}
+            chat={recap.chat}
             tip={recap.tip}
             cta={{ label: cta, onClick: onDismiss }}
             onReact={onReact}

@@ -2775,6 +2775,13 @@ a.ag-list-row, a.ag-list-row-main {
     margin: 10px auto 22px;
     max-width: 32ch;
 }
+.ag-recap-chat {
+    font: 600 13px/1.4 var(--ag-font);
+    color: var(--ag-ink-soft);
+    text-align: center;
+    margin: -14px auto 20px;
+    max-width: 32ch;
+}
 
 .ag-recap-timeline {
     list-style: none;
