@@ -69,13 +69,20 @@ export const CHAT_EVENTS = ['ChatMessage'] as const;
 
 /**
  * Everything that changes the home screen: an invite arriving, the turn moving,
- * a game finishing. One set because the dashboard is now one read — see
- * `buildDashboard` for why its five lists are no longer five subscriptions.
+ * a game finishing, a chat message landing. One set because the dashboard is
+ * now one read — see `buildDashboard` for why its five lists are no longer
+ * five subscriptions.
+ *
+ * `ChatMessage` is a one-line improvement here, not the mechanism: the push
+ * is throttled to one per recipient per game per ten minutes
+ * (docs/in-game-chat.md §7), so the unread badge's real liveness is the
+ * dashboard's own `pollWhileWatching` (§13.6).
  */
 export const DASHBOARD_EVENTS = [
     ...INVITE_EVENTS,
     ...TURN_ADVANCED_EVENTS,
-    ...COMPLETED_GAME_EVENTS
+    ...COMPLETED_GAME_EVENTS,
+    ...CHAT_EVENTS,
 ] as const;
 
 export interface PushEventsOptions {

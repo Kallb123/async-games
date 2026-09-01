@@ -84,11 +84,14 @@ export async function resetApiRouteStubs() {
     clearAfterCallbacks();
     sentPushes.length = 0;
     vi.spyOn(gameData.GameDataModel, 'findOne').mockImplementation(findOneFromStore as GameData['GameDataModel']['findOne']);
+    vi.spyOn(gameData.GameDataModel, 'find').mockImplementation(findManyFromStore as GameData['GameDataModel']['find']);
     vi.spyOn(chatMessageData.ChatMessageModel, 'find').mockImplementation(findChatFromStore as typeof chatMessageData.ChatMessageModel.find);
+    vi.spyOn(chatMessageData.ChatMessageModel, 'aggregate').mockImplementation(aggregateChatFromStore as unknown as typeof chatMessageData.ChatMessageModel.aggregate);
     // new ChatMessageModel(...).save() lands in the store, so the chat route's
     // POST writes somewhere a later GET (or a test) can read it back.
     vi.spyOn(chatMessageData.ChatMessageModel.prototype, 'save').mockImplementation(saveChatToStore);
     vi.spyOn(chatReadData.ChatReadModel, 'findOne').mockImplementation(findOneChatReadFromStore as typeof chatReadData.ChatReadModel.findOne);
+    vi.spyOn(chatReadData.ChatReadModel, 'find').mockImplementation(findManyChatReadFromStore as typeof chatReadData.ChatReadModel.find);
     vi.spyOn(chatReadData.ChatReadModel, 'findOneAndUpdate').mockImplementation(findOneAndUpdateChatReadFromStore as typeof chatReadData.ChatReadModel.findOneAndUpdate);
 }
 
@@ -338,6 +341,19 @@ function findOneFromStore(filter: Record<string, unknown>) {
     return { exec: async () => (stored ? hydrate(stored) : null) };
 }
 
+// The dashboard's one query over the whole game store: every live game a
+// player is in — find({ userIdList: userId, complete: false }).exec().
+function findManyFromStore(filter: Record<string, unknown>) {
+    const userId = filter?.userIdList;
+    const complete = filter?.complete;
+    if (typeof userId !== 'string' || typeof complete !== 'boolean' || Object.keys(filter).length !== 2) {
+        throw new Error(`The test game store only searches many by userIdList and complete, not ${JSON.stringify(filter)}`);
+    }
+    const matches = [...games.values()].filter(stored =>
+        (stored.userIdList as string[]).includes(userId) && stored.complete === complete);
+    return { exec: async () => matches.map(hydrate) };
+}
+
 // ---------------------------------------------------------------- Chat
 
 /** Puts a message in the chat store, as if it had been posted earlier. */
@@ -391,6 +407,37 @@ function findChatFromStore(filter: Record<string, unknown>) {
     return query;
 }
 
+// The dashboard's unread count: one aggregate over every live game at once
+// (docs/in-game-chat.md §13.5) — a $match of one $or clause per game, then a
+// $group by gameId. This interprets exactly that pipeline shape rather than a
+// general aggregation engine, the same trade findChatFromStore above already
+// makes for find().
+function aggregateChatFromStore(pipeline: Record<string, unknown>[]) {
+    const match = pipeline[0]?.$match as { $or?: Record<string, unknown>[] } | undefined;
+    const clauses = match?.$or;
+    if (!Array.isArray(clauses) || pipeline.length !== 2) {
+        throw new Error(`The test chat store only aggregates a one-$match-one-$group pipeline, not ${JSON.stringify(pipeline)}`);
+    }
+    const counts: { _id: string, count: number }[] = [];
+    for (const clause of clauses) {
+        const gameId = clause.gameId as string;
+        const excludedSender = (clause.senderId as { $ne?: string } | undefined)?.$ne;
+        const after = (clause.timestamp as { $gt?: string } | undefined)?.$gt;
+        const count = chatMessages.filter(message =>
+            message.gameId === gameId &&
+            (excludedSender === undefined || message.senderId !== excludedSender) &&
+            (after === undefined || message.timestamp > after)
+        ).length;
+        // $group only ever emits a row for a gameId that had at least one
+        // matching message — mirrored here so a fully-read game is absent
+        // from the map rather than present at zero.
+        if (count > 0) {
+            counts.push({ _id: gameId, count });
+        }
+    }
+    return Promise.resolve(counts);
+}
+
 // new ChatMessageModel(...).save(): flatten the document down to what the
 // collection stores (a string messageId, whatever the schema cast it to) and
 // keep it. `this` is the document, so this must stay a plain function.
@@ -427,6 +474,17 @@ function findOneChatReadFromStore(filter: Record<string, unknown>) {
     }
     const found = chatReadMarkers.find(marker => marker.gameId === gameId && marker.userId === userId);
     return { exec: async () => (found ? chatReadData.ChatReadModel.hydrate(found) : null) };
+}
+
+// The dashboard's other read: every marker one player holds, across every
+// game — find({ userId }).exec(), served by the { userId: 1 } index.
+function findManyChatReadFromStore(filter: Record<string, unknown>) {
+    const userId = filter?.userId;
+    if (typeof userId !== 'string' || Object.keys(filter).length !== 1) {
+        throw new Error(`The test chat-read store only searches many by userId, not ${JSON.stringify(filter)}`);
+    }
+    const matches = chatReadMarkers.filter(marker => marker.userId === userId);
+    return { exec: async () => matches.map(marker => chatReadData.ChatReadModel.hydrate(marker)) };
 }
 
 // findOneAndUpdate({ gameId, userId }, { $max: { readAt } }, { upsert: true }):

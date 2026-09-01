@@ -35,7 +35,13 @@ export interface IGameResponse {
     complete: boolean,
     winner: string,
     endReason?: GameEndReason,
-    forfeitedBy?: string
+    forfeitedBy?: string,
+    // How many chat messages this viewer hasn't read in this game yet. Only
+    // ever present on a dashboard response — buildDashboard maps it on after
+    // CreateResponse, because the schema method knows nothing about chat and
+    // no board screen's own game response carries it (docs/in-game-chat.md
+    // §13.5). Absent (not zero) anywhere else.
+    unreadChatCount?: number,
 }
 
 // One line (or a few) of formatted, human-readable GameResult stats. Groups
