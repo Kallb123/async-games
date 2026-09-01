@@ -19,6 +19,7 @@ import {
 } from '@/games/Outbreak/board';
 import { stationCityIds } from '@/games/Outbreak/rules';
 import { OutbreakPlayEvent } from '@/utils/apiModels/GameLogic';
+import { playerColourForId } from '@/utils/ui/playerColours';
 
 // A board-targeted event still in progress — lifted to the page (like
 // movement's moveMode) because only the page owns the map's click handler.
@@ -162,7 +163,7 @@ export default function OutbreakEventTray({
                                 onStartTargeting({ cardId: EVENT_CARD_AIRLIFT, kind: 'airlift', targetUserId: p.userId });
                             }}
                         >
-                            <span className="ag-icon-box">🧑‍⚕️</span>
+                            <span className="ag-icon-box" style={{ background: playerColourForId(userId, userIdList) }}>🧑‍⚕️</span>
                             <span className="ag-build-main">
                                 <span className="ag-build-name">{userId === myUserId ? 'You' : p.username}</span>
                                 <span className="ag-build-cost">{[roleDef(p.role)?.name, CITIES[p.city].name].filter(Boolean).join(' · ')}</span>
