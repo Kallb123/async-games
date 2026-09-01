@@ -8,7 +8,7 @@ import { normaliseMessage } from "@/utils/chat";
 import type { IChatResponse, IChatMessageResponse } from "@/app/api/game/[gameid]/chat/route";
 
 /** A thread message plus whether it's new since this viewing of the panel — see
- *  `readBoundary` below. */
+ *  `unreadCutoffId` below. */
 export interface GameChatMessage extends IChatMessageResponse {
     unread: boolean;
 }
@@ -60,71 +60,102 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean): Ga
     // hasn't changed — otherwise the `?? []` fallback would make it a new array
     // every render and defeat the `messages` useMemo below.
     const rawMessages = useMemo(() => data?.messages ?? [], [data]);
-    const latest = rawMessages.length ? rawMessages[rawMessages.length - 1].timestamp : null;
+    const latest = rawMessages.length ? rawMessages[rawMessages.length - 1] : null;
 
-    // The boundary this *viewing* of the panel treats as "already read", frozen
-    // at whatever the marker was when the panel opened. The effect below starts
-    // advancing the real marker (`readAt`) the moment the panel opens, so if the
-    // unread styling followed `readAt` live it would clear within one poll of
-    // opening — using the frozen boundary instead means a message that arrived
-    // since last time stays marked as new for as long as this viewing stays
-    // open. `undefined` means "not captured for this viewing yet".
+    // The boundary this *viewing* of the panel treats as "already read" — every
+    // message *after* the one `unreadCutoffId` names, by position in
+    // `rawMessages`, is "new". It starts frozen at whatever the marker was when
+    // the panel opened (the effect below starts advancing the real marker,
+    // `readAt`, the moment the panel opens, so if the unread styling followed
+    // `readAt` live it would clear within one poll of opening), then *rolls
+    // forward* every time a poll brings in a message newer than
+    // `trackedLatestId` — the newest message as of the previous snapshot: the
+    // batch that just arrived becomes the newly-marked one, and the batch that
+    // was marked before it (now superseded) stops being marked. A player
+    // watching the thread live sees each message arrive as new, but doesn't
+    // have the last one singled out once another has taken its place.
+    // `undefined` means "not captured for this viewing yet".
     //
-    // `boundaryLatest` is the newest message that existed at the same moment —
-    // once a poll brings in something newer than that, the whole divider clears
-    // rather than sitting there stale: a player watching the thread live and
-    // seeing a message arrive doesn't need "new since last time" pointed out to
-    // them, they just watched it happen.
+    // Tracked by messageId and read back as an array *position*, not by
+    // comparing timestamp strings: two messages from different senders can
+    // legitimately share the same millisecond (the GET route ties `messageId`
+    // in as a tiebreaker for exactly this reason), so rolling the cutoff
+    // forward to a bare timestamp could silently swallow a same-millisecond
+    // message that arrived alongside the one that superseded it — a real
+    // message with nothing on screen ever having marked it new.
     //
     // Adjusted directly during render (not in an effect, which would setState
     // synchronously and trigger a cascading render — react-hooks/set-state-in-
     // effect) — the same `loadedFor`-style comparison `useTurnRecap` uses.
-    const [readBoundary, setReadBoundary] = useState<string | null | undefined>(undefined);
-    const [boundaryLatest, setBoundaryLatest] = useState<string | null>(null);
+    const [unreadCutoffId, setUnreadCutoffId] = useState<string | null | undefined>(undefined);
+    const [trackedLatestId, setTrackedLatestId] = useState<string | null>(null);
     const [wasOpen, setWasOpen] = useState(open);
     if (open !== wasOpen) {
         setWasOpen(open);
         if (!open) {
-            setReadBoundary(undefined);
+            setUnreadCutoffId(undefined);
         }
     }
     // Gated on `data !== null`, not just `!isLoading`: a failed fetch also
     // leaves `isLoading` false (useRefreshableData flips it in its `finally`
     // whether or not the request succeeded) but `data` stays null, and `readAt`
     // would read as `null` — indistinguishable from "never opened this thread".
-    // Capturing that as the boundary would mark the whole history unread for
+    // Capturing that as the cutoff would mark the whole history unread for
     // this viewing; waiting for real data means a retry or the next poll
-    // captures the correct boundary instead.
-    if (open && readBoundary === undefined && !isLoading && data !== null) {
-        setReadBoundary(readAt);
-        setBoundaryLatest(latest);
+    // captures the correct cutoff instead.
+    if (open && !isLoading && data !== null) {
+        if (unreadCutoffId === undefined) {
+            // readAt is the server's own boundary, so it's compared against
+            // timestamps here same as it always was (matching `hasUnread`
+            // below) — this one-time conversion into a messageId only has to
+            // find *a* message at or before it, not out-tiebreak a same-poll
+            // arrival the way the rolling step below does.
+            const cutoffMessage = readAt === null ? undefined
+                : [...rawMessages].reverse().find((message) => message.timestamp <= readAt);
+            setUnreadCutoffId(cutoffMessage?.messageId ?? null);
+            setTrackedLatestId(latest?.messageId ?? null);
+        } else if (latest?.messageId !== trackedLatestId) {
+            setUnreadCutoffId(trackedLatestId);
+            setTrackedLatestId(latest?.messageId ?? null);
+        }
     }
 
-    const messages: GameChatMessage[] = useMemo(() => rawMessages.map((message) => ({
-        ...message,
-        // `myId` is momentarily undefined before Clerk resolves; treating that
-        // as "not mine" would flag the viewer's own already-read messages as
-        // unread for a render.
-        unread: myId !== undefined
-            && message.senderId !== myId
-            && readBoundary !== undefined
-            && latest === boundaryLatest
-            && (readBoundary === null || message.timestamp > readBoundary),
-    })), [rawMessages, myId, readBoundary, latest, boundaryLatest]);
+    const messages: GameChatMessage[] = useMemo(() => {
+        // Not captured yet (still loading, or the panel is shut) — nothing is
+        // markable as new.
+        if (unreadCutoffId === undefined) {
+            return rawMessages.map((message) => ({ ...message, unread: false }));
+        }
+        // `null` means "no boundary" (never read before): everything counts as
+        // after it. A real id that's rolled off the loaded page (paged out by
+        // CHAT_PAGE_SIZE) behaves the same way — findIndex returns -1 — which
+        // is the same generous "mark what's currently loaded" fallback the
+        // timestamp version had at that edge.
+        const cutoffIndex = unreadCutoffId === null ? -1
+            : rawMessages.findIndex((message) => message.messageId === unreadCutoffId);
+        return rawMessages.map((message, index) => ({
+            ...message,
+            // `myId` is momentarily undefined before Clerk resolves; treating
+            // that as "not mine" would flag the viewer's own already-read
+            // messages as unread for a render.
+            unread: myId !== undefined && message.senderId !== myId && index > cutoffIndex,
+        }));
+    }, [rawMessages, myId, unreadCutoffId]);
 
     // While the panel is open, advance the marker to the newest message — and
     // keep advancing it as the poll brings more in — so the dot never lights for
     // a line the player is looking at. A failed POST is logged and dropped: the
     // dot staying lit for another minute is the correct failure, and there is
     // nothing to retry that the next open won't do anyway.
+    const latestTimestamp = latest?.timestamp ?? null;
     useEffect(() => {
-        if (!open || latest === null || latest === readAt) {
+        if (!open || latestTimestamp === null || latestTimestamp === readAt) {
             return;
         }
         fetch(`/api/game/${gameId}/chat/read`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ readAt: latest }),
+            body: JSON.stringify({ readAt: latestTimestamp }),
             signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         }).then((response) => {
             if (!response.ok) {
@@ -133,14 +164,14 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean): Ga
         }).catch((error) => {
             console.error('Failed to mark chat read', error);
         });
-    }, [open, latest, readAt, gameId]);
+    }, [open, latestTimestamp, readAt, gameId]);
 
     // Unread: a message that landed after the marker and came from someone else.
     // A browser that has never opened the thread (readAt null) treats every other
     // player's message as unread, which is the right first-time signal. This one
-    // follows the live marker, not the frozen `readBoundary` above — the topbar
-    // dot should clear the moment the marker does, unlike the panel's own
-    // unread styling.
+    // follows the live marker, not the rolling `unreadCutoffId` above — the
+    // topbar dot should clear the moment the marker does, unlike the panel's
+    // own unread styling.
     const hasUnread = rawMessages.some(
         (message) => message.senderId !== myId && (readAt === null || message.timestamp > readAt),
     );
