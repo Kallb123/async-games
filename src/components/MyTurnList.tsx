@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { gamePath, metaForGame } from "@/utils/ui/games";
 import { opponentsById } from "@/utils/ui/players";
 import GameThumb from "@/components/ui/GameThumb";
+import UnreadChatBadge from "@/components/ui/UnreadChatBadge";
 import { accentVar } from "@/utils/ui/colours";
 import CollapsingSection from "@/components/ui/CollapsingSection";
 import Refreshable from "@/components/ui/Refreshable";
@@ -58,7 +59,12 @@ export default function MyTurnList({ games, isLoading, isRefreshing }: MyTurnLis
                 <div className="ag-turn-card-cta" style={{ color: accent }}>
                     Take your turn
                 </div>
-                {timeLeft && <div className="ag-turn-card-badge">{timeLeft}</div>}
+                {(timeLeft || (game.unreadChatCount ?? 0) > 0) && (
+                    <div className="ag-turn-card-badges">
+                        <UnreadChatBadge count={game.unreadChatCount ?? 0} onDark />
+                        {timeLeft && <div className="ag-turn-card-badge">{timeLeft}</div>}
+                    </div>
+                )}
             </div>
         );
     }), { isLoading, placeholder: { node: <SkeletonTurnCard />, count: 1 } });

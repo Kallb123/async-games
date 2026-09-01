@@ -6,6 +6,7 @@ import { useState } from "react";
 import { opponentsById } from "@/utils/ui/players";
 import { gamePath } from "@/utils/ui/games";
 import ListSection from "@/components/ui/ListSection";
+import UnreadChatBadge from "@/components/ui/UnreadChatBadge";
 import type { RefreshableState } from "@/utils/hooks/useRefreshableData";
 import { useIsAuthorised } from "@/utils/hooks/useAuthGuard";
 import { formatRemainingTimeShort } from "@/utils/games/TurnTimer";
@@ -74,6 +75,7 @@ export default function TheirTurnList({ games, isLoading, isRefreshing }: TheirT
                             </div>
                         </Link>
                         {timeLeft && <span className="ag-list-row-time">{timeLeft}</span>}
+                        <UnreadChatBadge count={game.unreadChatCount ?? 0} />
                         <button
                             type="button"
                             className="ag-pill-action"

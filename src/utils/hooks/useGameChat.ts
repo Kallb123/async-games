@@ -4,7 +4,6 @@ import { useUser } from "@clerk/nextjs";
 import { useRefreshableData } from "./useRefreshableData";
 import { REQUEST_TIMEOUT_MS } from "./fetchWithSessionRetry";
 import { CHAT_EVENTS } from "./usePushEvents";
-import { useStoredValue } from "./useStoredValue";
 import { normaliseMessage } from "@/utils/chat";
 import type { IChatResponse, IChatMessageResponse } from "@/app/api/game/[gameid]/chat/route";
 
@@ -38,6 +37,10 @@ export interface GameChat {
  * rendering each sent line twice until the refetch reconciled it; a refetch
  * after a POST the player just waited on is imperceptible and has one source of
  * truth. See docs/in-game-chat.md §6.
+ *
+ * The read marker lives on the server (`data.readAt`), not in `localStorage`:
+ * reading the thread on one device clears the dot on every other one. See
+ * docs/in-game-chat.md §13.6.
  */
 export function useGameChat(gameId: string, open: boolean, enabled: boolean): GameChat {
     const { user } = useUser();
@@ -45,23 +48,33 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean): Ga
     const { data, isLoading, isRefreshing, refresh } =
         useRefreshableData<IChatResponse>(`/api/game/${gameId}/chat`, CHAT_EVENTS, { pollWhileWatching: open, enabled });
     const [sending, setSending] = useState(false);
-    // The read marker: the timestamp of the newest message this browser has seen
-    // in this game. Per-device (localStorage) — reading on your phone leaves the
-    // dot on your laptop, the known cost a server-side marker (phase 2) would
-    // pay off. See docs/in-game-chat.md §6.
-    const [readAt, setReadAt] = useStoredValue(`ag-chat-read:${gameId}`);
+    const readAt = data?.readAt ?? null;
 
     const messages = data?.messages ?? [];
     const latest = messages.length ? messages[messages.length - 1].timestamp : null;
 
     // While the panel is open, advance the marker to the newest message — and
     // keep advancing it as the poll brings more in — so the dot never lights for
-    // a line the player is looking at.
+    // a line the player is looking at. A failed POST is logged and dropped: the
+    // dot staying lit for another minute is the correct failure, and there is
+    // nothing to retry that the next open won't do anyway.
     useEffect(() => {
-        if (open && latest !== null && latest !== readAt) {
-            setReadAt(latest);
+        if (!open || latest === null || latest === readAt) {
+            return;
         }
-    }, [open, latest, readAt, setReadAt]);
+        fetch(`/api/game/${gameId}/chat/read`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ readAt: latest }),
+            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        }).then((response) => {
+            if (!response.ok) {
+                console.error(`Failed to mark chat read: ${response.status}`);
+            }
+        }).catch((error) => {
+            console.error('Failed to mark chat read', error);
+        });
+    }, [open, latest, readAt, gameId]);
 
     // Unread: a message that landed after the marker and came from someone else.
     // A browser that has never opened the thread (readAt null) treats every other
