@@ -81,13 +81,24 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean): Ga
             setReadBoundary(undefined);
         }
     }
-    if (open && readBoundary === undefined && !isLoading) {
+    // Gated on `data !== null`, not just `!isLoading`: a failed fetch also
+    // leaves `isLoading` false (useRefreshableData flips it in its `finally`
+    // whether or not the request succeeded) but `data` stays null, and `readAt`
+    // would read as `null` — indistinguishable from "never opened this thread".
+    // Capturing that as the boundary would mark the whole history unread for
+    // this viewing; waiting for real data means a retry or the next poll
+    // captures the correct boundary instead.
+    if (open && readBoundary === undefined && !isLoading && data !== null) {
         setReadBoundary(readAt);
     }
 
     const messages: GameChatMessage[] = useMemo(() => rawMessages.map((message) => ({
         ...message,
-        unread: message.senderId !== myId
+        // `myId` is momentarily undefined before Clerk resolves; treating that
+        // as "not mine" would flag the viewer's own already-read messages as
+        // unread for a render.
+        unread: myId !== undefined
+            && message.senderId !== myId
             && readBoundary !== undefined
             && (readBoundary === null || message.timestamp > readBoundary),
     })), [rawMessages, myId, readBoundary]);
