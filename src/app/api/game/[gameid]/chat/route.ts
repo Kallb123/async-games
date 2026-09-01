@@ -17,6 +17,9 @@ export interface IChatParams {
     gameid: string;
 }
 
+// A v4 UUID, case-insensitively — messageId's own format (randomUUID() below).
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // The newest this many messages, oldest-first — one indexed read served by
 // { gameId: 1, timestamp: -1 } (ChatMessageData). Older-than-this paging is a
 // phase-2 cursor (docs/in-game-chat.md §5, §10); fifty is a long conversation
@@ -75,15 +78,25 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IC
     }
 
     // `before` loads an earlier page of the thread (docs/in-game-chat.md §13.7
-    // commit 5): the client sends the oldest timestamp it already has, and gets
-    // the CHAT_PAGE_SIZE messages immediately before it. Reuses normaliseReadAt
-    // rather than a second copy of "is this a well-formed ISO timestamp" — the
-    // read marker and a paging cursor are the same shape of value.
+    // commit 5): the client sends the oldest message it already has — its
+    // timestamp *and* its messageId — and gets the CHAT_PAGE_SIZE messages
+    // immediately before it. Both together, because timestamp alone reopens the
+    // same tie the sort's own tiebreaker exists for (the comment on the query
+    // below): two messages can share a millisecond, and a page boundary that
+    // fell between them would mean `timestamp: { $lt: before }` skips the one
+    // that lost the tiebreak forever — it was never on the earlier page (cut
+    // off by CHAT_PAGE_SIZE) and can never satisfy a plain `$lt` on any later
+    // one either. `before` still reuses normaliseReadAt rather than a second
+    // "is this a well-formed ISO timestamp" check — the read marker and a
+    // paging cursor are the same shape of value.
     const beforeParam = request.nextUrl.searchParams.get('before');
+    const beforeMessageIdParam = request.nextUrl.searchParams.get('beforeMessageId');
     let before: string | null = null;
-    if (beforeParam !== null) {
-        before = normaliseReadAt(beforeParam);
-        if (before === null) {
+    let beforeMessageId: string | null = null;
+    if (beforeParam !== null || beforeMessageIdParam !== null) {
+        before = beforeParam === null ? null : normaliseReadAt(beforeParam);
+        beforeMessageId = beforeMessageIdParam !== null && UUID_PATTERN.test(beforeMessageIdParam) ? beforeMessageIdParam : null;
+        if (before === null || beforeMessageId === null) {
             return NextResponse.json({}, { status: 400, statusText: "Invalid before" });
         }
     }
@@ -100,6 +113,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IC
         return NextResponse.json({}, { status: 403, statusText: "Not a player in this game" });
     }
 
+    // The cursor mirrors the sort key exactly: strictly older, or the same
+    // millisecond and strictly on the other side of the tiebreak — "earlier in
+    // { timestamp: -1, messageId: -1 } order than (before, beforeMessageId)".
+    const cursor = before === null ? { gameId: gameid } : {
+        gameId: gameid,
+        $or: [
+            { timestamp: { $lt: before } },
+            { timestamp: before, messageId: { $lt: beforeMessageId } },
+        ],
+    };
     const page: IChatMessageDataDocument[] = await ChatMessageModel
         // messageId is a deterministic tiebreaker: two messages written in the
         // same millisecond compare equal on timestamp alone, and their order
@@ -107,7 +130,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IC
         // and, at the page boundary, flipping in and out of the window. The
         // { gameId: 1, timestamp: -1 } index still leads the scan; only a
         // same-ms tie is settled in memory, and there are only ever a handful.
-        .find(before === null ? { gameId: gameid } : { gameId: gameid, timestamp: { $lt: before } })
+        .find(cursor)
         .sort({ timestamp: -1, messageId: -1 })
         // One extra, never returned, so hasMore is known without a second
         // count query — the same "fetch N+1" a limit-based cursor always uses.

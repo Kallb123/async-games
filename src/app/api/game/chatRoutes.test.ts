@@ -41,9 +41,23 @@ function readChatFor(gameid: string) {
     return readChat(get(`/api/game/${gameid}/chat`), { params: Promise.resolve({ gameid }) });
 }
 
-/** A GET of an earlier page: the same request, with `?before=` on it. */
-function readChatBefore(gameid: string, before: string) {
-    return readChat(get(`/api/game/${gameid}/chat?before=${encodeURIComponent(before)}`), { params: Promise.resolve({ gameid }) });
+/** A GET of an earlier page: the same request, with `?before=`/`?beforeMessageId=`
+ *  on it — the compound cursor the client sends (docs/in-game-chat.md §13.7
+ *  commit 5). `beforeMessageId` defaults to a low, valid-shaped UUID: none of
+ *  the seeded test messageIds sort below it, so the tie clause is inert and the
+ *  cursor behaves as pure "strictly before this timestamp" for tests that
+ *  aren't specifically exercising the tiebreak. */
+function readChatBefore(gameid: string, before: string, beforeMessageId = '00000000-0000-4000-8000-000000000000') {
+    const params = new URLSearchParams({ before, beforeMessageId });
+    return readChat(get(`/api/game/${gameid}/chat?${params.toString()}`), { params: Promise.resolve({ gameid }) });
+}
+
+/** A deterministic, valid-shaped UUID ordered the same as `i` — the route's
+ *  `beforeMessageId` gate rejects anything that doesn't look like one
+ *  (UUID_PATTERN), so a test that round-trips a page's own messageId back in
+ *  as the next page's cursor needs seeded messages to carry real ones. */
+function uuidFor(i: number): string {
+    return `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`;
 }
 
 /** A POST to one game's chat thread, JSON body and path param. */
@@ -210,7 +224,7 @@ describe('GET /api/game/[gameid]/chat', () => {
             // 120 messages: three pages of 50, 50 and 20.
             for (let i = 0; i < 120; i++) {
                 const timestamp = new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString();
-                seedChatMessage({ messageId: `m${i}`, gameId: 'game_1', senderId: ANN.id, text: `msg ${i}`, timestamp });
+                seedChatMessage({ messageId: uuidFor(i), gameId: 'game_1', senderId: ANN.id, text: `msg ${i}`, timestamp });
             }
 
             const live = await (await readChatFor('game_1')).json();
@@ -218,13 +232,13 @@ describe('GET /api/game/[gameid]/chat', () => {
             expect(live.messages[0].text).toBe('msg 70');
             expect(live.hasMore).toBe(true);
 
-            const secondPage = await (await readChatBefore('game_1', live.messages[0].timestamp)).json();
+            const secondPage = await (await readChatBefore('game_1', live.messages[0].timestamp, live.messages[0].messageId)).json();
             expect(secondPage.messages).toHaveLength(50);
             expect(secondPage.messages[0].text).toBe('msg 20');
             expect(secondPage.messages.at(-1).text).toBe('msg 69');
             expect(secondPage.hasMore).toBe(true);
 
-            const thirdPage = await (await readChatBefore('game_1', secondPage.messages[0].timestamp)).json();
+            const thirdPage = await (await readChatBefore('game_1', secondPage.messages[0].timestamp, secondPage.messages[0].messageId)).json();
             expect(thirdPage.messages).toHaveLength(20);
             expect(thirdPage.messages[0].text).toBe('msg 0');
             expect(thirdPage.messages.at(-1).text).toBe('msg 19');
@@ -232,12 +246,47 @@ describe('GET /api/game/[gameid]/chat', () => {
             expect(thirdPage.hasMore).toBe(false);
         });
 
+        it('does not lose a same-millisecond message split across a page boundary', async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+            const tieTimestamp = '2026-01-01T00:01:00.000Z';
+            const a = uuidFor(1);   // lower id — loses the tiebreak, sorts after b
+            const b = uuidFor(2);   // higher id — wins the tiebreak, sorts first
+            seedChatMessage({ messageId: a, gameId: 'game_1', senderId: ANN.id, text: 'tied-a', timestamp: tieTimestamp });
+            seedChatMessage({ messageId: b, gameId: 'game_1', senderId: ANN.id, text: 'tied-b', timestamp: tieTimestamp });
+            // 49 messages newer than the tie, so the tie lands exactly on the
+            // live page's oldest edge: 'tied-b' is the 50th (last) message on
+            // the live page, and 'tied-a' — same millisecond, lower id — is the
+            // 51st, the one a page boundary here could lose.
+            for (let i = 0; i < 49; i++) {
+                const timestamp = new Date(Date.UTC(2026, 0, 1, 0, 2, i)).toISOString();
+                seedChatMessage({ messageId: uuidFor(100 + i), gameId: 'game_1', senderId: ANN.id, text: `recent ${i}`, timestamp });
+            }
+
+            const live = await (await readChatFor('game_1')).json();
+            expect(live.messages).toHaveLength(50);
+            expect(live.hasMore).toBe(true);
+            // The higher id wins the tiebreak and sorts first, so 'tied-b' is
+            // the oldest message still inside the live page.
+            expect(live.messages[0].text).toBe('tied-b');
+
+            const earlier = await (await readChatBefore('game_1', live.messages[0].timestamp, live.messages[0].messageId)).json();
+
+            // A plain `timestamp: { $lt: before }` cursor would exclude
+            // 'tied-a' forever — same timestamp, so never "less than" — even
+            // though it never made it onto the live page either. The compound
+            // before/beforeMessageId cursor must still find it.
+            expect(earlier.messages.map((m: { text: string }) => m.text)).toEqual(['tied-a']);
+            expect(earlier.hasMore).toBe(false);
+        });
+
         it('answers an empty page, not an error, once the thread runs out', async () => {
             signIn(ANN);
             seedSnakesAndLadders();
-            seedChatMessage({ messageId: 'm1', gameId: 'game_1', senderId: ANN.id, text: 'only one', timestamp: '2026-01-01T00:00:00.000Z' });
+            const onlyMessageId = uuidFor(1);
+            seedChatMessage({ messageId: onlyMessageId, gameId: 'game_1', senderId: ANN.id, text: 'only one', timestamp: '2026-01-01T00:00:00.000Z' });
 
-            const body = await (await readChatBefore('game_1', '2026-01-01T00:00:00.000Z')).json();
+            const body = await (await readChatBefore('game_1', '2026-01-01T00:00:00.000Z', onlyMessageId)).json();
 
             expect(body.success).toBe(true);
             expect(body.messages).toEqual([]);
@@ -249,6 +298,15 @@ describe('GET /api/game/[gameid]/chat', () => {
             seedSnakesAndLadders();
 
             const response = await readChatBefore('game_1', 'not a date');
+
+            expect(response.status).toBe(400);
+        });
+
+        it('rejects a beforeMessageId that is not a UUID, with a 400', async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+
+            const response = await readChatBefore('game_1', '2026-01-01T00:00:00.000Z', 'not-a-uuid');
 
             expect(response.status).toBe(400);
         });

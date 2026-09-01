@@ -368,23 +368,37 @@ export function storedChatMessages(gameId: string): StoredChatMessage[] {
 }
 
 // The one read the chat route makes: find({ gameId }).sort({ timestamp: -1 })
-// .limit(N).exec(), optionally narrowed to find({ gameId, timestamp: { $lt } })
-// for a `before` page (docs/in-game-chat.md §13.7 commit 5). A chainable
-// stand-in for a Query, honouring the sort and limit the route asks for so the
-// "newest N, then reversed" slice is real.
+// .limit(N).exec(), optionally narrowed to the `before`/`beforeMessageId`
+// compound cursor for an earlier page (docs/in-game-chat.md §13.7 commit 5):
+// find({ gameId, $or: [{ timestamp: { $lt } }, { timestamp, messageId: { $lt } }] }).
+// A chainable stand-in for a Query, honouring the sort and limit the route
+// asks for so the "newest N, then reversed" slice is real.
 function findChatFromStore(filter: Record<string, unknown>) {
     const gameId = filter?.gameId;
-    const timestampFilter = filter?.timestamp as { $lt?: string } | undefined;
     const keys = Object.keys(filter);
-    const shape = keys.length === 1 && keys[0] === 'gameId'
-        || keys.length === 2 && keys.includes('gameId') && keys.includes('timestamp')
-            && typeof timestampFilter === 'object' && timestampFilter !== null
-            && Object.keys(timestampFilter).length === 1 && typeof timestampFilter.$lt === 'string';
-    if (typeof gameId !== 'string' || !shape) {
-        throw new Error(`The test chat store only looks messages up by gameId (and an optional timestamp $lt), not ${JSON.stringify(filter)}`);
+    let matchesCursor: (message: StoredChatMessage) => boolean = () => true;
+    if (keys.length === 2 && keys.includes('gameId') && keys.includes('$or')) {
+        const or = filter.$or;
+        const byTimestamp = Array.isArray(or) ? or[0] as Record<string, unknown> : undefined;
+        const byTie = Array.isArray(or) ? or[1] as Record<string, unknown> : undefined;
+        const beforeLt = (byTimestamp?.timestamp as { $lt?: string } | undefined)?.$lt;
+        const tieTimestamp = byTie?.timestamp;
+        const tieMessageIdLt = (byTie?.messageId as { $lt?: string } | undefined)?.$lt;
+        const shape = Array.isArray(or) && or.length === 2
+            && byTimestamp !== undefined && Object.keys(byTimestamp).length === 1 && typeof beforeLt === 'string'
+            && byTie !== undefined && Object.keys(byTie).length === 2 && typeof tieTimestamp === 'string' && typeof tieMessageIdLt === 'string';
+        if (!shape) {
+            throw new Error(`The test chat store's $or cursor didn't have the shape the route builds, not ${JSON.stringify(filter)}`);
+        }
+        matchesCursor = (message) => message.timestamp < beforeLt!
+            || (message.timestamp === tieTimestamp && message.messageId < tieMessageIdLt!);
+    } else if (keys.length !== 1 || keys[0] !== 'gameId') {
+        throw new Error(`The test chat store only looks messages up by gameId (and an optional before/beforeMessageId $or cursor), not ${JSON.stringify(filter)}`);
     }
-    let results = chatMessages.filter(message => message.gameId === gameId
-        && (timestampFilter === undefined || message.timestamp < timestampFilter.$lt!));
+    if (typeof gameId !== 'string') {
+        throw new Error(`The test chat store only looks messages up by gameId, not ${JSON.stringify(filter)}`);
+    }
+    let results = chatMessages.filter(message => message.gameId === gameId && matchesCursor(message));
     const query = {
         // Honours each sort key in order, so a tiebreaker (the route sorts
         // { timestamp: -1, messageId: -1 }) is exercised, not silently dropped.

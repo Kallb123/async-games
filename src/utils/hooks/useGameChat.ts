@@ -1,8 +1,8 @@
 'use client'
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useRefreshableData } from "./useRefreshableData";
-import { REQUEST_TIMEOUT_MS } from "./fetchWithSessionRetry";
+import { fetchWithSessionRetry, REQUEST_TIMEOUT_MS } from "./fetchWithSessionRetry";
 import { CHAT_EVENTS } from "./usePushEvents";
 import { normaliseMessage } from "@/utils/chat";
 import type { IChatResponse, IChatMessageResponse } from "@/app/api/game/[gameid]/chat/route";
@@ -103,18 +103,45 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean): Ga
     // that page itself answered — the two never both apply.
     const hasMoreEarlier = olderMessages.length > 0 ? olderHasMore : (data?.hasMore ?? false);
 
+    // The in-flight guard `loadEarlier` checks is a ref, not the `loadingEarlier`
+    // state above — a double-tap can fire before React commits the state update
+    // (and before the button's own `disabled` follows it), and two concurrent
+    // requests for the same page would both resolve and both prepend, duplicating
+    // messages (and their React keys). `useSubmitCommand` guards its own in-flight
+    // POST the same way, for the same reason. `loadingEarlier` state still exists
+    // for the UI to render from.
+    const loadingEarlierRef = useRef(false);
+    // The `gameId` this render is for, read back once a `loadEarlier` fetch
+    // resolves: `GameShell` mounts `useGameChat` once per matched route, so
+    // switching games client-side doesn't remount this hook (the render-time
+    // reset above is the proof it's already anticipated). A fetch started for
+    // one game landing after the player has switched to another must not
+    // prepend that game's history onto this one's.
+    const currentGameIdRef = useRef(gameId);
+    useEffect(() => { currentGameIdRef.current = gameId; }, [gameId]);
+
     const loadEarlier = useCallback(async () => {
         const oldest = olderMessages.length > 0 ? olderMessages[0] : rawMessages[0];
-        if (loadingEarlier || !oldest) {
+        if (loadingEarlierRef.current || !oldest) {
             return;
         }
+        loadingEarlierRef.current = true;
         setLoadingEarlier(true);
+        const requestedGameId = gameId;
         try {
-            const response = await fetch(`/api/game/${gameId}/chat?before=${encodeURIComponent(oldest.timestamp)}`, {
-                signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-            });
-            if (!response.ok) {
-                console.error(`Failed to load earlier chat messages: ${response.status}`);
+            const params = new URLSearchParams({ before: oldest.timestamp, beforeMessageId: oldest.messageId });
+            const response = await fetchWithSessionRetry(
+                `/api/game/${gameId}/chat?${params.toString()}`,
+                () => currentGameIdRef.current !== requestedGameId,
+            );
+            if (currentGameIdRef.current !== requestedGameId) {
+                // The player switched games while this was in flight — the
+                // response, if any, belongs to a thread nobody is looking at
+                // any more.
+                return;
+            }
+            if (!response || !response.ok) {
+                console.error(`Failed to load earlier chat messages: ${response?.status ?? 'network error'}`);
                 return;
             }
             const body = await response.json() as IChatResponse;
@@ -123,9 +150,10 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean): Ga
         } catch (error) {
             console.error('Failed to load earlier chat messages', error);
         } finally {
+            loadingEarlierRef.current = false;
             setLoadingEarlier(false);
         }
-    }, [gameId, loadingEarlier, olderMessages, rawMessages]);
+    }, [gameId, olderMessages, rawMessages]);
 
     // The boundary this *viewing* of the panel treats as "already read" — every
     // message *after* the one `unreadCutoffId` names, by position in
