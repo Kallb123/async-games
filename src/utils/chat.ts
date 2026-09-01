@@ -1,7 +1,8 @@
 // Shared chat validation — the one module the composer and the POST route both
 // import, so the client's limit and the server's gate cannot drift apart. It
 // mirrors src/utils/reactions.ts, which does the same job for the recap
-// reactions. See docs/in-game-chat.md §4.
+// reactions. See docs/in-game-chat.md §4 (messages) and §13.4 (the read
+// marker).
 
 export const MAX_MESSAGE_LENGTH = 500;
 
@@ -27,4 +28,26 @@ export function normaliseMessage(value: unknown): string | null {
     // to a single blank line, so a wall of empty lines can't stretch one message
     // over a screenful. A single line break inside the message is left alone.
     return trimmed.replace(/(?:[ \t]*\n){2,}/g, '\n\n');
+}
+
+/**
+ * The read marker as it will be stored, or `null` if it isn't one.
+ *
+ * Rejects a non-string and anything that doesn't parse as a date, then
+ * canonicalises to ISO — the marker route applies it with `$max`, which on an
+ * ISO string is a lexical comparison, so a value that parsed but wasn't
+ * already in that format would compare wrong against the messages it is
+ * meant to catch up to. See docs/in-game-chat.md §13.4.
+ */
+export function normaliseReadAt(value: unknown): string | null {
+    if (typeof value !== 'string') {
+        return null;
+    }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+        return null;
+    }
+
+    return parsed.toISOString();
 }
