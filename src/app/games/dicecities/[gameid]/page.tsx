@@ -24,7 +24,7 @@ import { useGameGuide } from "@/utils/hooks/useGameGuide";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { landmarkCount } from "@/games/DiceCities/ui";
 import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
-import { abandonedGameStatus, nameForUserId } from "@/utils/ui/players";
+import { abandonedGameStatus, isPlayersTurn, nameForUserId } from "@/utils/ui/players";
 
 // Sentinel used as "current turn" while reviewing a past turn, so no player's
 // interactive controls activate.
@@ -80,7 +80,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const myState = players.find(p => p.userId === user?.id);
     const boardPlayer = myState ?? players.find(p => p.userId === displayedCurrentTurn) ?? players[0];
     const opponents = boardPlayer ? players.filter(p => p.userId !== boardPlayer.userId) : [];
-    const isMyTurn = nav.isLive && !!user?.id && user.id === displayedCurrentTurn && !complete;
+    const isMyTurn = isPlayersTurn(nav.isLive, user, displayedCurrentTurn) && !complete;
 
     const leaderLandmarks = players.reduce((m, p) => Math.max(m, landmarkCount(p)), 0);
     const playerName = (userId?: string): string => nameForUserId(gameData, userId);

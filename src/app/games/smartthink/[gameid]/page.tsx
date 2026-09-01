@@ -19,7 +19,7 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import type { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
 import { SMARTTHINK_CODE_LENGTH } from "@/games/Smartthink/ui";
-import { abandonedGameStatus } from "@/utils/ui/players";
+import { abandonedGameStatus, isPlayersTurn } from "@/utils/ui/players";
 
 const PLAYER_COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c"];
 const emptyGuess = (): (number | null)[] => Array(SMARTTHINK_CODE_LENGTH).fill(null);
@@ -51,7 +51,7 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
     const { endGame } = useEndGame(gameId);
     const displayed = nav.displayedState;
     const complete = nav.displayedComplete;
-    const isMyTurn = nav.isLive && !!user && user.id === gameData?.currentTurn && !complete;
+    const isMyTurn = isPlayersTurn(nav.isLive, user, gameData?.currentTurn) && !complete;
 
     const state = gameData?.specificGameState;
 

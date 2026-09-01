@@ -33,7 +33,7 @@ import { IOutbreakInfectionPhaseOutcome, OutbreakAction, OutbreakPlayEvent } fro
 import { HAND_LIMIT, IOutbreakInfectionLogEntry, OutbreakMoveType, getLegalMoves, infectionRateFor, stationCityIds } from "@/games/Outbreak/rules";
 import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, EVENT_CARD_AIRLIFT, EVENT_CARD_GOVERNMENT_GRANT, MAX_RESEARCH_STATIONS } from "@/games/Outbreak/board";
 import { playerColour } from "@/utils/ui/playerColours";
-import { abandonedGameStatus, nameForUserId } from "@/utils/ui/players";
+import { abandonedGameStatus, isPlayersTurn, nameForUserId } from "@/utils/ui/players";
 
 // What the map is being used to pick right now: a movement destination, or
 // the destination/target an in-flight event card still needs. One state
@@ -103,7 +103,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
     const displayedCurrentTurn = nav.displayedCurrentTurn;
-    const isMyTurn = nav.isLive && !!user && user.id === displayedCurrentTurn && !complete;
+    const isMyTurn = isPlayersTurn(nav.isLive, user, displayedCurrentTurn) && !complete;
     const myUserId = user?.id ?? '';
     const usernameList = gameData?.usernameList ?? [];
     const userIdList = gameData?.userIdList ?? [];
