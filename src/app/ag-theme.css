@@ -1271,7 +1271,13 @@ a.ag-list-row, a.ag-list-row-main {
     box-shadow: 0 0 0 2px var(--ag-dark);
 }
 .ag-game-topbar-btn:hover { background: rgba(255, 255, 255, 0.22); color: inherit; }
-.ag-game-topbar-btn--on { background: var(--ag-terracotta); }
+/* The active (chat-open) state must outrank :hover — otherwise the hover that a
+   tap leaves behind (sticky on touch, held on mouse) paints over the terracotta
+   and the button no longer looks open. Same specificity as the :hover above, so
+   it wins by coming after it; hover while open just brightens, staying on. */
+.ag-game-topbar-btn--on,
+.ag-game-topbar-btn--on:hover { background: var(--ag-terracotta); color: inherit; }
+.ag-game-topbar-btn--on:hover { filter: brightness(1.08); }
 
 /* ---- Game options (kebab) menu ---- */
 .ag-gom { position: relative; flex: none; }
