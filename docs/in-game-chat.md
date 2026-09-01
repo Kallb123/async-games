@@ -4,11 +4,12 @@ A per-game message thread: the players in one game can talk to each other from
 the board screen, and a message reaches the others as a push notification the
 way a nudge or a reaction does.
 
-This was the planning document. **It is now implemented** — phase 1 (§10)
-shipped in full across the seven commits §11 lays out, so read it for the *why*,
-and treat the code as the current state where the two disagree. Phase 2's polish
-(older-message paging, server-side read markers, a "somebody messaged" recap
-line) and phase 3's moderation are deliberately still ahead. Read
+This was the planning document. **Phase 1 is implemented** — it shipped in full
+across the seven commits §11 lays out, so read §1–§9 for the *why*, and treat the
+code as the current state where the two disagree. **Phase 2 is now planned but
+not built**: §13 designs it and breaks it into commits, led by the server-side
+read marker, because that is what puts unread chat on the dashboard. Phase 3's
+moderation is still deliberately ahead. Read
 [`AGENTS.md`](../AGENTS.md) first — the component-reuse rule shapes most of the
 decisions below — and [`ARCHITECTURE.md`](../ARCHITECTURE.md) §5–§8 for the data
 model, the response-shaping contract and the push plumbing this leans on.
@@ -527,14 +528,20 @@ it, since a chat nobody is notified about is a chat nobody uses. §11 breaks it
 into the seven commits that build it, and says where it can be cut if the diff
 turns out too wide to review in one go.
 
-**Phase 2 — the polish, once phase 1 has been used.**
+**Phase 2 — the polish, once phase 1 has been used.** Designed in full in §13,
+which orders it and breaks it into seven commits. In short, and in the order it
+gets built:
 
+- **Server-side read markers, first.** Phase 1's unread dot is a `localStorage`
+  timestamp, so it knows only what *this browser* has seen. Moving the marker to
+  the server is what unlocks an unread count on the dashboard game rows — the
+  one signal a player who has muted the `chat` channel can get without opening
+  the game (§7) — and it is also the boundary the recap line below wants.
+- An unread badge on the dashboard's turn cards and "waiting on others" rows,
+  which is the thing the marker is for.
 - Older messages: a `before` cursor on the GET, and a "load earlier" control.
   Deliberately not in phase 1 — fifty messages is a long conversation for a
   game, and a cursor nobody has hit the end of is speculative work.
-- Server-side read markers, which is what an unread count on the dashboard
-  game rows would need — and the one thing that would give a player who has
-  muted the channel a signal outside the board screen (§7).
 - A "somebody messaged" line in the "since you were last here" recap.
 
 **Phase 3 — only if the product goes there.** Blocking, reporting and anything
@@ -687,3 +694,417 @@ from 5 for long (a chat nobody is told about is a chat nobody uses).
   something like *"Talk to your opponents — every game now has a chat thread:
   tap 💬 on the board to say something, and the others get a nudge on their
   phone."*, with the oldest line dropped if the group runs past five.
+
+---
+
+## 13. Phase 2 — the read marker, and the dashboard it unlocks
+
+Phase 1 shipped a thread you have to go and look at. Phase 2's job is to make
+the app tell you there is something in it. Everything below hangs off one small
+change: **the "how far have I read" marker moves from `localStorage` to the
+server.**
+
+### 13.1 Why the marker goes first
+
+Phase 1's dot is honest about what it knows: `ag-chat-read:<gameId>` is a
+timestamp in *one browser*, so reading a thread on your phone leaves the dot lit
+on your laptop, and no other screen in the app can ask the question at all. §6
+recorded that as the known cost and §7 named the consequence — a player who
+turns the `chat` channel off gets no signal anywhere outside the board screen,
+because the dashboard cannot know what they have read.
+
+So the marker is not one of three equal polish items; it is the thing the other
+two are waiting on:
+
+- **The dashboard badge** needs a server-side "unread since" per player per
+  game. There is no other way for `buildDashboard` to answer it.
+- **The recap line** ("3 messages while you were away") wants a boundary, and
+  "since you last read the thread" is a better one than "since your last turn":
+  in an async game those are hours apart, and a player who read the thread at
+  breakfast should not be told about it again at lunch.
+- **Paging** wants nothing from it, which is why it is last.
+
+Building it first also means the board's dot gets *better* on the way past
+(it clears across devices), rather than staying as it is until something else
+needs it.
+
+### 13.2 Two decisions, settled
+
+**Read markers are private.** The marker records what *you* have read, and
+nothing on the wire tells anyone else about it — no ticks, no "Seen by Ann", no
+per-message reader list. That keeps this a plumbing change with a badge on the
+end rather than a social feature with a privacy question in it, and it means the
+croupier's answer for the whole phase is short: the only read state a response
+carries is the viewer's own. If "seen by" is ever wanted, it is a phase-3-shaped
+conversation and it needs its own opt-out; nothing here forecloses it, because
+the storage already has the per-player rows it would read.
+
+**The dashboard gets a count on the existing rows**, not a chat surface of its
+own. An unread pill on the "It's your move" cards and the "Waiting on others"
+rows, tapping through to the board where the thread already lives. A
+conversations section that reads and sends from the home screen is a second
+mount of the whole feature for a screen whose job is "what needs you next"; if
+it turns out people want to reply without opening the game, that is a separate
+proposal with its own plan.
+
+### 13.3 Storage: `ChatReadData`
+
+**`src/utils/mongodb/ChatReadData.ts`** — a second small flat collection, one
+row per player per game:
+
+```ts
+export interface IChatReadData {
+    gameId: string;
+    userId: string;
+    readAt: string;   // ISO — the newest message this player has seen
+}
+
+ChatReadSchema.index({ gameId: 1, userId: 1 }, { unique: true });
+ChatReadSchema.index({ userId: 1 });
+```
+
+Two indexes because there are two reads, and they are asked from opposite ends:
+the board asks "this player, in this game" (the unique index, which is also what
+enforces one row per seat), and the dashboard asks "every marker this player
+has" (`{ userId: 1 }`, one query for the whole home screen).
+
+Three alternatives, and why not:
+
+- **A `readBy` array on `ChatMessage`.** Wrong grain and a hot write: one marker
+  per player per game is `O(seats)`, a per-message reader list is
+  `O(messages × seats)`, and it turns an append-only collection into one every
+  read rewrites. The append-only property is worth keeping — it is why phase 1's
+  thread cannot lose a message to a concurrent anything.
+- **A field on `GameData`.** The same argument §3 makes about messages, and it
+  is *worse* here: a marker is written every time somebody looks at a thread, so
+  under `trySave`'s optimistic concurrency the thing it would race is a turn.
+  A badge must never be able to make somebody's move lose.
+- **A denormalised `unreadCount` on the marker, incremented by the POST.** A
+  write per recipient per message, and a second source of truth that drifts the
+  first time a push handler dies halfway. The count is cheap to derive (§13.5);
+  derive it.
+
+**Deletion.** Markers must not outlive their game, exactly as messages must not
+(§3). `src/app/api/user/delete/route.ts` already reads the user's `gameId`s
+before deleting the games and runs `ChatMessageModel.deleteMany({ gameId: { $in:
+gameIds } })`; the marker delete is the line beside it, on the same ids, in the
+same before-the-games position and for the same reason (a partial failure stays
+recoverable, because the retry can still find the games). Two `deleteMany` calls
+sharing a variable is not the duplication the caveman is looking for — a helper
+wrapping one line with one caller would be the finding — but the *comment* above
+them should now say "chat" rather than "messages", so the next collection keyed
+by `gameId` gets added to the list rather than forgotten.
+
+### 13.4 API: reading and writing the marker
+
+**The marker rides the GET the panel already polls.** `IChatResponse` gains one
+field:
+
+```ts
+export interface IChatResponse {
+    success: boolean;
+    messages: IChatMessageResponse[];
+    readAt: string | null;   // this viewer's marker; null if they never opened it
+}
+```
+
+One extra indexed lookup on a request the board already makes, and the dot then
+comes from the same response as the messages it is counting — so there is no
+window where the two disagree. Nobody else's marker is in there (§13.2).
+
+**`POST /api/game/[gameid]/chat/read`** — its own route file under the existing
+`[gameid]/chat/` folder, because it is a different resource and folding a
+"mark read" verb into the message POST would mean one handler doing two things
+behind a body flag.
+
+1. `auth()` — the same retryable 401 as the sibling handlers, for the same
+   reason (§5).
+2. `normaliseReadAt(body.readAt)` — new in `src/utils/chat.ts`, beside
+   `normaliseMessage` and tested with it: a string that parses as a date, or
+   `null`. 400 on null.
+3. `dbConnect()`, load the game, **`userIdList.includes(userId)` — 403**. The
+   same one line that is the whole of chat's access control.
+4. Rate limit: `consumeRateLimit('chatRead', `${gameId}:${userId}`, 60, 5 *
+   60_000)` → 429. An open panel only posts when the newest message *changes*,
+   so real traffic is bounded by the 20-per-5-minutes message limit already;
+   sixty is headroom, and its job is to stop a loop, not to shape behaviour.
+5. Clamp to now — `readAt = min(readAt, new Date().toISOString())` — and apply
+   it with `$max`:
+
+```ts
+ChatReadModel.findOneAndUpdate(
+    { gameId, userId },
+    { $max: { readAt } },
+    { upsert: true },
+)
+```
+
+Three properties worth having, all from that one line. `$max` on an ISO string
+is a lexical comparison, which for ISO-8601 *is* chronological, so the marker is
+**monotonic** — two tabs racing, or a request arriving out of order, can never
+move it backwards and re-light a dot the player already cleared. It is
+**idempotent**, so the client can post the same value as often as it likes. And
+the upsert makes first-read and later-read the same code path. Two concurrent
+upserts on a row that does not exist yet both hit the unique index; that is a
+duplicate key, and the fix is the retry-without-upsert the repo already writes
+twice (`consumeRateLimit`, the join-code generator) via `isDuplicateKeyError`.
+
+**Why the client sends the value rather than the server reading its own newest.**
+The tidier-looking version takes no body and sets the marker to the newest
+message in the game, which cannot be forged at all. It is wrong in a small way:
+a message that lands between the client's render and the request would be marked
+read by a player who never saw it, and its dot would never light. Sending what
+the client actually rendered has no such window. The locksmith question that
+raises — a player can post any timestamp — has a short answer: the clamp caps it
+at now, and the only thing a forged marker can do is suppress *the forger's own*
+badge. There is no other player's state behind this route and nothing to escalate
+into; it is a preference they could equally express by muting the channel.
+
+**No push, no notification, nothing after the response.** Marking read is the
+one thing in this feature that tells nobody.
+
+### 13.5 The dashboard read
+
+`buildDashboard` (`src/utils/dashboard.ts`) already reads three collections in
+one `Promise.all` and partitions in memory, precisely so the home screen is one
+consistent snapshot. The badge is a fourth read in the same shape, plus one
+aggregate that depends on it:
+
+```ts
+const markers = await ChatReadModel.find({ userId }).exec();          // { userId: 1 }
+const readAt = new Map(markers.map(m => [m.gameId, m.readAt]));
+
+const counts = await ChatMessageModel.aggregate([
+    { $match: { $or: games.map(game => ({
+        gameId: game.gameId,
+        senderId: { $ne: userId },
+        ...(readAt.has(game.gameId) ? { timestamp: { $gt: readAt.get(game.gameId) } } : {}),
+    })) } },
+    { $group: { _id: '$gameId', count: { $sum: 1 } } },
+]);
+```
+
+The `$or` is one clause per *live* game the player is in — a handful, and each
+clause is served by the `{ gameId: 1, timestamp: -1 }` index phase 1 already
+added, so this reads index entries and no documents. It has to be an `$or`
+rather than one `$match` because the boundary is per game. A player with no
+marker in a game counts every message from somebody else, which is the same
+first-time signal the board's dot gives.
+
+The marker read can join the existing `Promise.all`; the aggregate cannot,
+because it needs both the game list and the markers. That makes the home screen
+two round trips deep instead of one — worth noting rather than hiding, and
+still far short of the twenty-odd Clerk calls the docstring says this function
+exists to have removed.
+
+`IGameResponse` gains `unreadChatCount?: number`, mapped on in `buildDashboard`
+rather than inside `CreateResponse`: the schema method knows nothing about chat
+and should keep it that way, and the dashboard is the only caller that has the
+counts to hand.
+
+```ts
+myTurn: games.filter(…).map(game => ({
+    ...game.CreateResponse(directory),
+    unreadChatCount: counts.get(game.gameId) ?? 0,
+})),
+```
+
+**At scale.** `$sum: 1` counts every unread entry, and a thread nobody has read
+for a month could be hundreds. That is still index-only work and the badge caps
+its display at `9+`, so the cost is bounded in practice; if it ever shows up
+slow, the cheaper question is the boolean one — `distinct('gameId', …)` for "has
+unread" — and the badge degrades to the same dot the top bar uses. Write the
+count; keep that fallback in the comment.
+
+### 13.6 Client
+
+**The board (`useGameChat`).** The hook stops calling `useStoredValue` and reads
+`data.readAt` instead. `hasUnread` is the same expression it is today with the
+marker coming from a different place, and the effect that advanced the
+`localStorage` value now POSTs to `/chat/read` — still gated on `open`, still
+firing only when the newest message changes, and still *not* fired by the plain
+GET, because the shell mounts this hook on every board open whether or not the
+panel is showing. A failed POST is logged and dropped: the dot staying lit for
+another minute is the correct failure, and there is nothing to retry that the
+next open will not do anyway.
+
+`useStoredValue` stays where it is — the dismissible banner and the guest-moved
+flag still use it, which is what it was extracted for.
+
+**Migration: there isn't one.** A browser holding an `ag-chat-read:<gameId>`
+value and no server marker sees one stale dot per game, cleared by opening the
+thread once. Seeding the server from `localStorage` on first mount would be a
+POST-on-mount and a one-release-only code path to delete later, for one dot.
+Leave the old keys to rot; `localStorage` is per-browser and nothing reads them.
+
+**The dashboard.** One new primitive, `src/components/ui/UnreadChatBadge.tsx`,
+because there are two call sites the moment it exists and that is the repo's
+stated trigger for extracting: `MyTurnList`'s turn card (which already places an
+`.ag-turn-card-badge` in the same corner for the turn timer — the two must not
+land on each other) and `TheirTurnList`'s list row (beside
+`.ag-list-row-time` and the 👉 nudge button). It renders nothing at zero, `9+`
+past nine, and carries the count in an `aria-label` rather than leaving a
+screen reader to read "3" next to a game name. One `.ag-chat-badge` block in
+`ag-theme.css`, in `--ag-*` tokens, with a modifier for the coloured card
+where the row's ink colour is wrong.
+
+`ChatMessage` joins `DASHBOARD_EVENTS` in `usePushEvents.ts`, so a message that
+buzzes a phone refreshes the home screen behind it. That is a one-line
+improvement rather than the mechanism: the chat push is throttled to one per
+recipient per game per ten minutes (§7), so the badge's real liveness is the
+dashboard's existing `pollWhileWatching`.
+
+### 13.7 The commits
+
+Seven again, in this order. Each builds, type-checks, lints and leaves the app
+working. The first four are the read receipts and the dashboard the owner asked
+for first; 5 and 6 are independent of each other and of everything before them.
+
+#### 1. `Remember where each player got to in a thread`
+
+`src/utils/mongodb/ChatReadData.ts` (§13.3) with both indexes,
+`normaliseReadAt` in `src/utils/chat.ts` with its cases in
+`src/utils/chat.test.ts`, and the marker delete in
+`src/app/api/user/delete/route.ts` beside the existing chat delete (§13.3).
+
+Nothing reads or writes a marker yet — deliberately the same shape as phase 1's
+commit 3: the model arrives already carrying the rule that stops it outliving
+its game, rather than that rule arriving later as a fix.
+
+*Gates: build, tsc, lint, `npm test`. Reviewer: `gremlin` (the deletion path,
+and the ordering that keeps a half-failed delete recoverable).*
+
+#### 2. `Keep a player's place in a thread on the server`
+
+`src/app/api/game/[gameid]/chat/read/route.ts` — auth, membership, validation,
+the `chatRead` limit, the clamp and the `$max` upsert with its duplicate-key
+retry (§13.4) — plus `readAt` on the GET's response, and route tests in
+`src/app/api/game/chatRoutes.test.ts` alongside phase 1's.
+
+The tests that matter: a non-player gets 403, a bad body gets 400, a future
+timestamp is clamped to now, a marker never moves backwards (post newer, then
+older — assert the newer one stands), a first post upserts and a second updates,
+and the GET carries **the caller's own** marker and no one else's.
+
+Reviewable as pure access control and pure storage semantics; nothing renders
+differently at the end of it.
+
+*Gates: build, tsc, lint, `npm test`. Reviewers: `locksmith` (a new mutating
+route) and `gremlin` (the upsert race).*
+
+#### 3. `Clear the chat dot on every device, not just this one`
+
+`useGameChat` moves off `useStoredValue` and onto `data.readAt` + the POST
+(§13.6). One hook changes; `GameShell`, `GameChat` and the seven board wirings
+are untouched, which is the payoff for phase 1 having put the fetch in the
+shell.
+
+This is the first commit of the phase a player notices, and the change is small
+enough to say in one line: reading the thread on your phone now clears the dot
+on your laptop.
+
+*Gates: build, tsc, lint. Reviewers: `caveman` (one source of truth for the dot
+— the `localStorage` marker goes, it does not linger as a fallback) and
+`gremlin` (a failed POST must leave the panel working).*
+
+#### 4. `Show unread messages on the dashboard`
+
+`buildDashboard`'s two reads and the `unreadChatCount` mapping (§13.5),
+`IGameResponse.unreadChatCount`, `UnreadChatBadge` used by both turn lists,
+`.ag-chat-badge` in `ag-theme.css`, and `ChatMessage` in `DASHBOARD_EVENTS`.
+
+A `buildDashboard` test for the count: a game with unread messages, a game read
+up to date, a game whose only recent message is the viewer's own (zero — you do
+not have unread mail from yourself), and a game with no marker at all.
+
+**This is the commit the phase exists for**, and the answer to §7's open gap: a
+player who has muted the `chat` channel now learns there is something to read
+without opening the game.
+
+*Gates: build, tsc, lint, `npm test`. Reviewers: `caveman` (one badge component,
+two call sites — not two pills), `croupier` (the dashboard response is a DTO,
+and it must carry the viewer's own count and nothing about anyone else's read
+state) and `gremlin` (the `$or` and the aggregate under a player with many
+games).*
+
+#### 5. `Load the earlier part of a long thread`
+
+`?before=<ISO>` on the GET — the same `{ gameId: 1, timestamp: -1 }` read with a
+`timestamp: { $lt: before }` clause — a `hasMore` flag in the response, a
+`loadEarlier` on the hook and a "Load earlier" control above the first row in
+`GameChat`.
+
+One thing to get right, and it is the reason this is not a two-line change:
+`useRefreshableData` owns `data` and hands out no setter, which is exactly why
+phase 1 refused an optimistic append (§6). Older pages need state of their own
+in `useGameChat`, prepended to the live window. That is safe where the
+optimistic append was not, and the difference is worth stating in the code:
+older pages are **immutable and disjoint** from the polled window, so there is
+no reconciliation to get wrong — the live fetch stays the single source of truth
+for the tail, and the accumulated pages are only ever appended to at the front.
+Reset them when `gameId` changes.
+
+*Gates: build, tsc, lint, `npm test` (the cursor's route tests). Reviewers:
+`caveman` (the second copy of the list is the thing to justify) and `gremlin`
+(an empty page, a `before` that is not a date, a thread shorter than one page).*
+
+#### 6. `Say who spoke while you were away`
+
+`IRecapResponse` gains `chat?: { count: number; senders: string[] }`, built in
+the recap route from the viewer's `ChatReadData` marker and a count of newer
+messages from other players, and rendered by `TurnRecap` as one line above the
+timeline ("💬 3 messages from Ann and Tom").
+
+It is **not** an `IGameEvent`. Recap events are derived by replaying
+`commandHistory` (§8, `docs/since-you-were-last-here.md` §3): a chat message has
+no command, cannot be replayed, and must not become reaction-able — dropping a
+🎉 on somebody's sentence is a different feature. A separate field keeps the
+event feed exactly what it is.
+
+The senders' names are resolved from the `userIdNameMap` the recap route already
+builds for the roster, so this resolves nothing of its own — the same rule §5
+sets for the thread.
+
+*Gates: build, tsc, lint, `npm test`. Reviewers: `croupier` (a change to a
+response builder) and `caveman` (a line, not a second thread).*
+
+#### 7. `Say what's new, and write phase 2 down`
+
+- `src/utils/ui/whatsNew.ts` — one *Enhancements* line, something like *"Chat
+  now follows you around: the home screen shows how many messages are waiting in
+  each game, and reading a thread anywhere clears it everywhere."* Drop the
+  oldest line if the group runs past five.
+- `ARCHITECTURE.md` §5 — the `ChatRead` collection beside `ChatMessage`, and the
+  `/chat/read` route in the same paragraph as the chat routes.
+- `docs/social-features.md` — the in-game chat row gains the unread badge.
+- This document — §13's status line flips to shipped, the way §10's phase 1
+  bullet did.
+
+Docs-only and last, so every line describes something already true in the same
+PR.
+
+*Gates: build, tsc, lint. Reviewer: `rulebook`.*
+
+#### If it has to be split
+
+**After 4** is the clean cut, and it is where the owner's ask is delivered: the
+marker is on the server, the dot works across devices and the dashboard counts
+what is waiting. 5 and 6 are each a standalone follow-up with no dependency on
+the other. What must not be split for long is **3 from 2** (a server marker
+nothing writes) or **7 from 4** (a player-visible change with no What's new
+line, which is the one upkeep rule `AGENTS.md` states outright).
+
+### 13.8 Definition of done (phase 2)
+
+- `npm run build`, `npx tsc --noEmit`, `npm run lint` (`--max-warnings 0`) and
+  `npm test` all clean. The engine is untouched again, and CI runs all four
+  anyway.
+- **Tests**, per commit above: `normaliseReadAt` in `chat.test.ts`; the marker
+  route's 403 / 400 / clamp / monotonicity / upsert cases and the GET's
+  own-marker-only case in `chatRoutes.test.ts`; the four `buildDashboard` count
+  cases; the cursor's paging cases.
+- **Reviews**: `locksmith` and `gremlin` on the new route, `croupier` on the
+  dashboard and recap responses, `caveman` on the badge component and the paging
+  state, `rulebook` on the upkeep commit.
+- **Docs and What's new** land in commit 7, and nothing player-visible ships
+  ahead of them by more than a day.
