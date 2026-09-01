@@ -1821,7 +1821,7 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-chat-panel { animation: ag-chat-open-pulse 1100ms ease-out 3; }
 @keyframes ag-chat-open-pulse {
     0% { background-color: transparent; }
-    28% { background-color: color-mix(in oklch, var(--ag-terracotta) 20%, var(--ag-surface)); }
+    28% { background-color: color-mix(in oklch, var(--ag-terracotta) 30%, var(--ag-surface)); }
     100% { background-color: transparent; }
 }
 @media (prefers-reduced-motion: reduce) {
