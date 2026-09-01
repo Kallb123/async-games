@@ -4,12 +4,12 @@ A per-game message thread: the players in one game can talk to each other from
 the board screen, and a message reaches the others as a push notification the
 way a nudge or a reaction does.
 
-This was the planning document. **Phase 1 is implemented** — it shipped in full
-across the seven commits §11 lays out, so read §1–§9 for the *why*, and treat the
-code as the current state where the two disagree. **Phase 2 is now planned but
-not built**: §13 designs it and breaks it into commits, led by the server-side
-read marker, because that is what puts unread chat on the dashboard. Phase 3's
-moderation is still deliberately ahead. Read
+This was the planning document. **Both phases are implemented.** Phase 1
+shipped in full across the seven commits §11 lays out, and phase 2 shipped in
+full across the seven commits §13.7 lays out, led by the server-side read
+marker — so read §1–§9 and §13 for the *why*, and treat the code as the
+current state where the two disagree. Phase 3's moderation is still
+deliberately ahead. Read
 [`AGENTS.md`](../AGENTS.md) first — the component-reuse rule shapes most of the
 decisions below — and [`ARCHITECTURE.md`](../ARCHITECTURE.md) §5–§8 for the data
 model, the response-shaping contract and the push plumbing this leans on.
@@ -528,9 +528,9 @@ it, since a chat nobody is notified about is a chat nobody uses. §11 breaks it
 into the seven commits that build it, and says where it can be cut if the diff
 turns out too wide to review in one go.
 
-**Phase 2 — the polish, once phase 1 has been used.** Designed in full in §13,
-which orders it and breaks it into seven commits. In short, and in the order it
-gets built:
+**Phase 2 — the polish, built once phase 1 had been used.** §13 designs it in
+full and §13.7 orders it into the seven commits that built it. In short, and in
+the order it was built:
 
 - **Server-side read markers, first.** Phase 1's unread dot is a `localStorage`
   timestamp, so it knows only what *this browser* has seen. Moving the marker to
