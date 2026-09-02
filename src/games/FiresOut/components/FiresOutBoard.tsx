@@ -75,8 +75,6 @@ export default function FiresOutBoard({ spaces, edges, firefighters, userIdList,
                     className={[
                         'ag-fo-cell',
                         isTopTrack || isBottomTrack ? 'ag-fo-cell--exterior' : '',
-                        state.threat === 'smoke' ? 'ag-fo-cell--smoke' : '',
-                        state.threat === 'fire' ? 'ag-fo-cell--fire' : '',
                         isValid ? 'ag-fo-cell--valid' : '',
                     ].filter(Boolean).join(' ')}
                     style={style}
@@ -84,18 +82,33 @@ export default function FiresOutBoard({ spaces, edges, firefighters, userIdList,
                     onClick={isValid && onSpaceClick ? () => onSpaceClick(space) : undefined}
                     title={`Space ${space}`}
                 >
+                    {state.threat !== 'none' && (
+                        <span
+                            key={`threat-${state.threat}`}
+                            className={`ag-fo-token ag-fo-token--${state.threat}`}
+                            aria-hidden="true"
+                            title={state.threat === 'fire' ? 'Fire' : 'Smoke'}
+                        >
+                            {state.threat === 'fire' ? '🔥' : '💨'}
+                        </span>
+                    )}
                     {state.poi && (
-                        <span className="ag-fo-poi" aria-hidden="true">
+                        <span
+                            key={`poi-${state.poi.revealed}`}
+                            className={`ag-fo-badge ag-fo-badge--poi${state.poi.revealed ? ' ag-fo-badge--victim' : ''}`}
+                            aria-hidden="true"
+                            title={state.poi.revealed ? 'Victim' : 'Possible victim'}
+                        >
                             {state.poi.revealed ? '🧍' : '❓'}
                         </span>
                     )}
                     {(state.hazmat || state.hotspot) && (
-                        <span className="ag-fo-hazard" aria-hidden="true" title={state.hazmat ? 'Hazmat' : 'Hot spot'}>
+                        <span className="ag-fo-badge ag-fo-badge--hazard" aria-hidden="true" title={state.hazmat ? 'Hazmat' : 'Hot spot'}>
                             {state.hazmat ? '☣️' : '♨️'}
                         </span>
                     )}
                     {(space === engine || space === ambulance) && (
-                        <span className="ag-fo-vehicle" aria-hidden="true" title={space === engine ? 'Engine' : 'Ambulance'}>
+                        <span className="ag-fo-badge ag-fo-badge--vehicle" aria-hidden="true" title={space === engine ? 'Engine' : 'Ambulance'}>
                             {space === engine ? '🚒' : '🚑'}
                         </span>
                     )}
