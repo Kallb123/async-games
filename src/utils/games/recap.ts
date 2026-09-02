@@ -8,6 +8,7 @@ import { settlementsAndCitiesRecapAdapter } from "@/games/SettlementsAndCities/r
 import { worldDominationRecapAdapter } from "@/games/WorldDomination/recap";
 import { trainTimeRecapAdapter } from "@/games/TrainTime/recap";
 import { outbreakRecapAdapter } from "@/games/Outbreak/recap";
+import { firesOutRecapAdapter } from "@/games/FiresOut/recap";
 
 // A single "here's what happened" entry in a since-you-were-last-here recap.
 // Games synthesise these from replayed turns via an IRecapAdapter; the generic
@@ -205,3 +206,4 @@ registerRecapAdapter(settlementsAndCitiesRecapAdapter);
 registerRecapAdapter(worldDominationRecapAdapter);
 registerRecapAdapter(trainTimeRecapAdapter);
 registerRecapAdapter(outbreakRecapAdapter);
+registerRecapAdapter(firesOutRecapAdapter);

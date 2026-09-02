@@ -2,13 +2,14 @@ import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { v4 as uuidv4 } from 'uuid';
-import { uuidString } from "@/utils/apiModels/GameDataApi";
+import { GameResultStatGroup, uuidString } from "@/utils/apiModels/GameDataApi";
+import { pluralize } from "@/utils/ui/text";
 import { userToken } from "@/utils/games/history";
 import { shuffle } from "@/utils/games/shuffle";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { FiresOutGameType } from "@/utils/apiModels/GameLogic";
 import { DiceRoll } from "@/utils/games/DiceRoll";
-import { AMBULANCE_START, DifficultyId, ENGINE_START, RulesetId, START_SPACE } from "./board";
+import { AMBULANCE_START, DAMAGE_TO_COLLAPSE, DifficultyId, ENGINE_START, RulesetId, START_SPACE, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN, difficultyTier } from "./board";
 import {
     IFiresOutEdgeState,
     IFiresOutFirefighterState,
@@ -23,6 +24,7 @@ import {
     newFirefighter,
     refillFirefighterAp,
     shuffledPoiPool,
+    totalDamage,
 } from "./rules";
 import {
     IFiresOutFirefighterResponse,
@@ -384,3 +386,52 @@ export function gameStateToModel(
 export var FiresOutGameDataModel =
     models.FiresOutGameData ||
     GameDataModel.discriminator<IFiresOutGameDataDocument, IFiresOutGameDataModel>('FiresOutGameData', FiresOutGameDataSchema);
+
+// ─── Result stats (§17.6 step 11) ───────────────────────────────────────────
+// A co-op table shares one result — one game-wide stat group, no per-player
+// breakdown — the same shape Outbreak's and Solitaire's own summaries use.
+// Wired into GAME_RESULT_STATS in src/utils/mongodb/GameResultData.ts.
+
+export interface IFiresOutGameResultStats {
+    rescued: number;
+    lost: number;
+    damage: number;
+    turnsLasted: number;
+    ruleset: RulesetId;
+    difficulty: DifficultyId;
+}
+
+export const firesOutGameResultStatsSchemaDef = {
+    rescued: Number,
+    lost: Number,
+    damage: Number,
+    turnsLasted: Number,
+    ruleset: String,
+    difficulty: String,
+};
+
+export function computeFiresOutResultStats(gameData: IFiresOutGameData): IFiresOutGameResultStats {
+    const gs = gameData.specificGameState;
+    return {
+        rescued: gs.rescued,
+        lost: gs.lost,
+        damage: totalDamage(gs.edges),
+        // §17.4: "endTurn being the only kind that consumes randomness" — every
+        // one runs exactly one Advance Fire, so counting them counts how many
+        // times the fire advanced (§17.2's per-figure turn), not how many
+        // players got a go.
+        turnsLasted: gameData.gameState.commandHistory.filter(c => (c as unknown as { kind?: string }).kind === 'endTurn').length,
+        ruleset: gs.ruleset,
+        difficulty: gs.difficulty,
+    };
+}
+
+export function formatFiresOutResultStats(stats: IFiresOutGameResultStats): GameResultStatGroup[] {
+    const tierLabel = stats.ruleset === 'experienced' ? difficultyTier(stats.difficulty).label : 'Family';
+    return [{
+        lines: [
+            `${pluralize(stats.rescued, 'victim')} rescued of ${VICTIMS_TO_WIN} · ${pluralize(stats.lost, 'victim')} lost of ${VICTIMS_LOST_TO_LOSE}`,
+            `${stats.damage}/${DAMAGE_TO_COLLAPSE} damage · ${tierLabel} · ${pluralize(stats.turnsLasted, 'turn')}`,
+        ],
+    }];
+}

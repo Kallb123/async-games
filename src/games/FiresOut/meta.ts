@@ -11,7 +11,5 @@ export const meta: GameMeta = {
     tagline: "A crew of firefighters races to pull everyone out before the building comes down.",
     accent: "#d2432c",
     glyph: "🚒",
-    // Not shown in the library yet — fires-out-gdd.md §17.6 step 11 flips this
-    // once the Family game (steps 3-7) is complete and playable end to end.
-    available: false,
+    available: true,
 };
