@@ -3595,16 +3595,30 @@ button.ag-tt-ticket { cursor: pointer; }
 
 /* ---- The board: the 6×8 interior grid plus its exterior parking track,
    one CSS grid — walls are cell borders and doors are gaps in them (see
-   FiresOutBoard.tsx), not art, so the frame is a plain smoke-dark panel. ---- */
+   FiresOutBoard.tsx). board.png sits behind the grid cells (see
+   .ag-fo-grid below); the frame itself stays a plain smoke-dark panel. ---- */
 .ag-game--firesout .ag-board-area { background: radial-gradient(circle at 50% 20%, var(--fo-char-2), var(--fo-char)); }
 .ag-firesout-frame { background: var(--fo-char); box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.35), 0 4px 0 oklch(0.18 0.02 40); }
 
-.ag-fo-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
+/* board.png (public/art/fires-out/board.png) is a wider reference-game
+   scan whose floor plan + numbered track sits inside x:248–1088,
+   y:33–866 of its 1195×896 canvas, flanked by side columns of dice art
+   that aren't part of our grid. background-size/-position below zoom and
+   shift the image so that crop, not the whole canvas, fills the grid. */
+.ag-fo-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 2px;
+    background-image: url('/art/fires-out/board.png');
+    background-size: 142.26% 107.56%;
+    background-position: 69.86% 52.38%;
+    background-repeat: no-repeat;
+}
 .ag-fo-cell {
     position: relative;
     aspect-ratio: 1;
     box-sizing: border-box;
-    background: #fff8ec;
+    background: rgba(255, 248, 236, 0.4);
     border-radius: 3px;
     border: none;
     padding: 0;
@@ -3613,7 +3627,7 @@ button.ag-tt-ticket { cursor: pointer; }
     justify-content: center;
     cursor: default;
 }
-.ag-fo-cell--exterior { background: oklch(0.68 0.01 40); }
+.ag-fo-cell--exterior { background: oklch(0.68 0.01 40 / 0.5); }
 .ag-fo-cell--smoke { background: var(--fo-smoke); }
 .ag-fo-cell--fire { background: var(--fo-fire); }
 .ag-fo-cell--valid { cursor: pointer; box-shadow: inset 0 0 0 3px var(--ag-gold); }
