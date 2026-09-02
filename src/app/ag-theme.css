@@ -305,6 +305,18 @@ button {
     line-height: 0;
 }
 
+/* The "active now" dot — someone who took a turn in the last few minutes (see
+   isRecentlyActive). Worn on top of `.ag-thumb-badge`, which already owns the
+   corner and the ring against the surface behind it; this only says how far in
+   it sits and what it looks like. Pair it with an `.ag-avatar-stack` host. */
+.ag-active-dot {
+    --ag-thumb-badge-inset: 2px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ag-green);
+}
+
 /* Your own avatar on the profile screen: the button that opens the
    picture picker, with a camera badge sitting on its edge. */
 .ag-avatar-edit {

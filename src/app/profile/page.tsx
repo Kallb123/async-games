@@ -12,7 +12,7 @@ import ListSection from "@/components/ui/ListSection";
 import CollapsingSection from "@/components/ui/CollapsingSection";
 import NameForm from "@/components/NameForm";
 import { IFriendRequestResponse } from "@/utils/mongodb/FriendshipData";
-import { formatRelativeTime } from "@/utils/ui/time";
+import { formatRelativeTime, isRecentlyActive } from "@/utils/ui/time";
 import { FRIEND_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
 import { useNowToTheMinute } from "@/utils/hooks/useNow";
@@ -267,34 +267,48 @@ export default function Profile() {
                     </>
                 )}
             >
-                {friends.map((friend) => (
-                    <div key={friend.friendshipId} className="ag-list-row">
-                        <Link
-                            href={`/profile/${friend.user.userId}`}
-                            className="ag-list-row-main"
-                            style={{ display: "flex", alignItems: "center", gap: 12 }}
-                        >
-                            <Avatar name={personalName(friend.user)} imageUrl={friend.user.imageUrl} size={36} />
-                            <div className="ag-list-row-main">
-                                <div className="ag-list-row-title">{displayName(friend.user)}</div>
-                                <div className="ag-list-row-sub">
-                                    {friend.user.lastActionTimestamp
-                                        ? now !== null && `Last active ${formatRelativeTime(friend.user.lastActionTimestamp, now)}`
-                                        : "No activity yet"}
+                {friends.map((friend) => {
+                    // Fresh enough to still be at the table: the last turn they
+                    // took anywhere lands inside the active window.
+                    const active = isRecentlyActive(friend.user.lastActionTimestamp, now);
+                    // Empty rather than a guess while `now` has no reading yet:
+                    // before hydration there is no clock to say how long ago.
+                    const activity = active
+                        ? "Active now"
+                        : friend.user.lastActionTimestamp
+                            ? (now === null ? "" : `Last active ${formatRelativeTime(friend.user.lastActionTimestamp, now)}`)
+                            : "No activity yet";
+                    return (
+                        <div key={friend.friendshipId} className="ag-list-row">
+                            <Link
+                                href={`/profile/${friend.user.userId}`}
+                                className="ag-list-row-main"
+                                style={{ display: "flex", alignItems: "center", gap: 12 }}
+                            >
+                                <span className="ag-avatar-stack">
+                                    <Avatar name={personalName(friend.user)} imageUrl={friend.user.imageUrl} size={36} />
+                                    {/* Decorative: the row's own sub-line says
+                                        "Active now" in text, so the dot would
+                                        only make a screen reader say it twice. */}
+                                    {active && <span className="ag-thumb-badge ag-active-dot" aria-hidden="true" />}
+                                </span>
+                                <div className="ag-list-row-main">
+                                    <div className="ag-list-row-title">{displayName(friend.user)}</div>
+                                    <div className="ag-list-row-sub">{activity}</div>
                                 </div>
-                            </div>
-                        </Link>
-                        <Link href="/newgame" className="ag-pill-action">Challenge</Link>
-                        <button
-                            type="button"
-                            className="ag-link-muted"
-                            style={{ marginLeft: 8 }}
-                            onClick={() => handleRemove(friend.friendshipId, 'Friend removed.')}
-                        >
-                            Remove
-                        </button>
-                    </div>
-                ))}
+                            </Link>
+                            <Link href="/newgame" className="ag-pill-action">Challenge</Link>
+                            <button
+                                type="button"
+                                className="ag-link-muted"
+                                style={{ marginLeft: 8 }}
+                                onClick={() => handleRemove(friend.friendshipId, 'Friend removed.')}
+                            >
+                                Remove
+                            </button>
+                        </div>
+                    );
+                })}
             </ListSection>
 
             {/* Incoming requests */}
