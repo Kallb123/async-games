@@ -1,17 +1,16 @@
 'use client'
 import React from 'react';
-import { COLS, edgeBetween, exteriorBottomSpace, exteriorTopSpace, ROWS, spaceIndex } from '@/games/FiresOut/board';
+import { DISPLAY_COLS, DISPLAY_ROWS, edgeBetween, isInteriorSpace, spaceAtDisplayCell } from '@/games/FiresOut/board';
 import type { IFiresOutEdgeResponse, IFiresOutFirefighterResponse, IFiresOutSpaceResponse } from '@/games/FiresOut/apiModels';
 import { playerColourForId } from '@/utils/ui/playerColours';
 
-// The 6×8 interior grid plus its exterior parking track, rendered as one 8×8
-// CSS grid — board.ts's own row/column convention (row = the d6, column =
-// the d8), with the exterior track as the grid's first and last row. Walls
-// are cell borders and doors are gaps in them (fires-out-gdd.md §17.6 step
-// 5): board.png sits behind the grid as decoration only (see .ag-fo-grid in
-// ag-theme.css), so this still reads wall/door state straight off `edges`
-// rather than drawing over the picture of it.
-const DISPLAY_ROWS = ROWS + 2;
+// The 6×8 interior grid inside its exterior perimeter, rendered as the one
+// (ROWS + 2) × (COLS + 2) display grid board.ts lays the two out on — every
+// cell the same size, so board.png (the whole board, tracks and all — see
+// .ag-fo-grid in ag-theme.css) lines up behind it cell for cell. Walls are
+// cell borders and doors are gaps in them (fires-out-gdd.md §17.6 step 5):
+// the art is decoration, so this still reads wall/door state straight off
+// `edges` rather than drawing over the picture of it.
 
 function edgeBorder(edge: IFiresOutEdgeResponse | undefined): string {
     if (!edge || edge.kind === 'open') return 'none';
@@ -20,6 +19,15 @@ function edgeBorder(edge: IFiresOutEdgeResponse | undefined): string {
         return edge.damage === 1 ? '3px dashed var(--fo-wall-cracked)' : '3px solid var(--fo-wall)';
     }
     return edge.doorOpen ? '3px dashed var(--fo-door-open)' : '4px solid var(--fo-door)';
+}
+
+/** The building's outer shell — a wall in every sense except that the edge graph doesn't model it, since it's never choppable and never a door. */
+const SHELL_WALL = '3px solid var(--fo-wall)';
+
+/** The border between an interior cell and the display cell next to it: the wall/door graph's, or the outer shell where the next cell is outdoors. */
+function borderTowards(edges: IFiresOutEdgeResponse[], space: number, neighbour: number): string {
+    if (!isInteriorSpace(neighbour)) return SHELL_WALL;
+    return edgeBorder(edges[edgeBetween(space, neighbour)!]);
 }
 
 interface FiresOutBoardProps {
@@ -43,29 +51,26 @@ export default function FiresOutBoard({ spaces, edges, firefighters, userIdList,
 
     const cells: React.ReactNode[] = [];
     for (let displayRow = 0; displayRow < DISPLAY_ROWS; displayRow++) {
-        const isTopTrack = displayRow === 0;
-        const isBottomTrack = displayRow === DISPLAY_ROWS - 1;
-        const boardRow = displayRow - 1; // meaningless for the two track rows
-
-        for (let col = 0; col < COLS; col++) {
-            const space = isTopTrack ? exteriorTopSpace(col) : isBottomTrack ? exteriorBottomSpace(col) : spaceIndex(boardRow, col);
+        for (let displayCol = 0; displayCol < DISPLAY_COLS; displayCol++) {
+            const space = spaceAtDisplayCell(displayRow, displayCol);
+            const interior = isInteriorSpace(space);
             const state = spaces[space];
             const isValid = validSpaces.has(space);
             const pawns = pawnsBySpace.get(space) ?? [];
 
             const style: React.CSSProperties = {};
-            if (!isTopTrack && !isBottomTrack) {
-                // Interior cell: its own right/bottom edges come from the
-                // wall/door graph; the grid's outer left/right flank is a
-                // permanent wall board.ts never models (only the top/bottom
-                // rows connect to the exterior track — see EXTERIOR_TOP_START's
-                // comment in board.ts).
+            if (interior) {
+                // Each interior cell draws its own right and bottom edge, and
+                // the cell before it draws the shared one — except along the
+                // building's outer shell, where there is no cell before it.
+                // Interior cells are inset by a whole cell of perimeter, so
+                // every one of these four neighbours is on the display grid.
                 style.borderRightWidth = 0;
                 style.borderBottomWidth = 0;
-                if (col === COLS - 1) style.borderRight = '3px solid var(--fo-wall)';
-                else style.borderRight = edgeBorder(edges[edgeBetween(space, spaceIndex(boardRow, col + 1))!]);
-                if (boardRow < ROWS - 1) style.borderBottom = edgeBorder(edges[edgeBetween(space, spaceIndex(boardRow + 1, col))!]);
-                if (col === 0) style.borderLeft = '3px solid var(--fo-wall)';
+                style.borderRight = borderTowards(edges, space, spaceAtDisplayCell(displayRow, displayCol + 1));
+                style.borderBottom = borderTowards(edges, space, spaceAtDisplayCell(displayRow + 1, displayCol));
+                if (!isInteriorSpace(spaceAtDisplayCell(displayRow, displayCol - 1))) style.borderLeft = SHELL_WALL;
+                if (!isInteriorSpace(spaceAtDisplayCell(displayRow - 1, displayCol))) style.borderTop = SHELL_WALL;
             }
 
             cells.push(
@@ -74,7 +79,7 @@ export default function FiresOutBoard({ spaces, edges, firefighters, userIdList,
                     type="button"
                     className={[
                         'ag-fo-cell',
-                        isTopTrack || isBottomTrack ? 'ag-fo-cell--exterior' : '',
+                        interior ? '' : 'ag-fo-cell--exterior',
                         isValid ? 'ag-fo-cell--valid' : '',
                     ].filter(Boolean).join(' ')}
                     style={style}

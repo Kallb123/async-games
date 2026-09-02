@@ -3594,38 +3594,36 @@ button.ag-tt-ticket { cursor: pointer; }
 .ag-game--firesout .ag-stat-row { background: var(--fo-char-2); padding: 0 12px 10px; }
 .ag-game--firesout .ag-stat { background: var(--ag-surface); border-radius: 9px; }
 
-/* ---- The board: the 6×8 interior grid plus its exterior parking track,
-   one CSS grid — walls are cell borders and doors are gaps in them (see
+/* ---- The board: the 6×8 interior grid inside its exterior perimeter, one
+   CSS grid — walls are cell borders and doors are gaps in them (see
    FiresOutBoard.tsx). board.png sits behind the grid cells (see
    .ag-fo-grid below); the frame itself stays a plain smoke-dark panel. ---- */
 .ag-game--firesout .ag-board-area { background: radial-gradient(circle at 50% 20%, var(--fo-char-2), var(--fo-char)); }
 .ag-firesout-frame { background: var(--fo-char); box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.35), 0 4px 0 oklch(0.18 0.02 40); }
 
-/* board.png (public/art/fires-out/board.png) is a wider reference-game
-   scan whose floor plan + numbered track sits inside x:248–1088,
-   y:28–881 of its 1195×896 canvas, flanked by side columns of dice art
-   that aren't part of our grid. background-size/-position below zoom and
-   shift the image so that crop, not the whole canvas, fills the grid.
-   The crop isn't square (841×853): the printed numbered track is a
-   shallower strip than the room rows above and below it, so the two
-   exterior rows get their own shorter aspect-ratio below rather than
-   sharing the interior rows' near-square one — using one aspect-ratio
-   for all 8 rows (as this used to) stretches the track row art into the
-   room row above/below it, which is what read as the board being cut off. */
+/* board.png (public/art/fires-out/board.png) is a 1195×896 scan of the whole
+   board: the house's outer wall runs x:245–1088, y:124.5–781.5, in 8 columns
+   of 105.4px and 6 rows of 109.5px. The display grid adds one cell of
+   exterior perimeter on every side (board.ts), so what belongs behind it is
+   that rectangle grown by one cell each way — x:139.6–1193.4, y:15–891,
+   which is very nearly the whole scan. The size/position pair below is that
+   crop, and it's why the numbered strips down the sides are on screen at all
+   now rather than cropped off. Every cell is the same shape (105.4/109.5),
+   so the art and the grid stay in step from one corner to the other. */
 .ag-fo-grid {
     display: grid;
-    grid-template-columns: repeat(8, 1fr);
+    grid-template-columns: repeat(10, 1fr);
     gap: 2px;
     background-image: url('/art/fires-out/board.png');
-    background-size: 142.26% 105.04%;
-    background-position: 69.86% 65.12%;
+    background-size: 113.4% 102.28%;
+    background-position: 98.87% 75%;
     background-repeat: no-repeat;
 }
 .ag-fo-cell {
     position: relative;
-    aspect-ratio: 0.935;
+    aspect-ratio: 0.9626;
     box-sizing: border-box;
-    background: color-mix(in srgb, var(--fo-parchment) 40%, transparent);
+    background: color-mix(in srgb, var(--fo-parchment) 22%, transparent);
     border-radius: 3px;
     border: none;
     padding: 0;
@@ -3634,7 +3632,7 @@ button.ag-tt-ticket { cursor: pointer; }
     justify-content: center;
     cursor: default;
 }
-.ag-fo-cell--exterior { aspect-ratio: 1.175; background: oklch(0.68 0.01 40 / 0.5); }
+.ag-fo-cell--exterior { background: oklch(0.68 0.01 40 / 0.28); }
 .ag-fo-cell--valid { cursor: pointer; box-shadow: inset 0 0 0 3px var(--ag-gold); }
 .ag-fo-cell:disabled { cursor: default; }
 
@@ -3652,8 +3650,8 @@ button.ag-tt-ticket { cursor: pointer; }
     line-height: 1;
 }
 .ag-fo-token {
-    top: 3px; left: 3px; right: 3px; bottom: 13px;
-    font-size: 15px;
+    top: 3px; left: 3px; right: 3px; bottom: 11px;
+    font-size: 13px;
     border: 1.5px solid rgba(0, 0, 0, 0.28);
     box-shadow: 0 2px 2px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.35);
 }
@@ -3672,10 +3670,12 @@ button.ag-tt-ticket { cursor: pointer; }
    treatment instead of a bare emoji floating on the room art — POI reuses
    the flip animation above, since it's the same face-down-marker-turns-over
    moment as smoke/fire. */
+/* Sized to still leave the cell's own art readable now that the perimeter
+   ring makes the grid 10 columns wide rather than 8. */
 .ag-fo-badge {
-    width: 15px;
-    height: 15px;
-    font-size: 10px;
+    width: 13px;
+    height: 13px;
+    font-size: 9px;
     background: color-mix(in srgb, var(--fo-parchment) 92%, transparent);
     border: 1px solid rgba(0, 0, 0, 0.25);
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -3686,7 +3686,7 @@ button.ag-tt-ticket { cursor: pointer; }
 .ag-fo-badge--vehicle { bottom: 2px; right: 2px; }
 
 .ag-fo-pawns { display: flex; gap: 1px; flex-wrap: wrap; justify-content: center; padding-bottom: 2px; }
-.ag-fo-pawn { width: 9px; height: 9px; border-radius: 50%; border: 1px solid #fff; display: inline-block; }
+.ag-fo-pawn { width: 8px; height: 8px; border-radius: 50%; border: 1px solid #fff; display: inline-block; }
 .ag-fo-pawn--active { box-shadow: 0 0 0 1.5px var(--fo-red); }
 
 /* ---- Advance Fire reveal (§17.6 step 7) — the async payoff for ending a

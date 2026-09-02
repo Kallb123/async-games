@@ -1,5 +1,5 @@
 // Static board data for Fires Out: the 6×8 interior grid, its wall/door
-// graph, the exterior parking track, and the printed Family setup — from
+// graph, the exterior perimeter, and the printed Family setup — from
 // docs/games/fires-out-gdd.md §3, §6.1 and §17.4. No server-only imports:
 // rules.ts (and, via it, the client action picker) depends on this module
 // staying isomorphic, the same contract board.ts holds for every other game.
@@ -30,18 +30,30 @@ export function isInteriorSpace(space: number): boolean {
     return space >= 0 && space < INTERIOR_SPACE_COUNT;
 }
 
-// ─── Exterior parking track ─────────────────────────────────────────────────
-// One exterior space per column, above row 0 and below row `ROWS - 1` — the
-// "grid of 8 x 6 ... plus an exterior parking track" of §3. Simplified from
-// the printed board: every column has an entry point (an 'open' edge, below)
-// rather than only the columns the art marks with a door icon, since which
-// columns those are is an art-alignment question and out of scope this
-// session (see AGENTS.md task note). Refining this to match specific printed
-// entry points is a board.ts-only change; nothing downstream assumes more
-// than "some exterior spaces border some interior spaces".
-export const EXTERIOR_TOP_START = INTERIOR_SPACE_COUNT; // 48..55
-export const EXTERIOR_BOTTOM_START = INTERIOR_SPACE_COUNT + COLS; // 56..63
-export const SPACE_COUNT = INTERIOR_SPACE_COUNT + 2 * COLS; // 64
+// ─── Exterior perimeter (§3's "exterior parking track") ────────────────────
+// The printed board wraps the house in a full ring of outdoor spaces — the
+// numbered strips above and below it and the dice strips down either side —
+// so the exterior here is that same ring: one space for every cell of the
+// (ROWS + 2) × (COLS + 2) display grid that isn't part of the building. That
+// makes the whole board art visible (nothing cropped off the sides), lets a
+// firefighter walk round the outside, and lets a vehicle park anywhere on the
+// perimeter, all of which the printed game allows and a top/bottom-only track
+// did not.
+//
+// The numbering is append-only on purpose: 48-63 are still the top and bottom
+// strips they always were, and the sides and corners take the indices after
+// them, so a game saved before the ring existed keeps every space it already
+// refers to — rules.ts's growBoardToCurrentLayout / boardAtCurrentLayout just
+// append the blanks for the rest.
+export const DISPLAY_ROWS = ROWS + 2;
+export const DISPLAY_COLS = COLS + 2;
+
+export const EXTERIOR_TOP_START = INTERIOR_SPACE_COUNT; // 48..55, above column 0..7
+export const EXTERIOR_BOTTOM_START = EXTERIOR_TOP_START + COLS; // 56..63, below column 0..7
+export const EXTERIOR_LEFT_START = EXTERIOR_BOTTOM_START + COLS; // 64..69, left of row 0..5
+export const EXTERIOR_RIGHT_START = EXTERIOR_LEFT_START + ROWS; // 70..75, right of row 0..5
+export const EXTERIOR_CORNER_START = EXTERIOR_RIGHT_START + ROWS; // 76..79, the four diagonal corners
+export const SPACE_COUNT = EXTERIOR_CORNER_START + 4; // 80
 
 export function exteriorTopSpace(col: number): number {
     return EXTERIOR_TOP_START + col;
@@ -51,44 +63,94 @@ export function exteriorBottomSpace(col: number): number {
     return EXTERIOR_BOTTOM_START + col;
 }
 
+export function exteriorLeftSpace(row: number): number {
+    return EXTERIOR_LEFT_START + row;
+}
+
+export function exteriorRightSpace(row: number): number {
+    return EXTERIOR_RIGHT_START + row;
+}
+
+/** The four corner spaces of the perimeter, in display order: top-left, top-right, bottom-left, bottom-right. */
+export const EXTERIOR_CORNERS = {
+    topLeft: EXTERIOR_CORNER_START,
+    topRight: EXTERIOR_CORNER_START + 1,
+    bottomLeft: EXTERIOR_CORNER_START + 2,
+    bottomRight: EXTERIOR_CORNER_START + 3,
+} as const;
+
 export function isExteriorSpace(space: number): boolean {
     return space >= INTERIOR_SPACE_COUNT && space < SPACE_COUNT;
 }
 
-/** Where a firefighter starts: the exterior space outside the front door (§6.1 step 5, simplified to one shared entry point — see the note above `EXTERIOR_TOP_START`). */
+// ─── Display grid ───────────────────────────────────────────────────────────
+// Where each space sits in the (ROWS + 2) × (COLS + 2) grid the board
+// component renders — the one place that mapping lives, so FiresOutBoard.tsx
+// walks display cells and asks for the space rather than re-deriving the ring
+// layout, and so the perimeter's own adjacency (below) is derived from the
+// same picture the player is looking at.
+
+interface IDisplayCell {
+    displayRow: number;
+    displayCol: number;
+}
+
+const DISPLAY_CELL_OF: IDisplayCell[] = buildDisplayCells();
+const SPACE_AT_DISPLAY_CELL: number[][] = buildSpaceAtDisplayCell();
+
+function buildDisplayCells(): IDisplayCell[] {
+    const cells: IDisplayCell[] = new Array(SPACE_COUNT);
+    for (let space = 0; space < INTERIOR_SPACE_COUNT; space++) {
+        cells[space] = { displayRow: rowOf(space) + 1, displayCol: colOf(space) + 1 };
+    }
+    for (let col = 0; col < COLS; col++) {
+        cells[exteriorTopSpace(col)] = { displayRow: 0, displayCol: col + 1 };
+        cells[exteriorBottomSpace(col)] = { displayRow: DISPLAY_ROWS - 1, displayCol: col + 1 };
+    }
+    for (let row = 0; row < ROWS; row++) {
+        cells[exteriorLeftSpace(row)] = { displayRow: row + 1, displayCol: 0 };
+        cells[exteriorRightSpace(row)] = { displayRow: row + 1, displayCol: DISPLAY_COLS - 1 };
+    }
+    cells[EXTERIOR_CORNERS.topLeft] = { displayRow: 0, displayCol: 0 };
+    cells[EXTERIOR_CORNERS.topRight] = { displayRow: 0, displayCol: DISPLAY_COLS - 1 };
+    cells[EXTERIOR_CORNERS.bottomLeft] = { displayRow: DISPLAY_ROWS - 1, displayCol: 0 };
+    cells[EXTERIOR_CORNERS.bottomRight] = { displayRow: DISPLAY_ROWS - 1, displayCol: DISPLAY_COLS - 1 };
+    return cells;
+}
+
+function buildSpaceAtDisplayCell(): number[][] {
+    const grid: number[][] = Array.from({ length: DISPLAY_ROWS }, () => new Array<number>(DISPLAY_COLS));
+    DISPLAY_CELL_OF.forEach((cell, space) => { grid[cell.displayRow][cell.displayCol] = space; });
+    return grid;
+}
+
+/** The space in one cell of the display grid. Total over the grid — every one of its `DISPLAY_ROWS × DISPLAY_COLS` cells is a space — so callers index it directly; nothing asks for a cell beyond the perimeter. */
+export function spaceAtDisplayCell(displayRow: number, displayCol: number): number {
+    return SPACE_AT_DISPLAY_CELL[displayRow][displayCol];
+}
+
+/** Where a firefighter starts, and where a knocked-down one is put back (§6.1 step 5, §10.3): the perimeter space outside the building's top-left corner — on the ring, and one step from the interior, so a knocked-down firefighter is never stranded on a corner with no way back in. */
 export const START_SPACE = exteriorTopSpace(0);
 
 // §6.2 step 6, §17.6 step 9: "separate exterior parking spots" for the two
-// vehicles — fixed rather than player-chosen (the printed game doesn't
-// mandate specific spots either). One per track, at the far end from
-// START_SPACE (top-left): since driving only ever moves a vehicle along its
-// own track (vehicleTrackNeighbours), starting them on different tracks
-// means they can never collide with each other, and neither track's end
-// collides with where firefighters enter. Always populated in
-// specificGameState, meaningless in a Family game — the same "always
-// populated" pattern `difficulty` already uses.
+// vehicles. Fixed rather than player-chosen (the printed game doesn't mandate
+// specific spots either), on opposite sides of the building from each other
+// and from where the crew arrives, and — since the perimeter is now one
+// connected ring — never allowed to be driven onto each other (applyDrive and
+// legalDriveTargets both exclude the other vehicle's spot).
 export const ENGINE_START = exteriorTopSpace(COLS - 1);
 export const AMBULANCE_START = exteriorBottomSpace(COLS - 1);
 
 /**
- * The parking spot(s) a vehicle can drive to from `space` — one step along
- * its own exterior track row (§12: vehicles never enter the building, and
- * this simplified board's two tracks don't connect to each other — see the
- * note above `EXTERIOR_TOP_START`). Deliberately not built from `edgesOf`/
- * `neighboursOf`: those model the wall/door graph state lives on, and a
- * parking spot has none of that — it's always drivable.
+ * The parking spot(s) a vehicle can drive to from `space` — one step round the
+ * exterior perimeter (§12: vehicles never enter the building). Read straight
+ * off the edge graph rather than re-derived from the ring geometry, so
+ * "adjacent, and still outside" means exactly the same thing here as it does
+ * for a firefighter walking round the outside.
  */
-export function vehicleTrackNeighbours(space: number): number[] {
-    const col = colOf(space);
-    const neighbours: number[] = [];
-    if (space >= EXTERIOR_TOP_START && space < EXTERIOR_TOP_START + COLS) {
-        if (col > 0) neighbours.push(exteriorTopSpace(col - 1));
-        if (col < COLS - 1) neighbours.push(exteriorTopSpace(col + 1));
-    } else if (space >= EXTERIOR_BOTTOM_START && space < EXTERIOR_BOTTOM_START + COLS) {
-        if (col > 0) neighbours.push(exteriorBottomSpace(col - 1));
-        if (col < COLS - 1) neighbours.push(exteriorBottomSpace(col + 1));
-    }
-    return neighbours;
+export function perimeterNeighbours(space: number): number[] {
+    if (!isExteriorSpace(space)) return [];
+    return neighboursOf(space).filter(isExteriorSpace);
 }
 
 // ─── Dice → coordinate (§3's design note, §9.1) ─────────────────────────────
@@ -102,37 +164,48 @@ export function spaceForRoll(d6: number, d8: number): number {
 // A room id per interior space, used only here to derive which of the 82
 // wall segments (§17.4) are open (same room), a solid wall (different room,
 // no doorway), or one of the 8 physical door markers (§3's component count) —
-// not read anywhere else. Loosely follows the printed floorplan
-// (public/art/fires-out/board.png): living room, bathroom and bedroom along
-// the top, a kitchen and den through the middle, dining room, second bedroom
-// and second bathroom along the bottom. Exact room shapes are a rendering
-// concern (step 5 of the implementation plan) and can be adjusted here later
-// without touching rules.ts. Only this one layout exists — §3 and §6.1 step 1
-// describe a double-sided board, but only one side's art was ever uploaded;
-// see fires-out-gdd.md §17.3's deviation note.
+// not read anywhere else.
+//
+// These are the rooms the board art actually draws
+// (public/art/fires-out/board.png, measured against the grid the component
+// lays over it): a living room down the left that turns the corner into the
+// middle of the house, a bathroom and bedroom across the top, the kitchen
+// through the middle with a games room beside it, and a dining room, second
+// bedroom and second bathroom along the bottom. Every wall below is a wall the
+// player can see, and every boundary the art leaves open is open here too —
+// that agreement is the point of this table, so re-measure the art before
+// changing it. Only this one layout exists — §3 and §6.1 step 1 describe a
+// double-sided board, but only one side's art was ever uploaded; see
+// fires-out-gdd.md §17.3's deviation note.
 const ROOM_GRID: number[][] = [
-    [0, 0, 0, 1, 2, 2, 2, 2],
-    [0, 0, 0, 1, 2, 2, 2, 2],
-    [3, 3, 3, 3, 3, 4, 4, 4],
-    [3, 3, 3, 3, 3, 4, 4, 4],
-    [5, 5, 5, 6, 6, 6, 7, 7],
-    [5, 5, 5, 6, 6, 6, 7, 7],
+    [0, 0, 0, 1, 1, 2, 2, 2],
+    [0, 0, 0, 1, 1, 2, 2, 2],
+    [0, 0, 3, 3, 3, 3, 4, 4],
+    [0, 0, 3, 3, 3, 3, 4, 4],
+    [5, 5, 5, 5, 5, 6, 6, 7],
+    [5, 5, 5, 5, 5, 6, 6, 7],
 ];
 
 function roomOf(space: number): number {
     return ROOM_GRID[rowOf(space)][colOf(space)];
 }
 
-/** The 8 interior doorways (§3: "Door markers, 8, double-sided"), each a `[room, room]` boundary picked to connect every room to the crew's route through the house. */
+/**
+ * The 8 interior doorways (§3: "Door markers, 8, double-sided"). The first
+ * four sit exactly where the art draws a gap in a wall; the other four are
+ * ours to place, because the art draws those four rooms sealed — every room
+ * has to be reachable, and a door marker rendered over a painted wall reads
+ * better than a room nobody can enter.
+ */
 const DOOR_BOUNDARIES = new Set([
-    key(spaceIndex(1, 2), spaceIndex(2, 2)), // Living ↔ Kitchen
-    key(spaceIndex(1, 3), spaceIndex(1, 4)), // Bathroom ↔ Bedroom
-    key(spaceIndex(1, 4), spaceIndex(2, 4)), // Bedroom ↔ Kitchen
-    key(spaceIndex(3, 4), spaceIndex(3, 5)), // Kitchen ↔ Den
-    key(spaceIndex(3, 1), spaceIndex(4, 1)), // Kitchen ↔ Dining
-    key(spaceIndex(4, 2), spaceIndex(4, 3)), // Dining ↔ Bedroom 2
-    key(spaceIndex(4, 5), spaceIndex(4, 6)), // Bedroom 2 ↔ Bathroom 2
-    key(spaceIndex(3, 6), spaceIndex(4, 6)), // Den ↔ Bathroom 2
+    key(spaceIndex(0, 2), spaceIndex(0, 3)), // Living room ↔ Bathroom (drawn)
+    key(spaceIndex(1, 4), spaceIndex(1, 5)), // Bathroom ↔ Bedroom (drawn)
+    key(spaceIndex(2, 1), spaceIndex(2, 2)), // Living room ↔ Kitchen (drawn)
+    key(spaceIndex(5, 6), spaceIndex(5, 7)), // Second bedroom ↔ Second bathroom (drawn)
+    key(spaceIndex(1, 6), spaceIndex(2, 6)), // Bedroom ↔ Games room
+    key(spaceIndex(3, 5), spaceIndex(3, 6)), // Kitchen ↔ Games room
+    key(spaceIndex(3, 2), spaceIndex(4, 2)), // Kitchen ↔ Dining room
+    key(spaceIndex(4, 4), spaceIndex(4, 5)), // Dining room ↔ Second bedroom
 ]);
 
 function key(a: number, b: number): string {
@@ -144,7 +217,11 @@ function key(a: number, b: number): string {
 // … becomes Schema.Types.Mixed, the schema can't validate it, and it invites
 // two different key orderings for the same wall"). Order: the 42 vertical
 // segments (row-major), then the 40 horizontal segments (row-major), then the
-// 16 exterior openings (top row, then bottom row) — 98 total.
+// 28 openings between the building and the perimeter (top, bottom, left,
+// right), then the 32 segments joining one perimeter space to the next —
+// 142 total. The order matters: it is what an edge id means, and a persisted
+// game indexes its edge array by it, so new kinds of segment are appended
+// after the ones that already existed rather than woven in among them.
 
 export type EdgeKind = 'wall' | 'door' | 'open';
 
@@ -177,12 +254,37 @@ function buildEdgeDefs(): EdgeDef[] {
         }
     }
 
-    // Exterior openings: top row, then bottom row.
+    // Openings between the building and the perimeter: top, bottom, then the
+    // two sides. Every face of the building is enterable, as the printed
+    // board's four sets of doorways are.
     for (let col = 0; col < COLS; col++) {
         edges.push({ id: id++, a: exteriorTopSpace(col), b: spaceIndex(0, col), kind: 'open' });
     }
     for (let col = 0; col < COLS; col++) {
         edges.push({ id: id++, a: exteriorBottomSpace(col), b: spaceIndex(ROWS - 1, col), kind: 'open' });
+    }
+    for (let row = 0; row < ROWS; row++) {
+        edges.push({ id: id++, a: exteriorLeftSpace(row), b: spaceIndex(row, 0), kind: 'open' });
+    }
+    for (let row = 0; row < ROWS; row++) {
+        edges.push({ id: id++, a: exteriorRightSpace(row), b: spaceIndex(row, COLS - 1), kind: 'open' });
+    }
+
+    // Round the perimeter: every pair of orthogonally-adjacent outdoor cells
+    // of the display grid, which is what lets a firefighter walk round the
+    // building and a vehicle drive along any side of it.
+    for (let displayRow = 0; displayRow < DISPLAY_ROWS; displayRow++) {
+        for (let displayCol = 0; displayCol < DISPLAY_COLS; displayCol++) {
+            const a = spaceAtDisplayCell(displayRow, displayCol);
+            if (!isExteriorSpace(a)) continue;
+            for (const [dRow, dCol] of [[0, 1], [1, 0]] as const) {
+                const nextRow = displayRow + dRow;
+                const nextCol = displayCol + dCol;
+                if (nextRow >= DISPLAY_ROWS || nextCol >= DISPLAY_COLS) continue;
+                const b = spaceAtDisplayCell(nextRow, nextCol);
+                if (isExteriorSpace(b)) edges.push({ id: id++, a, b, kind: 'open' });
+            }
+        }
     }
 
     return edges;
@@ -194,7 +296,7 @@ function edgeKindFor(a: number, b: number): EdgeKind {
 }
 
 export const EDGE_DEFS: EdgeDef[] = buildEdgeDefs();
-export const EDGE_COUNT = EDGE_DEFS.length; // 98
+export const EDGE_COUNT = EDGE_DEFS.length; // 142
 
 // space -> its incident edge ids, for neighbour walks (movement, explosions,
 // flashover adjacency).

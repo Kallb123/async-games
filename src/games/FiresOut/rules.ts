@@ -15,10 +15,15 @@ import {
     DAMAGE_TO_COLLAPSE,
     DifficultyId,
     difficultyTier,
+    EDGE_COUNT,
     EDGE_DEFS,
+    EdgeDef,
     EdgeKind,
     edgeBetween,
-    EXTERIOR_TOP_START,
+    exteriorBottomSpace,
+    exteriorLeftSpace,
+    exteriorRightSpace,
+    exteriorTopSpace,
     FALSE_ALARM_POI_COUNT,
     FAMILY_STARTING_FIRE,
     FAMILY_STARTING_POI,
@@ -37,7 +42,7 @@ import {
     spacesInQuadrant,
     START_SPACE,
     TOTAL_HOTSPOT_MARKERS,
-    vehicleTrackNeighbours,
+    perimeterNeighbours,
     VICTIM_POI_COUNT,
     VICTIMS_LOST_TO_LOSE,
     VICTIMS_TO_WIN,
@@ -201,7 +206,47 @@ export function buildEmptySpaces(): IFiresOutSpaceState[] {
 }
 
 export function buildEmptyEdges(): IFiresOutEdgeState[] {
-    return EDGE_DEFS.map(def => ({ kind: def.kind, damage: 0, doorOpen: false }));
+    return EDGE_DEFS.map(emptyEdgeState);
+}
+
+function emptyEdgeState(def: EdgeDef): IFiresOutEdgeState {
+    return { kind: def.kind, damage: 0, doorOpen: false };
+}
+
+/** The two board arrays of `specificGameState`, taken structurally so this module stays free of FiresOutModels.ts (which imports it). */
+export interface IFiresOutBoard {
+    spaces: IFiresOutSpaceState[];
+    edges: IFiresOutEdgeState[];
+}
+
+/**
+ * Grows a persisted board, in place, to the size board.ts describes today. A
+ * game saved before the exterior became a full perimeter ring has shorter
+ * `spaces` and `edges` arrays, and every index the ring added is — by
+ * construction — an empty outdoor space or an undamaged opening, so appending
+ * blanks is the whole migration. Called at the top of FiresOutAction.Execute,
+ * before any rule reads either array; a no-op for every game created since.
+ *
+ * Deliberately additive only: the walls and doors such a game already holds
+ * are left exactly as they are, even though the rooms have since been
+ * re-measured against the board art. A building doesn't rearrange itself
+ * halfway through a fire — and more concretely, the recap replays a game's
+ * recorded commands against its own starting snapshot (utils/games/replay.ts),
+ * so moving a wall under a game in flight would make its own history stop
+ * being replayable. An in-flight game keeps the floorplan it was dealt; the
+ * corrected one starts with the next game.
+ */
+export function growBoardToCurrentLayout(board: IFiresOutBoard): void {
+    while (board.spaces.length < SPACE_COUNT) board.spaces.push(emptySpaceState());
+    for (let id = board.edges.length; id < EDGE_COUNT; id++) board.edges.push(emptyEdgeState(EDGE_DEFS[id]));
+}
+
+/** The same growth, without touching the stored state — for read-only paths like the response builder, which has no business mutating what it serialises. Returns `board` itself when there is nothing to grow. */
+export function boardAtCurrentLayout(board: IFiresOutBoard): IFiresOutBoard {
+    if (board.spaces.length >= SPACE_COUNT && board.edges.length >= EDGE_COUNT) return board;
+    const grown: IFiresOutBoard = { spaces: [...board.spaces], edges: [...board.edges] };
+    growBoardToCurrentLayout(grown);
+    return grown;
 }
 
 /** The collapse clock (§5, §17.4): derived from the edges, never a stored total. */
@@ -345,17 +390,19 @@ function isAdjacentToFire(spaces: IFiresOutSpaceState[], space: number): boolean
 /**
  * Where an explosion's blast (or a shockwave continuing it) goes next, one
  * step in one cardinal direction — `null` when it runs off the building with
- * nowhere to go (dissipates). Only the top and bottom rows connect to the
- * exterior track (§3's simplified entry model, see board.ts); running off the
- * left or right edge of the grid simply has no target.
+ * nowhere to go (dissipates). Every face of the building backs onto the
+ * exterior perimeter (board.ts), so a blast that leaves the grid lands on the
+ * outdoor space beyond that face and stops there: an exterior space is a dead
+ * end, and resolveFireConsequences puts out anything burning outside anyway.
  */
 function spaceInDirection(current: number, dRow: number, dCol: number): number | null {
     if (!isInteriorSpace(current)) return null; // an exterior space is a dead end
-    const col = colOf(current) + dCol;
-    if (col < 0 || col >= COLS) return null;
     const row = rowOf(current) + dRow;
-    if (row < 0) return EXTERIOR_TOP_START + col;
-    if (row >= ROWS) return EXTERIOR_TOP_START + COLS + col;
+    const col = colOf(current) + dCol;
+    if (row < 0) return exteriorTopSpace(col);
+    if (row >= ROWS) return exteriorBottomSpace(col);
+    if (col < 0) return exteriorLeftSpace(row);
+    if (col >= COLS) return exteriorRightSpace(row);
     return spaceIndex(row, col);
 }
 
@@ -822,10 +869,25 @@ export function isRescuePoint(ruleset: RulesetId, ambulance: number, space: numb
     return ruleset === 'family' || space === ambulance;
 }
 
-/** §8, §12.1: adjacent parking spots `ff` can afford to drive `vehicleSpace` to — only from the vehicle's own space, along its own track row (vehicleTrackNeighbours). Mirrors FiresOutLogic.ts's own Execute check, the same contract as this section's header comment. */
-export function legalDriveTargets(ff: IFiresOutFirefighterState, vehicleSpace: number): number[] {
+export type VehicleId = 'engine' | 'ambulance';
+
+/** Where the two vehicles are parked — the two fields of `specificGameState` §12 cares about, taken structurally so this module stays free of FiresOutModels.ts (which imports it). */
+export interface IFiresOutParking {
+    engine: number;
+    ambulance: number;
+}
+
+/** §6.2 step 6: the spot the *other* vehicle occupies, which the one being driven has to keep off now that the perimeter is one connected ring. */
+export function otherVehicleSpace(parking: IFiresOutParking, vehicle: VehicleId): number {
+    return parking[vehicle === 'engine' ? 'ambulance' : 'engine'];
+}
+
+/** §8, §12.1: adjacent parking spots `ff` can afford to drive `vehicle` to — only from the vehicle's own space, one step along the perimeter (perimeterNeighbours), and never onto the other vehicle's spot. Mirrors FiresOutLogic.ts's own Execute check, the same contract as this section's header comment. */
+export function legalDriveTargets(ff: IFiresOutFirefighterState, parking: IFiresOutParking, vehicle: VehicleId): number[] {
+    const vehicleSpace = parking[vehicle];
     if (ff.space !== vehicleSpace || !canAffordAp(ff, AP_COSTS.drive, null)) return [];
-    return vehicleTrackNeighbours(vehicleSpace);
+    const blocked = otherVehicleSpace(parking, vehicle);
+    return perimeterNeighbours(vehicleSpace).filter(spot => spot !== blocked);
 }
 
 function quadrantHasFirefighter(firefighters: IFiresOutFirefighterState[], quadrant: Quadrant): boolean {

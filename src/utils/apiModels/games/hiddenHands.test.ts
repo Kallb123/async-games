@@ -13,7 +13,7 @@ import type { ISACSpecificGameState } from "@/games/SettlementsAndCities/board";
 import { makeState as makeSacState, player as sacPlayer } from "@/games/SettlementsAndCities/testFixtures";
 import { gameStateToModel as firesOutStateToModel, IFiresOutSpecificGameState } from "@/games/FiresOut/FiresOutModels";
 import { buildEmptyEdges, buildEmptySpaces, newFirefighter } from "@/games/FiresOut/rules";
-import { AMBULANCE_START, ENGINE_START, spaceIndex } from "@/games/FiresOut/board";
+import { AMBULANCE_START, EDGE_COUNT, ENGINE_START, INTERIOR_SPACE_COUNT, SPACE_COUNT, spaceIndex } from "@/games/FiresOut/board";
 
 // Two of the games this guards were once sending every player's hidden hand to
 // every player: World Domination shipped each player's territory cards, and
@@ -272,5 +272,25 @@ describe("Fires Out's response", () => {
         const response = firesOutStateToModel(firesOutState(), NAMES, "u1");
         expect((response as unknown as { poiPool?: unknown }).poiPool).toBeUndefined();
         expect(response.poiPoolCount).toBe(3);
+    });
+
+    // A game saved before the exterior became a full perimeter ring has
+    // shorter spaces/edges arrays, which the response builder grows before
+    // serialising (rules.ts's boardAtCurrentLayout). The spaces it appends
+    // must be blank outdoor ones, not a copy of anything — so the grown board
+    // is checked here rather than only where the migration lives.
+    it("grows a board saved before the exterior perimeter without inventing a POI", () => {
+        const state = firesOutState();
+        state.spaces = state.spaces.slice(0, INTERIOR_SPACE_COUNT + 16);
+        state.edges = state.edges.slice(0, 98);
+
+        const response = firesOutStateToModel(state, NAMES, "u1");
+
+        expect(response.spaces).toHaveLength(SPACE_COUNT);
+        expect(response.edges).toHaveLength(EDGE_COUNT);
+        expect(response.spaces.slice(INTERIOR_SPACE_COUNT + 16).every(space => space.poi === null)).toBe(true);
+        expect(JSON.stringify(response)).not.toContain('"victim":true');
+        // The stored state is left exactly as it was — the response builder reads, it doesn't migrate.
+        expect(state.spaces).toHaveLength(INTERIOR_SPACE_COUNT + 16);
     });
 });

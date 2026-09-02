@@ -31,7 +31,7 @@
 
 | Component | Qty (approx.) | Function |
 |---|---|---|
-| Double-sided game board | 1 | Two house layouts; grid of 8 × 6 = 48 interior spaces plus an exterior parking track |
+| Double-sided game board | 1 | Two house layouts; grid of 8 × 6 = 48 interior spaces inside an exterior perimeter of 32 outdoor spaces (the parking track and the street round it) |
 | Threat markers (smoke / fire) | ~33, double-sided | The advancing hazard; smoke on one face, fire on the other |
 | Point of Interest (POI) markers | ~15 used per game (10 victims, 5 false alarms) | Face-down "?" tokens; hidden information |
 | Damage markers | 24 | Structural integrity; also the global loss timer |
@@ -394,6 +394,22 @@ a d8 to solve it again.
   any command from a user who isn't `currentTurn`. Moving someone else's figure
   during your own turn is fine and needs no engine change — it's the pawn that
   moves, not the turn.
+* **The rooms are the ones the art draws.** `ROOM_GRID` in `board.ts` is
+  measured off `public/art/fires-out/board.png` against the grid the board
+  component lays over it, so every wall the player can see is a wall the rules
+  play by. Four of the eight door markers sit on doorways the art draws; the
+  other four are placed by us, because the art seals four of its rooms and
+  every room has to be reachable. Re-measure the art before changing the
+  table.
+* **A game in flight keeps the floorplan it was dealt.** The migration for a
+  board saved under an older layout is additive only: it appends the spaces and
+  edges the exterior perimeter added and leaves the walls, doors and damage
+  alone. Re-pointing them at a new `ROOM_GRID` would move walls under a game
+  already being played, and — because the recap replays a game's recorded
+  commands against its own starting snapshot (`utils/games/replay.ts`) — would
+  make its own history stop replaying, quietly dropping every move through a
+  boundary that had become a wall. Any future change to the room table applies
+  to games started after it, not to games already burning.
 * **One board layout, not two.** §3 and §6.1 step 1 describe a double-sided
   board; only one floorplan's art was ever uploaded
   (`public/art/fires-out/board.png`), so `board.ts` builds one `ROOM_GRID` /
@@ -416,7 +432,7 @@ it from there.
   ruleset: 'family' | 'experienced',
   difficulty: 'recruit' | 'veteran' | 'heroic',
   layout: 'a' | 'b',
-  spaces: {                       // 48 interior + the exterior track, one array
+  spaces: {                       // 48 interior + the 32-space exterior perimeter, one array
       threat: 'none' | 'smoke' | 'fire',
       poi: { id: number, revealed: boolean } | null,   // identity redacted until revealed
       hazmat: boolean,
@@ -457,10 +473,15 @@ it now rather than at the Specialists step avoids changing a persisted schema
 eight commits in.
 
 **Edges are a flat array, not a keyed map.** The grid has a fixed 82 interior
-wall segments (42 vertical, 40 horizontal) plus the exterior openings; number
-them once in `board.ts` and index them, the way World Domination numbers its
-territories. A `Record<string, …>` keyed by `"12-13"` would work and would be
-worse: it becomes `Schema.Types.Mixed`, the schema can't validate it, and it
+wall segments (42 vertical, 40 horizontal), plus 28 openings onto the exterior
+perimeter (one per face of every edge space) and the 32 segments joining one
+perimeter space to the next — 142 in all. Number them once in `board.ts` and
+index them, the way World Domination numbers its territories. The numbering is
+**append-only**: a persisted game indexes its `edges` array by edge id and its
+`spaces` array by space index, so a new kind of segment or space goes on the
+end, and `rules.ts`'s `growBoardToCurrentLayout` (or `boardAtCurrentLayout`, on
+read-only paths) appends the blanks for a game saved before it existed. A
+`Record<string, …>` keyed by `"12-13"` would work and would be worse: it becomes `Schema.Types.Mixed`, the schema can't validate it, and it
 invites two different key orderings for the same wall.
 
 **Every command must call `markModified('specificGameState')`.** This is
@@ -613,11 +634,14 @@ sixth asking to be written — one `nextInTurnOrder(gameState, currentTurn)`
 helper retires all of them.
 
 **2 — Board data and pure rules.** `src/games/FiresOut/board.ts`: the board as
-a space and edge table, the d6/d8 coordinate mapping, the exterior track, the
-parking spots, and the printed Family setup. §17.3's deviation note explains
-why this ships one layout rather than both. `rules.ts` alongside it is the
-whole fire system as pure functions — §9.1's four-row table, explosion
-radiation with shockwaves, flashover to fixpoint, knock-downs — taking a
+a space and edge table, the d6/d8 coordinate mapping, the exterior perimeter
+(a full ring round the building — the numbered strips above and below it and
+the dice strips down either side, all walkable and all parkable), the display
+grid that ring and the interior share, and the printed Family setup. §17.3's
+deviation note explains why this ships one layout rather than both. `rules.ts`
+alongside it is the whole fire system as pure functions — §9.1's four-row
+table, explosion radiation with shockwaves, flashover to fixpoint,
+knock-downs — taking a
 `nextRoll` callback rather than calling `DiceRoll` itself, which is what makes
 it both replayable and testable. Server-free, so the client can import it to
 show what an action costs and what is reachable (`docs/new-game.md`,
