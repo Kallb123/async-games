@@ -43,3 +43,29 @@ export function formatBuildTime(iso: string): string {
         minute: "2-digit",
     });
 }
+
+// How recently someone has to have moved to count as "active now" — the green
+// dot beside a friend on the profile screen. Five minutes is long enough to
+// cover a player still thinking about the turn they are halfway through, and
+// short enough that the dot means "they are here", not "they were here today".
+export const ACTIVE_WINDOW_MS = 5 * 60 * 1000;
+
+// True if `iso` — a friend's last action across their games — falls inside the
+// active window ending at `now`.
+//
+// Pure for the same reason as formatRelativeTime: `now` is supplied by the
+// caller (`useNowToTheMinute()` in a component), and is null until hydration,
+// when there is no honest clock reading to judge against — so nobody reads as
+// active until there is one.
+//
+// A timestamp *after* `now` counts as active rather than as nonsense: the
+// stamp is the server's clock and `now` is the reader's, so a browser running a
+// little slow would otherwise hide the dot on the friend who just moved.
+export function isRecentlyActive(iso: string | null | undefined, now: number | null): boolean {
+    if (!iso || now === null) return false;
+
+    const then = new Date(iso).getTime();
+    if (Number.isNaN(then)) return false;
+
+    return now - then < ACTIVE_WINDOW_MS;
+}

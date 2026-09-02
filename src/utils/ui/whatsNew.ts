@@ -44,6 +44,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "See which friends are around right now",
+                detail: "A green dot now sits on a friend's picture in your friends list while they're taking turns — anyone who has moved in a game in the last five minutes — so you can tell at a glance who is worth challenging now rather than tomorrow.",
+            },
+            {
                 title: "Talk to your opponents during a game",
                 detail: "Every game now has a chat thread: tap 💬 on the board to say something to the other players, and they get a nudge on their phone. It stays readable after the game ends, so “gg” has somewhere to go — and you can turn the notifications off in Settings if you'd rather just read it when you next open the board. Reading it on one device now clears it everywhere, the home screen shows how many messages are waiting in each game, and opening a game you're behind on tells you who messaged while you were away.",
             },
@@ -58,10 +62,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Your cards stay on screen between your turns",
                 detail: "Waiting for someone else to move used to leave you looking at the board and nothing else. Your hand, the face-up cards and what's left in the deck now stay put in Train Time, the market in Dice Cities and the cards you're holding in World Domination — greyed out until it's your go, so you can plan the move but not make it early.",
-            },
-            {
-                title: "Change the name friends invite you by",
-                detail: "The username you picked when you signed up used to be yours for good, typo and all. Your profile now has an Edit username button — take a new one and it follows you straight away: your friends' invite lists, the games you're already in, and your match history.",
             },
         ],
     },

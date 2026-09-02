@@ -37,7 +37,7 @@ rule, and it applies to server models and API contracts too).
 
 | Capability | Where | State |
 |---|---|---|
-| **Friends** — request / accept / remove, list with incoming/outgoing | `src/utils/mongodb/FriendshipData.ts`, `src/app/api/friends/**` | Built. Flat `requester/recipient/accepted` record; list endpoint already aggregates each friend's **last action timestamp** across their games. |
+| **Friends** — request / accept / remove, list with incoming/outgoing | `src/utils/mongodb/FriendshipData.ts`, `src/app/api/friends/**` | Built. Flat `requester/recipient/accepted` record; list endpoint aggregates each friend's **last action timestamp** across their games, which the friends list reads as an *active now* marker (`ActiveDot` + `isRecentlyActive`, five-minute window). |
 | **User directory** | `src/app/users/page.tsx`, `src/app/api/users/` | Built. Browse users to friend / invite. |
 | **Game invitations** | `src/utils/mongodb/InvitationData.ts`, `src/app/api/newgame/**`, `src/app/api/invite/**` | Built. Per-game invite → all-accept → `CreateGame()`. |
 | **Push notifications** | `src/utils/firebase/pushNotification.ts`, `FirebaseForeground.tsx` | Built. `sendPushToUsers()` + a `window` `CustomEvent` fan-out. Events: `NewInvite`, `InviteAccepted`, `GameStart`, `YourTurn`, `TurnExpiringSoon`, `GameOver`, `TurnNudge`, `TurnReaction`, `ChatMessage`. |
@@ -90,7 +90,9 @@ They lean almost entirely on infrastructure that already exists.
 - **Friends activity / "who to play" surface.** Use the *already-computed*
   last-action timestamp to show which friends are active, who you have no game
   with, and a one-tap rematch/invite. Turns the friends list from a roster into
-  a launcher.
+  a launcher. *Started*: the friends list now shows a green `ActiveDot` on
+  anyone who moved in the last five minutes; "who you have no game with" and
+  the one-tap invite are still to come.
 
 ### Tier 2 — Identity & status (medium value, medium cost)
 
@@ -254,8 +256,10 @@ grow a parallel one. Relevant existing pieces:
 New shared primitives worth extracting early (they'll each be used by more than
 one feature): a **message-thread / activity-row** component, a **stat tile**
 (profiles + head-to-head + leaderboards all want it), and a **presence/last-seen
-badge** (friends list + profiles + player headers). Extract on the second use,
-per the repo's "second copy is the signal" rule.
+badge** — that one now exists as `ActiveDot` (`src/components/ui/`) over
+`isRecentlyActive` (`src/utils/ui/time.ts`), used by the friends list and ready
+for profiles and player headers. Extract on the second use, per the repo's
+"second copy is the signal" rule.
 
 ---
 
