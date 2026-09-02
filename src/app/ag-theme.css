@@ -306,18 +306,15 @@ button {
 }
 
 /* The "active now" dot — someone who took a turn in the last few minutes (see
-   ActiveDot). Rides the same corner as `.ag-thumb-badge`, ringed against the
-   surface it sits on so it reads as a marker rather than part of the picture. */
+   isRecentlyActive). Worn on top of `.ag-thumb-badge`, which already owns the
+   corner and the ring against the surface behind it; this only says how far in
+   it sits and what it looks like. Pair it with an `.ag-avatar-stack` host. */
 .ag-active-dot {
-    position: absolute;
-    right: -1px;
-    bottom: -1px;
-    width: 9px;
-    height: 9px;
+    --ag-thumb-badge-inset: 2px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     background: var(--ag-green);
-    border: 2px solid var(--ag-surface);
-    display: block;
 }
 
 /* Your own avatar on the profile screen: the button that opens the

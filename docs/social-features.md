@@ -37,7 +37,7 @@ rule, and it applies to server models and API contracts too).
 
 | Capability | Where | State |
 |---|---|---|
-| **Friends** — request / accept / remove, list with incoming/outgoing | `src/utils/mongodb/FriendshipData.ts`, `src/app/api/friends/**` | Built. Flat `requester/recipient/accepted` record; list endpoint aggregates each friend's **last action timestamp** across their games, which the friends list reads as an *active now* marker (`ActiveDot` + `isRecentlyActive`, five-minute window). |
+| **Friends** — request / accept / remove, list with incoming/outgoing | `src/utils/mongodb/FriendshipData.ts`, `src/app/api/friends/**` | Built. Flat `requester/recipient/accepted` record; list endpoint aggregates each friend's **last action timestamp** across their games, which the friends list reads as an *active now* dot (`isRecentlyActive`, five-minute window). |
 | **User directory** | `src/app/users/page.tsx`, `src/app/api/users/` | Built. Browse users to friend / invite. |
 | **Game invitations** | `src/utils/mongodb/InvitationData.ts`, `src/app/api/newgame/**`, `src/app/api/invite/**` | Built. Per-game invite → all-accept → `CreateGame()`. |
 | **Push notifications** | `src/utils/firebase/pushNotification.ts`, `FirebaseForeground.tsx` | Built. `sendPushToUsers()` + a `window` `CustomEvent` fan-out. Events: `NewInvite`, `InviteAccepted`, `GameStart`, `YourTurn`, `TurnExpiringSoon`, `GameOver`, `TurnNudge`, `TurnReaction`, `ChatMessage`. |
@@ -90,7 +90,7 @@ They lean almost entirely on infrastructure that already exists.
 - **Friends activity / "who to play" surface.** Use the *already-computed*
   last-action timestamp to show which friends are active, who you have no game
   with, and a one-tap rematch/invite. Turns the friends list from a roster into
-  a launcher. *Started*: the friends list now shows a green `ActiveDot` on
+  a launcher. *Started*: the friends list now shows a green active-now dot on
   anyone who moved in the last five minutes; "who you have no game with" and
   the one-tap invite are still to come.
 
@@ -189,8 +189,11 @@ and never open a stranger channel before moderation exists.
 
 **Phase 0 — Presence wins (small, low risk, high felt value)** ✓ Mostly complete
 Nudges ✓ → reactions ✓ → notification preferences ✓ → richer turn
-notifications (to start) → friends activity/rematch surface (to start). The
-first three are shipped and in use; the last two are highest-value next steps.
+notifications (to start) → friends activity/rematch surface (started). The
+first three are shipped and in use; richer turn notifications are the
+highest-value next step, and the activity surface has its first slice — the
+active-now dot on the friends list — with "who you have no game with" and the
+one-tap invite still to come.
 All ride existing FCM + friendship infra and have proven the best
 value-to-cost ratio on the board. Structural foundation (`GameResult` +
 `UserProfile`) now in place for Phase 2.
@@ -198,7 +201,8 @@ value-to-cost ratio on the board. Structural foundation (`GameResult` +
 **Phase 1 — Conversation (friends-only) & richer notifications**
 Next priorities: richer turn notifications (what actually happened in the game,
 not "your turn"), in-game messaging between players already in a game together
-(no stranger-safety dependency yet), and the friends activity / rematch surface.
+(no stranger-safety dependency yet), and the rest of the friends activity /
+rematch surface beyond the active-now dot.
 Messaging adds unread state and a `NewMessage` event. Introduce *minimal*
 moderation (report + block) as a forward investment, scoped to existing
 relationships.
@@ -256,10 +260,12 @@ grow a parallel one. Relevant existing pieces:
 New shared primitives worth extracting early (they'll each be used by more than
 one feature): a **message-thread / activity-row** component, a **stat tile**
 (profiles + head-to-head + leaderboards all want it), and a **presence/last-seen
-badge** — that one now exists as `ActiveDot` (`src/components/ui/`) over
-`isRecentlyActive` (`src/utils/ui/time.ts`), used by the friends list and ready
-for profiles and player headers. Extract on the second use, per the repo's
-"second copy is the signal" rule.
+badge** — the friends list has the first half of that one: `isRecentlyActive`
+(`src/utils/ui/time.ts`) decides it, and `ag-active-dot` draws it as a
+`.ag-thumb-badge` on an `.ag-avatar-stack`, sized for a 36px avatar. It is
+markup in one screen, not a component yet: profiles or player headers wanting
+the same dot are the second use that should lift it into
+`src/components/ui/`, per the repo's "second copy is the signal" rule.
 
 ---
 

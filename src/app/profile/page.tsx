@@ -12,7 +12,6 @@ import ListSection from "@/components/ui/ListSection";
 import CollapsingSection from "@/components/ui/CollapsingSection";
 import NameForm from "@/components/NameForm";
 import { IFriendRequestResponse } from "@/utils/mongodb/FriendshipData";
-import ActiveDot from "@/components/ui/ActiveDot";
 import { formatRelativeTime, isRecentlyActive } from "@/utils/ui/time";
 import { FRIEND_EVENTS } from "@/utils/hooks/usePushEvents";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
@@ -272,6 +271,13 @@ export default function Profile() {
                     // Fresh enough to still be at the table: the last turn they
                     // took anywhere lands inside the active window.
                     const active = isRecentlyActive(friend.user.lastActionTimestamp, now);
+                    // Empty rather than a guess while `now` has no reading yet:
+                    // before hydration there is no clock to say how long ago.
+                    const activity = active
+                        ? "Active now"
+                        : friend.user.lastActionTimestamp
+                            ? (now === null ? "" : `Last active ${formatRelativeTime(friend.user.lastActionTimestamp, now)}`)
+                            : "No activity yet";
                     return (
                         <div key={friend.friendshipId} className="ag-list-row">
                             <Link
@@ -281,17 +287,14 @@ export default function Profile() {
                             >
                                 <span className="ag-avatar-stack">
                                     <Avatar name={personalName(friend.user)} imageUrl={friend.user.imageUrl} size={36} />
-                                    {active && <ActiveDot label={`${displayName(friend.user)} is active now`} />}
+                                    {/* Decorative: the row's own sub-line says
+                                        "Active now" in text, so the dot would
+                                        only make a screen reader say it twice. */}
+                                    {active && <span className="ag-thumb-badge ag-active-dot" aria-hidden="true" />}
                                 </span>
                                 <div className="ag-list-row-main">
                                     <div className="ag-list-row-title">{displayName(friend.user)}</div>
-                                    <div className="ag-list-row-sub">
-                                        {active
-                                            ? "Active now"
-                                            : friend.user.lastActionTimestamp
-                                                ? now !== null && `Last active ${formatRelativeTime(friend.user.lastActionTimestamp, now)}`
-                                                : "No activity yet"}
-                                    </div>
+                                    <div className="ag-list-row-sub">{activity}</div>
                                 </div>
                             </Link>
                             <Link href="/newgame" className="ag-pill-action">Challenge</Link>
