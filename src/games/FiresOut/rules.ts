@@ -417,8 +417,16 @@ export function isPassable(edge: IFiresOutEdgeState): boolean {
     return true; // open
 }
 
+// Movement/extinguish legality never reads anything off a space but its
+// threat level — narrower than IFiresOutSpaceState, so the client's redacted
+// wire shape (IFiresOutSpaceResponse, apiModels.ts — whose poi may lack
+// `victim`) satisfies it too. That's what lets the board reuse these exact
+// checks for its own legal-target highlighting (below) with no adapter
+// between the wire shape and the internal one.
+type SpacesWithThreat = readonly { threat: ThreatLevel }[];
+
 /** §8: what moving from `from` to an adjacent `to` costs, given whether `ff` is carrying something. Ignores whether the move is otherwise legal (see canMoveTo). */
-export function moveApCost(spaces: IFiresOutSpaceState[], ff: IFiresOutFirefighterState, to: number): number {
+export function moveApCost(spaces: SpacesWithThreat, ff: IFiresOutFirefighterState, to: number): number {
     if (ff.carrying) return AP_COSTS.carryPerSpace;
     return spaces[to].threat === 'fire' ? AP_COSTS.moveIntoFire : AP_COSTS.move;
 }
@@ -428,7 +436,7 @@ export function moveApCost(spaces: IFiresOutSpaceState[], ff: IFiresOutFirefight
  * passable edge, and not carrying a victim or hazmat into fire.
  */
 export function canMoveTo(
-    spaces: IFiresOutSpaceState[],
+    spaces: SpacesWithThreat,
     edges: IFiresOutEdgeState[],
     ff: IFiresOutFirefighterState,
     from: number,
@@ -438,4 +446,50 @@ export function canMoveTo(
     if (edgeId === undefined || !isPassable(edges[edgeId])) return false;
     if (ff.carrying && spaces[to].threat === 'fire') return false;
     return true;
+}
+
+// ─── Reachability — what a board click can legally target (§17.6 step 5) ───
+// Mirrors FiresOutLogic.ts's own Execute checks exactly (canMoveTo/
+// moveApCost, edge kind, canAffordAp), so the board never highlights a
+// target the server would then reject — this module's header comment
+// promises the client "what an action costs and what is reachable", and
+// this is that promise kept for the board's own click targets.
+
+/** §8, §10.2: adjacent spaces `ff` may move to right now — `carrying` is
+ * whether this move would leave them carrying a victim (already carrying,
+ * or picking one up as they leave their own space), the same "as if
+ * carrying" firefighter applyMove checks against. */
+export function legalMoveTargets(
+    spaces: SpacesWithThreat,
+    edges: IFiresOutEdgeState[],
+    ff: IFiresOutFirefighterState,
+    carrying: boolean,
+): number[] {
+    const asIf: IFiresOutFirefighterState = carrying ? { ...ff, carrying: 'victim' } : ff;
+    return neighboursOf(ff.space).filter(to =>
+        canMoveTo(spaces, edges, asIf, ff.space, to) && canAffordAp(ff, moveApCost(spaces, asIf, to), null));
+}
+
+/** §8: adjacent doors `ff` can afford to open or close. */
+export function legalDoorTargets(edges: IFiresOutEdgeState[], ff: IFiresOutFirefighterState): number[] {
+    if (!canAffordAp(ff, AP_COSTS.door, null)) return [];
+    return neighboursOf(ff.space).filter(to => {
+        const edgeId = edgeBetween(ff.space, to);
+        return edgeId !== undefined && edges[edgeId].kind === 'door';
+    });
+}
+
+/** §8: `ff`'s own space plus any adjacent space carrying smoke or fire, that `ff` can afford to extinguish. */
+export function legalExtinguishTargets(spaces: SpacesWithThreat, ff: IFiresOutFirefighterState): number[] {
+    if (!canAffordAp(ff, AP_COSTS.extinguish, null)) return [];
+    return [ff.space, ...neighboursOf(ff.space)].filter(space => spaces[space].threat !== 'none');
+}
+
+/** §8, §9.2: adjacent undestroyed walls `ff` can afford to chop. */
+export function legalChopTargets(edges: IFiresOutEdgeState[], ff: IFiresOutFirefighterState): number[] {
+    if (!canAffordAp(ff, AP_COSTS.chop, null)) return [];
+    return neighboursOf(ff.space).filter(to => {
+        const edgeId = edgeBetween(ff.space, to);
+        return edgeId !== undefined && edges[edgeId].kind === 'wall' && edges[edgeId].damage < 2;
+    });
 }

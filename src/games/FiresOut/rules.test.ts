@@ -16,6 +16,10 @@ import {
     explode,
     flashover,
     isBuildingCollapsed,
+    legalChopTargets,
+    legalDoorTargets,
+    legalExtinguishTargets,
+    legalMoveTargets,
     newFirefighter,
     poiCountOnBoard,
     replenishPoi,
@@ -241,6 +245,67 @@ describe("replenishPoi (§7 Phase 3)", () => {
 
         expect(pool).toHaveLength(2); // never drawn from — nextRoll was never called
     });
+});
+
+describe("reachability (§17.6 step 5 — must mirror FiresOutLogic.ts's own Execute checks)", () => {
+    it("legalMoveTargets excludes a space blocked by an undamaged wall, and excludes fire when carrying but not otherwise", () => {
+        const spaces = buildEmptySpaces();
+        const edges = buildEmptyEdges();
+        const origin = spaceIndex(2, 1);
+        const ff = newFirefighter("u1", origin);
+        spaces[spaceIndex(2, 2)].threat = 'fire';
+
+        // (2,1)-(2,5) is walled; (2,0)/(2,2) are open same-room neighbours.
+        const notCarrying = legalMoveTargets(spaces, edges, ff, false);
+        expect(notCarrying).toContain(spaceIndex(2, 0));
+        expect(notCarrying).toContain(spaceIndex(2, 2)); // fire is fine unless carrying
+        expect(notCarrying).not.toContain(spaceIndex(1, 1)); // walled off
+
+        const carrying = legalMoveTargets(spaces, edges, ff, true);
+        expect(carrying).not.toContain(spaceIndex(2, 2)); // blocked while carrying
+    });
+
+    it("legalMoveTargets is empty once AP runs out", () => {
+        const spaces = buildEmptySpaces();
+        const edges = buildEmptyEdges();
+        const ff = newFirefighter("u1", spaceIndex(2, 1));
+        ff.apLeft = 0;
+        expect(legalMoveTargets(spaces, edges, ff, false)).toEqual([]);
+    });
+
+    it("legalDoorTargets finds only adjacent doors, and only while affordable", () => {
+        const spaces = buildEmptySpaces();
+        const edges = buildEmptyEdges();
+        const ff = newFirefighter("u1", spaceIndex(1, 2)); // beside the living/kitchen door
+        expect(legalDoorTargets(edges, ff)).toEqual([spaceIndex(2, 2)]);
+
+        ff.apLeft = 0;
+        expect(legalDoorTargets(edges, ff)).toEqual([]);
+    });
+
+    it("legalExtinguishTargets includes the firefighter's own space and any smoking/burning neighbour, never a clear one", () => {
+        const spaces = buildEmptySpaces();
+        const ff = newFirefighter("u1", spaceIndex(2, 1));
+        spaces[ff.space].threat = 'smoke';
+        spaces[spaceIndex(2, 2)].threat = 'fire';
+
+        const targets = legalExtinguishTargets(spaces, ff);
+        expect(targets).toContain(ff.space);
+        expect(targets).toContain(spaceIndex(2, 2));
+        expect(targets).not.toContain(spaceIndex(2, 0)); // clear
+    });
+
+    it("legalChopTargets excludes a wall already destroyed", () => {
+        const edges = buildEmptyEdges();
+        const ff = newFirefighter("u1", spaceIndex(2, 1));
+        const wallEdge = edgeBetween(spaceIndex(2, 1), spaceIndex(1, 1))!;
+
+        expect(legalChopTargets(edges, ff)).toEqual([spaceIndex(1, 1)]);
+
+        edges[wallEdge].damage = 2;
+        expect(legalChopTargets(edges, ff)).toEqual([]);
+    });
+
 });
 
 describe("the collapse clock (§5, §17.4 — derived, never stored)", () => {
