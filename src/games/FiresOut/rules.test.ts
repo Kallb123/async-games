@@ -10,6 +10,8 @@ import {
     IFiresOutEdgeState,
     IFiresOutFirefighterState,
     IFiresOutSpaceState,
+    TOTAL_HOTSPOT_MARKERS,
+    applyExperiencedSetup,
     buildEmptyEdges,
     buildEmptySpaces,
     checkOutcome,
@@ -42,6 +44,24 @@ function scriptedRolls(...values: number[]): (sides: number) => number {
     return (_sides: number) => {
         if (i >= values.length) throw new Error("scriptedRolls exhausted");
         return values[i++];
+    };
+}
+
+// A nextRoll that walks every interior space exactly once, in row-major
+// order, one (d6, d8) pair per space — never repeats a coordinate within a
+// single setup's worth of rolls, so a setup placement's own re-roll-on-invalid
+// loop (rollValidSetupTarget) never has to reject a coordinate for being
+// already claimed by *this* generator, only for board state (fire from an
+// earlier explosion's radiation, say).
+function sequentialRolls(): (sides: number) => number {
+    let row = 0, col = 0, wantRow = true;
+    return () => {
+        if (wantRow) { wantRow = false; return row + 1; }
+        const d8 = col + 1;
+        wantRow = true;
+        col++;
+        if (col >= COLS) { col = 0; row++; }
+        return d8;
     };
 }
 
@@ -213,11 +233,121 @@ describe("resolveAdvanceFire (§7 Phase 2)", () => {
     it("rolls, resolves the target, flashes over, and applies consequences in one call", () => {
         const spaces = buildEmptySpaces();
         const edges = buildEmptyEdges();
-        const result = resolveAdvanceFire(spaces, edges, [], scriptedRolls(3, 4));
+        const result = resolveAdvanceFire(spaces, edges, [], 0, scriptedRolls(3, 4));
         expect(result.rolls).toEqual({ d6: 3, d8: 4 });
         expect(result.target).toBe(spaceIndex(2, 3));
         expect(result.resolution).toBe('smoke');
         expect(spaces[spaceIndex(2, 3)].threat).toBe('smoke');
+    });
+});
+
+describe("hazmat detonation (§9.4, §17.6 step 8)", () => {
+    it("detonates a hazmat caught by fire — an immediate explosion, replaced by a hot spot drawn from the reserve", () => {
+        const spaces = buildEmptySpaces();
+        const edges = buildEmptyEdges();
+        const target = spaceIndex(2, 3);
+        fire(spaces, spaceIndex(2, 2)); // adjacent — the roll below catches (not explodes) per §9.1
+        spaces[target].hazmat = true;
+
+        const result = resolveAdvanceFire(spaces, edges, [], 5, scriptedRolls(3, 4)); // -> spaceIndex(2, 3)
+
+        expect(result.resolution).toBe('fire'); // the roll itself only sees "adjacent to fire" — detonation is a consequence, not the resolution
+        expect(spaces[target].hazmat).toBe(false);
+        expect(spaces[target].hotspot).toBe(true);
+        expect(result.hotspotReserve).toBe(4); // one drawn from the reserve of 5
+        expect(result.flareUps).toEqual([]); // the hot spot the detonation just placed doesn't flare up itself — see wasHotspot's comment
+
+        // The detonation's own explosion (§9.2) radiated from the hazmat's
+        // space — north is a different room and not a doorway, so that
+        // direction damages the wall rather than spreading fire.
+        const northWall = edgeBetween(target, spaceIndex(1, 3))!;
+        expect(edges[northWall].damage).toBe(1);
+    });
+
+    it("doesn't place a hot spot once the reserve is empty", () => {
+        const spaces = buildEmptySpaces();
+        const edges = buildEmptyEdges();
+        const target = spaceIndex(2, 3);
+        fire(spaces, spaceIndex(2, 2));
+        spaces[target].hazmat = true;
+
+        const result = resolveAdvanceFire(spaces, edges, [], 0, scriptedRolls(3, 4));
+
+        expect(spaces[target].hazmat).toBe(false);
+        expect(spaces[target].hotspot).toBe(false);
+        expect(result.hotspotReserve).toBe(0);
+    });
+});
+
+describe("hot spot flare-ups (§9.4, §17.6 step 8)", () => {
+    it("fire newly placed on a pre-existing hot spot triggers one more full Advance Fire, consuming another roll", () => {
+        const spaces = buildEmptySpaces();
+        const edges = buildEmptyEdges();
+        const hotspotSpace = spaceIndex(2, 3);
+        fire(spaces, spaceIndex(2, 2)); // adjacent to the target, so it catches rather than explodes
+        spaces[hotspotSpace].hotspot = true;
+
+        // First roll (3,4) -> (2,3), the hot spot, catching fire. Second roll
+        // (1,1) -> (0,0), the chained flare-up's own resolution.
+        const result = resolveAdvanceFire(spaces, edges, [], 2, scriptedRolls(3, 4, 1, 1));
+
+        expect(result.target).toBe(hotspotSpace);
+        expect(result.flareUps).toHaveLength(1);
+        expect(result.flareUps[0].rolls).toEqual({ d6: 1, d8: 1 });
+        expect(result.flareUps[0].target).toBe(spaceIndex(0, 0));
+        expect(spaces[spaceIndex(0, 0)].threat).toBe('smoke'); // (0,0) isn't adjacent to any fire
+        expect(result.hotspotReserve).toBe(2); // untouched — no hazmat detonated
+    });
+
+    it("doesn't re-trigger a flare-up for a hot spot that was already burning", () => {
+        const spaces = buildEmptySpaces();
+        const edges = buildEmptyEdges();
+        const hotspotSpace = spaceIndex(2, 1);
+        fire(spaces, hotspotSpace); // already on fire *before* this Advance Fire
+        spaces[hotspotSpace].hotspot = true;
+
+        // Rolling the already-burning hot spot itself explodes it (§9.1's
+        // fire-on-fire row) — not a "fire placed on a hot spot" event.
+        const result = resolveAdvanceFire(spaces, edges, [], 0, scriptedRolls(3, 2));
+
+        expect(result.target).toBe(hotspotSpace);
+        expect(result.resolution).toBe('explosion');
+        expect(result.flareUps).toEqual([]);
+    });
+});
+
+describe("applyExperiencedSetup (§6.2, §17.6 step 8)", () => {
+    it("resolves the tier's initial explosions, places its hazmats and hot spots, reserves the rest, and places 3 POIs", () => {
+        const spaces = buildEmptySpaces();
+        const edges = buildEmptyEdges();
+        const poiPool = shuffledPoiPool();
+
+        const { nextPoiId, hotspotReserve } = applyExperiencedSetup(spaces, edges, poiPool, 'veteran', 4, sequentialRolls());
+
+        // Veteran: 3 explosions, 4 hazmats (fires-out-gdd.md §6.2's table).
+        const fireCount = spaces.slice(0, INTERIOR_SPACE_COUNT).filter(s => s.threat === 'fire').length;
+        expect(fireCount).toBeGreaterThanOrEqual(3);
+        expect(spaces.filter(s => s.hazmat).length).toBe(4);
+
+        // Crew of 4 -> base 3 (§6.2 step 4), +3 for Veteran = 6.
+        const hotspotsPlaced = spaces.filter(s => s.hotspot).length;
+        expect(hotspotsPlaced).toBe(6);
+        expect(hotspotsPlaced + hotspotReserve).toBe(TOTAL_HOTSPOT_MARKERS); // conservation (§17.7)
+
+        expect(poiCountOnBoard(spaces)).toBe(3);
+        expect(nextPoiId).toBe(3);
+    });
+
+    it("scales the hot spot count down for a small crew and up for Heroic", () => {
+        const spaces = buildEmptySpaces();
+        const edges = buildEmptyEdges();
+        const { hotspotReserve } = applyExperiencedSetup(spaces, edges, shuffledPoiPool(), 'heroic', 2, sequentialRolls());
+
+        // Crew of 2 -> base 2, +3 for Heroic = 5.
+        const hotspotsPlaced = spaces.filter(s => s.hotspot).length;
+        expect(hotspotsPlaced).toBe(5);
+        expect(hotspotsPlaced + hotspotReserve).toBe(TOTAL_HOTSPOT_MARKERS);
+        expect(spaces.filter(s => s.hazmat).length).toBe(5); // Heroic's hazmat count
     });
 });
 
@@ -366,7 +496,7 @@ describe("marker conservation", () => {
         // Advance Fires that some hit a space already on fire and explode —
         // then replenish, asserting conservation holds after each round.
         for (let round = 0; round < COLS; round++) {
-            resolveAdvanceFire(spaces, edges, firefighters, scriptedRolls(2, round + 1));
+            resolveAdvanceFire(spaces, edges, firefighters, 0, scriptedRolls(2, round + 1));
             nextId = replenishPoi(spaces, pool, scriptedRolls(3, 1, 3, 2, 3, 3), nextId);
 
             expect(totalDamage(edges)).toBeLessThanOrEqual(24);

@@ -154,6 +154,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
                         <Stat value={`${gs.lost}/${VICTIMS_LOST_TO_LOSE}`} label="lost" />
                         <Stat value={totalDamage(gs.edges)} label="damage" />
                         <Stat value={gs.poiPoolCount} label="POI left" />
+                        {gs.ruleset === 'experienced' && <Stat value={gs.hotspotReserve} label="hot spots left" />}
                     </div>
 
                     {!complete && (

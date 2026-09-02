@@ -247,23 +247,31 @@ export interface IFiresOutAdvanceFireOutcome {
     rolls: { d6: number; d8: number };
     target: number;
     resolution: 'smoke' | 'fire' | 'explosion';
-    /** Owner ids of firefighters caught by the fire this Advance Fire — names come off the gameData the same response already carries. */
+    /** Owner ids of firefighters caught by the fire across this Advance Fire and any hot spot flare-ups it chained into. */
     knockedDownOwnerIds: string[];
     victimsLost: number;
     poiPlaced: number;
+    /** §9.4: how many additional full Advance Fire resolutions this one's hot spots chained into. */
+    flareUpCount: number;
 }
 
 export interface IFiresOutEndTurnOutcome extends ICommandOutcome {
     advanceFire: IFiresOutAdvanceFireOutcome;
 }
 
-function describeAdvanceFire(result: IFiresOutAdvanceFireResult): string {
+function describeAdvanceFire(result: IFiresOutAdvanceFireResult, isFlareUp: boolean): string {
+    const prefix = isFlareUp ? 'Flare-up! ' : '';
     const rollText = `rolled ${result.rolls.d6},${result.rolls.d8}`;
     switch (result.resolution) {
-        case 'smoke': return `Advance Fire: ${rollText} — smoke fills space ${result.target}`;
-        case 'fire': return `Advance Fire: ${rollText} — fire catches at space ${result.target}`;
-        case 'explosion': return `Advance Fire: ${rollText} — space ${result.target} explodes!`;
+        case 'smoke': return `${prefix}Advance Fire: ${rollText} — smoke fills space ${result.target}`;
+        case 'fire': return `${prefix}Advance Fire: ${rollText} — fire catches at space ${result.target}`;
+        case 'explosion': return `${prefix}Advance Fire: ${rollText} — space ${result.target} explodes!`;
     }
+}
+
+/** Depth-first flattening of a resolution and every flare-up it chained into (§9.4: "flare-ups can chain into flare-ups") — the primary resolution first, so history logs and the outcome's totals both read in the order the fire actually happened. */
+function flattenAdvanceFireChain(result: IFiresOutAdvanceFireResult): IFiresOutAdvanceFireResult[] {
+    return [result, ...result.flareUps.flatMap(flattenAdvanceFireChain)];
 }
 
 // §7 Phase 1, §8: bank up to MAX_BANKED_AP unspent AP, hand the turn to the
@@ -281,16 +289,27 @@ function applyEndTurn(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff:
 
     const { nextRoll, used } = makeNextRoll(action.recordedRolls);
 
-    const advance = resolveAdvanceFire(gs.spaces, gs.edges, gs.firefighters, nextRoll);
-    fo.gameState.history.unshift({ text: describeAdvanceFire(advance) });
-    for (const index of advance.consequences.knockedDownIndices) {
-        const knocked = gs.firefighters[index];
-        fo.gameState.history.unshift(playerHistory(knocked.ownerId, 'was knocked down and carried outside'));
+    const advance = resolveAdvanceFire(gs.spaces, gs.edges, gs.firefighters, gs.hotspotReserve, nextRoll);
+    gs.hotspotReserve = advance.hotspotReserve;
+
+    // Depth-first: the primary roll's own log line, then each flare-up it
+    // chained into, in the order the fire actually resolved (§9.4).
+    const chain = flattenAdvanceFireChain(advance);
+    const knockedDownIndices: number[] = [];
+    let victimsLost = 0;
+    for (const step of chain) {
+        fo.gameState.history.unshift({ text: describeAdvanceFire(step, step !== advance) });
+        for (const index of step.consequences.knockedDownIndices) {
+            const knocked = gs.firefighters[index];
+            fo.gameState.history.unshift(playerHistory(knocked.ownerId, 'was knocked down and carried outside'));
+        }
+        knockedDownIndices.push(...step.consequences.knockedDownIndices);
+        victimsLost += step.consequences.victimsLost;
     }
-    if (advance.consequences.victimsLost > 0) {
-        gs.lost += advance.consequences.victimsLost;
+    if (victimsLost > 0) {
+        gs.lost += victimsLost;
         fo.gameState.history.unshift({
-            text: `${advance.consequences.victimsLost} victim${advance.consequences.victimsLost === 1 ? '' : 's'} lost to the fire (${gs.lost}/${VICTIMS_LOST_TO_LOSE})`,
+            text: `${victimsLost} victim${victimsLost === 1 ? '' : 's'} lost to the fire (${gs.lost}/${VICTIMS_LOST_TO_LOSE})`,
         });
     }
 
@@ -312,9 +331,10 @@ function applyEndTurn(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff:
             rolls: advance.rolls,
             target: advance.target,
             resolution: advance.resolution,
-            knockedDownOwnerIds: advance.consequences.knockedDownIndices.map(i => gs.firefighters[i].ownerId),
-            victimsLost: advance.consequences.victimsLost,
+            knockedDownOwnerIds: knockedDownIndices.map(i => gs.firefighters[i].ownerId),
+            victimsLost,
             poiPlaced,
+            flareUpCount: chain.length - 1,
         },
     };
 }

@@ -33,6 +33,8 @@ function cmd(senderId: string, fields: Partial<FiresOutAction>): FiresOutAction 
 // Family setup's fire cluster.
 function baseState(turnOrder: string[] = ["u1", "u2"]): IFiresOutSpecificGameState {
     return {
+        ruleset: 'family',
+        difficulty: 'recruit',
         spaces: buildEmptySpaces(),
         edges: buildEmptyEdges(),
         poiPool: [],
@@ -41,6 +43,7 @@ function baseState(turnOrder: string[] = ["u1", "u2"]): IFiresOutSpecificGameSta
         lost: 0,
         firefighters: turnOrder.map(userId => newFirefighter(userId, spaceIndex(2, 1))),
         activeFirefighter: 0,
+        hotspotReserve: 0,
     };
 }
 

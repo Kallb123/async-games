@@ -85,6 +85,11 @@ export default function FiresOutBoard({ spaces, edges, firefighters, userIdList,
                             {state.poi.revealed ? '🧍' : '❓'}
                         </span>
                     )}
+                    {(state.hazmat || state.hotspot) && (
+                        <span className="ag-fo-hazard" aria-hidden="true" title={state.hazmat ? 'Hazmat' : 'Hot spot'}>
+                            {state.hazmat ? '☣️' : '♨️'}
+                        </span>
+                    )}
                     {pawns.length > 0 && (
                         <span className="ag-fo-pawns">
                             {pawns.map(ff => (
