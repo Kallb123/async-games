@@ -2244,6 +2244,15 @@ a.ag-list-row, a.ag-list-row-main {
 }
 .ag-die-pip--on { background: var(--ag-dark); }
 
+/* A d8 (or any face above 6) is printed with a numeral, not pips. */
+.ag-die--numeral {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font: 800 calc(var(--ag-die-size) * 0.42) var(--ag-font);
+    color: var(--ag-dark);
+}
+
 /* ---- Dice row (shared Dice primitive: any number of pip dice together) ---- */
 .ag-dice-row { display: flex; gap: 8px; align-items: center; justify-content: center; }
 .ag-dice-row--rolling .ag-die { animation: ag-die-tumble 0.32s ease-in-out infinite; }
@@ -3541,3 +3550,67 @@ button.ag-tt-ticket { cursor: pointer; }
     box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.35), 0 4px 0 oklch(0.22 0.045 250);
 }
 .ag-game--outbreak .ag-board-tag { background: var(--ob-crimson); }
+
+/* ==========================================================================
+   Fires Out! — smoke-charcoal chrome over the terracotta accent from meta.ts
+   ==========================================================================
+   Same deal as Train Time and Outbreak: scoped to .ag-game--firesout,
+   re-tinting the shared chrome rather than growing private copies of it. */
+.ag-game--firesout {
+    --fo-red: #d2432c;
+    --fo-red-deep: #a8341f;
+    --fo-char: oklch(0.24 0.02 40);
+    --fo-char-2: oklch(0.3 0.02 40);
+    --fo-wall: oklch(0.32 0.02 40);
+    --fo-wall-cracked: oklch(0.55 0.09 50);
+    --fo-door: #8a5a2b;
+    --fo-door-open: oklch(0.6 0.05 80);
+    --fo-smoke: oklch(0.74 0.01 40);
+    --fo-fire: #e8622f;
+}
+.ag-game--firesout .ag-game-topbar { background: var(--fo-char); }
+.ag-game--firesout .ag-scorestrip { background: var(--fo-char-2); }
+.ag-game--firesout .ag-score-pill--me {
+    background: var(--fo-red);
+    color: var(--ag-on-dark);
+    box-shadow: 0 0 0 2px oklch(0.6 0.15 40);
+}
+.ag-game--firesout .ag-btn--primary {
+    background: var(--fo-red);
+    color: var(--ag-on-dark);
+    box-shadow: 0 3px 0 var(--fo-red-deep);
+}
+.ag-game--firesout .ag-stat-row { background: var(--fo-char-2); padding: 0 12px 10px; }
+.ag-game--firesout .ag-stat { background: var(--ag-surface); border-radius: 9px; }
+
+/* ---- The board: the 6×8 interior grid plus its exterior parking track,
+   one CSS grid — walls are cell borders and doors are gaps in them (see
+   FiresOutBoard.tsx), not art, so the frame is a plain smoke-dark panel. ---- */
+.ag-game--firesout .ag-board-area { background: radial-gradient(circle at 50% 20%, var(--fo-char-2), var(--fo-char)); }
+.ag-firesout-frame { background: var(--fo-char); box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.35), 0 4px 0 oklch(0.18 0.02 40); }
+
+.ag-fo-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
+.ag-fo-cell {
+    position: relative;
+    aspect-ratio: 1;
+    box-sizing: border-box;
+    background: #fff8ec;
+    border-radius: 3px;
+    border: none;
+    padding: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    cursor: default;
+}
+.ag-fo-cell--exterior { background: oklch(0.68 0.01 40); }
+.ag-fo-cell--smoke { background: var(--fo-smoke); }
+.ag-fo-cell--fire { background: var(--fo-fire); }
+.ag-fo-cell--valid { cursor: pointer; box-shadow: inset 0 0 0 3px var(--ag-gold); }
+.ag-fo-cell:disabled { cursor: default; }
+
+.ag-fo-poi { position: absolute; top: 1px; right: 2px; font-size: 11px; line-height: 1; }
+
+.ag-fo-pawns { display: flex; gap: 1px; flex-wrap: wrap; justify-content: center; padding-bottom: 2px; }
+.ag-fo-pawn { width: 9px; height: 9px; border-radius: 50%; border: 1px solid #fff; display: inline-block; }
+.ag-fo-pawn--active { box-shadow: 0 0 0 1.5px var(--fo-red); }
