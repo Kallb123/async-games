@@ -13,6 +13,8 @@ import {
     COLS,
     colOf,
     DAMAGE_TO_COLLAPSE,
+    DifficultyId,
+    difficultyTier,
     EDGE_DEFS,
     EdgeKind,
     edgeBetween,
@@ -29,6 +31,7 @@ import {
     spaceIndex,
     SPACE_COUNT,
     START_SPACE,
+    TOTAL_HOTSPOT_MARKERS,
     VICTIM_POI_COUNT,
     VICTIMS_LOST_TO_LOSE,
     VICTIMS_TO_WIN,
@@ -145,6 +148,95 @@ export function applyFamilySetup(spaces: IFiresOutSpaceState[], poiPool: boolean
         if (victim === undefined) break; // defensive — pool always has 15, more than 3
         spaces[space].poi = { id: nextId++, revealed: false, victim };
     }
+}
+
+// ─── The Experienced game's rolled setup (§6.2, §17.6 step 8) ──────────────
+// RulesetId/DifficultyId/DIFFICULTY_TIERS/TOTAL_HOTSPOT_MARKERS live in
+// board.ts alongside this game's other §3 component counts; this is the
+// behaviour that reads them. The switch between rulesets is that one field,
+// read here rather than scattered through the fire system — see
+// gameStateToModel and buildInitialFiresOutState in FiresOutModels.ts for the
+// other half of "one two-valued string, which is the whole mechanism".
+
+/** §6.2 step 4: "a base number scaled by crew size (roughly 2 for a three-firefighter crew, 3 for four or more), plus 3 additional at Veteran and Heroic." */
+function hotspotsToPlace(crewSize: number, difficulty: DifficultyId): number {
+    const base = crewSize <= 3 ? 2 : 3;
+    return difficulty === 'recruit' ? base : base + 3;
+}
+
+/**
+ * §6.2 step 2: seeds one initial explosion at a rolled coordinate, fully
+ * resolved (including wall damage) — the building starts already
+ * compromised, and differently compromised every game. Unlike a live Advance
+ * Fire roll, the target need not already be on fire: the printed setup
+ * assumes something has *just* gone off there, so this places the fire and
+ * radiates from it in the same step rather than requiring resolveTargetSpace
+ * to see existing fire first.
+ */
+function seedInitialExplosion(spaces: IFiresOutSpaceState[], edges: IFiresOutEdgeState[], target: number): void {
+    spaces[target].threat = 'fire';
+    explode(spaces, edges, target);
+}
+
+/** A rolled interior coordinate a setup placement re-rolls until `isValid` accepts it, bounded the same way replenishPoi bounds its own re-rolls. */
+function rollValidSetupTarget(nextRoll: NextRoll, isValid: (space: number) => boolean): number | null {
+    const MAX_ATTEMPTS = INTERIOR_SPACE_COUNT * 4;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        const target = spaceForRoll(nextRoll(6), nextRoll(8));
+        if (isValid(target)) return target;
+    }
+    return null; // defensive — the board would have to be almost entirely full
+}
+
+/**
+ * §6.2 steps 2-5: the Experienced game's rolled setup — initial explosions,
+ * then hazmats, then hot spots, then the first 3 POIs, in that order (each
+ * later placement avoids the spaces the earlier ones already claimed).
+ * Vehicles (step 6) and Specialists (step 7) are later steps (9 and 10).
+ * Returns the running POI id counter and the hot spot reserve left after
+ * setup's own placements, both of which the caller folds into the fresh
+ * specificGameState.
+ */
+export function applyExperiencedSetup(
+    spaces: IFiresOutSpaceState[],
+    edges: IFiresOutEdgeState[],
+    poiPool: boolean[],
+    difficulty: DifficultyId,
+    crewSize: number,
+    nextRoll: NextRoll,
+): { nextPoiId: number; hotspotReserve: number } {
+    const tier = difficultyTier(difficulty);
+
+    for (let i = 0; i < tier.explosions; i++) {
+        seedInitialExplosion(spaces, edges, spaceForRoll(nextRoll(6), nextRoll(8)));
+    }
+
+    // One hazmat per space (§6.2 step 3) — not on an already-burning space
+    // (nobody would leave equipment in an active blast zone) and not
+    // stacked on another hazmat.
+    for (let i = 0; i < tier.hazmats; i++) {
+        const target = rollValidSetupTarget(nextRoll, space => spaces[space].threat !== 'fire' && !spaces[space].hazmat);
+        if (target !== null) spaces[target].hazmat = true;
+    }
+
+    // Hot spots (§6.2 step 4) — not doubled up on a hazmat or another hot
+    // spot, and not dropped into existing fire for the same reason as
+    // hazmats above. Whatever isn't placed now stays in reserve for §9.4's
+    // hazmat-detonation replacement.
+    const toPlace = hotspotsToPlace(crewSize, difficulty);
+    let placed = 0;
+    for (let i = 0; i < toPlace; i++) {
+        const target = rollValidSetupTarget(nextRoll,
+            space => spaces[space].threat !== 'fire' && !spaces[space].hazmat && !spaces[space].hotspot);
+        if (target === null) break;
+        spaces[target].hotspot = true;
+        placed++;
+    }
+
+    // POIs (§6.2 step 5) — the same 3-marker placement as the Family game.
+    const nextPoiId = replenishPoi(spaces, poiPool, nextRoll, 0);
+
+    return { nextPoiId, hotspotReserve: TOTAL_HOTSPOT_MARKERS - placed };
 }
 
 // ─── Phase 2 — Advance Fire (§9) ────────────────────────────────────────────
@@ -296,28 +388,96 @@ export interface IFiresOutAdvanceFireResult {
     target: number;
     resolution: 'smoke' | 'fire' | 'explosion';
     consequences: IFiresOutFireConsequences;
+    /**
+     * §9.4: "fire placed on a hot spot" — a hot spot this resolution's fire
+     * newly reached, each triggering one more full Advance Fire, resolved
+     * depth-first (a flare-up's own flare-ups appear inside it). Empty for
+     * every Family game, since no space ever has `hotspot: true` there.
+     */
+    flareUps: IFiresOutAdvanceFireResult[];
+    /** The hot spot reserve left after this resolution (and any chained flare-ups) drew from it. */
+    hotspotReserve: number;
 }
 
 /**
- * One full Phase 2 (§7): roll, resolve the target space, flashover to a
- * fixpoint, then apply consequences. Hot spot flare-ups (§9.4, chained
- * re-rolls of this same function) and the Experienced ruleset are out of
- * scope until 17.6 step 8 — every space's `hotspot` stays false until then,
- * so this never triggers one.
+ * §9.4: a hazmat caught by fire detonates immediately — the same explosion
+ * §9.2 already models, radiated from the hazmat's own space — and is
+ * replaced by a hot spot drawn from the reserve (none, once it runs dry).
+ * Interleaved with flashover to a fixpoint: a detonation can catch a
+ * smoke-filled corridor that needs flashing over, and flashover can reach a
+ * space still holding a hazmat that then needs to go off — each pass can
+ * feed the other, bounded by the finite number of hazmats on the board.
+ */
+function settleHazmatsAndFlashover(spaces: IFiresOutSpaceState[], edges: IFiresOutEdgeState[], hotspotReserve: number): number {
+    let changed = true;
+    while (changed) {
+        changed = false;
+        flashover(spaces);
+        for (let space = 0; space < INTERIOR_SPACE_COUNT; space++) {
+            const state = spaces[space];
+            if (state.threat !== 'fire' || !state.hazmat) continue;
+            state.hazmat = false;
+            explode(spaces, edges, space);
+            if (hotspotReserve > 0) {
+                state.hotspot = true;
+                hotspotReserve--;
+            }
+            changed = true;
+        }
+    }
+    return hotspotReserve;
+}
+
+/**
+ * One full Phase 2 (§7): roll, resolve the target space, settle hazmat
+ * detonations and flashover to a fixpoint, apply consequences, then chase
+ * down any hot spot flare-up this resolution's fire newly reached (§9.4) —
+ * each one a full, recursive re-run of this same function, consuming more
+ * of `nextRoll`'s cursor. A space already on fire before this call keeps its
+ * hot spot from re-triggering every single turn; only the transition to
+ * fire counts as "placed".
+ *
+ * `claimed` is shared by reference across the whole recursive call tree for
+ * one turn's Advance Fire, not reset per call: a nested flare-up's own
+ * explosion/flashover chain can reach a second hot spot before its ancestor's
+ * for-loop gets there, and without a tree-wide record the ancestor's *own*
+ * pre-call snapshot would still say that space "wasn't fire yet" and spawn a
+ * second, redundant flare-up for an ignition its descendant already resolved.
  */
 export function resolveAdvanceFire(
     spaces: IFiresOutSpaceState[],
     edges: IFiresOutEdgeState[],
     firefighters: IFiresOutFirefighterState[],
+    hotspotReserve: number,
     nextRoll: NextRoll,
+    claimed: Set<number> = new Set(),
 ): IFiresOutAdvanceFireResult {
+    // Both snapshotted *before* this resolution touches anything: a flare-up
+    // is fire reaching a hot spot that already existed, not a hot spot a
+    // hazmat detonation (below) just planted on a space that was already
+    // on fire — that space's fire arrived first, so it never "was placed"
+    // on the hot spot at all.
+    const wasFire = spaces.map(s => s.threat === 'fire');
+    const wasHotspot = spaces.map(s => s.hotspot);
+
     const d6 = nextRoll(6);
     const d8 = nextRoll(8);
     const target = spaceForRoll(d6, d8);
     const resolution = resolveTargetSpace(spaces, edges, target);
-    flashover(spaces);
+    let reserve = settleHazmatsAndFlashover(spaces, edges, hotspotReserve);
     const consequences = resolveFireConsequences(spaces, firefighters);
-    return { rolls: { d6, d8 }, target, resolution, consequences };
+
+    const flareUps: IFiresOutAdvanceFireResult[] = [];
+    for (let space = 0; space < INTERIOR_SPACE_COUNT; space++) {
+        if (wasFire[space] || !wasHotspot[space] || spaces[space].threat !== 'fire') continue;
+        if (claimed.has(space)) continue; // a nested flare-up already resolved this ignition
+        claimed.add(space);
+        const flareUp = resolveAdvanceFire(spaces, edges, firefighters, reserve, nextRoll, claimed);
+        reserve = flareUp.hotspotReserve;
+        flareUps.push(flareUp);
+    }
+
+    return { rolls: { d6, d8 }, target, resolution, consequences, flareUps, hotspotReserve: reserve };
 }
 
 // ─── Phase 3 — Replenish POI (§7) ───────────────────────────────────────────

@@ -1,6 +1,6 @@
 import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
 import type { RestrictedApKind, SpecialistId, ThreatLevel } from "./rules";
-import type { EdgeKind } from "./board";
+import type { DifficultyId, EdgeKind, RulesetId } from "./board";
 
 export interface IFiresOutPoiResponse {
     id: number;
@@ -36,6 +36,8 @@ export interface IFiresOutFirefighterResponse {
 }
 
 export interface IFiresOutSpecificGameStateResponse {
+    ruleset: RulesetId;
+    difficulty: DifficultyId;
     spaces: IFiresOutSpaceResponse[];
     edges: IFiresOutEdgeResponse[];
     // The undrawn POI pool is a deck, not a die (§17.5) — redacted to a count,
@@ -45,6 +47,8 @@ export interface IFiresOutSpecificGameStateResponse {
     lost: number;
     firefighters: IFiresOutFirefighterResponse[];
     activeFirefighter: number;
+    /** §9.4: hot spot markers not yet placed — 0 in a Family game. */
+    hotspotReserve: number;
 }
 
 export interface IFiresOutGameDataResponse extends IGameDataResponse {

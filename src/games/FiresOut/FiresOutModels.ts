@@ -7,12 +7,15 @@ import { userToken } from "@/utils/games/history";
 import { shuffle } from "@/utils/games/shuffle";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { FiresOutGameType } from "@/utils/apiModels/GameLogic";
-import { START_SPACE } from "./board";
+import { DiceRoll } from "@/utils/games/DiceRoll";
+import { DifficultyId, RulesetId, START_SPACE } from "./board";
 import {
     IFiresOutEdgeState,
     IFiresOutFirefighterState,
     IFiresOutPoiState,
     IFiresOutSpaceState,
+    NextRoll,
+    applyExperiencedSetup,
     applyFamilySetup,
     buildEmptyEdges,
     buildEmptySpaces,
@@ -33,15 +36,24 @@ import {
 
 // ─── Invitation ─────────────────────────────────────────────────────────────
 
-export interface IFiresOutInvitationData extends IInvitationData {}
+export interface IFiresOutInvitationData extends IInvitationData {
+    ruleset: RulesetId;
+    difficulty: DifficultyId;
+}
 
-export interface IFiresOutInvitationRequest extends IInvitationRequest {}
+export interface IFiresOutInvitationRequest extends IInvitationRequest {
+    ruleset: RulesetId;
+    difficulty: DifficultyId;
+}
 
 export interface IFiresOutInvitationDataDocument extends IFiresOutInvitationData, IInvitationDataDocument {}
 
 export interface IFiresOutInvitationDataModel extends Model<IFiresOutInvitationDataDocument> {}
 
-var FiresOutInvitationSchema = new Schema<IFiresOutInvitationDataDocument>({}, { discriminatorKey: 'kind' });
+var FiresOutInvitationSchema = new Schema<IFiresOutInvitationDataDocument>({
+    ruleset: String,
+    difficulty: String,
+}, { discriminatorKey: 'kind' });
 FiresOutInvitationSchema.methods.CreateGame = async function(
     invite: IFiresOutInvitationData,
     userIdList: string[],
@@ -49,16 +61,20 @@ FiresOutInvitationSchema.methods.CreateGame = async function(
     console.log('CreateGame: FiresOut game');
 
     const gameType = new FiresOutGameType();
+    const ruleset = this.ruleset as RulesetId;
+    const difficulty = this.difficulty as DifficultyId;
 
     // Who's up first is arbitrary (no printed rule decides it) — drawn at
     // random the same way Outbreak and Train Time decide their opening order.
     const turnOrder = shuffle(userIdList);
     const history = [
         { text: `Setup: running order is ${turnOrder.map(userToken).join(' → ')}` },
-        { text: `Setup: the crew arrives to a fire already spreading through the house` },
+        { text: ruleset === 'experienced'
+            ? `Setup: ${difficulty} difficulty — the crew arrives to a building already compromised by explosion`
+            : `Setup: the crew arrives to a fire already spreading through the house` },
     ];
 
-    const specificGameState = buildInitialFiresOutState(turnOrder);
+    const specificGameState = buildInitialFiresOutState(turnOrder, ruleset, difficulty);
 
     const gameData: IFiresOutGameData = {
         gameId: uuidv4() as uuidString,
@@ -88,6 +104,10 @@ export var FiresOutInvitationModel =
 // ─── specificGameState ───────────────────────────────────────────────────────
 
 export interface IFiresOutSpecificGameState {
+    // §17.6 step 8: the whole family/experienced switch — read by rules.ts's
+    // fire system and by setup below, never branched on anywhere else.
+    ruleset: RulesetId;
+    difficulty: DifficultyId; // meaningless (but always populated) for a Family game
     spaces: IFiresOutSpaceState[]; // length SPACE_COUNT (board.ts) — interior spaces then the exterior track
     edges: IFiresOutEdgeState[]; // length EDGE_COUNT (board.ts), indexed by EdgeDef.id
     poiPool: boolean[]; // shuffled once at setup, drawn in order — redacted to a count on the wire
@@ -96,6 +116,10 @@ export interface IFiresOutSpecificGameState {
     lost: number; // §5: 4 loses
     firefighters: IFiresOutFirefighterState[];
     activeFirefighter: number; // index into firefighters — §17.2's per-figure turn, not per-player
+    // §9.4, §17.6 step 8: hot spot markers not yet placed on the board — 0 for
+    // every Family game. Placed-on-board + this always equals
+    // TOTAL_HOTSPOT_MARKERS (board.ts), the conservation invariant §17.7 asks for.
+    hotspotReserve: number;
 }
 
 function cloneSpaceState(s: IFiresOutSpaceState): IFiresOutSpaceState {
@@ -127,6 +151,8 @@ function cloneFirefighterState(ff: IFiresOutFirefighterState): IFiresOutFirefigh
 // starting state").
 export function cloneFiresOutState(gs: IFiresOutSpecificGameState): IFiresOutSpecificGameState {
     return {
+        ruleset: gs.ruleset,
+        difficulty: gs.difficulty,
         spaces: gs.spaces.map(cloneSpaceState),
         edges: gs.edges.map(cloneEdgeState),
         poiPool: [...gs.poiPool],
@@ -135,26 +161,44 @@ export function cloneFiresOutState(gs: IFiresOutSpecificGameState): IFiresOutSpe
         lost: gs.lost,
         firefighters: gs.firefighters.map(cloneFirefighterState),
         activeFirefighter: gs.activeFirefighter,
+        hotspotReserve: gs.hotspotReserve,
     };
 }
 
-// §6.1: the Family game — the only ruleset built so far (fires-out-gdd.md
-// §17.6 step 3) — starting fire cluster, first 3 POIs, one firefighter per
-// player at the front door.
-export function buildInitialFiresOutState(turnOrder: string[]): IFiresOutSpecificGameState {
+// §6.1/§6.2: Family's fixed diagram or Experienced's rolled setup (§17.6 step
+// 8) — one real `nextRoll` here, the only place in this module randomness is
+// consumed directly (like shuffledPoiPool's own `shuffle()` call), since
+// setup's dice rolls are never replayed — buildInitialFiresOutStateFromGameData
+// below clones the persisted *result*, the same way the Family fire cluster
+// and the POI shuffle already work.
+export function buildInitialFiresOutState(turnOrder: string[], ruleset: RulesetId, difficulty: DifficultyId): IFiresOutSpecificGameState {
     const spaces = buildEmptySpaces();
+    const edges = buildEmptyEdges();
     const poiPool = shuffledPoiPool();
-    applyFamilySetup(spaces, poiPool);
+    const realRoll: NextRoll = sides => DiceRoll(sides);
+
+    let nextPoiId: number;
+    let hotspotReserve: number;
+    if (ruleset === 'experienced') {
+        ({ nextPoiId, hotspotReserve } = applyExperiencedSetup(spaces, edges, poiPool, difficulty, turnOrder.length, realRoll));
+    } else {
+        applyFamilySetup(spaces, poiPool);
+        nextPoiId = 3; // applyFamilySetup already assigned ids 0-2
+        hotspotReserve = 0;
+    }
 
     return {
+        ruleset,
+        difficulty,
         spaces,
-        edges: buildEmptyEdges(),
+        edges,
         poiPool,
-        nextPoiId: 3, // applyFamilySetup already assigned ids 0-2
+        nextPoiId,
         rescued: 0,
         lost: 0,
         firefighters: turnOrder.map(userId => newFirefighter(userId, START_SPACE)),
         activeFirefighter: 0,
+        hotspotReserve,
     };
 }
 
@@ -182,6 +226,8 @@ export interface IFiresOutGameDataModel extends Model<IFiresOutGameDataDocument>
 
 function firesOutStateSchemaDef() {
     return {
+        ruleset: String,
+        difficulty: String,
         spaces: [{
             threat: String,
             poi: {
@@ -214,6 +260,7 @@ function firesOutStateSchemaDef() {
             carrying: { type: String, default: null },
         }],
         activeFirefighter: Number,
+        hotspotReserve: Number,
     };
 }
 
@@ -286,6 +333,8 @@ export function gameStateToModel(
     }));
 
     return {
+        ruleset: gs.ruleset,
+        difficulty: gs.difficulty,
         spaces,
         edges: gs.edges.map(e => ({ kind: e.kind, damage: e.damage, doorOpen: e.doorOpen })),
         // Deck order is exactly what §10's design note says the game must not
@@ -296,6 +345,7 @@ export function gameStateToModel(
         lost: gs.lost,
         firefighters,
         activeFirefighter: gs.activeFirefighter,
+        hotspotReserve: gs.hotspotReserve,
     };
 }
 

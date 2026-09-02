@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FiresOutAction, FiresOutGameType } from "./FiresOutLogic";
+import { FiresOutAction, FiresOutGameType, IFiresOutEndTurnOutcome } from "./FiresOutLogic";
 import { IFiresOutGameData, IFiresOutSpecificGameState } from "./FiresOutModels";
 import { edgeBetween, exteriorTopSpace, spaceIndex, START_SPACE, VICTIMS_TO_WIN } from "./board";
 import { AP_PER_TURN, buildEmptyEdges, buildEmptySpaces, newFirefighter } from "./rules";
@@ -33,6 +33,8 @@ function cmd(senderId: string, fields: Partial<FiresOutAction>): FiresOutAction 
 // Family setup's fire cluster.
 function baseState(turnOrder: string[] = ["u1", "u2"]): IFiresOutSpecificGameState {
     return {
+        ruleset: 'family',
+        difficulty: 'recruit',
         spaces: buildEmptySpaces(),
         edges: buildEmptyEdges(),
         poiPool: [],
@@ -41,6 +43,7 @@ function baseState(turnOrder: string[] = ["u1", "u2"]): IFiresOutSpecificGameSta
         lost: 0,
         firefighters: turnOrder.map(userId => newFirefighter(userId, spaceIndex(2, 1))),
         activeFirefighter: 0,
+        hotspotReserve: 0,
     };
 }
 
@@ -229,7 +232,7 @@ describe("FiresOutAction 'endTurn' and FiresOutGameType", () => {
         const gameType = new FiresOutGameType();
 
         const outcome = await cmd("u1", { kind: 'endTurn' }).Execute(game);
-        expect(outcome).toEqual({ validMove: true, turnOver: true });
+        expect(outcome).toMatchObject({ validMove: true, turnOver: true });
         expect(state.firefighters[0].bankedAp).toBe(3);
         expect(state.activeFirefighter).toBe(1);
 
@@ -322,6 +325,17 @@ describe("FiresOutAction 'endTurn' and FiresOutGameType", () => {
         expect(state.firefighters[1].space).toBe(START_SPACE);
         expect(game.gameState.history.some(h => h.text.includes('lost to the fire'))).toBe(true);
         expect(game.gameState.history.some(h => h.text.includes('was knocked down'))).toBe(true);
+
+        // The structured twin of those history lines (§17.6 step 7) — what
+        // FiresOutAdvanceFireResult.tsx animates instead of parsing text back
+        // out of the log.
+        const advance = (outcome as IFiresOutEndTurnOutcome).advanceFire;
+        expect(advance.rolls).toEqual({ d6: 2, d8: 2 });
+        expect(advance.target).toBe(spaceIndex(1, 1));
+        expect(advance.resolution).toBe('smoke');
+        expect(advance.knockedDownOwnerIds).toEqual(["u2"]);
+        expect(advance.victimsLost).toBe(1);
+        expect(advance.poiPlaced).toBe(0);
     });
 
     it("replenishes a POI from the pool once fewer than 3 are on the board", async () => {

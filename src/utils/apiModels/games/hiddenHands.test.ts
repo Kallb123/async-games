@@ -11,7 +11,7 @@ import { buildInitialTrainTimeState } from "@/games/TrainTime/board";
 import { gameStateToResponse as sacStateToResponse } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import type { ISACSpecificGameState } from "@/games/SettlementsAndCities/board";
 import { makeState as makeSacState, player as sacPlayer } from "@/games/SettlementsAndCities/testFixtures";
-import { gameStateToModel as firesOutStateToModel } from "@/games/FiresOut/FiresOutModels";
+import { gameStateToModel as firesOutStateToModel, IFiresOutSpecificGameState } from "@/games/FiresOut/FiresOutModels";
 import { buildEmptyEdges, buildEmptySpaces, newFirefighter } from "@/games/FiresOut/rules";
 import { spaceIndex } from "@/games/FiresOut/board";
 
@@ -221,11 +221,13 @@ describe("Settlements & Cities' response", () => {
 // three games above, redaction here doesn't key on the viewer at all, so
 // there's only one wire shape to check rather than "mine" vs. "theirs".
 
-function firesOutState() {
+function firesOutState(): IFiresOutSpecificGameState {
     const spaces = buildEmptySpaces();
     spaces[spaceIndex(0, 0)].poi = { id: 0, revealed: false, victim: true };
     spaces[spaceIndex(0, 1)].poi = { id: 1, revealed: true, victim: false };
     return {
+        ruleset: 'family',
+        difficulty: 'recruit',
         spaces,
         edges: buildEmptyEdges(),
         poiPool: [true, false, true],
@@ -234,6 +236,7 @@ function firesOutState() {
         lost: 0,
         firefighters: [newFirefighter("u1")],
         activeFirefighter: 0,
+        hotspotReserve: 0,
     };
 }
 

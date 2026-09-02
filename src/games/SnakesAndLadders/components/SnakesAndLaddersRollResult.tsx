@@ -1,5 +1,5 @@
-import BackArrow from "@/components/ui/BackArrow";
 import Dice from "@/components/ui/Dice";
+import PayoffScreen from "@/components/ui/PayoffScreen";
 import { ISnakesAndLaddersDiceRollOutcome } from "@/utils/apiModels/GameLogic";
 import { useEffect, useState } from "react";
 
@@ -74,10 +74,10 @@ export default function SnakesAndLaddersRollResult({ result, onDismiss }: { resu
     }, [roll]);
 
     const stageClass = rolling
-        ? 'ag-sl-roll-stage ag-sl-roll-stage--plain'
-        : verdict === 'snake' ? 'ag-sl-roll-stage ag-sl-roll-stage--snake'
-            : verdict === 'ladder' || verdict === 'win' ? 'ag-sl-roll-stage ag-sl-roll-stage--ladder'
-                : 'ag-sl-roll-stage ag-sl-roll-stage--plain';
+        ? 'ag-sl-roll-stage--plain'
+        : verdict === 'snake' ? 'ag-sl-roll-stage--snake'
+            : verdict === 'ladder' || verdict === 'win' ? 'ag-sl-roll-stage--ladder'
+                : 'ag-sl-roll-stage--plain';
 
     // The square shown on the right of the move pill: for a snake/ladder that's
     // the square you *landed* on before the slide/climb; otherwise your new one.
@@ -92,58 +92,54 @@ export default function SnakesAndLaddersRollResult({ result, onDismiss }: { resu
     if (extraRoll) sub = <>{sub} <b>A 6 — roll again!</b></>;
 
     return (
-        <div className="ag-sl-roll">
-            <div className="ag-game-topbar">
-                <button className="ag-game-topbar-btn" onClick={onDismiss} aria-label="Close"><BackArrow /></button>
-                <div className="ag-game-topbar-main">
-                    <div className="ag-game-topbar-title">Snakes &amp; Ladders</div>
-                    <div className="ag-game-topbar-sub">{rolling ? 'Rolling the die…' : `You rolled a ${roll}`}</div>
-                </div>
-            </div>
-
-            <div className={stageClass}>
-                <div className="ag-sl-roll-die">
-                    <Dice values={[face]} rolling={rolling} />
-                    <div className="ag-sl-roll-num">{face}</div>
-                </div>
-
-                {rolling ? (
-                    <div className="ag-sl-verdict-title">Rolling…</div>
-                ) : (
-                    <>
-                        <div className="ag-sl-move-pill ag-sl-reveal">
-                            <span className="ag-sl-move-from">{from}</span>
-                            <span>→</span>
-                            <span>{pillTo}</span>
-                        </div>
-                        <div className="ag-sl-verdict-icon ag-sl-reveal">{VERDICT_ICON[verdict]}</div>
-                        <div className="ag-sl-reveal">
-                            <div className="ag-sl-verdict-title">{VERDICT_TITLE[verdict]}</div>
-                            <div className="ag-sl-verdict-sub">{sub}</div>
-                        </div>
-                        <div className="ag-sl-newsquare ag-sl-reveal">
-                            <span className="ag-sl-newsquare-label">New square</span>
-                            <span className="ag-sl-newsquare-num">{newPosition}</span>
-                        </div>
-                    </>
-                )}
-            </div>
-
-            <div className="ag-sl-roll-sheet">
-                <div className="ag-sl-roll-grip" />
+        <PayoffScreen
+            title="Snakes & Ladders"
+            subtitle={rolling ? 'Rolling the die…' : `You rolled a ${roll}`}
+            onClose={onDismiss}
+            stageClassName={stageClass}
+            ctaLabel={extraRoll ? '🎲 Roll again' : '✓ End turn'}
+            onCta={onDismiss}
+            ctaDisabled={rolling}
+            ctaClassName="ag-btn--success"
+            noteAbove={
                 <div className="ag-sl-roll-note">
                     <span style={{ fontSize: 20 }}>🎲</span>
                     <span>{extraRoll
                         ? 'A 6 — the die stays with you. Tap below to take another roll.'
                         : 'Nothing to decide here — the die did it. Tap below to hand the roll to the next player.'}</span>
                 </div>
-                <button className="ag-btn ag-btn--success ag-btn--block" onClick={onDismiss} disabled={rolling}>
-                    {extraRoll ? '🎲 Roll again' : '✓ End turn'}
-                </button>
+            }
+            noteBelow={
                 <div className="ag-sl-roll-foot">
                     {extraRoll ? 'Your turn carries on until you roll something else' : 'We’ll let the next player know it’s their roll'}
                 </div>
+            }
+        >
+            <div className="ag-sl-roll-die">
+                <Dice values={[face]} rolling={rolling} />
+                <div className="ag-sl-roll-num">{face}</div>
             </div>
-        </div>
+
+            {rolling ? (
+                <div className="ag-sl-verdict-title">Rolling…</div>
+            ) : (
+                <>
+                    <div className="ag-sl-move-pill ag-sl-reveal">
+                        <span className="ag-sl-move-from">{from}</span>
+                        <span>→</span>
+                        <span>{pillTo}</span>
+                    </div>
+                    <div className="ag-payoff-icon ag-sl-reveal">{VERDICT_ICON[verdict]}</div>
+                    <div className="ag-sl-reveal">
+                        <div className="ag-sl-verdict-title">{VERDICT_TITLE[verdict]}</div>
+                        <div className="ag-sl-verdict-sub">{sub}</div>
+                    </div>
+                    <div className="ag-sl-newsquare ag-sl-reveal">
+                        <span className="ag-sl-newsquare-label">New square</span>
+                        <span className="ag-sl-newsquare-num">{newPosition}</span>
+                    </div>
+                </>
+            )}
+        </PayoffScreen>
     );
 }

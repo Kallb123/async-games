@@ -225,3 +225,35 @@ export const DAMAGE_TO_COLLAPSE = 24;
 // World Domination's territory deal is").
 export const VICTIM_POI_COUNT = 10;
 export const FALSE_ALARM_POI_COUNT = 5;
+
+// ─── The Experienced game and its difficulty tiers (§6.2, §13) ─────────────
+// Static setup configuration, alongside this file's other §3 component
+// counts — rules.ts's applyExperiencedSetup (§17.6 step 8) is the behaviour
+// that reads these, the same way it reads FAMILY_STARTING_FIRE/POI above.
+// Mirrors Outbreak's DIFFICULTIES/OutbreakDifficulty in board.ts exactly.
+
+export type RulesetId = 'family' | 'experienced';
+export type DifficultyId = 'recruit' | 'veteran' | 'heroic';
+
+export interface IFiresOutDifficultyTier {
+    id: DifficultyId;
+    label: string;
+    /** §6.2 step 2: initial explosions resolved (with wall damage) before anyone's had a turn. */
+    explosions: number;
+    /** §6.2 step 3: hazmat markers placed at setup. */
+    hazmats: number;
+    description: string;
+}
+
+export const DIFFICULTY_TIERS: IFiresOutDifficultyTier[] = [
+    { id: 'recruit', label: 'Recruit', explosions: 3, hazmats: 3, description: 'Comparable to the Family game.' },
+    { id: 'veteran', label: 'Veteran', explosions: 3, hazmats: 4, description: 'Hard.' },
+    { id: 'heroic', label: 'Heroic', explosions: 4, hazmats: 5, description: 'Very hard, with a larger hot spot reserve.' },
+];
+
+export function difficultyTier(difficulty: DifficultyId): IFiresOutDifficultyTier {
+    return DIFFICULTY_TIERS.find(d => d.id === difficulty)!;
+}
+
+/** §3's component count — the total hot spot marker supply. Placed-on-board + reserve always equals this (a conservation invariant, like the POI pool and the damage markers — §17.7's testing note). */
+export const TOTAL_HOTSPOT_MARKERS = 24;
