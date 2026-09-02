@@ -372,3 +372,70 @@ export function checkOutcome(rescued: number, lost: number, edges: IFiresOutEdge
     if (isBuildingCollapsed(edges)) return 'buildingCollapsed';
     return null;
 }
+
+// ─── §8 the AP economy ───────────────────────────────────────────────────────
+
+export const AP_COSTS = {
+    move: 1,
+    moveIntoFire: 2,
+    carryPerSpace: 2,
+    door: 1,
+    extinguish: 1,
+    chop: 2,
+} as const;
+
+/**
+ * Spends `cost` AP from `ff`, preferring its restricted pool when `kind`
+ * matches it (§17.4: "one spendAp(firefighter, cost, actionKind) decides
+ * which pool pays" — every spend site already knows its own action kind, so
+ * no action needs a "which pool" argument beyond this). Returns false and
+ * mutates nothing if the firefighter can't afford it. No Specialist has a
+ * restrictedAp pool yet (17.6 step 10), so `kind` is always `null` today and
+ * every spend comes straight out of `apLeft` — this is still the one place
+ * that decides, ready for when one does.
+ */
+export function canAffordAp(ff: IFiresOutFirefighterState, cost: number, kind: RestrictedApKind | null): boolean {
+    const restricted = ff.restrictedAp && kind && ff.restrictedAp.kind === kind ? ff.restrictedAp.left : 0;
+    return ff.apLeft + restricted >= cost;
+}
+
+export function spendAp(ff: IFiresOutFirefighterState, cost: number, kind: RestrictedApKind | null): boolean {
+    if (!canAffordAp(ff, cost, kind)) return false;
+    if (ff.restrictedAp && kind && ff.restrictedAp.kind === kind) {
+        const fromRestricted = Math.min(ff.restrictedAp.left, cost);
+        ff.restrictedAp.left -= fromRestricted;
+        cost -= fromRestricted;
+    }
+    ff.apLeft -= cost;
+    return true;
+}
+
+/** Whether an edge between two adjacent spaces currently permits movement through it. */
+export function isPassable(edge: IFiresOutEdgeState): boolean {
+    if (edge.kind === 'wall') return edge.damage >= 2; // destroyed
+    if (edge.kind === 'door') return edge.doorOpen;
+    return true; // open
+}
+
+/** §8: what moving from `from` to an adjacent `to` costs, given whether `ff` is carrying something. Ignores whether the move is otherwise legal (see canMoveTo). */
+export function moveApCost(spaces: IFiresOutSpaceState[], ff: IFiresOutFirefighterState, to: number): number {
+    if (ff.carrying) return AP_COSTS.carryPerSpace;
+    return spaces[to].threat === 'fire' ? AP_COSTS.moveIntoFire : AP_COSTS.move;
+}
+
+/**
+ * §8: whether `ff` may step from `from` to the adjacent `to` — connected by a
+ * passable edge, and not carrying a victim or hazmat into fire.
+ */
+export function canMoveTo(
+    spaces: IFiresOutSpaceState[],
+    edges: IFiresOutEdgeState[],
+    ff: IFiresOutFirefighterState,
+    from: number,
+    to: number,
+): boolean {
+    const edgeId = edgeBetween(from, to);
+    if (edgeId === undefined || !isPassable(edges[edgeId])) return false;
+    if (ff.carrying && spaces[to].threat === 'fire') return false;
+    return true;
+}
