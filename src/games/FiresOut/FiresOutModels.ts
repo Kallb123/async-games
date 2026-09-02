@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { userToken } from "@/utils/games/history";
 import { shuffle } from "@/utils/games/shuffle";
+import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { FiresOutGameType } from "@/utils/apiModels/GameLogic";
 import { START_SPACE } from "./board";
 import {
@@ -228,7 +229,6 @@ FiresOutGameDataSchema.methods.CreateDataResponse = async function(viewerId: str
     console.log('CreateDataResponse: FiresOut game');
 
     const doc: IFiresOutGameData = this as IFiresOutGameData;
-    const { userIdListToNamesAndMap } = await import("@/utils/users/clerk");
     const { usernameList, userIdNameMap } = await userIdListToNamesAndMap(doc.userIdList);
 
     return {

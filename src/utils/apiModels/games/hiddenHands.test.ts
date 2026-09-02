@@ -11,6 +11,9 @@ import { buildInitialTrainTimeState } from "@/games/TrainTime/board";
 import { gameStateToResponse as sacStateToResponse } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import type { ISACSpecificGameState } from "@/games/SettlementsAndCities/board";
 import { makeState as makeSacState, player as sacPlayer } from "@/games/SettlementsAndCities/testFixtures";
+import { gameStateToModel as firesOutStateToModel } from "@/games/FiresOut/FiresOutModels";
+import { buildEmptyEdges, buildEmptySpaces, newFirefighter } from "@/games/FiresOut/rules";
+import { spaceIndex } from "@/games/FiresOut/board";
 
 // Two of the games this guards were once sending every player's hidden hand to
 // every player: World Domination shipped each player's territory cards, and
@@ -208,5 +211,61 @@ describe("Settlements & Cities' response", () => {
         // The counts the recap's resource deltas are built from survive.
         expect(response.playerStates.u1.resourceCount).toBe(3);
         expect(response.playerStates.u2.resourceCount).toBe(4);
+    });
+});
+
+// ─── Fires Out ────────────────────────────────────────────────────────────
+// The whole game turns on POI identity staying hidden from *every* player —
+// not per-opponent, since this is co-op — until a firefighter physically
+// reaches that space (fires-out-gdd.md §10.1's design note). Unlike the
+// three games above, redaction here doesn't key on the viewer at all, so
+// there's only one wire shape to check rather than "mine" vs. "theirs".
+
+function firesOutState() {
+    const spaces = buildEmptySpaces();
+    spaces[spaceIndex(0, 0)].poi = { id: 0, revealed: false, victim: true };
+    spaces[spaceIndex(0, 1)].poi = { id: 1, revealed: true, victim: false };
+    return {
+        spaces,
+        edges: buildEmptyEdges(),
+        poiPool: [true, false, true],
+        nextPoiId: 2,
+        rescued: 0,
+        lost: 0,
+        firefighters: [newFirefighter("u1")],
+        activeFirefighter: 0,
+    };
+}
+
+describe("Fires Out's response", () => {
+    it("keeps an unrevealed POI's identity off the wire entirely", () => {
+        const wire = JSON.parse(JSON.stringify(firesOutStateToModel(firesOutState(), NAMES, "u1")));
+
+        expect(wire.spaces[spaceIndex(0, 0)].poi).toEqual({ id: 0, revealed: false });
+        expect("victim" in wire.spaces[spaceIndex(0, 0)].poi).toBe(false);
+        // Scoped to the unrevealed marker alone — a second, already-revealed
+        // POI in the same state legitimately does carry "victim" on the wire.
+        expect(JSON.stringify(wire.spaces[spaceIndex(0, 0)].poi)).not.toContain("victim");
+    });
+
+    it("reveals identity once a POI has actually been flipped over", () => {
+        const wire = JSON.parse(JSON.stringify(firesOutStateToModel(firesOutState(), NAMES, "u1")));
+        expect(wire.spaces[spaceIndex(0, 1)].poi).toEqual({ id: 1, revealed: true, victim: false });
+    });
+
+    it("redacts the same way for every viewer, since nothing here is per-player", () => {
+        const state = firesOutState();
+        const asU1 = JSON.stringify(firesOutStateToModel(state, NAMES, "u1"));
+        const asU2 = JSON.stringify(firesOutStateToModel(state, NAMES, "u2"));
+        const asNobody = JSON.stringify(firesOutStateToModel(state, NAMES, null));
+        expect(asU1).not.toContain('"victim":true');
+        expect(asU2).toEqual(asU1);
+        expect(asNobody).toEqual(asU1);
+    });
+
+    it("sends the undrawn POI pool as a count, never the pool itself", () => {
+        const response = firesOutStateToModel(firesOutState(), NAMES, "u1");
+        expect((response as unknown as { poiPool?: unknown }).poiPool).toBeUndefined();
+        expect(response.poiPoolCount).toBe(3);
     });
 });
