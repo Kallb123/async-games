@@ -1021,7 +1021,7 @@ Named explicitly so they don't creep in:
 
 | Phase | Scope | Why this order |
 | --- | --- | --- |
-| **0 — pure refactor** | Extract `SACResourcePicker` from the maritime modal; move `RESOURCE_EMOJI` / `RESOURCES` / `costText` / `shortfall` into `ui.ts`. No behaviour change. | Lands the reuse work on a clean diff, so the risky engine change reviews on its own. |
+| **0 — pure refactor** | Extract `SACResourcePicker` from the maritime modal; move `RESOURCE_EMOJI` / `RESOURCES` / `costText` / `shortfall` into `ui.ts`. No behaviour change. **Shared with [§11](#11-seas--sailors-implementation-plan)'s commit 0** — whichever feature starts first does it, and it must be the maritime grid that gets extracted, not the Year of Plenty selects. | Lands the reuse work on a clean diff, so the risky engine change reviews on its own. |
 | **1 — the hole in the wall** | The server-side off-turn allowlist, the three-line route guard, the `timestamp` restamp, and the `replay.ts` one-liner. `SACProposeTrade` (on-turn) and `SACAcceptTrade` (off-turn). One nullable turn-scoped `openTrade`, cleared in `sacAdvanceMainTurn`. The small responder panel. Decline is client-side. One `TradeOffered` / `TradeAccepted` push pair and the `trade` channel. One recap case. | Proves the engine change end-to-end on the narrowest case. No timers, no cron, no new collection, no new CSS. |
 | **2 — the standing want-ad** | Offers become a list and outlive the turn, **with deadlines from the start** (§10.7): the bucket field, lazy expiry, persisted `declinedBy`, re-validation. Optionally `SACCancelTrade`. | The shape most likely to make async trading actually happen. **Prerequisite:** the §10.8 settlement-rule decision is a rules/balance call and must be settled *before* this phase starts, not inside it. |
 | **3 — polish** | The live countdown label, real counter-offers, offers surfaced on the home dashboard. | Genuine polish on a working market. Safe to defer. |
@@ -1074,6 +1074,7 @@ is independently shippable.
 5. **How much imbalance is a legal trade?** The no-gifts rule blocks 0-for-N,
    but not 1-for-8. Cap it, or trust the visible history and the table?
 
+
 ---
 
 ## 11. Seas & Sailors implementation plan
@@ -1117,7 +1118,7 @@ More than it looks. The expansion is additive to a codebase that already has:
 * **A blocking pawn with a full lifecycle.** The robber already does
   "block a hex, steal from an adjacent owner, be moved by a 7 or a Knight".
   The Pirate is that code with a different adjacency test — it should reuse it,
-  not copy it.
+  which is why commit 7 starts by *extracting* that code rather than reading it.
 
 ### 11.2 The four architectural problems
 
@@ -1125,12 +1126,19 @@ Everything hard about this expansion is one of these four. The commit order
 below exists to take them one at a time.
 
 **1. `BOARD_TOPOLOGY` is a module-level singleton.** It is computed once on
-module load from the fixed 19-hex `HEX_POSITIONS` and imported by five files.
-Scenario maps mean *per-game* topology, and vertex/edge indices are only
+module load from the fixed 19-hex `HEX_POSITIONS` and read from about twenty
+call sites across five files — six functions inside `board.ts` itself
+(`generateBoard`, `dfsRoad`, `calculateLongestRoad`, `isValidSettlementVertex`,
+`isValidRoadEdge`, `isValidSetupRoadEdge`), plus `SettlementsAndCitiesLogic.ts`,
+`SettlementsAndCitiesModels.ts`, `SettlementsAndCitiesBoard.tsx` and the game
+page. Scenario maps mean *per-game* topology, and vertex/edge indices are only
 meaningful relative to the map that generated them — a game persists
 `vertices[]` and `edges[]` arrays sized by its own topology. A game that does
-not persist which layout it was generated from is a game whose board can never
-be reconstructed. **This is the load-bearing change and it must come first.**
+not persist which map it was generated from is a game whose board can never be
+reconstructed. **This is the load-bearing change and it must come first — and it
+must actually thread the topology through in that first commit** (see commit 1),
+because a version that keeps the singleton alive as an alias hasn't moved the
+problem, it has scheduled the same twenty-site edit twice.
 
 **2. An edge is a boolean.** `ISACEdge` is `{ hasRoad: boolean; owner }`. A
 ship is a second, differently-ruled piece on the same edge. `hasRoad: true`
@@ -1154,7 +1162,7 @@ Three, and each is a rules call rather than an implementation detail — they
 should be agreed before the commits they sit in, not decided inside them.
 
 * **Gold fields are collected on your next turn, not immediately.** When a gold
-  hex produces for you, the count lands in `pendingGold` and you pick the
+  hex produces for you, the count lands in your `pendingGold` and you pick the
   resource with a `SACChooseGold` command at the start of your own next turn.
   Faithful play would interrupt every affected player the moment the number is
   rolled; that needs an off-turn command (§10.3) and, across a 24-hour turn
@@ -1177,28 +1185,43 @@ should be agreed before the commits they sit in, not decided inside them.
 
 ### 11.4 State and command surface
 
-New fields on `ISACSpecificGameState` (all persisted in both schema paths, all
-deep-cloned in `cloneSACState`, all coerced with `?? default` so games created
-before the expansion read cleanly):
+New fields on `ISACSpecificGameState` (all persisted in **both** schema paths,
+all deep-cloned in `cloneSACState`, all coerced with `?? default` so games
+created before the expansion read cleanly):
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `layoutId` | `string` | Which map generated this board. `'base'` for every existing game. **Without this, recap replays the wrong topology.** |
-| `scenarioId` | `string \| null` | Null outside Seas & Sailors. Carries the victory target and the bonus-VP rules. |
+| `scenarioId` | `string \| null` | The **one** persisted map identity. Null = the base 19-hex island; a scenario id names a row in the `layouts.ts` registry, which owns the hex list, its topology, the island ids and the victory target. **Without this, recap replays the wrong topology.** Also on the wire — the board component and the game page resolve their own topology from it. |
 | `pirateHexIndex` | `number \| null` | Null until the expansion places it. |
-| `pendingGold` | `Map<string, number>` | Gold picks each player still owes themselves. Cleared as they're taken. |
 | `movedShipThisTurn` | `boolean` | The once-per-turn open-ended-ship move. |
-| `islandBonusClaimed` | `string[]` | Island ids whose "new shores" bonus is gone. |
+| `islandBonusClaimed` | `Record<string, string>` | Island id → the userId who took its bonus. One field answers both "is it gone?" (`id in record`) and "who scores it?" (the value) — a bare id list can't feed `calculateVisibleVP`, which is asked about one player at a time. |
+
+There is deliberately **no** separate `layoutId`. A layout is a pure function of
+the scenario, so persisting both means persisting the same choice twice and
+inventing a way for them to disagree. If a future 5–6-player variant of one
+scenario genuinely needs its own map, that is the moment to split them — and
+§11.8 puts those maps out of scope.
 
 Changed shapes:
 
 * `ISACEdge`: `hasRoad: boolean` → `piece: 'road' \| 'ship' \| null`.
 * `SAC_Terrain`: gains `'sea'` and `'gold'`.
-* `ISACPlayerState`: gains `remainingShips` (15) and `shipsBuilt` for the
-  result stats, alongside the existing `remainingRoads`.
+* `ISACPlayerState`: gains `remainingShips` (15) — a piece budget the engine has
+  to check — and `pendingGold` (a plain `number`). Per-player state belongs on
+  the one per-player record the game already has, beside `remainingRoads`, not
+  in a second `Map` on the state root: it then rides `clonePlayerState`, the
+  `playerStates` sub-schema (which covers both schema paths at once), the wire
+  projection, `createInitialPlayerState` and `testFixtures.player()` — each one
+  line, each already handling exactly this kind of field. There is deliberately
+  no `shipsBuilt` counter: ships are physical board state, so the result stats
+  count them off the final board the way roads already are.
+* `sacCanBuildOrTrade(gs)` → `sacCanBuildOrTrade(gs, ps)`. It has to see the
+  acting player's `pendingGold` to block on it.
 * `SACMoveRobber`: gains `pawn: 'robber' | 'pirate'`, defaulting to `'robber'`.
   One command, not two — the validation, the steal and the history line differ
-  by which adjacency test they run, and nothing else.
+  by which adjacency test they run, and nothing else. That claim is only true
+  once commit 7's helpers exist; today the candidate rule and the steal are
+  inline in `Execute`, and the client keeps its own copy of the candidate rule.
 
 New commands (each needs its line in `COMMANDS_BY_GAME_TYPE` in
 `src/utils/games/gameCommands.ts`, or `serializableRegistry.test.ts` fails):
@@ -1207,44 +1230,76 @@ New commands (each needs its line in `COMMANDS_BY_GAME_TYPE` in
 * `SACMoveShip` — relocate one open-ended ship, once per turn.
 * `SACChooseGold` — spend one `pendingGold` on a named resource.
 
+Three classes, not one parameterised builder and not five: it matches
+`SACBuildSettlement`/`SACBuildCity`, which are already separate despite a
+near-identical shape, and folding ships into `SACBuildRoad` would mean branching
+its free-road path, which ships never use.
+
 Nothing here is hidden information. Ships, the Pirate and island bonuses are all
 public board state, and `pendingGold` is a count derivable from the public roll
 and the public board — so it goes on the wire for everyone, and there is no new
-redaction surface. `plannableCommands` stays empty for this game (§11.8).
+redaction surface. **That is a claim, not a proof: it wants a croupier pass
+before commit 6 lands**, since `pendingGold` is the first new per-player field
+since the hand itself. `plannableCommands` stays empty for this game (§11.8).
 
 ### 11.5 The commits
 
-**1 — Topology per layout (pure refactor, no behaviour change).** Move
-`HEX_POSITIONS`, `HARBOR_HEX_EDGES`, `TERRAIN_POOL`, `NUMBER_TOKEN_POOL` and
-`HARBOR_TYPE_POOL` out of `board.ts` into `layouts.ts`, keyed by a layout id,
-with `'base'` holding exactly today's values. `computeBoardTopology()` takes a
-hex list; `topologyFor(layoutId)` memoises the result in a `Map` (bounded — the
-keys are a small fixed registry, not user input). `BOARD_TOPOLOGY` stays exported
-as `topologyFor('base')` so the five importing files compile untouched.
-`generateBoard()` takes a layout id and returns `layoutId` alongside the hexes;
-`layoutId` is persisted and cloned. A test pins that the base layout still
-produces 54 vertices and 72 edges with an unchanged harbour set — the whole
-point of this commit is that the existing board is bit-identical afterwards.
+**0 — The resource picker, extracted (shared with §10.14 phase 0).** No Seas &
+Sailors code, and worth doing whether or not this expansion ever ships.
+`SettlementsAndCitiesActions.tsx` holds **three** resource pickers today — Year
+of Plenty and Monopoly as raw `<Form.Select>`s, and the maritime-trade grid
+built from `ag-trade-section` / `ag-trade-grid` / `ag-trade-opt` — and
+`RESOURCE_EMOJI` is declared three separate times across the game (the page, the
+actions sheet, the board) with a fourth inline resource list in the logic.
+Extract `SACResourcePicker` **from the maritime grid** (the good one, and the
+same extraction §10.12 already specifies — the two sections must not extract
+different things under one name), repoint Year of Plenty and Monopoly at it in
+the same diff, and move `RESOURCE_EMOJI` / `RESOURCES` / `costText` /
+`shortfall` into `src/games/SettlementsAndCities/ui.ts`, which already exists to
+hold exactly this. Commit 6 is then a two-line render instead of a fourth
+picker. This is not conditional on anything.
+
+**1 — Topology per scenario.** Move `HEX_POSITIONS`, `HARBOR_HEX_EDGES`,
+`TERRAIN_POOL`, `NUMBER_TOKEN_POOL` and `HARBOR_TYPE_POOL` out of `board.ts`
+into `layouts.ts`, keyed by scenario id, with the base map holding exactly
+today's values. `computeBoardTopology()` takes a hex list, and each registry row
+holds its topology **computed eagerly at module load** — the same thing
+`board.ts` does today, one per row, so there is no cache to bound and no
+lazy-memo caveat to review. `topologyFor(scenarioId)` is then a lookup.
+
+Then thread it: the six functions in `board.ts` take a `BoardTopology`
+parameter, every caller resolves it once from `gs.scenarioId`, and
+**`BOARD_TOPOLOGY` is deleted**. Most call sites already receive `gs.vertices`
+and `gs.edges`, so this is one more argument at each. Keeping the singleton
+alive as an alias would leave commit 3 to walk the same twenty sites a second
+time, which is the churn this commit exists to absorb. `scenarioId` is
+persisted (null everywhere), cloned in `cloneSACState`, and put on the wire so
+the client resolves the same topology the server did. A test pins that the base
+map still produces 54 vertices and 72 edges with an unchanged harbour set —
+the whole point of this commit is that the existing board is bit-identical
+afterwards.
 
 **2 — The edge carries a piece (pure refactor, no behaviour change).**
 `hasRoad: boolean` → `piece: 'road' | 'ship' | null` across the six files that
-read it, with `piece: e.hasRoad ? 'road' : null` coercion where old documents
-are read (`cloneSACState`, `gameStateToResponse`) — the same shape as
-`normaliseExpansions`. `'ship'` is declared but unreachable. Landing the read-site
-churn on a diff with no rules in it is the point; commit 4 then reviews as
-rules only.
+read it (~18 sites), with `piece: e.hasRoad ? 'road' : null` coercion where old
+documents are read (`cloneSACState`, `gameStateToResponse`) — the same shape as
+`normaliseExpansions`. `'ship'` is declared but unreachable. The cheaper-looking
+alternative, keeping `hasRoad` and adding `isShip`, is worse: it makes
+`hasRoad && isShip` representable and forces two checks at all eighteen sites
+forever. Landing the read-site churn on a diff with no rules in it is the point;
+commit 4 then reviews as rules only.
 
 **3 — Sea hexes and the first scenario.** `'sea'` joins `SAC_Terrain`; a sea hex
 never carries a number token, never produces, and **never takes the robber**
 (`SACMoveRobber` gains a land check — today it only checks the hex isn't the
-current one). The *Heading for New Shores* layout lands in `layouts.ts` with its
-island ids and its main-island vertex set; `scenarioId` is persisted;
-`computeVictoryTarget` takes the scenario so 12–14 comes from the scenario rather
-than the expansion flag. Setup placement is restricted to the main island when a
-scenario says so. Board rendering: sea tiles get their own colour, and
-`SVG_W`/`SVG_H` are derived from the topology's coordinate bounds rather than
-hard-coded, with the board wrapped in the shared **`BoardZoom`** — the same
-pan-and-zoom World Domination and Outbreak use. Do not write a second one.
+current one). The *Heading for New Shores* row lands in `layouts.ts` with its
+island ids and its main-island vertex set; `computeVictoryTarget` takes the
+scenario, so 12–14 comes from the scenario rather than the expansion flag. Setup
+placement is restricted to the main island when a scenario says so. Board
+rendering: sea tiles get their own colour, and `SVG_W`/`SVG_H` are derived from
+the topology's coordinate bounds rather than hard-coded, with the board wrapped
+in the shared **`BoardZoom`** — the same pan-and-zoom World Domination and
+Outbreak use. Do not write a second one.
 `SAC_EXPANSION_META.seasAndSailors` stays `disabled: true`; at the end of this
 commit a Seas & Sailors game is creatable through the API and plays base rules
 on an archipelago, which is exactly the milestone worth reviewing on its own.
@@ -1262,73 +1317,95 @@ to this *game*, not to this *ruleset*.
 **5 — Longest Trade Route.** `dfsRoad` walks roads and ships as one network,
 respecting the switch-at-your-own-building rule from commit 4 (which is why it
 lands after it, not with it). `calculateLongestRoad` keeps its name and its
-callers; only the traversal changes. History, recap and scoreboard copy say
-"Longest Trade Route" when `scenarioId` is set and "Longest Road" otherwise —
-one helper, read by all three, not three copies of a ternary.
+callers; only the traversal changes. The label is one helper in
+`src/games/SettlementsAndCities/ui.ts` — already the home for this game's
+presentation strings — returning "Longest Trade Route" when `scenarioId` is set
+and "Longest Road" otherwise. Its callers are the recap adapter, the result
+stats and the server-side history line; that last one must import the helper
+rather than inline its own ternary. `guide.ts` is *not* a caller: it is static
+per-game text that no per-game-instance flag can reach, so its wording is a
+separate decision, taken in commit 10.
 
 **6 — Gold fields.** `'gold'` joins `SAC_Terrain`. `SACRollDice`'s distribution
-loop credits `pendingGold` instead of a resource; `SACChooseGold` spends one.
-The build/trade gate (`sacCanBuildOrTrade`) blocks while you owe yourself a gold
-pick, the way `pendingRobber` does — you resolve it, then you play. The picker
-reuses the existing resource-choice modal from Year of Plenty rather than a
-fourth hand-rolled `<Form.Select>` grid; if that means extracting
-`SACResourcePicker` first, extract it (§10.14 phase 0 wants the same component,
-and two callers is the signal). Recap gets a `SACChooseGold` case. Push copy:
-nothing new — the pick happens on a turn the player is already being notified
-about.
+loop credits each affected player's `pendingGold` instead of a resource;
+`SACChooseGold` spends one. `sacCanBuildOrTrade(gs, ps)` blocks while you owe
+yourself a pick, the way `pendingRobber` does — you resolve it, then you play.
+The picker is `SACResourcePicker` from commit 0. Recap gets a `SACChooseGold`
+case. Push copy: nothing new — the pick happens on a turn the player is already
+being notified about.
 
-**7 — The Pirate.** `pirateHexIndex`; `SACMoveRobber` gains `pawn`, so a 7 (or
-a Knight) moves *either* pawn — robber to a land hex, pirate to a sea hex. The
+**7 — The Pirate.** Starts by extracting what commit 7 claims to reuse, because
+it does not exist yet: the robber's "who is beside this hex and holds cards"
+rule is inline in `SACMoveRobber.Execute` **and** copied into the game page, so
+a pirate rule added naively would be the third and fourth copies. Pull
+`sacStealCandidates(pawn, hexId, …)` into `board.ts` — the client already
+imports `isValidRoadEdge`/`isValidSettlementVertex` from there, so the precedent
+and the import line exist — and the random-resource steal into a helper in
+`SettlementsAndCitiesLogic.ts`, deleting both copies. Then `pirateHexIndex` and
+`SACMoveRobber`'s `pawn` field really are just "which adjacency test": a 7 (or a
+Knight) moves either pawn — robber to a land hex, pirate to a sea hex. The
 pirate blocks ship building on its adjacent edges and steals from players with a
-ship or coastal building beside it, reusing `sacDiscardHalf`'s sibling steal
-logic rather than a second copy. `robberUses` counts both. Board draws the pawn;
-`moveRobber` board mode filters `validHexes` by which pawn is moving.
+ship or coastal building beside it. `robberUses` counts both. The board draws
+the pawn; `moveRobber` board mode filters `validHexes` by which pawn is moving.
 
 **8 — Ship movement.** `SACMoveShip`, once per turn (`movedShipThisTurn`, reset
 in `sacAdvanceMainTurn` beside the other per-turn flags). Only an **open-ended**
 ship moves: one whose far vertex carries no building and no second piece of
 yours. It may not be moved to a pirate-blocked edge, and it may not be the ship
-that was built this turn. Blocked during Special Build, like the other dev-card-
-shaped actions in `sacCanPlayDevCard`.
+that was built this turn. Blocked during Special Build, like the other
+dev-card-shaped actions in `sacCanPlayDevCard`.
 
-**9 — New shores.** Island ids per hex in the layout; the first player to
+**9 — New shores.** Island ids per hex come from the layout; the first player to
 complete a settlement on an island nobody has settled scores the scenario's
-bonus VP, recorded in `islandBonusClaimed` so it can't be scored twice. Bonus VP
-join `calculateVisibleVP` — which means they are on the scoreboard, in
-`CheckGameOver`, and in the result stats, and none of those three should learn
-about islands separately. A recap event for the claim, in the shape
-`bonusChangeEvent` already uses for Longest Road.
+bonus VP, recorded in `islandBonusClaimed` (island id → userId) so it can't be
+scored twice and so the scorer is known. Bonus VP join `calculateVisibleVP` —
+which means they are on the scoreboard, in `CheckGameOver`, and in the result
+stats, and none of those three should learn about islands separately. Recap gets
+its **own** `case` in `toEvents`, in the shape `bonusChangeEvent` uses but not
+routed through it: that helper is built end to end around a *handover* — one
+state key, a previous holder, `affectedIds`, "taken from X" — and an island
+bonus has no previous holder, so reusing it means a third key plus
+optional-loser branching through every line of it. A small separate case is the
+smaller code here.
 
 **10 — Turn it on.** `disabled: false` and a real tagline in
-`SAC_EXPANSION_META`; a scenario picker on `/newgame/settlementsandcities`
-(an `OptionSection`, shown only when the toggle is on); a "Ships & islands"
-section in `guide.ts`; a line in the **New games / enhancements** group of
-`whatsNew.ts`; §9's Seas & Sailors bullet rewritten from outstanding to landed,
-with a §11 back-reference. Confirm the 5–6 Player Extension combination: a
-special-build player may build ships (`sacCanBuildOrTrade` already allows it —
-the point is to have a test saying so) but may not move one.
+`SAC_EXPANSION_META`; a "Ships & islands" section in `guide.ts`, which also
+settles how that static text names the trade route; a line in the
+**enhancements** group of `whatsNew.ts`; §9's Seas & Sailors bullet rewritten
+from outstanding to landed, with a §11 back-reference. No scenario picker: one
+scenario ships, so the expansion toggle *is* the choice, and a `<select>` with a
+single option is a control that can only be got wrong. (When scenario two lands
+and the picker is real, it is not an `OptionSection` — that is the card that
+holds toggle rows. A labelled select is `Section` + `.ag-select` + `.ag-hint`;
+copy `TurnTimerSelect` or `SeatCountSelect` rather than hand-rolling a third
+shape.) Confirm the 5–6 Player Extension combination: a special-build player may
+build ships (`sacCanBuildOrTrade` already allows it — the point is to have a
+test saying so) but may not move one.
 
 ### 11.6 Landmines
 
 Things that fail silently rather than loudly.
 
 * **Recap replays the wrong board.** `buildInitialSettlementsAndCitiesState`
-  deep-clones `initialSpecificGameState` through `cloneSACState`. If `layoutId`
-  is not in that clone, replay rebuilds base topology over archipelago vertex
-  indices and renders a plausible, wrong board with pieces in the wrong places.
-  Nothing throws. Add `layoutId` to `cloneSACState` **in commit 1**, not when
-  the first scenario appears.
+  deep-clones `initialSpecificGameState` through `cloneSACState`. If
+  `scenarioId` is not in that clone, replay rebuilds base topology over
+  archipelago vertex indices and renders a plausible, wrong board with pieces in
+  the wrong places. Nothing throws. Add `scenarioId` to `cloneSACState`
+  **in commit 1**, not when the first scenario appears.
+* **The client resolves its own topology.** `scenarioId` has to reach the wire
+  in commit 1 as well, or the board component and the game page keep computing
+  base geometry for an archipelago game and the two disagree about what vertex
+  17 is.
 * **`testFixtures.ts` is the canary.** `makeState()` is a full literal of
   `ISACSpecificGameState` deliberately kept in one place so it can't go stale.
-  Every commit that adds a field adds it there, and `hiddenHands.test.ts` and
-  `recap.test.ts` pick the change up for free.
+  Every commit that adds a field adds it there — and `player()` for the
+  per-player ones — and `hiddenHands.test.ts` and `recap.test.ts` pick the
+  change up for free.
 * **Two schema paths, not one.** `makeSACStateSchemaDef()` is called for both
   `specificGameState` and `initialSpecificGameState`. A field added to only one
-  of them persists on live state and vanishes from recap.
-* **`pendingGold` is a Mongoose `Map`.** Mutating a map in place needs the same
-  `markModified` care `playerStates` already gets — check how the existing map
-  is saved before adding a second one, and prefer a plain record if the map buys
-  nothing.
+  of them persists on live state and vanishes from recap. (Per-player fields
+  dodge this: the `playerStates` sub-schema is shared by both paths, which is
+  another reason `pendingGold` belongs there.)
 * **History lines go through `playerHistory`/`userToken`.**
   `historyWrites.test.ts` scans source for raw username interpolation. A ship
   built by "{{userId}}", never by a name.
@@ -1346,7 +1423,7 @@ Things that fail silently rather than loudly.
 
 Per commit, in `SettlementsAndCitiesLogic.test.ts` and a new `layouts.test.ts`:
 
-* Base topology is unchanged by commit 1 (54 vertices, 72 edges, same harbours).
+* The base map is unchanged by commit 1 (54 vertices, 72 edges, same harbours).
 * Every layout is well-formed: every hex has a terrain, non-sea non-desert hexes
   have a token, island ids cover every land hex, the main-island vertex set is
   non-empty and reachable.
@@ -1354,13 +1431,15 @@ Per commit, in `SettlementsAndCitiesLogic.test.ts` and a new `layouts.test.ts`:
   your own building, and may not be built by a base-game player.
 * A trade route counting roads and ships scores correctly, and does *not* count
   a road-to-ship junction at an opponent's settlement.
-* The robber refuses a sea hex; the pirate refuses a land hex.
+* The robber refuses a sea hex; the pirate refuses a land hex; both find the
+  same steal candidates through the one extracted helper.
 * A gold roll banks `pendingGold` and blocks building until it's spent; the
   spend is replayable.
-* An island bonus scores once, for the first settler only.
+* An island bonus scores once, for the first settler only, and the record says
+  who.
 * Recap: a full Seas & Sailors game replays from its initial snapshot with the
-  same final board. This is the test that would have caught the missing
-  `layoutId`.
+  same final board. This is the test that would have caught a missing
+  `scenarioId`.
 
 ### 11.8 Out of scope
 
@@ -1372,8 +1451,8 @@ Per commit, in `SettlementsAndCitiesLogic.test.ts` and a new `layouts.test.ts`:
 * **Planning.** `plannableCommands` stays `[]` for this game. Planning replays
   hypothetical commands against real state; a planned gold pick or ship build
   would answer questions the live game hasn't. Opting in is its own change.
-* **Combining with player-to-player trade (§10).** Independent; neither blocks
-  the other, and neither should wait for it.
+* **Combining with player-to-player trade (§10).** Independent past the shared
+  commit 0; neither blocks the other, and neither should wait for it.
 
 ### 11.9 Open questions
 
@@ -1384,13 +1463,9 @@ Per commit, in `SettlementsAndCitiesLogic.test.ts` and a new `layouts.test.ts`:
 2. **What happens to `pendingGold` when a player is skipped for a missed turn?**
    The turn-timeout sweep passes the turn on; the debt survives. Confirm that's
    intended rather than discovering it in production.
-3. **Should a scenario be pickable, or randomly assigned?** A picker is one
-   `OptionSection`; random assignment is zero UI and one more thing the lobby
-   can't preview. Picker proposed.
-4. **Does the pirate move on a 7, or on its own trigger?** Sharing the 7 with
+3. **Does the pirate move on a 7, or on its own trigger?** Sharing the 7 with
    the robber is faithful and free. Anything else needs a new trigger the async
    turn loop doesn't have.
-5. **Do ships count toward the result-page stats** ("roads built"), or get their
-   own row? `computeSettlementsAndCitiesResultStats` reads the final board, so
-   either is cheap — but only if `remainingShips` is on `ISACPlayerState` from
-   commit 4 rather than retrofitted.
+4. **Is the deferred gold pick (§11.3) acceptable as a rules change?** It is the
+   one deviation a player will actually feel, and it is load-bearing for commit
+   6. Settle it before commit 6 starts, not inside it.
