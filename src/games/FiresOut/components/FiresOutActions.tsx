@@ -29,6 +29,40 @@ const MODE_DEFS: ModeDef[] = [
     { mode: 'reveal', icon: '📡', name: 'Reveal a POI remotely', hint: () => `${AP_COSTS.reveal} AP — anywhere on the board`, experiencedOnly: true, specialistOnly: 'imagingTechnician' },
 ];
 
+// The one row shape every action in this sheet renders as — an icon, a
+// name/cost pair, and a trailing tag — whether it arms the board for a tap
+// (MODE_DEFS), fires immediately (a §11 quick action below), or swaps a
+// Specialist card (the crew-change list). Factored once rather than copied
+// per call site, the caveman review's own note on this file.
+interface BuildRowProps {
+    icon?: string;
+    name: string;
+    cost: string;
+    tag: React.ReactNode;
+    tagMuted?: boolean;
+    disabled?: boolean;
+    active?: boolean;
+    onClick: () => void;
+}
+
+function BuildRow({ icon, name, cost, tag, tagMuted, disabled, active, onClick }: BuildRowProps) {
+    return (
+        <button
+            type="button"
+            className={`ag-build-row${disabled ? ' ag-build-row--disabled' : ''}${active ? ' ag-build-row--active' : ''}`}
+            disabled={disabled}
+            onClick={onClick}
+        >
+            {icon && <span className="ag-icon-box">{icon}</span>}
+            <span className="ag-build-main">
+                <span className="ag-build-name">{name}</span>
+                <span className="ag-build-cost">{cost}</span>
+            </span>
+            <span className={`ag-build-tag${tagMuted ? ' ag-build-tag--muted' : ''}`}>{tag}</span>
+        </button>
+    );
+}
+
 interface FiresOutActionsProps {
     apLeft: number;
     bankedAp: number;
@@ -78,6 +112,14 @@ export default function FiresOutActions({
     showDisposeHazmat, onDisposeHazmat, disposeHazmatPending,
     showCrewChange, onCrewChange, crewChangePending,
 }: FiresOutActionsProps) {
+    // §11 one-shot abilities with no board target — data, the same way
+    // MODE_DEFS is, rather than a parallel show*/on*/*Pending prop for every
+    // new one that arrives later.
+    const quickActions = [
+        { key: 'treat', icon: '🩹', name: 'Treat the victim', cost: `${AP_COSTS.treat} AP — they walk alongside instead of being carried`, show: showTreat, onClick: onTreat, pending: treatPending },
+        { key: 'disposeHazmat', icon: '☣️', name: 'Remove the hazmat on the spot', cost: `${AP_COSTS.disposeHazmatOnSite} AP`, show: showDisposeHazmat, onClick: onDisposeHazmat, pending: disposeHazmatPending },
+    ];
+
     return (
         <div className="ag-actionsheet">
             <p className="ag-action-hint" style={{ marginTop: 0 }}>
@@ -90,48 +132,32 @@ export default function FiresOutActions({
                     .map(def => {
                         const count = targetCounts[def.mode];
                         const disabled = count === 0;
-                        const active = mode === def.mode;
                         return (
-                            <button
+                            <BuildRow
                                 key={def.mode}
-                                type="button"
-                                className={`ag-build-row${disabled ? ' ag-build-row--disabled' : ''}${active ? ' ag-build-row--active' : ''}`}
+                                icon={def.icon}
+                                name={def.name}
+                                cost={def.hint(specialist)}
                                 disabled={disabled || submitting}
-                                onClick={() => onModeChange(active ? null : def.mode)}
-                            >
-                                <span className="ag-icon-box">{def.icon}</span>
-                                <span className="ag-build-main">
-                                    <span className="ag-build-name">{def.name}</span>
-                                    <span className="ag-build-cost">{def.hint(specialist)}</span>
-                                </span>
-                                {disabled
-                                    ? <span className="ag-build-tag ag-build-tag--muted">No targets</span>
-                                    : <span className="ag-build-tag">{count} {count === 1 ? 'space' : 'spaces'}</span>}
-                            </button>
+                                active={mode === def.mode}
+                                onClick={() => onModeChange(mode === def.mode ? null : def.mode)}
+                                tag={disabled ? 'No targets' : `${count} ${count === 1 ? 'space' : 'spaces'}`}
+                                tagMuted={disabled}
+                            />
                         );
                     })}
 
-                {showTreat && (
-                    <button type="button" className="ag-build-row" disabled={submitting} onClick={onTreat}>
-                        <span className="ag-icon-box">🩹</span>
-                        <span className="ag-build-main">
-                            <span className="ag-build-name">Treat the victim</span>
-                            <span className="ag-build-cost">{AP_COSTS.treat} AP — they walk alongside instead of being carried</span>
-                        </span>
-                        <span className="ag-build-tag">{treatPending ? '…' : 'Go'}</span>
-                    </button>
-                )}
-
-                {showDisposeHazmat && (
-                    <button type="button" className="ag-build-row" disabled={submitting} onClick={onDisposeHazmat}>
-                        <span className="ag-icon-box">☣️</span>
-                        <span className="ag-build-main">
-                            <span className="ag-build-name">Remove the hazmat on the spot</span>
-                            <span className="ag-build-cost">{AP_COSTS.disposeHazmatOnSite} AP</span>
-                        </span>
-                        <span className="ag-build-tag">{disposeHazmatPending ? '…' : 'Go'}</span>
-                    </button>
-                )}
+                {quickActions.filter(a => a.show).map(a => (
+                    <BuildRow
+                        key={a.key}
+                        icon={a.icon}
+                        name={a.name}
+                        cost={a.cost}
+                        disabled={submitting}
+                        onClick={a.onClick}
+                        tag={a.pending ? '…' : 'Go'}
+                    />
+                ))}
             </div>
 
             {showCarryToggle && mode === 'move' && (
@@ -148,19 +174,14 @@ export default function FiresOutActions({
                     <p className="ag-action-hint">At the Engine — swap Specialist cards for {AP_COSTS.crewChange} AP:</p>
                     <div className="ag-build-list">
                         {SPECIALISTS.filter(s => s.id !== specialist).map(s => (
-                            <button
+                            <BuildRow
                                 key={s.id}
-                                type="button"
-                                className="ag-build-row"
+                                name={s.label}
+                                cost={s.ability}
                                 disabled={submitting}
                                 onClick={() => onCrewChange(s.id)}
-                            >
-                                <span className="ag-build-main">
-                                    <span className="ag-build-name">{s.label}</span>
-                                    <span className="ag-build-cost">{s.ability}</span>
-                                </span>
-                                <span className="ag-build-tag">{crewChangePending ? '…' : 'Swap'}</span>
-                            </button>
+                                tag={crewChangePending ? '…' : 'Swap'}
+                            />
                         ))}
                     </div>
                 </>
