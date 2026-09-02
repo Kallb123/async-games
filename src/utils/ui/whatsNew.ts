@@ -49,6 +49,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Fires Out's board now matches the real thing",
+                detail: "Smoke and fire are flippable tokens instead of a flat colour wash, victims and hazards sit on their own marker badges instead of floating text, and the board art now lines up properly with the grid.",
+                game: "firesout",
+            },
+            {
                 title: "See which friends are around right now",
                 detail: "A green dot now sits on a friend's picture in your friends list while they're taking turns — anyone who has moved in a game in the last five minutes — so you can tell at a glance who is worth challenging now rather than tomorrow.",
             },
@@ -63,10 +68,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Every game has a game guide",
                 detail: "Not sure what a phase does or which pile to worry about? A game guide now opens the first time you join a match of Dice Cities, Settlements & Cities, Train Time, World Domination or Outbreak, and any time after that from the ⋮ menu at the top of the board.",
-            },
-            {
-                title: "Your cards stay on screen between your turns",
-                detail: "Waiting for someone else to move used to leave you looking at the board and nothing else. Your hand, the face-up cards and what's left in the deck now stay put in Train Time, the market in Dice Cities and the cards you're holding in World Domination — greyed out until it's your go, so you can plan the move but not make it early.",
             },
         ],
     },

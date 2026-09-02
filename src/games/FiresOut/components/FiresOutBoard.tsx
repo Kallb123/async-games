@@ -85,7 +85,7 @@ export default function FiresOutBoard({ spaces, edges, firefighters, userIdList,
                     {state.threat !== 'none' && (
                         <span
                             key={`threat-${state.threat}`}
-                            className={`ag-fo-token ag-fo-token--${state.threat}`}
+                            className={`ag-fo-marker ag-fo-token ag-fo-token--${state.threat}`}
                             aria-hidden="true"
                             title={state.threat === 'fire' ? 'Fire' : 'Smoke'}
                         >
@@ -95,7 +95,7 @@ export default function FiresOutBoard({ spaces, edges, firefighters, userIdList,
                     {state.poi && (
                         <span
                             key={`poi-${state.poi.revealed}`}
-                            className={`ag-fo-badge ag-fo-badge--poi${state.poi.revealed ? ' ag-fo-badge--victim' : ''}`}
+                            className={`ag-fo-marker ag-fo-badge ag-fo-badge--poi${state.poi.revealed ? ' ag-fo-badge--victim' : ''}`}
                             aria-hidden="true"
                             title={state.poi.revealed ? 'Victim' : 'Possible victim'}
                         >
@@ -103,12 +103,12 @@ export default function FiresOutBoard({ spaces, edges, firefighters, userIdList,
                         </span>
                     )}
                     {(state.hazmat || state.hotspot) && (
-                        <span className="ag-fo-badge ag-fo-badge--hazard" aria-hidden="true" title={state.hazmat ? 'Hazmat' : 'Hot spot'}>
+                        <span className="ag-fo-marker ag-fo-badge ag-fo-badge--hazard" aria-hidden="true" title={state.hazmat ? 'Hazmat' : 'Hot spot'}>
                             {state.hazmat ? '☣️' : '♨️'}
                         </span>
                     )}
                     {(space === engine || space === ambulance) && (
-                        <span className="ag-fo-badge ag-fo-badge--vehicle" aria-hidden="true" title={space === engine ? 'Engine' : 'Ambulance'}>
+                        <span className="ag-fo-marker ag-fo-badge ag-fo-badge--vehicle" aria-hidden="true" title={space === engine ? 'Engine' : 'Ambulance'}>
                             {space === engine ? '🚒' : '🚑'}
                         </span>
                     )}
