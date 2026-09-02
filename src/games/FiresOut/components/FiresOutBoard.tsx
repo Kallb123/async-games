@@ -8,8 +8,9 @@ import { playerColourForId } from '@/utils/ui/playerColours';
 // CSS grid — board.ts's own row/column convention (row = the d6, column =
 // the d8), with the exterior track as the grid's first and last row. Walls
 // are cell borders and doors are gaps in them (fires-out-gdd.md §17.6 step
-// 5): there's no board art to overlay, so this reads the wall/door state
-// straight off `edges` rather than drawing over a picture of it.
+// 5): board.png sits behind the grid as decoration only (see .ag-fo-grid in
+// ag-theme.css), so this still reads wall/door state straight off `edges`
+// rather than drawing over the picture of it.
 const DISPLAY_ROWS = ROWS + 2;
 
 function edgeBorder(edge: IFiresOutEdgeResponse | undefined): string {
