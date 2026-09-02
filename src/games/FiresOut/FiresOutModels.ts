@@ -8,15 +8,13 @@ import { shuffle } from "@/utils/games/shuffle";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { FiresOutGameType } from "@/utils/apiModels/GameLogic";
 import { DiceRoll } from "@/utils/games/DiceRoll";
-import { START_SPACE } from "./board";
+import { DifficultyId, RulesetId, START_SPACE } from "./board";
 import {
-    DifficultyId,
     IFiresOutEdgeState,
     IFiresOutFirefighterState,
     IFiresOutPoiState,
     IFiresOutSpaceState,
     NextRoll,
-    RulesetId,
     applyExperiencedSetup,
     applyFamilySetup,
     buildEmptyEdges,
@@ -120,7 +118,7 @@ export interface IFiresOutSpecificGameState {
     activeFirefighter: number; // index into firefighters — §17.2's per-figure turn, not per-player
     // §9.4, §17.6 step 8: hot spot markers not yet placed on the board — 0 for
     // every Family game. Placed-on-board + this always equals
-    // TOTAL_HOTSPOT_MARKERS (rules.ts), the conservation invariant §17.7 asks for.
+    // TOTAL_HOTSPOT_MARKERS (board.ts), the conservation invariant §17.7 asks for.
     hotspotReserve: number;
 }
 

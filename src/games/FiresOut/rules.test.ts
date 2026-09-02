@@ -3,6 +3,7 @@ import {
     COLS,
     EXTERIOR_TOP_START,
     INTERIOR_SPACE_COUNT,
+    TOTAL_HOTSPOT_MARKERS,
     edgeBetween,
     spaceIndex,
 } from "./board";
@@ -10,7 +11,6 @@ import {
     IFiresOutEdgeState,
     IFiresOutFirefighterState,
     IFiresOutSpaceState,
-    TOTAL_HOTSPOT_MARKERS,
     applyExperiencedSetup,
     buildEmptyEdges,
     buildEmptySpaces,
@@ -313,6 +313,33 @@ describe("hot spot flare-ups (§9.4, §17.6 step 8)", () => {
         expect(result.target).toBe(hotspotSpace);
         expect(result.resolution).toBe('explosion');
         expect(result.flareUps).toEqual([]);
+    });
+
+    it("doesn't re-trigger a flare-up an ancestor's own loop rediscovers after a nested flare-up already resolved it", () => {
+        const spaces = buildEmptySpaces();
+        const edges = buildEmptyEdges();
+        const h1 = spaceIndex(0, 0);
+        const h2 = spaceIndex(5, 7); // a higher interior index — reached only through h1's own flare-up below, not this call's own roll
+        spaces[h1].threat = 'smoke';
+        spaces[h1].hotspot = true;
+        spaces[h2].threat = 'smoke';
+        spaces[h2].hotspot = true;
+
+        // The primary roll catches h1; h1's flare-up catches h2; h2's own
+        // flare-up rolls a harmless, unrelated target. Without a tree-wide
+        // claimed-space record, the primary call's own for-loop — using its
+        // own pre-call snapshot, which still says h2 "wasn't fire yet" —
+        // would rediscover h2 once the nested flare-up sets it alight and
+        // spawn a second, redundant flare-up for the same ignition. That
+        // would need two more rolls than this test scripts, so a regression
+        // here fails with "scriptedRolls exhausted" rather than a wrong count.
+        const result = resolveAdvanceFire(spaces, edges, [], 0, scriptedRolls(1, 1, 6, 8, 4, 4));
+
+        expect(result.target).toBe(h1);
+        expect(result.flareUps).toHaveLength(1);
+        expect(result.flareUps[0].target).toBe(h2);
+        expect(result.flareUps[0].flareUps).toHaveLength(1);
+        expect(result.flareUps[0].flareUps[0].flareUps).toEqual([]);
     });
 });
 

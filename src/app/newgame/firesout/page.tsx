@@ -15,7 +15,7 @@ import { useCreateLobbyOrInvite } from "@/utils/hooks/useCreateLobbyOrInvite";
 import { GAME_META } from "@/utils/ui/games";
 import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { IFiresOutInvitationRequest } from "@/games/FiresOut/FiresOutModels";
-import { DIFFICULTY_TIERS, DifficultyId, RulesetId } from "@/games/FiresOut/rules";
+import { DIFFICULTY_TIERS, DifficultyId, RulesetId } from "@/games/FiresOut/board";
 
 function NewGameFiresOutForm() {
   const pathName = usePathname();

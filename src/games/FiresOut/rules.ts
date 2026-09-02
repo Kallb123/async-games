@@ -13,6 +13,8 @@ import {
     COLS,
     colOf,
     DAMAGE_TO_COLLAPSE,
+    DifficultyId,
+    difficultyTier,
     EDGE_DEFS,
     EdgeKind,
     edgeBetween,
@@ -29,6 +31,7 @@ import {
     spaceIndex,
     SPACE_COUNT,
     START_SPACE,
+    TOTAL_HOTSPOT_MARKERS,
     VICTIM_POI_COUNT,
     VICTIMS_LOST_TO_LOSE,
     VICTIMS_TO_WIN,
@@ -147,37 +150,13 @@ export function applyFamilySetup(spaces: IFiresOutSpaceState[], poiPool: boolean
     }
 }
 
-// ─── The Experienced game and its difficulty tiers (§6.2, §13, §17.6 step 8) ─
-// The switch between rulesets is this one field, read here rather than
-// scattered through the fire system — see gameStateToModel and
-// buildInitialFiresOutState in FiresOutModels.ts for the other half of "one
-// two-valued string, which is the whole mechanism" (§17.6 step 8).
-
-export type RulesetId = 'family' | 'experienced';
-export type DifficultyId = 'recruit' | 'veteran' | 'heroic';
-
-export interface IFiresOutDifficultyTier {
-    id: DifficultyId;
-    label: string;
-    /** §6.2 step 2: initial explosions resolved (with wall damage) before anyone's had a turn. */
-    explosions: number;
-    /** §6.2 step 3: hazmat markers placed at setup. */
-    hazmats: number;
-    description: string;
-}
-
-export const DIFFICULTY_TIERS: IFiresOutDifficultyTier[] = [
-    { id: 'recruit', label: 'Recruit', explosions: 3, hazmats: 3, description: 'Comparable to the Family game.' },
-    { id: 'veteran', label: 'Veteran', explosions: 3, hazmats: 4, description: 'Hard.' },
-    { id: 'heroic', label: 'Heroic', explosions: 4, hazmats: 5, description: 'Very hard, with a larger hot spot reserve.' },
-];
-
-export function difficultyTier(difficulty: DifficultyId): IFiresOutDifficultyTier {
-    return DIFFICULTY_TIERS.find(d => d.id === difficulty)!;
-}
-
-/** §3's component count — the total hot spot marker supply. Placed-on-board + reserve always equals this (a conservation invariant, like the POI pool and the damage markers — §17.7's testing note). */
-export const TOTAL_HOTSPOT_MARKERS = 24;
+// ─── The Experienced game's rolled setup (§6.2, §17.6 step 8) ──────────────
+// RulesetId/DifficultyId/DIFFICULTY_TIERS/TOTAL_HOTSPOT_MARKERS live in
+// board.ts alongside this game's other §3 component counts; this is the
+// behaviour that reads them. The switch between rulesets is that one field,
+// read here rather than scattered through the fire system — see
+// gameStateToModel and buildInitialFiresOutState in FiresOutModels.ts for the
+// other half of "one two-valued string, which is the whole mechanism".
 
 /** §6.2 step 4: "a base number scaled by crew size (roughly 2 for a three-firefighter crew, 3 for four or more), plus 3 additional at Veteran and Heroic." */
 function hotspotsToPlace(crewSize: number, difficulty: DifficultyId): number {
@@ -457,6 +436,13 @@ function settleHazmatsAndFlashover(spaces: IFiresOutSpaceState[], edges: IFiresO
  * of `nextRoll`'s cursor. A space already on fire before this call keeps its
  * hot spot from re-triggering every single turn; only the transition to
  * fire counts as "placed".
+ *
+ * `claimed` is shared by reference across the whole recursive call tree for
+ * one turn's Advance Fire, not reset per call: a nested flare-up's own
+ * explosion/flashover chain can reach a second hot spot before its ancestor's
+ * for-loop gets there, and without a tree-wide record the ancestor's *own*
+ * pre-call snapshot would still say that space "wasn't fire yet" and spawn a
+ * second, redundant flare-up for an ignition its descendant already resolved.
  */
 export function resolveAdvanceFire(
     spaces: IFiresOutSpaceState[],
@@ -464,6 +450,7 @@ export function resolveAdvanceFire(
     firefighters: IFiresOutFirefighterState[],
     hotspotReserve: number,
     nextRoll: NextRoll,
+    claimed: Set<number> = new Set(),
 ): IFiresOutAdvanceFireResult {
     // Both snapshotted *before* this resolution touches anything: a flare-up
     // is fire reaching a hot spot that already existed, not a hot spot a
@@ -483,7 +470,9 @@ export function resolveAdvanceFire(
     const flareUps: IFiresOutAdvanceFireResult[] = [];
     for (let space = 0; space < INTERIOR_SPACE_COUNT; space++) {
         if (wasFire[space] || !wasHotspot[space] || spaces[space].threat !== 'fire') continue;
-        const flareUp = resolveAdvanceFire(spaces, edges, firefighters, reserve, nextRoll);
+        if (claimed.has(space)) continue; // a nested flare-up already resolved this ignition
+        claimed.add(space);
+        const flareUp = resolveAdvanceFire(spaces, edges, firefighters, reserve, nextRoll, claimed);
         reserve = flareUp.hotspotReserve;
         flareUps.push(flareUp);
     }

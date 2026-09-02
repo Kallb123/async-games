@@ -4,8 +4,7 @@ import { readGameSetupRequest, seatsFor } from '@/utils/api/gameSetupRequest';
 import { sendGameInvitePush } from '@/utils/firebase/invitePush';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { FiresOutInvitationModel, IFiresOutInvitationRequest } from '@/games/FiresOut/FiresOutModels';
-import { MAX_PLAYERS, MIN_PLAYERS } from '@/games/FiresOut/board';
-import { DIFFICULTY_TIERS } from '@/games/FiresOut/rules';
+import { DIFFICULTY_TIERS, MAX_PLAYERS, MIN_PLAYERS } from '@/games/FiresOut/board';
 import { IInvitationDataDocument } from '@/utils/mongodb/InvitationData';
 
 const RULESETS = ['family', 'experienced'] as const;

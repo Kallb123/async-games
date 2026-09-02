@@ -1,6 +1,6 @@
 import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
-import type { DifficultyId, RestrictedApKind, RulesetId, SpecialistId, ThreatLevel } from "./rules";
-import type { EdgeKind } from "./board";
+import type { RestrictedApKind, SpecialistId, ThreatLevel } from "./rules";
+import type { DifficultyId, EdgeKind, RulesetId } from "./board";
 
 export interface IFiresOutPoiResponse {
     id: number;
