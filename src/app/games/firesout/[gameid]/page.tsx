@@ -134,7 +134,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
                 <>
                     <GameScoreboard entries={scoreEntries} />
 
-                    <div className="ag-stat-row" style={{ padding: '0 16px', marginTop: 12 }}>
+                    <div className="ag-stat-row">
                         <Stat value={`${gs.rescued}/${VICTIMS_TO_WIN}`} label="rescued" />
                         <Stat value={`${gs.lost}/${VICTIMS_LOST_TO_LOSE}`} label="lost" />
                         <Stat value={totalDamage(gs.edges)} label="damage" />

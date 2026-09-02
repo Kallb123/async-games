@@ -7,7 +7,7 @@ import { AP_COSTS } from '@/games/FiresOut/rules';
 export type FiresOutBoardMode = 'move' | 'door' | 'extinguish' | 'chop';
 
 const MODE_DEFS: { mode: FiresOutBoardMode; icon: string; name: string; hint: string }[] = [
-    { mode: 'move', icon: '🚶', name: 'Move', hint: '1 AP (2 into fire, 2/space carrying)' },
+    { mode: 'move', icon: '🚶', name: 'Move', hint: `${AP_COSTS.move} AP (${AP_COSTS.moveIntoFire} into fire, ${AP_COSTS.carryPerSpace}/space carrying)` },
     { mode: 'door', icon: '🚪', name: 'Open / close a door', hint: `${AP_COSTS.door} AP` },
     { mode: 'extinguish', icon: '💧', name: 'Extinguish', hint: `${AP_COSTS.extinguish} AP` },
     { mode: 'chop', icon: '🪓', name: 'Chop a wall', hint: `${AP_COSTS.chop} AP` },
