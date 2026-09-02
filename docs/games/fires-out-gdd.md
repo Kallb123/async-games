@@ -394,6 +394,15 @@ a d8 to solve it again.
   any command from a user who isn't `currentTurn`. Moving someone else's figure
   during your own turn is fine and needs no engine change — it's the pawn that
   moves, not the turn.
+* **One board layout, not two.** §3 and §6.1 step 1 describe a double-sided
+  board; only one floorplan's art was ever uploaded
+  (`public/art/fires-out/board.png`), so `board.ts` builds one `ROOM_GRID` /
+  door layout and there is no board-side picker on the setup screen. The
+  `specificGameState` shape has no `layout` field to migrate later — replay
+  only needs the persisted `spaces`/`edges` snapshot, not a layout id to
+  rebuild them from — so adding a second floorplan later is additive: a
+  second room/door table in `board.ts`, a toggle in the setup screen, nothing
+  to retrofit on games already in flight.
 
 ### 17.4 State and command surface
 
@@ -603,9 +612,10 @@ followed by a modulo is now copy-pasted in five places, and gap 3 above is the
 sixth asking to be written — one `nextInTurnOrder(gameState, currentTurn)`
 helper retires all of them.
 
-**2 — Board data and pure rules.** `src/games/FiresOut/board.ts`: both layouts
-as space and edge tables, the d6/d8 coordinate mapping, the exterior track, the
-parking spots, and the printed Family setup. `rules.ts` alongside it is the
+**2 — Board data and pure rules.** `src/games/FiresOut/board.ts`: the board as
+a space and edge table, the d6/d8 coordinate mapping, the exterior track, the
+parking spots, and the printed Family setup. §17.3's deviation note explains
+why this ships one layout rather than both. `rules.ts` alongside it is the
 whole fire system as pure functions — §9.1's four-row table, explosion
 radiation with shockwaves, flashover to fixpoint, knock-downs — taking a
 `nextRoll` callback rather than calling `DiceRoll` itself, which is what makes
@@ -620,9 +630,12 @@ discriminators, `buildInitialFiresOutState`, `gameStateToModel` with the
 redaction above), `apiModels.ts`, `meta.ts` with `available: false`,
 `POST /api/newgame/firesout`, and the setup screen — `GameSetupLayout` +
 `UserInviteList` (`src/components/UserInviteList.tsx`, driven by `usePlayerList`)
-+ `TurnTimerSelect` + an `OptionSection` of `OptionToggleRow`s for board side
-and, later, ruleset. `meta.categories` claims `Strategy` and `Co-op` (adding
-`Co-op` to `GAME_CATEGORIES` in `src/utils/ui/games.ts` if Outbreak hasn't).
++ `TurnTimerSelect`. No board-side or ruleset picker yet — one layout exists
+(§17.3's deviation) and the ruleset is Family-only until step 8; an
+`OptionSection` of `OptionToggleRow`s is the place for both once there's
+something to pick between. `meta.categories` claims `Strategy` and `Co-op`
+(adding `Co-op` to `GAME_CATEGORIES` in `src/utils/ui/games.ts` if Outbreak
+hasn't).
 
 `FiresOutLogic.ts` has to exist by the end of this step, not step 4:
 `gameRegistry.test.ts` discovers games by the presence of `meta.ts` and then

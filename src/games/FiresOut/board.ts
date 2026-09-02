@@ -74,7 +74,9 @@ export function spaceForRoll(d6: number, d8: number): number {
 // the top, a kitchen and den through the middle, dining room, second bedroom
 // and second bathroom along the bottom. Exact room shapes are a rendering
 // concern (step 5 of the implementation plan) and can be adjusted here later
-// without touching rules.ts.
+// without touching rules.ts. Only this one layout exists — §3 and §6.1 step 1
+// describe a double-sided board, but only one side's art was ever uploaded;
+// see fires-out-gdd.md §17.3's deviation note.
 const ROOM_GRID: number[][] = [
     [0, 0, 0, 1, 2, 2, 2, 2],
     [0, 0, 0, 1, 2, 2, 2, 2],
