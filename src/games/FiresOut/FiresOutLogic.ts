@@ -7,10 +7,16 @@ import type { IFiresOutGameData, IFiresOutSpecificGameState } from "@/games/Fire
 import { edgeBetween, isExteriorSpace, isInteriorSpace, neighboursOf, quadrantOf, vehicleTrackNeighbours, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN } from "@/games/FiresOut/board";
 import {
     AP_COSTS,
-    AP_PER_TURN,
+    canCrewChange,
+    canDisposeHazmatOnSite,
     canFireDeckGunAt,
     canMoveTo,
+    canTreat,
     checkOutcome,
+    chopApCost,
+    deckGunApCost,
+    extinguishApCost,
+    fireCaptainCanControlOthers,
     fireDeckGun,
     IFiresOutAdvanceFireResult,
     IFiresOutFirefighterState,
@@ -18,8 +24,13 @@ import {
     MAX_BANKED_AP,
     moveApCost,
     NextRoll,
+    refillFirefighterAp,
     replenishPoi,
     resolveAdvanceFire,
+    revealPoiAt,
+    SpecialistId,
+    SPECIALISTS,
+    specialistDef,
     spendAp,
 } from "@/games/FiresOut/rules";
 import { playerHistory } from "@/utils/games/history";
@@ -63,14 +74,14 @@ export class FiresOutGameType implements IGameType {
     // — always true today, since every firefighter has a distinct owner
     // until a later step allows multiple pawns per player); this just syncs
     // currentTurn to match, and refills the AP the new figure's turn opens
-    // with — their base allowance plus whatever they banked last time (§8).
+    // with — their specialist's full allowance (§11, §17.6 step 10) or the
+    // flat rate in the Family game, plus whatever they banked last time (§8).
     CheckEndTurn(gameData: IGameData, commandOutcome: ICommandOutcome): void {
         if (!commandOutcome.turnOver) return;
         const gs = (gameData as IFiresOutGameData).specificGameState;
         const next = gs.firefighters[gs.activeFirefighter];
         gameData.currentTurn = next.ownerId;
-        next.apLeft = AP_PER_TURN + next.bankedAp;
-        next.bankedAp = 0;
+        refillFirefighterAp(next, gs.ruleset);
     }
 
     CheckGameOver(gameData: IGameData): boolean {
@@ -104,7 +115,9 @@ export class FiresOutGameType implements IGameType {
 // precedent (§21.4: "four command classes, not fifteen") rather than a class
 // per move type.
 
-export type FiresOutActionKind = 'move' | 'door' | 'extinguish' | 'chop' | 'drive' | 'deckGun' | 'endTurn';
+export type FiresOutActionKind =
+    | 'move' | 'door' | 'extinguish' | 'chop' | 'drive' | 'deckGun'
+    | 'reveal' | 'treat' | 'disposeHazmat' | 'crewChange' | 'endTurn';
 
 function activeFirefighter(gs: IFiresOutSpecificGameState): IFiresOutFirefighterState | undefined {
     return gs.firefighters[gs.activeFirefighter];
@@ -114,65 +127,87 @@ function requireTarget(target: number | undefined): target is number {
     return target !== undefined && (isInteriorSpace(target) || isExteriorSpace(target));
 }
 
-// §8: move to an adjacent space, at 1/2/2 AP depending on fire and carrying
-// (rules.ts's moveApCost), reveals a POI entered for the first time (§10.1),
-// and rescues a carried victim on reaching the exterior (§10.2 Family game:
-// "any exterior space").
+// §11 Fire Captain: `action.targetUserId`, if set, names whose pawn a 'move'
+// command moves — the sender (`ff`) still pays with their own AP. Named and
+// shaped after Outbreak's own `targetUserId`/dispatcherCanControlOthers
+// (OutbreakLogic.ts:484-487, rules.ts:410-412) — the same "actor pays, mover
+// moves" split, for the same reason (§17.3: "it's the pawn that moves, not
+// the turn"). Resolving to `ff` itself (no direction) is always allowed.
+function resolveMover(gs: IFiresOutSpecificGameState, ff: IFiresOutFirefighterState, action: FiresOutAction): IFiresOutFirefighterState | null {
+    if (action.targetUserId === undefined || action.targetUserId === ff.ownerId) return ff;
+    if (!fireCaptainCanControlOthers(ff.specialist)) return null;
+    return gs.firefighters.find(f => f.ownerId === action.targetUserId) ?? null;
+}
+
+// §8, §11: move to an adjacent space, at 1/2/2 AP depending on fire and
+// carrying (rules.ts's moveApCost), reveals a POI entered for the first time
+// (§10.1), rescues a carried or escorted victim on reaching the rescue point
+// (§10.2, isRescuePoint), and disposes of a carried hazmat the same way on
+// reaching any exterior space (§8's "Dispose of hazmat ... carried out of the
+// building" row — no Ambulance requirement, unlike a victim). A Fire Captain
+// may move a teammate's firefighter instead of their own (resolveMover),
+// paying with their own command AP.
 function applyMove(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IFiresOutFirefighterState, action: FiresOutAction): ICommandOutcome {
     const target = action.target;
     if (!requireTarget(target)) return INVALID;
+    const mover = resolveMover(gs, ff, action);
+    if (!mover) return INVALID;
 
-    const origin = ff.space;
-    const originPoi = gs.spaces[origin].poi;
-    // Picking up a revealed victim as you leave their space is the choice a
-    // player makes on the move that carries them away, not on the move that
-    // revealed them (§10.1-10.2) — so it has to be decided before this move's
-    // cost and its into-fire legality are, not applied as an afterthought
-    // once a plain 1 AP move has already gone through.
-    const willCarry = ff.carrying !== null || (!!action.carry && !!originPoi?.revealed && originPoi.victim);
-    // A pretend firefighter carrying iff this move would leave them carrying
-    // — canMoveTo/moveApCost only need to know that one boolean, not which
-    // move set it.
-    const asIfCarrying: IFiresOutFirefighterState = { ...ff, carrying: willCarry ? 'victim' : ff.carrying };
+    const origin = mover.space;
+    const originSpace = gs.spaces[origin];
+    // Picking up a revealed victim or a hazmat as you leave their space is
+    // the choice made on the move that carries it away (§10.1-10.2, §8's
+    // hazmat-carry row) — decided before this move's cost and into-fire
+    // legality, not applied as an afterthought once a plain move already
+    // went through. A revealed victim takes priority over a hazmat sharing
+    // the same space; only one thing can be carried at a time.
+    let pickup: 'victim' | 'hazmat' | null = null;
+    if (mover.carrying === null && action.carry) {
+        if (originSpace.poi?.revealed && originSpace.poi.victim) pickup = 'victim';
+        else if (originSpace.hazmat) pickup = 'hazmat';
+    }
+    // A pretend mover carrying iff this move would leave them carrying —
+    // canMoveTo/moveApCost only need to know what, not which move set it.
+    const asIfCarrying: IFiresOutFirefighterState = pickup ? { ...mover, carrying: pickup } : mover;
 
     if (!canMoveTo(gs.spaces, gs.edges, asIfCarrying, origin, target)) return INVALID;
     const cost = moveApCost(gs.spaces, asIfCarrying, target);
-    if (!spendAp(ff, cost, null)) return INVALID;
+    // The actor pays: their own moveChop pool (Rescue Specialist) when
+    // moving themselves, or their command pool (Fire Captain) when directing
+    // someone else — never the mover's own restrictedAp, since it's the
+    // actor's AP being spent (§11's "spending their own actions").
+    if (!spendAp(ff, cost, mover === ff ? 'moveChop' : 'command')) return INVALID;
+
+    if (pickup === 'victim') { mover.carrying = 'victim'; originSpace.poi = null; }
+    else if (pickup === 'hazmat') { mover.carrying = 'hazmat'; originSpace.hazmat = false; }
+
+    mover.space = target;
 
     const notes: string[] = [];
-    if (willCarry && !ff.carrying) {
-        ff.carrying = 'victim';
-        gs.spaces[origin].poi = null;
-    }
-
-    ff.space = target;
-
-    const targetPoi = gs.spaces[target].poi;
-    if (targetPoi && !targetPoi.revealed) {
-        targetPoi.revealed = true;
-        if (targetPoi.victim) {
-            notes.push('revealed a victim');
-        } else {
-            gs.spaces[target].poi = null; // §10.1: a false alarm is simply removed
-            notes.push('revealed a false alarm');
-        }
-    }
+    const revealed = revealPoiAt(gs.spaces, target);
+    if (revealed) notes.push(revealed.victim ? 'revealed a victim' : 'revealed a false alarm');
 
     // §10.2: any exterior space rescues in the Family game; the Experienced
-    // game requires reaching the Ambulance specifically.
-    if (ff.carrying === 'victim' && isRescuePoint(gs.ruleset, gs.ambulance, target)) {
+    // game requires reaching the Ambulance specifically. An escorted victim
+    // (§11 Paramedic) rescues exactly like a carried one.
+    if ((mover.carrying === 'victim' || mover.carrying === 'escort') && isRescuePoint(gs.ruleset, gs.ambulance, target)) {
         gs.rescued++;
-        ff.carrying = null;
+        mover.carrying = null;
         notes.push('rescued a victim!');
+    } else if (mover.carrying === 'hazmat' && isExteriorSpace(target)) {
+        mover.carrying = null;
+        notes.push('disposed of the hazmat');
     }
 
-    const verb = ff.carrying === 'victim' ? 'carried a victim to' : 'moved to';
+    const verb = mover.carrying === 'victim' || mover.carrying === 'escort' ? 'carried a victim to'
+        : mover.carrying === 'hazmat' ? 'carried a hazmat to' : 'moved to';
+    const directed = mover !== ff ? " (directing a teammate's firefighter)" : '';
     const suffix = notes.length ? ` — ${notes.join(', ')}` : '';
-    fo.gameState.history.unshift(playerHistory(action.senderId, `${verb} space ${target}${suffix}`));
+    fo.gameState.history.unshift(playerHistory(action.senderId, `${verb} space ${target}${directed}${suffix}`));
     return { validMove: true, turnOver: false };
 }
 
-// §8: open or close a door, 1 AP.
+// §8, §11: open or close a door, 1 AP — a Fire Captain's command AP first.
 function applyDoor(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IFiresOutFirefighterState, action: FiresOutAction): ICommandOutcome {
     const target = action.target;
     if (!requireTarget(target)) return INVALID;
@@ -180,30 +215,33 @@ function applyDoor(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IF
     if (edgeId === undefined) return INVALID;
     const edge = gs.edges[edgeId];
     if (edge.kind !== 'door') return INVALID;
-    if (!spendAp(ff, AP_COSTS.door, null)) return INVALID;
+    if (!spendAp(ff, AP_COSTS.door, 'command')) return INVALID;
 
     edge.doorOpen = !edge.doorOpen;
     fo.gameState.history.unshift(playerHistory(action.senderId, `${edge.doorOpen ? 'opened' : 'closed'} a door`));
     return { validMove: true, turnOver: false };
 }
 
-// §8: extinguish — fire becomes smoke, or smoke is removed — 1 AP, on the
+// §8, §11: extinguish — fire becomes smoke, or smoke is removed — on the
 // firefighter's own space or any orthogonally adjacent one (adjacency here
-// ignores walls, the same as the fire table itself — §9.1).
+// ignores walls, the same as the fire table itself — §9.1). A CAFS
+// Firefighter's extinguish AP first; a Paramedic pays 1 AP more.
 function applyExtinguish(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IFiresOutFirefighterState, action: FiresOutAction): ICommandOutcome {
     const target = action.target;
     if (!requireTarget(target)) return INVALID;
     if (target !== ff.space && !neighboursOf(ff.space).includes(target)) return INVALID;
     const state = gs.spaces[target];
     if (state.threat === 'none') return INVALID;
-    if (!spendAp(ff, AP_COSTS.extinguish, null)) return INVALID;
+    if (!spendAp(ff, extinguishApCost(ff), 'extinguish')) return INVALID;
 
     state.threat = state.threat === 'fire' ? 'smoke' : 'none';
     fo.gameState.history.unshift(playerHistory(action.senderId, `extinguished space ${target} to ${state.threat === 'none' ? 'clear' : 'smoke'}`));
     return { validMove: true, turnOver: false };
 }
 
-// §8, §9.2: chop a wall, 2 AP — places 1 damage marker; 2 damage destroys it.
+// §8, §9.2, §11: chop a wall — places 1 damage marker; 2 damage destroys it.
+// A Rescue Specialist's move/chop AP first, and their wall costs 1 AP instead
+// of 2 (chopApCost).
 function applyChop(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IFiresOutFirefighterState, action: FiresOutAction): ICommandOutcome {
     const target = action.target;
     if (!requireTarget(target)) return INVALID;
@@ -211,10 +249,69 @@ function applyChop(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IF
     if (edgeId === undefined) return INVALID;
     const edge = gs.edges[edgeId];
     if (edge.kind !== 'wall' || edge.damage >= 2) return INVALID;
-    if (!spendAp(ff, AP_COSTS.chop, null)) return INVALID;
+    if (!spendAp(ff, chopApCost(ff), 'moveChop')) return INVALID;
 
     edge.damage = (edge.damage + 1) as 0 | 1 | 2;
     fo.gameState.history.unshift(playerHistory(action.senderId, `chopped a wall toward space ${target}${edge.damage >= 2 ? ' — destroyed it' : ''}`));
+    return { validMove: true, turnOver: false };
+}
+
+// §11 Imaging Technician: reveal any interior POI remotely, without
+// travelling to it — the same flip-and-redact revealPoiAt does for an
+// arriving move, just not tied to one.
+function applyReveal(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IFiresOutFirefighterState, action: FiresOutAction): ICommandOutcome {
+    const target = action.target;
+    if (!requireTarget(target) || !isInteriorSpace(target)) return INVALID;
+    if (ff.specialist !== 'imagingTechnician') return INVALID;
+    const poi = gs.spaces[target].poi;
+    if (!poi || poi.revealed) return INVALID;
+    if (!spendAp(ff, AP_COSTS.reveal, null)) return INVALID;
+
+    const revealed = revealPoiAt(gs.spaces, target)!; // just checked above
+    fo.gameState.history.unshift(playerHistory(action.senderId,
+        `remotely revealed a ${revealed.victim ? 'victim' : 'false alarm'} at space ${target}`));
+    return { validMove: true, turnOver: false };
+}
+
+// §11 Paramedic: treat a revealed victim on their own space for 1 AP, so a
+// later move carries them at the ordinary per-space rate (moveApCost) rather
+// than carryPerSpace, without ever picking them up as 'victim'.
+function applyTreat(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IFiresOutFirefighterState, action: FiresOutAction): ICommandOutcome {
+    if (!canTreat(gs.spaces, ff)) return INVALID;
+    if (!spendAp(ff, AP_COSTS.treat, null)) return INVALID;
+
+    ff.carrying = 'escort';
+    gs.spaces[ff.space].poi = null;
+    fo.gameState.history.unshift(playerHistory(action.senderId, 'treated a victim, who now walks alongside'));
+    return { validMove: true, turnOver: false };
+}
+
+// §11 Hazmat Technician: remove a hazmat on their own space on the spot,
+// instead of carrying it out of the building (§8's other disposal route,
+// applyMove above).
+function applyDisposeHazmat(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IFiresOutFirefighterState, action: FiresOutAction): ICommandOutcome {
+    if (!canDisposeHazmatOnSite(gs.spaces, ff)) return INVALID;
+    if (!spendAp(ff, AP_COSTS.disposeHazmatOnSite, null)) return INVALID;
+
+    gs.spaces[ff.space].hazmat = false;
+    fo.gameState.history.unshift(playerHistory(action.senderId, 'removed a hazmat on the spot'));
+    return { validMove: true, turnOver: false };
+}
+
+// §8, §11: swap Specialist cards for 2 AP, from the Engine, Experienced only.
+// Takes effect immediately for future AP arithmetic (canAffordAp/spendAp all
+// read `ff.specialist` live), but a fresh restricted pool only appears at
+// this firefighter's *next* turn (refillFirefighterAp, run by CheckEndTurn)
+// — swapping mid-turn doesn't retroactively grant this turn's bonus AP.
+function applyCrewChange(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IFiresOutFirefighterState, action: FiresOutAction): ICommandOutcome {
+    if (!canCrewChange(gs.ruleset, ff, gs.engine)) return INVALID;
+    const specialist = action.specialist;
+    if (!specialist || !SPECIALISTS.some(s => s.id === specialist)) return INVALID;
+    if (!spendAp(ff, AP_COSTS.crewChange, null)) return INVALID;
+
+    ff.specialist = specialist;
+    ff.restrictedAp = null;
+    fo.gameState.history.unshift(playerHistory(action.senderId, `swapped to the ${specialistDef(specialist).label}`));
     return { validMove: true, turnOver: false };
 }
 
@@ -246,7 +343,7 @@ function applyDrive(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: I
     return { validMove: true, turnOver: false };
 }
 
-// §12.3, §17.6 step 9: fire the deck gun from the Engine, 4 AP — the only
+// §12.3, §17.6 steps 9-10: fire the deck gun from the Engine — the only
 // non-endTurn action that consumes a die roll (see makeNextRoll below), since
 // §12.3's targeting is itself random. This doesn't touch Advance Fire (no
 // spreading, no consequences) — it only clears threat — so it doesn't run
@@ -254,20 +351,31 @@ function applyDrive(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: I
 // crew-planner step (17.6 step 13) that wants a dice-free frozen-fire plan
 // will need to exclude this kind too, the same way it already excludes
 // endTurn, but that's that step's decision to make, not this one's.
+// A Driver/Operator (§11) pays 2 AP instead of 4 (deckGunApCost), and — "re-
+// rolls off-target deck gun shots" — automatically fires once more into the
+// same quadrant if the first shot cleared nothing, still within the same
+// `nextRoll` cursor so a replay reproduces exactly this many rolls.
 function applyDeckGun(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IFiresOutFirefighterState, action: FiresOutAction): ICommandOutcome {
     if (gs.ruleset !== 'experienced') return INVALID;
     const target = action.target;
     if (!requireTarget(target) || !canFireDeckGunAt(gs.firefighters, ff, gs.engine, target)) return INVALID;
-    if (!spendAp(ff, AP_COSTS.deckGun, null)) return INVALID;
+    if (!spendAp(ff, deckGunApCost(ff), null)) return INVALID;
 
     const { nextRoll, used } = makeNextRoll(action.recordedRolls);
-    const result = fireDeckGun(gs.spaces, quadrantOf(target), nextRoll);
+    const quadrant = quadrantOf(target);
+    let result = fireDeckGun(gs.spaces, quadrant, nextRoll);
+    let rerolled = false;
+    if (result.clearedSpaces.length === 0 && ff.specialist === 'driverOperator') {
+        result = fireDeckGun(gs.spaces, quadrant, nextRoll);
+        rerolled = true;
+    }
     action.recordedRolls = used;
 
     const effect = result.clearedSpaces.length
         ? `cleared ${result.clearedSpaces.length} space${result.clearedSpaces.length === 1 ? '' : 's'}`
         : 'no effect';
-    fo.gameState.history.unshift(playerHistory(action.senderId, `fired the deck gun at space ${result.target} — ${effect}`));
+    const rerollNote = rerolled ? ' — re-rolled the off-target shot' : '';
+    fo.gameState.history.unshift(playerHistory(action.senderId, `fired the deck gun at space ${result.target} — ${effect}${rerollNote}`));
     return { validMove: true, turnOver: false };
 }
 
@@ -408,11 +516,15 @@ export class FiresOutAction implements IGameCommand {
     kind: FiresOutActionKind = 'endTurn';
     /** The space a move/door/extinguish/chop targets — meaningless for 'endTurn'. */
     target?: number;
-    /** 'move' only: pick up a revealed victim on the firefighter's current space as they leave it (§10.1-10.2). */
+    /** 'move' only: pick up a revealed victim or a hazmat on the firefighter's current space as they leave it (§10.1-10.2, §8's hazmat-carry row). */
     carry?: boolean;
     /** 'drive' only: which vehicle — the firefighter must already be at its space (§12.1-12.2). */
     vehicle?: 'engine' | 'ambulance';
-    /** 'endTurn' and 'deckGun' only: the d6/d8 rolls consumed, in order (§17.4) — 'deckGun' can re-roll more than one pair before landing inside its quadrant (rollTargetInQuadrant). Stripped from live requests by stripRecordedRandomness; supplied on replay. */
+    /** 'move' only: a Fire Captain (§11) may set this to the owner id of the teammate whose firefighter moves instead of their own — resolveMover. */
+    targetUserId?: string;
+    /** 'crewChange' only: the specialist to swap to (§8, §11). */
+    specialist?: SpecialistId;
+    /** 'endTurn' and 'deckGun' only: the d6/d8 rolls consumed, in order (§17.4) — 'deckGun' can re-roll more than one pair before landing inside its quadrant (rollTargetInQuadrant), and once more still for a Driver/Operator's off-target re-roll (§11). Stripped from live requests by stripRecordedRandomness; supplied on replay. */
     recordedRolls?: number[];
 
     myString(): string {
@@ -433,6 +545,10 @@ export class FiresOutAction implements IGameCommand {
             case 'chop': outcome = applyChop(fo, gs, ff, this); break;
             case 'drive': outcome = applyDrive(fo, gs, ff, this); break;
             case 'deckGun': outcome = applyDeckGun(fo, gs, ff, this); break;
+            case 'reveal': outcome = applyReveal(fo, gs, ff, this); break;
+            case 'treat': outcome = applyTreat(fo, gs, ff, this); break;
+            case 'disposeHazmat': outcome = applyDisposeHazmat(fo, gs, ff, this); break;
+            case 'crewChange': outcome = applyCrewChange(fo, gs, ff, this); break;
             case 'endTurn': outcome = applyEndTurn(fo, gs, ff, this); break;
             default: return INVALID;
         }

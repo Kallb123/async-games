@@ -7,21 +7,32 @@ import {
     exteriorBottomSpace,
     exteriorTopSpace,
     INTERIOR_SPACE_COUNT,
+    MAX_PLAYERS,
     quadrantOf,
     TOTAL_HOTSPOT_MARKERS,
     edgeBetween,
     spaceIndex,
 } from "./board";
 import {
+    AP_COSTS,
     IFiresOutEdgeState,
     IFiresOutFirefighterState,
     IFiresOutSpaceState,
+    SPECIALISTS,
     applyExperiencedSetup,
     buildEmptyEdges,
     buildEmptySpaces,
+    canCrewChange,
+    canDisposeHazmatOnSite,
     canFireDeckGunAt,
+    canTreat,
     checkOutcome,
+    chopApCost,
+    dealSpecialists,
+    deckGunApCost,
     explode,
+    extinguishApCost,
+    fireCaptainCanControlOthers,
     fireDeckGun,
     flashover,
     isBuildingCollapsed,
@@ -32,14 +43,18 @@ import {
     legalDriveTargets,
     legalExtinguishTargets,
     legalMoveTargets,
+    legalRevealTargets,
     newFirefighter,
     poiCountOnBoard,
+    refillFirefighterAp,
     replenishPoi,
     resolveAdvanceFire,
     resolveFireConsequences,
     resolveTargetSpace,
+    revealPoiAt,
     rollTargetInQuadrant,
     shuffledPoiPool,
+    specialistDef,
     totalDamage,
 } from "./rules";
 
@@ -603,6 +618,146 @@ describe("deck gun (§12.3, §17.6 step 9)", () => {
         const spaces = buildEmptySpaces();
         const result = fireDeckGun(spaces, 3, scriptedRolls(6, 8));
         expect(result.clearedSpaces).toEqual([]);
+    });
+});
+
+describe("Specialists (§11, §17.6 step 10)", () => {
+    it("has exactly 8 distinct specialists — at least MAX_PLAYERS, so dealSpecialists never runs short", () => {
+        expect(SPECIALISTS).toHaveLength(8);
+        expect(new Set(SPECIALISTS.map(s => s.id)).size).toBe(8);
+        expect(SPECIALISTS.length).toBeGreaterThanOrEqual(MAX_PLAYERS);
+    });
+
+    it("specialistDef looks up a specialist's own table row", () => {
+        expect(specialistDef('cafsFirefighter')).toEqual(SPECIALISTS.find(s => s.id === 'cafsFirefighter'));
+    });
+
+    it("dealSpecialists gives every seat a distinct specialist", () => {
+        const turnOrder = ["u1", "u2", "u3", "u4"];
+        const dealt = dealSpecialists(turnOrder);
+        expect(dealt.size).toBe(4);
+        const ids = turnOrder.map(u => dealt.get(u));
+        expect(new Set(ids).size).toBe(4);
+        for (const id of ids) expect(SPECIALISTS.some(s => s.id === id)).toBe(true);
+    });
+
+    describe("refillFirefighterAp", () => {
+        it("gives the flat AP_PER_TURN in the Family game regardless of the (meaningless) specialist field", () => {
+            const ff = newFirefighter("u1");
+            ff.specialist = 'cafsFirefighter'; // stray value — must not leak through in Family
+            ff.bankedAp = 2;
+            refillFirefighterAp(ff, 'family');
+            expect(ff.apLeft).toBe(4 + 2);
+            expect(ff.restrictedAp).toBeNull();
+        });
+
+        it("gives each Experienced specialist their own base AP and restricted pool", () => {
+            const generalist = newFirefighter("u1");
+            generalist.specialist = 'generalist';
+            refillFirefighterAp(generalist, 'experienced');
+            expect(generalist.apLeft).toBe(5); // 4 base + 1 (§11)
+            expect(generalist.restrictedAp).toBeNull();
+
+            const cafs = newFirefighter("u2");
+            cafs.specialist = 'cafsFirefighter';
+            refillFirefighterAp(cafs, 'experienced');
+            expect(cafs.apLeft).toBe(3);
+            expect(cafs.restrictedAp).toEqual({ kind: 'extinguish', left: 3 });
+        });
+
+        it("adds banked AP on top of the specialist's base, and never banks restricted AP", () => {
+            const ff = newFirefighter("u1");
+            ff.specialist = 'fireCaptain';
+            ff.bankedAp = 3;
+            ff.restrictedAp = { kind: 'command', left: 1 }; // 1 left over from last turn — discarded, not banked
+            refillFirefighterAp(ff, 'experienced');
+            expect(ff.apLeft).toBe(4 + 3);
+            expect(ff.restrictedAp).toEqual({ kind: 'command', left: 2 }); // fresh, full pool
+            expect(ff.bankedAp).toBe(0);
+        });
+    });
+
+    it("chopApCost/extinguishApCost/deckGunApCost only change for their own specialist", () => {
+        const rescue = newFirefighter("u1"); rescue.specialist = 'rescueSpecialist';
+        const paramedic = newFirefighter("u2"); paramedic.specialist = 'paramedic';
+        const driver = newFirefighter("u3"); driver.specialist = 'driverOperator';
+        const generalist = newFirefighter("u4");
+
+        expect(chopApCost(rescue)).toBe(1);
+        expect(chopApCost(generalist)).toBe(AP_COSTS.chop);
+        expect(extinguishApCost(paramedic)).toBe(AP_COSTS.extinguish + 1);
+        expect(extinguishApCost(generalist)).toBe(AP_COSTS.extinguish);
+        expect(deckGunApCost(driver)).toBe(2);
+        expect(deckGunApCost(generalist)).toBe(AP_COSTS.deckGun);
+    });
+
+    it("fireCaptainCanControlOthers is true only for that specialist", () => {
+        expect(fireCaptainCanControlOthers('fireCaptain')).toBe(true);
+        expect(fireCaptainCanControlOthers('generalist')).toBe(false);
+    });
+
+    describe("revealPoiAt (§10.1, shared by applyMove and the Imaging Technician's remote reveal)", () => {
+        it("flips a victim and leaves the marker, but removes a false alarm", () => {
+            const spaces = buildEmptySpaces();
+            spaces[spaceIndex(0, 0)].poi = { id: 0, revealed: false, victim: true };
+            spaces[spaceIndex(0, 1)].poi = { id: 1, revealed: false, victim: false };
+
+            expect(revealPoiAt(spaces, spaceIndex(0, 0))).toEqual({ victim: true });
+            expect(spaces[spaceIndex(0, 0)].poi).toEqual({ id: 0, revealed: true, victim: true });
+
+            expect(revealPoiAt(spaces, spaceIndex(0, 1))).toEqual({ victim: false });
+            expect(spaces[spaceIndex(0, 1)].poi).toBeNull();
+        });
+
+        it("returns null for an empty space or one already revealed", () => {
+            const spaces = buildEmptySpaces();
+            expect(revealPoiAt(spaces, spaceIndex(0, 0))).toBeNull();
+            spaces[spaceIndex(0, 0)].poi = { id: 0, revealed: true, victim: true };
+            expect(revealPoiAt(spaces, spaceIndex(0, 0))).toBeNull();
+        });
+    });
+
+    it("legalRevealTargets is Imaging Technician only, and lists every unrevealed POI on the board", () => {
+        const spaces = buildEmptySpaces();
+        spaces[spaceIndex(0, 0)].poi = { id: 0, revealed: false, victim: true };
+        spaces[spaceIndex(0, 1)].poi = { id: 1, revealed: true, victim: false };
+        const tech = newFirefighter("u1"); tech.specialist = 'imagingTechnician';
+        const generalist = newFirefighter("u2");
+
+        expect(legalRevealTargets(spaces, tech)).toEqual([spaceIndex(0, 0)]);
+        expect(legalRevealTargets(spaces, generalist)).toEqual([]);
+    });
+
+    it("canTreat requires a Paramedic, a revealed victim on their own space, and empty hands", () => {
+        const spaces = buildEmptySpaces();
+        const origin = spaceIndex(2, 1);
+        spaces[origin].poi = { id: 0, revealed: true, victim: true };
+        const paramedic = newFirefighter("u1", origin); paramedic.specialist = 'paramedic';
+        const generalist = newFirefighter("u2", origin);
+
+        expect(canTreat(spaces, paramedic)).toBe(true);
+        expect(canTreat(spaces, generalist)).toBe(false);
+
+        paramedic.carrying = 'hazmat';
+        expect(canTreat(spaces, paramedic)).toBe(false);
+    });
+
+    it("canDisposeHazmatOnSite requires a Hazmat Technician and a hazmat on their own space", () => {
+        const spaces = buildEmptySpaces();
+        const origin = spaceIndex(2, 1);
+        spaces[origin].hazmat = true;
+        const tech = newFirefighter("u1", origin); tech.specialist = 'hazmatTechnician';
+        const generalist = newFirefighter("u2", origin);
+
+        expect(canDisposeHazmatOnSite(spaces, tech)).toBe(true);
+        expect(canDisposeHazmatOnSite(spaces, generalist)).toBe(false);
+    });
+
+    it("canCrewChange requires the Experienced ruleset and starting the turn at the Engine", () => {
+        const ff = newFirefighter("u1", ENGINE_START);
+        expect(canCrewChange('experienced', ff, ENGINE_START)).toBe(true);
+        expect(canCrewChange('family', ff, ENGINE_START)).toBe(false);
+        expect(canCrewChange('experienced', ff, AMBULANCE_START)).toBe(false);
     });
 });
 

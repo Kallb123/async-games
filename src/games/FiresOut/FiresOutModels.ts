@@ -19,7 +19,9 @@ import {
     applyFamilySetup,
     buildEmptyEdges,
     buildEmptySpaces,
+    dealSpecialists,
     newFirefighter,
+    refillFirefighterAp,
     shuffledPoiPool,
 } from "./rules";
 import {
@@ -194,6 +196,23 @@ export function buildInitialFiresOutState(turnOrder: string[], ruleset: RulesetI
         hotspotReserve = 0;
     }
 
+    // §6.2 step 7, §17.6 step 10: one Specialist card per firefighter, dealt
+    // at random the same way dealSpecialists mirrors Outbreak's dealRoles —
+    // never in the Family game, which sets Specialist cards aside (§6.1 step
+    // 7) and leaves every firefighter the 'generalist' placeholder
+    // newFirefighter already builds. refillFirefighterAp seeds each
+    // firefighter's very first apLeft/restrictedAp from their dealt
+    // specialist (bankedAp is still 0, so this is exactly what their first
+    // CheckEndTurn would compute) — the same call CheckEndTurn itself makes
+    // every turn after, so a specialist's numbers are derived in one place.
+    const specialists = ruleset === 'experienced' ? dealSpecialists(turnOrder) : null;
+    const firefighters = turnOrder.map(userId => {
+        const ff = newFirefighter(userId, START_SPACE);
+        if (specialists) ff.specialist = specialists.get(userId)!;
+        refillFirefighterAp(ff, ruleset);
+        return ff;
+    });
+
     return {
         ruleset,
         difficulty,
@@ -203,7 +222,7 @@ export function buildInitialFiresOutState(turnOrder: string[], ruleset: RulesetI
         nextPoiId,
         rescued: 0,
         lost: 0,
-        firefighters: turnOrder.map(userId => newFirefighter(userId, START_SPACE)),
+        firefighters,
         activeFirefighter: 0,
         hotspotReserve,
         engine: ENGINE_START,

@@ -32,7 +32,7 @@ export interface IFiresOutFirefighterResponse {
     apLeft: number;
     restrictedAp: { kind: RestrictedApKind; left: number } | null;
     bankedAp: number;
-    carrying: 'victim' | 'hazmat' | null;
+    carrying: 'victim' | 'hazmat' | 'escort' | null;
 }
 
 export interface IFiresOutSpecificGameStateResponse {

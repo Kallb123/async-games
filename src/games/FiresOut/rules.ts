@@ -62,10 +62,14 @@ export interface IFiresOutFirefighterState {
     apLeft: number;
     restrictedAp: { kind: RestrictedApKind; left: number } | null;
     bankedAp: number; // 0..MAX_BANKED_AP
-    carrying: 'victim' | 'hazmat' | null;
+    // 'escort' (§11 Paramedic, §17.6 step 10): a revealed victim `treat`ed
+    // rather than carried — walks alongside at the ordinary move cost (§8)
+    // instead of costing carryPerSpace, but still counts as "carrying
+    // something" for canMoveTo's into-fire block and applyMove's rescue check.
+    carrying: 'victim' | 'hazmat' | 'escort' | null;
 }
 
-/** §7 Phase 1, §8: 4 AP per turn plus up to `MAX_BANKED_AP` carried over. */
+/** §7 Phase 1, §8: 4 AP per turn plus up to `MAX_BANKED_AP` carried over — the Family game's flat allowance, and the Experienced game's before any specialist modifies it (see SPECIALISTS below). */
 export const AP_PER_TURN = 4;
 export const MAX_BANKED_AP = 4;
 
@@ -79,6 +83,86 @@ export function newFirefighter(ownerId: string, space: number = START_SPACE): IF
         bankedAp: 0,
         carrying: null,
     };
+}
+
+// ─── Specialists (§11, §17.6 step 10) ───────────────────────────────────────
+// Static reference data only — dealt in FiresOutModels.buildInitialFiresOutState
+// and expressed as small pure exceptions to the base rules below, rather than
+// as `if (specialist === ...)` branches sprayed through FiresOutLogic.ts's
+// Execute methods (mirrors Outbreak's ROLES/roleDef, board.ts:300-337).
+//
+// `specialist` is always populated on a firefighter, including in the Family
+// game, where it stays the meaningless 'generalist' placeholder every
+// firefighter is built with (§6.1 step 7 sets Specialist cards aside — same
+// "always populated, meaningless in Family" pattern as `difficulty`). So
+// every specialist-driven number below is read only when `ruleset ===
+// 'experienced'` (see refillFirefighterAp) — a Family-game firefighter's
+// `specialist` field is never fed through SPECIALISTS at all.
+
+export interface ISpecialistDef {
+    id: SpecialistId;
+    label: string;
+    /** §8: total AP allowance once dealt — the printed 4 AP base already folded in. */
+    baseAp: number;
+    restrictedAp: { kind: RestrictedApKind; amount: number } | null;
+    /** Player-facing: what the card does at the table, for the crew-change picker. No GDD references, no pronouns. */
+    ability: string;
+}
+
+// All eight, dealt one per firefighter at random in the Experienced game
+// (dealSpecialists) and swappable at the Engine (FiresOutLogic.ts's
+// applyCrewChange). Chop/extinguish/deck-gun cost exceptions and the
+// Paramedic/Imaging/Hazmat abilities that aren't AP arithmetic live in their
+// own functions below rather than in this table, the same split Outbreak's
+// ROLES/rules.ts uses for the Medic's auto-clear and the Dispatcher's control.
+export const SPECIALISTS: ISpecialistDef[] = [
+    { id: 'generalist', label: 'Generalist', baseAp: 5, restrictedAp: null,
+        ability: 'No special ability — one extra AP every turn.' },
+    { id: 'fireCaptain', label: 'Fire Captain', baseAp: 4, restrictedAp: { kind: 'command', amount: 2 },
+        ability: "2 extra AP usable only to move a teammate's firefighter (as if it were your own) or to open/close a door." },
+    { id: 'rescueSpecialist', label: 'Rescue Specialist', baseAp: 4, restrictedAp: { kind: 'moveChop', amount: 3 },
+        ability: '3 extra AP usable only for moving or chopping walls — and chopping a wall costs 1 AP instead of 2.' },
+    { id: 'cafsFirefighter', label: 'CAFS Firefighter', baseAp: 3, restrictedAp: { kind: 'extinguish', amount: 3 },
+        ability: '3 extra AP usable only for extinguishing.' },
+    { id: 'paramedic', label: 'Paramedic', baseAp: 4, restrictedAp: null,
+        ability: 'Can treat a revealed victim for 1 AP so they walk alongside at 1 AP a space instead of being carried at 2. Extinguishing costs 1 AP more.' },
+    { id: 'imagingTechnician', label: 'Imaging Technician', baseAp: 4, restrictedAp: null,
+        ability: 'Can reveal any POI marker on the board remotely, without travelling to it.' },
+    { id: 'driverOperator', label: 'Driver/Operator', baseAp: 4, restrictedAp: null,
+        ability: 'Fires the deck gun for 2 AP instead of 4, and automatically re-rolls a shot that clears nothing.' },
+    { id: 'hazmatTechnician', label: 'Hazmat Technician', baseAp: 4, restrictedAp: null,
+        ability: 'Can remove a hazmat marker on their own space instantly, instead of carrying it out of the building.' },
+];
+
+export function specialistDef(id: SpecialistId): ISpecialistDef {
+    return SPECIALISTS.find(s => s.id === id)!;
+}
+
+/** §6.2 step 7: each firefighter takes one specialist at random — mirrors Outbreak's dealRoles (rules.ts:361-366) exactly, including its "more roles than seats" slack (8 specialists, MAX_PLAYERS 6). */
+export function dealSpecialists(turnOrder: string[]): Map<string, SpecialistId> {
+    const shuffled = shuffle(SPECIALISTS.map(s => s.id));
+    const assignment = new Map<string, SpecialistId>();
+    turnOrder.forEach((userId, i) => assignment.set(userId, shuffled[i]));
+    return assignment;
+}
+
+/**
+ * Refills `ff`'s AP for the turn about to start: their specialist's full
+ * allowance in the Experienced game (§11) or the flat AP_PER_TURN in the
+ * Family game (§8), plus whatever they banked, and a freshly-full restricted
+ * pool if their specialist has one — unspent restricted AP is never banked
+ * (§8 only banks the general pool). Used both by FiresOutGameType.CheckEndTurn
+ * (a turn handing off) and setup (a firefighter's very first turn, with
+ * `bankedAp` still 0) — the one place both call so a specialist's numbers are
+ * never recomputed differently in two places.
+ */
+export function refillFirefighterAp(ff: IFiresOutFirefighterState, ruleset: RulesetId): void {
+    const def = specialistDef(ff.specialist);
+    const baseAp = ruleset === 'experienced' ? def.baseAp : AP_PER_TURN;
+    const restricted = ruleset === 'experienced' ? def.restrictedAp : null;
+    ff.apLeft = baseAp + ff.bankedAp;
+    ff.restrictedAp = restricted ? { kind: restricted.kind, left: restricted.amount } : null;
+    ff.bankedAp = 0;
 }
 
 // ─── Space / edge state ─────────────────────────────────────────────────────
@@ -555,6 +639,21 @@ export const AP_COSTS = {
     chop: 2,
     drive: 2,
     deckGun: 4,
+    // §11, §17.6 step 10 — flat costs the table gives directly: 'Treats a
+    // victim for 1 AP', 'Crew change ... 2 AP'. Imaging Technician's remote
+    // reveal and the Hazmat Technician's on-site removal have no printed AP
+    // cost (unlike every other §8 row); priced here at 1 AP each, the same
+    // as extinguish — the cheapest existing utility action — rather than
+    // left free, since a free repeatable action would sit outside the AP
+    // economy every other action in this game answers to.
+    reveal: 1,
+    treat: 1,
+    crewChange: 2,
+    disposeHazmatOnSite: 1,
+    // Specialist-modified costs (chop, extinguish, the deck gun) are
+    // resolved by chopApCost/extinguishApCost/deckGunApCost below rather
+    // than living here — this table stays the unmodified baseline every one
+    // of those functions falls back to.
 } as const;
 
 /**
@@ -562,10 +661,10 @@ export const AP_COSTS = {
  * matches it (§17.4: "one spendAp(firefighter, cost, actionKind) decides
  * which pool pays" — every spend site already knows its own action kind, so
  * no action needs a "which pool" argument beyond this). Returns false and
- * mutates nothing if the firefighter can't afford it. No Specialist has a
- * restrictedAp pool yet (17.6 step 10), so `kind` is always `null` today and
- * every spend comes straight out of `apLeft` — this is still the one place
- * that decides, ready for when one does.
+ * mutates nothing if the firefighter can't afford it. Only a firefighter
+ * dealt a specialist with a restrictedAp pool (§11, §17.6 step 10) ever has
+ * `ff.restrictedAp` non-null, so `kind` is a no-op for everyone else — this
+ * is still the one place that decides.
  */
 export function canAffordAp(ff: IFiresOutFirefighterState, cost: number, kind: RestrictedApKind | null): boolean {
     const restricted = ff.restrictedAp && kind && ff.restrictedAp.kind === kind ? ff.restrictedAp.left : 0;
@@ -597,16 +696,54 @@ export function isPassable(edge: IFiresOutEdgeState): boolean {
 // checks for its own legal-target highlighting (below) with no adapter
 // between the wire shape and the internal one.
 type SpacesWithThreat = readonly { threat: ThreatLevel }[];
+// Same trick for the two §11 abilities that read a POI or a hazmat flag
+// rather than threat — legalRevealTargets only needs to know a marker is
+// unrevealed (never its identity), and canTreat only reads `victim` once
+// `revealed` is true, which is exactly when the client's own redacted
+// response carries it. Neither ever needs the full internal IFiresOutSpaceState.
+type SpacesWithPoi = readonly { poi: { revealed: boolean; victim?: boolean } | null }[];
+type SpacesWithHazmat = readonly { hazmat: boolean }[];
 
-/** §8: what moving from `from` to an adjacent `to` costs, given whether `ff` is carrying something. Ignores whether the move is otherwise legal (see canMoveTo). */
+/**
+ * §8: what moving from `from` to an adjacent `to` costs, given whether `ff`
+ * is carrying something. Ignores whether the move is otherwise legal (see
+ * canMoveTo). An escorted victim (§11 Paramedic) walks under their own power
+ * — the ordinary per-space rate, not carryPerSpace — which is the entire
+ * point of treating them in the first place.
+ */
 export function moveApCost(spaces: SpacesWithThreat, ff: IFiresOutFirefighterState, to: number): number {
-    if (ff.carrying) return AP_COSTS.carryPerSpace;
+    if (ff.carrying === 'victim' || ff.carrying === 'hazmat') return AP_COSTS.carryPerSpace;
     return spaces[to].threat === 'fire' ? AP_COSTS.moveIntoFire : AP_COSTS.move;
+}
+
+// ─── Specialist-modified costs (§11, §17.6 step 10) ─────────────────────────
+// Small, named exceptions to the flat AP_COSTS table — every call site
+// already knows which firefighter is paying, so each of these takes `ff` and
+// falls back to the unmodified cost for anyone without the specialist. Only
+// `specialist` is ever read, so these take that alone rather than a full
+// firefighter — which is what lets the AP-hint text in FiresOutActions.tsx
+// call them with just `{ specialist }`, live as a player swaps cards,
+// without needing a whole (possibly stale) firefighter object.
+type HasSpecialist = { specialist: SpecialistId };
+
+/** Rescue Specialist (§11): chops a wall for 1 AP instead of 2. */
+export function chopApCost(ff: HasSpecialist): number {
+    return ff.specialist === 'rescueSpecialist' ? 1 : AP_COSTS.chop;
+}
+
+/** Paramedic (§11): "pays extra to extinguish" — 1 AP more than the flat rate. */
+export function extinguishApCost(ff: HasSpecialist): number {
+    return ff.specialist === 'paramedic' ? AP_COSTS.extinguish + 1 : AP_COSTS.extinguish;
+}
+
+/** Driver/Operator (§11, §12.3): fires the deck gun for 2 AP instead of 4. */
+export function deckGunApCost(ff: HasSpecialist): number {
+    return ff.specialist === 'driverOperator' ? 2 : AP_COSTS.deckGun;
 }
 
 /**
  * §8: whether `ff` may step from `from` to the adjacent `to` — connected by a
- * passable edge, and not carrying a victim or hazmat into fire.
+ * passable edge, and not carrying or escorting anyone into fire.
  */
 export function canMoveTo(
     spaces: SpacesWithThreat,
@@ -640,27 +777,27 @@ export function legalMoveTargets(
 ): number[] {
     const asIf: IFiresOutFirefighterState = carrying ? { ...ff, carrying: 'victim' } : ff;
     return neighboursOf(ff.space).filter(to =>
-        canMoveTo(spaces, edges, asIf, ff.space, to) && canAffordAp(ff, moveApCost(spaces, asIf, to), null));
+        canMoveTo(spaces, edges, asIf, ff.space, to) && canAffordAp(ff, moveApCost(spaces, asIf, to), 'moveChop'));
 }
 
-/** §8: adjacent doors `ff` can afford to open or close. */
+/** §8: adjacent doors `ff` can afford to open or close — funded by a Fire Captain's command AP first (§11), general AP for everyone else. */
 export function legalDoorTargets(edges: IFiresOutEdgeState[], ff: IFiresOutFirefighterState): number[] {
-    if (!canAffordAp(ff, AP_COSTS.door, null)) return [];
+    if (!canAffordAp(ff, AP_COSTS.door, 'command')) return [];
     return neighboursOf(ff.space).filter(to => {
         const edgeId = edgeBetween(ff.space, to);
         return edgeId !== undefined && edges[edgeId].kind === 'door';
     });
 }
 
-/** §8: `ff`'s own space plus any adjacent space carrying smoke or fire, that `ff` can afford to extinguish. */
+/** §8, §11: `ff`'s own space plus any adjacent space carrying smoke or fire, that `ff` can afford to extinguish — a CAFS Firefighter's extinguish AP first, a Paramedic's higher cost, the flat rate for everyone else. */
 export function legalExtinguishTargets(spaces: SpacesWithThreat, ff: IFiresOutFirefighterState): number[] {
-    if (!canAffordAp(ff, AP_COSTS.extinguish, null)) return [];
+    if (!canAffordAp(ff, extinguishApCost(ff), 'extinguish')) return [];
     return [ff.space, ...neighboursOf(ff.space)].filter(space => spaces[space].threat !== 'none');
 }
 
-/** §8, §9.2: adjacent undestroyed walls `ff` can afford to chop. */
+/** §8, §9.2, §11: adjacent undestroyed walls `ff` can afford to chop — a Rescue Specialist's discounted cost and move/chop AP first, the flat rate for everyone else. */
 export function legalChopTargets(edges: IFiresOutEdgeState[], ff: IFiresOutFirefighterState): number[] {
-    if (!canAffordAp(ff, AP_COSTS.chop, null)) return [];
+    if (!canAffordAp(ff, chopApCost(ff), 'moveChop')) return [];
     return neighboursOf(ff.space).filter(to => {
         const edgeId = edgeBetween(ff.space, to);
         return edgeId !== undefined && edges[edgeId].kind === 'wall' && edges[edgeId].damage < 2;
@@ -701,7 +838,7 @@ export function canFireDeckGunAt(
 
 /** §12.3: every interior space `ff` could click to fire the deck gun at — i.e. every space in a quadrant with no firefighter in it. The actual target within that quadrant is rolled (rollTargetInQuadrant), so this is a click surface, not a preview of where the shot lands. */
 export function legalDeckGunTargets(firefighters: IFiresOutFirefighterState[], ff: IFiresOutFirefighterState, engineSpace: number): number[] {
-    if (ff.space !== engineSpace || !canAffordAp(ff, AP_COSTS.deckGun, null)) return [];
+    if (ff.space !== engineSpace || !canAffordAp(ff, deckGunApCost(ff), null)) return [];
     const targets: number[] = [];
     for (let space = 0; space < INTERIOR_SPACE_COUNT; space++) {
         if (canFireDeckGunAt(firefighters, ff, engineSpace, space)) targets.push(space);
@@ -732,4 +869,56 @@ export function fireDeckGun(spaces: IFiresOutSpaceState[], quadrant: Quadrant, n
         }
     }
     return { quadrant, target, clearedSpaces };
+}
+
+// ─── The four non-AP-arithmetic abilities (§11, §17.6 step 10) ─────────────
+
+/** Fire Captain (§11): may act on another firefighter's pawn as if it were their own, spending their own AP — mirrors Outbreak's dispatcherCanControlOthers (rules.ts:410-412). */
+export function fireCaptainCanControlOthers(specialist: SpecialistId): boolean {
+    return specialist === 'fireCaptain';
+}
+
+/**
+ * §10.1: flips a face-down POI at `target` — a false alarm vanishes, a
+ * victim stays as a marker — and returns whether it was a victim, or `null`
+ * if there was nothing unrevealed there to flip. Shared by applyMove's
+ * arrive-and-reveal (FiresOutLogic.ts) and the Imaging Technician's remote
+ * `reveal` action, so the one §10.1 rule ("a false alarm is simply removed")
+ * isn't written twice.
+ */
+export function revealPoiAt(spaces: IFiresOutSpaceState[], target: number): { victim: boolean } | null {
+    const poi = spaces[target].poi;
+    if (!poi || poi.revealed) return null;
+    poi.revealed = true;
+    const victim = poi.victim;
+    if (!victim) spaces[target].poi = null;
+    return { victim };
+}
+
+/** Imaging Technician (§11): every interior space holding an unrevealed POI, affordable right now. No range limit — the whole point is not having to travel. */
+export function legalRevealTargets(spaces: SpacesWithPoi, ff: IFiresOutFirefighterState): number[] {
+    if (ff.specialist !== 'imagingTechnician' || !canAffordAp(ff, AP_COSTS.reveal, null)) return [];
+    const targets: number[] = [];
+    for (let space = 0; space < INTERIOR_SPACE_COUNT; space++) {
+        const poi = spaces[space].poi;
+        if (poi && !poi.revealed) targets.push(space);
+    }
+    return targets;
+}
+
+/** Paramedic (§11): whether `ff` can treat a revealed victim right now — one sits on their own space, unrevealed already ruled out, and they aren't already carrying/escorting someone. */
+export function canTreat(spaces: SpacesWithPoi, ff: IFiresOutFirefighterState): boolean {
+    if (ff.specialist !== 'paramedic' || ff.carrying !== null || !canAffordAp(ff, AP_COSTS.treat, null)) return false;
+    const poi = spaces[ff.space].poi;
+    return !!(poi && poi.revealed && poi.victim);
+}
+
+/** Hazmat Technician (§11): whether `ff` can remove the hazmat on their own space on the spot, rather than carrying it out. */
+export function canDisposeHazmatOnSite(spaces: SpacesWithHazmat, ff: IFiresOutFirefighterState): boolean {
+    return ff.specialist === 'hazmatTechnician' && spaces[ff.space].hazmat && canAffordAp(ff, AP_COSTS.disposeHazmatOnSite, null);
+}
+
+/** §8: whether `ff` can swap Specialist cards right now — must begin the turn at the Engine (Experienced only; Family has no vehicles or cards to swap). */
+export function canCrewChange(ruleset: RulesetId, ff: IFiresOutFirefighterState, engineSpace: number): boolean {
+    return ruleset === 'experienced' && ff.space === engineSpace && canAffordAp(ff, AP_COSTS.crewChange, null);
 }

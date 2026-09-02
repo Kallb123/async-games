@@ -20,7 +20,21 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN } from "@/games/FiresOut/board";
-import { legalChopTargets, legalDeckGunTargets, legalDoorTargets, legalDriveTargets, legalExtinguishTargets, legalMoveTargets, totalDamage } from "@/games/FiresOut/rules";
+import {
+    canCrewChange,
+    canDisposeHazmatOnSite,
+    canTreat,
+    legalChopTargets,
+    legalDeckGunTargets,
+    legalDoorTargets,
+    legalDriveTargets,
+    legalExtinguishTargets,
+    legalMoveTargets,
+    legalRevealTargets,
+    specialistDef,
+    SpecialistId,
+    totalDamage,
+} from "@/games/FiresOut/rules";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId } from "@/utils/ui/players";
 import { playerColourForId } from "@/utils/ui/playerColours";
 
@@ -56,6 +70,14 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     const [mode, setMode] = useResettingState<FiresOutBoardMode | null>(null, targetKey);
     const [carryOnMove, setCarryOnMove] = useResettingState(false, targetKey);
 
+    // §11: a Fire Captain may direct a teammate's firefighter by setting
+    // FiresOutAction.targetUserId (resolveMover, FiresOutLogic.ts) — the
+    // rules engine supports it fully (and is tested), but this screen never
+    // sets it, so 'move' here always acts on the sender's own figure. A
+    // "tap a teammate, then move them" affordance is presentation work for a
+    // later pass, the same way step 7 split Advance Fire's animation out of
+    // step 6's rules — not something this step's board needs to unblock.
+
     const carrying = !!activeFf?.carrying;
     const ownPoi = gs && activeFf ? gs.spaces[activeFf.space].poi : null;
     const showCarryToggle = !carrying && !!ownPoi?.revealed && !!ownPoi.victim;
@@ -70,7 +92,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
                 : activeFf.space === gs.ambulance ? 'ambulance'
                     : null;
 
-    const targetCounts = { move: 0, door: 0, extinguish: 0, chop: 0, drive: 0, deckGun: 0 };
+    const targetCounts = { move: 0, door: 0, extinguish: 0, chop: 0, drive: 0, deckGun: 0, reveal: 0 };
     let validSpaces = new Set<number>();
     if (gs && activeFf && isMyTurn) {
         targetCounts.move = legalMoveTargets(gs.spaces, gs.edges, activeFf, carrying || (showCarryToggle && carryOnMove)).length;
@@ -80,6 +102,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
         if (experienced) {
             targetCounts.drive = vehicleHere ? legalDriveTargets(activeFf, gs[vehicleHere]).length : 0;
             targetCounts.deckGun = legalDeckGunTargets(gs.firefighters, activeFf, gs.engine).length;
+            targetCounts.reveal = legalRevealTargets(gs.spaces, activeFf).length;
         }
 
         if (mode === 'move') validSpaces = new Set(legalMoveTargets(gs.spaces, gs.edges, activeFf, carrying || (showCarryToggle && carryOnMove)));
@@ -88,7 +111,16 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
         else if (mode === 'chop') validSpaces = new Set(legalChopTargets(gs.edges, activeFf));
         else if (mode === 'drive' && vehicleHere) validSpaces = new Set(legalDriveTargets(activeFf, gs[vehicleHere]));
         else if (mode === 'deckGun') validSpaces = new Set(legalDeckGunTargets(gs.firefighters, activeFf, gs.engine));
+        else if (mode === 'reveal') validSpaces = new Set(legalRevealTargets(gs.spaces, activeFf));
     }
+
+    // §11, §17.6 step 10: treat, on-site hazmat disposal and crew change all
+    // target the active firefighter's own space (or nothing) rather than a
+    // board click, so they're plain submit buttons in FiresOutActions
+    // instead of arming the board — see that component's header comment.
+    const showTreat = experienced && !!gs && !!activeFf && canTreat(gs.spaces, activeFf);
+    const showDisposeHazmat = experienced && !!gs && !!activeFf && canDisposeHazmatOnSite(gs.spaces, activeFf);
+    const showCrewChange = experienced && !!gs && !!activeFf && canCrewChange(gs.ruleset, activeFf, gs.engine);
 
     function handleSpaceClick(space: number) {
         if (!mode) return;
@@ -98,6 +130,25 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
         if (mode === 'move') command.carry = carryOnMove;
         if (mode === 'drive' && vehicleHere) command.vehicle = vehicleHere;
         submitCommand(command, () => setMode(null), `space:${space}`);
+    }
+
+    function handleTreat() {
+        const command = new FiresOutAction();
+        command.kind = 'treat';
+        submitCommand(command, undefined, 'treat');
+    }
+
+    function handleDisposeHazmat() {
+        const command = new FiresOutAction();
+        command.kind = 'disposeHazmat';
+        submitCommand(command, undefined, 'disposeHazmat');
+    }
+
+    function handleCrewChange(specialist: SpecialistId) {
+        const command = new FiresOutAction();
+        command.kind = 'crewChange';
+        command.specialist = specialist;
+        submitCommand(command, undefined, 'crewChange');
     }
 
     // The Advance Fire payoff screen (§17.6 step 7) — lives here, not inside
@@ -119,11 +170,18 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
         }, 'endTurn');
     }
 
+    const carryingLabel: Record<'victim' | 'hazmat' | 'escort', string> = {
+        victim: '🧍 carrying', hazmat: '☣️ carrying', escort: '🚶 escorting',
+    };
     const scoreEntries: ScoreEntry[] = (gs?.firefighters ?? []).map((ff) => ({
         id: ff.ownerId,
         name: nameOrYou(ff.ownerId, ff.username),
         color: playerColourForId(ff.ownerId, userIdList),
-        sub: `${ff.apLeft} AP${ff.bankedAp > 0 ? ` · ${ff.bankedAp} banked` : ''}${ff.carrying === 'victim' ? ' · 🧍 carrying' : ''}`,
+        sub: [
+            experienced ? specialistDef(ff.specialist).label : null,
+            `${ff.apLeft} AP${ff.bankedAp > 0 ? ` · ${ff.bankedAp} banked` : ''}`,
+            ff.carrying ? carryingLabel[ff.carrying] : null,
+        ].filter(Boolean).join(' · '),
         score: ff.apLeft,
         isMe: ff.ownerId === myUserId,
         isActive: ff.ownerId === activeFf?.ownerId,
@@ -203,6 +261,16 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
                                 submitting={submitting}
                                 endTurnPending={pendingTarget === 'endTurn'}
                                 experienced={experienced}
+                                specialist={activeFf?.specialist ?? 'generalist'}
+                                showTreat={showTreat}
+                                onTreat={handleTreat}
+                                treatPending={pendingTarget === 'treat'}
+                                showDisposeHazmat={showDisposeHazmat}
+                                onDisposeHazmat={handleDisposeHazmat}
+                                disposeHazmatPending={pendingTarget === 'disposeHazmat'}
+                                showCrewChange={showCrewChange}
+                                onCrewChange={handleCrewChange}
+                                crewChangePending={pendingTarget === 'crewChange'}
                             />
                         </ReadOnlyPanel>
                     )}
