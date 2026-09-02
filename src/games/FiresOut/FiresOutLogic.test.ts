@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FiresOutAction, FiresOutGameType } from "./FiresOutLogic";
 import { IFiresOutGameData, IFiresOutSpecificGameState } from "./FiresOutModels";
-import { edgeBetween, exteriorTopSpace, spaceIndex, VICTIMS_TO_WIN } from "./board";
+import { edgeBetween, exteriorTopSpace, spaceIndex, START_SPACE, VICTIMS_TO_WIN } from "./board";
 import { AP_PER_TURN, buildEmptyEdges, buildEmptySpaces, newFirefighter } from "./rules";
 
 // ─── Minimal in-memory game harness (mirrors SolitaireLogic.test.ts) ────────
@@ -279,6 +279,63 @@ describe("FiresOutAction 'endTurn' and FiresOutGameType", () => {
         const game = makeGame(state, ["u1"]);
         expect(new FiresOutGameType().CheckGameOver(game)).toBe(false);
         expect(game.complete).toBe(false);
+    });
+
+    it("resolves Advance Fire and Replenish POI, and records the rolls it consumed so replay reproduces the same fire", async () => {
+        const state1 = baseState(["u1", "u2"]);
+        const game1 = makeGame(state1);
+        const action1 = cmd("u1", { kind: 'endTurn' });
+
+        const outcome1 = await action1.Execute(game1);
+        expect(outcome1.validMove).toBe(true);
+        expect(action1.recordedRolls).toHaveLength(2); // baseState's poiPool is empty — nothing to replenish
+        const [d6, d8] = action1.recordedRolls!;
+        expect(d6).toBeGreaterThanOrEqual(1);
+        expect(d6).toBeLessThanOrEqual(6);
+        expect(d8).toBeGreaterThanOrEqual(1);
+        expect(d8).toBeLessThanOrEqual(8);
+
+        // Replaying the same rolls against an identical fresh state reaches
+        // the identical result — the point of recording them (§17.4).
+        const state2 = baseState(["u1", "u2"]);
+        const game2 = makeGame(state2);
+        await cmd("u1", { kind: 'endTurn', recordedRolls: action1.recordedRolls }).Execute(game2);
+        const target = spaceIndex(d6 - 1, d8 - 1);
+        expect(state2.spaces[target].threat).toBe(state1.spaces[target].threat);
+    });
+
+    it("loses a victim and knocks down a firefighter caught by fire when Advance Fire resolves, without touching the (1,1) target it rolled", async () => {
+        const state = baseState(["u1", "u2"]);
+        const burning = spaceIndex(3, 3);
+        state.spaces[burning].threat = 'fire';
+        state.spaces[burning].poi = { id: 0, revealed: false, victim: true };
+        state.firefighters[1].space = burning; // not the active figure — Advance Fire hits every firefighter, not just the one ending their turn
+        const game = makeGame(state);
+
+        // Rolls a safe, empty target (1,1) so the only fire consequences come
+        // from the pre-existing blaze at (3,3), not from this roll.
+        const outcome = await cmd("u1", { kind: 'endTurn', recordedRolls: [2, 2] }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(state.lost).toBe(1);
+        expect(state.spaces[burning].poi).toBeNull();
+        expect(state.firefighters[1].space).toBe(START_SPACE);
+        expect(game.gameState.history.some(h => h.text.includes('lost to the fire'))).toBe(true);
+        expect(game.gameState.history.some(h => h.text.includes('was knocked down'))).toBe(true);
+    });
+
+    it("replenishes a POI from the pool once fewer than 3 are on the board", async () => {
+        const state = baseState(["u1", "u2"]);
+        state.poiPool = [true];
+        const game = makeGame(state);
+
+        // (1,1) for the Advance Fire roll (harmless smoke), then (3,5) for
+        // Replenish to place the pool's one marker.
+        await cmd("u1", { kind: 'endTurn', recordedRolls: [2, 2, 4, 6] }).Execute(game);
+
+        expect(state.poiPool).toHaveLength(0);
+        expect(state.spaces[spaceIndex(3, 5)].poi).toEqual({ id: 0, revealed: false, victim: true });
+        expect(game.gameState.history.some(h => h.text.includes('Replenish: 1 new POI marker placed'))).toBe(true);
     });
 
     it("loses if the building collapses (even from a crew's own chopping, before Advance Fire exists)", () => {

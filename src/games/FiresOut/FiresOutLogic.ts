@@ -4,18 +4,23 @@ import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels
 import { serializable } from "@/utils/apiModels/Serialisable";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IFiresOutGameData, IFiresOutSpecificGameState } from "@/games/FiresOut/FiresOutModels";
-import { edgeBetween, isExteriorSpace, isInteriorSpace, neighboursOf, VICTIMS_TO_WIN } from "@/games/FiresOut/board";
+import { edgeBetween, isExteriorSpace, isInteriorSpace, neighboursOf, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN } from "@/games/FiresOut/board";
 import {
     AP_COSTS,
     AP_PER_TURN,
     canMoveTo,
     checkOutcome,
+    IFiresOutAdvanceFireResult,
     IFiresOutFirefighterState,
     MAX_BANKED_AP,
     moveApCost,
+    NextRoll,
+    replenishPoi,
+    resolveAdvanceFire,
     spendAp,
 } from "@/games/FiresOut/rules";
-import { playerHistory } from "@/utils/games/history";
+import { playerHistory, userToken } from "@/utils/games/history";
+import { DiceRoll } from "@/utils/games/DiceRoll";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  FIRES OUT
@@ -23,11 +28,10 @@ import { playerHistory } from "@/utils/games/history";
 //
 // fires-out-gdd.md §17.6 step 4: the turn's spending half — move (including
 // the fire-entry surcharge, carrying a victim, and rescuing one on reaching
-// the exterior), doors, extinguish, chop, and an endTurn that (for now) only
-// banks AP and advances the figure. Advance Fire and Replenish POI are step
-// 6 — until then nothing can lose a victim or damage a wall except a
-// player's own chop, so CheckGameOver only has a win and a (self-inflicted)
-// collapse to watch for.
+// the exterior), doors, extinguish, chop. §17.6 step 6 adds the rest of
+// endTurn: Phase 2 Advance Fire and Phase 3 Replenish POI (§7), the only
+// place this game's randomness is consumed — everything else in a turn is
+// deterministic (§17.4).
 
 const INVALID: ICommandOutcome = { validMove: false, turnOver: false };
 
@@ -209,9 +213,40 @@ function applyChop(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IF
     return { validMove: true, turnOver: false };
 }
 
-// §7 Phase 1, §8: bank up to MAX_BANKED_AP unspent AP, then hand the turn to
-// the next figure. Advancing Fire and Replenishing POI (§7 Phases 2-3) are
-// step 6 — this command doesn't touch the board at all yet.
+// §17.4: "recordedRolls is an ordered list with a cursor" — the resolver
+// calls nextRoll(sides), which pops the next recorded value if the command
+// carried one (a replay) and otherwise rolls fresh and records it, so a
+// single Advance Fire's unknown-in-advance number of rolls (the d6/d8, any
+// Replenish re-rolls) all round-trip through one flat array. First
+// execution records via `used`; replay (which passes a full `recorded`
+// array) consumes it instead of rolling. See stripRecordedRandomness
+// (gameCommand.ts) for why a live request can never supply `recorded…`
+// itself.
+function makeNextRoll(recorded: number[] | undefined): { nextRoll: NextRoll; used: number[] } {
+    const used: number[] = [];
+    let cursor = 0;
+    const nextRoll: NextRoll = sides => {
+        const roll = recorded && cursor < recorded.length ? recorded[cursor] : DiceRoll(sides);
+        cursor++;
+        used.push(roll);
+        return roll;
+    };
+    return { nextRoll, used };
+}
+
+function describeAdvanceFire(result: IFiresOutAdvanceFireResult): string {
+    const rollText = `rolled ${result.rolls.d6},${result.rolls.d8}`;
+    switch (result.resolution) {
+        case 'smoke': return `Advance Fire: ${rollText} — smoke fills space ${result.target}`;
+        case 'fire': return `Advance Fire: ${rollText} — fire catches at space ${result.target}`;
+        case 'explosion': return `Advance Fire: ${rollText} — space ${result.target} explodes!`;
+    }
+}
+
+// §7 Phase 1, §8: bank up to MAX_BANKED_AP unspent AP, hand the turn to the
+// next figure, then resolve Phase 2 Advance Fire and Phase 3 Replenish POI
+// (§9, §10.1) — the fire's consequences for this figure and every other one
+// on the board, not just the figure whose turn is ending.
 function applyEndTurn(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IFiresOutFirefighterState, action: FiresOutAction): ICommandOutcome {
     const previousOwner = ff.ownerId;
     ff.bankedAp = Math.min(MAX_BANKED_AP, ff.bankedAp + ff.apLeft);
@@ -220,6 +255,33 @@ function applyEndTurn(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff:
     const nextOwner = gs.firefighters[gs.activeFirefighter].ownerId;
 
     fo.gameState.history.unshift(playerHistory(action.senderId, `ended their turn${ff.bankedAp > 0 ? ` with ${ff.bankedAp} AP banked` : ''}`));
+
+    const { nextRoll, used } = makeNextRoll(action.recordedRolls);
+
+    const advance = resolveAdvanceFire(gs.spaces, gs.edges, gs.firefighters, nextRoll);
+    fo.gameState.history.unshift({ text: describeAdvanceFire(advance) });
+    for (const index of advance.consequences.knockedDownIndices) {
+        const knocked = gs.firefighters[index];
+        fo.gameState.history.unshift(playerHistory(knocked.ownerId, 'was knocked down and carried outside'));
+    }
+    if (advance.consequences.victimsLost > 0) {
+        gs.lost += advance.consequences.victimsLost;
+        fo.gameState.history.unshift({
+            text: `${advance.consequences.victimsLost} victim${advance.consequences.victimsLost === 1 ? '' : 's'} lost to the fire (${gs.lost}/${VICTIMS_LOST_TO_LOSE})`,
+        });
+    }
+
+    const poolBefore = gs.poiPool.length;
+    gs.nextPoiId = replenishPoi(gs.spaces, gs.poiPool, nextRoll, gs.nextPoiId);
+    const poiPlaced = poolBefore - gs.poiPool.length;
+    if (poiPlaced > 0) {
+        fo.gameState.history.unshift({ text: `Replenish: ${poiPlaced} new POI marker${poiPlaced === 1 ? '' : 's'} placed` });
+    }
+
+    // First execution records what it rolled; a replayed command already
+    // carries `recordedRolls` and this is a no-op rewrite of the same array.
+    action.recordedRolls = used;
+
     return { validMove: true, turnOver: nextOwner !== previousOwner };
 }
 
@@ -236,6 +298,8 @@ export class FiresOutAction implements IGameCommand {
     target?: number;
     /** 'move' only: pick up a revealed victim on the firefighter's current space as they leave it (§10.1-10.2). */
     carry?: boolean;
+    /** 'endTurn' only: the d6/d8 rolls Advance Fire and Replenish POI consumed, in order (§17.4). Stripped from live requests by stripRecordedRandomness; supplied on replay. */
+    recordedRolls?: number[];
 
     myString(): string {
         return `played ${this.kind}`;
