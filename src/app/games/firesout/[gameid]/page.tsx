@@ -65,9 +65,10 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     // now — the only thing that decides what 'drive' can target and which
     // vehicle the command names (§17.6 step 9).
     const vehicleHere: 'engine' | 'ambulance' | null =
-        gs && activeFf && activeFf.space === gs.engine ? 'engine'
-            : gs && activeFf && activeFf.space === gs.ambulance ? 'ambulance'
-                : null;
+        !gs || !activeFf ? null
+            : activeFf.space === gs.engine ? 'engine'
+                : activeFf.space === gs.ambulance ? 'ambulance'
+                    : null;
 
     const targetCounts = { move: 0, door: 0, extinguish: 0, chop: 0, drive: 0, deckGun: 0 };
     let validSpaces = new Set<number>();
