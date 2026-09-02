@@ -145,7 +145,7 @@ function cloneFirefighterState(ff: IFiresOutFirefighterState): IFiresOutFirefigh
         space: ff.space,
         specialist: ff.specialist,
         apLeft: ff.apLeft,
-        restrictedAp: ff.restrictedAp ? { ...ff.restrictedAp } : null,
+        restrictedAp: normalizedRestrictedAp(ff.restrictedAp),
         bankedAp: ff.bankedAp,
         carrying: ff.carrying,
     };
@@ -260,10 +260,19 @@ function firesOutStateSchemaDef() {
         difficulty: String,
         spaces: [{
             threat: String,
+            // A bare nested object here is a Mongoose "single nested
+            // subdocument" path, which — unlike every other optional field in
+            // this file — can't just flatten to individually-defaulted-null
+            // leaves (id/revealed/victim only mean anything together): the
+            // whole point is "no POI here at all" vs. a real one. Without
+            // `default: undefined`, Mongoose hands back a truthy empty
+            // subdocument for a space that was saved with `poi: null`, on
+            // every read after the first (every command reloads the document
+            // fresh — see requireLiveGame's findOne().exec()), which made
+            // every space look like it held an unrevealed POI.
             poi: {
-                id: Number,
-                revealed: Boolean,
-                victim: Boolean,
+                type: new Schema({ id: Number, revealed: Boolean, victim: Boolean }, { _id: false }),
+                default: undefined,
             },
             hazmat: Boolean,
             hotspot: Boolean,
@@ -335,6 +344,20 @@ function poiResponse(poi: IFiresOutPoiState | null): IFiresOutPoiResponse | null
     return poi.revealed ? { id: poi.id, revealed: true, victim: poi.victim } : { id: poi.id, revealed: false };
 }
 
+// `restrictedAp`'s two leaves (`kind`/`left`) are each individually
+// `default: null` in the schema below — the fix `poi` above needed, since
+// unlike `poi` there's no "the whole record is meaningless alone" problem —
+// so `kind` alone is always trustworthy read straight off a loaded document.
+// Checking the *parent* object's truthiness instead (as this used to) isn't:
+// a Mongoose nested-object path is never really `null` once loaded, so that
+// check always took the truthy branch, matching `poi`'s bug. Used by both
+// gameStateToModel (the outgoing DTO) and cloneFirefighterState (the
+// initialSpecificGameState snapshot) — it only normalises the value, no
+// redaction happens here, so both are safe to share it.
+function normalizedRestrictedAp(restrictedAp: IFiresOutFirefighterState['restrictedAp']): IFiresOutFirefighterState['restrictedAp'] {
+    return restrictedAp?.kind != null ? { kind: restrictedAp.kind, left: restrictedAp.left } : null;
+}
+
 // `_viewerId` is unused: nothing in this state is hidden per-player — POI
 // identity is redacted from *everybody* until revealed, not just from
 // opponents, and §17.3 requires every crewmate's AP, specialist and position
@@ -359,7 +382,7 @@ export function gameStateToModel(
         space: ff.space,
         specialist: ff.specialist,
         apLeft: ff.apLeft,
-        restrictedAp: ff.restrictedAp ? { ...ff.restrictedAp } : null,
+        restrictedAp: normalizedRestrictedAp(ff.restrictedAp),
         bankedAp: ff.bankedAp,
         carrying: ff.carrying,
     }));

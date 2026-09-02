@@ -3577,6 +3577,7 @@ button.ag-tt-ticket { cursor: pointer; }
     --fo-door-open: oklch(0.6 0.05 80);
     --fo-smoke: oklch(0.74 0.01 40);
     --fo-fire: #e8622f;
+    --fo-parchment: #fff8ec;
 }
 .ag-game--firesout .ag-game-topbar { background: var(--fo-char); }
 .ag-game--firesout .ag-scorestrip { background: var(--fo-char-2); }
@@ -3602,23 +3603,29 @@ button.ag-tt-ticket { cursor: pointer; }
 
 /* board.png (public/art/fires-out/board.png) is a wider reference-game
    scan whose floor plan + numbered track sits inside x:248–1088,
-   y:33–866 of its 1195×896 canvas, flanked by side columns of dice art
+   y:28–881 of its 1195×896 canvas, flanked by side columns of dice art
    that aren't part of our grid. background-size/-position below zoom and
-   shift the image so that crop, not the whole canvas, fills the grid. */
+   shift the image so that crop, not the whole canvas, fills the grid.
+   The crop isn't square (841×853): the printed numbered track is a
+   shallower strip than the room rows above and below it, so the two
+   exterior rows get their own shorter aspect-ratio below rather than
+   sharing the interior rows' near-square one — using one aspect-ratio
+   for all 8 rows (as this used to) stretches the track row art into the
+   room row above/below it, which is what read as the board being cut off. */
 .ag-fo-grid {
     display: grid;
     grid-template-columns: repeat(8, 1fr);
     gap: 2px;
     background-image: url('/art/fires-out/board.png');
-    background-size: 142.26% 107.56%;
-    background-position: 69.86% 52.38%;
+    background-size: 142.26% 105.04%;
+    background-position: 69.86% 65.12%;
     background-repeat: no-repeat;
 }
 .ag-fo-cell {
     position: relative;
-    aspect-ratio: 1;
+    aspect-ratio: 0.935;
     box-sizing: border-box;
-    background: rgba(255, 248, 236, 0.4);
+    background: color-mix(in srgb, var(--fo-parchment) 40%, transparent);
     border-radius: 3px;
     border: none;
     padding: 0;
@@ -3627,15 +3634,56 @@ button.ag-tt-ticket { cursor: pointer; }
     justify-content: center;
     cursor: default;
 }
-.ag-fo-cell--exterior { background: oklch(0.68 0.01 40 / 0.5); }
-.ag-fo-cell--smoke { background: var(--fo-smoke); }
-.ag-fo-cell--fire { background: var(--fo-fire); }
+.ag-fo-cell--exterior { aspect-ratio: 1.175; background: oklch(0.68 0.01 40 / 0.5); }
 .ag-fo-cell--valid { cursor: pointer; box-shadow: inset 0 0 0 3px var(--ag-gold); }
 .ag-fo-cell:disabled { cursor: default; }
 
-.ag-fo-poi { position: absolute; top: 1px; right: 2px; font-size: 11px; line-height: 1; }
-.ag-fo-hazard { position: absolute; top: 1px; left: 2px; font-size: 11px; line-height: 1; }
-.ag-fo-vehicle { position: absolute; bottom: 1px; right: 2px; font-size: 12px; line-height: 1; }
+/* Smoke and fire (§9.1) are one double-sided marker in the physical game —
+   a token that flips over rather than swapping for a different piece — so
+   here too it's a single element restyled and remounted (FiresOutBoard.tsx
+   keys it on threat) to replay ag-fo-flip each time it changes, instead of
+   the cell's whole background changing colour. */
+.ag-fo-marker {
+    position: absolute;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+.ag-fo-token {
+    top: 3px; left: 3px; right: 3px; bottom: 13px;
+    font-size: 15px;
+    border: 1.5px solid rgba(0, 0, 0, 0.28);
+    box-shadow: 0 2px 2px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.35);
+}
+.ag-fo-token--smoke { background: radial-gradient(circle at 35% 28%, #efe9dd, var(--fo-smoke) 75%); }
+.ag-fo-token--fire { background: radial-gradient(circle at 35% 28%, #ffab63, var(--fo-fire) 75%); border-color: var(--fo-red-deep); }
+
+@keyframes ag-fo-flip {
+    0% { transform: rotateY(100deg) scale(0.7); opacity: 0.3; }
+    55% { transform: rotateY(-14deg) scale(1.06); opacity: 1; }
+    100% { transform: rotateY(0deg) scale(1); }
+}
+.ag-fo-token, .ag-fo-badge--poi { animation: ag-fo-flip 0.4s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+
+/* POIs, hazmat and hot spots are markers too (the printed game's own wooden
+   standees and card tokens), so they get the same small round-badge
+   treatment instead of a bare emoji floating on the room art — POI reuses
+   the flip animation above, since it's the same face-down-marker-turns-over
+   moment as smoke/fire. */
+.ag-fo-badge {
+    width: 15px;
+    height: 15px;
+    font-size: 10px;
+    background: color-mix(in srgb, var(--fo-parchment) 92%, transparent);
+    border: 1px solid rgba(0, 0, 0, 0.25);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.ag-fo-badge--poi { top: 2px; right: 2px; }
+.ag-fo-badge--poi.ag-fo-badge--victim { background: radial-gradient(circle at 35% 30%, #f3c98a, #c98a3f); border-color: #7a4a1d; }
+.ag-fo-badge--hazard { top: 2px; left: 2px; }
+.ag-fo-badge--vehicle { bottom: 2px; right: 2px; }
 
 .ag-fo-pawns { display: flex; gap: 1px; flex-wrap: wrap; justify-content: center; padding-bottom: 2px; }
 .ag-fo-pawn { width: 9px; height: 9px; border-radius: 50%; border: 1px solid #fff; display: inline-block; }
