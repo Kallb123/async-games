@@ -22,3 +22,4 @@ export * from "@/games/WorldDomination/WorldDominationLogic";
 export * from "@/games/Solitaire/SolitaireLogic";
 export * from "@/games/TrainTime/TrainTimeLogic";
 export * from "@/games/Outbreak/OutbreakLogic";
+export * from "@/games/FiresOut/FiresOutLogic";

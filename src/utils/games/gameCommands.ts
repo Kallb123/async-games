@@ -94,6 +94,12 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
         "OutbreakDiscard",
         "OutbreakPlayEvent",
     ],
+    // docs/games/fires-out-gdd.md §17.6 step 3: FiresOutGameType exists now so
+    // CreateGame and gameRegistry.test.ts's barrel check are satisfied;
+    // FiresOutAction is still a skeleton (step 4 fills in Execute).
+    FiresOutGameType: [
+        "FiresOutAction",
+    ],
 };
 
 /** The game types this map knows, for the test that guards it. */

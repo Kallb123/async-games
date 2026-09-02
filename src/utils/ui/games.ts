@@ -47,6 +47,7 @@ import { meta as worldDominationMeta } from "@/games/WorldDomination/meta";
 import { meta as solitaireMeta } from "@/games/Solitaire/meta";
 import { meta as trainTimeMeta } from "@/games/TrainTime/meta";
 import { meta as outbreakMeta } from "@/games/Outbreak/meta";
+import { meta as firesOutMeta } from "@/games/FiresOut/meta";
 
 export const GAME_META: Record<string, GameMeta> = {
     dicecities: diceCitiesMeta,
@@ -57,6 +58,7 @@ export const GAME_META: Record<string, GameMeta> = {
     solitaire: solitaireMeta,
     traintime: trainTimeMeta,
     outbreak: outbreakMeta,
+    firesout: firesOutMeta,
 };
 
 // Games that don't have an implementation yet but are teased in the library.

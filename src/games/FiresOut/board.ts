@@ -204,10 +204,13 @@ export const FAMILY_STARTING_POI: number[] = [
     spaceIndex(0, 0), spaceIndex(0, 6), spaceIndex(5, 6),
 ];
 
-// §1, §11 preamble ("crew of firefighters"): 1-6 players, one figure each in
-// the Family game (multi-pawn solitaire is step 12 of the implementation
-// plan and not wired in yet).
-export const MIN_PLAYERS = 1;
+// §1's "1-6 players, solitaire supported by controlling multiple pawns" is
+// two modes: this wires up the multiplayer one (2-6, one figure each).
+// §17.3's deviation is deliberate — solitaire needs step 12's
+// activeFirefighter/multi-pawn control and ships as a separate mode later,
+// not as MIN_PLAYERS: 1 on the ordinary invite flow, which would let a
+// one-firefighter game through the AP economy makes close to unwinnable.
+export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 6;
 
 // §5: the three end conditions.
