@@ -234,6 +234,29 @@ function makeNextRoll(recorded: number[] | undefined): { nextRoll: NextRoll; use
     return { nextRoll, used };
 }
 
+// §17.6 step 7: what an 'endTurn' command's Advance Fire did, alongside the
+// plain validMove/turnOver every command returns — the structured twin of
+// describeAdvanceFire's log line, for FiresOutAdvanceFireResult.tsx to
+// animate rather than parse back out of history text. Nothing here is hidden
+// information (§10.1's redaction is about POI *identity*, not the count of
+// victims a fire caught), so it needs no per-viewer treatment the way
+// gameStateToModel's response does. Follows SnakesAndLadders'
+// ISnakesAndLaddersDiceRollOutcome precedent: a per-game outcome extends the
+// shared ICommandOutcome rather than growing a second response envelope.
+export interface IFiresOutAdvanceFireOutcome {
+    rolls: { d6: number; d8: number };
+    target: number;
+    resolution: 'smoke' | 'fire' | 'explosion';
+    /** Owner ids of firefighters caught by the fire this Advance Fire — names come off the gameData the same response already carries. */
+    knockedDownOwnerIds: string[];
+    victimsLost: number;
+    poiPlaced: number;
+}
+
+export interface IFiresOutEndTurnOutcome extends ICommandOutcome {
+    advanceFire: IFiresOutAdvanceFireOutcome;
+}
+
 function describeAdvanceFire(result: IFiresOutAdvanceFireResult): string {
     const rollText = `rolled ${result.rolls.d6},${result.rolls.d8}`;
     switch (result.resolution) {
@@ -247,7 +270,7 @@ function describeAdvanceFire(result: IFiresOutAdvanceFireResult): string {
 // next figure, then resolve Phase 2 Advance Fire and Phase 3 Replenish POI
 // (§9, §10.1) — the fire's consequences for this figure and every other one
 // on the board, not just the figure whose turn is ending.
-function applyEndTurn(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IFiresOutFirefighterState, action: FiresOutAction): ICommandOutcome {
+function applyEndTurn(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IFiresOutFirefighterState, action: FiresOutAction): IFiresOutEndTurnOutcome {
     const previousOwner = ff.ownerId;
     ff.bankedAp = Math.min(MAX_BANKED_AP, ff.bankedAp + ff.apLeft);
     ff.apLeft = 0;
@@ -282,7 +305,18 @@ function applyEndTurn(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff:
     // carries `recordedRolls` and this is a no-op rewrite of the same array.
     action.recordedRolls = used;
 
-    return { validMove: true, turnOver: nextOwner !== previousOwner };
+    return {
+        validMove: true,
+        turnOver: nextOwner !== previousOwner,
+        advanceFire: {
+            rolls: advance.rolls,
+            target: advance.target,
+            resolution: advance.resolution,
+            knockedDownOwnerIds: advance.consequences.knockedDownIndices.map(i => gs.firefighters[i].ownerId),
+            victimsLost: advance.consequences.victimsLost,
+            poiPlaced,
+        },
+    };
 }
 
 @serializable

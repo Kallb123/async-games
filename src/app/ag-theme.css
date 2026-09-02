@@ -2264,12 +2264,15 @@ a.ag-list-row, a.ag-list-row-main {
     100% { transform: rotate(0) scale(1); }
 }
 
-/* The move / verdict / new-square reveal fades in once the die settles. */
-.ag-sl-reveal { animation: ag-sl-fade-in 0.35s ease both; }
-@keyframes ag-sl-fade-in {
+/* The move / verdict / new-square reveal fades in once the die settles —
+   shared by any game's post-roll payoff screen (Snakes & Ladders, Fires
+   Out's Advance Fire) via its own `.ag-*-reveal` class, so the keyframes are
+   named for what they do rather than for whichever game defined them first. */
+@keyframes ag-reveal-fade-in {
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: none; }
 }
+.ag-sl-reveal { animation: ag-reveal-fade-in 0.35s ease both; }
 
 /* ---- Playing card (shared PlayingCard primitive: any card game) ---- */
 .ag-pcard {
@@ -2315,8 +2318,13 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-cascade { display: flex; flex-direction: column; }
 .ag-cascade > *:not(:first-child) { margin-top: calc(-1 * var(--ag-cascade-overlap, 40px)); }
 
-/* ---- Roll-result screen (the async payoff) ---- */
-.ag-sl-roll {
+/* ---- Payoff screen shell (the async payoff) — shared by any game's
+   full-screen "here's what your move did" reveal (PayoffScreen.tsx):
+   Snakes & Ladders' dice roll, Fires Out's Advance Fire. Each game supplies
+   its own `stageClassName` gradient modifier and stage content; only the
+   chrome around it — the fixed overlay, the stage frame, the bottom sheet —
+   is shared. ---- */
+.ag-payoff-screen {
     position: fixed;
     inset: 0;
     z-index: 60;
@@ -2328,7 +2336,7 @@ a.ag-list-row, a.ag-list-row-main {
        sliver of the app background at the edges on viewports just over 480px. */
     width: 100%;
 }
-.ag-sl-roll-stage {
+.ag-payoff-stage {
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -2338,6 +2346,27 @@ a.ag-list-row, a.ag-list-row-main {
     padding: 24px 22px;
     text-align: center;
 }
+.ag-payoff-icon {
+    width: 96px;
+    height: 96px;
+    border-radius: 26px;
+    background: var(--ag-surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 52px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    transform: rotate(-4deg);
+}
+.ag-payoff-sheet {
+    background: var(--ag-surface);
+    border-radius: 22px 22px 0 0;
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.12);
+    padding: 16px 16px 18px;
+}
+.ag-payoff-grip { width: 38px; height: 4px; border-radius: 99px; background: var(--ag-line); margin: 0 auto 14px; }
+
+/* ---- Snakes & Ladders' own reveal content, staged inside .ag-payoff-stage/-sheet above ---- */
 .ag-sl-roll-stage--snake { background: radial-gradient(circle at 50% 30%, oklch(0.78 0.09 30), oklch(0.62 0.12 28)); }
 .ag-sl-roll-stage--ladder { background: radial-gradient(circle at 50% 30%, oklch(0.82 0.09 150), oklch(0.6 0.11 150)); }
 .ag-sl-roll-stage--plain { background: radial-gradient(circle at 50% 30%, oklch(0.8 0.07 60), oklch(0.68 0.09 55)); }
@@ -2354,18 +2383,6 @@ a.ag-list-row, a.ag-list-row-main {
     font: 800 14px var(--ag-font);
 }
 .ag-sl-move-pill .ag-sl-move-from { opacity: 0.85; }
-.ag-sl-verdict-icon {
-    width: 96px;
-    height: 96px;
-    border-radius: 26px;
-    background: var(--ag-surface);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 52px;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
-    transform: rotate(-4deg);
-}
 .ag-sl-verdict-title { font: 800 27px/1.1 var(--ag-font); color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.19); }
 .ag-sl-verdict-sub { font: 600 13px/1.5 var(--ag-font); color: #fff; opacity: 0.92; margin-top: 5px; max-width: 260px; }
 .ag-sl-verdict-sub b { font-weight: 800; }
@@ -2380,13 +2397,6 @@ a.ag-list-row, a.ag-list-row-main {
 }
 .ag-sl-newsquare-label { font: 600 11px var(--ag-font); opacity: 0.8; }
 .ag-sl-newsquare-num { font: 800 20px var(--ag-font); color: var(--ag-gold); }
-.ag-sl-roll-sheet {
-    background: var(--ag-surface);
-    border-radius: 22px 22px 0 0;
-    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.12);
-    padding: 16px 16px 18px;
-}
-.ag-sl-roll-grip { width: 38px; height: 4px; border-radius: 99px; background: var(--ag-line); margin: 0 auto 14px; }
 .ag-sl-roll-note {
     display: flex;
     align-items: center;
@@ -3614,3 +3624,26 @@ button.ag-tt-ticket { cursor: pointer; }
 .ag-fo-pawns { display: flex; gap: 1px; flex-wrap: wrap; justify-content: center; padding-bottom: 2px; }
 .ag-fo-pawn { width: 9px; height: 9px; border-radius: 50%; border: 1px solid #fff; display: inline-block; }
 .ag-fo-pawn--active { box-shadow: 0 0 0 1.5px var(--fo-red); }
+
+/* ---- Advance Fire reveal (§17.6 step 7) — the async payoff for ending a
+   turn, staged inside the shared .ag-payoff-stage/-sheet (PayoffScreen.tsx)
+   the same way Snakes & Ladders' own reveal content is above. Only the
+   content is Fires Out's own: two dice instead of one, and a resolution
+   state instead of a verdict. ---- */
+.ag-fo-advance-stage--plain { background: radial-gradient(circle at 50% 30%, var(--fo-char-2), var(--fo-char)); }
+.ag-fo-advance-stage--smoke { background: radial-gradient(circle at 50% 30%, var(--fo-smoke), var(--fo-char)); }
+.ag-fo-advance-stage--fire { background: radial-gradient(circle at 50% 30%, var(--fo-fire), var(--fo-red-deep)); }
+.ag-fo-advance-stage--explosion { background: radial-gradient(circle at 50% 30%, oklch(0.78 0.15 55), var(--fo-red-deep)); }
+.ag-fo-advance-title { font: 800 25px/1.1 var(--ag-font); color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.19); }
+.ag-fo-advance-sub { font: 600 13px var(--ag-font); color: #fff; opacity: 0.9; margin-top: 5px; }
+.ag-fo-advance-notes {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.14);
+    border-radius: 14px;
+    padding: 10px 16px;
+    color: #fff;
+    font: 600 12.5px var(--ag-font);
+}
+.ag-fo-advance-reveal { animation: ag-reveal-fade-in 0.35s ease both; }

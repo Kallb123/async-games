@@ -1,12 +1,13 @@
 'use client'
-import { use } from "react";
+import { use, useState } from "react";
 import { usePathname } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
-import { FiresOutAction } from "@/utils/apiModels/GameLogic";
+import { FiresOutAction, IFiresOutEndTurnOutcome } from "@/utils/apiModels/GameLogic";
 import type { IFiresOutGameDataResponse } from "@/games/FiresOut/apiModels";
 import FiresOutBoard from "@/games/FiresOut/components/FiresOutBoard";
 import FiresOutActions, { FiresOutBoardMode } from "@/games/FiresOut/components/FiresOutActions";
+import FiresOutAdvanceFireResult, { AdvanceFireDisplay, buildAdvanceFireDisplay } from "@/games/FiresOut/components/FiresOutAdvanceFireResult";
 import GameShell from "@/components/ui/GameShell";
 import { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
@@ -44,6 +45,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     const userIdList = gameData?.userIdList ?? [];
     const usernameList = gameData?.usernameList ?? [];
     const myUserId = user?.id ?? '';
+    const nameOrYou = (ownerId: string, name: string): string => ownerId === myUserId ? 'You' : name;
     const isMyTurn = isPlayersTurn(true, user, gameData?.currentTurn) && !complete;
     const activeFf = gs?.firefighters[gs.activeFirefighter];
 
@@ -81,15 +83,28 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
         submitCommand(command, () => setMode(null), `space:${space}`);
     }
 
+    // The Advance Fire payoff screen (§17.6 step 7) — lives here, not inside
+    // FiresOutActions, so it survives the endTurn command handing the turn
+    // (and often activeFirefighter's owner) to someone else.
+    const [advanceFireResult, setAdvanceFireResult] = useState<AdvanceFireDisplay | null>(null);
+
     function handleEndTurn() {
         const command = new FiresOutAction();
         command.kind = 'endTurn';
-        submitCommand(command, () => { setMode(null); setCarryOnMove(false); }, 'endTurn');
+        submitCommand(command, (response) => {
+            setMode(null);
+            setCarryOnMove(false);
+            const advance = (response.outcome as IFiresOutEndTurnOutcome).advanceFire;
+            if (advance) {
+                setAdvanceFireResult(buildAdvanceFireDisplay(command.id, advance,
+                    ownerId => nameOrYou(ownerId, nameForUserId(response.gameData, ownerId))));
+            }
+        }, 'endTurn');
     }
 
     const scoreEntries: ScoreEntry[] = (gs?.firefighters ?? []).map((ff) => ({
         id: ff.ownerId,
-        name: ff.ownerId === myUserId ? 'You' : ff.username,
+        name: nameOrYou(ff.ownerId, ff.username),
         color: playerColourForId(ff.ownerId, userIdList),
         sub: `${ff.apLeft} AP${ff.bankedAp > 0 ? ` · ${ff.bankedAp} banked` : ''}${ff.carrying === 'victim' ? ' · 🧍 carrying' : ''}`,
         score: ff.apLeft,
@@ -182,6 +197,14 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
                             userIdList={userIdList}
                             myUserId={myUserId}
                             turnTimer={gameData?.turnTimer}
+                        />
+                    )}
+
+                    {advanceFireResult && (
+                        <FiresOutAdvanceFireResult
+                            key={advanceFireResult.id}
+                            result={advanceFireResult}
+                            onDismiss={() => setAdvanceFireResult(null)}
                         />
                     )}
                 </>
