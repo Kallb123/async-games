@@ -79,17 +79,18 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
 
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
+    const displayedCurrentTurn = nav.displayedCurrentTurn;
     const userIdList = gameData?.userIdList ?? [];
     const usernameList = gameData?.usernameList ?? [];
     const myUserId = user?.id ?? '';
     const nameOrYou = (ownerId: string, name: string): string => ownerId === myUserId ? 'You' : name;
-    const isMyTurn = isPlayersTurn(nav.isLive, user, nav.displayedCurrentTurn) && !complete;
+    const isMyTurn = isPlayersTurn(nav.isLive, user, displayedCurrentTurn) && !complete;
     const activeFf = gs?.firefighters[gs.activeFirefighter];
 
     // What the board is targeting right now, if anything — reset whenever the
     // active figure changes so a stale pick from the previous turn (or the
     // previous firefighter, mid multi-figure round) never lingers into it.
-    const targetKey = `${nav.displayedCurrentTurn}-${gs?.activeFirefighter ?? ''}`;
+    const targetKey = `${displayedCurrentTurn}-${gs?.activeFirefighter ?? ''}`;
     const [mode, setModeRaw] = useResettingState<FiresOutBoardMode | null>(null, targetKey);
     const [carryOnMove, setCarryOnMove] = useResettingState(false, targetKey);
     // §11: a Fire Captain may direct a teammate's firefighter instead of
@@ -251,7 +252,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
             ? abandoned.subtitle
             : complete
                 ? 'Game over'
-                : isMyTurn ? "Your turn" : `${nameForUserId(gameData, nav.displayedCurrentTurn)}'s turn`;
+                : isMyTurn ? "Your turn" : `${nameForUserId(gameData, displayedCurrentTurn)}'s turn`;
     }
 
     const menuOptions: GameOption[] = [

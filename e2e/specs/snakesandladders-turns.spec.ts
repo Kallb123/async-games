@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { clearGames, clerkUserId, logBrowserErrors } from '../helpers';
+import { clearGames, clerkUserId, logBrowserErrors, reloadAndSettle } from '../helpers';
 
 // The multiplayer follow-up to solitaire-smoke.spec.ts: prove the two-player
 // path solitaire can't reach — inviting a named player, that player accepting
@@ -31,36 +31,6 @@ test.afterAll(async ({ request }) => {
 // and produced a click that silently did nothing.
 function rollButton(page: Page) {
   return page.locator('button.ag-btn--roll');
-}
-
-// The recap screen replaces the board entirely while it's showing (real
-// behaviour: "since you were last here, this happened"), so a reload that
-// lands on it needs dismissing before the actual roll button exists in the
-// DOM at all. The recap is fetched independently of the game data
-// (useTurnRecap's own /api/game/[gameid]/recap call), so a single isVisible()
-// check right after reload can run before it's decided whether to show at
-// all — races both outcomes (the CTA appearing, or the real button appearing
-// directly because there was nothing to recap) instead of guessing which
-// wins by checking once too early.
-async function dismissRecapIfShown(page: Page): Promise<void> {
-  const cta = page.locator('button.ag-recap-cta');
-  await Promise.race([
-    cta.waitFor({ state: 'visible' }),
-    rollButton(page).waitFor({ state: 'visible' }),
-  ]).catch(() => {});
-  if (await cta.isVisible().catch(() => false)) {
-    await cta.click();
-  }
-}
-
-// page.reload() is a full page load just like a fresh navigation — Clerk has
-// to boot its client SDK again from nothing, and it can land on the recap
-// screen instead of the board. Whoever is waiting for the turn to come back
-// gets reloaded mid-test to pick it up, so both need handling every time.
-async function reloadAndSettle(page: Page): Promise<void> {
-  await page.reload();
-  await clerkUserId(page);
-  await dismissRecapIfShown(page);
 }
 
 // Turn order is decided by a roll-off (SnakesAndLaddersModels.ts), so either
@@ -167,7 +137,7 @@ test('invite a player, start a game, and take a turn each', async ({ browser }) 
   await first.getByRole('button', { name: /End turn/ }).click();
 
   // The turn passed to the other player.
-  await reloadAndSettle(second);
+  await reloadAndSettle(second, rollButton(second));
   await expect(rollButton(second)).toBeVisible();
   await expect(rollButton(first)).not.toBeVisible();
 
@@ -175,7 +145,7 @@ test('invite a player, start a game, and take a turn each', async ({ browser }) 
   await second.getByRole('button', { name: /End turn/ }).click();
 
   // ...and back again — both players have now each taken a live turn.
-  await reloadAndSettle(first);
+  await reloadAndSettle(first, rollButton(first));
   await expect(rollButton(first)).toBeVisible();
 
   await oneContext.close();

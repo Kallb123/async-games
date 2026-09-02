@@ -778,6 +778,15 @@ were re-read against this step's diff and none of them changed — solitaire,
 crew planning, the Fire Captain's own-turn-only command AP and the single board
 layout are all exactly as shipped in steps 3-10; no new deviation surfaced.
 
+This step's rulebook review caught one real step-3 gap, invisible until now
+because it only bites once real invites flow: `src/utils/ui/games.ts`'s
+`NAME_TO_URL` (the friendlyName → slug fallback `metaForGame` uses when only
+`gameType.friendlyName` is known, not `url`) had no `"fires out!"` entry, so
+the lobby screen, the home screen's incoming-invites list and the invite push
+notification all silently lost Fires Out's art/tagline/share-card image for
+any invite that reached them without a `url`. Fixed alongside this step
+rather than left for the next report to rediscover.
+
 An `e2e/specs/firesout-turns.spec.ts` proves the pipeline this step wires up
 end to end — invite, accept, take a live turn each, dismiss the Advance Fire
 payoff screen, and confirm "Review actions" is offered from the first turn —

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { clearGames, clerkUserId, logBrowserErrors } from '../helpers';
+import { clearGames, clerkUserId, logBrowserErrors, reloadAndSettle } from '../helpers';
 
 // fires-out-gdd.md §17.6 step 11: prove the game is actually playable end to
 // end, now that meta.available is true — inviting a named player, each side
@@ -21,27 +21,6 @@ test.afterAll(async ({ request }) => {
 
 function endTurnButton(page: Page) {
   return page.getByRole('button', { name: /End turn/ });
-}
-
-// Scoped to the recap CTA's own class, not just its text — the same trap
-// snakesandladders-turns.spec.ts's rollButton comment describes: the "since
-// you were last here" screen's CTA is a dismiss button with no server round
-// trip, and a bare text match can't tell it apart from the real action.
-async function dismissRecapIfShown(page: Page): Promise<void> {
-  const cta = page.locator('button.ag-recap-cta');
-  await Promise.race([
-    cta.waitFor({ state: 'visible' }),
-    endTurnButton(page).waitFor({ state: 'visible' }),
-  ]).catch(() => {});
-  if (await cta.isVisible().catch(() => false)) {
-    await cta.click();
-  }
-}
-
-async function reloadAndSettle(page: Page): Promise<void> {
-  await page.reload();
-  await clerkUserId(page);
-  await dismissRecapIfShown(page);
 }
 
 // Turn order is drawn at random at setup (FiresOutModels.ts's CreateGame), so
@@ -139,7 +118,7 @@ test('invite a player, start a game, and take a turn each', async ({ browser }) 
   // "since you were last here" recap first (the fire the first player's
   // endTurn triggered), which needs dismissing before the board underneath is
   // usable.
-  await reloadAndSettle(second);
+  await reloadAndSettle(second, endTurnButton(second));
   await expect(second.getByText('Your turn')).toBeVisible();
   await expect(endTurnButton(first)).toBeDisabled();
 
@@ -147,7 +126,7 @@ test('invite a player, start a game, and take a turn each', async ({ browser }) 
 
   // ...and back again — both players have now each taken a live turn, and the
   // fire has advanced twice.
-  await reloadAndSettle(first);
+  await reloadAndSettle(first, endTurnButton(first));
   await expect(first.getByText('Your turn')).toBeVisible();
 
   await oneContext.close();

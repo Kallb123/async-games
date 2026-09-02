@@ -1,4 +1,4 @@
-import { type APIRequestContext, type Page } from '@playwright/test';
+import { type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
 // Helpers shared by the specs — game-agnostic bits that would otherwise be
 // copy-pasted into each one. Anything about a particular game's board (roll
@@ -30,6 +30,33 @@ export async function clerkUserId(page: Page): Promise<string | undefined> {
   } catch {
     return undefined;
   }
+}
+
+// Dismisses the "since you were last here" recap screen if it's showing,
+// scoped to its own CTA class rather than text: the recap's dismiss button
+// has no server round trip of its own, and a bare text match can't tell it
+// apart from the real live action (e.g. both "Roll the die" and a recap CTA
+// worded the same way). `liveButton` is the locator for that live action —
+// whichever one proves the board (rather than the recap) is what's showing.
+export async function dismissRecapIfShown(page: Page, liveButton: Locator): Promise<void> {
+  const cta = page.locator('button.ag-recap-cta');
+  await Promise.race([
+    cta.waitFor({ state: 'visible' }),
+    liveButton.waitFor({ state: 'visible' }),
+  ]).catch(() => {});
+  if (await cta.isVisible().catch(() => false)) {
+    await cta.click();
+  }
+}
+
+// page.reload() is a full page load just like a fresh navigation — Clerk has
+// to boot its client SDK again from nothing, and it can land on the recap
+// screen instead of the board. Whoever is waiting for the turn to come back
+// gets reloaded mid-test to pick it up, so both need handling every time.
+export async function reloadAndSettle(page: Page, liveButton: Locator): Promise<void> {
+  await page.reload();
+  await clerkUserId(page);
+  await dismissRecapIfShown(page, liveButton);
 }
 
 // Prints a page's console.error output and uncaught exceptions to this
