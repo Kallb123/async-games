@@ -19,7 +19,7 @@ import {
     resolveAdvanceFire,
     spendAp,
 } from "@/games/FiresOut/rules";
-import { playerHistory, userToken } from "@/utils/games/history";
+import { playerHistory } from "@/utils/games/history";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 
 // ═══════════════════════════════════════════════════════════════════════════
