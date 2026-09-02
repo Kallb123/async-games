@@ -731,7 +731,14 @@ export function chopApCost(ff: HasSpecialist): number {
     return ff.specialist === 'rescueSpecialist' ? 1 : AP_COSTS.chop;
 }
 
-/** Paramedic (§11): "pays extra to extinguish" — 1 AP more than the flat rate. */
+/**
+ * Paramedic (§11): "pays extra to extinguish" — no number is printed, so
+ * this reads it as +1 AP (2 total) rather than, say, doubling it: the
+ * Paramedic's whole design is a trade (fast rescues, weak firefighting), not
+ * a firefighting penalty severe enough to make extinguishing impractical for
+ * them — the smallest surcharge that's still a real cost is the one that
+ * keeps the trade-off legible rather than punitive.
+ */
 export function extinguishApCost(ff: HasSpecialist): number {
     return ff.specialist === 'paramedic' ? AP_COSTS.extinguish + 1 : AP_COSTS.extinguish;
 }

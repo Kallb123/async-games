@@ -489,6 +489,66 @@ describe("reachability (§17.6 step 5 — must mirror FiresOutLogic.ts's own Exe
         expect(legalChopTargets(edges, ff)).toEqual([]);
     });
 
+    // §11: legalMoveTargets/legalChopTargets/legalExtinguishTargets pass a
+    // restricted-AP kind into canAffordAp now, not always null — these prove
+    // that mirrors Execute's own spendAp call exactly: a firefighter with 0
+    // general apLeft still reaches a target funded entirely by their
+    // specialist's own restricted pool, the same as applyChop/applyMove/
+    // applyExtinguish (FiresOutLogic.ts) would actually let them pay for it.
+    it("legalMoveTargets and legalChopTargets stay reachable off a Rescue Specialist's moveChop pool alone", () => {
+        const spaces = buildEmptySpaces();
+        const edges = buildEmptyEdges();
+        const ff = newFirefighter("u1", spaceIndex(2, 1));
+        ff.specialist = 'rescueSpecialist';
+        ff.apLeft = 0;
+        ff.restrictedAp = { kind: 'moveChop', left: 3 };
+
+        expect(legalMoveTargets(spaces, edges, ff, false)).toContain(spaceIndex(2, 0));
+        expect(legalChopTargets(edges, ff)).toEqual([spaceIndex(1, 1)]);
+
+        ff.restrictedAp = { kind: 'moveChop', left: 0 };
+        expect(legalMoveTargets(spaces, edges, ff, false)).toEqual([]); // pool spent, general AP empty too
+        expect(legalChopTargets(edges, ff)).toEqual([]);
+    });
+
+    it("legalExtinguishTargets stays reachable off a CAFS Firefighter's extinguish pool alone", () => {
+        const spaces = buildEmptySpaces();
+        const ff = newFirefighter("u1", spaceIndex(2, 1));
+        ff.specialist = 'cafsFirefighter';
+        ff.apLeft = 0;
+        ff.restrictedAp = { kind: 'extinguish', left: 3 };
+        spaces[ff.space].threat = 'smoke';
+
+        expect(legalExtinguishTargets(spaces, ff)).toContain(ff.space);
+
+        ff.restrictedAp = { kind: 'extinguish', left: 0 };
+        expect(legalExtinguishTargets(spaces, ff)).toEqual([]);
+    });
+
+    it("legalDoorTargets stays reachable off a Fire Captain's command pool alone", () => {
+        const edges = buildEmptyEdges();
+        const ff = newFirefighter("u1", spaceIndex(1, 2)); // beside the living/kitchen door
+        ff.specialist = 'fireCaptain';
+        ff.apLeft = 0;
+        ff.restrictedAp = { kind: 'command', left: 2 };
+
+        expect(legalDoorTargets(edges, ff)).toEqual([spaceIndex(2, 2)]);
+
+        ff.restrictedAp = { kind: 'command', left: 0 };
+        expect(legalDoorTargets(edges, ff)).toEqual([]);
+    });
+
+    it("an unrelated restricted pool never funds a different action — general AP only", () => {
+        const spaces = buildEmptySpaces();
+        const edges = buildEmptyEdges();
+        const ff = newFirefighter("u1", spaceIndex(2, 1));
+        ff.specialist = 'cafsFirefighter';
+        ff.apLeft = 0;
+        ff.restrictedAp = { kind: 'extinguish', left: 3 }; // can't fund a chop
+
+        expect(legalChopTargets(edges, ff)).toEqual([]);
+        expect(legalMoveTargets(spaces, edges, ff, false)).toEqual([]);
+    });
 });
 
 describe("the collapse clock (§5, §17.4 — derived, never stored)", () => {

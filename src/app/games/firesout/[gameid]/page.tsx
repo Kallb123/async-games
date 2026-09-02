@@ -67,25 +67,45 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     // active figure changes so a stale pick from the previous turn (or the
     // previous firefighter, mid multi-figure round) never lingers into it.
     const targetKey = `${gameData?.currentTurn}-${gs?.activeFirefighter ?? ''}`;
-    const [mode, setMode] = useResettingState<FiresOutBoardMode | null>(null, targetKey);
+    const [mode, setModeRaw] = useResettingState<FiresOutBoardMode | null>(null, targetKey);
     const [carryOnMove, setCarryOnMove] = useResettingState(false, targetKey);
+    // §11: a Fire Captain may direct a teammate's firefighter instead of
+    // their own — the owner id of who's being directed, or null for
+    // themselves. Only ever set while mode === 'move' (tap a teammate's
+    // scoreboard pill, then a board space), and cleared whenever the mode
+    // changes away from 'move' so it can't linger into a door/chop/etc.
+    const [directing, setDirecting] = useResettingState<string | null>(null, targetKey);
+    function setMode(next: FiresOutBoardMode | null) {
+        setModeRaw(next);
+        if (next !== 'move') setDirecting(null);
+    }
 
-    // §11: a Fire Captain may direct a teammate's firefighter by setting
-    // FiresOutAction.targetUserId (resolveMover, FiresOutLogic.ts) — the
-    // rules engine supports it fully (and is tested), but this screen never
-    // sets it, so 'move' here always acts on the sender's own figure. A
-    // "tap a teammate, then move them" affordance is presentation work for a
-    // later pass, the same way step 7 split Advance Fire's animation out of
-    // step 6's rules — not something this step's board needs to unblock.
+    // §11, §17.6 step 10: who a 'move' actually acts on — the Fire Captain
+    // themselves, or the teammate they're directing (resolveMover,
+    // FiresOutLogic.ts, mirrors Outbreak's Dispatcher/targetUserId).
+    // Reachability, carry pickup and the AP cost preview all follow the
+    // *mover*; only the AP itself is paid by the active firefighter.
+    const mover = (directing && gs && gs.firefighters.find(f => f.ownerId === directing)) || activeFf;
 
-    const carrying = !!activeFf?.carrying;
-    const ownPoi = gs && activeFf ? gs.spaces[activeFf.space].poi : null;
-    const showCarryToggle = !carrying && !!ownPoi?.revealed && !!ownPoi.victim;
+    const carrying = !!mover?.carrying;
+    const ownSpace = gs && mover ? gs.spaces[mover.space] : null;
+    // §8, §11: what a plain (non-Paramedic) 'move' with carry:true would pick
+    // up leaving this space — a revealed victim takes priority over a hazmat
+    // sharing the same space, matching applyMove's own pickup priority
+    // (FiresOutLogic.ts). Null once already carrying/escorting something, or
+    // when there's nothing here to pick up at all.
+    const carryToggleKind: 'victim' | 'hazmat' | null =
+        carrying ? null
+            : ownSpace?.poi?.revealed && ownSpace.poi.victim ? 'victim'
+                : ownSpace?.hazmat ? 'hazmat'
+                    : null;
+    const showCarryToggle = carryToggleKind !== null;
 
     const experienced = gs?.ruleset === 'experienced';
     // §12.1: which vehicle (if either) the active figure is standing at right
     // now — the only thing that decides what 'drive' can target and which
-    // vehicle the command names (§17.6 step 9).
+    // vehicle the command names (§17.6 step 9). Never directed — only 'move'
+    // can be (§11's table: command AP funds moving a teammate, not driving).
     const vehicleHere: 'engine' | 'ambulance' | null =
         !gs || !activeFf ? null
             : activeFf.space === gs.engine ? 'engine'
@@ -94,8 +114,8 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
 
     const targetCounts = { move: 0, door: 0, extinguish: 0, chop: 0, drive: 0, deckGun: 0, reveal: 0 };
     let validSpaces = new Set<number>();
-    if (gs && activeFf && isMyTurn) {
-        targetCounts.move = legalMoveTargets(gs.spaces, gs.edges, activeFf, carrying || (showCarryToggle && carryOnMove)).length;
+    if (gs && activeFf && mover && isMyTurn) {
+        targetCounts.move = legalMoveTargets(gs.spaces, gs.edges, mover, carrying || (showCarryToggle && carryOnMove)).length;
         targetCounts.door = legalDoorTargets(gs.edges, activeFf).length;
         targetCounts.extinguish = legalExtinguishTargets(gs.spaces, activeFf).length;
         targetCounts.chop = legalChopTargets(gs.edges, activeFf).length;
@@ -105,7 +125,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
             targetCounts.reveal = legalRevealTargets(gs.spaces, activeFf).length;
         }
 
-        if (mode === 'move') validSpaces = new Set(legalMoveTargets(gs.spaces, gs.edges, activeFf, carrying || (showCarryToggle && carryOnMove)));
+        if (mode === 'move') validSpaces = new Set(legalMoveTargets(gs.spaces, gs.edges, mover, carrying || (showCarryToggle && carryOnMove)));
         else if (mode === 'door') validSpaces = new Set(legalDoorTargets(gs.edges, activeFf));
         else if (mode === 'extinguish') validSpaces = new Set(legalExtinguishTargets(gs.spaces, activeFf));
         else if (mode === 'chop') validSpaces = new Set(legalChopTargets(gs.edges, activeFf));
@@ -121,15 +141,21 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     const showTreat = experienced && !!gs && !!activeFf && canTreat(gs.spaces, activeFf);
     const showDisposeHazmat = experienced && !!gs && !!activeFf && canDisposeHazmatOnSite(gs.spaces, activeFf);
     const showCrewChange = experienced && !!gs && !!activeFf && canCrewChange(gs.ruleset, activeFf, gs.engine);
+    // §11: only a Fire Captain has anyone to direct, and only while picking
+    // a move — tapping a teammate's scoreboard pill sets `directing`.
+    const canDirect = isMyTurn && mode === 'move' && activeFf?.specialist === 'fireCaptain';
 
     function handleSpaceClick(space: number) {
         if (!mode) return;
         const command = new FiresOutAction();
         command.kind = mode;
         command.target = space;
-        if (mode === 'move') command.carry = carryOnMove;
+        if (mode === 'move') {
+            command.carry = carryOnMove;
+            if (directing) command.targetUserId = directing;
+        }
         if (mode === 'drive' && vehicleHere) command.vehicle = vehicleHere;
-        submitCommand(command, () => setMode(null), `space:${space}`);
+        submitCommand(command, () => { setMode(null); }, `space:${space}`);
     }
 
     function handleTreat() {
@@ -185,6 +211,13 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
         score: ff.apLeft,
         isMe: ff.ownerId === myUserId,
         isActive: ff.ownerId === activeFf?.ownerId,
+        // §11: a Fire Captain picking a move may tap a teammate's pill here
+        // to direct their firefighter instead of their own (§17.6 step 10)
+        // — tapping it again returns control to themselves.
+        onClick: canDirect && ff.ownerId !== activeFf?.ownerId
+            ? () => setDirecting(directing === ff.ownerId ? null : ff.ownerId)
+            : undefined,
+        highlighted: canDirect && directing === ff.ownerId,
     }));
 
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, nameForUserId(gameData, gameData?.forfeitedBy));
@@ -254,7 +287,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
                                 mode={mode}
                                 onModeChange={setMode}
                                 targetCounts={targetCounts}
-                                showCarryToggle={showCarryToggle}
+                                carryToggleKind={carryToggleKind}
                                 carryOnMove={carryOnMove}
                                 onCarryOnMoveChange={setCarryOnMove}
                                 onEndTurn={handleEndTurn}
@@ -262,6 +295,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
                                 endTurnPending={pendingTarget === 'endTurn'}
                                 experienced={experienced}
                                 specialist={activeFf?.specialist ?? 'generalist'}
+                                directingName={directing ? nameOrYou(directing, nameForUserId(gameData, directing)) : null}
                                 showTreat={showTreat}
                                 onTreat={handleTreat}
                                 treatPending={pendingTarget === 'treat'}

@@ -70,8 +70,8 @@ interface FiresOutActionsProps {
     onModeChange: (mode: FiresOutBoardMode | null) => void;
     /** How many board spaces each mode can currently target — 0 disables its row. */
     targetCounts: Record<FiresOutBoardMode, number>;
-    /** A revealed victim sits on the firefighter's own space, not yet picked up. */
-    showCarryToggle: boolean;
+    /** A revealed victim, or a hazmat, sits on the (possibly directed — see `directingName`) mover's own space, not yet picked up. Null when there's nothing to pick up. */
+    carryToggleKind: 'victim' | 'hazmat' | null;
     carryOnMove: boolean;
     onCarryOnMoveChange: (carry: boolean) => void;
     onEndTurn: () => void;
@@ -80,6 +80,8 @@ interface FiresOutActionsProps {
     /** §6.1 step 7: Drive, the deck gun and every Specialist ability only exist once vehicles/cards are in play. */
     experienced: boolean;
     specialist: SpecialistId;
+    /** §11: set to a teammate's name while a Fire Captain is directing their firefighter instead of moving their own. */
+    directingName: string | null;
     /** §11 Paramedic: a revealed victim sits on their own space, untreated. */
     showTreat: boolean;
     onTreat: () => void;
@@ -106,8 +108,8 @@ interface FiresOutActionsProps {
  */
 export default function FiresOutActions({
     apLeft, bankedAp, mode, onModeChange, targetCounts,
-    showCarryToggle, carryOnMove, onCarryOnMoveChange,
-    onEndTurn, submitting, endTurnPending, experienced, specialist,
+    carryToggleKind, carryOnMove, onCarryOnMoveChange,
+    onEndTurn, submitting, endTurnPending, experienced, specialist, directingName,
     showTreat, onTreat, treatPending,
     showDisposeHazmat, onDisposeHazmat, disposeHazmatPending,
     showCrewChange, onCrewChange, crewChangePending,
@@ -124,6 +126,8 @@ export default function FiresOutActions({
         <div className="ag-actionsheet">
             <p className="ag-action-hint" style={{ marginTop: 0 }}>
                 {apLeft} AP left{bankedAp > 0 ? ` · ${bankedAp} banked` : ''} — tap an action, then a space on the board.
+                {directingName && ` Directing ${directingName}'s move — tap their pill above again to move yourself instead.`}
+                {!directingName && specialist === 'fireCaptain' && mode === 'move' && ' Tap a teammate above to direct their move instead.'}
             </p>
 
             <div className="ag-build-list">
@@ -160,10 +164,10 @@ export default function FiresOutActions({
                 ))}
             </div>
 
-            {showCarryToggle && mode === 'move' && (
+            {carryToggleKind && mode === 'move' && (
                 <OptionToggleRow
-                    title="Carry the victim here"
-                    description="Leave them, or bring them along at 2 AP a space"
+                    title={carryToggleKind === 'victim' ? 'Carry the victim here' : 'Carry the hazmat here'}
+                    description="Leave it, or bring it along at 2 AP a space"
                     on={carryOnMove}
                     onToggle={() => onCarryOnMoveChange(!carryOnMove)}
                 />
