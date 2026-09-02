@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { FiresOutAction, IFiresOutEndTurnOutcome } from "@/utils/apiModels/GameLogic";
-import type { IFiresOutGameDataResponse } from "@/games/FiresOut/apiModels";
+import type { IFiresOutGameDataResponse, IFiresOutSpecificGameStateResponse } from "@/games/FiresOut/apiModels";
 import FiresOutBoard from "@/games/FiresOut/components/FiresOutBoard";
 import FiresOutActions, { FiresOutBoardMode } from "@/games/FiresOut/components/FiresOutActions";
 import FiresOutAdvanceFireResult, { AdvanceFireDisplay, buildAdvanceFireDisplay } from "@/games/FiresOut/components/FiresOutAdvanceFireResult";
@@ -14,11 +14,15 @@ import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
 import Stat from "@/components/ui/Stat";
+import TurnNavControls from "@/components/games/TurnNavControls";
+import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
+import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
+import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN } from "@/games/FiresOut/board";
 import {
     canCrewChange,
@@ -38,10 +42,9 @@ import {
 import { abandonedGameStatus, isPlayersTurn, nameForUserId } from "@/utils/ui/players";
 import { playerColourForId } from "@/utils/ui/playerColours";
 
-// fires-out-gdd.md §17.6 step 5: the board screen. Turn recap and the crew
-// planner are deliberately later steps (11 and 13) — this reads gameData
-// straight off the live command route, the way Solitaire's single-player
-// screen does, rather than through useTurnNavigation/useTurnRecap.
+// fires-out-gdd.md §17.6 step 5 (board), step 11 (turn recap). The crew
+// planner is still a later step (13) — useTurnNavigation is wired with
+// canPlan={false}, the same way Outbreak's board waits on its own step 13.
 export default function GameFiresOut({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
@@ -54,19 +57,40 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     const { submitCommand, submitting, pendingTarget } = useSubmitCommand<IFiresOutGameDataResponse>(gameId, user, setGameData, getGameData);
     const { endGame } = useEndGame(gameId);
 
-    const gs = gameData?.specificGameState;
-    const complete = gameData?.complete ?? false;
+    // Turn review steps back through the match's real actions (one per played
+    // command, not one per figure's whole turn); the board, scoreboard and log
+    // all render whichever point is being viewed. The crew planner (step 13)
+    // is what turns planning on — until then FiresOutActions never appears
+    // while reviewing, so canPlan stays false (isMyTurn below already gates
+    // every submit handler on nav.isLive).
+    const nav = useTurnNavigation<IFiresOutSpecificGameStateResponse>(gameId, {
+        specificGameState: gameData?.specificGameState,
+        currentTurn: gameData?.currentTurn ?? "",
+        complete: gameData?.complete ?? false,
+        winner: gameData?.winner ?? "",
+        history: gameData?.gameState?.history ?? [],
+    });
+    const recapAvailable = gameData?.recapAvailable ?? false;
+
+    // "Since you were last here": the fire advanced once per crewmate since
+    // you last looked (§7, §17.6 step 11) — shown before the board whenever
+    // it's our turn and something happened while we were away.
+    const recap = useTurnRecap(gameId);
+
+    const gs = nav.displayedState;
+    const complete = nav.displayedComplete;
+    const displayedCurrentTurn = nav.displayedCurrentTurn;
     const userIdList = gameData?.userIdList ?? [];
     const usernameList = gameData?.usernameList ?? [];
     const myUserId = user?.id ?? '';
     const nameOrYou = (ownerId: string, name: string): string => ownerId === myUserId ? 'You' : name;
-    const isMyTurn = isPlayersTurn(true, user, gameData?.currentTurn) && !complete;
+    const isMyTurn = isPlayersTurn(nav.isLive, user, displayedCurrentTurn) && !complete;
     const activeFf = gs?.firefighters[gs.activeFirefighter];
 
     // What the board is targeting right now, if anything — reset whenever the
     // active figure changes so a stale pick from the previous turn (or the
     // previous firefighter, mid multi-figure round) never lingers into it.
-    const targetKey = `${gameData?.currentTurn}-${gs?.activeFirefighter ?? ''}`;
+    const targetKey = `${displayedCurrentTurn}-${gs?.activeFirefighter ?? ''}`;
     const [mode, setModeRaw] = useResettingState<FiresOutBoardMode | null>(null, targetKey);
     const [carryOnMove, setCarryOnMove] = useResettingState(false, targetKey);
     // §11: a Fire Captain may direct a teammate's firefighter instead of
@@ -228,10 +252,16 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
             ? abandoned.subtitle
             : complete
                 ? 'Game over'
-                : isMyTurn ? "Your turn" : `${nameForUserId(gameData, gameData?.currentTurn)}'s turn`;
+                : isMyTurn ? "Your turn" : `${nameForUserId(gameData, displayedCurrentTurn)}'s turn`;
     }
 
     const menuOptions: GameOption[] = [
+        ...(recap.hasRecap ? [{
+            key: 'recap',
+            label: 'Show last recap',
+            icon: '🔁',
+            onClick: recap.reshow,
+        }] : []),
         ...(!complete ? [{
             key: 'end',
             label: 'End game',
@@ -241,13 +271,26 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
         }] : []),
     ];
 
+    // Recap intro: a standalone welcome-back screen shown before the board
+    // when it's our turn and moves happened while we were away.
+    if (recap.show) {
+        return (
+            <TurnRecapScreen
+                recap={recap.recap!}
+                cta="See the fire →"
+                onDismiss={recap.dismiss}
+                onReact={recap.react}
+            />
+        );
+    }
+
     return (
         <GameShell
             title="Fires Out!"
             subtitle={subtitle}
             options={gameData ? menuOptions : undefined}
             syncing={submitting}
-            log={{ entries: gameData?.gameState?.history ?? [], userIdList }}
+            log={{ entries: nav.displayedHistory, userIdList }}
             chat={{ gameId, userIdList, usernameList }}
             className="ag-game--firesout"
         >
@@ -329,6 +372,10 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
                             result={advanceFireResult}
                             onDismiss={() => setAdvanceFireResult(null)}
                         />
+                    )}
+
+                    {recapAvailable && (
+                        <TurnNavControls nav={nav as unknown as ReturnType<typeof useTurnNavigation>} canPlan={false} userIdList={userIdList} />
                     )}
                 </>
             )}

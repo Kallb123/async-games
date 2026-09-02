@@ -97,6 +97,7 @@ const NAME_TO_URL: Record<string, string> = {
     "solitaire": "solitaire",
     "train time": "traintime",
     "outbreak": "outbreak",
+    "fires out!": "firesout",
 };
 
 export function metaForGame(opts: { url?: string; friendlyName?: string }): GameMeta | undefined {

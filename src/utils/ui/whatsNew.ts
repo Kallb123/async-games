@@ -28,6 +28,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🎲",
         items: [
             {
+                title: "Fires Out!",
+                detail: "Team up as a crew of firefighters to pull every victim out before the building comes down — chop through walls, carry victims to safety, and watch the fire spread once per firefighter's turn. Play the printed Family setup or the randomised Experienced game with hazmats, hot spots and eight Specialists.",
+                game: "firesout",
+            },
+            {
                 title: "Outbreak",
                 detail: "Team up to cure four spreading diseases before the board overwhelms you — open hands, seven roles, and a recap that shows exactly how much worse things got while you were away.",
                 game: "outbreak",

@@ -722,6 +722,80 @@ nothing, silently, with no test failing (`gameRegistry.test.ts` checks the
 `compute*` half only). Then flip `meta.available`, add the "What's new" line to
 `src/utils/ui/whatsNew.ts`, and fold 17.3's deviations into this document.
 
+*Landed.* Replay needed no new snapshot machinery: `initialSpecificGameState`
+and `buildInitialFiresOutStateFromGameData` already existed from step 3 (§17.4
+decided this was a snapshot-replay game — the Family fire cluster and the POI
+shuffle are both creation-time randomness — before there was a step 2 to build
+around it), so the adapter registered in `replay.ts` is two lines pointing at
+what was already there. `plannableCommands: []`, same as every other
+unbuilt-planning game — §17.5 already worked out that Fires Out qualifies for
+*both* patterns once a UI exists (deck freeze **and** decoy, the one row in
+`turn-recap-and-planning.md`'s per-game table marked "both"), but that's steps
+13/14's job.
+
+`src/games/FiresOut/recap.ts` exports `firesOutRecapAdapter`. Per §7, the
+away-time story is the fire, not the crew's own choices, so `toEvents` leans on
+`IFiresOutEndTurnOutcome.advanceFire` — already the fully-resolved summary of
+one endTurn's chain of Advance Fire and any flare-ups (§9.4), built by
+`applyEndTurn` in `FiresOutLogic.ts` — rather than re-deriving it from a
+snapshot diff, the same shortcut World Domination's recap takes for its
+battles. The crew's own good news (a POI flipped face up, a rescue, a hazmat
+cleared, a Specialist swap) is read straight off each command's own `kind`/
+`target`/`specialist` fields instead: unlike Outbreak's cube counts, a move's
+`target` already names the one space that matters, so no whole-board diff is
+needed. Doors, extinguishing, chopping, driving and the deck gun are this
+game's equivalent of a Catan road — routine enough to stay silent. `tip` points
+at a revealed victim still waiting to be carried out, falling back to a hazmat
+left on the board.
+
+Result stats are the four pieces `GameResultData.ts` needs, added to
+`FiresOutModels.ts` alongside the invitation/state machinery already there:
+`IFiresOutGameResultStats`/`firesOutGameResultStatsSchemaDef`,
+`computeFiresOutResultStats` (rescued/lost straight off the final state,
+damage via `rules.ts`'s own `totalDamage` rather than a second total — §17.4's
+"never a stored total" applies here too — and turns lasted by counting
+`kind === 'endTurn'` in `commandHistory`, since `endTurn` is the one command
+type that ever appears there for a passive figure and the only one §17.4 lets
+consume randomness) and `formatFiresOutResultStats`. One game-wide stat group
+with no per-player breakdown, the same shape Outbreak's and Solitaire's own
+summaries use since a co-op table shares its result. Wired into
+`GAME_RESULT_STATS` under the `FiresOut` key.
+
+The board screen picked up `useTurnNavigation` + `TurnNavControls` and
+`useTurnRecap` + `TurnRecapScreen`, gated on `recap.show` before the normal
+board render — the same shape Outbreak uses — plus a "Show last recap" row in
+the options menu when `recap.hasRecap`. `isMyTurn` now gates on `nav.isLive`
+rather than a bare `true`, which is what makes every existing submit handler
+(move, door, extinguish, chop, drive, deck gun, treat, dispose, crew change,
+end turn) automatically read-only while reviewing, with no per-handler change
+needed. `recapAvailable` is `true` from the moment a game is created (the
+snapshot is written in `CreateGame`, not earned by playing), so "Review
+actions" is offered before anyone has taken a turn — unlike every other
+snapshot-replay game in the repo, which only reaches this state well into a
+match. `meta.available` is `true`, `GameLibrary` now lists Fires Out for real,
+and `src/utils/ui/whatsNew.ts` has its "New games" line. §17.3's deviations
+were re-read against this step's diff and none of them changed — solitaire,
+crew planning, the Fire Captain's own-turn-only command AP and the single board
+layout are all exactly as shipped in steps 3-10; no new deviation surfaced.
+
+This step's rulebook review caught one real step-3 gap, invisible until now
+because it only bites once real invites flow: `src/utils/ui/games.ts`'s
+`NAME_TO_URL` (the friendlyName → slug fallback `metaForGame` uses when only
+`gameType.friendlyName` is known, not `url`) had no `"fires out!"` entry, so
+the lobby screen, the home screen's incoming-invites list and the invite push
+notification all silently lost Fires Out's art/tagline/share-card image for
+any invite that reached them without a `url`. Fixed alongside this step
+rather than left for the next report to rediscover.
+
+An `e2e/specs/firesout-turns.spec.ts` proves the pipeline this step wires up
+end to end — invite, accept, take a live turn each, dismiss the Advance Fire
+payoff screen, and confirm "Review actions" is offered from the first turn —
+following `snakesandladders-turns.spec.ts`'s shape. `src/games/FiresOut/
+replay.test.ts` follows Train Time's `replay.test.ts` precedent: a passive
+game (every figure just ends its turn) replayed with `Math.random` stubbed to
+throw, `buildEventFeed` exercised on a real command log, and
+`computeFiresOutResultStats` checked against the final state.
+
 **12 — Solitaire, optional.** Multi-pawn control, closing gap 3 with the
 `activeFirefighter` design 17.2 describes — no duplicate entries in `turnOrder`,
 so every `findIndex` in the repo stays correct and a solo game can still take a
