@@ -20,7 +20,7 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN } from "@/games/FiresOut/board";
-import { legalChopTargets, legalDoorTargets, legalExtinguishTargets, legalMoveTargets, totalDamage } from "@/games/FiresOut/rules";
+import { legalChopTargets, legalDeckGunTargets, legalDoorTargets, legalDriveTargets, legalExtinguishTargets, legalMoveTargets, totalDamage } from "@/games/FiresOut/rules";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId } from "@/utils/ui/players";
 import { playerColourForId } from "@/utils/ui/playerColours";
 
@@ -60,18 +60,33 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     const ownPoi = gs && activeFf ? gs.spaces[activeFf.space].poi : null;
     const showCarryToggle = !carrying && !!ownPoi?.revealed && !!ownPoi.victim;
 
-    const targetCounts = { move: 0, door: 0, extinguish: 0, chop: 0 };
+    const experienced = gs?.ruleset === 'experienced';
+    // §12.1: which vehicle (if either) the active figure is standing at right
+    // now — the only thing that decides what 'drive' can target and which
+    // vehicle the command names (§17.6 step 9).
+    const vehicleHere: 'engine' | 'ambulance' | null =
+        gs && activeFf && activeFf.space === gs.engine ? 'engine'
+            : gs && activeFf && activeFf.space === gs.ambulance ? 'ambulance'
+                : null;
+
+    const targetCounts = { move: 0, door: 0, extinguish: 0, chop: 0, drive: 0, deckGun: 0 };
     let validSpaces = new Set<number>();
     if (gs && activeFf && isMyTurn) {
         targetCounts.move = legalMoveTargets(gs.spaces, gs.edges, activeFf, carrying || (showCarryToggle && carryOnMove)).length;
         targetCounts.door = legalDoorTargets(gs.edges, activeFf).length;
         targetCounts.extinguish = legalExtinguishTargets(gs.spaces, activeFf).length;
         targetCounts.chop = legalChopTargets(gs.edges, activeFf).length;
+        if (experienced) {
+            targetCounts.drive = vehicleHere ? legalDriveTargets(activeFf, gs[vehicleHere]).length : 0;
+            targetCounts.deckGun = legalDeckGunTargets(gs.firefighters, activeFf, gs.engine).length;
+        }
 
         if (mode === 'move') validSpaces = new Set(legalMoveTargets(gs.spaces, gs.edges, activeFf, carrying || (showCarryToggle && carryOnMove)));
         else if (mode === 'door') validSpaces = new Set(legalDoorTargets(gs.edges, activeFf));
         else if (mode === 'extinguish') validSpaces = new Set(legalExtinguishTargets(gs.spaces, activeFf));
         else if (mode === 'chop') validSpaces = new Set(legalChopTargets(gs.edges, activeFf));
+        else if (mode === 'drive' && vehicleHere) validSpaces = new Set(legalDriveTargets(activeFf, gs[vehicleHere]));
+        else if (mode === 'deckGun') validSpaces = new Set(legalDeckGunTargets(gs.firefighters, activeFf, gs.engine));
     }
 
     function handleSpaceClick(space: number) {
@@ -80,6 +95,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
         command.kind = mode;
         command.target = space;
         if (mode === 'move') command.carry = carryOnMove;
+        if (mode === 'drive' && vehicleHere) command.vehicle = vehicleHere;
         submitCommand(command, () => setMode(null), `space:${space}`);
     }
 
@@ -166,6 +182,8 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
                             activeFirefighter={gs.activeFirefighter}
                             validSpaces={validSpaces}
                             onSpaceClick={isMyTurn && !submitting ? handleSpaceClick : undefined}
+                            engine={experienced ? gs.engine : undefined}
+                            ambulance={experienced ? gs.ambulance : undefined}
                         />
                     )}
 
@@ -183,6 +201,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
                                 onEndTurn={handleEndTurn}
                                 submitting={submitting}
                                 endTurnPending={pendingTarget === 'endTurn'}
+                                experienced={experienced}
                             />
                         </ReadOnlyPanel>
                     )}

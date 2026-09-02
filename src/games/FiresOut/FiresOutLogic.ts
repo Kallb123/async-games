@@ -4,14 +4,17 @@ import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels
 import { serializable } from "@/utils/apiModels/Serialisable";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IFiresOutGameData, IFiresOutSpecificGameState } from "@/games/FiresOut/FiresOutModels";
-import { edgeBetween, isExteriorSpace, isInteriorSpace, neighboursOf, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN } from "@/games/FiresOut/board";
+import { edgeBetween, isExteriorSpace, isInteriorSpace, neighboursOf, quadrantOf, vehicleTrackNeighbours, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN } from "@/games/FiresOut/board";
 import {
     AP_COSTS,
     AP_PER_TURN,
+    canFireDeckGunAt,
     canMoveTo,
     checkOutcome,
+    fireDeckGun,
     IFiresOutAdvanceFireResult,
     IFiresOutFirefighterState,
+    isRescuePoint,
     MAX_BANKED_AP,
     moveApCost,
     NextRoll,
@@ -101,7 +104,7 @@ export class FiresOutGameType implements IGameType {
 // precedent (§21.4: "four command classes, not fifteen") rather than a class
 // per move type.
 
-export type FiresOutActionKind = 'move' | 'door' | 'extinguish' | 'chop' | 'endTurn';
+export type FiresOutActionKind = 'move' | 'door' | 'extinguish' | 'chop' | 'drive' | 'deckGun' | 'endTurn';
 
 function activeFirefighter(gs: IFiresOutSpecificGameState): IFiresOutFirefighterState | undefined {
     return gs.firefighters[gs.activeFirefighter];
@@ -155,7 +158,9 @@ function applyMove(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IF
         }
     }
 
-    if (ff.carrying === 'victim' && isExteriorSpace(target)) {
+    // §10.2: any exterior space rescues in the Family game; the Experienced
+    // game requires reaching the Ambulance specifically.
+    if (ff.carrying === 'victim' && isRescuePoint(gs.ruleset, gs.ambulance, target)) {
         gs.rescued++;
         ff.carrying = null;
         notes.push('rescued a victim!');
@@ -210,6 +215,59 @@ function applyChop(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IF
 
     edge.damage = (edge.damage + 1) as 0 | 1 | 2;
     fo.gameState.history.unshift(playerHistory(action.senderId, `chopped a wall toward space ${target}${edge.damage >= 2 ? ' — destroyed it' : ''}`));
+    return { validMove: true, turnOver: false };
+}
+
+// §8, §12.1-12.2, §17.6 step 9: drive the Engine or the Ambulance one parking
+// spot along its own track (board.ts's vehicleTrackNeighbours), 2 AP —
+// Experienced only (§6.1 step 7 sets vehicles aside in the Family game).
+// "Firefighters in the Engine's space may ride along when it is driven"
+// (§12.1): everyone standing at the vehicle's space — the driver included —
+// moves with it, at no extra cost. `action.vehicle` picks which one, since a
+// firefighter starting the action at neither vehicle has nothing to drive.
+function applyDrive(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IFiresOutFirefighterState, action: FiresOutAction): ICommandOutcome {
+    if (gs.ruleset !== 'experienced') return INVALID;
+    const vehicle = action.vehicle;
+    if (vehicle !== 'engine' && vehicle !== 'ambulance') return INVALID;
+    const vehicleSpace = vehicle === 'engine' ? gs.engine : gs.ambulance;
+    if (ff.space !== vehicleSpace) return INVALID;
+
+    const target = action.target;
+    if (!requireTarget(target) || !vehicleTrackNeighbours(vehicleSpace).includes(target)) return INVALID;
+    if (!spendAp(ff, AP_COSTS.drive, null)) return INVALID;
+
+    const riders = gs.firefighters.filter(f => f.space === vehicleSpace);
+    for (const rider of riders) rider.space = target;
+    if (vehicle === 'engine') gs.engine = target; else gs.ambulance = target;
+
+    const vehicleName = vehicle === 'engine' ? 'Engine' : 'Ambulance';
+    const riderNote = riders.length > 1 ? ` with ${riders.length - 1} other firefighter${riders.length > 2 ? 's' : ''} riding along` : '';
+    fo.gameState.history.unshift(playerHistory(action.senderId, `drove the ${vehicleName} to space ${target}${riderNote}`));
+    return { validMove: true, turnOver: false };
+}
+
+// §12.3, §17.6 step 9: fire the deck gun from the Engine, 4 AP — the only
+// non-endTurn action that consumes a die roll (see makeNextRoll below), since
+// §12.3's targeting is itself random. This doesn't touch Advance Fire (no
+// spreading, no consequences) — it only clears threat — so it doesn't run
+// afoul of §17.4's "keep Advance Fire out of every other kind"; a future
+// crew-planner step (17.6 step 13) that wants a dice-free frozen-fire plan
+// will need to exclude this kind too, the same way it already excludes
+// endTurn, but that's that step's decision to make, not this one's.
+function applyDeckGun(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IFiresOutFirefighterState, action: FiresOutAction): ICommandOutcome {
+    if (gs.ruleset !== 'experienced') return INVALID;
+    const target = action.target;
+    if (!requireTarget(target) || !canFireDeckGunAt(gs.firefighters, ff, gs.engine, target)) return INVALID;
+    if (!spendAp(ff, AP_COSTS.deckGun, null)) return INVALID;
+
+    const { nextRoll, used } = makeNextRoll(action.recordedRolls);
+    const result = fireDeckGun(gs.spaces, quadrantOf(target), nextRoll);
+    action.recordedRolls = used;
+
+    const effect = result.clearedSpaces.length
+        ? `cleared ${result.clearedSpaces.length} space${result.clearedSpaces.length === 1 ? '' : 's'}`
+        : 'no effect';
+    fo.gameState.history.unshift(playerHistory(action.senderId, `fired the deck gun at space ${result.target} — ${effect}`));
     return { validMove: true, turnOver: false };
 }
 
@@ -352,7 +410,9 @@ export class FiresOutAction implements IGameCommand {
     target?: number;
     /** 'move' only: pick up a revealed victim on the firefighter's current space as they leave it (§10.1-10.2). */
     carry?: boolean;
-    /** 'endTurn' only: the d6/d8 rolls Advance Fire and Replenish POI consumed, in order (§17.4). Stripped from live requests by stripRecordedRandomness; supplied on replay. */
+    /** 'drive' only: which vehicle — the firefighter must already be at its space (§12.1-12.2). */
+    vehicle?: 'engine' | 'ambulance';
+    /** 'endTurn' and 'deckGun' only: the d6/d8 rolls consumed, in order (§17.4) — 'deckGun' can re-roll more than one pair before landing inside its quadrant (rollTargetInQuadrant). Stripped from live requests by stripRecordedRandomness; supplied on replay. */
     recordedRolls?: number[];
 
     myString(): string {
@@ -371,6 +431,8 @@ export class FiresOutAction implements IGameCommand {
             case 'door': outcome = applyDoor(fo, gs, ff, this); break;
             case 'extinguish': outcome = applyExtinguish(fo, gs, ff, this); break;
             case 'chop': outcome = applyChop(fo, gs, ff, this); break;
+            case 'drive': outcome = applyDrive(fo, gs, ff, this); break;
+            case 'deckGun': outcome = applyDeckGun(fo, gs, ff, this); break;
             case 'endTurn': outcome = applyEndTurn(fo, gs, ff, this); break;
             default: return INVALID;
         }

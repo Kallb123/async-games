@@ -8,7 +8,7 @@ import { shuffle } from "@/utils/games/shuffle";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { FiresOutGameType } from "@/utils/apiModels/GameLogic";
 import { DiceRoll } from "@/utils/games/DiceRoll";
-import { DifficultyId, RulesetId, START_SPACE } from "./board";
+import { AMBULANCE_START, DifficultyId, ENGINE_START, RulesetId, START_SPACE } from "./board";
 import {
     IFiresOutEdgeState,
     IFiresOutFirefighterState,
@@ -120,6 +120,11 @@ export interface IFiresOutSpecificGameState {
     // every Family game. Placed-on-board + this always equals
     // TOTAL_HOTSPOT_MARKERS (board.ts), the conservation invariant §17.7 asks for.
     hotspotReserve: number;
+    // §6.2 step 6, §12, §17.6 step 9: parking spots — always populated (the
+    // same "meaningless but populated" pattern as `difficulty`), only ever
+    // driven or used as the rescue destination once `ruleset === 'experienced'`.
+    engine: number;
+    ambulance: number;
 }
 
 function cloneSpaceState(s: IFiresOutSpaceState): IFiresOutSpaceState {
@@ -162,6 +167,8 @@ export function cloneFiresOutState(gs: IFiresOutSpecificGameState): IFiresOutSpe
         firefighters: gs.firefighters.map(cloneFirefighterState),
         activeFirefighter: gs.activeFirefighter,
         hotspotReserve: gs.hotspotReserve,
+        engine: gs.engine,
+        ambulance: gs.ambulance,
     };
 }
 
@@ -199,6 +206,8 @@ export function buildInitialFiresOutState(turnOrder: string[], ruleset: RulesetI
         firefighters: turnOrder.map(userId => newFirefighter(userId, START_SPACE)),
         activeFirefighter: 0,
         hotspotReserve,
+        engine: ENGINE_START,
+        ambulance: AMBULANCE_START,
     };
 }
 
@@ -261,6 +270,8 @@ function firesOutStateSchemaDef() {
         }],
         activeFirefighter: Number,
         hotspotReserve: Number,
+        engine: Number,
+        ambulance: Number,
     };
 }
 
@@ -346,6 +357,8 @@ export function gameStateToModel(
         firefighters,
         activeFirefighter: gs.activeFirefighter,
         hotspotReserve: gs.hotspotReserve,
+        engine: gs.engine,
+        ambulance: gs.ambulance,
     };
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FiresOutAction, FiresOutGameType, IFiresOutEndTurnOutcome } from "./FiresOutLogic";
 import { IFiresOutGameData, IFiresOutSpecificGameState } from "./FiresOutModels";
-import { edgeBetween, exteriorTopSpace, spaceIndex, START_SPACE, VICTIMS_TO_WIN } from "./board";
+import { AMBULANCE_START, edgeBetween, ENGINE_START, exteriorTopSpace, spaceIndex, START_SPACE, vehicleTrackNeighbours, VICTIMS_TO_WIN } from "./board";
 import { AP_PER_TURN, buildEmptyEdges, buildEmptySpaces, newFirefighter } from "./rules";
 
 // ─── Minimal in-memory game harness (mirrors SolitaireLogic.test.ts) ────────
@@ -44,7 +44,15 @@ function baseState(turnOrder: string[] = ["u1", "u2"]): IFiresOutSpecificGameSta
         firefighters: turnOrder.map(userId => newFirefighter(userId, spaceIndex(2, 1))),
         activeFirefighter: 0,
         hotspotReserve: 0,
+        engine: ENGINE_START,
+        ambulance: AMBULANCE_START,
     };
+}
+
+// Vehicle tests need an Experienced state, since 'drive'/'deckGun' and the
+// Ambulance-gated rescue are all set aside in the Family game (§6.1 step 7).
+function experiencedState(turnOrder: string[] = ["u1", "u2"]): IFiresOutSpecificGameState {
+    return { ...baseState(turnOrder), ruleset: 'experienced' };
 }
 
 describe("FiresOutAction 'move'", () => {
@@ -221,6 +229,112 @@ describe("FiresOutAction 'chop'", () => {
         // (2,1)-(2,0) is open (same room) — nothing to chop.
         const outcome = await cmd("u1", { kind: 'chop', target: spaceIndex(2, 0) }).Execute(game);
         expect(outcome.validMove).toBe(false);
+    });
+});
+
+describe("FiresOutAction 'drive' (§8, §12.1-12.2, §17.6 step 9)", () => {
+    it("drives the Engine one parking spot, taking every firefighter at its space along for free", async () => {
+        const state = experiencedState();
+        state.firefighters[0].space = ENGINE_START;
+        state.firefighters[1].space = ENGINE_START; // riding along
+        const game = makeGame(state);
+        const target = vehicleTrackNeighbours(ENGINE_START)[0];
+
+        const outcome = await cmd("u1", { kind: 'drive', vehicle: 'engine', target }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(state.engine).toBe(target);
+        expect(state.firefighters[0].space).toBe(target);
+        expect(state.firefighters[1].space).toBe(target); // rode along, at no extra cost
+        expect(state.firefighters[0].apLeft).toBe(AP_PER_TURN - 2);
+        expect(state.firefighters[1].apLeft).toBe(AP_PER_TURN); // the passenger paid nothing
+    });
+
+    it("rejects driving from anywhere but the vehicle's own space", async () => {
+        const state = experiencedState();
+        state.firefighters[0].space = spaceIndex(2, 1); // not at the Engine
+        const game = makeGame(state);
+
+        const outcome = await cmd("u1", { kind: 'drive', vehicle: 'engine', target: vehicleTrackNeighbours(ENGINE_START)[0] }).Execute(game);
+        expect(outcome.validMove).toBe(false);
+    });
+
+    it("rejects driving in the Family game — vehicles are set aside (§6.1 step 7)", async () => {
+        const state = baseState();
+        state.firefighters[0].space = ENGINE_START;
+        const game = makeGame(state);
+
+        const outcome = await cmd("u1", { kind: 'drive', vehicle: 'engine', target: vehicleTrackNeighbours(ENGINE_START)[0] }).Execute(game);
+        expect(outcome.validMove).toBe(false);
+    });
+});
+
+describe("FiresOutAction 'deckGun' (§12.3, §17.6 step 9)", () => {
+    it("fires from the Engine into an unoccupied quadrant, clearing threat there and recording the roll it consumed", async () => {
+        const state = experiencedState();
+        state.firefighters[0].space = ENGINE_START;
+        state.firefighters[1].space = spaceIndex(0, 0); // occupies quadrant 0
+        state.spaces[spaceIndex(5, 7)].threat = 'fire'; // inside quadrant 3, clear of firefighters
+        const game = makeGame(state);
+
+        const action = cmd("u1", { kind: 'deckGun', target: spaceIndex(5, 7), recordedRolls: [6, 8] });
+        const outcome = await action.Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(state.spaces[spaceIndex(5, 7)].threat).toBe('none');
+        expect(state.firefighters[0].apLeft).toBe(AP_PER_TURN - 4);
+        expect(action.recordedRolls).toEqual([6, 8]);
+        expect(game.gameState.history.some(h => h.text.includes('fired the deck gun'))).toBe(true);
+    });
+
+    it("rejects targeting a quadrant that has a firefighter in it", async () => {
+        const state = experiencedState();
+        state.firefighters[0].space = ENGINE_START;
+        state.firefighters[1].space = spaceIndex(0, 0); // occupies quadrant 0
+        const game = makeGame(state);
+
+        const outcome = await cmd("u1", { kind: 'deckGun', target: spaceIndex(0, 1), recordedRolls: [1, 2] }).Execute(game);
+        expect(outcome.validMove).toBe(false);
+    });
+
+    it("rejects firing from anywhere but the Engine", async () => {
+        const state = experiencedState();
+        state.firefighters[0].space = spaceIndex(2, 1);
+        const game = makeGame(state);
+
+        const outcome = await cmd("u1", { kind: 'deckGun', target: spaceIndex(5, 7), recordedRolls: [6, 8] }).Execute(game);
+        expect(outcome.validMove).toBe(false);
+    });
+});
+
+describe("Ambulance-gated rescue (§10.2, §17.6 step 9)", () => {
+    it("does not rescue at an ordinary exterior space in the Experienced game", async () => {
+        const state = experiencedState();
+        const ff = state.firefighters[0];
+        ff.space = spaceIndex(0, 0);
+        ff.carrying = 'victim';
+        const game = makeGame(state);
+
+        const outcome = await cmd("u1", { kind: 'move', target: exteriorTopSpace(0) }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(state.rescued).toBe(0);
+        expect(ff.carrying).toBe('victim'); // still carrying — not yet at the Ambulance
+    });
+
+    it("rescues once the carried victim reaches the Ambulance", async () => {
+        const state = experiencedState();
+        state.ambulance = exteriorTopSpace(0);
+        const ff = state.firefighters[0];
+        ff.space = spaceIndex(0, 0);
+        ff.carrying = 'victim';
+        const game = makeGame(state);
+
+        const outcome = await cmd("u1", { kind: 'move', target: exteriorTopSpace(0) }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(state.rescued).toBe(1);
+        expect(ff.carrying).toBeNull();
     });
 });
 

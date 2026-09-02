@@ -58,6 +58,39 @@ export function isExteriorSpace(space: number): boolean {
 /** Where a firefighter starts: the exterior space outside the front door (§6.1 step 5, simplified to one shared entry point — see the note above `EXTERIOR_TOP_START`). */
 export const START_SPACE = exteriorTopSpace(0);
 
+// §6.2 step 6, §17.6 step 9: "separate exterior parking spots" for the two
+// vehicles — fixed rather than player-chosen (the printed game doesn't
+// mandate specific spots either). One per track, at the far end from
+// START_SPACE (top-left): since driving only ever moves a vehicle along its
+// own track (vehicleTrackNeighbours), starting them on different tracks
+// means they can never collide with each other, and neither track's end
+// collides with where firefighters enter. Always populated in
+// specificGameState, meaningless in a Family game — the same "always
+// populated" pattern `difficulty` already uses.
+export const ENGINE_START = exteriorTopSpace(COLS - 1);
+export const AMBULANCE_START = exteriorBottomSpace(COLS - 1);
+
+/**
+ * The parking spot(s) a vehicle can drive to from `space` — one step along
+ * its own exterior track row (§12: vehicles never enter the building, and
+ * this simplified board's two tracks don't connect to each other — see the
+ * note above `EXTERIOR_TOP_START`). Deliberately not built from `edgesOf`/
+ * `neighboursOf`: those model the wall/door graph state lives on, and a
+ * parking spot has none of that — it's always drivable.
+ */
+export function vehicleTrackNeighbours(space: number): number[] {
+    const col = colOf(space);
+    const neighbours: number[] = [];
+    if (space >= EXTERIOR_TOP_START && space < EXTERIOR_TOP_START + COLS) {
+        if (col > 0) neighbours.push(exteriorTopSpace(col - 1));
+        if (col < COLS - 1) neighbours.push(exteriorTopSpace(col + 1));
+    } else if (space >= EXTERIOR_BOTTOM_START && space < EXTERIOR_BOTTOM_START + COLS) {
+        if (col > 0) neighbours.push(exteriorBottomSpace(col - 1));
+        if (col < COLS - 1) neighbours.push(exteriorBottomSpace(col + 1));
+    }
+    return neighbours;
+}
+
 // ─── Dice → coordinate (§3's design note, §9.1) ─────────────────────────────
 
 /** The d6/d8 roll's target interior space — 1-6 picks the row, 1-8 the column. */
@@ -257,3 +290,25 @@ export function difficultyTier(difficulty: DifficultyId): IFiresOutDifficultyTie
 
 /** §3's component count — the total hot spot marker supply. Placed-on-board + reserve always equals this (a conservation invariant, like the POI pool and the damage markers — §17.7's testing note). */
 export const TOTAL_HOTSPOT_MARKERS = 24;
+
+// ─── Quadrants (§12.3, §17.6 step 9) ────────────────────────────────────────
+// The deck gun targets "a quadrant of the building" — four equal 3-row ×
+// 4-column regions, split at the grid's own midpoints. Interior spaces only;
+// nothing calls quadrantOf on an exterior space.
+
+export type Quadrant = 0 | 1 | 2 | 3;
+export const QUADRANT_COUNT = 4;
+
+export function quadrantOf(space: number): Quadrant {
+    const top = rowOf(space) < ROWS / 2 ? 0 : 1;
+    const left = colOf(space) < COLS / 2 ? 0 : 1;
+    return (top * 2 + left) as Quadrant;
+}
+
+export function spacesInQuadrant(quadrant: Quadrant): number[] {
+    const spaces: number[] = [];
+    for (let space = 0; space < INTERIOR_SPACE_COUNT; space++) {
+        if (quadrantOf(space) === quadrant) spaces.push(space);
+    }
+    return spaces;
+}

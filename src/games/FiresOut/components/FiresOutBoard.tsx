@@ -30,9 +30,12 @@ interface FiresOutBoardProps {
     /** Spaces the pending action (if any) can legally target — the tappable ones. */
     validSpaces: Set<number>;
     onSpaceClick?: (space: number) => void;
+    /** §12, §17.6 step 9: current parking spots — omitted in the Family game, which sets vehicles aside. */
+    engine?: number;
+    ambulance?: number;
 }
 
-export default function FiresOutBoard({ spaces, edges, firefighters, userIdList, activeFirefighter, validSpaces, onSpaceClick }: FiresOutBoardProps) {
+export default function FiresOutBoard({ spaces, edges, firefighters, userIdList, activeFirefighter, validSpaces, onSpaceClick, engine, ambulance }: FiresOutBoardProps) {
     const pawnsBySpace = new Map<number, IFiresOutFirefighterResponse[]>();
     firefighters.forEach(ff => pawnsBySpace.set(ff.space, [...(pawnsBySpace.get(ff.space) ?? []), ff]));
     const activeOwnerId = firefighters[activeFirefighter]?.ownerId;
@@ -88,6 +91,11 @@ export default function FiresOutBoard({ spaces, edges, firefighters, userIdList,
                     {(state.hazmat || state.hotspot) && (
                         <span className="ag-fo-hazard" aria-hidden="true" title={state.hazmat ? 'Hazmat' : 'Hot spot'}>
                             {state.hazmat ? '☣️' : '♨️'}
+                        </span>
+                    )}
+                    {(space === engine || space === ambulance) && (
+                        <span className="ag-fo-vehicle" aria-hidden="true" title={space === engine ? 'Engine' : 'Ambulance'}>
+                            {space === engine ? '🚒' : '🚑'}
                         </span>
                     )}
                     {pawns.length > 0 && (

@@ -4,13 +4,19 @@ import ActionButton from '@/components/ui/ActionButton';
 import OptionToggleRow from '@/components/ui/OptionToggleRow';
 import { AP_COSTS } from '@/games/FiresOut/rules';
 
-export type FiresOutBoardMode = 'move' | 'door' | 'extinguish' | 'chop';
+export type FiresOutBoardMode = 'move' | 'door' | 'extinguish' | 'chop' | 'drive' | 'deckGun';
 
-const MODE_DEFS: { mode: FiresOutBoardMode; icon: string; name: string; hint: string }[] = [
+interface ModeDef { mode: FiresOutBoardMode; icon: string; name: string; hint: string; experiencedOnly?: boolean }
+
+const MODE_DEFS: ModeDef[] = [
     { mode: 'move', icon: '🚶', name: 'Move', hint: `${AP_COSTS.move} AP (${AP_COSTS.moveIntoFire} into fire, ${AP_COSTS.carryPerSpace}/space carrying)` },
     { mode: 'door', icon: '🚪', name: 'Open / close a door', hint: `${AP_COSTS.door} AP` },
     { mode: 'extinguish', icon: '💧', name: 'Extinguish', hint: `${AP_COSTS.extinguish} AP` },
     { mode: 'chop', icon: '🪓', name: 'Chop a wall', hint: `${AP_COSTS.chop} AP` },
+    // §12, §17.6 step 9 — Experienced only (§6.1 step 7 sets vehicles aside
+    // in the Family game).
+    { mode: 'drive', icon: '🚒', name: 'Drive', hint: `${AP_COSTS.drive} AP — from the Engine or Ambulance`, experiencedOnly: true },
+    { mode: 'deckGun', icon: '💦', name: 'Fire the deck gun', hint: `${AP_COSTS.deckGun} AP — from the Engine, into a quadrant with no one in it`, experiencedOnly: true },
 ];
 
 interface FiresOutActionsProps {
@@ -27,6 +33,8 @@ interface FiresOutActionsProps {
     onEndTurn: () => void;
     submitting: boolean;
     endTurnPending: boolean;
+    /** §6.1 step 7: Drive and the deck gun only exist once vehicles are in play. */
+    experienced: boolean;
 }
 
 /**
@@ -39,7 +47,7 @@ interface FiresOutActionsProps {
 export default function FiresOutActions({
     apLeft, bankedAp, mode, onModeChange, targetCounts,
     showCarryToggle, carryOnMove, onCarryOnMoveChange,
-    onEndTurn, submitting, endTurnPending,
+    onEndTurn, submitting, endTurnPending, experienced,
 }: FiresOutActionsProps) {
     return (
         <div className="ag-actionsheet">
@@ -48,7 +56,7 @@ export default function FiresOutActions({
             </p>
 
             <div className="ag-build-list">
-                {MODE_DEFS.map(def => {
+                {MODE_DEFS.filter(def => experienced || !def.experiencedOnly).map(def => {
                     const count = targetCounts[def.mode];
                     const disabled = count === 0;
                     const active = mode === def.mode;

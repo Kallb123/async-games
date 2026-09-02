@@ -49,6 +49,9 @@ export interface IFiresOutSpecificGameStateResponse {
     activeFirefighter: number;
     /** §9.4: hot spot markers not yet placed — 0 in a Family game. */
     hotspotReserve: number;
+    /** §12: parking spots — meaningful only once `ruleset === 'experienced'`. */
+    engine: number;
+    ambulance: number;
 }
 
 export interface IFiresOutGameDataResponse extends IGameDataResponse {

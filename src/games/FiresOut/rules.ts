@@ -23,15 +23,21 @@ import {
     FAMILY_STARTING_FIRE,
     FAMILY_STARTING_POI,
     INTERIOR_SPACE_COUNT,
+    isExteriorSpace,
     isInteriorSpace,
     neighboursOf,
+    Quadrant,
+    quadrantOf,
     rowOf,
     ROWS,
+    RulesetId,
     spaceForRoll,
     spaceIndex,
     SPACE_COUNT,
+    spacesInQuadrant,
     START_SPACE,
     TOTAL_HOTSPOT_MARKERS,
+    vehicleTrackNeighbours,
     VICTIM_POI_COUNT,
     VICTIMS_LOST_TO_LOSE,
     VICTIMS_TO_WIN,
@@ -178,8 +184,13 @@ function seedInitialExplosion(spaces: IFiresOutSpaceState[], edges: IFiresOutEdg
     explode(spaces, edges, target);
 }
 
-/** A rolled interior coordinate a setup placement re-rolls until `isValid` accepts it, bounded the same way replenishPoi bounds its own re-rolls. */
-function rollValidSetupTarget(nextRoll: NextRoll, isValid: (space: number) => boolean): number | null {
+/**
+ * A rolled interior coordinate that re-rolls until `isValid` accepts it,
+ * bounded the same way replenishPoi bounds its own re-rolls. Setup's own
+ * placements use this directly; rollTargetInQuadrant (§17.6 step 9) is the
+ * same loop with a quadrant as its validity check, for the deck gun.
+ */
+export function rollValidTarget(nextRoll: NextRoll, isValid: (space: number) => boolean): number | null {
     const MAX_ATTEMPTS = INTERIOR_SPACE_COUNT * 4;
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         const target = spaceForRoll(nextRoll(6), nextRoll(8));
@@ -215,7 +226,7 @@ export function applyExperiencedSetup(
     // (nobody would leave equipment in an active blast zone) and not
     // stacked on another hazmat.
     for (let i = 0; i < tier.hazmats; i++) {
-        const target = rollValidSetupTarget(nextRoll, space => spaces[space].threat !== 'fire' && !spaces[space].hazmat);
+        const target = rollValidTarget(nextRoll, space => spaces[space].threat !== 'fire' && !spaces[space].hazmat);
         if (target !== null) spaces[target].hazmat = true;
     }
 
@@ -226,7 +237,7 @@ export function applyExperiencedSetup(
     const toPlace = hotspotsToPlace(crewSize, difficulty);
     let placed = 0;
     for (let i = 0; i < toPlace; i++) {
-        const target = rollValidSetupTarget(nextRoll,
+        const target = rollValidTarget(nextRoll,
             space => spaces[space].threat !== 'fire' && !spaces[space].hazmat && !spaces[space].hotspot);
         if (target === null) break;
         spaces[target].hotspot = true;
@@ -542,6 +553,8 @@ export const AP_COSTS = {
     door: 1,
     extinguish: 1,
     chop: 2,
+    drive: 2,
+    deckGun: 4,
 } as const;
 
 /**
@@ -652,4 +665,71 @@ export function legalChopTargets(edges: IFiresOutEdgeState[], ff: IFiresOutFiref
         const edgeId = edgeBetween(ff.space, to);
         return edgeId !== undefined && edges[edgeId].kind === 'wall' && edges[edgeId].damage < 2;
     });
+}
+
+// ─── Vehicles (§12, §17.6 step 9) ───────────────────────────────────────────
+// Experienced only (§6.1 step 7: Family sets vehicles aside); FiresOutLogic.ts
+// gates both 'drive' and 'deckGun' on `gs.ruleset === 'experienced'` the same
+// way it would any other Family/Experienced difference.
+
+/** §10.2: the Family game rescues at any exterior space; the Experienced game requires reaching the Ambulance specifically, wherever it's currently parked. */
+export function isRescuePoint(ruleset: RulesetId, ambulance: number, space: number): boolean {
+    if (!isExteriorSpace(space)) return false;
+    return ruleset === 'family' || space === ambulance;
+}
+
+/** §8, §12.1: adjacent parking spots `ff` can afford to drive `vehicleSpace` to — only from the vehicle's own space, along its own track row (vehicleTrackNeighbours). Mirrors FiresOutLogic.ts's own Execute check, the same contract as this section's header comment. */
+export function legalDriveTargets(ff: IFiresOutFirefighterState, vehicleSpace: number): number[] {
+    if (ff.space !== vehicleSpace || !canAffordAp(ff, AP_COSTS.drive, null)) return [];
+    return vehicleTrackNeighbours(vehicleSpace);
+}
+
+function quadrantHasFirefighter(firefighters: IFiresOutFirefighterState[], quadrant: Quadrant): boolean {
+    return firefighters.some(f => isInteriorSpace(f.space) && quadrantOf(f.space) === quadrant);
+}
+
+/** §12.3: whether `ff` (from the Engine) may fire the deck gun into `target`'s quadrant — the quadrant must hold no firefighter at all, not just be clear of `ff` themselves. */
+export function canFireDeckGunAt(
+    firefighters: IFiresOutFirefighterState[],
+    ff: IFiresOutFirefighterState,
+    engineSpace: number,
+    target: number,
+): boolean {
+    if (ff.space !== engineSpace || !isInteriorSpace(target)) return false;
+    return !quadrantHasFirefighter(firefighters, quadrantOf(target));
+}
+
+/** §12.3: every interior space `ff` could click to fire the deck gun at — i.e. every space in a quadrant with no firefighter in it. The actual target within that quadrant is rolled (rollTargetInQuadrant), so this is a click surface, not a preview of where the shot lands. */
+export function legalDeckGunTargets(firefighters: IFiresOutFirefighterState[], ff: IFiresOutFirefighterState, engineSpace: number): number[] {
+    if (ff.space !== engineSpace || !canAffordAp(ff, AP_COSTS.deckGun, null)) return [];
+    const targets: number[] = [];
+    for (let space = 0; space < INTERIOR_SPACE_COUNT; space++) {
+        if (canFireDeckGunAt(firefighters, ff, engineSpace, space)) targets.push(space);
+    }
+    return targets;
+}
+
+/** §12.3: "roll for a target space within it" — re-rolls (via rollValidTarget) until the d6/d8 lands inside `quadrant`. */
+export function rollTargetInQuadrant(quadrant: Quadrant, nextRoll: NextRoll): number {
+    return rollValidTarget(nextRoll, space => quadrantOf(space) === quadrant) ?? spacesInQuadrant(quadrant)[0];
+}
+
+export interface IFiresOutDeckGunResult {
+    quadrant: Quadrant;
+    target: number;
+    /** Spaces that actually had something to clear — a strict subset of target + its orthogonal neighbours. */
+    clearedSpaces: number[];
+}
+
+/** §12.3: fire the deck gun into `quadrant` — rolls the actual target, then removes fire and smoke from it and its orthogonal neighbours (interior only; a target on the grid's edge simply has fewer neighbours to clear). */
+export function fireDeckGun(spaces: IFiresOutSpaceState[], quadrant: Quadrant, nextRoll: NextRoll): IFiresOutDeckGunResult {
+    const target = rollTargetInQuadrant(quadrant, nextRoll);
+    const clearedSpaces: number[] = [];
+    for (const space of [target, ...neighboursOf(target).filter(isInteriorSpace)]) {
+        if (spaces[space].threat !== 'none') {
+            spaces[space].threat = 'none';
+            clearedSpaces.push(space);
+        }
+    }
+    return { quadrant, target, clearedSpaces };
 }

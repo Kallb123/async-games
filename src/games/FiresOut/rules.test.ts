@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+    AMBULANCE_START,
     COLS,
+    ENGINE_START,
     EXTERIOR_TOP_START,
+    exteriorBottomSpace,
+    exteriorTopSpace,
     INTERIOR_SPACE_COUNT,
+    quadrantOf,
     TOTAL_HOTSPOT_MARKERS,
     edgeBetween,
     spaceIndex,
@@ -14,12 +19,17 @@ import {
     applyExperiencedSetup,
     buildEmptyEdges,
     buildEmptySpaces,
+    canFireDeckGunAt,
     checkOutcome,
     explode,
+    fireDeckGun,
     flashover,
     isBuildingCollapsed,
+    isRescuePoint,
     legalChopTargets,
+    legalDeckGunTargets,
     legalDoorTargets,
+    legalDriveTargets,
     legalExtinguishTargets,
     legalMoveTargets,
     newFirefighter,
@@ -28,6 +38,7 @@ import {
     resolveAdvanceFire,
     resolveFireConsequences,
     resolveTargetSpace,
+    rollTargetInQuadrant,
     shuffledPoiPool,
     totalDamage,
 } from "./rules";
@@ -508,6 +519,90 @@ describe("shuffledPoiPool (§10.1)", () => {
         expect(pool).toHaveLength(15);
         expect(pool.filter(Boolean)).toHaveLength(10);
         expect(pool.filter(v => !v)).toHaveLength(5);
+    });
+});
+
+describe("isRescuePoint (§10.2, §17.6 step 9)", () => {
+    it("rescues at any exterior space in the Family game", () => {
+        expect(isRescuePoint('family', AMBULANCE_START, exteriorTopSpace(3))).toBe(true);
+        expect(isRescuePoint('family', AMBULANCE_START, spaceIndex(0, 0))).toBe(false); // interior — not exterior at all
+    });
+
+    it("requires the Ambulance specifically in the Experienced game", () => {
+        expect(isRescuePoint('experienced', AMBULANCE_START, AMBULANCE_START)).toBe(true);
+        expect(isRescuePoint('experienced', AMBULANCE_START, exteriorTopSpace(3))).toBe(false);
+        // Once the Ambulance has been driven, the new spot rescues.
+        expect(isRescuePoint('experienced', exteriorBottomSpace(3), exteriorBottomSpace(3))).toBe(true);
+    });
+});
+
+describe("legalDriveTargets (§8, §12.1-12.2, §17.6 step 9 — must mirror FiresOutLogic.ts's applyDrive)", () => {
+    it("is empty unless the firefighter is at the vehicle's own space", () => {
+        const ff = newFirefighter("u1", spaceIndex(0, 0));
+        expect(legalDriveTargets(ff, ENGINE_START)).toEqual([]);
+    });
+
+    it("offers the adjacent parking spots once affordable, empty once AP runs out", () => {
+        const ff = newFirefighter("u1", ENGINE_START);
+        expect(legalDriveTargets(ff, ENGINE_START)).toEqual([exteriorTopSpace(COLS - 2)]);
+
+        ff.apLeft = 0;
+        expect(legalDriveTargets(ff, ENGINE_START)).toEqual([]);
+    });
+});
+
+describe("deck gun (§12.3, §17.6 step 9)", () => {
+    it("canFireDeckGunAt requires the firefighter at the Engine and a quadrant with no one in it", () => {
+        const shooter = newFirefighter("u1", ENGINE_START);
+        const bystander = newFirefighter("u2", spaceIndex(0, 0)); // quadrant 0
+
+        expect(canFireDeckGunAt([shooter, bystander], shooter, ENGINE_START, spaceIndex(5, 7))).toBe(true); // quadrant 3 — clear
+        expect(canFireDeckGunAt([shooter, bystander], shooter, ENGINE_START, spaceIndex(0, 1))).toBe(false); // quadrant 0 — occupied
+        expect(canFireDeckGunAt([shooter, bystander], bystander, ENGINE_START, spaceIndex(5, 7))).toBe(false); // shooter not at the Engine
+    });
+
+    it("legalDeckGunTargets lists every space in an unoccupied quadrant, and none in an occupied one", () => {
+        const shooter = newFirefighter("u1", ENGINE_START);
+        const bystander = newFirefighter("u2", spaceIndex(0, 0)); // quadrant 0
+        const targets = legalDeckGunTargets([shooter, bystander], shooter, ENGINE_START);
+
+        expect(targets.length).toBe((INTERIOR_SPACE_COUNT / 4) * 3); // the other 3 quadrants
+        expect(targets.every(s => quadrantOf(s) !== 0)).toBe(true);
+
+        shooter.apLeft = 0;
+        expect(legalDeckGunTargets([shooter, bystander], shooter, ENGINE_START)).toEqual([]);
+    });
+
+    it("rollTargetInQuadrant re-rolls until the d6/d8 lands inside the quadrant", () => {
+        let i = 0;
+        const rolls = [1, 1, 6, 8]; // (0,0) -> quadrant 0, then (5,7) -> quadrant 3
+        const nextRoll = () => rolls[i++];
+        expect(rollTargetInQuadrant(3, nextRoll)).toBe(spaceIndex(5, 7));
+        expect(i).toBe(4); // both pairs consumed — the first was rejected
+    });
+
+    it("fireDeckGun clears fire/smoke from the rolled target and its orthogonal neighbours, leaving a diagonal untouched", () => {
+        const spaces = buildEmptySpaces();
+        const target = spaceIndex(5, 7); // a corner of quadrant 3 — fewer neighbours to clear
+        spaces[target].threat = 'fire';
+        spaces[spaceIndex(5, 6)].threat = 'smoke'; // orthogonal neighbour — cleared
+        spaces[spaceIndex(4, 7)].threat = 'fire'; // the other orthogonal neighbour — cleared
+        spaces[spaceIndex(4, 6)].threat = 'fire'; // diagonal, not orthogonal — untouched
+
+        const result = fireDeckGun(spaces, 3, scriptedRolls(6, 8)); // (5,7) is already inside quadrant 3 — one roll, no re-rolling
+
+        expect(result.target).toBe(target);
+        expect(result.clearedSpaces.sort((a, b) => a - b)).toEqual([spaceIndex(4, 7), spaceIndex(5, 6), target].sort((a, b) => a - b));
+        expect(spaces[target].threat).toBe('none');
+        expect(spaces[spaceIndex(5, 6)].threat).toBe('none');
+        expect(spaces[spaceIndex(4, 7)].threat).toBe('none');
+        expect(spaces[spaceIndex(4, 6)].threat).toBe('fire'); // untouched — not orthogonal
+    });
+
+    it("reports no cleared spaces when the target and its neighbours were already clear", () => {
+        const spaces = buildEmptySpaces();
+        const result = fireDeckGun(spaces, 3, scriptedRolls(6, 8));
+        expect(result.clearedSpaces).toEqual([]);
     });
 });
 

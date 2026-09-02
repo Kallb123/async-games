@@ -13,7 +13,7 @@ import type { ISACSpecificGameState } from "@/games/SettlementsAndCities/board";
 import { makeState as makeSacState, player as sacPlayer } from "@/games/SettlementsAndCities/testFixtures";
 import { gameStateToModel as firesOutStateToModel, IFiresOutSpecificGameState } from "@/games/FiresOut/FiresOutModels";
 import { buildEmptyEdges, buildEmptySpaces, newFirefighter } from "@/games/FiresOut/rules";
-import { spaceIndex } from "@/games/FiresOut/board";
+import { AMBULANCE_START, ENGINE_START, spaceIndex } from "@/games/FiresOut/board";
 
 // Two of the games this guards were once sending every player's hidden hand to
 // every player: World Domination shipped each player's territory cards, and
@@ -237,6 +237,8 @@ function firesOutState(): IFiresOutSpecificGameState {
         firefighters: [newFirefighter("u1")],
         activeFirefighter: 0,
         hotspotReserve: 0,
+        engine: ENGINE_START,
+        ambulance: AMBULANCE_START,
     };
 }
 
