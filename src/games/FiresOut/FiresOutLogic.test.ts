@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { FiresOutAction, FiresOutGameType, IFiresOutEndTurnOutcome } from "./FiresOutLogic";
 import { IFiresOutGameData, IFiresOutSpecificGameState } from "./FiresOutModels";
-import { edgeBetween, ENGINE_START, exteriorTopSpace, perimeterNeighbours, spaceIndex, START_SPACE, VICTIMS_TO_WIN } from "./board";
-import { AP_COSTS, AP_PER_TURN } from "./rules";
-import { baseState, experiencedState } from "./testFixtures";
+import { edgeBetween, ENGINE_START, exteriorTopSpace, INTERIOR_SPACE_COUNT, perimeterNeighbours, spaceIndex, START_SPACE, VICTIMS_TO_WIN } from "./board";
+import { AP_COSTS, AP_PER_TURN, poiCountOnBoard } from "./rules";
+import { baseState, burnAllExcept, experiencedState } from "./testFixtures";
 
 // ─── Minimal in-memory game harness (mirrors SolitaireLogic.test.ts) ────────
 // markModified is a Mongoose Document method the real command route relies
@@ -250,13 +250,15 @@ describe("FiresOutAction 'deckGun' (§12.3, §17.6 step 9)", () => {
         state.spaces[spaceIndex(5, 7)].threat = 'fire'; // inside quadrant 3, clear of firefighters
         const game = makeGame(state);
 
-        const action = cmd("u1", { kind: 'deckGun', target: spaceIndex(5, 7), recordedRolls: [6, 8] });
+        // §12.3 rolls where the shot actually lands: the 12th of quadrant 3's
+        // own spaces is (5,7) (rollTargetInQuadrant).
+        const action = cmd("u1", { kind: 'deckGun', target: spaceIndex(5, 7), recordedRolls: [12] });
         const outcome = await action.Execute(game);
 
         expect(outcome.validMove).toBe(true);
         expect(state.spaces[spaceIndex(5, 7)].threat).toBe('none');
         expect(state.firefighters[0].apLeft).toBe(AP_PER_TURN - 4);
-        expect(action.recordedRolls).toEqual([6, 8]);
+        expect(action.recordedRolls).toEqual([12]);
         expect(game.gameState.history.some(h => h.text.includes('fired the deck gun'))).toBe(true);
     });
 
@@ -308,6 +310,114 @@ describe("Ambulance-gated rescue (§10.2, §17.6 step 9)", () => {
         expect(outcome.validMove).toBe(true);
         expect(state.rescued).toBe(1);
         expect(ff.carrying).toBeNull();
+    });
+
+    it("rescues when the Ambulance is driven to the carrier instead", async () => {
+        // The other half of "reaching the Ambulance": the rescue point moves.
+        // A carrier waiting at a parking spot the Ambulance then pulls onto
+        // used to stay uncounted — with the marker standing on the very space
+        // the delivery needs, and nothing but paying 4 AP to step off and back
+        // on to fix it.
+        const state = experiencedState();
+        const carrier = state.firefighters[1];
+        carrier.space = perimeterNeighbours(state.ambulance)[0];
+        carrier.carrying = 'victim';
+        const driver = state.firefighters[0];
+        driver.space = state.ambulance;
+        const game = makeGame(state);
+
+        const outcome = await cmd("u1", { kind: 'drive', vehicle: 'ambulance', target: carrier.space }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(state.rescued).toBe(1);
+        expect(carrier.carrying).toBeNull();
+        expect(game.gameState.history[0].text).toContain('1 victim rescued!');
+    });
+
+    it("rescues an escorted victim who rode along in the Ambulance", async () => {
+        // §11's Paramedic escort delivers exactly as a carried victim does, and
+        // a rider is at the Ambulance's space by definition.
+        const state = experiencedState();
+        const ff = state.firefighters[0];
+        ff.space = state.ambulance;
+        ff.carrying = 'escort';
+        const game = makeGame(state);
+
+        const outcome = await cmd("u1", { kind: 'drive', vehicle: 'ambulance', target: perimeterNeighbours(state.ambulance)[0] }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(state.rescued).toBe(1);
+        expect(ff.carrying).toBeNull();
+    });
+
+    it("never lets the Engine take credit for a delivery at the Ambulance", async () => {
+        // The Engine is not a rescue point, so driving it anywhere must not
+        // deliver — not even for somebody standing on the Ambulance's spot,
+        // which would otherwise log the Engine's driver as the rescuer.
+        const state = experiencedState();
+        const driver = state.firefighters[0];
+        driver.space = ENGINE_START;
+        const waiting = state.firefighters[1];
+        waiting.space = state.ambulance;
+        waiting.carrying = 'victim';
+        const game = makeGame(state);
+
+        const outcome = await cmd("u1", { kind: 'drive', vehicle: 'engine', target: perimeterNeighbours(ENGINE_START)[0] }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(state.rescued).toBe(0);
+        expect(waiting.carrying).toBe('victim');
+        expect(game.gameState.history[0].text).not.toContain('rescued');
+    });
+
+    it("delivers a carried victim when the fire knocks their carrier outside (§10.3)", async () => {
+        // Every exterior space rescues in the Family game, and START_SPACE —
+        // where a knock-down puts them — is one. The victim used to sit in the
+        // carrier's arms on the rescue point, uncounted, until they paid 2 AP
+        // to step to another exterior space and back.
+        const state = baseState();
+        const caught = state.firefighters[1];
+        caught.space = spaceIndex(3, 3);
+        state.spaces[caught.space].threat = 'fire';
+        caught.carrying = 'victim';
+        const game = makeGame(state);
+
+        await cmd("u1", { kind: 'endTurn', recordedRolls: [1, 1] }).Execute(game);
+
+        expect(caught.space).toBe(START_SPACE);
+        expect(state.rescued).toBe(1);
+        expect(caught.carrying).toBeNull();
+        expect(game.gameState.history.some(h => h.text.includes('delivering the victim they were carrying!'))).toBe(true);
+    });
+
+    it("holds onto them when the knock-down lands short of the Ambulance (§10.2, Experienced)", async () => {
+        const state = experiencedState();
+        state.ambulance = exteriorTopSpace(4); // not where a knock-down lands
+        const caught = state.firefighters[1];
+        caught.space = spaceIndex(3, 3);
+        state.spaces[caught.space].threat = 'fire';
+        caught.carrying = 'victim';
+        const game = makeGame(state);
+
+        await cmd("u1", { kind: 'endTurn', recordedRolls: [1, 1] }).Execute(game);
+
+        expect(caught.space).toBe(START_SPACE);
+        expect(state.rescued).toBe(0);
+        expect(caught.carrying).toBe('victim'); // §10.3: knocked down with them, not lost
+    });
+
+    it("disposes of a carried hazmat the same way", async () => {
+        const state = baseState();
+        const caught = state.firefighters[1];
+        caught.space = spaceIndex(3, 3);
+        state.spaces[caught.space].threat = 'fire';
+        caught.carrying = 'hazmat';
+        const game = makeGame(state);
+
+        await cmd("u1", { kind: 'endTurn', recordedRolls: [1, 1] }).Execute(game);
+
+        expect(caught.carrying).toBeNull(); // §8: carried out of the building
+        expect(state.rescued).toBe(0);
     });
 });
 
@@ -430,9 +540,9 @@ describe("FiresOutAction 'endTurn' and FiresOutGameType", () => {
         state.poiPool = [true];
         const game = makeGame(state);
 
-        // (1,1) for the Advance Fire roll (harmless smoke), then (3,5) for
-        // Replenish to place the pool's one marker.
-        await cmd("u1", { kind: 'endTurn', recordedRolls: [2, 2, 4, 6] }).Execute(game);
+        // (1,1) for the Advance Fire pair (harmless smoke), then the 30th
+        // space Replenish may target — an untouched board, so that is (3,5).
+        await cmd("u1", { kind: 'endTurn', recordedRolls: [2, 2, 30] }).Execute(game);
 
         expect(state.poiPool).toHaveLength(0);
         expect(state.spaces[spaceIndex(3, 5)].poi).toEqual({ id: 0, revealed: false, victim: true });
@@ -461,6 +571,49 @@ describe("FiresOutAction 'endTurn' and FiresOutGameType", () => {
 
         expect(state.firefighters[1].apLeft).toBe(3); // CAFS Firefighter's base
         expect(state.firefighters[1].restrictedAp).toEqual({ kind: 'extinguish', left: 3 });
+    });
+});
+
+// The late-game board is where Phase 3 used to misbehave: rollValidTarget kept
+// re-rolling a coordinate that had almost nowhere legal to land, and every
+// pair it rolled is recorded on the command for replay.
+describe("endTurn Phase 3 on a board with almost nothing clear (§7)", () => {
+    it("places what still fits without recording hundreds of rolls", async () => {
+        const state = baseState();
+        burnAllExcept(state.spaces, spaceIndex(5, 6), spaceIndex(5, 7));
+        state.poiPool = [true, true, false, true];
+        const game = makeGame(state);
+        // Phase 2's own pair is scripted (the replay path, §17.4): a target of
+        // (0,0) on an already-burning board explodes, and a blast radiates
+        // along its own row and column, so it can't reach the two spaces this
+        // test is keeping clear for Phase 3.
+        const action = cmd("u1", { kind: 'endTurn', recordedRolls: [1, 1] });
+
+        await action.Execute(game);
+
+        expect(poiCountOnBoard(state.spaces)).toBe(2); // both spaces that were clear
+        // Two clear spaces used to mean ~192 attempts of two rolls each before
+        // Replenish gave up: 386 numbers persisted on one endTurn. Now it is
+        // Advance Fire's own pair, one roll per marker placed, and none for
+        // the pass that found the board full.
+        expect(action.recordedRolls).toEqual([1, 1, expect.any(Number), expect.any(Number)]);
+    });
+
+    it("says Phase 3 had nowhere to go, rather than quietly doing nothing", async () => {
+        const state = baseState();
+        burnAllExcept(state.spaces);
+        state.poiPool = [true, true, true];
+        const game = makeGame(state);
+        const action = cmd("u1", { kind: 'endTurn' });
+
+        await action.Execute(game);
+
+        expect(poiCountOnBoard(state.spaces)).toBe(0);
+        expect(state.poiPool).toHaveLength(3); // nothing drawn
+        expect(game.gameState.history.some(h => h.text === 'Replenish: nowhere clear to place a new POI')).toBe(true);
+        // A board with no legal space is answered before a die is rolled, so
+        // the only rolls here are Advance Fire's own d6 and d8.
+        expect(action.recordedRolls).toHaveLength(2);
     });
 });
 

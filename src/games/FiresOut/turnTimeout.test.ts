@@ -108,34 +108,38 @@ describe("resolveStalledTurn (Fires Out)", () => {
         expect(game.currentTurn).toBe("u2");
     });
 
-    it("reports stuck without burning the building down, when every figure on the board is the stalled player's", async () => {
+    it("declines, without burning the building down, when every figure on the board is the stalled player's", async () => {
         // No number of endTurns hands the turn to anyone else here, so
         // resolveStalledTurn would otherwise run its whole MAX_TIMEOUT_COMMANDS
-        // budget of real Advance Fires — and either throw them away with
-        // 'stuck' or save a teamloss caused by twenty forced fires.
+        // budget of real Advance Fires — and either throw them away or save a
+        // teamloss caused by twenty forced fires. 'declined' rather than
+        // 'stuck' because nothing ran at all: it is the answer that tells the
+        // cron to bank the missed turn (see the turntimer route).
         const state = baseState(["u1", "u1"]);
         const game = makeGame(state, ["u1"]);
 
         const resolution = await resolveStalledTurn(game, "u1", "Alice");
 
-        expect(resolution).toBe('stuck');
+        expect(resolution).toBe('declined');
         expect(commandHistory(game)).toEqual([]);
         expect(game.gameState.history).toEqual([]);
         expect(state.activeFirefighter).toBe(0);
     });
 
-    it("reports stuck, rather than rewriting whose figure is up, when the timed-out player isn't the active one", async () => {
+    it("declines, rather than rewriting whose figure is up, when the timed-out player isn't the active one", async () => {
         // The deadlocked game gap 3 warns about — currentTurn and
         // activeFirefighter out of step — is one no player can move either,
         // and Execute's own ownerId guard refuses the forced command too. The
-        // adapter still hands back the command it always would: 'stuck' is the
-        // engine's answer, not a whose-turn-is-it rewrite smuggled in here.
+        // adapter still hands back the command it always would: declining is
+        // the engine's answer, not a whose-turn-is-it rewrite smuggled in
+        // here. Nothing was accepted, so the cron banks the missed turn and
+        // the ladder eventually ends a game nobody can play.
         const state = baseState(["u1", "u2"]);
         const game = makeGame(state, ["u1", "u2"]);
 
         const resolution = await resolveStalledTurn(game, "u2", "Bob");
 
-        expect(resolution).toBe('stuck');
+        expect(resolution).toBe('declined');
         expect(commandHistory(game)).toEqual([]);
         expect(state.activeFirefighter).toBe(0);
         expect(state.firefighters[0].apLeft).toBe(AP_PER_TURN);

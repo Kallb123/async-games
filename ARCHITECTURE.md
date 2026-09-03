@@ -547,14 +547,23 @@ enforcement job. It:
     plain `currentTurn` advance. Either way the timer resets (or, once that
     player has missed `MAX_CONSECUTIVE_MISSED_TURNS` in a row, the game is
     abandoned through the shared `finishGame()` — §5 — which records the result
-    and tells the table);
+    and tells the table). An adapter may also answer that it *can't* resolve
+    this turn, and the two ways it can say so are handled differently: a game
+    shape it declines to play automatically (nothing ran) keeps the turn where
+    it is, but still banks the missed turn and restarts the timer, so the
+    abandon ladder ends the game on the third one; an adapter that ran commands
+    and still didn't finish the turn is a bug, so the document goes back
+    **unsaved** — half a resolved turn is never persisted — and the next tick
+    starts over;
   - else sends a `TurnExpiringSoon` push and sets
     `timerWarningNotificationSent`.
 - sweeps each game inside its own `try`, so one Clerk or FCM failure costs that
   game rather than the rest of the run;
 - stops itself before the request deadline rather than being cut off mid-game,
-  and returns `{ processed, expired, warned, abandoned, skipped, failed,
-  unswept, capped }` — the last two saying what it didn't get to. Candidates
+  and returns `{ processed, expired, warned, abandoned, skipped, declined,
+  stuck, failed, unswept, capped }` — `declined`/`stuck` being the two
+  unresolved-turn cases above, and the last two saying what it didn't get to.
+  Candidates
   come oldest-first and every game it acts on stops being one, so the next run
   resumes where this one stopped with no cursor to keep.
 

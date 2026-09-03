@@ -84,16 +84,6 @@ function toEvents(
                         : `${name} found a false alarm at space ${space}`,
                 });
             }
-            const rescued = nextState.rescued - prevState.rescued;
-            if (rescued > 0) {
-                events.push({
-                    ...base,
-                    id: `${command.id}:rescue`,
-                    type: FO_RESCUE,
-                    glyph: '🚑',
-                    title: `${name} rescued a victim! (${nextState.rescued}/${VICTIMS_TO_WIN})`,
-                });
-            }
             break;
         }
 
@@ -122,6 +112,29 @@ function toEvents(
         // worth a row of its own.
         default:
             break;
+    }
+
+    // ── A victim out of the building (§10.2) ───────────────────────────────
+    // Asked of every kind rather than inside the 'move' case, because the
+    // delivery is the rescue *point* being reached and a move is only one of
+    // the ways to reach it: the Ambulance can be driven to the victim, and the
+    // fire can knock their carrier out of the building (deliverCarried,
+    // FiresOutLogic.ts). A rescue counted off the state delta belongs wherever
+    // the delta appears — the rows this used to skip were victims making it
+    // out with nothing in the recap to show it.
+    const rescued = nextState.rescued - prevState.rescued;
+    if (rescued > 0) {
+        events.push({
+            ...base,
+            id: `${command.id}:rescue`,
+            type: FO_RESCUE,
+            glyph: '🚑',
+            // More than one at a time is the Ambulance arriving on a spot two
+            // firefighters were both waiting on with a victim.
+            title: rescued > 1
+                ? `${name} got ${pluralize(rescued, 'victim')} out! (${nextState.rescued}/${VICTIMS_TO_WIN})`
+                : `${name} rescued a victim! (${nextState.rescued}/${VICTIMS_TO_WIN})`,
+        });
     }
 
     // ── The fire, the one thing nobody at the table chose (§7) ──────────────

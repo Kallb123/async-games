@@ -314,18 +314,41 @@ function seedInitialExplosion(spaces: IFiresOutSpaceState[], edges: IFiresOutEdg
 }
 
 /**
- * A rolled interior coordinate that re-rolls until `isValid` accepts it,
- * bounded the same way replenishPoi bounds its own re-rolls. Setup's own
- * placements use this directly; rollTargetInQuadrant (§17.6 step 9) is the
- * same loop with a quadrant as its validity check, for the deck gun.
+ * One rolled interior space `isValid` accepts, or `null` when no space on the
+ * board would satisfy `isValid` at all. Setup's own hazmat and hot spot
+ * placements use this; rollTargetInQuadrant (§17.6 step 9) is the same roll
+ * with a quadrant as its validity check, for the deck gun, and replenishPoi
+ * (§7 Phase 3) with "clear of fire and POIs" as its own.
+ *
+ * The printed rule is "roll a coordinate, re-roll an invalid one", and this is
+ * that rule — one roll over the legal spaces instead of a re-roll loop, which
+ * is the *same* roll. `spaceForRoll` maps d6×d8 onto the 48 interior spaces
+ * one-for-one, so re-rolling until the pair lands somewhere legal is a uniform
+ * pick among the legal spaces, which is exactly what this is.
+ *
+ * Writing it as the loop cost more than a line of code. Every pair rolled is
+ * recorded on the command for replay (`recordedRolls`, FiresOutLogic.ts), and
+ * the late-game board is where the loop struggled: with most of the building
+ * alight, a Replenish hunting three clear spaces re-rolled dozens of pairs per
+ * marker — up to 386 numbers persisted for one endTurn — and after 192
+ * attempts it gave up anyway, silently leaving the board short of the POIs §7
+ * says it must carry. A board with nowhere legal is now answered before a die
+ * leaves the hand, and a board with somewhere legal always places.
  */
 export function rollValidTarget(nextRoll: NextRoll, isValid: (space: number) => boolean): number | null {
-    const MAX_ATTEMPTS = INTERIOR_SPACE_COUNT * 4;
-    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-        const target = spaceForRoll(nextRoll(6), nextRoll(8));
-        if (isValid(target)) return target;
+    const legal: number[] = [];
+    for (let space = 0; space < INTERIOR_SPACE_COUNT; space++) {
+        if (isValid(space)) legal.push(space);
     }
-    return null; // defensive — the board would have to be almost entirely full
+    if (legal.length === 0) return null;
+
+    // Clamped, because `nextRoll` is not always a die: on replay it hands back
+    // whatever the command recorded, and a recorded value that doesn't match
+    // this call (a log from before this function rolled one die per placement,
+    // say) would otherwise index off the end and answer `undefined` — which
+    // every caller here would write into `spaces[undefined]`.
+    const rolled = Math.round(nextRoll(legal.length));
+    return legal[Math.min(Math.max(rolled, 1), legal.length) - 1];
 }
 
 /**
@@ -653,6 +676,9 @@ export function resolveAdvanceFire(
 
 // ─── Phase 3 — Replenish POI (§7) ───────────────────────────────────────────
 
+/** §7: how many POI markers Phase 3 keeps on the board. */
+export const POI_TARGET_ON_BOARD = 3;
+
 /** Interior spaces Replenish may target: no fire, no existing POI. */
 function isValidReplenishTarget(spaces: IFiresOutSpaceState[], space: number): boolean {
     const state = spaces[space];
@@ -667,11 +693,25 @@ export function poiCountOnBoard(spaces: IFiresOutSpaceState[]): number {
     return count;
 }
 
+/** §7 Phase 3's "while fewer than 3 POIs are on the board": whether another
+ *  marker is wanted and there is one left in the pool to place. The loop
+ *  below runs on it, and applyEndTurn asks the same question to tell "Phase 3
+ *  had nothing to do" from "Phase 3 had nowhere to do it". */
+export function poiReplenishWanted(spaces: IFiresOutSpaceState[], poiPool: boolean[]): boolean {
+    return poiCountOnBoard(spaces) < POI_TARGET_ON_BOARD && poiPool.length > 0;
+}
+
 /**
- * §7 Phase 3: while fewer than 3 POIs are on the board, roll for a
- * coordinate and place the next marker off `poiPool`, re-rolling an invalid
- * target. Mutates `spaces` and `poiPool`, and hands back the running POI id
- * counter (the id `applyFamilySetup` already started).
+ * §7 Phase 3: while fewer than 3 POIs are on the board, roll for a space and
+ * place the next marker off `poiPool`. Mutates `spaces` and `poiPool`, and
+ * hands back the running POI id counter (the id `applyFamilySetup` already
+ * started).
+ *
+ * Where to put one is rollValidTarget's question, not a second copy of it, so
+ * this stops for exactly three reasons: the board is up to 3, the pool has run
+ * dry, or there is nowhere clear left to put one. Only the last leaves the
+ * board short, and applyEndTurn says so rather than dropping it. Each pass
+ * either places a marker or breaks, so there are at most three passes.
  */
 export function replenishPoi(
     spaces: IFiresOutSpaceState[],
@@ -679,14 +719,9 @@ export function replenishPoi(
     nextRoll: NextRoll,
     nextPoiId: number,
 ): number {
-    const MAX_ATTEMPTS = INTERIOR_SPACE_COUNT * 4; // generous — every space re-rolled a few times over
-    let attempts = 0;
-    while (poiCountOnBoard(spaces) < 3 && poiPool.length > 0 && attempts < MAX_ATTEMPTS) {
-        attempts++;
-        const d6 = nextRoll(6);
-        const d8 = nextRoll(8);
-        const target = spaceForRoll(d6, d8);
-        if (!isValidReplenishTarget(spaces, target)) continue;
+    while (poiReplenishWanted(spaces, poiPool)) {
+        const target = rollValidTarget(nextRoll, space => isValidReplenishTarget(spaces, space));
+        if (target === null) break;
         const victim = poiPool.shift()!;
         spaces[target].poi = { id: nextPoiId++, revealed: false, victim };
     }
@@ -943,7 +978,7 @@ export function legalDeckGunTargets(firefighters: IFiresOutFirefighterState[], f
     return targets;
 }
 
-/** §12.3: "roll for a target space within it" — re-rolls (via rollValidTarget) until the d6/d8 lands inside `quadrant`. */
+/** §12.3: "roll for a target space within it" — rollValidTarget rolls one of the quadrant's own spaces. A quadrant always holds spaces, so the `??` is only there to answer its `number | null`. */
 export function rollTargetInQuadrant(quadrant: Quadrant, nextRoll: NextRoll): number {
     return rollValidTarget(nextRoll, space => quadrantOf(space) === quadrant) ?? spacesInQuadrant(quadrant)[0];
 }
