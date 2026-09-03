@@ -4,8 +4,9 @@
 //
 // Test-only. Nothing under src/app imports this.
 
-import { AMBULANCE_START, ENGINE_START, spaceIndex } from "./board";
+import { AMBULANCE_START, ENGINE_START, INTERIOR_SPACE_COUNT, spaceIndex } from "./board";
 import { buildEmptyEdges, buildEmptySpaces, newFirefighter } from "./rules";
+import type { IFiresOutSpaceState } from "./rules";
 import type { IFiresOutSpecificGameState } from "./FiresOutModels";
 
 /**
@@ -35,6 +36,17 @@ export function baseState(owners: string[] = ["u1", "u2"]): IFiresOutSpecificGam
         engine: ENGINE_START,
         ambulance: AMBULANCE_START,
     };
+}
+
+/**
+ * Sets every interior space alight except `clear` — the late-game board, for
+ * the rules that only get interesting once there is almost nowhere legal
+ * left to put anything (§7 Phase 3, §6.2's placements).
+ */
+export function burnAllExcept(spaces: IFiresOutSpaceState[], ...clear: number[]): void {
+    for (let space = 0; space < INTERIOR_SPACE_COUNT; space++) {
+        spaces[space].threat = clear.includes(space) ? 'none' : 'fire';
+    }
 }
 
 /**

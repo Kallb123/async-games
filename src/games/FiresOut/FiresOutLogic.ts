@@ -26,6 +26,7 @@ import {
     moveApCost,
     NextRoll,
     otherVehicleSpace,
+    poiReplenishWanted,
     refillFirefighterAp,
     replenishPoi,
     resolveAdvanceFire,
@@ -154,12 +155,49 @@ function resolveMover(gs: IFiresOutSpecificGameState, ff: IFiresOutFirefighterSt
     return gs.firefighters.find(f => f.ownerId === action.targetUserId) ?? null;
 }
 
+/**
+ * §10.2, §8: whatever `ff` is carrying, handed over — if the space they are
+ * standing on now is where it gets handed over. A victim (or one escorted by
+ * a Paramedic) goes at a rescue point: any exterior space in the Family game,
+ * the Ambulance's own space in the Experienced one (rules.ts's
+ * isRescuePoint). A hazmat goes at any exterior space at all, in either game
+ * (§8's "Dispose of hazmat ... carried out of the building" row). Null when
+ * they are carrying nothing, or aren't there yet.
+ *
+ * The one place either is delivered, because there are three ways to end up
+ * standing where the delivery happens and only one of them is a move:
+ *
+ *  - the firefighter walks there (applyMove);
+ *  - the Ambulance is driven to *them* (applyDrive) — §12.2's repositioning
+ *    means the rescue point moves too;
+ *  - the fire knocks them down and carries them outside (§10.3, applyEndTurn),
+ *    which in the Family game *is* the rescue point, since every exterior
+ *    space is one.
+ *
+ * Only the move used to count. The other two left a carried victim standing
+ * on the very space the delivery needs, uncounted, until their carrier paid
+ * to step off it and back on — and §5 has no slack for a victim in limbo (10
+ * on the board, 7 to win, 4 lost to lose).
+ */
+function deliverCarried(gs: IFiresOutSpecificGameState, ff: IFiresOutFirefighterState): 'victim' | 'hazmat' | null {
+    if (ff.carrying === 'victim' || ff.carrying === 'escort') {
+        if (!isRescuePoint(gs.ruleset, gs.ambulance, ff.space)) return null;
+        gs.rescued++;
+        ff.carrying = null;
+        return 'victim';
+    }
+    if (ff.carrying === 'hazmat') {
+        if (!isExteriorSpace(ff.space)) return null;
+        ff.carrying = null;
+        return 'hazmat';
+    }
+    return null;
+}
+
 // §8, §11: move to an adjacent space, at 1/2/2 AP depending on fire and
 // carrying (rules.ts's moveApCost), reveals a POI entered for the first time
-// (§10.1), rescues a carried or escorted victim on reaching the rescue point
-// (§10.2, isRescuePoint), and disposes of a carried hazmat the same way on
-// reaching any exterior space (§8's "Dispose of hazmat ... carried out of the
-// building" row — no Ambulance requirement, unlike a victim). A Fire Captain
+// (§10.1), and hands over whatever is being carried if this move reaches the
+// place it gets handed over (§10.2, §8, deliverCarried). A Fire Captain
 // may move a teammate's firefighter instead of their own (resolveMover),
 // paying with their own command AP.
 function applyMove(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IFiresOutFirefighterState, action: FiresOutAction): ICommandOutcome {
@@ -202,17 +240,9 @@ function applyMove(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IF
     const revealed = revealPoiAt(gs.spaces, target);
     if (revealed) notes.push(revealed.victim ? 'revealed a victim' : 'revealed a false alarm');
 
-    // §10.2: any exterior space rescues in the Family game; the Experienced
-    // game requires reaching the Ambulance specifically. An escorted victim
-    // (§11 Paramedic) rescues exactly like a carried one.
-    if ((mover.carrying === 'victim' || mover.carrying === 'escort') && isRescuePoint(gs.ruleset, gs.ambulance, target)) {
-        gs.rescued++;
-        mover.carrying = null;
-        notes.push('rescued a victim!');
-    } else if (mover.carrying === 'hazmat' && isExteriorSpace(target)) {
-        mover.carrying = null;
-        notes.push('disposed of the hazmat');
-    }
+    const delivered = deliverCarried(gs, mover);
+    if (delivered === 'victim') notes.push('rescued a victim!');
+    else if (delivered === 'hazmat') notes.push('disposed of the hazmat');
 
     const verb = mover.carrying === 'victim' || mover.carrying === 'escort' ? 'carried a victim to'
         : mover.carrying === 'hazmat' ? 'carried a hazmat to' : 'moved to';
@@ -337,6 +367,8 @@ function applyCrewChange(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, 
 // (§12.1): everyone standing at the vehicle's space — the driver included —
 // moves with it, at no extra cost. `action.vehicle` picks which one, since a
 // firefighter starting the action at neither vehicle has nothing to drive.
+// Moving the Ambulance moves the Experienced game's rescue point, so this is
+// the second way a victim gets delivered (deliverCarried).
 function applyDrive(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IFiresOutFirefighterState, action: FiresOutAction): ICommandOutcome {
     if (gs.ruleset !== 'experienced') return INVALID;
     const vehicle = action.vehicle;
@@ -356,9 +388,21 @@ function applyDrive(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: I
     for (const rider of riders) rider.space = target;
     if (vehicle === 'engine') gs.engine = target; else gs.ambulance = target;
 
+    // §10.2, §12.2: the Ambulance pulling up *is* the rescue point arriving.
+    // Anyone now standing at its spot with a victim — a rider who came along,
+    // or a carrier who was already waiting there when it was driven over —
+    // hands them over, exactly as if they had walked to it. Asked only of the
+    // Ambulance: the Engine is not a rescue point, so asking on its behalf
+    // could only ever credit its driver with somebody else's delivery.
+    let rescues = 0;
+    if (vehicle === 'ambulance') {
+        for (const f of gs.firefighters) if (deliverCarried(gs, f) === 'victim') rescues++;
+    }
+
     const vehicleName = vehicle === 'engine' ? 'Engine' : 'Ambulance';
     const riderNote = riders.length > 1 ? ` with ${riders.length - 1} other firefighter${riders.length > 2 ? 's' : ''} riding along` : '';
-    fo.gameState.history.unshift(playerHistory(action.senderId, `drove the ${vehicleName} to space ${target}${riderNote}`));
+    const rescueNote = rescues > 0 ? ` — ${rescues} victim${rescues === 1 ? '' : 's'} rescued!` : '';
+    fo.gameState.history.unshift(playerHistory(action.senderId, `drove the ${vehicleName} to space ${target}${riderNote}${rescueNote}`));
     return { validMove: true, turnOver: false };
 }
 
@@ -486,7 +530,15 @@ function applyEndTurn(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff:
         fo.gameState.history.unshift({ text: describeAdvanceFire(step, step !== advance) });
         for (const index of step.consequences.knockedDownIndices) {
             const knocked = gs.firefighters[index];
-            fo.gameState.history.unshift(playerHistory(knocked.ownerId, 'was knocked down and carried outside'));
+            // §10.3: what they were carrying goes out with them rather than
+            // being lost — and "outside" is where a carried thing is handed
+            // over (deliverCarried), so the trip out counts as the delivery
+            // whenever they land somewhere that delivers. In the Family game
+            // that is every exterior space, so it always does.
+            const delivered = deliverCarried(gs, knocked);
+            const carriedNote = delivered === 'victim' ? ', delivering the victim they were carrying!'
+                : delivered === 'hazmat' ? ', disposing of the hazmat they were carrying' : '';
+            fo.gameState.history.unshift(playerHistory(knocked.ownerId, `was knocked down and carried outside${carriedNote}`));
         }
         knockedDownIndices.push(...step.consequences.knockedDownIndices);
         victimsLost += step.consequences.victimsLost;
@@ -503,6 +555,13 @@ function applyEndTurn(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff:
     const poiPlaced = poolBefore - gs.poiPool.length;
     if (poiPlaced > 0) {
         fo.gameState.history.unshift({ text: `Replenish: ${poiPlaced} new POI marker${poiPlaced === 1 ? '' : 's'} placed` });
+    } else if (poiReplenishWanted(gs.spaces, gs.poiPool)) {
+        // Phase 3 still wants a marker and still has one to place, so
+        // replenishPoi stopping short means every interior space is on fire or
+        // already holds one. That is a real board state late on, not a
+        // failure — but a Phase 3 that quietly did nothing is exactly the kind
+        // of thing a crew reads as a bug, so it gets a line of its own.
+        fo.gameState.history.unshift({ text: 'Replenish: nowhere clear to place a new POI' });
     }
 
     // First execution records what it rolled; a replayed command already

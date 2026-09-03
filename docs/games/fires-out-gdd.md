@@ -531,6 +531,23 @@ which is what `recordedRoll` does for a single die in Snakes & Ladders and
 Settlements & Cities — this is the same idea with the count left open. Get it
 wrong and the recap tells every player a different story about the same fire.
 
+Left open is not left unbounded, though, and the re-roll is where that bit.
+"Re-roll an invalid target" costs two recorded numbers a go, and on a late-game
+board almost nothing is a valid target: Replenish hunting three clear spaces
+could persist 386 rolls on one `endTurn` and then give up anyway, leaving the
+board short of the POIs §7 requires. `rollValidTarget` (rules.ts) is that rule
+written as the roll it actually is: gather the legal spaces, answer "nowhere"
+without rolling at all, and otherwise roll *once* over them. `spaceForRoll`
+maps d6×d8 onto the 48 interior spaces one-for-one, so re-rolling a pair until
+it lands somewhere legal is a uniform pick among the legal spaces — the same
+distribution, one recorded number instead of up to 384, and a placement that
+always happens when one is possible. (The visible dice are unaffected: Advance
+Fire still rolls and reports its own d6/d8. Nothing ever displayed a
+placement's re-rolls.) The one thing to keep in mind is that a recorded value
+is replayed positionally, so a log written by a different number of rolls per
+placement no longer lines up — `rollValidTarget` clamps its pick for that
+reason rather than indexing off the end of the list.
+
 The dice are not the only randomness. The **POI pool is shuffled once** into
 `initialSpecificGameState` and drawn in order thereafter, the way World
 Domination's territory deal is — a pool reshuffled at each Replenish would be
@@ -642,7 +659,16 @@ that runs §7's Phase 2 and Phase 3 and syncs `currentTurn` to
 and player together, the fire resolving with its rolls recorded for the recap,
 a forced Advance Fire ending the game, one advance per figure for a player
 holding two, and gap 3's deadlocked game reporting `'stuck'` rather than being
-papered over.
+papered over. Such a turn is one only its owner can take, so `resolveStalledTurn`
+reports `'declined'` — the adapter ran nothing — and the cron banks the missed
+turn against `MAX_CONSECUTIVE_MISSED_TURNS` and restarts their timer: three of
+them and the game is abandoned like any other its player walked away from. (It
+used to bank nothing at all: the count was incremented in memory and dropped
+with the unsaved document, so such a game was swept every tick forever and
+never ended. `src/utils/games/turnTimeout.test.ts` covers declining against
+the other thing an adapter can fail to do — get `'stuck'` after commands have
+already run, which is thrown away rather than banked — and
+`src/app/api/cron/turntimer/route.test.ts` holds the sweep to both.)
 Still worth folding in: `turnOrder.findIndex(to => to === currentTurn)`
 followed by a modulo is copy-pasted in five places — and gap 3 turned out
 *not* to add a sixth, since `'endTurn'` delegates the advance to
@@ -739,7 +765,15 @@ earns its keep.
 **9 — Vehicles.** Engine and Ambulance parking, driving with riders, the
 ambulance as the rescue destination, and the deck gun's quadrant-and-roll
 targeting. Small, self-contained, and needed before two of the Specialists mean
-anything.
+anything. One thing about the rescue destination is worth spelling out, because
+it isn't always a move that reaches it. The Ambulance being *driven to* a
+firefighter holding a victim delivers them, exactly as walking to the Ambulance
+does (12.2's repositioning is why: a rescue point that moves can arrive rather
+than be arrived at) — and so does the fire knocking a carrier out of the
+building, since §10.3 keeps the victim in their arms and §10.2 makes every
+exterior space a rescue point in the Family game. All three go through one
+`deliverCarried` (`FiresOutLogic.ts`), which also disposes of a carried hazmat
+on the same terms, rather than one rule per way of arriving.
 
 **10 — Specialists.** All eight at once, chosen at setup, swappable at the
 Engine for 2 AP, expressed in `rules.ts` as AP-pool values and rule exceptions
@@ -839,7 +873,20 @@ throw, `buildEventFeed` exercised on a real command log, and
 **12 — Solitaire, optional.** Multi-pawn control, closing gap 3 with the
 `activeFirefighter` design 17.2 describes — no duplicate entries in `turnOrder`,
 so every `findIndex` in the repo stays correct and a solo game can still take a
-real turn timer. The invitation is created with `userIdList: []` exactly as
+real turn timer. The turn timer is the one thing to settle about a solo game
+and the cron, because the two halves of this paragraph disagree: a solo board
+is one where every figure is the same player's, so the timeout adapter declines
+the turn (there is nobody to hand it to) and the sweep banks a missed turn
+instead of forcing a fire — which is the right answer for a board only its
+owner can move, and after `MAX_CONSECUTIVE_MISSED_TURNS` of them the game is
+abandoned like any other walked away from. **With the hardcoded
+`UNLIMITED_TURN_TIMER` below, none of that ever runs**: `actionableTurnFilter`
+excludes unlimited games by construction, so a solo game is never swept, never
+warned and never abandoned — it simply waits. Both are defensible; the step has
+to pick one, and offering the timer is what makes the declining path worth
+having.
+
+The invitation is created with `userIdList: []` exactly as
 Solitaire's `POST /api/newgame/solitaire` does, which makes
 `/api/invite/accept`'s "has everyone accepted?" check vacuously true on the
 first call. Per `docs/new-game.md`'s solo gotcha, the setup screen becomes

@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildTimeline } from "@/utils/games/replay";
-import { buildEventFeed } from "@/utils/games/recap";
+import { buildAllEvents, buildEventFeed } from "@/utils/games/recap";
 import type { IGameCommand } from "@/utils/apiModels/gameCommand";
 import { FiresOutAction, FiresOutGameType } from "./FiresOutLogic";
+import { perimeterNeighbours } from "./board";
 import {
     IFiresOutGameData,
     buildInitialFiresOutState,
@@ -109,6 +110,32 @@ describe("Fires Out replay", () => {
         expect(feed.hasRecap).toBe(true);
         expect(feed.events.length).toBeGreaterThan(0);
         expect(feed.summary?.subline).toContain("while you were away");
+    });
+
+    it("gives a rescue its own row even when it was the Ambulance that moved", async () => {
+        // §10.2's other delivery: the rescue point arrives rather than being
+        // walked to (deliverCarried). The rescue row used to be built inside the
+        // recap's 'move' case, so a victim delivered by a 'drive' left the feed
+        // with nothing at all to show for it.
+        const game = makeGame();
+        const gs = game.specificGameState;
+        gs.ruleset = 'experienced';
+        const spot = perimeterNeighbours(gs.ambulance).find(space => space !== gs.engine)!;
+        const carrier = gs.firefighters[1];
+        carrier.space = spot;
+        carrier.carrying = 'victim';
+        gs.firefighters[0].space = gs.ambulance;
+        game.initialSpecificGameState = cloneFiresOutState(gs);
+
+        const drive = new FiresOutAction();
+        drive.kind = 'drive';
+        drive.vehicle = 'ambulance';
+        drive.target = spot;
+        await play(game, drive, gs.firefighters[0].ownerId);
+
+        expect(gs.rescued).toBe(1);
+        const events = await buildAllEvents(game, { ...NAMES });
+        expect(events.map(event => event.title)).toContain("Alice rescued a victim! (1/7)");
     });
 
     it("computes result stats off the final state", async () => {

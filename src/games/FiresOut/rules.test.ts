@@ -23,6 +23,7 @@ import {
     difficultyTier,
 } from "./board";
 import { formatFiresOutResultStats } from "./FiresOutModels";
+import { burnAllExcept } from "./testFixtures";
 import {
     AP_COSTS,
     boardAtCurrentLayout,
@@ -68,6 +69,7 @@ import {
     resolveTargetSpace,
     revealPoiAt,
     rollTargetInQuadrant,
+    rollValidTarget,
     shuffledPoiPool,
     specialistDef,
     totalDamage,
@@ -88,12 +90,11 @@ function scriptedRolls(...values: number[]): (sides: number) => number {
     };
 }
 
-// A nextRoll that walks every interior space exactly once, in row-major
-// order, one (d6, d8) pair per space — never repeats a coordinate within a
-// single setup's worth of rolls, so a setup placement's own re-roll-on-invalid
-// loop (rollValidSetupTarget) never has to reject a coordinate for being
-// already claimed by *this* generator, only for board state (fire from an
-// earlier explosion's radiation, say).
+// A deterministic stream of small die faces: row-major (d6, d8) pairs, which
+// is what §6.2's explosions consume two at a time (spaceForRoll). Setup's
+// other placements take one roll each over their own legal-space list
+// (rollValidTarget), so what this gives them is simply a repeatable low
+// number — every face of it lands somewhere on an early-setup board.
 function sequentialRolls(): (sides: number) => number {
     let row = 0, col = 0, wantRow = true;
     return () => {
@@ -510,16 +511,19 @@ describe("applyExperiencedSetup (§6.2, §17.6 step 8)", () => {
 });
 
 describe("replenishPoi (§7 Phase 3)", () => {
-    it("re-rolls an invalid target (fire, or an existing POI) before placing", () => {
+    it("never places on fire, or on a space that already holds a POI", () => {
         const spaces = buildEmptySpaces();
-        fire(spaces, spaceIndex(0, 0)); // first roll's target — invalid, must re-roll
+        fire(spaces, spaceIndex(0, 0)); // excluded: alight
+        spaces[spaceIndex(0, 1)].poi = { id: 0, revealed: false, victim: true }; // excluded: taken
         const pool = [true];
-        const nextId = replenishPoi(spaces, pool, scriptedRolls(1, 1, 3, 4), 0);
+
+        // One roll, over the legal spaces only — the first of which is (0,2).
+        const nextId = replenishPoi(spaces, pool, scriptedRolls(1), 1);
 
         expect(pool).toHaveLength(0);
-        expect(poiCountOnBoard(spaces)).toBe(1);
-        expect(spaces[spaceIndex(2, 3)].poi).toEqual({ id: 0, revealed: false, victim: true });
-        expect(nextId).toBe(1);
+        expect(poiCountOnBoard(spaces)).toBe(2);
+        expect(spaces[spaceIndex(0, 2)].poi).toEqual({ id: 1, revealed: false, victim: true });
+        expect(nextId).toBe(2);
     });
 
     it("stops once 3 POIs are on the board", () => {
@@ -532,6 +536,59 @@ describe("replenishPoi (§7 Phase 3)", () => {
         replenishPoi(spaces, pool, scriptedRolls(), 3);
 
         expect(pool).toHaveLength(2); // never drawn from — nextRoll was never called
+    });
+
+    it("places on the one space left clear, whatever the roll says", () => {
+        // The late-game board. This used to spend 192 attempts (384 recorded
+        // rolls) rolling coordinates that were all alight, then give up
+        // silently and leave §7's board short of the POIs it requires.
+        const spaces = buildEmptySpaces();
+        const clear = spaceIndex(5, 7);
+        burnAllExcept(spaces, clear);
+        const pool = [true, true];
+        let rolls = 0;
+        const nextRoll = () => { rolls++; return 6; }; // off the end of a one-space list
+
+        const nextId = replenishPoi(spaces, pool, nextRoll, 0);
+
+        expect(spaces[clear].poi).toEqual({ id: 0, revealed: false, victim: true });
+        expect(pool).toHaveLength(1); // one placed; then there is nowhere left
+        expect(nextId).toBe(1);
+        // One roll for the marker it placed, and none at all for the pass
+        // after it: a board with nowhere legal needs no dice to say so.
+        expect(rolls).toBe(1);
+    });
+});
+
+describe("rollValidTarget (§6.2, §7, §12.3)", () => {
+    it("answers null without rolling anything when no space is legal", () => {
+        let rolls = 0;
+        const target = rollValidTarget(() => { rolls++; return 1; }, () => false);
+
+        expect(target).toBeNull();
+        // The point of the finding: a board with nowhere to place is decided
+        // by looking, not by rolling 192 coordinates and then giving up.
+        expect(rolls).toBe(0);
+    });
+
+    it("spends exactly one roll, over the legal spaces in board order", () => {
+        let rolls = 0;
+        const target = rollValidTarget(() => { rolls++; return 3; }, () => true);
+
+        expect(target).toBe(spaceIndex(0, 2)); // the 3rd space, every one being legal
+        expect(rolls).toBe(1);
+    });
+
+    it("clamps a roll that doesn't match the list it is picking from", () => {
+        // On replay `nextRoll` hands back whatever the command recorded, and a
+        // log written while this rolled a d6/d8 pair per attempt can offer a
+        // face bigger than the list. Answering `undefined` would put a POI in
+        // `spaces[undefined]` — replenishPoi's `null` check walks straight
+        // past it.
+        const onlyTheMiddle = (space: number) => space === spaceIndex(2, 2);
+
+        expect(rollValidTarget(() => 8, onlyTheMiddle)).toBe(spaceIndex(2, 2));
+        expect(rollValidTarget(() => 0, onlyTheMiddle)).toBe(spaceIndex(2, 2));
     });
 });
 
@@ -807,12 +864,17 @@ describe("deck gun (§12.3, §17.6 step 9)", () => {
         expect(legalDeckGunTargets([shooter, bystander], shooter, ENGINE_START)).toEqual([]);
     });
 
-    it("rollTargetInQuadrant re-rolls until the d6/d8 lands inside the quadrant", () => {
+    it("rollTargetInQuadrant rolls one of the quadrant's own spaces", () => {
         let i = 0;
-        const rolls = [1, 1, 6, 8]; // (0,0) -> quadrant 0, then (5,7) -> quadrant 3
-        const nextRoll = () => rolls[i++];
+        const nextRoll = () => { i++; return 12; }; // the last of quadrant 3's 12 spaces
         expect(rollTargetInQuadrant(3, nextRoll)).toBe(spaceIndex(5, 7));
-        expect(i).toBe(4); // both pairs consumed — the first was rejected
+        expect(i).toBe(1);
+
+        // Every face of that roll is inside the quadrant, so §12.3's "roll for
+        // a target space within it" never has anything to reject.
+        for (let face = 1; face <= 12; face++) {
+            expect(quadrantOf(rollTargetInQuadrant(3, () => face))).toBe(3);
+        }
     });
 
     it("fireDeckGun clears fire/smoke from the rolled target and its orthogonal neighbours, leaving a diagonal untouched", () => {
@@ -823,7 +885,7 @@ describe("deck gun (§12.3, §17.6 step 9)", () => {
         spaces[spaceIndex(4, 7)].threat = 'fire'; // the other orthogonal neighbour — cleared
         spaces[spaceIndex(4, 6)].threat = 'fire'; // diagonal, not orthogonal — untouched
 
-        const result = fireDeckGun(spaces, 3, scriptedRolls(6, 8)); // (5,7) is already inside quadrant 3 — one roll, no re-rolling
+        const result = fireDeckGun(spaces, 3, scriptedRolls(12)); // the 12th space of quadrant 3 is (5,7)
 
         expect(result.target).toBe(target);
         expect(result.clearedSpaces.sort((a, b) => a - b)).toEqual([spaceIndex(4, 7), spaceIndex(5, 6), target].sort((a, b) => a - b));
@@ -835,7 +897,7 @@ describe("deck gun (§12.3, §17.6 step 9)", () => {
 
     it("reports no cleared spaces when the target and its neighbours were already clear", () => {
         const spaces = buildEmptySpaces();
-        const result = fireDeckGun(spaces, 3, scriptedRolls(6, 8));
+        const result = fireDeckGun(spaces, 3, scriptedRolls(12));
         expect(result.clearedSpaces).toEqual([]);
     });
 });
@@ -1021,7 +1083,7 @@ describe("marker conservation", () => {
         for (let round = 0; round < COLS; round++) {
             const advance = resolveAdvanceFire(spaces, edges, firefighters, 0, scriptedRolls(2, round + 1));
             lost += advance.consequences.victimsLost;
-            nextId = replenishPoi(spaces, pool, scriptedRolls(3, 1, 3, 2, 3, 3), nextId);
+            nextId = replenishPoi(spaces, pool, scriptedRolls(3, 1, 3), nextId); // one roll per marker placed
 
             expect(totalDamage(edges)).toBeLessThanOrEqual(24);
             expect(pool.length).toBeGreaterThanOrEqual(0);
