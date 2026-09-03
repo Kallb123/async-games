@@ -537,10 +537,17 @@ enforcement job. It:
 - asks `needsSweeping` of each candidate, and only for the ones that answer yes
   loads the whole game by `gameId` and **asks again** — the player may have taken
   their turn between the two reads — then:
-  - if the turn is **expired**, advances `currentTurn`, resets the timer and
-    sends a `YourTurn` push to the new player (or, once that player has missed
-    `MAX_CONSECUTIVE_MISSED_TURNS` in a row, abandons the game through the
-    shared `finishGame()` — §5 — which records the result and tells the table);
+  - if the turn is **expired**, ends it and sends a `YourTurn` push to the new
+    player, having first asked the game how (`resolveStalledTurn`): a game that
+    registers an `ITurnTimeoutAdapter` (`src/utils/games/turnTimeout.ts`) has
+    its stalled turn run through its own commands, so a game whose board only
+    deteriorates on a player's own turn — Outbreak's draw and infect phases,
+    Fires Out's Advance Fire — doesn't get to skip that by going quiet, and
+    `CheckEndTurn` moves the turn on; a game that registers nothing gets the
+    plain `currentTurn` advance. Either way the timer resets (or, once that
+    player has missed `MAX_CONSECUTIVE_MISSED_TURNS` in a row, the game is
+    abandoned through the shared `finishGame()` — §5 — which records the result
+    and tells the table);
   - else sends a `TurnExpiringSoon` push and sets
     `timerWarningNotificationSent`.
 - sweeps each game inside its own `try`, so one Clerk or FCM failure costs that
