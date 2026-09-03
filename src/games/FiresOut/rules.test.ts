@@ -16,7 +16,13 @@ import {
     perimeterNeighbours,
     edgeBetween,
     spaceIndex,
+    VICTIM_POI_COUNT,
+    DIFFICULTY_TIERS,
+    DifficultyId,
+    asRulesetId,
+    difficultyTier,
 } from "./board";
+import { formatFiresOutResultStats } from "./FiresOutModels";
 import {
     AP_COSTS,
     boardAtCurrentLayout,
@@ -163,25 +169,98 @@ describe("explode (§9.2)", () => {
 });
 
 describe("flashover (§9.3)", () => {
+    // The real ROOM_GRID down row 0: cols 0-1 and 1-2 are open, 2-3 is a
+    // door, and 4-5 is a wall segment. That geometry is the point of these
+    // tests — flashover crosses only what fire can actually cross (§4, §8).
     it("flashes over a smoke-filled wing to a fixpoint in one call, even when the chain is more than one hop from the original fire", () => {
         const spaces = buildEmptySpaces();
+        const edges = buildEmptyEdges();
         fire(spaces, spaceIndex(0, 0));
         spaces[spaceIndex(0, 1)].threat = 'smoke';
-        spaces[spaceIndex(0, 2)].threat = 'smoke';
-        spaces[spaceIndex(0, 3)].threat = 'smoke'; // two hops from the fire — only reachable via 0,2
+        spaces[spaceIndex(0, 2)].threat = 'smoke'; // two hops from the fire — only reachable via 0,1
 
-        flashover(spaces);
+        flashover(spaces, edges);
 
         expect(spaces[spaceIndex(0, 1)].threat).toBe('fire');
         expect(spaces[spaceIndex(0, 2)].threat).toBe('fire');
-        expect(spaces[spaceIndex(0, 3)].threat).toBe('fire');
     });
 
     it("leaves smoke alone when nothing nearby is on fire", () => {
         const spaces = buildEmptySpaces();
         spaces[spaceIndex(3, 3)].threat = 'smoke';
-        flashover(spaces);
+        flashover(spaces, buildEmptyEdges());
         expect(spaces[spaceIndex(3, 3)].threat).toBe('smoke');
+    });
+
+    it("stops at an intact wall segment rather than flashing through it", () => {
+        const spaces = buildEmptySpaces();
+        const edges = buildEmptyEdges();
+        const wall = edgeBetween(spaceIndex(0, 4), spaceIndex(0, 5))!;
+        expect(edges[wall].kind).toBe('wall'); // guards the fixture against a ROOM_GRID change
+        fire(spaces, spaceIndex(0, 4));
+        spaces[spaceIndex(0, 5)].threat = 'smoke';
+
+        flashover(spaces, edges);
+
+        expect(spaces[spaceIndex(0, 5)].threat).toBe('smoke');
+    });
+
+    it("crosses that same wall once it has been chopped twice and destroyed", () => {
+        const spaces = buildEmptySpaces();
+        const edges = buildEmptyEdges();
+        edges[edgeBetween(spaceIndex(0, 4), spaceIndex(0, 5))!].damage = 2;
+        fire(spaces, spaceIndex(0, 4));
+        spaces[spaceIndex(0, 5)].threat = 'smoke';
+
+        flashover(spaces, edges);
+
+        expect(spaces[spaceIndex(0, 5)].threat).toBe('fire');
+    });
+
+    it("is blocked by a closed door and let through by an open one (§8's tactical tool)", () => {
+        const door = edgeBetween(spaceIndex(0, 2), spaceIndex(0, 3))!;
+
+        const closed = buildEmptySpaces();
+        const closedEdges = buildEmptyEdges();
+        expect(closedEdges[door].kind).toBe('door');
+        closedEdges[door].doorOpen = false;
+        fire(closed, spaceIndex(0, 2));
+        closed[spaceIndex(0, 3)].threat = 'smoke';
+        flashover(closed, closedEdges);
+        expect(closed[spaceIndex(0, 3)].threat).toBe('smoke');
+
+        const open = buildEmptySpaces();
+        const openEdges = buildEmptyEdges();
+        openEdges[door].doorOpen = true;
+        fire(open, spaceIndex(0, 2));
+        open[spaceIndex(0, 3)].threat = 'smoke';
+        flashover(open, openEdges);
+        expect(open[spaceIndex(0, 3)].threat).toBe('fire');
+    });
+});
+
+describe("§9.1's adjacency ignition respects the floorplan too", () => {
+    it("smokes an empty space whose only neighbouring fire is behind a closed door, rather than igniting it", () => {
+        const spaces = buildEmptySpaces();
+        const edges = buildEmptyEdges();
+        const door = edgeBetween(spaceIndex(0, 2), spaceIndex(0, 3))!;
+        edges[door].doorOpen = false;
+        fire(spaces, spaceIndex(0, 2));
+
+        // §9.1 row 1: "nothing, not adjacent to fire" — the door means this
+        // space is not adjacent to fire for spread purposes.
+        expect(resolveTargetSpace(spaces, edges, spaceIndex(0, 3))).toBe('smoke');
+        expect(spaces[spaceIndex(0, 3)].threat).toBe('smoke');
+    });
+
+    it("ignites it once that door is open (§9.1 row 2)", () => {
+        const spaces = buildEmptySpaces();
+        const edges = buildEmptyEdges();
+        edges[edgeBetween(spaceIndex(0, 2), spaceIndex(0, 3))!].doorOpen = true;
+        fire(spaces, spaceIndex(0, 2));
+
+        expect(resolveTargetSpace(spaces, edges, spaceIndex(0, 3))).toBe('fire');
+        expect(spaces[spaceIndex(0, 3)].threat).toBe('fire');
     });
 });
 
@@ -235,7 +314,7 @@ describe("resolveFireConsequences (§9.1 step 6, §10.3)", () => {
         expect(spaces[spaceIndex(1, 5)].poi).toBeNull();
     });
 
-    it("knocks a firefighter caught by fire back to the start space, dropping what they carried without losing it", () => {
+    it("knocks a firefighter caught by fire back to the start space, carrying their victim out with them (§10.3)", () => {
         const spaces = buildEmptySpaces();
         fire(spaces, spaceIndex(3, 3));
         const ff = newFirefighter("u1", spaceIndex(3, 3));
@@ -244,8 +323,25 @@ describe("resolveFireConsequences (§9.1 step 6, §10.3)", () => {
         const result = resolveFireConsequences(spaces, [ff]);
 
         expect(result.knockedDownIndices).toEqual([0]);
-        expect(ff.carrying).toBeNull();
         expect(ff.space).not.toBe(spaceIndex(3, 3));
+        // "Knocked down along with them rather than lost" — the victim stays
+        // in their arms and still has to be walked to a rescue point, rather
+        // than being counted as lost *or* silently destroyed.
+        expect(ff.carrying).toBe('victim');
+        expect(result.victimsLost).toBe(0);
+    });
+
+    it("carries an escorted victim (§11 Paramedic) out of a knock-down too", () => {
+        const spaces = buildEmptySpaces();
+        fire(spaces, spaceIndex(3, 3));
+        const ff = newFirefighter("u1", spaceIndex(3, 3));
+        ff.carrying = 'escort';
+
+        const result = resolveFireConsequences(spaces, [ff]);
+
+        expect(result.knockedDownIndices).toEqual([0]);
+        expect(ff.carrying).toBe('escort');
+        expect(result.victimsLost).toBe(0);
     });
 
     it("leaves an untouched firefighter alone", () => {
@@ -895,13 +991,86 @@ describe("marker conservation", () => {
         // Repeatedly roll the same target (row 1, every column) — enough
         // Advance Fires that some hit a space already on fire and explode —
         // then replenish, asserting conservation holds after each round.
+        //
+        // §17.7 asks for *equality*: "what's on the board plus what's in
+        // reserve equals what the game started with". A `<=` assertion can't
+        // tell conservation from leakage, which is exactly how a knocked-down
+        // firefighter destroying the victim in their arms went unnoticed —
+        // the count only ever fell. Victims are the checkable half of the
+        // pool (a revealed false alarm legitimately leaves play, §10.1), so
+        // every one of the 10 must be on the board, in the pool, in
+        // somebody's arms, rescued or counted lost.
+        const victimsAccountedFor = (): number =>
+            rescued + lost
+            + pool.filter(isVictim => isVictim).length
+            + spaces.slice(0, INTERIOR_SPACE_COUNT).filter(s => s.poi?.victim).length
+            + firefighters.filter(ff => ff.carrying === 'victim' || ff.carrying === 'escort').length;
+
+        // This sequence never rescues; `lost` accumulates what the fire took.
+        const rescued = 0;
+        let lost = 0;
+
+        // A firefighter in the fire's way, holding a victim — the knock-down
+        // path that used to make a marker vanish.
+        firefighters[0].space = spaceIndex(1, 1);
+        firefighters[0].carrying = 'victim';
+        pool.splice(pool.findIndex(isVictim => isVictim), 1); // the one they're holding
+
+        expect(victimsAccountedFor()).toBe(VICTIM_POI_COUNT);
+
         for (let round = 0; round < COLS; round++) {
-            resolveAdvanceFire(spaces, edges, firefighters, 0, scriptedRolls(2, round + 1));
+            const advance = resolveAdvanceFire(spaces, edges, firefighters, 0, scriptedRolls(2, round + 1));
+            lost += advance.consequences.victimsLost;
             nextId = replenishPoi(spaces, pool, scriptedRolls(3, 1, 3, 2, 3, 3), nextId);
 
             expect(totalDamage(edges)).toBeLessThanOrEqual(24);
             expect(pool.length).toBeGreaterThanOrEqual(0);
-            expect(poiCountOnBoard(spaces) + pool.length).toBeLessThanOrEqual(15);
+            expect(victimsAccountedFor()).toBe(VICTIM_POI_COUNT);
         }
+    });
+});
+
+// Only POST /api/newgame/firesout validates `difficulty`, and only when the
+// host opens no seats; with a seat open the client goes through POST
+// /api/lobby, which spreads its per-game settings into the invitation
+// unchecked against a `difficulty: String` schema. An unknown value used to
+// throw off difficultyTier's `!` — inside CreateGame, *before* the
+// transaction consumed the invitation, so the invite was left accepted with
+// no game and every retry threw again — and again later in
+// formatFiresOutResultStats. Both paths now default instead.
+describe("an unrecognised ruleset/difficulty never throws (§6.2, the /api/lobby path)", () => {
+    const JUNK = ['nightmare', '', 'RECRUIT', undefined, null, 7, {}] as unknown[];
+
+    it("difficultyTier falls back to the first tier", () => {
+        for (const value of JUNK) {
+            expect(difficultyTier(value as DifficultyId)).toEqual(DIFFICULTY_TIERS[0]);
+        }
+    });
+
+    it("difficultyTier().id / asRulesetId narrow anything to a real id — what CreateGame stores", () => {
+        for (const value of JUNK) {
+            expect(difficultyTier(value as DifficultyId).id).toBe('recruit');
+            expect(asRulesetId(value)).toBe('family');
+        }
+        expect(difficultyTier('heroic').id).toBe('heroic');
+        expect(asRulesetId('experienced')).toBe('experienced');
+    });
+
+    it("applyExperiencedSetup builds a playable board rather than throwing", () => {
+        const spaces = buildEmptySpaces();
+        const edges = buildEmptyEdges();
+        const pool = shuffledPoiPool();
+
+        expect(() => applyExperiencedSetup(spaces, edges, pool, 'nightmare' as DifficultyId, 3, sequentialRolls()))
+            .not.toThrow();
+        expect(poiCountOnBoard(spaces)).toBe(3);
+    });
+
+    it("formatFiresOutResultStats renders a label rather than throwing", () => {
+        const groups = formatFiresOutResultStats({
+            rescued: 2, lost: 1, damage: 5, turnsLasted: 9,
+            ruleset: 'experienced', difficulty: 'nightmare' as DifficultyId,
+        });
+        expect(groups.flatMap(g => g.lines).join(' ')).toContain(DIFFICULTY_TIERS[0].label);
     });
 });

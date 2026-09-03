@@ -49,16 +49,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
-                title: "Fires Out shows the whole board — and you can walk right round it",
-                detail: "The street and the numbered tracks down every side of the house are on screen now instead of cropped off, and the outdoors is a full ring you can walk round, park a vehicle anywhere on and enter the building from any side. The rooms match the art too, so every wall and doorway you can see is one the game plays by. Games already under way keep the floorplan they started with.",
-                game: "firesout",
-            },
-            {
-                title: "Fires Out's pieces look like pieces",
-                detail: "Smoke and fire are flippable tokens instead of a flat colour wash, and victims, hazmats and hot spots sit on their own marker badges instead of floating text.",
-                game: "firesout",
-            },
-            {
                 title: "See which friends are around right now",
                 detail: "A green dot now sits on a friend's picture in your friends list while they're taking turns — anyone who has moved in a game in the last five minutes — so you can tell at a glance who is worth challenging now rather than tomorrow.",
             },
@@ -70,17 +60,20 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Check your notifications actually work",
                 detail: "Allowing notifications was only half of it: a phone can allow them and still quietly fail to sign itself up, and nothing told you. Settings now says where this device stands, has a Send a test notification button that tells you exactly what became of it, and a ? explaining everything which can stop one arriving — including the Android battery and per-app settings that block them without asking.",
             },
+            {
+                title: "Every game has a game guide",
+                detail: "Not sure what a phase does or which pile to worry about? A game guide now opens the first time you join a match of Dice Cities, Settlements & Cities, Train Time, World Domination or Outbreak, and any time after that from the ⋮ menu at the top of the board.",
+            },
+            {
+                title: "Your cards stay on screen between your turns",
+                detail: "Waiting for someone else to move used to leave you looking at the board and nothing else. Your hand, the face-up cards and what's left in the deck now stay put in Train Time, the market in Dice Cities and the cards you're holding in World Domination — greyed out until it's your go, so you can plan the move but not make it early.",
+            },
         ],
     },
     {
         label: "Bug fixes",
         icon: "🔧",
         items: [
-            {
-                title: "Fires Out no longer marks every square as a possible victim",
-                detail: "The board was showing a \"?\" on every single space, not just the handful that actually hold a POI marker — and the Imaging Technician could spend AP \"revealing\" empty rooms. Only spaces that really hold a marker show one now.",
-                game: "firesout",
-            },
             {
                 title: "City names on a map no longer sit on top of each other",
                 detail: "Outbreak, World Domination and Train Time all print their names straight onto the board, and where the map got busy they piled up — a city's name buried under its neighbour's, or under the disease cubes, pawns and stations crowding the dot next door. Every name on a board is now placed around the others: it keeps the side of its dot it has always used wherever there is room, steps round to a free side where there isn't, and turns inwards instead of running off the edge of the map.",
@@ -96,6 +89,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Map connections that go round the world stay off the map",
                 detail: "On the World Domination and Outbreak boards, the routes that cross from one side of the world to the other — Alaska to Kamchatka, San Francisco to Tokyo — used to be drawn as a long line straight across the whole map, over everything in the way. Each now heads off its own edge with a label naming where it comes out on the far side.",
+            },
+            {
+                title: "The logo on a join link takes you home",
+                detail: "Landing on a friend's join screen with nothing filled in used to be a dead end — there was no way back except the browser's own back button. Tapping the logo at the top now takes you home.",
             },
         ],
     },

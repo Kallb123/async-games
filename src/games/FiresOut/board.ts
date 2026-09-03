@@ -386,8 +386,32 @@ export const DIFFICULTY_TIERS: IFiresOutDifficultyTier[] = [
     { id: 'heroic', label: 'Heroic', explosions: 4, hazmats: 5, description: 'Very hard, with a larger hot spot reserve.' },
 ];
 
+/**
+ * The tier a game is set to, defaulting to the first (Recruit) rather than
+ * trusting the stored string. The `!` this replaces was reachable from a
+ * normal lobby: only `POST /api/newgame/firesout` validates `difficulty`
+ * against this table, and that route is taken only when the host opens no
+ * seats — with a seat open the client posts to `POST /api/lobby`, which
+ * spreads its per-game `...gameSettings` into the invitation unchecked
+ * against a `difficulty: String` schema. An unknown value then threw inside
+ * `CreateGame` (reading `.explosions`) *before* the transaction consumed the
+ * invitation, leaving it fully accepted with no game and every retry
+ * throwing again — permanent for a named invite with no TTL — and threw
+ * again on the read path in `formatFiresOutResultStats` (reading `.label`).
+ * `CreateGame` normalises what it stores as well, so a game is never left
+ * holding a value this has to paper over twice.
+ *
+ * (The missing per-game validation on `/api/lobby` itself is a wider issue
+ * shared with Outbreak's own `epidemicCountFor`, and belongs with that route
+ * rather than here.)
+ */
 export function difficultyTier(difficulty: DifficultyId): IFiresOutDifficultyTier {
-    return DIFFICULTY_TIERS.find(d => d.id === difficulty)!;
+    return DIFFICULTY_TIERS.find(d => d.id === difficulty) ?? DIFFICULTY_TIERS[0];
+}
+
+/** Narrows an arbitrary persisted/incoming value to a real ruleset id, for the normalising `CreateGame` does at setup. `difficulty`'s counterpart is `difficultyTier(...).id` — this one has no table to look itself up in. */
+export function asRulesetId(value: unknown): RulesetId {
+    return value === 'experienced' ? 'experienced' : 'family';
 }
 
 /** §3's component count — the total hot spot marker supply. Placed-on-board + reserve always equals this (a conservation invariant, like the POI pool and the damage markers — §17.7's testing note). */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildInitialFiresOutState, FiresOutGameDataModel, gameStateToModel } from "./FiresOutModels";
+import { buildInitialFiresOutState, buildInitialFiresOutStateFromGameData, cloneFiresOutState, FiresOutGameDataModel, gameStateToModel, IFiresOutGameData } from "./FiresOutModels";
 import { INTERIOR_SPACE_COUNT } from "./board";
 
 // Regression test for a classic Mongoose footgun (see WorldDominationModels.test.ts
@@ -75,5 +75,58 @@ describe("Fires Out Mongoose schema", () => {
             const dealt = specificGameState.firefighters.find(f => f.ownerId === ff.ownerId)!;
             expect(ff.restrictedAp).toEqual(dealt.restrictedAp);
         }
+    });
+});
+
+// The sibling footgun to the one above, on the same `poi` subdocument path
+// and found the same way — by going through a *hydrated document* rather than
+// a plain object. `{ ...subdocument }` copies Mongoose's internals
+// (`$__parent`, `$basePath`, `$__`, `_doc`) instead of `id`/`revealed`/
+// `victim`, so cloneFiresOutState silently produced POIs with everything
+// `undefined`. It only bites on the read path, which is why every plain-object
+// test in replay.test.ts passed while turn review diverged from the real game
+// in every match and could name a marker still face down on the live board.
+//
+// Everything a Fires Out replay starts from goes through this clone
+// (buildInitialFiresOutStateFromGameData), so asserting it here covers the
+// whole timeline.
+describe("cloneFiresOutState off a hydrated document", () => {
+    function hydrated(): IFiresOutGameData {
+        const specificGameState = buildInitialFiresOutState(["u1", "u2"], "family", "recruit");
+        return new FiresOutGameDataModel({
+            gameId: "22222222-2222-2222-2222-222222222222",
+            gameType: { gameId: "g", gameType: "FiresOut", friendlyName: "Fires Out!", icon: "", url: "firesout", className: "FiresOutGameType" },
+            userIdList: ["u1", "u2"],
+            turnTimer: "1d",
+            currentTurn: "u1",
+            lastTurnTimestamp: new Date().toISOString(),
+            timerWarningNotificationSent: false,
+            gameState: { turnOrder: ["u1", "u2"], history: [], commandHistory: [] },
+            complete: false,
+            winner: "",
+            specificGameState,
+            initialSpecificGameState: cloneFiresOutState(specificGameState),
+        }) as unknown as IFiresOutGameData;
+    }
+
+    it("copies a POI's own fields rather than a subdocument's internals", () => {
+        const clone = cloneFiresOutState(hydrated().specificGameState);
+        const pois = clone.spaces.filter(s => s.poi).map(s => s.poi!);
+
+        expect(pois).toHaveLength(3);
+        for (const poi of pois) {
+            expect(Object.keys(poi).sort()).toEqual(["id", "revealed", "victim"]);
+            expect(typeof poi.id).toBe("number");
+            expect(poi.revealed).toBe(false);
+            expect(typeof poi.victim).toBe("boolean");
+        }
+    });
+
+    it("gives the replay snapshot the same board the live game holds", () => {
+        const doc = hydrated();
+        const snapshot = buildInitialFiresOutStateFromGameData(doc);
+
+        expect(gameStateToModel(snapshot, {}, null))
+            .toEqual(gameStateToModel(doc.specificGameState, {}, null));
     });
 });
