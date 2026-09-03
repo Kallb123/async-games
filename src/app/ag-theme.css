@@ -2207,18 +2207,27 @@ a.ag-list-row, a.ag-list-row-main {
 
 /* ---- Die face (shared DieFace primitive) ---- */
 /* Sized entirely off --ag-die-size so pips stay proportional — and contained —
-   at any size, from the 30px battle dice to the 64px roll-result die. */
+   at any size, from the 30px battle dice to the 64px roll-result die. Painted
+   entirely off the three colour tokens below, so a game that rolls dice of
+   its own colour re-points them in its own `.ag-game--*` scope (Fires Out's
+   red Advance Fire dice) rather than overriding background, box-shadow and
+   pip colour one property at a time. */
 .ag-die {
     --ag-die-size: 64px;
+    /* The face, the pips/numerals printed on it, and the die's edge — the
+       band of colour under the face that makes it look like a solid object. */
+    --ag-die-face: var(--ag-surface);
+    --ag-die-ink: var(--ag-dark);
+    --ag-die-edge: oklch(0.75 0.05 60);
     width: var(--ag-die-size);
     height: var(--ag-die-size);
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     grid-template-rows: repeat(3, 1fr);
     padding: calc(var(--ag-die-size) * 0.17);
-    background: var(--ag-surface);
+    background: var(--ag-die-face);
     border-radius: calc(var(--ag-die-size) * 0.25);
-    box-shadow: 0 6px 0 oklch(0.75 0.05 60), 0 8px 14px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 6px 0 var(--ag-die-edge), 0 8px 14px rgba(0, 0, 0, 0.2);
     overflow: hidden;
     flex-shrink: 0;
 }
@@ -2232,7 +2241,7 @@ a.ag-list-row, a.ag-list-row-main {
     background: none;
     cursor: pointer;
 }
-.ag-die-btn:active .ag-die { transform: translateY(2px); box-shadow: 0 4px 0 oklch(0.75 0.05 60), 0 6px 10px rgba(0, 0, 0, 0.2); }
+.ag-die-btn:active .ag-die { transform: translateY(2px); box-shadow: 0 4px 0 var(--ag-die-edge), 0 6px 10px rgba(0, 0, 0, 0.2); }
 .ag-die-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .ag-die-pip {
@@ -2242,7 +2251,7 @@ a.ag-list-row, a.ag-list-row-main {
     align-self: center;
     justify-self: center;
 }
-.ag-die-pip--on { background: var(--ag-dark); }
+.ag-die-pip--on { background: var(--ag-die-ink); }
 
 /* A d8 (or any face above 6) is printed with a numeral, not pips. */
 .ag-die--numeral {
@@ -2250,7 +2259,7 @@ a.ag-list-row, a.ag-list-row-main {
     align-items: center;
     justify-content: center;
     font: 800 calc(var(--ag-die-size) * 0.42) var(--ag-font);
-    color: var(--ag-dark);
+    color: var(--ag-die-ink);
 }
 
 /* ---- Dice row (shared Dice primitive: any number of pip dice together) ---- */
@@ -3569,6 +3578,11 @@ button.ag-tt-ticket { cursor: pointer; }
 .ag-game--firesout {
     --fo-red: #d2432c;
     --fo-red-deep: #a8341f;
+    /* The Advance Fire dice, specified as their own red. It lands within a
+       few units of --fo-red (the chrome accent from meta.ts) and is
+       effectively the same colour on screen, so if the two are ever meant to
+       be one, drop this and point .ag-game--firesout .ag-die at --fo-red. */
+    --fo-dice-red: #d34634;
     --fo-char: oklch(0.24 0.02 40);
     --fo-char-2: oklch(0.3 0.02 40);
     --fo-wall: oklch(0.32 0.02 40);
@@ -3593,6 +3607,15 @@ button.ag-tt-ticket { cursor: pointer; }
 }
 .ag-game--firesout .ag-stat-row { background: var(--fo-char-2); padding: 0 12px 10px; }
 .ag-game--firesout .ag-stat { background: var(--ag-surface); border-radius: 9px; }
+/* The d6 and d8 of the Advance Fire reveal. They're the fire's dice, not a
+   player's, so they're red with white pips and numerals instead of the cream
+   house die. Fires Out only rolls dice on that one screen, so the game scope
+   is scope enough. */
+.ag-game--firesout .ag-die {
+    --ag-die-face: var(--fo-dice-red);
+    --ag-die-ink: #fff;
+    --ag-die-edge: var(--fo-red-deep);
+}
 
 /* ---- The board: the 6×8 interior grid inside its exterior perimeter, one
    CSS grid — walls are cell borders and doors are gaps in them (see
