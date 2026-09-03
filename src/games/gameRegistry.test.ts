@@ -106,6 +106,28 @@ describe("game registry completeness", () => {
         ).toEqual([]);
     });
 
+    it("wires every game's how-to-play guide into GAME_GUIDES", () => {
+        // The how-to-play popup is opt-in per game via a
+        // src/games/<Game>/guide.ts exporting a GameGuide. Games without one
+        // (e.g. Solitaire, Snakes & Ladders) simply have no guide, and
+        // guideForGame handles the miss. But a game that ships a guide.ts must
+        // be added to GAME_GUIDES, or two things fail silently: the board can
+        // still import the guide directly and show it, while /api/gameguides
+        // validates with `body.game in GAME_GUIDES` and so rejects the "seen"
+        // write — leaving the popup auto-showing on every single visit.
+        const guides = read("src/utils/ui/gameGuides.ts");
+        const withGuide = gameNames.filter((name) =>
+            existsSync(path.join(gamesRoot, name, "guide.ts")),
+        );
+        const missing = withGuide.filter((name) => !guides.includes(`@/games/${name}/guide`));
+        expect(
+            missing,
+            `These games have a guide.ts that isn't imported by ` +
+                `src/utils/ui/gameGuides.ts, so their guide is missing from GAME_GUIDES. Add:\n` +
+                missing.map((n) => `  import { guide as ${n[0].toLowerCase()}${n.slice(1)}Guide } from "@/games/${n}/guide";`).join("\n"),
+        ).toEqual([]);
+    });
+
     it("wires every game's result-stats calculator into the GameResult dispatch table", () => {
         // Per-game GameResult stats (AGENTS.md: "GameResult storage should include
         // some game specific statistics") are opt-in per game via a

@@ -77,6 +77,14 @@ New games should add their metadata to `src/utils/ui/games.ts` and reuse
 screen rather than rebuilding the form — and add themselves to the "What's
 new" notes (see Working practices below).
 
+Most also want a **game guide**: a `guide.ts` beside the game's `meta.ts`
+exporting a `GameGuide`, wired into `GAME_GUIDES` in
+`src/utils/ui/gameGuides.ts` and shown by the board screen through
+`useGameGuide`. It's the how-to-play popup a player gets on their first match
+and from the ⋮ menu after that. Five sections, `Goal` first, then `Your turn`,
+in the player's language — match the existing guides rather than restating the
+GDD.
+
 They also need a **share card**: the image a link to a game unfurls to in a
 chat app (today a join link, `/join?code=PLUM`). Run `npm run icons` and
 commit the `public/icons/og-game-<slug>.png` it writes. The script draws it
