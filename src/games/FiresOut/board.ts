@@ -329,16 +329,32 @@ export function neighboursOf(space: number): number[] {
 }
 
 // ─── Family setup (§6.1) ────────────────────────────────────────────────────
+// The coordinates below are the ones printed on the setup diagram, and the
+// rulebook writes them 1-indexed as (row, column) — the same d6/d8 reading
+// spaceForRoll uses. `spaceIndex` is 0-indexed, so every pair here is the
+// printed one minus one on each axis; the trailing comment on each line is
+// the printed pair, so the table can be checked against the rulebook without
+// doing the arithmetic in your head.
 
-/** §6.1 step 2: a cluster of ten fire markers, centred on the kitchen/den. */
+/** §6.1 step 2: the ten printed starting fire markers — a cluster through the living room and kitchen, plus a second one in the far bedroom. */
 export const FAMILY_STARTING_FIRE: number[] = [
-    spaceIndex(2, 1), spaceIndex(2, 2), spaceIndex(2, 3), spaceIndex(2, 4), spaceIndex(2, 5),
-    spaceIndex(3, 1), spaceIndex(3, 2), spaceIndex(3, 3), spaceIndex(3, 4), spaceIndex(3, 5),
+    spaceIndex(1, 1), // 2,2
+    spaceIndex(1, 2), // 2,3
+    spaceIndex(2, 1), // 3,2
+    spaceIndex(2, 2), // 3,3
+    spaceIndex(2, 3), // 3,4
+    spaceIndex(2, 4), // 3,5
+    spaceIndex(3, 3), // 4,4
+    spaceIndex(4, 5), // 5,6
+    spaceIndex(4, 6), // 5,7
+    spaceIndex(5, 5), // 6,6
 ];
 
-/** §6.1 step 4: the printed setup coordinates for the first three POIs. */
+/** §6.1 step 4: the printed setup coordinates for the first three POIs, drawn at random from the pool and placed "?" side up. */
 export const FAMILY_STARTING_POI: number[] = [
-    spaceIndex(0, 0), spaceIndex(0, 6), spaceIndex(5, 6),
+    spaceIndex(1, 3), // 2,4
+    spaceIndex(4, 0), // 5,1
+    spaceIndex(4, 7), // 5,8
 ];
 
 // §1's "1-6 players, solitaire supported by controlling multiple pawns" is

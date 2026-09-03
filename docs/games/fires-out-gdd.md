@@ -83,11 +83,15 @@ The game ends immediately when any one of the following is met:
 
 ### 6.1 Family Game
 
-1. Choose a board side. Place door markers **closed** in every doorway.
-2. Place the starting fire markers on the coordinates printed in the setup diagram (a cluster of ten, typically centred).
+Coordinates below are written as printed on the setup diagram: **(row,
+column)**, 1-indexed — row 1-6 (the d6), column 1-8 (the d8), per §3's design
+note.
+
+1. Choose a board side. Place a **closed** door marker on each inside doorway — 8 on this side of the board.
+2. Place the 10 starting fire markers on (2,2), (2,3), (3,2), (3,3), (3,4), (3,5), (4,4), (5,6), (5,7) and (6,6).
 3. Build the POI pool: 10 victim markers and 5 false alarms, mixed face down ("?" side up).
-4. Place 3 POI markers on the board at the printed setup coordinates.
-5. Each player takes a firefighter figure and places it on any exterior space (outside the building).
+4. Draw 3 POI markers at random from that pool and place them "?" side up on (2,4), (5,1) and (5,8).
+5. Each player takes a player card and a firefighter figure, and places the figure on any exterior space (outside the building) — for example beside an exit door, or by a room holding a victim. Firefighters may share a space.
 6. Place damage markers, spare POIs, spare threat markers, and dice within reach.
 7. Set unused components (hazmat, hot spots, vehicles, specialist cards) aside — they are not used.
 
@@ -415,6 +419,17 @@ a d8 to solve it again.
   make its own history stop replaying, quietly dropping every move through a
   boundary that had become a wall. Any future change to the room table applies
   to games started after it, not to games already burning.
+* **The crew starts on one printed exterior space, not one each player
+  picks.** §6.1 step 5 lets every player choose their own space outside the
+  building; `START_SPACE` in `board.ts` puts the whole crew on the perimeter
+  space outside the building's top-left corner instead. Choosing would need a
+  placement round before the first turn — a whole extra async phase, played
+  before anyone can see what the fire is doing — for a decision the rulebook
+  itself treats as a suggestion ("for example beside an exit door"), and
+  sharing a space is legal anyway, so the crew arriving together is a legal
+  setup rather than a rule bent. It is also where §10.3 puts a knocked-down
+  firefighter back, so the two stay one constant. A per-player choice can be
+  added later as an opening command without changing the stored shape.
 * **One board layout, not two.** §3 and §6.1 step 1 describe a double-sided
   board; only one floorplan's art was ever uploaded
   (`public/art/fires-out/board.png`), so `board.ts` builds one `ROOM_GRID` /

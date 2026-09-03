@@ -210,10 +210,25 @@ describe("quadrants (§12.3, §17.6 step 9)", () => {
 });
 
 describe("Family setup data (§6.1)", () => {
-    it("has a cluster of ten starting fire spaces, all interior and unique", () => {
+    // The rulebook prints these 1-indexed as (row, column); `printed` reads
+    // them the same way spaceForRoll reads a d6/d8, so the expectations below
+    // can be diffed against §6.1 line by line rather than converted by hand.
+    const printed = (row: number, col: number) => spaceIndex(row - 1, col - 1);
+
+    it("has ten starting fire spaces, all interior and unique", () => {
         expect(FAMILY_STARTING_FIRE).toHaveLength(10);
         expect(new Set(FAMILY_STARTING_FIRE).size).toBe(10);
         for (const space of FAMILY_STARTING_FIRE) expect(isInteriorSpace(space)).toBe(true);
+    });
+
+    it("places the starting fire on the printed coordinates (§6.1 step 2)", () => {
+        expect(FAMILY_STARTING_FIRE).toEqual([
+            printed(2, 2), printed(2, 3),
+            printed(3, 2), printed(3, 3), printed(3, 4), printed(3, 5),
+            printed(4, 4),
+            printed(5, 6), printed(5, 7),
+            printed(6, 6),
+        ]);
     });
 
     it("has three starting POI spaces, all interior, unique, and clear of the starting fire", () => {
@@ -223,5 +238,13 @@ describe("Family setup data (§6.1)", () => {
             expect(isInteriorSpace(space)).toBe(true);
             expect(FAMILY_STARTING_FIRE).not.toContain(space);
         }
+    });
+
+    it("places the starting POIs on the printed coordinates (§6.1 step 4)", () => {
+        expect(FAMILY_STARTING_POI).toEqual([printed(2, 4), printed(5, 1), printed(5, 8)]);
+    });
+
+    it("starts every firefighter outside the building, where a knocked-down one is put back (§6.1 step 5, §10.3)", () => {
+        expect(isExteriorSpace(START_SPACE)).toBe(true);
     });
 });

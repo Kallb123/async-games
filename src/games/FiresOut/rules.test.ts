@@ -6,6 +6,9 @@ import {
     EDGE_COUNT,
     EXTERIOR_CORNERS,
     EXTERIOR_TOP_START,
+    FAMILY_STARTING_FIRE,
+    FAMILY_STARTING_POI,
+    FALSE_ALARM_POI_COUNT,
     exteriorBottomSpace,
     exteriorTopSpace,
     INTERIOR_SPACE_COUNT,
@@ -33,6 +36,7 @@ import {
     IFiresOutSpaceState,
     SPECIALISTS,
     applyExperiencedSetup,
+    applyFamilySetup,
     buildEmptyEdges,
     buildEmptySpaces,
     emptySpaceState,
@@ -472,6 +476,35 @@ describe("hot spot flare-ups (§9.4, §17.6 step 8)", () => {
         expect(result.flareUps[0].target).toBe(h2);
         expect(result.flareUps[0].flareUps).toHaveLength(1);
         expect(result.flareUps[0].flareUps[0].flareUps).toEqual([]);
+    });
+});
+
+describe("applyFamilySetup (§6.1)", () => {
+    it("starts every one of the 8 door markers closed (§6.1 step 1)", () => {
+        const doors = buildEmptyEdges().filter(e => e.kind === 'door');
+        expect(doors).toHaveLength(8);
+        for (const door of doors) expect(door.doorOpen).toBe(false);
+    });
+
+    it("lights the printed starting fire and nothing else (§6.1 step 2)", () => {
+        const spaces = buildEmptySpaces();
+        applyFamilySetup(spaces, shuffledPoiPool());
+
+        const onFire = spaces.flatMap((s, i) => s.threat === 'fire' ? [i] : []);
+        expect(onFire).toEqual([...FAMILY_STARTING_FIRE].sort((a, b) => a - b));
+        expect(spaces.some(s => s.hazmat || s.hotspot)).toBe(false); // §6.1 step 7 sets both aside
+    });
+
+    it("places 3 face-down POIs from the 15-marker pool on the printed coordinates (§6.1 steps 3-4)", () => {
+        const spaces = buildEmptySpaces();
+        const poiPool = shuffledPoiPool();
+        expect(poiPool).toHaveLength(VICTIM_POI_COUNT + FALSE_ALARM_POI_COUNT);
+
+        applyFamilySetup(spaces, poiPool);
+
+        expect(spaces.flatMap((s, i) => s.poi ? [i] : [])).toEqual([...FAMILY_STARTING_POI].sort((a, b) => a - b));
+        for (const space of FAMILY_STARTING_POI) expect(spaces[space].poi!.revealed).toBe(false);
+        expect(poiPool).toHaveLength(VICTIM_POI_COUNT + FALSE_ALARM_POI_COUNT - 3); // drawn from the pool, not conjured
     });
 });
 
