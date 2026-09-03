@@ -200,6 +200,49 @@ function roomOf(space: number): number {
 }
 
 /**
+ * What each room in `ROOM_GRID` is called, in the same order as its ids —
+ * the names the board art draws, so a player reading "fire caught in the
+ * kitchen" can find it on the board. A space number is an implementation
+ * detail of the grid and means nothing at the table, so nothing
+ * player-facing prints one: the log, the recap, the Advance Fire screen and
+ * the board tooltips all come through `spaceName`/`spacePhrase` below.
+ */
+const ROOM_NAMES = [
+    'Living room',
+    'Bathroom',
+    'Bedroom',
+    'Kitchen',
+    'Games room',
+    'Dining room',
+    'Second bedroom',
+    'Second bathroom',
+] as const;
+
+/**
+ * Outdoors has no rooms, so the perimeter is named by the side of the house
+ * it runs along — read off the display grid the player is looking at (north
+ * is the top of the board), so the ring names itself rather than needing a
+ * table kept in step with `EXTERIOR_*_START`.
+ */
+function exteriorName(space: number): string {
+    const { displayRow, displayCol } = DISPLAY_CELL_OF[space];
+    const northSouth = displayRow === 0 ? 'North' : displayRow === DISPLAY_ROWS - 1 ? 'South' : '';
+    const eastWest = displayCol === 0 ? 'West' : displayCol === DISPLAY_COLS - 1 ? 'East' : '';
+    if (northSouth && eastWest) return `${northSouth}-${eastWest.toLowerCase()} corner`;
+    return `${northSouth || eastWest} side`;
+}
+
+/** What to call a space to a player: the room it sits in, or the side of the house it's parked on. Suitable as a label on its own — `spacePhrase` is the version that reads inside a sentence. */
+export function spaceName(space: number): string {
+    return isInteriorSpace(space) ? ROOM_NAMES[roomOf(space)] : exteriorName(space);
+}
+
+/** `spaceName` as it reads after a preposition — "moved to the kitchen", "fire caught in the north-west corner". */
+export function spacePhrase(space: number): string {
+    return `the ${spaceName(space).toLowerCase()}`;
+}
+
+/**
  * The 8 interior doorways (§3: "Door markers, 8, double-sided"). The first
  * four sit exactly where the art draws a gap in a wall; the other four are
  * ours to place, because the art draws those four rooms sealed — every room

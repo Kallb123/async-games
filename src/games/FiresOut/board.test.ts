@@ -33,6 +33,8 @@ import {
     rowOf,
     spaceForRoll,
     spaceIndex,
+    spaceName,
+    spacePhrase,
     spacesInQuadrant,
     perimeterNeighbours,
 } from "./board";
@@ -237,5 +239,37 @@ describe("Family setup data (§6.1)", () => {
 
     it("starts every firefighter outside the building (§6.1 step 5)", () => {
         expect(isExteriorSpace(START_SPACE)).toBe(true);
+    });
+});
+
+// Nothing a player reads should print a space number (§17.4's grid indices are
+// an implementation detail), so these are the names every log line, recap row,
+// Advance Fire screen and board tooltip goes through.
+describe("space names", () => {
+    it("names every interior space after the room the art draws it in", () => {
+        expect(spaceName(spaceIndex(0, 0))).toBe("Living room");
+        expect(spaceName(spaceIndex(0, 3))).toBe("Bathroom");
+        expect(spaceName(spaceIndex(1, 6))).toBe("Bedroom");
+        expect(spaceName(spaceIndex(3, 3))).toBe("Kitchen");
+        expect(spaceName(spaceIndex(2, 7))).toBe("Games room");
+        expect(spaceName(spaceIndex(4, 3))).toBe("Dining room");
+        expect(spaceName(spaceIndex(5, 6))).toBe("Second bedroom");
+        expect(spaceName(spaceIndex(4, 7))).toBe("Second bathroom");
+    });
+
+    it("names the perimeter after the side of the house it runs along", () => {
+        expect(spaceName(exteriorTopSpace(3))).toBe("North side");
+        expect(spaceName(exteriorBottomSpace(3))).toBe("South side");
+        expect(spaceName(exteriorLeftSpace(2))).toBe("West side");
+        expect(spaceName(exteriorRightSpace(2))).toBe("East side");
+        expect(spaceName(EXTERIOR_CORNERS.topLeft)).toBe("North-west corner");
+        expect(spaceName(EXTERIOR_CORNERS.bottomRight)).toBe("South-east corner");
+    });
+
+    it("gives every space a name, so no log line can fall back to a number", () => {
+        for (let space = 0; space < SPACE_COUNT; space++) {
+            expect(spaceName(space)).toBeTruthy();
+            expect(spacePhrase(space)).toBe(`the ${spaceName(space).toLowerCase()}`);
+        }
     });
 });

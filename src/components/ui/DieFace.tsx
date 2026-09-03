@@ -11,16 +11,18 @@ const PIP_LAYOUT: Record<number, number[]> = {
 };
 
 /**
- * A single tactile die face showing a value as pips (1–6) or, past 6, a
- * numeral — an octahedral d8 is printed with numerals in real life, not
- * pips, so `PIP_LAYOUT` simply has no row above 6 rather than a wrong one
+ * A single tactile die face showing a value as pips or a numeral — an
+ * octahedral d8 is printed with numerals in real life, not pips, so it says
+ * so with `sides` rather than switching on the value it happened to roll
  * (fires-out-gdd.md §17.2 gap 4: "the fix is a numeral variant in the shared
  * component — not a bespoke Fires Out die that leaves the next game with a
- * d8 to solve it again"). Presentational only — used directly, or via the
- * Dice component for rows of more than one die.
+ * d8 to solve it again"). A die keeps one face all roll long that way: a d8
+ * showing 3 is still a numeral, where switching on the value alone made it
+ * flicker between pips and numerals as it tumbled. Presentational only —
+ * used directly, or via the Dice component for rows of more than one die.
  */
-export default function DieFace({ value, size = 64 }: { value: number; size?: number }) {
-    const pips = PIP_LAYOUT[value];
+export default function DieFace({ value, size = 64, sides = 6 }: { value: number; size?: number; sides?: number }) {
+    const pips = sides <= 6 ? PIP_LAYOUT[value] : undefined;
     const style = { '--ag-die-size': `${size}px` } as React.CSSProperties;
 
     if (!pips) {

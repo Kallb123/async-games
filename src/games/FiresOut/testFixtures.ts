@@ -11,10 +11,11 @@ import type { IFiresOutSpecificGameState } from "./FiresOutModels";
 
 /**
  * Firefighters — one per entry in `owners`, in that order — all starting at
- * (3,2): a kitchen space with one of each kind of boundary around it, open to
- * (3,3) and (2,2), walled off from (3,1), and a door onto the dining room at
- * (4,2). No fire, POIs or damage, so a test builds whatever board condition it
- * needs on top of this rather than fighting the Family setup's fire cluster.
+ * (3,2): a kitchen space open to (3,3) and (2,2) and walled off from (3,1).
+ * The kitchen's door onto the dining room is one step further along, between
+ * (3,3) and (4,3), so a door test steps to (3,3) first. No fire, POIs or
+ * damage, so a test builds whatever board condition it needs on top of this
+ * rather than fighting the Family setup's fire cluster.
  *
  * `owners` is a list of *figure* owners rather than the game's turn order —
  * §17.2 gap 3's distinction — so one user may appear more than once, which is
