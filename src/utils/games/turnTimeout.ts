@@ -7,6 +7,7 @@ import { OutbreakAction, OutbreakDiscard, OutbreakEndTurn, OutbreakPlayEvent } f
 import { IOutbreakGameData } from "@/games/Outbreak/OutbreakModels";
 import { HAND_LIMIT } from "@/games/Outbreak/rules";
 import { FiresOutAction } from "@/games/FiresOut/FiresOutLogic";
+import { IFiresOutGameData } from "@/games/FiresOut/FiresOutModels";
 
 // docs/games/outbreak-gdd.md §21.2, gap 2: the turn-timer cron used to handle
 // every game the same way — advance currentTurn and nothing else — which is
@@ -99,7 +100,18 @@ registerTurnTimeoutAdapter({
     // resolving the fire. resolveStalledTurn re-asks until turnOver, which is
     // what owes a player holding two figures (§1's solitaire play) one fire
     // advance per figure rather than one for the lot.
-    buildTimeoutCommand() {
+    buildTimeoutCommand(gameData, userId) {
+        const gs = (gameData as IFiresOutGameData).specificGameState;
+        // ...with one bound on that re-asking: if every figure on the board is
+        // this player's, no number of endTurns reaches a different owner, so
+        // turnOver never comes and the cap below becomes the exit rather than
+        // the backstop — a tick's worth of real Advance Fires either thrown
+        // away with 'stuck' or, worse, saved as a teamloss the fire only
+        // caused because the cron rolled it twenty times. Unreachable while
+        // every seat holds exactly one figure (MIN_PLAYERS is 2), and there is
+        // nothing useful the cron could do with such a game anyway.
+        if (gs.firefighters.every(ff => ff.ownerId === userId)) return null;
+
         const action = new FiresOutAction();
         action.kind = 'endTurn';
         return action;

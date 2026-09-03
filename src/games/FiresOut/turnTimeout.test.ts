@@ -66,8 +66,12 @@ describe("resolveStalledTurn (Fires Out)", () => {
         // strongest play.
         const rolls = commandHistory(game)[0].recordedRolls;
         expect(rolls).toHaveLength(2); // an empty poiPool has nothing to replenish
+        // 'smoke' exactly: baseState has no fire anywhere, so the target can
+        // only step up from 'none' by one. (A `not.toBe('clear')` here proved
+        // nothing — 'clear' isn't a ThreatLevel, so it passed against a board
+        // Advance Fire never touched.)
         const target = spaceIndex(rolls![0] - 1, rolls![1] - 1);
-        expect(state.spaces[target].threat).not.toBe('clear');
+        expect(state.spaces[target].threat).toBe('smoke');
         expect(game.gameState.history.some(h => h.text.includes('Advance Fire'))).toBe(true);
         expect(game.gameState.history.some(h => h.text.includes('ended their turn'))).toBe(true);
     });
@@ -102,6 +106,22 @@ describe("resolveStalledTurn (Fires Out)", () => {
         expect(commandHistory(game)).toHaveLength(2);
         expect(state.activeFirefighter).toBe(2);
         expect(game.currentTurn).toBe("u2");
+    });
+
+    it("reports stuck without burning the building down, when every figure on the board is the stalled player's", async () => {
+        // No number of endTurns hands the turn to anyone else here, so
+        // resolveStalledTurn would otherwise run its whole MAX_TIMEOUT_COMMANDS
+        // budget of real Advance Fires — and either throw them away with
+        // 'stuck' or save a teamloss caused by twenty forced fires.
+        const state = baseState(["u1", "u1"]);
+        const game = makeGame(state, ["u1"]);
+
+        const resolution = await resolveStalledTurn(game, "u1", "Alice");
+
+        expect(resolution).toBe('stuck');
+        expect(commandHistory(game)).toEqual([]);
+        expect(game.gameState.history).toEqual([]);
+        expect(state.activeFirefighter).toBe(0);
     });
 
     it("reports stuck, rather than rewriting whose figure is up, when the timed-out player isn't the active one", async () => {
