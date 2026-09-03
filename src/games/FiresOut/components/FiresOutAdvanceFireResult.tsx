@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import Dice from '@/components/ui/Dice';
 import PayoffScreen from '@/components/ui/PayoffScreen';
+import { spaceName } from '@/games/FiresOut/board';
 import type { IFiresOutAdvanceFireOutcome } from '@/games/FiresOut/FiresOutLogic';
 
 // fires-out-gdd.md §17.6 step 7: the fire is the antagonist (§2), so ending a
@@ -83,7 +84,7 @@ export default function FiresOutAdvanceFireResult({ result, onDismiss }: { resul
             onCta={onDismiss}
             ctaDisabled={rolling}
         >
-            <Dice values={[d6Face, d8Face]} rolling={rolling} />
+            <Dice values={[d6Face, d8Face]} sides={[6, 8]} rolling={rolling} />
 
             {rolling ? (
                 <div className="ag-fo-advance-title">Rolling…</div>
@@ -92,7 +93,7 @@ export default function FiresOutAdvanceFireResult({ result, onDismiss }: { resul
                     <div className="ag-payoff-icon ag-fo-advance-reveal">{RESOLUTION_ICON[resolution]}</div>
                     <div className="ag-fo-advance-reveal">
                         <div className="ag-fo-advance-title">{RESOLUTION_TITLE[resolution]}</div>
-                        <div className="ag-fo-advance-sub">Space {target}</div>
+                        <div className="ag-fo-advance-sub">{spaceName(target)}</div>
                     </div>
                     {notes.length > 0 && (
                         <div className="ag-fo-advance-notes ag-fo-advance-reveal">

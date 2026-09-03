@@ -65,8 +65,9 @@ describe("FiresOutAction 'move'", () => {
 
     it("rejects a move through a closed door, and permits it once opened", async () => {
         const state = baseState();
+        state.firefighters[0].space = spaceIndex(3, 3); // the kitchen side of the dining-room door
         const game = makeGame(state);
-        const doorTarget = spaceIndex(4, 2); // through the kitchen/dining-room door
+        const doorTarget = spaceIndex(4, 3); // through the kitchen/dining-room door
 
         const blocked = await cmd("u1", { kind: 'move', target: doorTarget }).Execute(game);
         expect(blocked.validMove).toBe(false);
@@ -667,10 +668,11 @@ describe("Specialists (§11, §17.6 step 10)", () => {
         captain.specialist = 'fireCaptain';
         captain.apLeft = 4;
         captain.restrictedAp = { kind: 'command', left: 2 };
+        captain.space = spaceIndex(3, 3); // the kitchen side of the dining-room door
         state.firefighters[1].space = spaceIndex(3, 3); // the teammate being directed
         const game = makeGame(state, ["u1", "u2"]);
 
-        const doorTarget = spaceIndex(4, 2); // the kitchen/dining-room door
+        const doorTarget = spaceIndex(4, 3); // the kitchen/dining-room door
         const doorOutcome = await cmd("u1", { kind: 'door', target: doorTarget }).Execute(game);
         expect(doorOutcome.validMove).toBe(true);
         expect(captain.restrictedAp).toEqual({ kind: 'command', left: 1 }); // 1 AP drawn from command first
@@ -678,7 +680,7 @@ describe("Specialists (§11, §17.6 step 10)", () => {
         const moveOutcome = await cmd("u1", { kind: 'move', target: spaceIndex(3, 4), targetUserId: "u2" }).Execute(game);
         expect(moveOutcome.validMove).toBe(true);
         expect(state.firefighters[1].space).toBe(spaceIndex(3, 4)); // the teammate moved
-        expect(captain.space).toBe(spaceIndex(3, 2)); // the Fire Captain stayed put
+        expect(captain.space).toBe(spaceIndex(3, 3)); // the Fire Captain stayed put
         expect(captain.restrictedAp).toEqual({ kind: 'command', left: 0 }); // the Fire Captain paid
         expect(game.gameState.history.some(h => h.text.includes("directing a teammate's firefighter"))).toBe(true);
     });

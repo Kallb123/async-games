@@ -1,6 +1,6 @@
 'use client'
 import React from 'react';
-import { DISPLAY_COLS, DISPLAY_ROWS, edgeBetween, isInteriorSpace, spaceAtDisplayCell } from '@/games/FiresOut/board';
+import { DISPLAY_COLS, DISPLAY_ROWS, edgeBetween, isInteriorSpace, spaceAtDisplayCell, spaceName } from '@/games/FiresOut/board';
 import type { IFiresOutEdgeResponse, IFiresOutFirefighterResponse, IFiresOutSpaceResponse } from '@/games/FiresOut/apiModels';
 import { playerColourForId } from '@/utils/ui/playerColours';
 
@@ -85,7 +85,7 @@ export default function FiresOutBoard({ spaces, edges, firefighters, userIdList,
                     style={style}
                     disabled={!isValid}
                     onClick={isValid && onSpaceClick ? () => onSpaceClick(space) : undefined}
-                    title={`Space ${space}`}
+                    title={spaceName(space)}
                 >
                     {state.threat !== 'none' && (
                         <span

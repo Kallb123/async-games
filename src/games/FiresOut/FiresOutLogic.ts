@@ -4,8 +4,9 @@ import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels
 import { serializable } from "@/utils/apiModels/Serialisable";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IFiresOutGameData, IFiresOutSpecificGameState } from "@/games/FiresOut/FiresOutModels";
-import { edgeBetween, isExteriorSpace, isInteriorSpace, neighboursOf, quadrantOf, perimeterNeighbours, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN } from "@/games/FiresOut/board";
+import { edgeBetween, isExteriorSpace, isInteriorSpace, neighboursOf, quadrantOf, perimeterNeighbours, spacePhrase, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN } from "@/games/FiresOut/board";
 import {
+    advanceFireLine,
     AP_COSTS,
     canCrewChange,
     canDisposeHazmatOnSite,
@@ -248,7 +249,7 @@ function applyMove(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IF
         : mover.carrying === 'hazmat' ? 'carried a hazmat to' : 'moved to';
     const directed = mover !== ff ? " (directing a teammate's firefighter)" : '';
     const suffix = notes.length ? ` — ${notes.join(', ')}` : '';
-    fo.gameState.history.unshift(playerHistory(action.senderId, `${verb} space ${target}${directed}${suffix}`));
+    fo.gameState.history.unshift(playerHistory(action.senderId, `${verb} ${spacePhrase(target)}${directed}${suffix}`));
     return { validMove: true, turnOver: false };
 }
 
@@ -263,7 +264,7 @@ function applyDoor(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IF
     if (!spendAp(ff, AP_COSTS.door, 'command')) return INVALID;
 
     edge.doorOpen = !edge.doorOpen;
-    fo.gameState.history.unshift(playerHistory(action.senderId, `${edge.doorOpen ? 'opened' : 'closed'} a door`));
+    fo.gameState.history.unshift(playerHistory(action.senderId, `${edge.doorOpen ? 'opened' : 'closed'} the door to ${spacePhrase(target)}`));
     return { validMove: true, turnOver: false };
 }
 
@@ -280,7 +281,7 @@ function applyExtinguish(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, 
     if (!spendAp(ff, extinguishApCost(ff), 'extinguish')) return INVALID;
 
     state.threat = state.threat === 'fire' ? 'smoke' : 'none';
-    fo.gameState.history.unshift(playerHistory(action.senderId, `extinguished space ${target} to ${state.threat === 'none' ? 'clear' : 'smoke'}`));
+    fo.gameState.history.unshift(playerHistory(action.senderId, `${state.threat === 'none' ? 'cleared the smoke' : 'knocked the fire back to smoke'} in ${spacePhrase(target)}`));
     return { validMove: true, turnOver: false };
 }
 
@@ -297,7 +298,7 @@ function applyChop(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IF
     if (!spendAp(ff, chopApCost(ff), 'moveChop')) return INVALID;
 
     edge.damage = (edge.damage + 1) as 0 | 1 | 2;
-    fo.gameState.history.unshift(playerHistory(action.senderId, `chopped a wall toward space ${target}${edge.damage >= 2 ? ' — destroyed it' : ''}`));
+    fo.gameState.history.unshift(playerHistory(action.senderId, `chopped a wall toward ${spacePhrase(target)}${edge.damage >= 2 ? ' — destroyed it' : ''}`));
     return { validMove: true, turnOver: false };
 }
 
@@ -314,7 +315,7 @@ function applyReveal(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: 
 
     const revealed = revealPoiAt(gs.spaces, target)!; // just checked above
     fo.gameState.history.unshift(playerHistory(action.senderId,
-        `remotely revealed a ${revealed.victim ? 'victim' : 'false alarm'} at space ${target}`));
+        `remotely revealed a ${revealed.victim ? 'victim' : 'false alarm'} in ${spacePhrase(target)}`));
     return { validMove: true, turnOver: false };
 }
 
@@ -402,7 +403,7 @@ function applyDrive(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: I
     const vehicleName = vehicle === 'engine' ? 'Engine' : 'Ambulance';
     const riderNote = riders.length > 1 ? ` with ${riders.length - 1} other firefighter${riders.length > 2 ? 's' : ''} riding along` : '';
     const rescueNote = rescues > 0 ? ` — ${rescues} victim${rescues === 1 ? '' : 's'} rescued!` : '';
-    fo.gameState.history.unshift(playerHistory(action.senderId, `drove the ${vehicleName} to space ${target}${riderNote}${rescueNote}`));
+    fo.gameState.history.unshift(playerHistory(action.senderId, `drove the ${vehicleName} to ${spacePhrase(target)}${riderNote}${rescueNote}`));
     return { validMove: true, turnOver: false };
 }
 
@@ -438,7 +439,7 @@ function applyDeckGun(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff:
         ? `cleared ${result.clearedSpaces.length} space${result.clearedSpaces.length === 1 ? '' : 's'}`
         : 'no effect';
     const rerollNote = rerolled ? ' — re-rolled the off-target shot' : '';
-    fo.gameState.history.unshift(playerHistory(action.senderId, `fired the deck gun at space ${result.target} — ${effect}${rerollNote}`));
+    fo.gameState.history.unshift(playerHistory(action.senderId, `fired the deck gun into ${spacePhrase(result.target)} — ${effect}${rerollNote}`));
     return { validMove: true, turnOver: false };
 }
 
@@ -489,13 +490,7 @@ export interface IFiresOutEndTurnOutcome extends ICommandOutcome {
 }
 
 function describeAdvanceFire(result: IFiresOutAdvanceFireResult, isFlareUp: boolean): string {
-    const prefix = isFlareUp ? 'Flare-up! ' : '';
-    const rollText = `rolled ${result.rolls.d6},${result.rolls.d8}`;
-    switch (result.resolution) {
-        case 'smoke': return `${prefix}Advance Fire: ${rollText} — smoke fills space ${result.target}`;
-        case 'fire': return `${prefix}Advance Fire: ${rollText} — fire catches at space ${result.target}`;
-        case 'explosion': return `${prefix}Advance Fire: ${rollText} — space ${result.target} explodes!`;
-    }
+    return `${isFlareUp ? 'Flare-up! ' : ''}${advanceFireLine(result.rolls, result.resolution, result.target, 'present')}`;
 }
 
 /** Depth-first flattening of a resolution and every flare-up it chained into (§9.4: "flare-ups can chain into flare-ups") — the primary resolution first, so history logs and the outcome's totals both read in the order the fire actually happened. */

@@ -2,8 +2,8 @@ import type { IRecapAdapter, IGameEvent, IRecapSummary, IRecapTip } from "@/util
 import type { ITurnSnapshot } from "@/utils/games/replay";
 import type { IGameCommand, ICommandOutcome, IFiresOutEndTurnOutcome, FiresOutActionKind } from "@/utils/apiModels/GameLogic";
 import type { IFiresOutSpecificGameStateResponse } from "@/games/FiresOut/apiModels";
-import { VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN } from "@/games/FiresOut/board";
-import { specialistDef, SpecialistId } from "@/games/FiresOut/rules";
+import { spacePhrase, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN } from "@/games/FiresOut/board";
+import { advanceFireLine, specialistDef, SpecialistId } from "@/games/FiresOut/rules";
 import { pluralize } from "@/utils/ui/text";
 
 // §7's away-time story is the fire, not the crew's own choices — "the fire
@@ -34,7 +34,6 @@ function state(snapshot: ITurnSnapshot): IFiresOutSpecificGameStateResponse {
 
 const RESOLUTION_TYPE = { smoke: FO_SMOKE, fire: FO_FIRE, explosion: FO_EXPLOSION } as const;
 const RESOLUTION_GLYPH = { smoke: '💨', fire: '🔥', explosion: '💥' } as const;
-const RESOLUTION_VERB = { smoke: 'smoke filled', fire: 'fire caught at', explosion: 'an explosion tore through' } as const;
 
 /**
  * Turns one replayed FiresOutAction into its recap row(s). Every command
@@ -72,16 +71,17 @@ function toEvents(
         case 'move':
         case 'reveal': {
             const space = act.target;
-            const poi = space !== undefined ? nextState.spaces[space]?.poi : undefined;
-            const wasRevealed = space !== undefined ? prevState.spaces[space]?.poi?.revealed : undefined;
+            if (space === undefined) break;
+            const poi = nextState.spaces[space]?.poi;
+            const wasRevealed = prevState.spaces[space]?.poi?.revealed;
             if (poi?.revealed && !wasRevealed) {
                 events.push({
                     ...base,
                     type: FO_REVEAL,
                     glyph: poi.victim ? '🧍' : '❓',
                     title: poi.victim
-                        ? `${name} found a victim at space ${space}`
-                        : `${name} found a false alarm at space ${space}`,
+                        ? `${name} found a victim in ${spacePhrase(space)}`
+                        : `${name} found a false alarm in ${spacePhrase(space)}`,
                 });
             }
             break;
@@ -146,7 +146,7 @@ function toEvents(
             id: `${command.id}:advance`,
             type: RESOLUTION_TYPE[advance.resolution],
             glyph: RESOLUTION_GLYPH[advance.resolution],
-            title: `Advance Fire: rolled ${advance.rolls.d6},${advance.rolls.d8} — ${RESOLUTION_VERB[advance.resolution]} space ${advance.target}${flareNote}`,
+            title: `${advanceFireLine(advance.rolls, advance.resolution, advance.target, 'past')}${flareNote}`,
         });
 
         if (advance.knockedDownOwnerIds.length > 0) {
