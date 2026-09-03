@@ -211,9 +211,9 @@ const DOOR_BOUNDARIES = new Set([
     key(spaceIndex(1, 4), spaceIndex(1, 5)), // Bathroom ↔ Bedroom (drawn)
     key(spaceIndex(2, 1), spaceIndex(2, 2)), // Living room ↔ Kitchen (drawn)
     key(spaceIndex(5, 6), spaceIndex(5, 7)), // Second bedroom ↔ Second bathroom (drawn)
-    key(spaceIndex(1, 6), spaceIndex(2, 6)), // Bedroom ↔ Games room
+    key(spaceIndex(1, 7), spaceIndex(2, 7)), // Bedroom ↔ Games room
     key(spaceIndex(3, 5), spaceIndex(3, 6)), // Kitchen ↔ Games room
-    key(spaceIndex(3, 2), spaceIndex(4, 2)), // Kitchen ↔ Dining room
+    key(spaceIndex(3, 3), spaceIndex(4, 3)), // Kitchen ↔ Dining room
     key(spaceIndex(4, 4), spaceIndex(4, 5)), // Dining room ↔ Second bedroom
 ]);
 
