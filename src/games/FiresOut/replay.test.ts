@@ -33,7 +33,7 @@ function noRandomness<T>(run: () => T): T {
 }
 
 function makeGame(): IFiresOutGameData {
-    const specificGameState = buildInitialFiresOutState(PLAYERS, 'family', 'recruit');
+    const { specificGameState } = buildInitialFiresOutState(PLAYERS, 'family', 'recruit');
     return {
         gameId: "g",
         gameType: new FiresOutGameType(),

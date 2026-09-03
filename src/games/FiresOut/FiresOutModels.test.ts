@@ -13,7 +13,7 @@ import { INTERIOR_SPACE_COUNT } from "./board";
 // is `default: undefined` on the wrapped nested type.
 describe("Fires Out Mongoose schema", () => {
     it("keeps a space's poi genuinely null through schema casting when there isn't one", () => {
-        const specificGameState = buildInitialFiresOutState(["u1", "u2"], "family", "recruit");
+        const { specificGameState } = buildInitialFiresOutState(["u1", "u2"], "family", "recruit");
         const poiCount = specificGameState.spaces.filter(s => s.poi).length;
         expect(poiCount).toBe(3); // §6.1 step 4 / the family setup this test seeds
 
@@ -51,7 +51,7 @@ describe("Fires Out Mongoose schema", () => {
     });
 
     it("keeps a firefighter's restrictedAp genuinely null once dealt a specialist without one", () => {
-        const specificGameState = buildInitialFiresOutState(["u1", "u2"], "experienced", "recruit");
+        const { specificGameState } = buildInitialFiresOutState(["u1", "u2"], "experienced", "recruit");
 
         const doc = new FiresOutGameDataModel({
             gameId: "22222222-2222-2222-2222-222222222222",
@@ -92,7 +92,7 @@ describe("Fires Out Mongoose schema", () => {
 // whole timeline.
 describe("cloneFiresOutState off a hydrated document", () => {
     function hydrated(): IFiresOutGameData {
-        const specificGameState = buildInitialFiresOutState(["u1", "u2"], "family", "recruit");
+        const { specificGameState } = buildInitialFiresOutState(["u1", "u2"], "family", "recruit");
         return new FiresOutGameDataModel({
             gameId: "22222222-2222-2222-2222-222222222222",
             gameType: { gameId: "g", gameType: "FiresOut", friendlyName: "Fires Out!", icon: "", url: "firesout", className: "FiresOutGameType" },

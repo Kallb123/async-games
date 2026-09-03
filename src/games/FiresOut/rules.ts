@@ -294,10 +294,10 @@ export function applyFamilySetup(spaces: IFiresOutSpaceState[], poiPool: boolean
 // gameStateToModel and buildInitialFiresOutState in FiresOutModels.ts for the
 // other half of "one two-valued string, which is the whole mechanism".
 
-/** §6.2 step 4: "a base number scaled by crew size (roughly 2 for a three-firefighter crew, 3 for four or more), plus 3 additional at Veteran and Heroic." */
+/** §6.2 step 4: "a base number scaled by crew size (roughly 2 for a three-firefighter crew, 3 for four or more), plus 3 additional at Veteran and Heroic." The "3 additional" is difficultyTier's own `hotspotBonus` (board.ts) — the one place that number is written, so the new-game screen's difficulty description can't drift from what setup actually places. */
 function hotspotsToPlace(crewSize: number, difficulty: DifficultyId): number {
     const base = crewSize <= 3 ? 2 : 3;
-    return difficulty === 'recruit' ? base : base + 3;
+    return base + difficultyTier(difficulty).hotspotBonus;
 }
 
 /**
@@ -359,7 +359,10 @@ export function rollValidTarget(nextRoll: NextRoll, isValid: (space: number) => 
  * Vehicles (step 6) and Specialists (step 7) are later steps (9 and 10).
  * Returns the running POI id counter and the hot spot reserve left after
  * setup's own placements, both of which the caller folds into the fresh
- * specificGameState.
+ * specificGameState — plus `log`, one line per placement (`CreateGame` pushes
+ * these onto the opening history so a rolled setup, unlike the Family game's
+ * fixed diagram, says what it actually rolled rather than just naming the
+ * difficulty).
  */
 export function applyExperiencedSetup(
     spaces: IFiresOutSpaceState[],
@@ -368,19 +371,31 @@ export function applyExperiencedSetup(
     difficulty: DifficultyId,
     crewSize: number,
     nextRoll: NextRoll,
-): { nextPoiId: number; hotspotReserve: number } {
+): { nextPoiId: number; hotspotReserve: number; log: string[] } {
     const tier = difficultyTier(difficulty);
+    const log: string[] = [];
 
     for (let i = 0; i < tier.explosions; i++) {
-        seedInitialExplosion(spaces, edges, spaceForRoll(nextRoll(6), nextRoll(8)));
+        const d6 = nextRoll(6);
+        const d8 = nextRoll(8);
+        const target = spaceForRoll(d6, d8);
+        seedInitialExplosion(spaces, edges, target);
+        log.push(`Setup: explosion rolled ${d6},${d8} — ignited ${spacePhrase(target)}`);
     }
 
     // One hazmat per space (§6.2 step 3) — not on an already-burning space
     // (nobody would leave equipment in an active blast zone) and not
     // stacked on another hazmat.
+    const hazmatTargets: number[] = [];
     for (let i = 0; i < tier.hazmats; i++) {
         const target = rollValidTarget(nextRoll, space => spaces[space].threat !== 'fire' && !spaces[space].hazmat);
-        if (target !== null) spaces[target].hazmat = true;
+        if (target !== null) {
+            spaces[target].hazmat = true;
+            hazmatTargets.push(target);
+        }
+    }
+    if (hazmatTargets.length > 0) {
+        log.push(`Setup: ${hazmatTargets.length} hazmat${hazmatTargets.length === 1 ? '' : 's'} rolled — placed in ${hazmatTargets.map(spacePhrase).join(', ')}`);
     }
 
     // Hot spots (§6.2 step 4) — not doubled up on a hazmat or another hot
@@ -389,18 +404,28 @@ export function applyExperiencedSetup(
     // hazmat-detonation replacement.
     const toPlace = hotspotsToPlace(crewSize, difficulty);
     let placed = 0;
+    const hotspotTargets: number[] = [];
     for (let i = 0; i < toPlace; i++) {
         const target = rollValidTarget(nextRoll,
             space => spaces[space].threat !== 'fire' && !spaces[space].hazmat && !spaces[space].hotspot);
         if (target === null) break;
         spaces[target].hotspot = true;
         placed++;
+        hotspotTargets.push(target);
+    }
+    if (hotspotTargets.length > 0) {
+        log.push(`Setup: ${hotspotTargets.length} hot spot${hotspotTargets.length === 1 ? '' : 's'} rolled — placed in ${hotspotTargets.map(spacePhrase).join(', ')}`);
     }
 
     // POIs (§6.2 step 5) — the same 3-marker placement as the Family game.
+    const poolBefore = poiPool.length;
     const nextPoiId = replenishPoi(spaces, poiPool, nextRoll, 0);
+    const poiPlaced = poolBefore - poiPool.length;
+    if (poiPlaced > 0) {
+        log.push(`Setup: ${poiPlaced} POI marker${poiPlaced === 1 ? '' : 's'} rolled`);
+    }
 
-    return { nextPoiId, hotspotReserve: TOTAL_HOTSPOT_MARKERS - placed };
+    return { nextPoiId, hotspotReserve: TOTAL_HOTSPOT_MARKERS - placed, log };
 }
 
 // ─── Phase 2 — Advance Fire (§9) ────────────────────────────────────────────

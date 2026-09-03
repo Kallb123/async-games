@@ -437,13 +437,31 @@ export interface IFiresOutDifficultyTier {
     explosions: number;
     /** §6.2 step 3: hazmat markers placed at setup. */
     hazmats: number;
+    /**
+     * §6.2 step 4: extra hot spot markers placed at setup on top of the
+     * crew-size base every tier gets (hotspotsToPlace, rules.ts) — 0 for
+     * Recruit. Veteran and Heroic share the same bonus: Heroic's harder start
+     * comes entirely from its extra explosion and hazmat, not from a bigger
+     * hot spot reserve, so the description below (which used to claim
+     * otherwise) reads off this field rather than a second hardcoded "+3".
+     */
+    hotspotBonus: number;
     description: string;
 }
 
 export const DIFFICULTY_TIERS: IFiresOutDifficultyTier[] = [
-    { id: 'recruit', label: 'Recruit', explosions: 3, hazmats: 3, description: 'Comparable to the Family game.' },
-    { id: 'veteran', label: 'Veteran', explosions: 3, hazmats: 4, description: 'Hard.' },
-    { id: 'heroic', label: 'Heroic', explosions: 4, hazmats: 5, description: 'Very hard, with a larger hot spot reserve.' },
+    {
+        id: 'recruit', label: 'Recruit', explosions: 3, hazmats: 3, hotspotBonus: 0,
+        description: 'Comparable to the Family game — 3 explosions and 3 hazmats at setup, no extra hot spots.',
+    },
+    {
+        id: 'veteran', label: 'Veteran', explosions: 3, hazmats: 4, hotspotBonus: 3,
+        description: 'A step up from Recruit: 4 hazmats instead of 3, plus 3 hot spots already smouldering.',
+    },
+    {
+        id: 'heroic', label: 'Heroic', explosions: 4, hazmats: 5, hotspotBonus: 3,
+        description: 'The hardest start: 4 explosions and 5 hazmats — the same extra hot spots as Veteran.',
+    },
 ];
 
 /**

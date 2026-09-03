@@ -84,7 +84,14 @@ FiresOutInvitationSchema.methods.CreateGame = async function(
             : `Setup: the crew arrives to a fire already spreading through the house` },
     ];
 
-    const specificGameState = buildInitialFiresOutState(turnOrder, ruleset, difficulty);
+    // §6.2 steps 2-5: for the Experienced game, applyExperiencedSetup's own
+    // `log` says exactly what its dice rolled — where the explosions caught,
+    // and which spaces its hazmats, hot spots and POIs landed on — appended
+    // in the same push order as Outbreak's own setup facts (OutbreakModels.ts),
+    // chronological within the setup block. The Family game has no rolls to
+    // report; its fixed diagram is already fully described by the line above.
+    const { specificGameState, setupLog } = buildInitialFiresOutState(turnOrder, ruleset, difficulty);
+    for (const line of setupLog) history.push({ text: line });
 
     const gameData: IFiresOutGameData = {
         gameId: uuidv4() as uuidString,
@@ -206,8 +213,15 @@ export function cloneFiresOutState(gs: IFiresOutSpecificGameState): IFiresOutSpe
 // consumed directly (like shuffledPoiPool's own `shuffle()` call), since
 // setup's dice rolls are never replayed — buildInitialFiresOutStateFromGameData
 // below clones the persisted *result*, the same way the Family fire cluster
-// and the POI shuffle already work.
-export function buildInitialFiresOutState(turnOrder: string[], ruleset: RulesetId, difficulty: DifficultyId): IFiresOutSpecificGameState {
+// and the POI shuffle already work. `setupLog` is applyExperiencedSetup's own
+// account of what it rolled, empty for the Family game's fixed diagram —
+// CreateGame folds it into the opening history rather than this module
+// reaching back into the finished board to guess what happened.
+export function buildInitialFiresOutState(
+    turnOrder: string[],
+    ruleset: RulesetId,
+    difficulty: DifficultyId,
+): { specificGameState: IFiresOutSpecificGameState; setupLog: string[] } {
     const spaces = buildEmptySpaces();
     const edges = buildEmptyEdges();
     const poiPool = shuffledPoiPool();
@@ -215,12 +229,15 @@ export function buildInitialFiresOutState(turnOrder: string[], ruleset: RulesetI
 
     let nextPoiId: number;
     let hotspotReserve: number;
+    let setupLog: string[];
     if (ruleset === 'experienced') {
-        ({ nextPoiId, hotspotReserve } = applyExperiencedSetup(spaces, edges, poiPool, difficulty, turnOrder.length, realRoll));
+        ({ nextPoiId, hotspotReserve, log: setupLog } =
+            applyExperiencedSetup(spaces, edges, poiPool, difficulty, turnOrder.length, realRoll));
     } else {
         applyFamilySetup(spaces, poiPool);
         nextPoiId = 3; // applyFamilySetup already assigned ids 0-2
         hotspotReserve = 0;
+        setupLog = [];
     }
 
     // §6.2 step 7, §17.6 step 10: one Specialist card per firefighter, dealt
@@ -241,19 +258,22 @@ export function buildInitialFiresOutState(turnOrder: string[], ruleset: RulesetI
     });
 
     return {
-        ruleset,
-        difficulty,
-        spaces,
-        edges,
-        poiPool,
-        nextPoiId,
-        rescued: 0,
-        lost: 0,
-        firefighters,
-        activeFirefighter: 0,
-        hotspotReserve,
-        engine: ENGINE_START,
-        ambulance: AMBULANCE_START,
+        specificGameState: {
+            ruleset,
+            difficulty,
+            spaces,
+            edges,
+            poiPool,
+            nextPoiId,
+            rescued: 0,
+            lost: 0,
+            firefighters,
+            activeFirefighter: 0,
+            hotspotReserve,
+            engine: ENGINE_START,
+            ambulance: AMBULANCE_START,
+        },
+        setupLog,
     };
 }
 
