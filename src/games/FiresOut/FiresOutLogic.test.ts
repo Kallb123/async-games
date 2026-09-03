@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FiresOutAction, FiresOutGameType, IFiresOutEndTurnOutcome } from "./FiresOutLogic";
 import { IFiresOutGameData, IFiresOutSpecificGameState } from "./FiresOutModels";
-import { AMBULANCE_START, edgeBetween, ENGINE_START, exteriorTopSpace, spaceIndex, START_SPACE, vehicleTrackNeighbours, VICTIMS_TO_WIN } from "./board";
+import { AMBULANCE_START, edgeBetween, ENGINE_START, exteriorTopSpace, perimeterNeighbours, spaceIndex, START_SPACE, VICTIMS_TO_WIN } from "./board";
 import { AP_COSTS, AP_PER_TURN, buildEmptyEdges, buildEmptySpaces, newFirefighter } from "./rules";
 
 // ─── Minimal in-memory game harness (mirrors SolitaireLogic.test.ts) ────────
@@ -28,7 +28,9 @@ function cmd(senderId: string, fields: Partial<FiresOutAction>): FiresOutAction 
     return action;
 }
 
-// Two firefighters, both starting at (2,1), no fire/POIs/damage — tests build
+// Two firefighters, both starting at (3,2) — a kitchen space with one of each
+// kind of boundary around it: open to (3,3) and (2,2), walled off from (3,1),
+// and a door onto the dining room at (4,2). No fire/POIs/damage — tests build
 // whatever board condition they need on top of this rather than fighting the
 // Family setup's fire cluster.
 function baseState(turnOrder: string[] = ["u1", "u2"]): IFiresOutSpecificGameState {
@@ -41,7 +43,7 @@ function baseState(turnOrder: string[] = ["u1", "u2"]): IFiresOutSpecificGameSta
         nextPoiId: 0,
         rescued: 0,
         lost: 0,
-        firefighters: turnOrder.map(userId => newFirefighter(userId, spaceIndex(2, 1))),
+        firefighters: turnOrder.map(userId => newFirefighter(userId, spaceIndex(3, 2))),
         activeFirefighter: 0,
         hotspotReserve: 0,
         engine: ENGINE_START,
@@ -61,20 +63,20 @@ describe("FiresOutAction 'move'", () => {
         const game = makeGame(state);
         const ff = state.firefighters[0];
 
-        const outcome = await cmd("u1", { kind: 'move', target: spaceIndex(2, 2) }).Execute(game);
+        const outcome = await cmd("u1", { kind: 'move', target: spaceIndex(3, 3) }).Execute(game);
 
         expect(outcome).toEqual({ validMove: true, turnOver: false });
-        expect(ff.space).toBe(spaceIndex(2, 2));
+        expect(ff.space).toBe(spaceIndex(3, 3));
         expect(ff.apLeft).toBe(AP_PER_TURN - 1);
     });
 
     it("costs 2 AP to step into fire", async () => {
         const state = baseState();
-        state.spaces[spaceIndex(2, 2)].threat = 'fire';
+        state.spaces[spaceIndex(3, 3)].threat = 'fire';
         const game = makeGame(state);
         const ff = state.firefighters[0];
 
-        const outcome = await cmd("u1", { kind: 'move', target: spaceIndex(2, 2) }).Execute(game);
+        const outcome = await cmd("u1", { kind: 'move', target: spaceIndex(3, 3) }).Execute(game);
 
         expect(outcome.validMove).toBe(true);
         expect(ff.apLeft).toBe(AP_PER_TURN - 2);
@@ -83,17 +85,16 @@ describe("FiresOutAction 'move'", () => {
     it("rejects a move blocked by an undamaged wall", async () => {
         const state = baseState();
         const game = makeGame(state);
-        // (2,1) and (2,5) sit in different rooms — walled, not a doorway.
-        const outcome = await cmd("u1", { kind: 'move', target: spaceIndex(2, 5) }).Execute(game);
+        // (3,2) and (3,1) sit in different rooms — walled, not a doorway.
+        const outcome = await cmd("u1", { kind: 'move', target: spaceIndex(3, 1) }).Execute(game);
         expect(outcome).toEqual({ validMove: false, turnOver: false });
-        expect(state.firefighters[0].space).toBe(spaceIndex(2, 1));
+        expect(state.firefighters[0].space).toBe(spaceIndex(3, 2));
     });
 
     it("rejects a move through a closed door, and permits it once opened", async () => {
         const state = baseState();
-        state.firefighters[0].space = spaceIndex(1, 2); // beside the living/kitchen door
         const game = makeGame(state);
-        const doorTarget = spaceIndex(2, 2);
+        const doorTarget = spaceIndex(4, 2); // through the kitchen/dining-room door
 
         const blocked = await cmd("u1", { kind: 'move', target: doorTarget }).Execute(game);
         expect(blocked.validMove).toBe(false);
@@ -110,42 +111,42 @@ describe("FiresOutAction 'move'", () => {
         const state = baseState();
         const ff = state.firefighters[0];
         ff.carrying = 'victim';
-        state.spaces[spaceIndex(2, 2)].threat = 'fire';
+        state.spaces[spaceIndex(3, 3)].threat = 'fire';
         const game = makeGame(state);
 
-        const outcome = await cmd("u1", { kind: 'move', target: spaceIndex(2, 2) }).Execute(game);
+        const outcome = await cmd("u1", { kind: 'move', target: spaceIndex(3, 3) }).Execute(game);
         expect(outcome.validMove).toBe(false);
     });
 
     it("rejects a command from anyone but the active firefighter's own owner", async () => {
         const state = baseState();
         const game = makeGame(state);
-        const outcome = await cmd("u2", { kind: 'move', target: spaceIndex(2, 2) }).Execute(game);
+        const outcome = await cmd("u2", { kind: 'move', target: spaceIndex(3, 3) }).Execute(game);
         expect(outcome.validMove).toBe(false);
     });
 
     it("reveals a POI entered for the first time — a false alarm vanishes, a victim stays as a marker", async () => {
         const state = baseState();
-        state.spaces[spaceIndex(2, 2)].poi = { id: 0, revealed: false, victim: false };
-        state.spaces[spaceIndex(2, 3)].poi = { id: 1, revealed: false, victim: true };
+        state.spaces[spaceIndex(3, 3)].poi = { id: 0, revealed: false, victim: false };
+        state.spaces[spaceIndex(3, 4)].poi = { id: 1, revealed: false, victim: true };
         const game = makeGame(state);
 
-        await cmd("u1", { kind: 'move', target: spaceIndex(2, 2) }).Execute(game);
-        expect(state.spaces[spaceIndex(2, 2)].poi).toBeNull();
+        await cmd("u1", { kind: 'move', target: spaceIndex(3, 3) }).Execute(game);
+        expect(state.spaces[spaceIndex(3, 3)].poi).toBeNull();
 
         state.firefighters[0].apLeft = AP_PER_TURN;
-        await cmd("u1", { kind: 'move', target: spaceIndex(2, 3) }).Execute(game);
-        expect(state.spaces[spaceIndex(2, 3)].poi).toEqual({ id: 1, revealed: true, victim: true });
+        await cmd("u1", { kind: 'move', target: spaceIndex(3, 4) }).Execute(game);
+        expect(state.spaces[spaceIndex(3, 4)].poi).toEqual({ id: 1, revealed: true, victim: true });
     });
 
     it("picks up a revealed victim when leaving with carry:true, and rescues them on reaching the exterior", async () => {
         const state = baseState();
-        const origin = spaceIndex(2, 1);
+        const origin = spaceIndex(3, 2);
         state.spaces[origin].poi = { id: 0, revealed: true, victim: true };
         const game = makeGame(state);
         const ff = state.firefighters[0];
 
-        const pickup = await cmd("u1", { kind: 'move', target: spaceIndex(2, 0), carry: true }).Execute(game);
+        const pickup = await cmd("u1", { kind: 'move', target: spaceIndex(3, 3), carry: true }).Execute(game);
         expect(pickup.validMove).toBe(true);
         expect(ff.carrying).toBe('victim');
         expect(ff.apLeft).toBe(AP_PER_TURN - 2); // carrying cost, not the plain 1 AP
@@ -166,7 +167,7 @@ describe("FiresOutAction 'move'", () => {
 describe("FiresOutAction 'extinguish'", () => {
     it("turns fire to smoke, and a second application clears smoke entirely", async () => {
         const state = baseState();
-        const target = spaceIndex(2, 2); // adjacent to the firefighter at (2,1)
+        const target = spaceIndex(3, 3); // adjacent to the firefighter at (3,2)
         state.spaces[target].threat = 'fire';
         const game = makeGame(state);
         const ff = state.firefighters[0];
@@ -184,15 +185,15 @@ describe("FiresOutAction 'extinguish'", () => {
     it("rejects a target with nothing to extinguish", async () => {
         const state = baseState();
         const game = makeGame(state);
-        const outcome = await cmd("u1", { kind: 'extinguish', target: spaceIndex(2, 2) }).Execute(game);
+        const outcome = await cmd("u1", { kind: 'extinguish', target: spaceIndex(3, 3) }).Execute(game);
         expect(outcome.validMove).toBe(false);
     });
 
     it("rejects a target that isn't the firefighter's own space or a neighbour", async () => {
         const state = baseState();
-        state.spaces[spaceIndex(2, 5)].threat = 'fire';
+        state.spaces[spaceIndex(0, 5)].threat = 'fire';
         const game = makeGame(state);
-        const outcome = await cmd("u1", { kind: 'extinguish', target: spaceIndex(2, 5) }).Execute(game);
+        const outcome = await cmd("u1", { kind: 'extinguish', target: spaceIndex(0, 5) }).Execute(game);
         expect(outcome.validMove).toBe(false);
     });
 });
@@ -200,9 +201,9 @@ describe("FiresOutAction 'extinguish'", () => {
 describe("FiresOutAction 'chop'", () => {
     it("places one damage marker per chop, destroying the wall — and opening a route — at 2", async () => {
         const state = baseState();
-        // (2,1)'s only undamaged wall is toward (1,1) (living/kitchen, no
-        // door there) — (2,0) and (2,2) are open, same-room neighbours.
-        const wallTarget = spaceIndex(1, 1);
+        // (3,2)'s only undamaged wall is toward (3,1) (kitchen/living room,
+        // no door there) — (2,2) and (3,3) are open, same-room neighbours.
+        const wallTarget = spaceIndex(3, 1);
         const game = makeGame(state);
         const ff = state.firefighters[0];
         const edgeId = edgeBetween(ff.space, wallTarget)!;
@@ -226,8 +227,8 @@ describe("FiresOutAction 'chop'", () => {
     it("rejects chopping an edge that isn't a wall", async () => {
         const state = baseState();
         const game = makeGame(state);
-        // (2,1)-(2,0) is open (same room) — nothing to chop.
-        const outcome = await cmd("u1", { kind: 'chop', target: spaceIndex(2, 0) }).Execute(game);
+        // (3,2)-(3,3) is open (same room) — nothing to chop.
+        const outcome = await cmd("u1", { kind: 'chop', target: spaceIndex(3, 3) }).Execute(game);
         expect(outcome.validMove).toBe(false);
     });
 });
@@ -238,7 +239,7 @@ describe("FiresOutAction 'drive' (§8, §12.1-12.2, §17.6 step 9)", () => {
         state.firefighters[0].space = ENGINE_START;
         state.firefighters[1].space = ENGINE_START; // riding along
         const game = makeGame(state);
-        const target = vehicleTrackNeighbours(ENGINE_START)[0];
+        const target = perimeterNeighbours(ENGINE_START)[0];
 
         const outcome = await cmd("u1", { kind: 'drive', vehicle: 'engine', target }).Execute(game);
 
@@ -252,10 +253,10 @@ describe("FiresOutAction 'drive' (§8, §12.1-12.2, §17.6 step 9)", () => {
 
     it("rejects driving from anywhere but the vehicle's own space", async () => {
         const state = experiencedState();
-        state.firefighters[0].space = spaceIndex(2, 1); // not at the Engine
+        state.firefighters[0].space = spaceIndex(3, 2); // not at the Engine
         const game = makeGame(state);
 
-        const outcome = await cmd("u1", { kind: 'drive', vehicle: 'engine', target: vehicleTrackNeighbours(ENGINE_START)[0] }).Execute(game);
+        const outcome = await cmd("u1", { kind: 'drive', vehicle: 'engine', target: perimeterNeighbours(ENGINE_START)[0] }).Execute(game);
         expect(outcome.validMove).toBe(false);
     });
 
@@ -264,7 +265,7 @@ describe("FiresOutAction 'drive' (§8, §12.1-12.2, §17.6 step 9)", () => {
         state.firefighters[0].space = ENGINE_START;
         const game = makeGame(state);
 
-        const outcome = await cmd("u1", { kind: 'drive', vehicle: 'engine', target: vehicleTrackNeighbours(ENGINE_START)[0] }).Execute(game);
+        const outcome = await cmd("u1", { kind: 'drive', vehicle: 'engine', target: perimeterNeighbours(ENGINE_START)[0] }).Execute(game);
         expect(outcome.validMove).toBe(false);
     });
 });
@@ -299,7 +300,7 @@ describe("FiresOutAction 'deckGun' (§12.3, §17.6 step 9)", () => {
 
     it("rejects firing from anywhere but the Engine", async () => {
         const state = experiencedState();
-        state.firefighters[0].space = spaceIndex(2, 1);
+        state.firefighters[0].space = spaceIndex(3, 2);
         const game = makeGame(state);
 
         const outcome = await cmd("u1", { kind: 'deckGun', target: spaceIndex(5, 7), recordedRolls: [6, 8] }).Execute(game);
@@ -498,7 +499,7 @@ describe("Specialists (§11, §17.6 step 10)", () => {
         ff.specialist = 'rescueSpecialist';
         ff.apLeft = 4;
         ff.restrictedAp = { kind: 'moveChop', left: 3 };
-        const wallTarget = spaceIndex(1, 1);
+        const wallTarget = spaceIndex(3, 1);
         const game = makeGame(state, ["u1"]);
 
         const outcome = await cmd("u1", { kind: 'chop', target: wallTarget }).Execute(game);
@@ -514,10 +515,10 @@ describe("Specialists (§11, §17.6 step 10)", () => {
         ff.specialist = 'cafsFirefighter';
         ff.apLeft = 3;
         ff.restrictedAp = { kind: 'extinguish', left: 3 };
-        state.spaces[spaceIndex(2, 2)].threat = 'fire'; // adjacent to (2,1)
+        state.spaces[spaceIndex(3, 3)].threat = 'fire'; // adjacent to (3,2)
         const game = makeGame(state, ["u1"]);
 
-        const outcome = await cmd("u1", { kind: 'extinguish', target: spaceIndex(2, 2) }).Execute(game);
+        const outcome = await cmd("u1", { kind: 'extinguish', target: spaceIndex(3, 3) }).Execute(game);
 
         expect(outcome.validMove).toBe(true);
         expect(ff.restrictedAp).toEqual({ kind: 'extinguish', left: 2 });
@@ -528,10 +529,10 @@ describe("Specialists (§11, §17.6 step 10)", () => {
         const state = experiencedState(["u1"]);
         const ff = state.firefighters[0];
         ff.specialist = 'paramedic';
-        state.spaces[spaceIndex(2, 2)].threat = 'fire';
+        state.spaces[spaceIndex(3, 3)].threat = 'fire';
         const game = makeGame(state, ["u1"]);
 
-        await cmd("u1", { kind: 'extinguish', target: spaceIndex(2, 2) }).Execute(game);
+        await cmd("u1", { kind: 'extinguish', target: spaceIndex(3, 3) }).Execute(game);
         expect(ff.apLeft).toBe(AP_PER_TURN - (AP_COSTS.extinguish + 1));
     });
 
@@ -541,31 +542,30 @@ describe("Specialists (§11, §17.6 step 10)", () => {
         captain.specialist = 'fireCaptain';
         captain.apLeft = 4;
         captain.restrictedAp = { kind: 'command', left: 2 };
-        captain.space = spaceIndex(1, 2); // beside the living/kitchen door
-        state.firefighters[1].space = spaceIndex(2, 2); // the teammate being directed
+        state.firefighters[1].space = spaceIndex(3, 3); // the teammate being directed
         const game = makeGame(state, ["u1", "u2"]);
 
-        const doorTarget = spaceIndex(2, 2);
+        const doorTarget = spaceIndex(4, 2); // the kitchen/dining-room door
         const doorOutcome = await cmd("u1", { kind: 'door', target: doorTarget }).Execute(game);
         expect(doorOutcome.validMove).toBe(true);
         expect(captain.restrictedAp).toEqual({ kind: 'command', left: 1 }); // 1 AP drawn from command first
 
-        const moveOutcome = await cmd("u1", { kind: 'move', target: spaceIndex(2, 3), targetUserId: "u2" }).Execute(game);
+        const moveOutcome = await cmd("u1", { kind: 'move', target: spaceIndex(3, 4), targetUserId: "u2" }).Execute(game);
         expect(moveOutcome.validMove).toBe(true);
-        expect(state.firefighters[1].space).toBe(spaceIndex(2, 3)); // the teammate moved
-        expect(captain.space).toBe(spaceIndex(1, 2)); // the Fire Captain stayed put
+        expect(state.firefighters[1].space).toBe(spaceIndex(3, 4)); // the teammate moved
+        expect(captain.space).toBe(spaceIndex(3, 2)); // the Fire Captain stayed put
         expect(captain.restrictedAp).toEqual({ kind: 'command', left: 0 }); // the Fire Captain paid
         expect(game.gameState.history.some(h => h.text.includes("directing a teammate's firefighter"))).toBe(true);
     });
 
     it("rejects a non-Fire-Captain trying to move a teammate's firefighter", async () => {
         const state = experiencedState(["u1", "u2"]);
-        state.firefighters[1].space = spaceIndex(2, 2);
+        state.firefighters[1].space = spaceIndex(3, 3);
         const game = makeGame(state, ["u1", "u2"]);
 
-        const outcome = await cmd("u1", { kind: 'move', target: spaceIndex(2, 3), targetUserId: "u2" }).Execute(game);
+        const outcome = await cmd("u1", { kind: 'move', target: spaceIndex(3, 4), targetUserId: "u2" }).Execute(game);
         expect(outcome.validMove).toBe(false);
-        expect(state.firefighters[1].space).toBe(spaceIndex(2, 2));
+        expect(state.firefighters[1].space).toBe(spaceIndex(3, 3));
     });
 
     it("Imaging Technician reveals a POI remotely without moving", async () => {
@@ -580,7 +580,7 @@ describe("Specialists (§11, §17.6 step 10)", () => {
 
         expect(outcome.validMove).toBe(true);
         expect(state.spaces[target].poi).toEqual({ id: 0, revealed: true, victim: true });
-        expect(ff.space).toBe(spaceIndex(2, 1)); // never moved
+        expect(ff.space).toBe(spaceIndex(3, 2)); // never moved
         expect(ff.apLeft).toBe(3); // AP_PER_TURN - AP_COSTS.reveal
     });
 
@@ -606,7 +606,7 @@ describe("Specialists (§11, §17.6 step 10)", () => {
         expect(ff.carrying).toBe('escort');
         expect(ff.apLeft).toBe(3); // AP_PER_TURN - AP_COSTS.treat
 
-        const move = await cmd("u1", { kind: 'move', target: spaceIndex(2, 2) }).Execute(game);
+        const move = await cmd("u1", { kind: 'move', target: spaceIndex(3, 3) }).Execute(game);
         expect(move.validMove).toBe(true);
         expect(ff.apLeft).toBe(2); // ordinary 1 AP move, not the 2 AP carry rate
     });

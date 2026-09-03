@@ -18,6 +18,7 @@ import {
     NextRoll,
     applyExperiencedSetup,
     applyFamilySetup,
+    boardAtCurrentLayout,
     buildEmptyEdges,
     buildEmptySpaces,
     dealSpecialists,
@@ -112,7 +113,7 @@ export interface IFiresOutSpecificGameState {
     // fire system and by setup below, never branched on anywhere else.
     ruleset: RulesetId;
     difficulty: DifficultyId; // meaningless (but always populated) for a Family game
-    spaces: IFiresOutSpaceState[]; // length SPACE_COUNT (board.ts) — interior spaces then the exterior track
+    spaces: IFiresOutSpaceState[]; // length SPACE_COUNT (board.ts) — interior spaces then the exterior perimeter
     edges: IFiresOutEdgeState[]; // length EDGE_COUNT (board.ts), indexed by EdgeDef.id
     poiPool: boolean[]; // shuffled once at setup, drawn in order — redacted to a count on the wire
     nextPoiId: number; // running counter for IFiresOutPoiState.id, so every placed marker gets a stable id
@@ -369,7 +370,12 @@ export function gameStateToModel(
     userIdNameMap: { [key: string]: string },
     _viewerId: string | null,
 ): IFiresOutSpecificGameStateResponse {
-    const spaces: IFiresOutSpaceResponse[] = gs.spaces.map(s => ({
+    // A game saved before the exterior became a full perimeter ring is short
+    // of the spaces and edges the ring added — the board component indexes
+    // both by space/edge id, so serialise the grown board. Grown into a copy:
+    // a response builder has no business mutating the document it reads.
+    const board = boardAtCurrentLayout(gs);
+    const spaces: IFiresOutSpaceResponse[] = board.spaces.map(s => ({
         threat: s.threat,
         poi: poiResponse(s.poi),
         hazmat: s.hazmat,
@@ -391,7 +397,7 @@ export function gameStateToModel(
         ruleset: gs.ruleset,
         difficulty: gs.difficulty,
         spaces,
-        edges: gs.edges.map(e => ({ kind: e.kind, damage: e.damage, doorOpen: e.doorOpen })),
+        edges: board.edges.map(e => ({ kind: e.kind, damage: e.damage, doorOpen: e.doorOpen })),
         // Deck order is exactly what §10's design note says the game must not
         // reveal — redact to a count, the same treatment Outbreak gives its
         // two decks.

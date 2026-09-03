@@ -4,7 +4,7 @@ import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels
 import { serializable } from "@/utils/apiModels/Serialisable";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IFiresOutGameData, IFiresOutSpecificGameState } from "@/games/FiresOut/FiresOutModels";
-import { edgeBetween, isExteriorSpace, isInteriorSpace, neighboursOf, quadrantOf, vehicleTrackNeighbours, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN } from "@/games/FiresOut/board";
+import { edgeBetween, isExteriorSpace, isInteriorSpace, neighboursOf, quadrantOf, perimeterNeighbours, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN } from "@/games/FiresOut/board";
 import {
     AP_COSTS,
     canCrewChange,
@@ -18,12 +18,14 @@ import {
     extinguishApCost,
     fireCaptainCanControlOthers,
     fireDeckGun,
+    growBoardToCurrentLayout,
     IFiresOutAdvanceFireResult,
     IFiresOutFirefighterState,
     isRescuePoint,
     MAX_BANKED_AP,
     moveApCost,
     NextRoll,
+    otherVehicleSpace,
     refillFirefighterAp,
     replenishPoi,
     resolveAdvanceFire,
@@ -32,6 +34,7 @@ import {
     SPECIALISTS,
     specialistDef,
     spendAp,
+    VehicleId,
 } from "@/games/FiresOut/rules";
 import { playerHistory } from "@/utils/games/history";
 import { DiceRoll } from "@/utils/games/DiceRoll";
@@ -316,7 +319,7 @@ function applyCrewChange(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, 
 }
 
 // §8, §12.1-12.2, §17.6 step 9: drive the Engine or the Ambulance one parking
-// spot along its own track (board.ts's vehicleTrackNeighbours), 2 AP —
+// spot round the exterior perimeter (board.ts's perimeterNeighbours), 2 AP —
 // Experienced only (§6.1 step 7 sets vehicles aside in the Family game).
 // "Firefighters in the Engine's space may ride along when it is driven"
 // (§12.1): everyone standing at the vehicle's space — the driver included —
@@ -330,7 +333,11 @@ function applyDrive(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: I
     if (ff.space !== vehicleSpace) return INVALID;
 
     const target = action.target;
-    if (!requireTarget(target) || !vehicleTrackNeighbours(vehicleSpace).includes(target)) return INVALID;
+    if (!requireTarget(target) || !perimeterNeighbours(vehicleSpace).includes(target)) return INVALID;
+    // §6.2 step 6: the two vehicles keep separate parking spots — reachable
+    // from each other now that the perimeter is one ring (rules.ts's
+    // legalDriveTargets excludes the same spot).
+    if (target === otherVehicleSpace(gs, vehicle)) return INVALID;
     if (!spendAp(ff, AP_COSTS.drive, null)) return INVALID;
 
     const riders = gs.firefighters.filter(f => f.space === vehicleSpace);
@@ -519,7 +526,7 @@ export class FiresOutAction implements IGameCommand {
     /** 'move' only: pick up a revealed victim or a hazmat on the firefighter's current space as they leave it (§10.1-10.2, §8's hazmat-carry row). */
     carry?: boolean;
     /** 'drive' only: which vehicle — the firefighter must already be at its space (§12.1-12.2). */
-    vehicle?: 'engine' | 'ambulance';
+    vehicle?: VehicleId;
     /** 'move' only: a Fire Captain (§11) may set this to the owner id of the teammate whose firefighter moves instead of their own — resolveMover. */
     targetUserId?: string;
     /** 'crewChange' only: the specialist to swap to (§8, §11). */
@@ -534,6 +541,11 @@ export class FiresOutAction implements IGameCommand {
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const fo = gameData as IFiresOutGameData;
         const gs = fo.specificGameState;
+        // A game saved before the exterior became a full perimeter ring is
+        // short of the spaces and edges the ring added; append them before any
+        // rule reads either array (rules.ts's growBoardToCurrentLayout, which
+        // explains why the walls it already holds are left alone).
+        growBoardToCurrentLayout(gs);
         const ff = activeFirefighter(gs);
         if (!ff || ff.ownerId !== this.senderId) return INVALID;
 

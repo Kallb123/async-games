@@ -3,18 +3,24 @@ import {
     AMBULANCE_START,
     COLS,
     ENGINE_START,
+    EDGE_COUNT,
+    EXTERIOR_CORNERS,
     EXTERIOR_TOP_START,
     exteriorBottomSpace,
     exteriorTopSpace,
     INTERIOR_SPACE_COUNT,
+    SPACE_COUNT,
     MAX_PLAYERS,
     quadrantOf,
     TOTAL_HOTSPOT_MARKERS,
+    perimeterNeighbours,
     edgeBetween,
     spaceIndex,
 } from "./board";
 import {
     AP_COSTS,
+    boardAtCurrentLayout,
+    IFiresOutBoard,
     IFiresOutEdgeState,
     IFiresOutFirefighterState,
     IFiresOutSpaceState,
@@ -22,6 +28,7 @@ import {
     applyExperiencedSetup,
     buildEmptyEdges,
     buildEmptySpaces,
+    emptySpaceState,
     canCrewChange,
     canDisposeHazmatOnSite,
     canFireDeckGunAt,
@@ -32,6 +39,7 @@ import {
     deckGunApCost,
     explode,
     extinguishApCost,
+    growBoardToCurrentLayout,
     fireCaptainCanControlOthers,
     fireDeckGun,
     flashover,
@@ -41,6 +49,7 @@ import {
     legalDeckGunTargets,
     legalDoorTargets,
     legalDriveTargets,
+    otherVehicleSpace,
     legalExtinguishTargets,
     legalMoveTargets,
     legalRevealTargets,
@@ -95,29 +104,29 @@ describe("explode (§9.2)", () => {
     it("sends a shockwave through a burning corridor and damages the wall at the end of it", () => {
         const spaces = buildEmptySpaces();
         const edges = buildEmptyEdges();
-        const origin = spaceIndex(2, 1);
-        const corridor = [spaceIndex(2, 2), spaceIndex(2, 3), spaceIndex(2, 4)];
+        const origin = spaceIndex(2, 2);
+        const corridor = [spaceIndex(2, 3), spaceIndex(2, 4), spaceIndex(2, 5)];
         fire(spaces, origin, ...corridor);
 
         explode(spaces, edges, origin);
 
         // The corridor is all one room (open edges) so the blast crosses all
-        // three already-burning spaces before meeting the kitchen/den wall.
-        const wallEdge = edgeBetween(spaceIndex(2, 4), spaceIndex(2, 5))!;
+        // three already-burning spaces before meeting the kitchen/games-room wall.
+        const wallEdge = edgeBetween(spaceIndex(2, 5), spaceIndex(2, 6))!;
         expect(edges[wallEdge].damage).toBe(1);
-        expect(spaces[spaceIndex(2, 5)].threat).toBe('none'); // the wall stopped it — not yet on fire
+        expect(spaces[spaceIndex(2, 6)].threat).toBe('none'); // the wall stopped it — not yet on fire
         for (const c of corridor) expect(spaces[c].threat).toBe('fire');
     });
 
     it("destroys a closed door in its path and stops, without damaging anything beyond it", () => {
         const spaces = buildEmptySpaces();
         const edges = buildEmptyEdges();
-        const origin = spaceIndex(1, 2); // living room, adjacent to the living/kitchen door
+        const origin = spaceIndex(2, 1); // living room, adjacent to the living-room/kitchen door
         fire(spaces, origin);
 
         explode(spaces, edges, origin);
 
-        const doorEdge = edgeBetween(spaceIndex(1, 2), spaceIndex(2, 2))!;
+        const doorEdge = edgeBetween(spaceIndex(2, 1), spaceIndex(2, 2))!;
         expect(edges[doorEdge].kind).toBe('open'); // destroyed doors are permanently passable
     });
 
@@ -141,7 +150,7 @@ describe("explode (§9.2)", () => {
         expect(() => explode(spaces, edges, origin)).not.toThrow();
     });
 
-    it("radiates onto the exterior track through the top/bottom openings", () => {
+    it("radiates onto the exterior perimeter through the openings round the building", () => {
         const spaces = buildEmptySpaces();
         const edges = buildEmptyEdges();
         const origin = spaceIndex(0, 3);
@@ -434,18 +443,18 @@ describe("reachability (§17.6 step 5 — must mirror FiresOutLogic.ts's own Exe
     it("legalMoveTargets excludes a space blocked by an undamaged wall, and excludes fire when carrying but not otherwise", () => {
         const spaces = buildEmptySpaces();
         const edges = buildEmptyEdges();
-        const origin = spaceIndex(2, 1);
+        const origin = spaceIndex(3, 1);
         const ff = newFirefighter("u1", origin);
-        spaces[spaceIndex(2, 2)].threat = 'fire';
+        spaces[spaceIndex(3, 0)].threat = 'fire';
 
-        // (2,1)-(2,5) is walled; (2,0)/(2,2) are open same-room neighbours.
+        // (3,1)-(3,2) is walled; (3,0)/(2,1) are open same-room neighbours.
         const notCarrying = legalMoveTargets(spaces, edges, ff, false);
-        expect(notCarrying).toContain(spaceIndex(2, 0));
-        expect(notCarrying).toContain(spaceIndex(2, 2)); // fire is fine unless carrying
-        expect(notCarrying).not.toContain(spaceIndex(1, 1)); // walled off
+        expect(notCarrying).toContain(spaceIndex(2, 1));
+        expect(notCarrying).toContain(spaceIndex(3, 0)); // fire is fine unless carrying
+        expect(notCarrying).not.toContain(spaceIndex(3, 2)); // walled off
 
         const carrying = legalMoveTargets(spaces, edges, ff, true);
-        expect(carrying).not.toContain(spaceIndex(2, 2)); // blocked while carrying
+        expect(carrying).not.toContain(spaceIndex(3, 0)); // blocked while carrying
     });
 
     it("legalMoveTargets is empty once AP runs out", () => {
@@ -459,7 +468,7 @@ describe("reachability (§17.6 step 5 — must mirror FiresOutLogic.ts's own Exe
     it("legalDoorTargets finds only adjacent doors, and only while affordable", () => {
         const spaces = buildEmptySpaces();
         const edges = buildEmptyEdges();
-        const ff = newFirefighter("u1", spaceIndex(1, 2)); // beside the living/kitchen door
+        const ff = newFirefighter("u1", spaceIndex(2, 1)); // beside the living-room/kitchen door
         expect(legalDoorTargets(edges, ff)).toEqual([spaceIndex(2, 2)]);
 
         ff.apLeft = 0;
@@ -480,10 +489,10 @@ describe("reachability (§17.6 step 5 — must mirror FiresOutLogic.ts's own Exe
 
     it("legalChopTargets excludes a wall already destroyed", () => {
         const edges = buildEmptyEdges();
-        const ff = newFirefighter("u1", spaceIndex(2, 1));
-        const wallEdge = edgeBetween(spaceIndex(2, 1), spaceIndex(1, 1))!;
+        const ff = newFirefighter("u1", spaceIndex(0, 4)); // bathroom, against the bedroom wall
+        const wallEdge = edgeBetween(spaceIndex(0, 4), spaceIndex(0, 5))!;
 
-        expect(legalChopTargets(edges, ff)).toEqual([spaceIndex(1, 1)]);
+        expect(legalChopTargets(edges, ff)).toEqual([spaceIndex(0, 5)]);
 
         edges[wallEdge].damage = 2;
         expect(legalChopTargets(edges, ff)).toEqual([]);
@@ -498,13 +507,13 @@ describe("reachability (§17.6 step 5 — must mirror FiresOutLogic.ts's own Exe
     it("legalMoveTargets and legalChopTargets stay reachable off a Rescue Specialist's moveChop pool alone", () => {
         const spaces = buildEmptySpaces();
         const edges = buildEmptyEdges();
-        const ff = newFirefighter("u1", spaceIndex(2, 1));
+        const ff = newFirefighter("u1", spaceIndex(0, 4)); // bathroom, against the bedroom wall
         ff.specialist = 'rescueSpecialist';
         ff.apLeft = 0;
         ff.restrictedAp = { kind: 'moveChop', left: 3 };
 
-        expect(legalMoveTargets(spaces, edges, ff, false)).toContain(spaceIndex(2, 0));
-        expect(legalChopTargets(edges, ff)).toEqual([spaceIndex(1, 1)]);
+        expect(legalMoveTargets(spaces, edges, ff, false)).toContain(spaceIndex(0, 3));
+        expect(legalChopTargets(edges, ff)).toEqual([spaceIndex(0, 5)]);
 
         ff.restrictedAp = { kind: 'moveChop', left: 0 };
         expect(legalMoveTargets(spaces, edges, ff, false)).toEqual([]); // pool spent, general AP empty too
@@ -527,7 +536,7 @@ describe("reachability (§17.6 step 5 — must mirror FiresOutLogic.ts's own Exe
 
     it("legalDoorTargets stays reachable off a Fire Captain's command pool alone", () => {
         const edges = buildEmptyEdges();
-        const ff = newFirefighter("u1", spaceIndex(1, 2)); // beside the living/kitchen door
+        const ff = newFirefighter("u1", spaceIndex(2, 1)); // beside the living-room/kitchen door
         ff.specialist = 'fireCaptain';
         ff.apLeft = 0;
         ff.restrictedAp = { kind: 'command', left: 2 };
@@ -548,6 +557,49 @@ describe("reachability (§17.6 step 5 — must mirror FiresOutLogic.ts's own Exe
 
         expect(legalChopTargets(edges, ff)).toEqual([]);
         expect(legalMoveTargets(spaces, edges, ff, false)).toEqual([]);
+    });
+});
+
+describe("growBoardToCurrentLayout / boardAtCurrentLayout (a board saved before the exterior perimeter)", () => {
+    /** A board as it was persisted before the perimeter ring: 64 spaces, 98 edges. */
+    function legacyBoard(): IFiresOutBoard {
+        return {
+            spaces: buildEmptySpaces().slice(0, INTERIOR_SPACE_COUNT + 16),
+            edges: buildEmptyEdges().slice(0, 98),
+        };
+    }
+
+    it("appends the spaces and edges the perimeter added, as blanks", () => {
+        const grown = boardAtCurrentLayout(legacyBoard());
+
+        expect(grown.spaces).toHaveLength(SPACE_COUNT);
+        expect(grown.edges).toHaveLength(EDGE_COUNT);
+        expect(grown.spaces.slice(INTERIOR_SPACE_COUNT + 16)).toEqual(
+            grown.spaces.slice(INTERIOR_SPACE_COUNT + 16).map(() => emptySpaceState()));
+        expect(grown.edges.slice(98).every(e => e.kind === 'open' && e.damage === 0 && !e.doorOpen)).toBe(true);
+    });
+
+    it("leaves the walls, doors and damage the game already holds exactly as they are", () => {
+        const board = legacyBoard();
+        const chopped = edgeBetween(spaceIndex(3, 1), spaceIndex(3, 2))!;
+        board.edges[chopped].damage = 1;
+        const before = board.edges.map(e => ({ ...e }));
+
+        expect(boardAtCurrentLayout(board).edges.slice(0, 98)).toEqual(before);
+    });
+
+    it("does nothing to a board already the current size, and never mutates the one it reads", () => {
+        const current: IFiresOutBoard = { spaces: buildEmptySpaces(), edges: buildEmptyEdges() };
+        expect(boardAtCurrentLayout(current)).toBe(current); // nothing to grow — the same object back
+
+        const legacy = legacyBoard();
+        boardAtCurrentLayout(legacy);
+        expect(legacy.spaces).toHaveLength(INTERIOR_SPACE_COUNT + 16);
+        expect(legacy.edges).toHaveLength(98);
+
+        growBoardToCurrentLayout(legacy); // the in-place variant is the one that writes
+        expect(legacy.spaces).toHaveLength(SPACE_COUNT);
+        expect(legacy.edges).toHaveLength(EDGE_COUNT);
     });
 });
 
@@ -612,17 +664,28 @@ describe("isRescuePoint (§10.2, §17.6 step 9)", () => {
 });
 
 describe("legalDriveTargets (§8, §12.1-12.2, §17.6 step 9 — must mirror FiresOutLogic.ts's applyDrive)", () => {
+    const parking = { engine: ENGINE_START, ambulance: AMBULANCE_START };
+
     it("is empty unless the firefighter is at the vehicle's own space", () => {
         const ff = newFirefighter("u1", spaceIndex(0, 0));
-        expect(legalDriveTargets(ff, ENGINE_START)).toEqual([]);
+        expect(legalDriveTargets(ff, parking, 'engine')).toEqual([]);
     });
 
     it("offers the adjacent parking spots once affordable, empty once AP runs out", () => {
         const ff = newFirefighter("u1", ENGINE_START);
-        expect(legalDriveTargets(ff, ENGINE_START)).toEqual([exteriorTopSpace(COLS - 2)]);
+        expect(legalDriveTargets(ff, parking, 'engine')).toEqual(
+            expect.arrayContaining([exteriorTopSpace(COLS - 2), EXTERIOR_CORNERS.topRight]));
 
         ff.apLeft = 0;
-        expect(legalDriveTargets(ff, ENGINE_START)).toEqual([]);
+        expect(legalDriveTargets(ff, parking, 'engine')).toEqual([]);
+    });
+
+    it("never offers the spot the other vehicle is parked on — the perimeter is one connected ring", () => {
+        const ff = newFirefighter("u1", ENGINE_START);
+        const alongside = perimeterNeighbours(ENGINE_START)[0];
+        expect(legalDriveTargets(ff, { engine: ENGINE_START, ambulance: alongside }, 'engine')).not.toContain(alongside);
+        expect(otherVehicleSpace({ engine: ENGINE_START, ambulance: alongside }, 'engine')).toBe(alongside);
+        expect(otherVehicleSpace({ engine: ENGINE_START, ambulance: alongside }, 'ambulance')).toBe(ENGINE_START);
     });
 });
 

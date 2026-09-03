@@ -47,7 +47,7 @@ describe("Fires Out Mongoose schema", () => {
         const response = gameStateToModel(doc.specificGameState, {}, null);
         const poiSpacesInResponse = response.spaces.filter(s => s.poi).length;
         expect(poiSpacesInResponse).toBe(3);
-        expect(response.spaces.length).toBe(INTERIOR_SPACE_COUNT + 16); // + the exterior parking track
+        expect(response.spaces.length).toBe(INTERIOR_SPACE_COUNT + 32); // + the exterior perimeter ring
     });
 
     it("keeps a firefighter's restrictedAp genuinely null once dealt a specialist without one", () => {

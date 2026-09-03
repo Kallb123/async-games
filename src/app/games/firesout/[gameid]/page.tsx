@@ -38,6 +38,7 @@ import {
     specialistDef,
     SpecialistId,
     totalDamage,
+    VehicleId,
 } from "@/games/FiresOut/rules";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId } from "@/utils/ui/players";
 import { playerColourForId } from "@/utils/ui/playerColours";
@@ -130,11 +131,13 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     // now — the only thing that decides what 'drive' can target and which
     // vehicle the command names (§17.6 step 9). Never directed — only 'move'
     // can be (§11's table: command AP funds moving a teammate, not driving).
-    const vehicleHere: 'engine' | 'ambulance' | null =
+    const vehicleHere: VehicleId | null =
         !gs || !activeFf ? null
             : activeFf.space === gs.engine ? 'engine'
                 : activeFf.space === gs.ambulance ? 'ambulance'
                     : null;
+    // Where 'drive' can put the vehicle the active figure is standing at.
+    const driveTargets: number[] = !gs || !activeFf || !vehicleHere ? [] : legalDriveTargets(activeFf, gs, vehicleHere);
 
     const targetCounts = { move: 0, door: 0, extinguish: 0, chop: 0, drive: 0, deckGun: 0, reveal: 0 };
     let validSpaces = new Set<number>();
@@ -144,7 +147,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
         targetCounts.extinguish = legalExtinguishTargets(gs.spaces, activeFf).length;
         targetCounts.chop = legalChopTargets(gs.edges, activeFf).length;
         if (experienced) {
-            targetCounts.drive = vehicleHere ? legalDriveTargets(activeFf, gs[vehicleHere]).length : 0;
+            targetCounts.drive = driveTargets.length;
             targetCounts.deckGun = legalDeckGunTargets(gs.firefighters, activeFf, gs.engine).length;
             targetCounts.reveal = legalRevealTargets(gs.spaces, activeFf).length;
         }
@@ -153,7 +156,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
         else if (mode === 'door') validSpaces = new Set(legalDoorTargets(gs.edges, activeFf));
         else if (mode === 'extinguish') validSpaces = new Set(legalExtinguishTargets(gs.spaces, activeFf));
         else if (mode === 'chop') validSpaces = new Set(legalChopTargets(gs.edges, activeFf));
-        else if (mode === 'drive' && vehicleHere) validSpaces = new Set(legalDriveTargets(activeFf, gs[vehicleHere]));
+        else if (mode === 'drive') validSpaces = new Set(driveTargets);
         else if (mode === 'deckGun') validSpaces = new Set(legalDeckGunTargets(gs.firefighters, activeFf, gs.engine));
         else if (mode === 'reveal') validSpaces = new Set(legalRevealTargets(gs.spaces, activeFf));
     }

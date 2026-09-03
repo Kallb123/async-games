@@ -49,8 +49,13 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
-                title: "Fires Out's board now matches the real thing",
-                detail: "Smoke and fire are flippable tokens instead of a flat colour wash, victims and hazards sit on their own marker badges instead of floating text, and the board art now lines up properly with the grid.",
+                title: "Fires Out shows the whole board — and you can walk right round it",
+                detail: "The street and the numbered tracks down every side of the house are on screen now instead of cropped off, and the outdoors is a full ring you can walk round, park a vehicle anywhere on and enter the building from any side. The rooms match the art too, so every wall and doorway you can see is one the game plays by. Games already under way keep the floorplan they started with.",
+                game: "firesout",
+            },
+            {
+                title: "Fires Out's pieces look like pieces",
+                detail: "Smoke and fire are flippable tokens instead of a flat colour wash, and victims, hazmats and hot spots sit on their own marker badges instead of floating text.",
                 game: "firesout",
             },
             {
@@ -64,10 +69,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Check your notifications actually work",
                 detail: "Allowing notifications was only half of it: a phone can allow them and still quietly fail to sign itself up, and nothing told you. Settings now says where this device stands, has a Send a test notification button that tells you exactly what became of it, and a ? explaining everything which can stop one arriving — including the Android battery and per-app settings that block them without asking.",
-            },
-            {
-                title: "Every game has a game guide",
-                detail: "Not sure what a phase does or which pile to worry about? A game guide now opens the first time you join a match of Dice Cities, Settlements & Cities, Train Time, World Domination or Outbreak, and any time after that from the ⋮ menu at the top of the board.",
             },
         ],
     },
