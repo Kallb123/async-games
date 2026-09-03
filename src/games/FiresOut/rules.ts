@@ -384,23 +384,25 @@ export function applyExperiencedSetup(
 export type NextRoll = (sides: number) => number;
 
 /**
- * §4, §8: fire crosses a boundary on exactly the terms a firefighter does —
- * an open doorway, a doorway whose door is open, or a wall chopped twice and
- * destroyed. An intact wall segment stops it, and so does a closed door,
- * which is what makes §8's "closed doors block fire — a genuine tactical
- * tool" true and what keeps §2's first pillar ("players lose to geometry")
- * honest. Both spread paths below route through this rather than through a
- * bare `neighboursOf`, which ignored the floorplan entirely and let fire
- * flash straight through solid walls while `explode` (which has always read
- * the edge table) was correctly stopped by them.
+ * Whether the boundary between two adjacent spaces is open — an open
+ * doorway, a doorway whose door is open, or a wall chopped twice and
+ * destroyed (`isPassable`) — or `false` if they aren't adjacent at all.
+ *
+ * §4, §8: fire crosses a boundary on exactly the terms a firefighter does,
+ * so this is the one place either asks. That shared answer is the point:
+ * `isAdjacentToFire` below used a bare `neighboursOf` and ignored the
+ * floorplan entirely, letting fire flash through solid walls and making §8's
+ * "closed doors block fire — a genuine tactical tool" untrue, while
+ * `explode` (which has always read the edge table) was correctly stopped by
+ * the same wall.
  */
-function fireSpreadsBetween(edges: IFiresOutEdgeState[], from: number, to: number): boolean {
+function passableBetween(edges: IFiresOutEdgeState[], from: number, to: number): boolean {
     const edgeId = edgeBetween(from, to);
     return edgeId !== undefined && isPassable(edges[edgeId]);
 }
 
 function isAdjacentToFire(spaces: IFiresOutSpaceState[], edges: IFiresOutEdgeState[], space: number): boolean {
-    return neighboursOf(space).some(n => spaces[n].threat === 'fire' && fireSpreadsBetween(edges, space, n));
+    return neighboursOf(space).some(n => spaces[n].threat === 'fire' && passableBetween(edges, space, n));
 }
 
 /**
@@ -487,7 +489,7 @@ export function resolveTargetSpace(
     return 'smoke';
 }
 
-/** §9.3: every smoke space adjacent to fire — across a boundary fire can actually cross (fireSpreadsBetween) — flips to fire, repeated to a fixpoint. */
+/** §9.3: every smoke space adjacent to fire — across a boundary fire can actually cross (passableBetween) — flips to fire, repeated to a fixpoint. */
 export function flashover(spaces: IFiresOutSpaceState[], edges: IFiresOutEdgeState[]): void {
     let changed = true;
     while (changed) {
@@ -833,8 +835,7 @@ export function canMoveTo(
     from: number,
     to: number,
 ): boolean {
-    const edgeId = edgeBetween(from, to);
-    if (edgeId === undefined || !isPassable(edges[edgeId])) return false;
+    if (!passableBetween(edges, from, to)) return false;
     if (ff.carrying && spaces[to].threat === 'fire') return false;
     return true;
 }

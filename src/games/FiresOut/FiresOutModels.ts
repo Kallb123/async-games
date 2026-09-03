@@ -9,7 +9,7 @@ import { shuffle } from "@/utils/games/shuffle";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { FiresOutGameType } from "@/utils/apiModels/GameLogic";
 import { DiceRoll } from "@/utils/games/DiceRoll";
-import { AMBULANCE_START, DAMAGE_TO_COLLAPSE, DifficultyId, ENGINE_START, RulesetId, START_SPACE, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN, asDifficultyId, asRulesetId, difficultyTier } from "./board";
+import { AMBULANCE_START, DAMAGE_TO_COLLAPSE, DifficultyId, ENGINE_START, RulesetId, START_SPACE, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN, asRulesetId, difficultyTier } from "./board";
 import {
     IFiresOutEdgeState,
     IFiresOutFirefighterState,
@@ -72,7 +72,7 @@ FiresOutInvitationSchema.methods.CreateGame = async function(
     // ruleset/difficulty reaching setup used to throw here and strand the
     // accepted invitation with no game — see difficultyTier's own comment.
     const ruleset = asRulesetId(this.ruleset);
-    const difficulty = asDifficultyId(this.difficulty);
+    const difficulty = difficultyTier(this.difficulty).id;
 
     // Who's up first is arbitrary (no printed rule decides it) — drawn at
     // random the same way Outbreak and Train Time decide their opening order.

@@ -409,12 +409,7 @@ export function difficultyTier(difficulty: DifficultyId): IFiresOutDifficultyTie
     return DIFFICULTY_TIERS.find(d => d.id === difficulty) ?? DIFFICULTY_TIERS[0];
 }
 
-/** Narrows an arbitrary persisted/incoming string to a real tier id, for the normalising `CreateGame` does at setup. */
-export function asDifficultyId(value: unknown): DifficultyId {
-    return DIFFICULTY_TIERS.find(d => d.id === value)?.id ?? DIFFICULTY_TIERS[0].id;
-}
-
-/** Narrows an arbitrary persisted/incoming string to a real ruleset id — same reason as asDifficultyId, for the same unchecked `/api/lobby` path. */
+/** Narrows an arbitrary persisted/incoming value to a real ruleset id, for the normalising `CreateGame` does at setup. `difficulty`'s counterpart is `difficultyTier(...).id` — this one has no table to look itself up in. */
 export function asRulesetId(value: unknown): RulesetId {
     return value === 'experienced' ? 'experienced' : 'family';
 }

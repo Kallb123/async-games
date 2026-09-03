@@ -19,7 +19,6 @@ import {
     VICTIM_POI_COUNT,
     DIFFICULTY_TIERS,
     DifficultyId,
-    asDifficultyId,
     asRulesetId,
     difficultyTier,
 } from "./board";
@@ -1048,12 +1047,12 @@ describe("an unrecognised ruleset/difficulty never throws (§6.2, the /api/lobby
         }
     });
 
-    it("asDifficultyId / asRulesetId narrow anything to a real id", () => {
+    it("difficultyTier().id / asRulesetId narrow anything to a real id — what CreateGame stores", () => {
         for (const value of JUNK) {
-            expect(asDifficultyId(value)).toBe('recruit');
+            expect(difficultyTier(value as DifficultyId).id).toBe('recruit');
             expect(asRulesetId(value)).toBe('family');
         }
-        expect(asDifficultyId('heroic')).toBe('heroic');
+        expect(difficultyTier('heroic').id).toBe('heroic');
         expect(asRulesetId('experienced')).toBe('experienced');
     });
 
