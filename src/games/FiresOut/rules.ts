@@ -383,8 +383,24 @@ export function applyExperiencedSetup(
 
 export type NextRoll = (sides: number) => number;
 
-function isAdjacentToFire(spaces: IFiresOutSpaceState[], space: number): boolean {
-    return neighboursOf(space).some(n => spaces[n].threat === 'fire');
+/**
+ * §4, §8: fire crosses a boundary on exactly the terms a firefighter does —
+ * an open doorway, a doorway whose door is open, or a wall chopped twice and
+ * destroyed. An intact wall segment stops it, and so does a closed door,
+ * which is what makes §8's "closed doors block fire — a genuine tactical
+ * tool" true and what keeps §2's first pillar ("players lose to geometry")
+ * honest. Both spread paths below route through this rather than through a
+ * bare `neighboursOf`, which ignored the floorplan entirely and let fire
+ * flash straight through solid walls while `explode` (which has always read
+ * the edge table) was correctly stopped by them.
+ */
+function fireSpreadsBetween(edges: IFiresOutEdgeState[], from: number, to: number): boolean {
+    const edgeId = edgeBetween(from, to);
+    return edgeId !== undefined && isPassable(edges[edgeId]);
+}
+
+function isAdjacentToFire(spaces: IFiresOutSpaceState[], edges: IFiresOutEdgeState[], space: number): boolean {
+    return neighboursOf(space).some(n => spaces[n].threat === 'fire' && fireSpreadsBetween(edges, space, n));
 }
 
 /**
@@ -463,7 +479,7 @@ export function resolveTargetSpace(
         state.threat = 'fire';
         return 'fire';
     }
-    if (isAdjacentToFire(spaces, target)) {
+    if (isAdjacentToFire(spaces, edges, target)) {
         state.threat = 'fire';
         return 'fire';
     }
@@ -471,13 +487,13 @@ export function resolveTargetSpace(
     return 'smoke';
 }
 
-/** §9.3: every smoke space adjacent to fire flips to fire, repeated to a fixpoint. */
-export function flashover(spaces: IFiresOutSpaceState[]): void {
+/** §9.3: every smoke space adjacent to fire — across a boundary fire can actually cross (fireSpreadsBetween) — flips to fire, repeated to a fixpoint. */
+export function flashover(spaces: IFiresOutSpaceState[], edges: IFiresOutEdgeState[]): void {
     let changed = true;
     while (changed) {
         changed = false;
         for (let space = 0; space < spaces.length; space++) {
-            if (spaces[space].threat === 'smoke' && isAdjacentToFire(spaces, space)) {
+            if (spaces[space].threat === 'smoke' && isAdjacentToFire(spaces, edges, space)) {
                 spaces[space].threat = 'fire';
                 changed = true;
             }
@@ -494,9 +510,10 @@ export interface IFiresOutFireConsequences {
 
 /**
  * §9.1 step 6: POIs caught by fire are lost, firefighters caught by fire are
- * knocked down (moved to the exterior, along with anything they're
- * carrying), and any fire that ended up outside the building during the
- * blast (§9.2) is put out — it isn't a threat to a structure it already left.
+ * knocked down (moved to the exterior, keeping hold of whatever they were
+ * carrying — §10.3), and any fire that ended up outside the building during
+ * the blast (§9.2) is put out — it isn't a threat to a structure it already
+ * left.
  */
 export function resolveFireConsequences(
     spaces: IFiresOutSpaceState[],
@@ -514,7 +531,17 @@ export function resolveFireConsequences(
     firefighters.forEach((ff, index) => {
         if (spaces[ff.space].threat !== 'fire') return;
         ff.space = START_SPACE;
-        ff.carrying = null; // knocked down, not lost (§10.3) — a mercy, not a loss
+        // §10.3: "Any victim being carried is knocked down along with them
+        // rather than lost." `carrying` therefore survives the knock-down —
+        // the victim (or hazmat, or escorted victim) rides out to the
+        // exterior in the firefighter's arms and still has to be walked to
+        // the rescue point. Clearing it here instead used to *destroy* the
+        // marker: it wasn't counted in `victimsLost`, wasn't returned to the
+        // board and wasn't returned to `poiPool`, so it left the game
+        // entirely. §5's arithmetic has no slack for that — 10 victims, 7 to
+        // win, 4 lost to lose — so every destroyed victim pushed the win
+        // condition further out of reach while the loss track stayed put,
+        // and a crew could be left playing a game it could no longer win.
         knockedDownIndices.push(index);
     });
 
@@ -554,7 +581,7 @@ function settleHazmatsAndFlashover(spaces: IFiresOutSpaceState[], edges: IFiresO
     let changed = true;
     while (changed) {
         changed = false;
-        flashover(spaces);
+        flashover(spaces, edges);
         for (let space = 0; space < INTERIOR_SPACE_COUNT; space++) {
             const state = spaces[space];
             if (state.threat !== 'fire' || !state.hazmat) continue;

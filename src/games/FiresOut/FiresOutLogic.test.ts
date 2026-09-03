@@ -667,3 +667,41 @@ describe("Specialists (§11, §17.6 step 10)", () => {
         expect(inFamily.validMove).toBe(false);
     });
 });
+
+// A malformed target must come back as an ordinary invalid move, not as a
+// crash. isInteriorSpace/isExteriorSpace are bare range comparisons, so a
+// fractional or non-numeric target satisfied them; 'reveal' then indexed
+// `gs.spaces[target]` directly and threw a TypeError out of Execute, which
+// POST /api/game/command answers as a 500 rather than "Not a valid move".
+// Every kind is covered here because requireTarget guards them all — the
+// others survived the old code only by accident, through edgeBetween or
+// neighboursOf missing the value further down.
+describe("malformed command targets (every kind, no 500s)", () => {
+    const JUNK: unknown[] = [5.5, 0.5, 47.9999, 1e-10, -0.5, NaN, Infinity, true, null, "3", [], {}];
+
+    it("rejects a non-integer target on 'reveal' instead of throwing", async () => {
+        const state = experiencedState();
+        state.firefighters[0].specialist = 'imagingTechnician';
+        const game = makeGame(state);
+
+        for (const target of JUNK) {
+            const action = cmd("u1", { kind: 'reveal' });
+            (action as unknown as { target: unknown }).target = target;
+            await expect(action.Execute(game)).resolves.toEqual({ validMove: false, turnOver: false });
+        }
+    });
+
+    it("rejects one on every other targeted kind too", async () => {
+        const kinds = ['move', 'door', 'extinguish', 'chop', 'drive', 'deckGun'] as const;
+        for (const kind of kinds) {
+            const state = experiencedState();
+            state.firefighters[0].specialist = 'imagingTechnician';
+            const game = makeGame(state);
+            for (const target of JUNK) {
+                const action = cmd("u1", { kind });
+                (action as unknown as { target: unknown }).target = target;
+                await expect(action.Execute(game)).resolves.toEqual({ validMove: false, turnOver: false });
+            }
+        }
+    });
+});

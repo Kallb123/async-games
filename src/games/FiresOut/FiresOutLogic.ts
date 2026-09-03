@@ -126,8 +126,20 @@ function activeFirefighter(gs: IFiresOutSpecificGameState): IFiresOutFirefighter
     return gs.firefighters[gs.activeFirefighter];
 }
 
+// Every space index this game holds is an integer position in
+// `spaces`/`edges`, so the integer check is what makes this a real guard
+// rather than a range check: isInteriorSpace/isExteriorSpace are bare `>= 0
+// && < n` comparisons, which `5.5`, `true` and `[]` all satisfy. Most kinds
+// happened to survive a fractional target (edgeBetween misses the pair,
+// neighboursOf().includes() misses the value), but 'reveal' indexes
+// `gs.spaces[target]` straight after its specialist check, so a request
+// posting `{"kind":"reveal","target":5.5}` threw a TypeError out of Execute
+// and turned POST /api/game/command into a 500 instead of the ordinary
+// "Not a valid move" 401. Checking it here closes the whole class at once
+// instead of hardening one call site.
 function requireTarget(target: number | undefined): target is number {
-    return target !== undefined && (isInteriorSpace(target) || isExteriorSpace(target));
+    if (typeof target !== 'number' || !Number.isInteger(target)) return false;
+    return isInteriorSpace(target) || isExteriorSpace(target);
 }
 
 // §11 Fire Captain: `action.targetUserId`, if set, names whose pawn a 'move'

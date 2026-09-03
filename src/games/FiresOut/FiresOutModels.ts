@@ -9,7 +9,7 @@ import { shuffle } from "@/utils/games/shuffle";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { FiresOutGameType } from "@/utils/apiModels/GameLogic";
 import { DiceRoll } from "@/utils/games/DiceRoll";
-import { AMBULANCE_START, DAMAGE_TO_COLLAPSE, DifficultyId, ENGINE_START, RulesetId, START_SPACE, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN, difficultyTier } from "./board";
+import { AMBULANCE_START, DAMAGE_TO_COLLAPSE, DifficultyId, ENGINE_START, RulesetId, START_SPACE, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN, asDifficultyId, asRulesetId, difficultyTier } from "./board";
 import {
     IFiresOutEdgeState,
     IFiresOutFirefighterState,
@@ -66,8 +66,13 @@ FiresOutInvitationSchema.methods.CreateGame = async function(
     console.log('CreateGame: FiresOut game');
 
     const gameType = new FiresOutGameType();
-    const ruleset = this.ruleset as RulesetId;
-    const difficulty = this.difficulty as DifficultyId;
+    // Normalised, not cast: an invitation created through POST /api/lobby
+    // carries whatever the client put in its per-game settings (that route
+    // spreads them in unchecked against a `String` schema), so an unknown
+    // ruleset/difficulty reaching setup used to throw here and strand the
+    // accepted invitation with no game — see difficultyTier's own comment.
+    const ruleset = asRulesetId(this.ruleset);
+    const difficulty = asDifficultyId(this.difficulty);
 
     // Who's up first is arbitrary (no printed rule decides it) — drawn at
     // random the same way Outbreak and Train Time decide their opening order.
@@ -132,8 +137,27 @@ export interface IFiresOutSpecificGameState {
     ambulance: number;
 }
 
+// `poi` is named field-by-field rather than spread, and that is load-bearing:
+// it is the one path in this schema that is a real Mongoose *single nested
+// subdocument* (see firesOutStateSchemaDef below), and spreading one copies
+// its internals (`$__parent`, `$basePath`, `$__`, `_doc`) instead of
+// `id`/`revealed`/`victim`. cloneFiresOutState runs on a hydrated document on
+// the read path — buildInitialFiresOutStateFromGameData clones
+// `gameData.initialSpecificGameState` for every replay — so a spread handed
+// the timeline a starting board whose POIs had `revealed`/`victim`
+// `undefined`. revealPoiAt then read every setup marker as a false alarm and
+// deleted it, Replenish drew deeper into the pool than the live game ever
+// did, and those replay-only markers reached the wire with real `victim`
+// flags: turn review both diverged from the game actually played and could
+// name a marker still face down on the live board. Same field-by-field shape
+// as cloneFirefighterState below and Outbreak's cloneCityState.
 function cloneSpaceState(s: IFiresOutSpaceState): IFiresOutSpaceState {
-    return { threat: s.threat, poi: s.poi ? { ...s.poi } : null, hazmat: s.hazmat, hotspot: s.hotspot };
+    return {
+        threat: s.threat,
+        poi: s.poi ? { id: s.poi.id, revealed: s.poi.revealed, victim: s.poi.victim } : null,
+        hazmat: s.hazmat,
+        hotspot: s.hotspot,
+    };
 }
 
 function cloneEdgeState(e: IFiresOutEdgeState): IFiresOutEdgeState {
