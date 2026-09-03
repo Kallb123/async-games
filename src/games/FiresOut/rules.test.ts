@@ -479,19 +479,20 @@ describe("hot spot flare-ups (§9.4, §17.6 step 8)", () => {
     });
 });
 
-describe("applyFamilySetup (§6.1)", () => {
-    it("starts every one of the 8 door markers closed (§6.1 step 1)", () => {
-        const doors = buildEmptyEdges().filter(e => e.kind === 'door');
-        expect(doors).toHaveLength(8);
-        for (const door of doors) expect(door.doorOpen).toBe(false);
+describe("the Family game's setup (§6.1)", () => {
+    // board.test.ts pins what the two setup constants *are*; these pin that
+    // applyFamilySetup writes them onto the board and touches nothing else.
+    // Both constants are already in ascending order, so the boards below are
+    // compared against them as-is.
+    it("starts every door marker closed (§6.1 step 1)", () => {
+        for (const edge of buildEmptyEdges()) expect(edge.doorOpen).toBe(false);
     });
 
     it("lights the printed starting fire and nothing else (§6.1 step 2)", () => {
         const spaces = buildEmptySpaces();
         applyFamilySetup(spaces, shuffledPoiPool());
 
-        const onFire = spaces.flatMap((s, i) => s.threat === 'fire' ? [i] : []);
-        expect(onFire).toEqual([...FAMILY_STARTING_FIRE].sort((a, b) => a - b));
+        expect(spaces.flatMap((s, i) => s.threat === 'fire' ? [i] : [])).toEqual(FAMILY_STARTING_FIRE);
         expect(spaces.some(s => s.hazmat || s.hotspot)).toBe(false); // §6.1 step 7 sets both aside
     });
 
@@ -502,7 +503,7 @@ describe("applyFamilySetup (§6.1)", () => {
 
         applyFamilySetup(spaces, poiPool);
 
-        expect(spaces.flatMap((s, i) => s.poi ? [i] : [])).toEqual([...FAMILY_STARTING_POI].sort((a, b) => a - b));
+        expect(spaces.flatMap((s, i) => s.poi ? [i] : [])).toEqual(FAMILY_STARTING_POI);
         for (const space of FAMILY_STARTING_POI) expect(spaces[space].poi!.revealed).toBe(false);
         expect(poiPool).toHaveLength(VICTIM_POI_COUNT + FALSE_ALARM_POI_COUNT - 3); // drawn from the pool, not conjured
     });

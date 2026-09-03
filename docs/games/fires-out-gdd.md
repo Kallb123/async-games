@@ -97,7 +97,9 @@ note.
 
 ### 6.2 Experienced Game
 
-Steps 1, 3, and 5 as above, then:
+Steps 1 and 3 as above, and step 5's figure placement — but step 7 below
+deals a Specialist card in place of step 5's player card, not as well as
+it. Then:
 
 1. **Choose a difficulty level:**
 

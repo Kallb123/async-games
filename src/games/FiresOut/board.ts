@@ -160,6 +160,15 @@ export function spaceForRoll(d6: number, d8: number): number {
     return spaceIndex(d6 - 1, d8 - 1);
 }
 
+/**
+ * The same reading, for a coordinate the rulebook *prints* rather than one
+ * anybody rolled — its setup pairs are 1-indexed (row, column) too. Only the
+ * name differs: the Experienced setup genuinely rolls its coordinates
+ * (applyExperiencedSetup) while the Family setup below is a fixed table, and
+ * `spaceForRoll(2, 2)` sitting in that table would say otherwise.
+ */
+export const printedSpace = spaceForRoll;
+
 // ─── Rooms, walls and doors ─────────────────────────────────────────────────
 // A room id per interior space, used only here to derive which of the 82
 // wall segments (§17.4) are open (same room), a solid wall (different room,
@@ -329,32 +338,23 @@ export function neighboursOf(space: number): number[] {
 }
 
 // ─── Family setup (§6.1) ────────────────────────────────────────────────────
-// The coordinates below are the ones printed on the setup diagram, and the
-// rulebook writes them 1-indexed as (row, column) — the same d6/d8 reading
-// spaceForRoll uses. `spaceIndex` is 0-indexed, so every pair here is the
-// printed one minus one on each axis; the trailing comment on each line is
-// the printed pair, so the table can be checked against the rulebook without
-// doing the arithmetic in your head.
+// Written through `printedSpace` so both tables read exactly as the setup
+// page prints them and can be diffed against it pair by pair — the
+// conversion to a 0-indexed space happens once, in the one function that
+// owns it, rather than thirteen times by hand down the margin.
 
-/** §6.1 step 2: the ten printed starting fire markers — a cluster through the living room and kitchen, plus a second one in the far bedroom. */
+/** §6.1 step 2: the ten printed starting fire markers — a fire through the living room and kitchen, plus a second seat in the second bedroom. */
 export const FAMILY_STARTING_FIRE: number[] = [
-    spaceIndex(1, 1), // 2,2
-    spaceIndex(1, 2), // 2,3
-    spaceIndex(2, 1), // 3,2
-    spaceIndex(2, 2), // 3,3
-    spaceIndex(2, 3), // 3,4
-    spaceIndex(2, 4), // 3,5
-    spaceIndex(3, 3), // 4,4
-    spaceIndex(4, 5), // 5,6
-    spaceIndex(4, 6), // 5,7
-    spaceIndex(5, 5), // 6,6
+    printedSpace(2, 2), printedSpace(2, 3),
+    printedSpace(3, 2), printedSpace(3, 3), printedSpace(3, 4), printedSpace(3, 5),
+    printedSpace(4, 4),
+    printedSpace(5, 6), printedSpace(5, 7),
+    printedSpace(6, 6),
 ];
 
 /** §6.1 step 4: the printed setup coordinates for the first three POIs, drawn at random from the pool and placed "?" side up. */
 export const FAMILY_STARTING_POI: number[] = [
-    spaceIndex(1, 3), // 2,4
-    spaceIndex(4, 0), // 5,1
-    spaceIndex(4, 7), // 5,8
+    printedSpace(2, 4), printedSpace(5, 1), printedSpace(5, 8),
 ];
 
 // §1's "1-6 players, solitaire supported by controlling multiple pawns" is
