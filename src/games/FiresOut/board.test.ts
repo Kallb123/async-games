@@ -24,6 +24,7 @@ import {
     exteriorLeftSpace,
     exteriorRightSpace,
     exteriorTopSpace,
+    printedSpace,
     spaceAtDisplayCell,
     isExteriorSpace,
     isInteriorSpace,
@@ -210,18 +211,31 @@ describe("quadrants (§12.3, §17.6 step 9)", () => {
 });
 
 describe("Family setup data (§6.1)", () => {
-    it("has a cluster of ten starting fire spaces, all interior and unique", () => {
-        expect(FAMILY_STARTING_FIRE).toHaveLength(10);
+    // Spelled through printedSpace so each expectation is the pair §6.1
+    // prints. The exact lists pin length and uniqueness on their own; what
+    // follows each is the property the list itself doesn't imply.
+    it("places the ten starting fire markers on the printed coordinates, all interior (§6.1 step 2)", () => {
+        expect(FAMILY_STARTING_FIRE).toEqual([
+            printedSpace(2, 2), printedSpace(2, 3),
+            printedSpace(3, 2), printedSpace(3, 3), printedSpace(3, 4), printedSpace(3, 5),
+            printedSpace(4, 4),
+            printedSpace(5, 6), printedSpace(5, 7),
+            printedSpace(6, 6),
+        ]);
         expect(new Set(FAMILY_STARTING_FIRE).size).toBe(10);
         for (const space of FAMILY_STARTING_FIRE) expect(isInteriorSpace(space)).toBe(true);
     });
 
-    it("has three starting POI spaces, all interior, unique, and clear of the starting fire", () => {
-        expect(FAMILY_STARTING_POI).toHaveLength(3);
+    it("places the three starting POIs on the printed coordinates, all interior and clear of the fire (§6.1 step 4)", () => {
+        expect(FAMILY_STARTING_POI).toEqual([printedSpace(2, 4), printedSpace(5, 1), printedSpace(5, 8)]);
         expect(new Set(FAMILY_STARTING_POI).size).toBe(3);
         for (const space of FAMILY_STARTING_POI) {
             expect(isInteriorSpace(space)).toBe(true);
             expect(FAMILY_STARTING_FIRE).not.toContain(space);
         }
+    });
+
+    it("starts every firefighter outside the building (§6.1 step 5)", () => {
+        expect(isExteriorSpace(START_SPACE)).toBe(true);
     });
 });
