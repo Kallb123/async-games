@@ -1,4 +1,4 @@
-import { type APIRequestContext, type Locator, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
 // Helpers shared by the specs — game-agnostic bits that would otherwise be
 // copy-pasted into each one. Anything about a particular game's board (roll
@@ -112,6 +112,39 @@ export async function reloadAndSettle(page: Page, liveButton: Locator): Promise<
     await dismissRecapFromScreen(page, liveButton);
   }
   await liveButton.waitFor({ state: 'visible' });
+}
+
+// The board's auto-show game guide depends on an async `/api/gameguides` fetch
+// (useGameGuide) that fires on mount. Without waiting for it, a still-in-
+// flight request can resolve moments after a test has decided the guide isn't
+// up, popping it open right as the next click lands and jamming every
+// following interaction behind its modal backdrop (a Bootstrap modal's
+// backdrop blocks clicks on whatever's underneath, even though that content
+// is still Playwright-"visible"). Callers set this up around whatever
+// navigation mounts the board — a hard nav or a client-side route change
+// alike — so it's already listening before the request can fire.
+export function gameGuideResponse(page: Page) {
+  return page.waitForResponse((res) => res.url().includes('/api/gameguides'), { timeout: 30_000 }).catch(() => {});
+}
+
+// Closes the guide if it auto-showed. Auto-show is a once-per-account flag
+// (useGameGuide) and these specs reuse real Clerk accounts across runs, so an
+// account may or may not already have a given game marked "seen" — every spec
+// that touches the board of a game with a guide has to cope with both. Pair it
+// with `gameGuideResponse` above, or the fetch can still be in flight here.
+export async function dismissGuideIfShown(page: Page, guideTitle: string): Promise<void> {
+  const guideText = page.getByText(guideTitle);
+  // `gameGuideResponse` resolves when the response reaches Playwright, which
+  // is a tick or two before useGameGuide's `.then` and React's render put the
+  // modal on screen — so give it that beat rather than reading the screen the
+  // instant the fetch lands. A caller that has already awaited something else
+  // in between loses nothing by it; one that hasn't would otherwise decide
+  // "no guide" just before it opens.
+  await guideText.waitFor({ state: 'visible', timeout: 2_000 }).catch(() => {});
+  if (await guideText.isVisible().catch(() => false)) {
+    await page.getByRole('button', { name: 'Got it' }).click();
+    await expect(guideText).not.toBeVisible();
+  }
 }
 
 // Prints a page's console.error output and uncaught exceptions to this

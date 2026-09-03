@@ -1,10 +1,10 @@
 import { test, expect, type Page } from '@playwright/test';
-import { clearGames, clerkUserId, logBrowserErrors } from '../helpers';
+import { clearGames, clerkUserId, dismissGuideIfShown, gameGuideResponse, logBrowserErrors } from '../helpers';
 
 // Proves the game-guide feature (src/utils/ui/gameGuides.ts) actually reaches
-// the four games it was just wired into: get a live match on the board, open
-// it from the ⋮ menu, and confirm the right guide's title shows up — then
-// confirm dismissing it actually closes it. This is deliberately just the
+// every game it was wired into: get a live match on the board, open it from
+// the ⋮ menu, and confirm the right guide's title shows up — then confirm
+// dismissing it actually closes it. This is deliberately just the
 // invite/accept plumbing from snakesandladders-turns.spec.ts (and, for
 // Settlements & Cities, outbreak-guest-invite.spec.ts's guest-fills-a-seat
 // plumbing too) plus the guide check, not a rules test — each game's own
@@ -22,48 +22,32 @@ test.afterAll(async ({ request }) => {
   await clearGames(request);
 });
 
-// The board's auto-show guide depends on an async `/api/gameguides` fetch
-// (useGameGuide) that fires on mount. Without waiting for it, a still-in-
-// flight request can resolve moments after checkGuideFromMenu below decides
-// the guide isn't up, popping it open right as the next click lands and
-// jamming every following interaction behind its modal backdrop (a Bootstrap
-// modal's backdrop blocks clicks on whatever's underneath, even though that
-// content is still Playwright-"visible"). Callers set this up around
-// whatever navigation mounts the board — a hard nav or a client-side route
-// change alike — so it's already listening before the request can fire.
-function gameGuideResponse(page: Page) {
-  return page.waitForResponse((res) => res.url().includes('/api/gameguides'), { timeout: 30_000 }).catch(() => {});
-}
-
 // Opens the game guide from the ⋮ menu on `page` and confirms it shows the
 // right title, then closes it again. Shared by every game below — only how
 // each one's board is reached differs; the guide check itself never does.
 async function checkGuideFromMenu(page: Page, guideTitle: string): Promise<void> {
-  // Auto-show is a once-per-account flag (useGameGuide) on real Clerk
-  // accounts these tests reuse across runs, so this account may or may not
-  // already have it marked "seen" — dismiss it first if it's up, so the
-  // on-demand path below is exercised the same way either way.
-  const guideText = page.getByText(guideTitle);
-  if (await guideText.isVisible().catch(() => false)) {
-    await page.getByRole('button', { name: 'Got it' }).click();
-    await expect(guideText).not.toBeVisible();
-  }
+  // Dismiss it first if it auto-showed, so the on-demand path below is
+  // exercised the same way whether or not this account has seen it already.
+  await dismissGuideIfShown(page, guideTitle);
 
+  const guideText = page.getByText(guideTitle);
   await page.getByRole('button', { name: 'Game options' }).click();
   await page.getByRole('menuitem', { name: 'Game guide' }).click();
 
+  // Now it's definitely up, so the shared dismiss is guaranteed to fire —
+  // which keeps the "Got it" label named in one place rather than two.
   await expect(guideText).toBeVisible();
-  await page.getByRole('button', { name: 'Got it' }).click();
-  await expect(guideText).not.toBeVisible();
+  await dismissGuideIfShown(page, guideTitle);
 }
 
-// The three games whose 2-player minimum this suite's two persistent test
-// accounts can satisfy on their own. Settlements & Cities can't (see below),
-// so it gets its own test rather than a slot in this list.
+// The games whose 2-player minimum this suite's two persistent test accounts
+// can satisfy on their own. Settlements & Cities can't (see below), so it gets
+// its own test rather than a slot in this list.
 const TWO_PLAYER_GAMES = [
   { slug: 'dicecities', name: 'Dice Cities', guideTitle: 'How to play Dice Cities' },
   { slug: 'worlddomination', name: 'World Domination', guideTitle: 'How to play World Domination' },
   { slug: 'traintime', name: 'Train Time', guideTitle: 'How to play Train Time' },
+  { slug: 'firesout', name: 'Fires Out!', guideTitle: 'How to play Fires Out!' },
 ];
 
 for (const game of TWO_PLAYER_GAMES) {

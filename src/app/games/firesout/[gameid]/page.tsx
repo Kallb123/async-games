@@ -10,6 +10,7 @@ import FiresOutActions, { FiresOutBoardMode } from "@/games/FiresOut/components/
 import FiresOutAdvanceFireResult, { AdvanceFireDisplay, buildAdvanceFireDisplay } from "@/games/FiresOut/components/FiresOutAdvanceFireResult";
 import GameShell from "@/components/ui/GameShell";
 import { GameOption } from "@/components/ui/GameOptionsMenu";
+import GameGuideModal from "@/components/ui/GameGuideModal";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
@@ -19,10 +20,12 @@ import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
+import { useGameGuide } from "@/utils/hooks/useGameGuide";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
+import { guide as firesOutGuide } from "@/games/FiresOut/guide";
 import { VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN } from "@/games/FiresOut/board";
 import {
     canCrewChange,
@@ -209,6 +212,10 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     // (and often activeFirefighter's owner) to someone else.
     const [advanceFireResult, setAdvanceFireResult] = useState<AdvanceFireDisplay | null>(null);
 
+    // The "how to play" popup: shown automatically the first time this account
+    // opens a Fires Out! match, and on demand from the game-options menu.
+    const gameGuide = useGameGuide('firesout');
+
     function handleEndTurn() {
         const command = new FiresOutAction();
         command.kind = 'endTurn';
@@ -265,6 +272,12 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
             icon: '🔁',
             onClick: recap.reshow,
         }] : []),
+        {
+            key: 'guide',
+            label: 'Game guide',
+            icon: '📖',
+            onClick: gameGuide.openGuide,
+        },
         ...(!complete ? [{
             key: 'end',
             label: 'End game',
@@ -298,6 +311,8 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
             className="ag-game--firesout"
         >
             <FcmTokenComp />
+
+            {gameGuide.open && <GameGuideModal guide={firesOutGuide} onClose={gameGuide.closeGuide} />}
 
             {gs && (
                 <>

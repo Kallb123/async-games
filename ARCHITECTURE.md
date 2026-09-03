@@ -943,11 +943,15 @@ in one new folder, `src/games/<Game>/`. Roughly:
    `UserInviteList`, and `TurnTimerSelect` for setup.
 6. *(Optional)* Add a replay `IReplayAdapter` for turn recap — see
    `docs/turn-recap-and-planning.md`.
+7. *(Optional)* Add a `guide.ts` exporting a `GameGuide` for the how-to-play
+   popup, and wire it into `GAME_GUIDES` in `src/utils/ui/gameGuides.ts`. The
+   board screen then shows it with `useGameGuide('<game>')`, a `key: 'guide'`
+   options row and `GameGuideModal` — see any existing guided board.
 
 ### One-liners outside the game folder — and what guards each
 
 Steps 2–5 above each add a single line to a shared file *outside*
-`src/games/<Game>/`. Every one of them is enforced by an automated test, so a
+`src/games/<Game>/`, as does step 7's optional guide. Every one of them is enforced by an automated test, so a
 game folder that's missing one fails CI instead of breaking silently at
 runtime:
 
@@ -957,6 +961,7 @@ runtime:
 | `src/utils/mongodb/mongodb.ts` | the discriminator key in both union types, and the model in both records (`GAME_DATA_MODELS` and `INVITATION_MODELS`) | TypeScript (the typed `Record`s are a compile-time exhaustiveness check) **and** `src/games/gameRegistry.test.ts` ("registers every game's Mongoose discriminator models") |
 | `src/utils/games/gameCommands.ts` | the game type's `className` as a key, its command `className`s as the list | `serializableRegistry.test.ts` ("assigns every command and game type to a game in the command registry") |
 | `src/utils/ui/games.ts` | import the game's `meta.ts` and add it to `GAME_META` | `src/games/gameRegistry.test.ts` ("wires every game's metadata into GAME_META") |
+| `src/utils/ui/gameGuides.ts` | *(only if the game has a `guide.ts`)* import the guide and add it to `GAME_GUIDES` | `src/games/gameRegistry.test.ts` ("wires every game's how-to-play guide into GAME_GUIDES") — without it `/api/gameguides` rejects the "seen" write, so the popup re-shows on every visit |
 
 `src/games/gameRegistry.test.ts` discovers games the same way
 `serializableRegistry.test.ts` discovers `@serializable` classes: by scanning,

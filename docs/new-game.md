@@ -127,6 +127,12 @@ none fit, it's a single source of truth other UI derives from), `players`,
   `GameShell`, `useGameData`, `usePushEvents`, `useEndGame`, and (for
   multiplayer games) `useTurnNavigation`/`TurnNavControls`/`useTurnRecap`
   (§7).
+- `src/games/<Game>/guide.ts` *(optional)* — a `GameGuide` (a title plus a
+  handful of `{heading, body}` sections) for the how-to-play popup. The board
+  screen shows it with `useGameGuide('<game>')`, a `key: 'guide'` row in its
+  `GameOption`s, and `{gameGuide.open && <GameGuideModal guide={…} …/>}` — the
+  same six lines on every board that has one. Keep it to five sections, `Goal`
+  first, then `Your turn`, matching the existing guides.
 - `src/app/api/newgame/<game>/route.ts` — creates the `Invitation` document.
 
 ### 6. Wire the shared files
@@ -144,6 +150,7 @@ rather than the game breaking silently at runtime.
 | `src/utils/mongodb/mongodb.ts` | the discriminator key in both union types, and the model in both records (`GAME_DATA_MODELS` and `INVITATION_MODELS`) |
 | `src/utils/games/gameCommands.ts` | the game type's `className` as a key, its command `className`s as the list |
 | `src/utils/mongodb/GameResultData.ts` | *(only if you added `compute<Game>ResultStats`)* the discriminator + wire it into `GAME_RESULT_STATS`, with a `charts` entry if you added per-turn series |
+| `src/utils/ui/gameGuides.ts` | *(only if you added a `guide.ts`)* import it and add it to `GAME_GUIDES` — the popup can't record itself as seen without this, so it re-shows every visit |
 
 ### 7. Turn recap & planning
 

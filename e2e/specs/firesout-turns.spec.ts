@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { clearGames, clerkUserId, logBrowserErrors, reloadAndSettle } from '../helpers';
+import { clearGames, clerkUserId, dismissGuideIfShown, gameGuideResponse, logBrowserErrors, reloadAndSettle } from '../helpers';
 
 // fires-out-gdd.md §17.6 step 11: prove the game is actually playable end to
 // end, now that meta.available is true — inviting a named player, each side
@@ -91,16 +91,28 @@ test('invite a player, start a game, and take a turn each', async ({ browser }) 
   // game immediately and lands them on its board.
   const inviteRow = two.locator('.ag-list-row', { hasText: 'Fires Out' });
   await two.goto('/');
+  const twoGuideReady = gameGuideResponse(two);
   await inviteRow.getByRole('button', { name: 'Accept' }).click();
   await two.waitForURL(/\/games\/firesout\/.+/);
 
   // Player one follows the same game directly, the way a push notification
   // link would take them there — a hard navigation, so wait for Clerk to boot.
+  const oneGuideReady = gameGuideResponse(one);
   await one.goto(new URL(two.url()).pathname);
   await clerkUserId(one);
 
-  await expect(one.getByText('Fires Out!')).toBeVisible();
-  await expect(two.getByText('Fires Out!')).toBeVisible();
+  // Both players are on this board for the first time, so the how-to-play
+  // guide auto-shows (useGameGuide) until each account has seen it once —
+  // and its modal backdrop would swallow every board click below. Settle the
+  // fetch that decides, then close it if it opened.
+  await Promise.all([oneGuideReady, twoGuideReady]);
+  await dismissGuideIfShown(one, 'How to play Fires Out!');
+  await dismissGuideIfShown(two, 'How to play Fires Out!');
+
+  // Exact match: the guide's own title contains the game's name, so a plain
+  // getByText would match both whenever the guide is on screen.
+  await expect(one.getByText('Fires Out!', { exact: true })).toBeVisible();
+  await expect(two.getByText('Fires Out!', { exact: true })).toBeVisible();
 
   // recapAvailable is true from creation (the initial-state snapshot is
   // written by CreateGame, not earned by playing) — "Review actions" should
