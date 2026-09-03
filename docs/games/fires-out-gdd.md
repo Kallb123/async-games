@@ -339,11 +339,16 @@ express a shared outcome (`IGameData.winner` is a single user ID, and an empty
 one reads as a *draw* in `outcomeFor()`), and the turntimer cron cannot resolve
 a timeout in a game-specific way. Both are described in full in
 `outbreak-gdd.md` §21.2 and closed by its steps 1 and 7. **Whichever game is
-built first pays for the engine work; the second only registers itself.** The
-timeout gap bites Fires Out for exactly the same reason it bites Outbreak: the
-fire advances at the end of *your* turn, so a turn the cron skips is a turn the
-building doesn't burn — and AP banking means a skipped turn even leaves you
-richer. Timing out would be the strongest play at the table.
+built first pays for the engine work; the second only registers itself** —
+Outbreak paid for both, so **this is done**: `finishGame()` carries the shared
+outcome and `registerTurnTimeoutAdapter` (`src/utils/games/turnTimeout.ts`) is
+where Fires Out registers its own timeout command. The timeout gap bites Fires
+Out for exactly the same reason it bites Outbreak: the fire advances at the end
+of *your* turn, so a turn the cron skips is a turn the building doesn't burn —
+and AP banking means a skipped turn even leaves you richer. Timing out would be
+the strongest play at the table. Worse than in Outbreak, a skipped turn also
+*deadlocks* the game, for gap 3's reason: the cron's plain advance moves
+`currentTurn` without moving `activeFirefighter`, and nobody can move again.
 
 **3 — The engine's turn belongs to a *player*; this game's belongs to a
 *firefighter*.** With one figure each that distinction is invisible, but §1
@@ -628,6 +633,11 @@ extract one `finishGame()` and put the `teamwin`/`teamloss` outcome inside it
 executing the game's own pass command through a per-game registry. If Outbreak got there first, skip the
 engine work — but Fires Out still registers its own timeout command,
 `FiresOutAction { kind: 'endTurn' }`, which it can only do once step 4 exists.
+**Both halves have landed**: Outbreak built the registry, and Fires Out's
+adapter is registered alongside its own in `turnTimeout.ts`. No new command
+kind was needed — `'endTurn'` already *is* the pass, and it is the only command
+that runs §7's Phase 2 and Phase 3 and syncs `currentTurn` to
+`activeFirefighter`, so one of them per stalled figure is the whole fix.
 Worth folding in while here: `turnOrder.findIndex(to => to === currentTurn)`
 followed by a modulo is now copy-pasted in five places, and gap 3 above is the
 sixth asking to be written — one `nextInTurnOrder(gameState, currentTurn)`
