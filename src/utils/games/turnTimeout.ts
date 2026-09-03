@@ -7,7 +7,6 @@ import { OutbreakAction, OutbreakDiscard, OutbreakEndTurn, OutbreakPlayEvent } f
 import { IOutbreakGameData } from "@/games/Outbreak/OutbreakModels";
 import { HAND_LIMIT } from "@/games/Outbreak/rules";
 import { FiresOutAction } from "@/games/FiresOut/FiresOutLogic";
-import { IFiresOutGameData } from "@/games/FiresOut/FiresOutModels";
 
 // docs/games/outbreak-gdd.md §21.2, gap 2: the turn-timer cron used to handle
 // every game the same way — advance currentTurn and nothing else — which is
@@ -88,48 +87,19 @@ registerTurnTimeoutAdapter({
 
 registerTurnTimeoutAdapter({
     className: "FiresOutGameType",
-    // docs/games/fires-out-gdd.md §17.2 gap 2 and §17.6 step 1: Fires Out needs
-    // this for the same reason Outbreak does, only harder. The plain advance
-    // would move currentTurn on without touching specificGameState, and that
-    // breaks two ways at once:
-    //
-    //   1. The fire never advances. §7 Phase 2 and Phase 3 — Advance Fire and
-    //      Replenish POI — only happen inside an 'endTurn' command, so a turn
-    //      the cron skips is a turn the building doesn't burn, which makes
-    //      going quiet the strongest play at the table (§17.2 gap 2).
-    //   2. The game deadlocks. §17.2 gap 3: the engine's turn belongs to a
-    //      player (currentTurn) but this game's belongs to a figure
-    //      (activeFirefighter), and only CheckEndTurn keeps the two in step.
-    //      Advancing one without the other leaves the new currentTurn player
-    //      rejected by Execute's `ff.ownerId !== senderId` guard and everyone
-    //      else rejected by the command route's currentTurn check — nobody can
-    //      move at all.
-    //
-    // So there is no skip action to write: 'endTurn' is already the whole of
-    // "give up on this turn". It is the same command a player with nothing
-    // worth doing sends by hand — §8's design note on AP banking is explicit
-    // that passing to fund a bigger turn later is a real move — so a timeout
-    // banks unspent AP exactly as a deliberate pass does, and pays the same
-    // price for it by resolving the fire. Nothing here needs to know which of
-    // §8's eleven actions the player left unfinished: unlike Outbreak, a Fires
-    // Out turn has no mid-turn phase that must be closed off first, and every
-    // action is optional, so one command always finishes the job.
-    //
-    // resolveStalledTurn keeps calling this until turnOver, which is what
-    // hands a player controlling more than one pawn (§1's solitaire play) one
-    // Advance Fire per figure rather than one for the lot.
-    buildTimeoutCommand(gameData, userId) {
-        const gs = (gameData as IFiresOutGameData).specificGameState;
-        const ff = gs.firefighters[gs.activeFirefighter];
-        // Whoever the cron timed out has to be the figure that's up, or the
-        // command would only be rejected by the same Execute guard. The two
-        // are in step from buildInitialFiresOutState onward and CheckEndTurn
-        // moves them together, so this is the deadlock in case 2 above having
-        // already happened — a game no player can move either. Reporting
-        // 'stuck' leaves it to the missed-turn count to abandon rather than
-        // quietly rewriting whose turn it is.
-        if (!ff || ff.ownerId !== userId) return null;
-
+    // docs/games/fires-out-gdd.md §17.2 gaps 2 and 3: 'endTurn' is the whole of
+    // "give up on this turn" here, and there is nothing to decide between. It
+    // is the only command that runs §7's Advance Fire and Replenish POI — so
+    // the plain advance let a stalled player skip the fire entirely — and the
+    // only one that moves activeFirefighter in step with currentTurn, so the
+    // plain advance also deadlocked the game outright. Unlike Outbreak, no
+    // turn can be left mid-phase and every action is optional, so one command
+    // always finishes the job; a timeout therefore banks unspent AP exactly as
+    // the deliberate pass of §8's design note does, and pays the same price by
+    // resolving the fire. resolveStalledTurn re-asks until turnOver, which is
+    // what owes a player holding two figures (§1's solitaire play) one fire
+    // advance per figure rather than one for the lot.
+    buildTimeoutCommand() {
         const action = new FiresOutAction();
         action.kind = 'endTurn';
         return action;

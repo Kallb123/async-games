@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { FiresOutAction, FiresOutGameType, IFiresOutEndTurnOutcome } from "./FiresOutLogic";
 import { IFiresOutGameData, IFiresOutSpecificGameState } from "./FiresOutModels";
-import { AMBULANCE_START, edgeBetween, ENGINE_START, exteriorTopSpace, perimeterNeighbours, spaceIndex, START_SPACE, VICTIMS_TO_WIN } from "./board";
-import { AP_COSTS, AP_PER_TURN, buildEmptyEdges, buildEmptySpaces, newFirefighter } from "./rules";
+import { edgeBetween, ENGINE_START, exteriorTopSpace, perimeterNeighbours, spaceIndex, START_SPACE, VICTIMS_TO_WIN } from "./board";
+import { AP_COSTS, AP_PER_TURN } from "./rules";
+import { baseState, experiencedState } from "./testFixtures";
 
 // ─── Minimal in-memory game harness (mirrors SolitaireLogic.test.ts) ────────
 // markModified is a Mongoose Document method the real command route relies
@@ -26,35 +27,6 @@ function cmd(senderId: string, fields: Partial<FiresOutAction>): FiresOutAction 
     action.senderUsername = senderId;
     Object.assign(action, fields);
     return action;
-}
-
-// Two firefighters, both starting at (3,2) — a kitchen space with one of each
-// kind of boundary around it: open to (3,3) and (2,2), walled off from (3,1),
-// and a door onto the dining room at (4,2). No fire/POIs/damage — tests build
-// whatever board condition they need on top of this rather than fighting the
-// Family setup's fire cluster.
-function baseState(turnOrder: string[] = ["u1", "u2"]): IFiresOutSpecificGameState {
-    return {
-        ruleset: 'family',
-        difficulty: 'recruit',
-        spaces: buildEmptySpaces(),
-        edges: buildEmptyEdges(),
-        poiPool: [],
-        nextPoiId: 0,
-        rescued: 0,
-        lost: 0,
-        firefighters: turnOrder.map(userId => newFirefighter(userId, spaceIndex(3, 2))),
-        activeFirefighter: 0,
-        hotspotReserve: 0,
-        engine: ENGINE_START,
-        ambulance: AMBULANCE_START,
-    };
-}
-
-// Vehicle tests need an Experienced state, since 'drive'/'deckGun' and the
-// Ambulance-gated rescue are all set aside in the Family game (§6.1 step 7).
-function experiencedState(turnOrder: string[] = ["u1", "u2"]): IFiresOutSpecificGameState {
-    return { ...baseState(turnOrder), ruleset: 'experienced' };
 }
 
 describe("FiresOutAction 'move'", () => {

@@ -638,10 +638,16 @@ adapter is registered alongside its own in `turnTimeout.ts`. No new command
 kind was needed — `'endTurn'` already *is* the pass, and it is the only command
 that runs §7's Phase 2 and Phase 3 and syncs `currentTurn` to
 `activeFirefighter`, so one of them per stalled figure is the whole fix.
-Worth folding in while here: `turnOrder.findIndex(to => to === currentTurn)`
-followed by a modulo is now copy-pasted in five places, and gap 3 above is the
-sixth asking to be written — one `nextInTurnOrder(gameState, currentTurn)`
-helper retires all of them.
+`src/games/FiresOut/turnTimeout.test.ts` covers it: the turn advancing figure
+and player together, the fire resolving with its rolls recorded for the recap,
+a forced Advance Fire ending the game, one advance per figure for a player
+holding two, and gap 3's deadlocked game reporting `'stuck'` rather than being
+papered over.
+Still worth folding in: `turnOrder.findIndex(to => to === currentTurn)`
+followed by a modulo is copy-pasted in five places — and gap 3 turned out
+*not* to add a sixth, since `'endTurn'` delegates the advance to
+`CheckEndTurn` — so one `nextInTurnOrder(gameState, currentTurn)` helper still
+retires all five.
 
 **2 — Board data and pure rules.** `src/games/FiresOut/board.ts`: the board as
 a space and edge table, the d6/d8 coordinate mapping, the exterior perimeter

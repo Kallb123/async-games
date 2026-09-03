@@ -2,39 +2,17 @@ import { describe, expect, it } from "vitest";
 import { resolveStalledTurn } from "@/utils/games/turnTimeout";
 import { FiresOutAction, FiresOutGameType } from "./FiresOutLogic";
 import { IFiresOutSpecificGameState } from "./FiresOutModels";
-import { AMBULANCE_START, ENGINE_START, spaceIndex, VICTIMS_LOST_TO_LOSE } from "./board";
-import { AP_PER_TURN, buildEmptyEdges, buildEmptySpaces, newFirefighter } from "./rules";
+import { spaceIndex, VICTIMS_LOST_TO_LOSE } from "./board";
+import { AP_PER_TURN } from "./rules";
+import { baseState } from "./testFixtures";
 import type { IGameDataDocument } from "@/utils/mongodb/GameData";
 
 // docs/games/fires-out-gdd.md §17.2 gaps 2 and 3: a timed-out turn has to run
 // the game's own 'endTurn' command, because that command is the only place
-// §7's Advance Fire and Replenish POI phases happen *and* the only thing that
-// keeps currentTurn in step with activeFirefighter. So this exercises
-// resolveStalledTurn exactly as the turn-timer cron calls it, against a real
-// FiresOutGameType and a real command — mirroring Outbreak's own
-// turnTimeout.test.ts.
-
-// baseState from FiresOutLogic.test.ts: an empty board with no fire, POIs or
-// damage, so the only fire consequences in a test are the ones it sets up.
-// `firefighters` is taken separately from `turnOrder` here because §17.2 gap 3
-// is exactly the case where the two differ.
-function baseState(owners: string[]): IFiresOutSpecificGameState {
-    return {
-        ruleset: 'family',
-        difficulty: 'recruit',
-        spaces: buildEmptySpaces(),
-        edges: buildEmptyEdges(),
-        poiPool: [],
-        nextPoiId: 0,
-        rescued: 0,
-        lost: 0,
-        firefighters: owners.map(userId => newFirefighter(userId, spaceIndex(3, 2))),
-        activeFirefighter: 0,
-        hotspotReserve: 0,
-        engine: ENGINE_START,
-        ambulance: AMBULANCE_START,
-    };
-}
+// §7's fire phases happen and the only thing that keeps currentTurn in step
+// with activeFirefighter. So this exercises resolveStalledTurn exactly as the
+// turn-timer cron calls it, against a real FiresOutGameType and a real
+// command — mirroring Outbreak's own turnTimeout.test.ts.
 
 // A real gameType (resolveStalledTurn re-serialises it) and a no-op
 // markModified are the only two things this needs beyond
@@ -69,15 +47,11 @@ describe("resolveStalledTurn (Fires Out)", () => {
         expect(resolution).toBe('advanced');
         expect(commandHistory(game).map(c => ({ className: c.className, kind: c.kind })))
             .toEqual([{ className: 'FiresOutAction', kind: 'endTurn' }]);
-        // §17.2 gap 3: the plain advance the cron falls back to would have
-        // moved currentTurn without moving activeFirefighter, leaving a game
-        // nobody could take a turn in. CheckEndTurn moved both.
+        // Gap 3: both moved, so the next player can actually play.
         expect(state.activeFirefighter).toBe(1);
         expect(game.currentTurn).toBe("u2");
         expect(state.firefighters[1].apLeft).toBe(AP_PER_TURN);
-        // §8: a forced end of turn banks what went unspent, exactly as the
-        // deliberate pass a player could have sent by hand does.
-        expect(state.firefighters[0].bankedAp).toBe(3);
+        expect(state.firefighters[0].bankedAp).toBe(3); // §8: banked, as a deliberate pass would
     });
 
     it("resolves Advance Fire, and records the rolls it consumed so the recap replays the same fire", async () => {
@@ -87,9 +61,9 @@ describe("resolveStalledTurn (Fires Out)", () => {
         const resolution = await resolveStalledTurn(game, "u1", "Alice");
 
         expect(resolution).toBe('advanced');
-        // §7 Phase 2: the timed-out turn burned the building, which is the
-        // whole point — the plain advance would have left the board untouched
-        // and made going quiet the strongest play (§17.2 gap 2).
+        // Gap 2: the timed-out turn burned the building. The plain advance
+        // left the board untouched, which is what made going quiet the
+        // strongest play.
         const rolls = commandHistory(game)[0].recordedRolls;
         expect(rolls).toHaveLength(2); // an empty poiPool has nothing to replenish
         const target = spaceIndex(rolls![0] - 1, rolls![1] - 1);
@@ -116,10 +90,9 @@ describe("resolveStalledTurn (Fires Out)", () => {
     });
 
     it("gives a player controlling more than one figure one fire advance per figure, and stops at the next player", async () => {
-        // §1's solitaire play, and §7's design note: the fire advances once per
-        // *figure*, so a stalled player with two pawns owes two advances before
-        // the turn is anyone else's. resolveStalledTurn keeps asking until
-        // turnOver, which is what makes that fall out.
+        // §7's design note: the fire advances once per *figure*, so a stalled
+        // player with two pawns owes two advances before the turn is anyone
+        // else's.
         const state = baseState(["u1", "u1", "u2"]);
         const game = makeGame(state, ["u1", "u2"]);
 
@@ -132,9 +105,11 @@ describe("resolveStalledTurn (Fires Out)", () => {
     });
 
     it("reports stuck, rather than rewriting whose figure is up, when the timed-out player isn't the active one", async () => {
-        // The deadlocked game §17.2 gap 3 warns about: currentTurn and
-        // activeFirefighter out of step, which no player can move either. It's
-        // left for the missed-turn count to abandon.
+        // The deadlocked game gap 3 warns about — currentTurn and
+        // activeFirefighter out of step — is one no player can move either,
+        // and Execute's own ownerId guard refuses the forced command too. The
+        // adapter still hands back the command it always would: 'stuck' is the
+        // engine's answer, not a whose-turn-is-it rewrite smuggled in here.
         const state = baseState(["u1", "u2"]);
         const game = makeGame(state, ["u1", "u2"]);
 
