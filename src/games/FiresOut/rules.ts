@@ -359,10 +359,14 @@ export function rollValidTarget(nextRoll: NextRoll, isValid: (space: number) => 
  * Vehicles (step 6) and Specialists (step 7) are later steps (9 and 10).
  * Returns the running POI id counter and the hot spot reserve left after
  * setup's own placements, both of which the caller folds into the fresh
- * specificGameState — plus `log`, one line per placement (`CreateGame` pushes
- * these onto the opening history so a rolled setup, unlike the Family game's
- * fixed diagram, says what it actually rolled rather than just naming the
- * difficulty).
+ * specificGameState — plus `explosionLog`, one line per explosion naming what
+ * it actually rolled. That's the one setup fact `CreateGame` can't recover by
+ * reading the finished board afterward (the hazmat/hot spot/POI counts and
+ * locations are still sitting in `spaces` once this returns, but an
+ * explosion's own d6/d8 are consumed and gone the moment `spaceForRoll` turns
+ * them into a target) — see `CreateGame`, which derives its hazmat/hot
+ * spot/POI history lines straight off the returned `specificGameState` the
+ * same way Outbreak's own `CreateGame` derives its setup facts.
  */
 export function applyExperiencedSetup(
     spaces: IFiresOutSpaceState[],
@@ -371,31 +375,24 @@ export function applyExperiencedSetup(
     difficulty: DifficultyId,
     crewSize: number,
     nextRoll: NextRoll,
-): { nextPoiId: number; hotspotReserve: number; log: string[] } {
+): { nextPoiId: number; hotspotReserve: number; explosionLog: string[] } {
     const tier = difficultyTier(difficulty);
-    const log: string[] = [];
+    const explosionLog: string[] = [];
 
     for (let i = 0; i < tier.explosions; i++) {
         const d6 = nextRoll(6);
         const d8 = nextRoll(8);
         const target = spaceForRoll(d6, d8);
         seedInitialExplosion(spaces, edges, target);
-        log.push(`Setup: explosion rolled ${d6},${d8} — ignited ${spacePhrase(target)}`);
+        explosionLog.push(`Setup: explosion rolled ${d6},${d8} — ignited ${spacePhrase(target)}`);
     }
 
     // One hazmat per space (§6.2 step 3) — not on an already-burning space
     // (nobody would leave equipment in an active blast zone) and not
     // stacked on another hazmat.
-    const hazmatTargets: number[] = [];
     for (let i = 0; i < tier.hazmats; i++) {
         const target = rollValidTarget(nextRoll, space => spaces[space].threat !== 'fire' && !spaces[space].hazmat);
-        if (target !== null) {
-            spaces[target].hazmat = true;
-            hazmatTargets.push(target);
-        }
-    }
-    if (hazmatTargets.length > 0) {
-        log.push(`Setup: ${hazmatTargets.length} hazmat${hazmatTargets.length === 1 ? '' : 's'} rolled — placed in ${hazmatTargets.map(spacePhrase).join(', ')}`);
+        if (target !== null) spaces[target].hazmat = true;
     }
 
     // Hot spots (§6.2 step 4) — not doubled up on a hazmat or another hot
@@ -404,28 +401,18 @@ export function applyExperiencedSetup(
     // hazmat-detonation replacement.
     const toPlace = hotspotsToPlace(crewSize, difficulty);
     let placed = 0;
-    const hotspotTargets: number[] = [];
     for (let i = 0; i < toPlace; i++) {
         const target = rollValidTarget(nextRoll,
             space => spaces[space].threat !== 'fire' && !spaces[space].hazmat && !spaces[space].hotspot);
         if (target === null) break;
         spaces[target].hotspot = true;
         placed++;
-        hotspotTargets.push(target);
-    }
-    if (hotspotTargets.length > 0) {
-        log.push(`Setup: ${hotspotTargets.length} hot spot${hotspotTargets.length === 1 ? '' : 's'} rolled — placed in ${hotspotTargets.map(spacePhrase).join(', ')}`);
     }
 
     // POIs (§6.2 step 5) — the same 3-marker placement as the Family game.
-    const poolBefore = poiPool.length;
     const nextPoiId = replenishPoi(spaces, poiPool, nextRoll, 0);
-    const poiPlaced = poolBefore - poiPool.length;
-    if (poiPlaced > 0) {
-        log.push(`Setup: ${poiPlaced} POI marker${poiPlaced === 1 ? '' : 's'} rolled`);
-    }
 
-    return { nextPoiId, hotspotReserve: TOTAL_HOTSPOT_MARKERS - placed, log };
+    return { nextPoiId, hotspotReserve: TOTAL_HOTSPOT_MARKERS - placed, explosionLog };
 }
 
 // ─── Phase 2 — Advance Fire (§9) ────────────────────────────────────────────

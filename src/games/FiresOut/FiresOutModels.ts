@@ -9,7 +9,7 @@ import { shuffle } from "@/utils/games/shuffle";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { FiresOutGameType } from "@/utils/apiModels/GameLogic";
 import { DiceRoll } from "@/utils/games/DiceRoll";
-import { AMBULANCE_START, DAMAGE_TO_COLLAPSE, DifficultyId, ENGINE_START, RulesetId, START_SPACE, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN, asRulesetId, difficultyTier } from "./board";
+import { AMBULANCE_START, DAMAGE_TO_COLLAPSE, DifficultyId, ENGINE_START, RulesetId, START_SPACE, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN, asRulesetId, difficultyTier, spacePhrase } from "./board";
 import {
     IFiresOutEdgeState,
     IFiresOutFirefighterState,
@@ -55,6 +55,19 @@ export interface IFiresOutInvitationDataDocument extends IFiresOutInvitationData
 
 export interface IFiresOutInvitationDataModel extends Model<IFiresOutInvitationDataDocument> {}
 
+// One line naming every space where `isPlaced` holds, or `null` if there are
+// none — CreateGame's shared formatter for its hazmat and hot spot setup
+// lines below, which differ only in the noun and which board flag they read.
+function setupPlacementLine(
+    spaces: IFiresOutSpaceState[],
+    noun: string,
+    isPlaced: (space: IFiresOutSpaceState) => boolean,
+): string | null {
+    const targets = spaces.flatMap((s, i) => isPlaced(s) ? [i] : []);
+    if (targets.length === 0) return null;
+    return `Setup: ${pluralize(targets.length, noun)} rolled — placed in ${targets.map(spacePhrase).join(', ')}`;
+}
+
 var FiresOutInvitationSchema = new Schema<IFiresOutInvitationDataDocument>({
     ruleset: String,
     difficulty: String,
@@ -84,14 +97,27 @@ FiresOutInvitationSchema.methods.CreateGame = async function(
             : `Setup: the crew arrives to a fire already spreading through the house` },
     ];
 
-    // §6.2 steps 2-5: for the Experienced game, applyExperiencedSetup's own
-    // `log` says exactly what its dice rolled — where the explosions caught,
-    // and which spaces its hazmats, hot spots and POIs landed on — appended
-    // in the same push order as Outbreak's own setup facts (OutbreakModels.ts),
+    // §6.2 steps 2-5: for the Experienced game, say what its setup actually
+    // rolled rather than just naming the difficulty — appended in the same
+    // push order as Outbreak's own setup facts (OutbreakModels.ts),
     // chronological within the setup block. The Family game has no rolls to
     // report; its fixed diagram is already fully described by the line above.
-    const { specificGameState, setupLog } = buildInitialFiresOutState(turnOrder, ruleset, difficulty);
-    for (const line of setupLog) history.push({ text: line });
+    // `explosionLog` is applyExperiencedSetup's own account of its explosion
+    // rolls (the one setup fact that can't be read back off the finished
+    // board); the hazmat/hot spot/POI lines below are derived straight off
+    // the returned specificGameState instead, the same way Outbreak's
+    // CreateGame reads its own setup facts (infectedCount, cubesPlaced) off
+    // the state buildInitialOutbreakState just built.
+    const { specificGameState, explosionLog } = buildInitialFiresOutState(turnOrder, ruleset, difficulty);
+    for (const line of explosionLog) history.push({ text: line });
+    if (ruleset === 'experienced') {
+        const hazmatLine = setupPlacementLine(specificGameState.spaces, 'hazmat', s => s.hazmat);
+        if (hazmatLine) history.push({ text: hazmatLine });
+        const hotspotLine = setupPlacementLine(specificGameState.spaces, 'hot spot', s => s.hotspot);
+        if (hotspotLine) history.push({ text: hotspotLine });
+        const poiCount = specificGameState.spaces.filter(s => s.poi).length;
+        if (poiCount > 0) history.push({ text: `Setup: ${pluralize(poiCount, 'POI marker')} rolled` });
+    }
 
     const gameData: IFiresOutGameData = {
         gameId: uuidv4() as uuidString,
@@ -213,15 +239,16 @@ export function cloneFiresOutState(gs: IFiresOutSpecificGameState): IFiresOutSpe
 // consumed directly (like shuffledPoiPool's own `shuffle()` call), since
 // setup's dice rolls are never replayed — buildInitialFiresOutStateFromGameData
 // below clones the persisted *result*, the same way the Family fire cluster
-// and the POI shuffle already work. `setupLog` is applyExperiencedSetup's own
-// account of what it rolled, empty for the Family game's fixed diagram —
-// CreateGame folds it into the opening history rather than this module
-// reaching back into the finished board to guess what happened.
+// and the POI shuffle already work. `explosionLog` is applyExperiencedSetup's
+// own account of its explosion rolls, empty for the Family game's fixed
+// diagram — CreateGame folds it into the opening history and reads its other
+// setup facts (hazmats, hot spots, POIs) straight off the returned
+// specificGameState instead, since those are still sitting in `spaces`.
 export function buildInitialFiresOutState(
     turnOrder: string[],
     ruleset: RulesetId,
     difficulty: DifficultyId,
-): { specificGameState: IFiresOutSpecificGameState; setupLog: string[] } {
+): { specificGameState: IFiresOutSpecificGameState; explosionLog: string[] } {
     const spaces = buildEmptySpaces();
     const edges = buildEmptyEdges();
     const poiPool = shuffledPoiPool();
@@ -229,15 +256,15 @@ export function buildInitialFiresOutState(
 
     let nextPoiId: number;
     let hotspotReserve: number;
-    let setupLog: string[];
+    let explosionLog: string[];
     if (ruleset === 'experienced') {
-        ({ nextPoiId, hotspotReserve, log: setupLog } =
+        ({ nextPoiId, hotspotReserve, explosionLog } =
             applyExperiencedSetup(spaces, edges, poiPool, difficulty, turnOrder.length, realRoll));
     } else {
         applyFamilySetup(spaces, poiPool);
         nextPoiId = 3; // applyFamilySetup already assigned ids 0-2
         hotspotReserve = 0;
-        setupLog = [];
+        explosionLog = [];
     }
 
     // §6.2 step 7, §17.6 step 10: one Specialist card per firefighter, dealt
@@ -273,7 +300,7 @@ export function buildInitialFiresOutState(
             engine: ENGINE_START,
             ambulance: AMBULANCE_START,
         },
-        setupLog,
+        explosionLog,
     };
 }
 

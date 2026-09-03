@@ -544,21 +544,16 @@ describe("applyExperiencedSetup (§6.2, §17.6 step 8)", () => {
         expect(spaces.filter(s => s.hazmat).length).toBe(5); // Heroic's hazmat count
     });
 
-    it("logs one line per explosion with the rolled d6,d8, and a summary line each for the hazmats, hot spots and POIs it placed", () => {
+    it("logs one line per explosion with the rolled d6,d8", () => {
         const spaces = buildEmptySpaces();
         const edges = buildEmptyEdges();
-        const { log } = applyExperiencedSetup(spaces, edges, shuffledPoiPool(), 'recruit', 3, sequentialRolls());
+        // Recruit: 3 explosions (fires-out-gdd.md §6.2's table).
+        const { explosionLog } = applyExperiencedSetup(spaces, edges, shuffledPoiPool(), 'recruit', 3, sequentialRolls());
 
-        // Recruit: 3 explosions, 3 hazmats, no hot spot bonus (crew of 3 -> base 2).
-        const explosionLines = log.filter(l => l.includes('explosion rolled'));
-        expect(explosionLines).toHaveLength(3);
-        for (const line of explosionLines) expect(line).toMatch(/^Setup: explosion rolled \d,\d — ignited the .+$/);
+        expect(explosionLog).toHaveLength(3);
+        for (const line of explosionLog) expect(line).toMatch(/^Setup: explosion rolled \d,\d — ignited the .+$/);
         // The very first roll is deterministic: sequentialRolls' first pair is (1,1).
-        expect(explosionLines[0]).toBe(`Setup: explosion rolled 1,1 — ignited ${spacePhrase(spaceIndex(0, 0))}`);
-
-        expect(log).toContainEqual(expect.stringMatching(/^Setup: 3 hazmats rolled — placed in the .+$/));
-        expect(log).toContainEqual(expect.stringMatching(/^Setup: 2 hot spots rolled — placed in the .+$/));
-        expect(log).toContainEqual('Setup: 3 POI markers rolled');
+        expect(explosionLog[0]).toBe(`Setup: explosion rolled 1,1 — ignited ${spacePhrase(spaceIndex(0, 0))}`);
     });
 });
 
