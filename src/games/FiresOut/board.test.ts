@@ -266,10 +266,16 @@ describe("space names", () => {
         expect(spaceName(EXTERIOR_CORNERS.bottomRight)).toBe("South-east corner");
     });
 
+    // A structural guard rather than a list to maintain: a room added to
+    // ROOM_GRID without a matching ROOM_NAMES entry fails here.
     it("gives every space a name, so no log line can fall back to a number", () => {
         for (let space = 0; space < SPACE_COUNT; space++) {
             expect(spaceName(space)).toBeTruthy();
-            expect(spacePhrase(space)).toBe(`the ${spaceName(space).toLowerCase()}`);
         }
+    });
+
+    it("reads inside a sentence as well as on a label", () => {
+        expect(spacePhrase(spaceIndex(3, 3))).toBe("the kitchen");
+        expect(spacePhrase(EXTERIOR_CORNERS.topLeft)).toBe("the north-west corner");
     });
 });

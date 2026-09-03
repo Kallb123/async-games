@@ -200,12 +200,13 @@ function roomOf(space: number): number {
 }
 
 /**
- * What each room in `ROOM_GRID` is called, in the same order as its ids —
- * the names the board art draws, so a player reading "fire caught in the
- * kitchen" can find it on the board. A space number is an implementation
- * detail of the grid and means nothing at the table, so nothing
- * player-facing prints one: the log, the recap, the Advance Fire screen and
- * the board tooltips all come through `spaceName`/`spacePhrase` below.
+ * What each room in `ROOM_GRID` is called, in the same order as its ids.
+ * The art prints no room labels — only the box title — so these are read off
+ * the furniture it draws in each room, the same measurement `ROOM_GRID`
+ * itself came from. A space number is an implementation detail of the grid
+ * and means nothing at the table, so nothing player-facing prints one: the
+ * log, the recap, the Advance Fire screen and the board tooltips all come
+ * through `spaceName`/`spacePhrase` below.
  */
 const ROOM_NAMES = [
     'Living room',

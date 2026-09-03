@@ -376,11 +376,17 @@ indistinguishable on replay no matter what the live game did.
 truth for which figure is up; `turnOrder` keeps one entry per user, and
 `turnOver` is true only when the next figure belongs to a different one.
 
-**4 — `DieFace` has no face above 6.** Its `PIP_LAYOUT` covers 1–6 and returns
-an empty pip grid for 7 or 8, so a d8 renders as a blank die. Octahedral dice
-show numerals rather than pips anyway, so the fix is a numeral variant *in the
-shared component* — not a bespoke Fires Out die that leaves the next game with
-a d8 to solve it again.
+**4 — `DieFace` has no face above 6.** Its `PIP_LAYOUT` covered 1–6 and
+returned an empty pip grid for 7 or 8, so a d8 rendered as a blank die.
+Octahedral dice show numerals rather than pips anyway, so the fix was a
+numeral variant *in the shared component* — not a bespoke Fires Out die that
+leaves the next game with a d8 to solve it again. **This is done**, though
+not as a per-value threshold: `DieFace` takes `sides` (defaulting to 6) and
+pips only a die of six or fewer, because a die that decided from the value it
+happened to roll flickered between pips and numerals as it tumbled. A d8 is
+numbered across its whole range, and a d4, d10 or d12 gets numerals for free.
+`Dice` passes `sides` through per die, which is what a row of a d6 and a d8
+needed.
 
 ### 17.3 Deviations from this document
 
@@ -412,6 +418,17 @@ a d8 to solve it again.
   other four are placed by us, because the art seals four of its rooms and
   every room has to be reachable. Re-measure the art before changing the
   table.
+* **Players are told rooms, never coordinates.** This document speaks in
+  (row, column) pairs throughout (§6.1, §17.4) because the printed board
+  prints them down its edges; the app never shows a player one. `ROOM_GRID`
+  already knew which room every space sits in — it is what derives the walls
+  and doors — so `spaceName`/`spacePhrase` name the eight rooms it draws, and
+  the exterior ring after the side of the house it runs along. The log, the
+  recap, the Advance Fire screen, the board tooltips and the push
+  notifications quoting them all go through those two functions. Unlike
+  `ROOM_GRID` itself (see the migration note below), the *names* are never
+  persisted and never replayed, so renaming a room is safe for a game already
+  burning.
 * **A game in flight keeps the floorplan it was dealt.** The migration for a
   board saved under an older layout is additive only: it appends the spaces and
   edges the exterior perimeter added and leaves the walls, doors and damage

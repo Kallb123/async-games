@@ -3,7 +3,7 @@ import type { ITurnSnapshot } from "@/utils/games/replay";
 import type { IGameCommand, ICommandOutcome, IFiresOutEndTurnOutcome, FiresOutActionKind } from "@/utils/apiModels/GameLogic";
 import type { IFiresOutSpecificGameStateResponse } from "@/games/FiresOut/apiModels";
 import { spacePhrase, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN } from "@/games/FiresOut/board";
-import { specialistDef, SpecialistId } from "@/games/FiresOut/rules";
+import { advanceFireLine, specialistDef, SpecialistId } from "@/games/FiresOut/rules";
 import { pluralize } from "@/utils/ui/text";
 
 // §7's away-time story is the fire, not the crew's own choices — "the fire
@@ -34,7 +34,6 @@ function state(snapshot: ITurnSnapshot): IFiresOutSpecificGameStateResponse {
 
 const RESOLUTION_TYPE = { smoke: FO_SMOKE, fire: FO_FIRE, explosion: FO_EXPLOSION } as const;
 const RESOLUTION_GLYPH = { smoke: '💨', fire: '🔥', explosion: '💥' } as const;
-const RESOLUTION_VERB = { smoke: 'smoke filled', fire: 'fire caught in', explosion: 'an explosion tore through' } as const;
 
 /**
  * Turns one replayed FiresOutAction into its recap row(s). Every command
@@ -147,7 +146,7 @@ function toEvents(
             id: `${command.id}:advance`,
             type: RESOLUTION_TYPE[advance.resolution],
             glyph: RESOLUTION_GLYPH[advance.resolution],
-            title: `Advance Fire: rolled ${advance.rolls.d6},${advance.rolls.d8} — ${RESOLUTION_VERB[advance.resolution]} ${spacePhrase(advance.target)}${flareNote}`,
+            title: `${advanceFireLine(advance.rolls, advance.resolution, advance.target, 'past')}${flareNote}`,
         });
 
         if (advance.knockedDownOwnerIds.length > 0) {

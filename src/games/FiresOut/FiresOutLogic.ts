@@ -6,6 +6,7 @@ import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IFiresOutGameData, IFiresOutSpecificGameState } from "@/games/FiresOut/FiresOutModels";
 import { edgeBetween, isExteriorSpace, isInteriorSpace, neighboursOf, quadrantOf, perimeterNeighbours, spacePhrase, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN } from "@/games/FiresOut/board";
 import {
+    advanceFireLine,
     AP_COSTS,
     canCrewChange,
     canDisposeHazmatOnSite,
@@ -263,7 +264,7 @@ function applyDoor(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff: IF
     if (!spendAp(ff, AP_COSTS.door, 'command')) return INVALID;
 
     edge.doorOpen = !edge.doorOpen;
-    fo.gameState.history.unshift(playerHistory(action.senderId, `${edge.doorOpen ? 'opened' : 'closed'} a door`));
+    fo.gameState.history.unshift(playerHistory(action.senderId, `${edge.doorOpen ? 'opened' : 'closed'} the door to ${spacePhrase(target)}`));
     return { validMove: true, turnOver: false };
 }
 
@@ -489,13 +490,7 @@ export interface IFiresOutEndTurnOutcome extends ICommandOutcome {
 }
 
 function describeAdvanceFire(result: IFiresOutAdvanceFireResult, isFlareUp: boolean): string {
-    const prefix = isFlareUp ? 'Flare-up! ' : '';
-    const rollText = `rolled ${result.rolls.d6},${result.rolls.d8}`;
-    switch (result.resolution) {
-        case 'smoke': return `${prefix}Advance Fire: ${rollText} — smoke fills ${spacePhrase(result.target)}`;
-        case 'fire': return `${prefix}Advance Fire: ${rollText} — fire catches in ${spacePhrase(result.target)}`;
-        case 'explosion': return `${prefix}Advance Fire: ${rollText} — an explosion tears through ${spacePhrase(result.target)}!`;
-    }
+    return `${isFlareUp ? 'Flare-up! ' : ''}${advanceFireLine(result.rolls, result.resolution, result.target, 'present')}`;
 }
 
 /** Depth-first flattening of a resolution and every flare-up it chained into (§9.4: "flare-ups can chain into flare-ups") — the primary resolution first, so history logs and the outcome's totals both read in the order the fire actually happened. */

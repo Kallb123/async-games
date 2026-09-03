@@ -18,8 +18,10 @@ const PIP_LAYOUT: Record<number, number[]> = {
  * component — not a bespoke Fires Out die that leaves the next game with a
  * d8 to solve it again"). A die keeps one face all roll long that way: a d8
  * showing 3 is still a numeral, where switching on the value alone made it
- * flicker between pips and numerals as it tumbled. Presentational only —
- * used directly, or via the Dice component for rows of more than one die.
+ * flicker between pips and numerals as it tumbled. Pips are for dice of six
+ * or fewer sides, so a d4 stays pipped and a d10 or d12 is numbered without
+ * anyone revisiting this. Presentational only — used directly, or via the
+ * Dice component for rows of more than one die.
  */
 export default function DieFace({ value, size = 64, sides = 6 }: { value: number; size?: number; sides?: number }) {
     const pips = sides <= 6 ? PIP_LAYOUT[value] : undefined;

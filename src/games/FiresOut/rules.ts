@@ -38,6 +38,7 @@ import {
     RulesetId,
     spaceForRoll,
     spaceIndex,
+    spacePhrase,
     SPACE_COUNT,
     spacesInQuadrant,
     START_SPACE,
@@ -591,6 +592,30 @@ export interface IFiresOutAdvanceFireResult {
     flareUps: IFiresOutAdvanceFireResult[];
     /** The hot spot reserve left after this resolution (and any chained flare-ups) drew from it. */
     hotspotReserve: number;
+}
+
+// The live log writes what Advance Fire just did; the recap retells the same
+// roll afterwards. Tense is the only thing that ever differed between them,
+// so the verbs sit in one table rather than one per caller — as two copies
+// they had to be edited in lockstep and had already drifted apart.
+const ADVANCE_FIRE_VERB = {
+    present: { smoke: 'smoke fills', fire: 'fire catches in', explosion: 'an explosion tears through' },
+    past: { smoke: 'smoke filled', fire: 'fire caught in', explosion: 'an explosion tore through' },
+} as const;
+
+/**
+ * The one sentence saying what an Advance Fire roll did, in the room it did
+ * it to (never a grid index — see `spaceName`). Callers add their own
+ * flare-up note: the live log prefixes each chained roll as it resolves,
+ * the recap counts them up at the end.
+ */
+export function advanceFireLine(
+    rolls: { d6: number; d8: number },
+    resolution: IFiresOutAdvanceFireResult['resolution'],
+    target: number,
+    tense: 'present' | 'past',
+): string {
+    return `Advance Fire: rolled ${rolls.d6},${rolls.d8} — ${ADVANCE_FIRE_VERB[tense][resolution]} ${spacePhrase(target)}`;
 }
 
 /**
