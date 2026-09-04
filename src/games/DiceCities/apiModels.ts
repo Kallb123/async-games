@@ -61,11 +61,12 @@ export interface IDiceCitiesGameStateResponse {
     /** Docks: a 10+ roll is parked here until the Harbour owner takes or declines its +2. */
     awaitingHarbourChoice: boolean,
     harbourRoll1: number | null,
-    harbourRoll2: number | null
+    harbourRoll2: number | null,
+    /** Docks: the expansion is in play. Fixed at creation, so replays match. */
+    enabledDocks: boolean
 }
 
 export interface IDiceCitiesGameDataResponse extends IGameDataResponse {
-    enabledDocks: boolean,
     enabledBillionaireRow: boolean,
     specificGameState: IDiceCitiesGameStateResponse
 }

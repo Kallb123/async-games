@@ -42,8 +42,6 @@ interface DiceCitiesActionsProps {
      * is left inert.
      */
     readOnly?: boolean;
-    /** Docks games can also build the Harbour, and answer its +2 offer. */
-    enabledDocks: boolean;
 }
 
 // The unlock command for each of the four win-condition landmarks, keyed by the
@@ -56,7 +54,7 @@ const LANDMARK_UNLOCK: Record<string, new () => IGameCommand> = {
     harbourUnlocked: DiceCitiesRequestUnlockHarbour,
 };
 
-export default function DiceCitiesActions({ gameState, myState, opponents, submitCommand, pendingTarget, readOnly = false, enabledDocks }: DiceCitiesActionsProps) {
+export default function DiceCitiesActions({ gameState, myState, opponents, submitCommand, pendingTarget, readOnly = false }: DiceCitiesActionsProps) {
     // A command is in flight — disable the sheet so a double-tap can't fire two
     // commands before the first response lands.
     const busy = pendingTarget !== null;
@@ -136,7 +134,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
     const buyable = [...gameState.bankCards].sort(
         (a, b) => DiceCitiesCards[a.card].rollNumber[0] - DiceCitiesCards[b.card].rollNumber[0],
     );
-    const unbuiltLandmarks = buildableLandmarks(enabledDocks).filter((l) => !myState[l.flag]);
+    const unbuiltLandmarks = buildableLandmarks(gameState.enabledDocks).filter((l) => !myState[l.flag]);
     const marketSheet = (
         <>
             <div className="ag-dc-market-head">

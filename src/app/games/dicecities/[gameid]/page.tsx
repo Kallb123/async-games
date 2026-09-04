@@ -90,7 +90,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, getForfeitedByDisplayName());
     const hasRolled = displayed?.hasRolled ?? false;
-    const enabledDocks = gameData?.enabledDocks === true;
+    const enabledDocks = displayed?.enabledDocks === true;
 
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
@@ -141,7 +141,6 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
             submitCommand={controlsSubmit}
             pendingTarget={controlsPendingTarget}
             readOnly={!isMyTurn}
-            enabledDocks={enabledDocks}
         />
     );
 

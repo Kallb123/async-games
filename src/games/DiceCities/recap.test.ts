@@ -39,6 +39,7 @@ function state(players: IDiceCitiesPlayerStateResponse[]): IDiceCitiesGameStateR
         awaitingHarbourChoice: false,
         harbourRoll1: null,
         harbourRoll2: null,
+        enabledDocks: false,
     };
 }
 

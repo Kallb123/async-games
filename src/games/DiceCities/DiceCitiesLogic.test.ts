@@ -53,11 +53,15 @@ function makeState(overrides: Partial<IDiceCitiesGameState> = {}): IDiceCitiesGa
         awaitingHarbourChoice: false,
         harbourRoll1: null,
         harbourRoll2: null,
+        enabledDocks: false,
         ...overrides,
     };
 }
 
 function makeGame(gs: IDiceCitiesGameState, currentTurn = "u1", enabledDocks = false): IDiceCitiesGameData {
+    // The Docks flag lives in specificGameState, so switching it on here keeps
+    // the state the test already holds a reference to.
+    if (enabledDocks) gs.enabledDocks = true;
     return {
         currentTurn,
         userIdList: ["u1", "u2"],
@@ -65,7 +69,6 @@ function makeGame(gs: IDiceCitiesGameState, currentTurn = "u1", enabledDocks = f
         specificGameState: gs,
         complete: false,
         winner: "",
-        enabledDocks,
     } as unknown as IDiceCitiesGameData;
 }
 
@@ -559,8 +562,9 @@ describe("Dice Cities: replaying a Docks game", () => {
             gameState: { turnOrder: ["u1", "u2"], history: [], commandHistory },
             complete: false,
             winner: "",
-            enabledDocks: true,
             enabledBillionaireRow: false,
+            // The Docks flag rides in specificGameState — the replay adapter
+            // reads it from there to restock the same market.
             specificGameState: buildInitialDiceCitiesState(["u1", "u2"], true),
         } as unknown as IGameData;
 

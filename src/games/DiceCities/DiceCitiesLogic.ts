@@ -375,7 +375,7 @@ export class DiceCitiesRequestUnlockHarbour implements IGameCommand {
     }
 
     async Execute(gameData: IGameData) {
-        if (!(gameData as IDiceCitiesGameData).enabledDocks) {
+        if (!(gameData as IDiceCitiesGameData).specificGameState.enabledDocks) {
             return {
                 turnOver: false,
                 validMove: false
@@ -990,7 +990,7 @@ function buildLandmark(gameData: IGameData, cardId: DiceCitiesCardIds, flag: Dic
 // Docks: a Harbour owner gets to say whether a 10-or-better total takes the
 // Harbour's +2, so a roll that big is parked rather than paid out.
 function harbourChoiceOffered(dcGameData: IDiceCitiesGameData, rollerState: IDiceCitiesPlayerState, totalRoll: number): boolean {
-    return dcGameData.enabledDocks === true && rollerState.harbourUnlocked === true && totalRoll >= HARBOUR_MIN_ROLL;
+    return dcGameData.specificGameState.enabledDocks === true && rollerState.harbourUnlocked === true && totalRoll >= HARBOUR_MIN_ROLL;
 }
 
 // A zeroed per-player delta map, the starting point for a roll's bookkeeping.

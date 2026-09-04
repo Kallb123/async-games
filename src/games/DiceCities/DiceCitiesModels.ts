@@ -86,6 +86,7 @@ export function buildInitialDiceCitiesState(userIdList: string[], enabledDocks: 
         awaitingHarbourChoice: false,
         harbourRoll1: null,
         harbourRoll2: null,
+        enabledDocks,
     };
 }
 
@@ -119,7 +120,6 @@ DiceCitiesInvitationSchema.methods.CreateGame = async function(invite: IDiceCiti
         complete: false,
         winner: "",
         specificGameState: buildInitialDiceCitiesState(userIdList, this.enabledDocks === true),
-        enabledDocks: this.enabledDocks,
         enabledBillionaireRow: this.enabledBillionaireRow
     }
     return gameData;
@@ -176,11 +176,12 @@ export interface IDiceCitiesGameState {
     // decide whether to take its +2 - payouts only land once they've chosen.
     awaitingHarbourChoice: boolean,
     harbourRoll1: number | null,
-    harbourRoll2: number | null
+    harbourRoll2: number | null,
+    /** Expansion chosen at setup: the Docks is in play. Never changes. */
+    enabledDocks: boolean
 }
 
 export interface IDiceCitiesGameData extends IGameData {
-    enabledDocks: boolean,
     enabledBillionaireRow: boolean,
     specificGameState: IDiceCitiesGameState
 }
@@ -194,7 +195,6 @@ export interface IDiceCitiesGameDataModel extends Model<IDiceCitiesGameDataDocum
 }
 
 var DiceCitiesGameDataSchema = new Schema<IDiceCitiesGameDataDocument>({
-    enabledDocks: Boolean,
     enabledBillionaireRow: Boolean,
     specificGameState: {
         bankCards: [{
@@ -232,7 +232,8 @@ var DiceCitiesGameDataSchema = new Schema<IDiceCitiesGameDataDocument>({
         hasReRolled: Boolean,
         awaitingHarbourChoice: Boolean,
         harbourRoll1: Number,
-        harbourRoll2: Number
+        harbourRoll2: Number,
+        enabledDocks: Boolean
     }
 }, {discriminatorKey: 'kind'});
 DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(_viewerId: string | null): Promise<IDiceCitiesGameDataResponse> {
@@ -253,7 +254,6 @@ DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(_viewerId: 
         winner: gameDataDocument.winner,
         endReason: gameDataDocument.endReason,
         forfeitedBy: gameDataDocument.forfeitedBy,
-        enabledDocks: gameDataDocument.enabledDocks,
         enabledBillionaireRow: gameDataDocument.enabledBillionaireRow,
         specificGameState: gameStateToModel(gameDataDocument.specificGameState, userIdNameMap)
     };
@@ -302,7 +302,9 @@ export function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap:
         hasReRolled: gameState.hasReRolled,
         awaitingHarbourChoice: gameState.awaitingHarbourChoice === true,
         harbourRoll1: gameState.harbourRoll1 ?? null,
-        harbourRoll2: gameState.harbourRoll2 ?? null
+        harbourRoll2: gameState.harbourRoll2 ?? null,
+        // Games that started before the Docks shipped have no stored flag.
+        enabledDocks: gameState.enabledDocks === true
     }
 }
 

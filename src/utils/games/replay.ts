@@ -89,11 +89,6 @@ export interface IReplayAdapter {
     // that hasn't built a planning UI. See plannableCommands() below for why
     // this is the control rather than `canPlan`.
     plannableCommands: string[];
-    // Optional: creation-time fields a game's rules read off the game document
-    // itself rather than specificGameState — which expansions are switched on,
-    // say. The replayed copy is built from scratch, so anything the commands
-    // will look for has to be carried over here or they'd rule differently.
-    extraGameFields?(gameData: IGameData): Record<string, unknown>;
 }
 
 const adapters = createAdapterRegistry<IReplayAdapter>();
@@ -148,7 +143,7 @@ registerReplayAdapter({
     // the recorded commands were actually played against.
     buildInitialSpecificGameState: (gameData) => buildInitialDiceCitiesState(
         gameData.userIdList,
-        (gameData as IDiceCitiesGameData).enabledDocks === true,
+        (gameData as IDiceCitiesGameData).specificGameState?.enabledDocks === true,
     ),
     toResponseState: (specificGameState, userIdNameMap) =>
         diceCitiesStateToModel(specificGameState as never, userIdNameMap),
@@ -156,8 +151,6 @@ registerReplayAdapter({
     // redaction — but no planning UI has been built, and the safe set is a
     // decision for whoever builds it. Off until then.
     plannableCommands: [],
-    // The Harbour's rules read the expansion flag off the game document.
-    extraGameFields: (gameData) => ({ enabledDocks: (gameData as IDiceCitiesGameData).enabledDocks === true }),
 });
 
 registerReplayAdapter({
@@ -274,7 +267,6 @@ export async function buildTimeline(
     // is game-specific (added by each discriminator), so we widen the base type.
     type ReplayState = IGameData & { specificGameState: unknown };
     const state: ReplayState = {
-        ...(adapter.extraGameFields?.(gameData) ?? {}),
         gameId: gameData.gameId,
         gameType,
         userIdList: [...gameData.userIdList],
