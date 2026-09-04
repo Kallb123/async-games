@@ -512,6 +512,95 @@ describe("Dice Cities: the Docks", () => {
         expect(coinsInPlay(gs)).toBe(10);
     });
 
+    it("pays the Flower Shop a coin for each Flower Orchard its owner holds", async () => {
+        // The Shop's whole rule is the multiplier: three Orchards, three coins.
+        // It counts "flower" cards, so it never counts itself.
+        const gs = makeState({
+            bankMoney: 20,
+            playerStates: new Map([
+                ["u1", player({
+                    cards: [
+                        { card: DiceCitiesCardIds.FLOWER_SHOP, amount: 1 },
+                        { card: DiceCitiesCardIds.FLOWER_ORCHARD, amount: 3 },
+                    ],
+                })],
+                ["u2", player()],
+            ]),
+            enabledDocks: true,
+        });
+        const game = makeGame(gs, "u1");
+
+        await rollCommand(6).Execute(game);
+
+        expect(gs.playerStates.get("u1")!.money).toBe(3);
+        expect(gs.bankMoney).toBe(17);
+    });
+
+    it("pays the Flower Shop nothing on an opponent's roll", async () => {
+        // Green: it only ever pays on its owner's own turn.
+        const gs = makeState({
+            bankMoney: 20,
+            playerStates: new Map([
+                ["u1", player()],
+                ["u2", player({
+                    cards: [
+                        { card: DiceCitiesCardIds.FLOWER_SHOP, amount: 1 },
+                        { card: DiceCitiesCardIds.FLOWER_ORCHARD, amount: 2 },
+                    ],
+                })],
+            ]),
+            enabledDocks: true,
+        });
+        const game = makeGame(gs, "u1");
+
+        await rollCommand(6).Execute(game);
+
+        // Only the two Orchards pay - they are blue, so they pay on anyone's
+        // roll - and the Shop adds nothing.
+        expect(gs.playerStates.get("u2")!.money).toBe(0);
+    });
+
+    it("pays the Flower Orchard on anyone's roll of 4", async () => {
+        const gs = makeState({
+            bankMoney: 20,
+            playerStates: new Map([
+                ["u1", player()],
+                ["u2", player({ cards: cards(DiceCitiesCardIds.FLOWER_ORCHARD) })],
+            ]),
+            enabledDocks: true,
+        });
+        const game = makeGame(gs, "u1");
+
+        await rollCommand(4).Execute(game);
+
+        expect(gs.playerStates.get("u2")!.money).toBe(1);
+        expect(gs.bankMoney).toBe(19);
+    });
+
+    it("keeps the Mackerel Boat dry until its owner has the Harbour", async () => {
+        const build = async (harbourUnlocked: boolean) => {
+            const gs = makeState({
+                bankMoney: 20,
+                playerStates: new Map([
+                    ["u1", player({ doubleUnlocked: true })],
+                    ["u2", player({ cards: cards(DiceCitiesCardIds.MACKEREL_BOAT), harbourUnlocked })],
+                ]),
+                enabledDocks: true,
+            });
+            // 3 + 5 rather than 4 + 4: doubles would hand u1 another turn.
+            await rollCommand(3, "u1", 5).Execute(makeGame(gs, "u1"));
+            return gs;
+        };
+
+        const dry = await build(false);
+        expect(dry.playerStates.get("u2")!.money).toBe(0);
+        expect(dry.bankMoney).toBe(20);
+
+        const withHarbour = await build(true);
+        expect(withHarbour.playerStates.get("u2")!.money).toBe(3);
+        expect(withHarbour.bankMoney).toBe(17);
+    });
+
     it("still wins on the original four landmarks, with no Harbour needed", () => {
         const gs = makeState({
             playerStates: new Map([

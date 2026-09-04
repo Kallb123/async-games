@@ -124,6 +124,60 @@ describe("Dice Cities recap adapter", () => {
         }
     });
 
+    it("holds the roll's beat back while the Harbour's offer is unanswered", () => {
+        // The roll has paid nobody yet, so reporting it would show a payout of
+        // nothing. The command that settles the total carries the beat instead.
+        const parked = { ...state([player({ userId: "u1", username: "Alice", harbourUnlocked: true })]), awaitingHarbourChoice: true };
+        for (const className of ["DiceCitiesRequestDiceRoll", "DiceCitiesRequestRadioTowerReroll"]) {
+            expect(
+                diceCitiesRecapAdapter.toEvents(
+                    snap(state([])),
+                    snap(parked),
+                    cmd({ className }),
+                    { validMove: true, turnOver: false, roll1: 5, roll2: 6, moneyChanges: new Map() } as ICommandOutcome,
+                ),
+            ).toEqual([]);
+        }
+    });
+
+    it("tells the whole story on the roll the Harbour's bonus settles", () => {
+        const events = diceCitiesRecapAdapter.toEvents(
+            snap(state([])),
+            snap(state([])),
+            cmd({ className: "DiceCitiesRequestHarbourBonus", addBonus: true } as Partial<IGameCommand> & { className: string }),
+            { validMove: true, turnOver: false, roll1: 5, roll2: 6, moneyChanges: new Map([["u1", 4]]) } as ICommandOutcome,
+        );
+        expect(events).toHaveLength(1);
+        expect(events[0].title).toBe("Alice rolled 11 (5+6), Harbour +2 → 13");
+        expect(events[0].glyph).toBe("⚓");
+        expect(events[0].detail).toBe("+4🪙");
+    });
+
+    it("reports a declined bonus as the plain roll it stayed", () => {
+        const events = diceCitiesRecapAdapter.toEvents(
+            snap(state([])),
+            snap(state([])),
+            cmd({ className: "DiceCitiesRequestHarbourBonus", addBonus: false } as Partial<IGameCommand> & { className: string }),
+            { validMove: true, turnOver: false, roll1: 5, roll2: 6, moneyChanges: new Map() } as ICommandOutcome,
+        );
+        expect(events[0].title).toBe("Alice rolled 11 (5+6)");
+        expect(events[0].glyph).toBe("🎲");
+    });
+
+    it("gives the Harbour its own build event, outside the landmark race", () => {
+        const events = diceCitiesRecapAdapter.toEvents(
+            snap(state([])),
+            snap(state([player({ userId: "u1", username: "Alice", harbourUnlocked: true })])),
+            cmd({ className: "DiceCitiesRequestUnlockHarbour" }),
+            { validMove: true, turnOver: true } as ICommandOutcome,
+        );
+        expect(events).toHaveLength(1);
+        expect(events[0].type).toBe("dc_harbour");
+        expect(events[0].title).toBe("Alice built the Harbour");
+        // Not "1/4 landmarks": the Harbour never counts toward the win.
+        expect(events[0].detail).toBe("+2 on a 10 or better");
+    });
+
     it("tips the viewer toward the cheapest landmark they can afford", () => {
         const canAfford = diceCitiesRecapAdapter.tip!(state([player({ userId: "u1", username: "Alice", money: 5 })]), "u1");
         expect(canAfford?.text).toContain("Train Station");
