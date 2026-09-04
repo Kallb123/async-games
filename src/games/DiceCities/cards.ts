@@ -5,7 +5,25 @@ import { IDiceCitiesCard } from "./apiModels";
 // card goes straight back in, so the bank plus all the players' purses always
 // add up to exactly this. A payout the bank can't cover is paid short rather
 // than minting coins that don't exist.
-export const BANK_TOTAL_COINS = 60;
+//
+// The boxed game's base supply: 42 ones, 24 fives and 10 tens. We count value
+// rather than coins, so denominations do not matter - only the 262 they total.
+export const BANK_TOTAL_COINS = 262;
+
+// The Docks brings its own money, as the Harbor expansion does: 12 pieces worth
+// 20 each, taking a Docks game's supply to 502.
+export const DOCKS_BANK_COINS = 240;
+
+// What games created before the supply matched the boxed game were played with.
+// Their stored state has no `bankTotal`, and replaying them against today's
+// larger bank would pay out coins the game never had - a roll the real bank
+// could only pay short would come out in full, moving player money.
+export const LEGACY_BANK_TOTAL_COINS = 60;
+
+/** The coin supply a game is played with: the base box, plus the Docks' own. */
+export function bankTotalCoins(enabledDocks: boolean): number {
+    return BANK_TOTAL_COINS + (enabledDocks ? DOCKS_BANK_COINS : 0);
+}
 
 // Coins each player is dealt out of the bank when the game is created.
 export const STARTING_PLAYER_COINS = 3;
@@ -29,8 +47,27 @@ export enum DiceCitiesCardIds {
     TRAIN_STATION = "5ca38fd7-eef0-4155-b5bb-8ff07ff5305a",
     SHOPPING_MALL = "8a5ca6e4-f987-4273-b1eb-e1cc9e855c10",
     AMUSEMENT_PARK = "a16f6202-ad15-41b9-a3f6-d5302acc033f",
-    RADIO_TOWER = "a8df8c37-e3b0-45d4-acc2-09815a151c04"
+    RADIO_TOWER = "a8df8c37-e3b0-45d4-acc2-09815a151c04",
+    // The Docks expansion (docs/games/dice-cities.md §8)
+    HARBOUR = "b0472e6d-3f18-4c95-a72b-6d9e1f0a5c83",
+    SUSHI_BAR = "b3d1f0a2-5c47-4e39-9a1b-8f2c6d0e4713",
+    FLOWER_ORCHARD = "c7e2a914-6b38-4d5f-8c02-1a9e3f7b6d54",
+    FLOWER_SHOP = "d41f8b26-9a70-4c13-b5e8-2f6c0d97a318",
+    MACKEREL_BOAT = "e58c3d70-4f19-42a6-9b7d-3c81e0f5a2b9",
+    FOOD_WAREHOUSE = "f26b9e51-8d43-4a07-91c6-5e0a2b7d3f84",
+    TUNA_BOAT = "a93d5c18-2e76-4b90-8d31-7f4c6a0b9e25"
 }
+
+// The dice a Tuna Boat haul is thrown on - two, as in the boxed game, so the
+// haul runs 2-12 and averages 7. Every owner earns the total.
+export const TUNA_DICE = 2;
+export const TUNA_DIE_SIDES = 6;
+
+// The Harbour's passive: a total this high or better may be nudged up by
+// HARBOUR_BONUS, which is the only way to reach the 13s and 14s the deep-sea
+// cards activate on.
+export const HARBOUR_MIN_ROLL = 10;
+export const HARBOUR_BONUS = 2;
 
 const wheatField: IDiceCitiesCard = {
     cardId: "2d5aaaa4-e939-43a4-84ab-7ebb89e16ee5",
@@ -262,7 +299,7 @@ const fruitAndVegetableMarket: IDiceCitiesCard = {
     cardId: "f8dd441e-5bed-444f-9659-b025d769af92",
     title: "Fruit and Vegetable Market",
     cost: 2,
-    rollNumber: [11.12],
+    rollNumber: [11, 12],
     text: "If this is your turn, get 2 coins from the bank for each Farm establishment that you own",
     art: "fruit-market.png",
     type: "market",
@@ -421,6 +458,145 @@ const radioTower: IDiceCitiesCard = {
     gainMultiplier: null
 }
 
+// ── The Docks expansion ──────────────────────────────────────────────────────
+// A coastal district that only appears in games created with the expansion
+// switched on. Three of its cards lie idle until their owner builds the
+// Harbour, whose +2 on a 10-or-better roll is also the only way to reach the
+// 13 and 14 the deep-sea cards activate on.
+
+// The values a card leaves at nothing. Spread these and state only what the
+// card actually does. (The base-game cards above predate this and spell every
+// field out.)
+const CARD_DEFAULTS = {
+    icon: "",
+    ownLimit: 20,
+    bankGain: 0,
+    onOwnTurn: false,
+    onOponentsTurn: false,
+    stealRollerGain: 0,
+    stealAllGain: 0,
+    stealChosenGain: 0,
+    tradeCards: false,
+    gainMultiplier: null
+} satisfies Partial<IDiceCitiesCard>;
+
+const harbour: IDiceCitiesCard = {
+    ...CARD_DEFAULTS,
+    cardId: DiceCitiesCardIds.HARBOUR,
+    title: "Harbour",
+    cost: 2,
+    rollNumber: [],
+    text: "If you roll 10 or more, you may add 2 to the total.",
+    art: "harbour.png",
+    type: "landmark",
+    ownLimit: 1
+}
+
+const sushiBar: IDiceCitiesCard = {
+    ...CARD_DEFAULTS,
+    cardId: DiceCitiesCardIds.SUSHI_BAR,
+    title: "Sushi Bar",
+    cost: 2,
+    rollNumber: [1],
+    text: "If you have the Harbour, get 3 coins from the player who rolled the dice.",
+    art: "sushi-bar.png",
+    type: "dining",
+    onOponentsTurn: true,
+    stealRollerGain: 3,
+    requiresHarbour: true
+}
+
+const flowerOrchard: IDiceCitiesCard = {
+    ...CARD_DEFAULTS,
+    cardId: DiceCitiesCardIds.FLOWER_ORCHARD,
+    title: "Flower Orchard",
+    cost: 2,
+    rollNumber: [4],
+    text: "Get 1 coin from the bank, on anyone's turn.",
+    art: "flower-orchard.png",
+    // A farm, like the Wheat Field and Apple Orchard: it carries the grain
+    // icon, so the Fruit and Vegetable Market counts it too. The Flower Shop
+    // picks it out by name rather than by icon - see its gainMultiplier.
+    type: "farm",
+    bankGain: 1,
+    onOwnTurn: true,
+    onOponentsTurn: true
+}
+
+const flowerShop: IDiceCitiesCard = {
+    ...CARD_DEFAULTS,
+    cardId: DiceCitiesCardIds.FLOWER_SHOP,
+    title: "Flower Shop",
+    cost: 1,
+    rollNumber: [6],
+    text: "If this is your turn, get 1 coin from the bank for each Flower Orchard that you own",
+    art: "flower-shop.png",
+    type: "store",
+    onOwnTurn: true,
+    gainMultiplier: {
+        cardIds: [DiceCitiesCardIds.FLOWER_ORCHARD],
+        amountPerType: 1
+    }
+}
+
+const mackerelBoat: IDiceCitiesCard = {
+    ...CARD_DEFAULTS,
+    cardId: DiceCitiesCardIds.MACKEREL_BOAT,
+    title: "Mackerel Boat",
+    cost: 2,
+    rollNumber: [8],
+    text: "If you have the Harbour, get 3 coins from the bank, on anyone's turn.",
+    art: "mackerel-boat.png",
+    type: "boat",
+    bankGain: 3,
+    onOwnTurn: true,
+    onOponentsTurn: true,
+    requiresHarbour: true
+}
+
+const foodWarehouse: IDiceCitiesCard = {
+    ...CARD_DEFAULTS,
+    cardId: DiceCitiesCardIds.FOOD_WAREHOUSE,
+    title: "Food Warehouse",
+    cost: 2,
+    rollNumber: [12, 13],
+    text: "If this is your turn, get 2 coins from the bank for each Dining establishment that you own",
+    art: "food-warehouse.png",
+    type: "factory",
+    onOwnTurn: true,
+    gainMultiplier: {
+        type: ["dining"],
+        amountPerType: 2
+    }
+}
+
+const tunaBoat: IDiceCitiesCard = {
+    ...CARD_DEFAULTS,
+    cardId: DiceCitiesCardIds.TUNA_BOAT,
+    title: "Tuna Boat",
+    cost: 5,
+    rollNumber: [12, 13, 14],
+    text: "If you have the Harbour, get coins from the bank equal to the shared tuna roll, on anyone's turn.",
+    art: "tuna-boat.png",
+    type: "boat",
+    onOwnTurn: true,
+    onOponentsTurn: true,
+    requiresHarbour: true,
+    sharedDieGain: true
+}
+
+// The establishments the Docks adds to the market, stocked only when the
+// expansion is enabled. The Harbour isn't here: like the other landmarks it's
+// bought through its own command rather than off the market.
+export const DOCKS_ESTABLISHMENT_IDS: DiceCitiesCardIds[] = [
+    DiceCitiesCardIds.SUSHI_BAR,
+    DiceCitiesCardIds.FLOWER_ORCHARD,
+    DiceCitiesCardIds.FLOWER_SHOP,
+    DiceCitiesCardIds.MACKEREL_BOAT,
+    DiceCitiesCardIds.FOOD_WAREHOUSE,
+    DiceCitiesCardIds.TUNA_BOAT,
+];
+
 export const DiceCitiesCards: { [key: string]: IDiceCitiesCard } = {
     "2d5aaaa4-e939-43a4-84ab-7ebb89e16ee5": wheatField,
     "ff935104-9d5e-403f-82c7-a01bdaed330d": ranch,
@@ -440,5 +616,12 @@ export const DiceCitiesCards: { [key: string]: IDiceCitiesCard } = {
     "5ca38fd7-eef0-4155-b5bb-8ff07ff5305a": trainStation,
     "8a5ca6e4-f987-4273-b1eb-e1cc9e855c10": shoppingMall,
     "a16f6202-ad15-41b9-a3f6-d5302acc033f": amusementPark,
-    "a8df8c37-e3b0-45d4-acc2-09815a151c04": radioTower
+    "a8df8c37-e3b0-45d4-acc2-09815a151c04": radioTower,
+    [DiceCitiesCardIds.HARBOUR]: harbour,
+    [DiceCitiesCardIds.SUSHI_BAR]: sushiBar,
+    [DiceCitiesCardIds.FLOWER_ORCHARD]: flowerOrchard,
+    [DiceCitiesCardIds.FLOWER_SHOP]: flowerShop,
+    [DiceCitiesCardIds.MACKEREL_BOAT]: mackerelBoat,
+    [DiceCitiesCardIds.FOOD_WAREHOUSE]: foodWarehouse,
+    [DiceCitiesCardIds.TUNA_BOAT]: tunaBoat
 }

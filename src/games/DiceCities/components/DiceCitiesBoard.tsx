@@ -3,8 +3,8 @@ import { DiceCitiesCards } from "@/games/DiceCities/cards";
 import {
     ACTIVATION_META,
     Activation,
-    LANDMARKS,
     activationFor,
+    buildableLandmarks,
     rollLabel,
     yieldLabel,
 } from "@/games/DiceCities/ui";
@@ -15,6 +15,8 @@ interface DiceCitiesBoardProps {
     playerState: IDiceCitiesPlayerStateResponse;
     /** Name to caption the tableau ("Your city" when it's the viewer's). */
     ownerLabel: string;
+    /** Docks games add the Harbour to the landmark track. */
+    enabledDocks: boolean;
 }
 
 /**
@@ -22,7 +24,7 @@ interface DiceCitiesBoardProps {
  * grid of establishments they own, colour-coded by when each one pays out.
  * Presentational — every interactive control lives in DiceCitiesActions.
  */
-export default function DiceCitiesBoard({ playerState, ownerLabel }: DiceCitiesBoardProps) {
+export default function DiceCitiesBoard({ playerState, ownerLabel, enabledDocks }: DiceCitiesBoardProps) {
     // Establishments = every card the player owns, sorted by the number that
     // triggers them so the city reads left-to-right like the dice. The four
     // win-condition landmarks are tracked by flags (never in `cards`), so this
@@ -36,9 +38,11 @@ export default function DiceCitiesBoard({ playerState, ownerLabel }: DiceCitiesB
         <div className="ag-board-area ag-dc-area">
             {/* ── Landmark track ─────────────────────────────────────────── */}
             <div className="ag-dc-landmarks">
-                <div className="ag-dc-landmarks-head">Landmarks · build all 4 to win</div>
+                <div className="ag-dc-landmarks-head">
+                    Landmarks · build all 4 to win{enabledDocks ? " · the Harbour is a bonus" : ""}
+                </div>
                 <div className="ag-dc-landmark-row">
-                    {LANDMARKS.map(({ cardId, flag }) => {
+                    {buildableLandmarks(enabledDocks).map(({ cardId, flag }) => {
                         const card = DiceCitiesCards[cardId];
                         const built = Boolean(playerState[flag]);
                         return (

@@ -40,6 +40,7 @@ export function activationFor(card: IDiceCitiesCard): Activation {
 
 /** A compact "what it pays" line, e.g. "+1", "take 2", "all 2", "+3 ea". */
 export function yieldLabel(card: IDiceCitiesCard): string {
+    if (card.sharedDieGain) return "+🎲";
     if (card.stealAllGain > 0) return `all ${card.stealAllGain}`;
     if (card.stealChosenGain > 0) return `take ${card.stealChosenGain}`;
     if (card.stealRollerGain > 0) return `take ${card.stealRollerGain}`;
@@ -49,12 +50,9 @@ export function yieldLabel(card: IDiceCitiesCard): string {
     return "";
 }
 
-// The rollNumber data uses floats like 11.12 to mean "11 or 12"; render those
-// as a clean "11-12" range and plain integers as-is.
+/** The numbers a card activates on, e.g. "5" or "9, 10". */
 export function rollLabel(card: IDiceCitiesCard): string {
-    return card.rollNumber
-        .map((n) => (Number.isInteger(n) ? String(n) : String(n).replace(".", "-")))
-        .join(", ");
+    return card.rollNumber.join(", ");
 }
 
 // Narrower than `keyof IDiceCitiesPlayerStateResponse` so LANDMARKS can also
@@ -62,6 +60,14 @@ export function rollLabel(card: IDiceCitiesCard): string {
 // landmarksUnlocked from this same table) - both share these four boolean
 // field names.
 export type DiceCitiesLandmarkFlag = "doubleUnlocked" | "bonusDiningAndStore" | "oneReroll" | "rerollDoubles";
+
+/** Every flag a landmark can light up, including the Docks' optional Harbour. */
+export type DiceCitiesBuildFlag = DiceCitiesLandmarkFlag | "harbourUnlocked";
+
+export interface DiceCitiesLandmarkEntry {
+    cardId: string;
+    flag: DiceCitiesBuildFlag;
+}
 
 /**
  * The four landmarks in cost order, each paired with the player-state flag that
@@ -73,6 +79,17 @@ export const LANDMARKS: { cardId: string; flag: DiceCitiesLandmarkFlag }[] = [
     { cardId: DiceCitiesCardIds.AMUSEMENT_PARK, flag: "oneReroll" },
     { cardId: DiceCitiesCardIds.RADIO_TOWER, flag: "rerollDoubles" },
 ];
+
+/**
+ * Every landmark a city can build in this game: the win-condition four, plus
+ * the Docks' Harbour, which is buildable at any time and never required to win.
+ * The Harbour is the cheapest thing on the board, so it leads the track.
+ */
+export function buildableLandmarks(enabledDocks: boolean): DiceCitiesLandmarkEntry[] {
+    return enabledDocks
+        ? [{ cardId: DiceCitiesCardIds.HARBOUR, flag: "harbourUnlocked" }, ...LANDMARKS]
+        : LANDMARKS;
+}
 
 /** How many of the four landmarks a player has built (0–4). */
 export function landmarkCount(playerState: IDiceCitiesPlayerStateResponse): number {

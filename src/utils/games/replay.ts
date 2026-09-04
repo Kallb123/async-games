@@ -6,7 +6,8 @@ import { deserializeJSON } from "../apiModels/Serialisable";
 import { runCommand } from "./commandPipeline";
 import { createAdapterRegistry } from "./adapterRegistry";
 import { buildInitialSnakesAndLaddersState, gameStateToModel as snakesAndLaddersStateToModel, ISnakesAndLaddersGameData } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
-import { buildInitialDiceCitiesState, gameStateToModel as diceCitiesStateToModel } from "@/games/DiceCities/DiceCitiesModels";
+import { buildInitialDiceCitiesState, gameStateToModel as diceCitiesStateToModel, IDiceCitiesGameData } from "@/games/DiceCities/DiceCitiesModels";
+import { LEGACY_BANK_TOTAL_COINS } from "@/games/DiceCities/cards";
 import { buildInitialSmartthinkState, gameStateToModel as smartthinkStateToModel } from "@/games/Smartthink/SmartthinkModels";
 import { buildInitialSettlementsAndCitiesState, gameStateToResponse as settlementsAndCitiesStateToModel } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
@@ -139,7 +140,18 @@ registerReplayAdapter({
 
 registerReplayAdapter({
     className: "DiceCitiesGameType",
-    buildInitialSpecificGameState: (gameData) => buildInitialDiceCitiesState(gameData.userIdList),
+    // The Docks and the coin supply are both fixed at creation, so replaying a
+    // game restocks the same market and deals from the same bank the recorded
+    // commands were actually played against. A game saved before the supply
+    // matched the boxed game has no stored total and gets the one it had.
+    buildInitialSpecificGameState: (gameData) => {
+        const played = (gameData as IDiceCitiesGameData).specificGameState;
+        return buildInitialDiceCitiesState(
+            gameData.userIdList,
+            played?.enabledDocks === true,
+            played?.bankTotal ?? LEGACY_BANK_TOTAL_COINS,
+        );
+    },
     toResponseState: (specificGameState, userIdNameMap) =>
         diceCitiesStateToModel(specificGameState as never, userIdNameMap),
     // Nothing about the game blocks planning — no deck, no shuffle, no

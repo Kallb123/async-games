@@ -90,6 +90,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const currentUserWon = complete && user?.id !== undefined && user.id === displayedWinner;
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, getForfeitedByDisplayName());
     const hasRolled = displayed?.hasRolled ?? false;
+    const enabledDocks = displayed?.enabledDocks === true;
 
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
@@ -204,6 +205,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
                 <DiceCitiesBoard
                     playerState={boardPlayer}
                     ownerLabel={boardPlayer.userId === user?.id ? 'Your city' : `${boardPlayer.username}'s city`}
+                    enabledDocks={enabledDocks}
                 />
             )}
 

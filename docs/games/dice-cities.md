@@ -140,6 +140,7 @@ The Docks expansion adds a coastal district that deepens the mid- and late-game 
 * **The Harbour (Landmark):** A **fifth landmark** available to every player, but **not** required to win. It may be built before the other four.
 * **New Establishments:** A batch of new sea- and travel-themed cards is shuffled into the market, several of which activate on numbers **1–14**.
 * **Two-Die Range Extension:** Several new cards activate on totals **higher than 12** — reachable only via the new Harbour rules below.
+* **More Money:** The expansion brings its own coins — 12 pieces worth 20 each, another **240**. The base box holds **262** (42 ones, 24 fives, 10 tens), so a Docks game is played from a supply of **502**. The implementation counts value rather than coins, so denominations do not matter, only the totals.
 
 ### New Rules
 
@@ -155,7 +156,7 @@ The Docks expansion adds a coastal district that deepens the mid- and late-game 
 | **Flower Shop** | Green | 6 | 1 | Get 1 coin per **Flower Orchard** you own (your turn). |
 | **Mackerel Boat** | Blue | 8 | 2 | If you have the **Harbour**, get 3 coins from the bank. |
 | **Food Warehouse** | Green | 12–13 | 2 | Get 2 coins per **Cup** (restaurant) icon establishment you own. |
-| **Tuna Boat** | Blue | 12–14 | 5 | If you have the **Harbour**, all players roll a shared die each turn to set the payout; every Tuna Boat owner earns that many coins. |
+| **Tuna Boat** | Blue | 12–14 | 5 | If you have the **Harbour**, a shared throw of **two dice** sets the payout; every Tuna Boat owner earns that many coins. |
 
 ### Optional "Open Market" Variant for a Larger Pool
 
