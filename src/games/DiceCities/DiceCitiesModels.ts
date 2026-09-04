@@ -132,10 +132,11 @@ DiceCitiesInvitationSchema.methods.CreateGame = async function(invite: IDiceCiti
 export var DiceCitiesInvitationModel = models.DiceCitiesInvitation || InvitationModel.discriminator<IDiceCitiesInvitationDataDocument, IDiceCitiesInvitationDataModel>('DiceCitiesInvitation', DiceCitiesInvitationSchema);
 
 
-// "flower" and "boat" arrive with the Docks: they stay out of the base game's
-// icon combos (a Flower Orchard is not a Fruit & Vegetable Market farm, a boat
-// is not a Furniture Factory production site) and feed their own.
-export type cardType = "farm" | "pasture" | "store" | "dining" | "production" | "landmark" | "factory" | "market" | "flower" | "boat";
+// "boat" arrives with the Docks: a boat is not a Furniture Factory production
+// site, so it stays out of the base game's icon combos. The Docks adds no
+// other type - its Flower Orchard is a farm like any other, and the Flower
+// Shop picks it out by cardId rather than by giving it an icon of its own.
+export type cardType = "farm" | "pasture" | "store" | "dining" | "production" | "landmark" | "factory" | "market" | "boat";
 
 export interface IDiceCitiesCardCount {
     card: string,

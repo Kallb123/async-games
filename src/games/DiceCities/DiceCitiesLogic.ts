@@ -1140,22 +1140,32 @@ function resolveRoll(dcGameData: IDiceCitiesGameData, rollerState: IDiceCitiesPl
         });
         hitCards.forEach(card => {
             let cardAmount = 0;
+            const multiplier = card.gainMultiplier;
             if (card.sharedDieGain) {
                 cardAmount = tunaHaul();
             } else if (card.bankGain > 0) {
-                cardAmount = card.type === "store" && playerState.bonusDiningAndStore ? card.bankGain+1 : card.bankGain;
-            } else if (card.gainMultiplier) {
+                cardAmount = card.bankGain;
+            } else if (multiplier) {
+                // A card counts if its icon group is named, or if the card
+                // itself is - the Fruit and Vegetable Market counts every farm,
+                // where the Flower Shop counts Flower Orchards alone.
                 const numCards = playerState.cards.reduce((total, cc) => {
                     const cardObject = DiceCitiesCards[cc.card.toString()];
-                    if (card.gainMultiplier?.type.includes(cardObject.type)) {
-                        return total + cc.amount;
-                    }
-                    return total;
+                    const counted = multiplier.type?.includes(cardObject.type)
+                        || multiplier.cardIds?.includes(cardObject.cardId);
+                    return counted ? total + cc.amount : total;
                 }, 0);
-                cardAmount = card.gainMultiplier.amountPerType * numCards;
+                cardAmount = multiplier.amountPerType * numCards;
             } else {
                 // What card is this??
                 console.error("Ended up with no money for card:", card);
+            }
+            // The Shopping Mall pays a store card an extra coin every time it
+            // activates, whatever worked out what it earns. Applied here rather
+            // than inside the flat-amount branch, where it used to sit and so
+            // never reached a card paid by a multiplier.
+            if (card.type === "store" && playerState.bonusDiningAndStore) {
+                cardAmount += 1;
             }
             // Card income comes out of the bank's fixed supply: if it can't cover
             // the full amount the player is paid what's left, not coins that

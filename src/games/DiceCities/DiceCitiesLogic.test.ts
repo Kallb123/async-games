@@ -514,7 +514,8 @@ describe("Dice Cities: the Docks", () => {
 
     it("pays the Flower Shop a coin for each Flower Orchard its owner holds", async () => {
         // The Shop's whole rule is the multiplier: three Orchards, three coins.
-        // It counts "flower" cards, so it never counts itself.
+        // It names the Flower Orchard by cardId, so it never counts itself and
+        // never counts the other farms.
         const gs = makeState({
             bankMoney: 20,
             playerStates: new Map([
@@ -534,6 +535,59 @@ describe("Dice Cities: the Docks", () => {
 
         expect(gs.playerStates.get("u1")!.money).toBe(3);
         expect(gs.bankMoney).toBe(17);
+    });
+
+    it("counts a Flower Orchard as a farm for the Fruit and Vegetable Market", async () => {
+        // The Orchard carries the grain icon in the boxed game, so the Market
+        // pays for it like any other farm - 2 each for the Wheat Field and the
+        // Orchard. Neither of those activates on 11, so the Market is the only
+        // card paying here.
+        const gs = makeState({
+            bankMoney: 20,
+            playerStates: new Map([
+                ["u1", player({
+                    doubleUnlocked: true,
+                    cards: [
+                        { card: DiceCitiesCardIds.FRUIT_MARKET, amount: 1 },
+                        { card: DiceCitiesCardIds.WHEAT_FIELD, amount: 1 },
+                        { card: DiceCitiesCardIds.FLOWER_ORCHARD, amount: 1 },
+                    ],
+                })],
+                ["u2", player()],
+            ]),
+            enabledDocks: true,
+        });
+        const game = makeGame(gs, "u1");
+
+        await rollCommand(5, "u1", 6).Execute(game);
+
+        expect(gs.playerStates.get("u1")!.money).toBe(4);
+    });
+
+    it("lets the Shopping Mall reach a card paid by a multiplier", async () => {
+        // The Mall adds a coin to a store card every time it activates. The
+        // Flower Shop is a store, so two Orchards pay 2, and 3 with the Mall.
+        const build = async (bonusDiningAndStore: boolean) => {
+            const gs = makeState({
+                bankMoney: 20,
+                playerStates: new Map([
+                    ["u1", player({
+                        bonusDiningAndStore,
+                        cards: [
+                            { card: DiceCitiesCardIds.FLOWER_SHOP, amount: 1 },
+                            { card: DiceCitiesCardIds.FLOWER_ORCHARD, amount: 2 },
+                        ],
+                    })],
+                    ["u2", player()],
+                ]),
+                enabledDocks: true,
+            });
+            await rollCommand(6).Execute(makeGame(gs, "u1"));
+            return gs;
+        };
+
+        expect((await build(false)).playerStates.get("u1")!.money).toBe(2);
+        expect((await build(true)).playerStates.get("u1")!.money).toBe(3);
     });
 
     it("pays the Flower Shop nothing on an opponent's roll", async () => {

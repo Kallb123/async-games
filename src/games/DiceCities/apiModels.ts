@@ -18,7 +18,13 @@ export interface IDiceCitiesCard {
     stealAllGain: number,
     stealChosenGain: number,
     tradeCards: boolean,
-    gainMultiplier: {type: cardType[], amountPerType: number} | null,
+    /**
+     * Pays `amountPerType` for each card the owner holds that this names.
+     * `type` names an icon group (the Fruit and Vegetable Market counts every
+     * farm); `cardIds` names particular cards, which is how the Flower Shop
+     * counts Flower Orchards and nothing else. A card matching either counts.
+     */
+    gainMultiplier: {type?: cardType[], cardIds?: string[], amountPerType: number} | null,
     /** Docks card that lies idle until its owner has built the Harbour. */
     requiresHarbour?: boolean,
     /** Docks card paid by the shared tuna die rather than a fixed amount. */

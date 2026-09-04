@@ -494,7 +494,10 @@ const flowerOrchard: IDiceCitiesCard = {
     rollNumber: [4],
     text: "Get 1 coin from the bank, on anyone's turn.",
     art: "flower-orchard.png",
-    type: "flower",
+    // A farm, like the Wheat Field and Apple Orchard: it carries the grain
+    // icon, so the Fruit and Vegetable Market counts it too. The Flower Shop
+    // picks it out by name rather than by icon - see its gainMultiplier.
+    type: "farm",
     bankGain: 1,
     onOwnTurn: true,
     onOponentsTurn: true
@@ -511,7 +514,7 @@ const flowerShop: IDiceCitiesCard = {
     type: "store",
     onOwnTurn: true,
     gainMultiplier: {
-        type: ["flower"],
+        cardIds: [DiceCitiesCardIds.FLOWER_ORCHARD],
         amountPerType: 1
     }
 }
