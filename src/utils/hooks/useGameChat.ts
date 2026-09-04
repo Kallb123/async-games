@@ -84,11 +84,10 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean): Ga
     // every render and defeat the `messages` useMemo below.
     const rawMessages = useMemo(() => data?.messages ?? [], [data]);
     const latest = rawMessages.length ? rawMessages[rawMessages.length - 1] : null;
-    // Normalised to `null` for an empty thread once, here, rather than at each
-    // use: `trackedLatestId` holds `null` when there is nothing to track, so
-    // comparing it against a bare `latest?.messageId` (`undefined`) reported a
-    // change on every render of an empty thread — a render-phase setState that
-    // never settled, which React ends with "Too many re-renders".
+    // `trackedLatestId` holds `null` when there is nothing to track, so the
+    // newest id has to be normalised the same way before the two are compared —
+    // otherwise an empty thread reports a change every render, and the
+    // render-phase setState below never settles.
     const latestId = latest?.messageId ?? null;
 
     // Earlier pages, oldest-first, prepended to the polled window — see the
