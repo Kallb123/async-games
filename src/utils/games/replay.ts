@@ -13,6 +13,7 @@ import { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/Sett
 import { buildInitialWorldDominationState, gameStateToResponse as worldDominationStateToModel, IWorldDominationGameData } from "@/games/WorldDomination/WorldDominationModels";
 import { buildInitialTrainTimeStateFromGameData, gameStateToModel as trainTimeStateToModel, ITrainTimeGameData } from "@/games/TrainTime/TrainTimeModels";
 import { buildInitialOutbreakStateFromGameData, gameStateToModel as outbreakStateToModel, IOutbreakGameData } from "@/games/Outbreak/OutbreakModels";
+import { buildInitialFiresOutStateFromGameData, gameStateToModel as firesOutStateToModel, IFiresOutGameData } from "@/games/FiresOut/FiresOutModels";
 // Side-effect import: evaluating GameLogic registers every @serializable command
 // class so deserializeJSON can rehydrate them during replay.
 import "../apiModels/GameLogic";
@@ -191,6 +192,17 @@ registerReplayAdapter({
     // The crew planner is §21.6 step 13, not this one — deck freeze is
     // feasible (only OutbreakEndTurn touches a deck) but no planning UI
     // exists yet, so this stays empty until that step turns it on.
+    plannableCommands: [],
+});
+
+registerReplayAdapter({
+    className: "FiresOutGameType",
+    buildInitialSpecificGameState: (gameData) => buildInitialFiresOutStateFromGameData(gameData as IFiresOutGameData),
+    toResponseState: (specificGameState, userIdNameMap, viewerId) =>
+        firesOutStateToModel(specificGameState as never, userIdNameMap, viewerId),
+    // §17.5: both deck freeze and decoy are feasible — the d6/d8 are
+    // memoryless and the POI pool's remaining composition is already public
+    // — but no planning UI exists yet (steps 13/14). Empty until then.
     plannableCommands: [],
 });
 

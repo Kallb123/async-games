@@ -6,6 +6,8 @@ import { createAdapterRegistry } from "./adapterRegistry";
 import { OutbreakAction, OutbreakDiscard, OutbreakEndTurn, OutbreakPlayEvent } from "@/games/Outbreak/OutbreakLogic";
 import { IOutbreakGameData } from "@/games/Outbreak/OutbreakModels";
 import { HAND_LIMIT } from "@/games/Outbreak/rules";
+import { FiresOutAction } from "@/games/FiresOut/FiresOutLogic";
+import { IFiresOutGameData } from "@/games/FiresOut/FiresOutModels";
 
 // docs/games/outbreak-gdd.md §21.2, gap 2: the turn-timer cron used to handle
 // every game the same way — advance currentTurn and nothing else — which is
@@ -84,6 +86,44 @@ registerTurnTimeoutAdapter({
     },
 });
 
+registerTurnTimeoutAdapter({
+    className: "FiresOutGameType",
+    // docs/games/fires-out-gdd.md §17.2 gaps 2 and 3: 'endTurn' is the whole of
+    // "give up on this turn" here, and there is nothing to decide between. It
+    // is the only command that runs §7's Advance Fire and Replenish POI — so
+    // the plain advance let a stalled player skip the fire entirely — and the
+    // only one that moves activeFirefighter in step with currentTurn, so the
+    // plain advance also deadlocked the game outright. Unlike Outbreak, no
+    // turn can be left mid-phase and every action is optional, so one command
+    // always finishes the job; a timeout therefore banks unspent AP exactly as
+    // the deliberate pass of §8's design note does, and pays the same price by
+    // resolving the fire. resolveStalledTurn re-asks until turnOver, which is
+    // what owes a player holding two figures (§1's solitaire play) one fire
+    // advance per figure rather than one for the lot.
+    buildTimeoutCommand(gameData, userId) {
+        const gs = (gameData as IFiresOutGameData).specificGameState;
+        // ...with one bound on that re-asking: if every figure on the board is
+        // this player's, no number of endTurns reaches a different owner, so
+        // turnOver never comes and the cap below becomes the exit rather than
+        // the backstop — a tick's worth of real Advance Fires either thrown
+        // away with 'stuck' or, worse, saved as a teamloss the fire only
+        // caused because the cron rolled it twenty times. Unreachable while
+        // every seat holds exactly one figure, which is every game that can be
+        // created today (MIN_PLAYERS is 2, and buildInitialFiresOutState makes
+        // one figure per seat); §1's solitaire play, plan step 12, is what will
+        // make it ordinary. Declining is the whole answer, and 'declined' is
+        // the answer the caller wants: it banks the missed turn against
+        // MAX_CONSECUTIVE_MISSED_TURNS and ends the game on the third one, the
+        // same as any other game its player walked away from — so a turn only
+        // its owner can take is left for its owner to take, but not forever.
+        if (gs.firefighters.every(ff => ff.ownerId === userId)) return null;
+
+        const action = new FiresOutAction();
+        action.kind = 'endTurn';
+        return action;
+    },
+});
+
 // A stalled turn should resolve in one sweep, not one command per ~15-minute
 // cron tick — the missed-turn count sweepGame keeps per player would
 // otherwise climb once per partial command (the timer never resets between
@@ -97,14 +137,43 @@ export type TurnTimeoutOutcome =
     | 'noAdapter' // nothing registered for this game type — the cron falls back to its old plain advance
     | 'advanced' // the registered command(s) ran and ended the turn
     | 'gameOver' // one of them ended the whole game
-    | 'stuck'; // registered, but couldn't make progress — left for the next sweep
+    | 'declined' // the game had nothing it could run for this turn, and nothing did run
+    | 'stuck'; // command(s) ran and the turn still didn't end — an adapter bug, not a game shape
+
+/**
+ * Whether an unresolved turn left the game as it found it. This is the
+ * distinction the caller needs, because it decides whether the half-finished
+ * turn is worth keeping:
+ *
+ * `declined` is a turn the game says it cannot resolve automatically — Fires
+ * Out's board where every figure belongs to the stalled player, Outbreak's
+ * currentTurn missing from its own player map — decided before anything ran,
+ * so the only thing dirty on the document is the caller's own missed-turn
+ * count. The cron banks that and leaves the turn where it is; three of them
+ * and the abandon ladder ends the game like any other its player walked away
+ * from.
+ *
+ * `stuck` is a turn where commands *did* run and it still didn't end: an
+ * adapter that ran out of the command budget below, or whose command came
+ * back invalid part-way through. That is a bug in the adapter rather than a
+ * shape of game, and half a resolved turn is not worth persisting — the
+ * caller drops the document unsaved and the next tick starts over, which is
+ * what the budget comment above is guarding against ("a tick's worth of real
+ * Advance Fires ... saved as a teamloss the fire only caused because the cron
+ * rolled it twenty times").
+ */
+function unresolved(commandsAccepted: number): TurnTimeoutOutcome {
+    return commandsAccepted === 0 ? 'declined' : 'stuck';
+}
 
 /**
  * Forces `userId`'s stalled turn to its conclusion by constructing and
  * running their game's own commands through runCommand — the same pipeline
  * the command route and buildTimeline() already run a command through, so
  * nothing lands on the board that commandHistory can't account for. Mutates
- * `gameData` in place; the caller is responsible for persisting it.
+ * `gameData` in place; the caller is responsible for persisting it — and for
+ * *not* persisting it on 'stuck', which is what keeps a half-resolved turn out
+ * of the database (see `unresolved` above).
  */
 export async function resolveStalledTurn(
     gameData: IGameDataDocument,
@@ -116,17 +185,26 @@ export async function resolveStalledTurn(
 
     const gameType: IGameType = deserializeJSON(JSON.stringify(gameData.gameType));
 
+    let accepted = 0;
     for (let i = 0; i < MAX_TIMEOUT_COMMANDS; i++) {
         const command = adapter.buildTimeoutCommand(gameData, userId);
-        if (!command) return 'stuck';
+        if (!command) return unresolved(accepted);
 
         command.gameId = gameData.gameId;
         command.senderId = userId;
         command.senderUsername = senderUsername;
 
         const { outcome, gameOver } = await runCommand(gameData, gameType, command);
-        if (!outcome.validMove) return 'stuck';
+        // A refused command is recorded nowhere (commandPipeline), so nothing
+        // it may have touched on the way to refusing is accounted for either.
+        // With nothing accepted before it that is still 'declined': the only
+        // such refusal any adapter here reaches is a game whose currentTurn
+        // and own turn marker are out of step, where Execute's ownerId guard
+        // returns before doing anything but Fires Out's idempotent board
+        // migration (growBoardToCurrentLayout).
+        if (!outcome.validMove) return unresolved(accepted);
 
+        accepted++;
         gameData.markModified('gameState.commandHistory');
 
         if (gameOver) return 'gameOver';

@@ -77,6 +77,13 @@ import {
     formatOutbreakCharts,
 } from "@/games/Outbreak/OutbreakModels";
 import type { IOutbreakSpecificGameStateResponse } from "@/games/Outbreak/apiModels";
+import {
+    IFiresOutGameData,
+    IFiresOutGameResultStats,
+    computeFiresOutResultStats,
+    firesOutGameResultStatsSchemaDef,
+    formatFiresOutResultStats,
+} from "@/games/FiresOut/FiresOutModels";
 
 export interface IGameResultData {
     gameId: uuidString,
@@ -229,6 +236,16 @@ var OutbreakGameResultSchema = new Schema<IOutbreakGameResultDataDocument>({
 }, { discriminatorKey: 'kind' });
 export var OutbreakGameResultModel = models.OutbreakGameResult || GameResultModel.discriminator<IOutbreakGameResultDataDocument, IOutbreakGameResultDataModel>('OutbreakGameResult', OutbreakGameResultSchema);
 
+export interface IFiresOutGameResultData extends IGameResultData {
+    stats: IFiresOutGameResultStats;
+}
+export interface IFiresOutGameResultDataDocument extends IFiresOutGameResultData, Document {}
+export interface IFiresOutGameResultDataModel extends Model<IFiresOutGameResultDataDocument> {}
+var FiresOutGameResultSchema = new Schema<IFiresOutGameResultDataDocument>({
+    stats: firesOutGameResultStatsSchemaDef
+}, { discriminatorKey: 'kind' });
+export var FiresOutGameResultModel = models.FiresOutGameResult || GameResultModel.discriminator<IFiresOutGameResultDataDocument, IFiresOutGameResultDataModel>('FiresOutGameResult', FiresOutGameResultSchema);
+
 // Maps a GameData's gameType to the discriminator model + stats calculator
 // that boil its final specificGameState down to the interesting numbers, plus
 // a formatter that turns those numbers into display-ready stat groups. Games
@@ -331,6 +348,11 @@ const GAME_RESULT_STATS: Record<string, {
         },
         format: formatOutbreakResultStats,
         charts: formatOutbreakCharts,
+    },
+    FiresOut: {
+        model: FiresOutGameResultModel,
+        compute: (gameData) => computeFiresOutResultStats(gameData as IFiresOutGameData),
+        format: formatFiresOutResultStats,
     },
 };
 

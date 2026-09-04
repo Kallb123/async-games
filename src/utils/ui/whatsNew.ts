@@ -28,6 +28,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🎲",
         items: [
             {
+                title: "Fires Out!",
+                detail: "Team up as a crew of firefighters to pull every victim out before the building comes down — chop through walls, carry victims to safety, and watch the fire spread once per firefighter's turn. Play the printed Family setup or the randomised Experienced game with hazmats, hot spots and eight Specialists.",
+                game: "firesout",
+            },
+            {
                 title: "Outbreak",
                 detail: "Team up to cure four spreading diseases before the board overwhelms you — open hands, seven roles, and a recap that shows exactly how much worse things got while you were away.",
                 game: "outbreak",
@@ -44,6 +49,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Fires Out's Experienced setup is clearer",
+                detail: "Starting an Experienced game now shows exactly what its dice rolled in the turn log — where each explosion caught, and which rooms its hazmats, hot spots and POI markers landed in — and the setup screen's Recruit/Veteran/Heroic descriptions now say what's actually different between them.",
+                game: "firesout",
+            },
+            {
                 title: "See which friends are around right now",
                 detail: "A green dot now sits on a friend's picture in your friends list while they're taking turns — anyone who has moved in a game in the last five minutes — so you can tell at a glance who is worth challenging now rather than tomorrow.",
             },
@@ -58,10 +68,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Every game has a game guide",
                 detail: "Not sure what a phase does or which pile to worry about? A game guide now opens the first time you join a match of Dice Cities, Settlements & Cities, Train Time, World Domination or Outbreak, and any time after that from the ⋮ menu at the top of the board.",
-            },
-            {
-                title: "Your cards stay on screen between your turns",
-                detail: "Waiting for someone else to move used to leave you looking at the board and nothing else. Your hand, the face-up cards and what's left in the deck now stay put in Train Time, the market in Dice Cities and the cards you're holding in World Domination — greyed out until it's your go, so you can plan the move but not make it early.",
             },
         ],
     },

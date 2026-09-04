@@ -17,6 +17,7 @@ const RESPONSE_BUILDERS = [
     "utils/mongodb/GameData.ts",
     "games/DiceCities/DiceCitiesModels.ts",
     "games/Outbreak/OutbreakModels.ts",
+    "games/FiresOut/FiresOutModels.ts",
     "games/SettlementsAndCities/SettlementsAndCitiesModels.ts",
     "games/Smartthink/SmartthinkModels.ts",
     "games/SnakesAndLadders/SnakesAndLaddersModels.ts",

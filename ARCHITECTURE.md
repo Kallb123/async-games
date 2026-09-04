@@ -537,17 +537,33 @@ enforcement job. It:
 - asks `needsSweeping` of each candidate, and only for the ones that answer yes
   loads the whole game by `gameId` and **asks again** — the player may have taken
   their turn between the two reads — then:
-  - if the turn is **expired**, advances `currentTurn`, resets the timer and
-    sends a `YourTurn` push to the new player (or, once that player has missed
-    `MAX_CONSECUTIVE_MISSED_TURNS` in a row, abandons the game through the
-    shared `finishGame()` — §5 — which records the result and tells the table);
+  - if the turn is **expired**, ends it and sends a `YourTurn` push to the new
+    player, having first asked the game how (`resolveStalledTurn`): a game that
+    registers an `ITurnTimeoutAdapter` (`src/utils/games/turnTimeout.ts`) has
+    its stalled turn run through its own commands, so a game whose board only
+    deteriorates on a player's own turn — Outbreak's draw and infect phases,
+    Fires Out's Advance Fire — doesn't get to skip that by going quiet, and
+    `CheckEndTurn` moves the turn on; a game that registers nothing gets the
+    plain `currentTurn` advance. Either way the timer resets (or, once that
+    player has missed `MAX_CONSECUTIVE_MISSED_TURNS` in a row, the game is
+    abandoned through the shared `finishGame()` — §5 — which records the result
+    and tells the table). An adapter may also answer that it *can't* resolve
+    this turn, and the two ways it can say so are handled differently: a game
+    shape it declines to play automatically (nothing ran) keeps the turn where
+    it is, but still banks the missed turn and restarts the timer, so the
+    abandon ladder ends the game on the third one; an adapter that ran commands
+    and still didn't finish the turn is a bug, so the document goes back
+    **unsaved** — half a resolved turn is never persisted — and the next tick
+    starts over;
   - else sends a `TurnExpiringSoon` push and sets
     `timerWarningNotificationSent`.
 - sweeps each game inside its own `try`, so one Clerk or FCM failure costs that
   game rather than the rest of the run;
 - stops itself before the request deadline rather than being cut off mid-game,
-  and returns `{ processed, expired, warned, abandoned, skipped, failed,
-  unswept, capped }` — the last two saying what it didn't get to. Candidates
+  and returns `{ processed, expired, warned, abandoned, skipped, declined,
+  stuck, failed, unswept, capped }` — `declined`/`stuck` being the two
+  unresolved-turn cases above, and the last two saying what it didn't get to.
+  Candidates
   come oldest-first and every game it acts on stops being one, so the next run
   resumes where this one stopped with no cursor to keep.
 
@@ -927,11 +943,15 @@ in one new folder, `src/games/<Game>/`. Roughly:
    `UserInviteList`, and `TurnTimerSelect` for setup.
 6. *(Optional)* Add a replay `IReplayAdapter` for turn recap — see
    `docs/turn-recap-and-planning.md`.
+7. *(Optional)* Add a `guide.ts` exporting a `GameGuide` for the how-to-play
+   popup, and wire it into `GAME_GUIDES` in `src/utils/ui/gameGuides.ts`. The
+   board screen then shows it with `useGameGuide('<game>')`, a `key: 'guide'`
+   options row and `GameGuideModal` — see any existing guided board.
 
 ### One-liners outside the game folder — and what guards each
 
 Steps 2–5 above each add a single line to a shared file *outside*
-`src/games/<Game>/`. Every one of them is enforced by an automated test, so a
+`src/games/<Game>/`, as does step 7's optional guide. Every one of them is enforced by an automated test, so a
 game folder that's missing one fails CI instead of breaking silently at
 runtime:
 
@@ -941,6 +961,7 @@ runtime:
 | `src/utils/mongodb/mongodb.ts` | the discriminator key in both union types, and the model in both records (`GAME_DATA_MODELS` and `INVITATION_MODELS`) | TypeScript (the typed `Record`s are a compile-time exhaustiveness check) **and** `src/games/gameRegistry.test.ts` ("registers every game's Mongoose discriminator models") |
 | `src/utils/games/gameCommands.ts` | the game type's `className` as a key, its command `className`s as the list | `serializableRegistry.test.ts` ("assigns every command and game type to a game in the command registry") |
 | `src/utils/ui/games.ts` | import the game's `meta.ts` and add it to `GAME_META` | `src/games/gameRegistry.test.ts` ("wires every game's metadata into GAME_META") |
+| `src/utils/ui/gameGuides.ts` | *(only if the game has a `guide.ts`)* import the guide and add it to `GAME_GUIDES` | `src/games/gameRegistry.test.ts` ("wires every game's how-to-play guide into GAME_GUIDES") — without it `/api/gameguides` rejects the "seen" write, so the popup re-shows on every visit |
 
 `src/games/gameRegistry.test.ts` discovers games the same way
 `serializableRegistry.test.ts` discovers `@serializable` classes: by scanning,

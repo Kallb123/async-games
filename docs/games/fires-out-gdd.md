@@ -31,7 +31,7 @@
 
 | Component | Qty (approx.) | Function |
 |---|---|---|
-| Double-sided game board | 1 | Two house layouts; grid of 8 × 6 = 48 interior spaces plus an exterior parking track |
+| Double-sided game board | 1 | Two house layouts; grid of 8 × 6 = 48 interior spaces inside an exterior perimeter of 32 outdoor spaces (the parking track and the street round it) |
 | Threat markers (smoke / fire) | ~33, double-sided | The advancing hazard; smoke on one face, fire on the other |
 | Point of Interest (POI) markers | ~15 used per game (10 victims, 5 false alarms) | Face-down "?" tokens; hidden information |
 | Damage markers | 24 | Structural integrity; also the global loss timer |
@@ -83,17 +83,23 @@ The game ends immediately when any one of the following is met:
 
 ### 6.1 Family Game
 
-1. Choose a board side. Place door markers **closed** in every doorway.
-2. Place the starting fire markers on the coordinates printed in the setup diagram (a cluster of ten, typically centred).
+Coordinates below are written as printed on the setup diagram: **(row,
+column)**, 1-indexed — row 1-6 (the d6), column 1-8 (the d8), per §3's design
+note.
+
+1. Choose a board side. Place a **closed** door marker on each inside doorway — 8 on this side of the board.
+2. Place the 10 starting fire markers on (2,2), (2,3), (3,2), (3,3), (3,4), (3,5), (4,4), (5,6), (5,7) and (6,6).
 3. Build the POI pool: 10 victim markers and 5 false alarms, mixed face down ("?" side up).
-4. Place 3 POI markers on the board at the printed setup coordinates.
-5. Each player takes a firefighter figure and places it on any exterior space (outside the building).
+4. Draw 3 POI markers at random from that pool and place them "?" side up on (2,4), (5,1) and (5,8).
+5. Each player takes a player card and a firefighter figure, and places the figure on any exterior space (outside the building) — for example beside an exit door, or by a room holding a victim. Firefighters may share a space.
 6. Place damage markers, spare POIs, spare threat markers, and dice within reach.
 7. Set unused components (hazmat, hot spots, vehicles, specialist cards) aside — they are not used.
 
 ### 6.2 Experienced Game
 
-Steps 1, 3, and 5 as above, then:
+Steps 1 and 3 as above, and step 5's figure placement — but step 7 below
+deals a Specialist card in place of step 5's player card, not as well as
+it. Then:
 
 1. **Choose a difficulty level:**
 
@@ -339,11 +345,16 @@ express a shared outcome (`IGameData.winner` is a single user ID, and an empty
 one reads as a *draw* in `outcomeFor()`), and the turntimer cron cannot resolve
 a timeout in a game-specific way. Both are described in full in
 `outbreak-gdd.md` §21.2 and closed by its steps 1 and 7. **Whichever game is
-built first pays for the engine work; the second only registers itself.** The
-timeout gap bites Fires Out for exactly the same reason it bites Outbreak: the
-fire advances at the end of *your* turn, so a turn the cron skips is a turn the
-building doesn't burn — and AP banking means a skipped turn even leaves you
-richer. Timing out would be the strongest play at the table.
+built first pays for the engine work; the second only registers itself** —
+Outbreak paid for both, so **this is done**: `finishGame()` carries the shared
+outcome and `registerTurnTimeoutAdapter` (`src/utils/games/turnTimeout.ts`) is
+where Fires Out registers its own timeout command. The timeout gap bites Fires
+Out for exactly the same reason it bites Outbreak: the fire advances at the end
+of *your* turn, so a turn the cron skips is a turn the building doesn't burn —
+and AP banking means a skipped turn even leaves you richer. Timing out would be
+the strongest play at the table. Worse than in Outbreak, a skipped turn also
+*deadlocks* the game, for gap 3's reason: the cron's plain advance moves
+`currentTurn` without moving `activeFirefighter`, and nobody can move again.
 
 **3 — The engine's turn belongs to a *player*; this game's belongs to a
 *firefighter*.** With one figure each that distinction is invisible, but §1
@@ -365,11 +376,17 @@ indistinguishable on replay no matter what the live game did.
 truth for which figure is up; `turnOrder` keeps one entry per user, and
 `turnOver` is true only when the next figure belongs to a different one.
 
-**4 — `DieFace` has no face above 6.** Its `PIP_LAYOUT` covers 1–6 and returns
-an empty pip grid for 7 or 8, so a d8 renders as a blank die. Octahedral dice
-show numerals rather than pips anyway, so the fix is a numeral variant *in the
-shared component* — not a bespoke Fires Out die that leaves the next game with
-a d8 to solve it again.
+**4 — `DieFace` has no face above 6.** Its `PIP_LAYOUT` covered 1–6 and
+returned an empty pip grid for 7 or 8, so a d8 rendered as a blank die.
+Octahedral dice show numerals rather than pips anyway, so the fix was a
+numeral variant *in the shared component* — not a bespoke Fires Out die that
+leaves the next game with a d8 to solve it again. **This is done**, though
+not as a per-value threshold: `DieFace` takes `sides` (defaulting to 6) and
+pips only a die of six or fewer, because a die that decided from the value it
+happened to roll flickered between pips and numerals as it tumbled. A d8 is
+numbered across its whole range, and a d4, d10 or d12 gets numerals for free.
+`Dice` passes `sides` through per die, which is what a row of a d6 and a d8
+needed.
 
 ### 17.3 Deviations from this document
 
@@ -394,6 +411,53 @@ a d8 to solve it again.
   any command from a user who isn't `currentTurn`. Moving someone else's figure
   during your own turn is fine and needs no engine change — it's the pawn that
   moves, not the turn.
+* **The rooms are the ones the art draws.** `ROOM_GRID` in `board.ts` is
+  measured off `public/art/fires-out/board.png` against the grid the board
+  component lays over it, so every wall the player can see is a wall the rules
+  play by. Four of the eight door markers sit on doorways the art draws; the
+  other four are placed by us, because the art seals four of its rooms and
+  every room has to be reachable. Re-measure the art before changing the
+  table.
+* **Players are told rooms, never coordinates.** This document speaks in
+  (row, column) pairs throughout (§6.1, §17.4) because the printed board
+  prints them down its edges; the app never shows a player one. `ROOM_GRID`
+  already knew which room every space sits in — it is what derives the walls
+  and doors — so `spaceName`/`spacePhrase` name the eight rooms it draws, and
+  the exterior ring after the side of the house it runs along. The log, the
+  recap, the Advance Fire screen, the board tooltips and the push
+  notifications quoting them all go through those two functions. Unlike
+  `ROOM_GRID` itself (see the migration note below), the *names* are never
+  persisted and never replayed, so renaming a room is safe for a game already
+  burning.
+* **A game in flight keeps the floorplan it was dealt.** The migration for a
+  board saved under an older layout is additive only: it appends the spaces and
+  edges the exterior perimeter added and leaves the walls, doors and damage
+  alone. Re-pointing them at a new `ROOM_GRID` would move walls under a game
+  already being played, and — because the recap replays a game's recorded
+  commands against its own starting snapshot (`utils/games/replay.ts`) — would
+  make its own history stop replaying, quietly dropping every move through a
+  boundary that had become a wall. Any future change to the room table applies
+  to games started after it, not to games already burning.
+* **The crew starts on one printed exterior space, not one each player
+  picks.** §6.1 step 5 lets every player choose their own space outside the
+  building; `START_SPACE` in `board.ts` puts the whole crew on the perimeter
+  space outside the building's top-left corner instead. Choosing would need a
+  placement round before the first turn — a whole extra async phase, played
+  before anyone can see what the fire is doing — for a decision the rulebook
+  itself treats as a suggestion ("for example beside an exit door"), and
+  sharing a space is legal anyway, so the crew arriving together is a legal
+  setup rather than a rule bent. It is also where §10.3 puts a knocked-down
+  firefighter back, so the two stay one constant. A per-player choice can be
+  added later as an opening command without changing the stored shape.
+* **One board layout, not two.** §3 and §6.1 step 1 describe a double-sided
+  board; only one floorplan's art was ever uploaded
+  (`public/art/fires-out/board.png`), so `board.ts` builds one `ROOM_GRID` /
+  door layout and there is no board-side picker on the setup screen. The
+  `specificGameState` shape has no `layout` field to migrate later — replay
+  only needs the persisted `spaces`/`edges` snapshot, not a layout id to
+  rebuild them from — so adding a second floorplan later is additive: a
+  second room/door table in `board.ts`, a toggle in the setup screen, nothing
+  to retrofit on games already in flight.
 
 ### 17.4 State and command surface
 
@@ -407,7 +471,7 @@ it from there.
   ruleset: 'family' | 'experienced',
   difficulty: 'recruit' | 'veteran' | 'heroic',
   layout: 'a' | 'b',
-  spaces: {                       // 48 interior + the exterior track, one array
+  spaces: {                       // 48 interior + the 32-space exterior perimeter, one array
       threat: 'none' | 'smoke' | 'fire',
       poi: { id: number, revealed: boolean } | null,   // identity redacted until revealed
       hazmat: boolean,
@@ -448,10 +512,15 @@ it now rather than at the Specialists step avoids changing a persisted schema
 eight commits in.
 
 **Edges are a flat array, not a keyed map.** The grid has a fixed 82 interior
-wall segments (42 vertical, 40 horizontal) plus the exterior openings; number
-them once in `board.ts` and index them, the way World Domination numbers its
-territories. A `Record<string, …>` keyed by `"12-13"` would work and would be
-worse: it becomes `Schema.Types.Mixed`, the schema can't validate it, and it
+wall segments (42 vertical, 40 horizontal), plus 28 openings onto the exterior
+perimeter (one per face of every edge space) and the 32 segments joining one
+perimeter space to the next — 142 in all. Number them once in `board.ts` and
+index them, the way World Domination numbers its territories. The numbering is
+**append-only**: a persisted game indexes its `edges` array by edge id and its
+`spaces` array by space index, so a new kind of segment or space goes on the
+end, and `rules.ts`'s `growBoardToCurrentLayout` (or `boardAtCurrentLayout`, on
+read-only paths) appends the blanks for a game saved before it existed. A
+`Record<string, …>` keyed by `"12-13"` would work and would be worse: it becomes `Schema.Types.Mixed`, the schema can't validate it, and it
 invites two different key orderings for the same wall.
 
 **Every command must call `markModified('specificGameState')`.** This is
@@ -495,6 +564,23 @@ records; replay consumes. `buildTimeline()` then reproduces the fire exactly,
 which is what `recordedRoll` does for a single die in Snakes & Ladders and
 Settlements & Cities — this is the same idea with the count left open. Get it
 wrong and the recap tells every player a different story about the same fire.
+
+Left open is not left unbounded, though, and the re-roll is where that bit.
+"Re-roll an invalid target" costs two recorded numbers a go, and on a late-game
+board almost nothing is a valid target: Replenish hunting three clear spaces
+could persist 386 rolls on one `endTurn` and then give up anyway, leaving the
+board short of the POIs §7 requires. `rollValidTarget` (rules.ts) is that rule
+written as the roll it actually is: gather the legal spaces, answer "nowhere"
+without rolling at all, and otherwise roll *once* over them. `spaceForRoll`
+maps d6×d8 onto the 48 interior spaces one-for-one, so re-rolling a pair until
+it lands somewhere legal is a uniform pick among the legal spaces — the same
+distribution, one recorded number instead of up to 384, and a placement that
+always happens when one is possible. (The visible dice are unaffected: Advance
+Fire still rolls and reports its own d6/d8. Nothing ever displayed a
+placement's re-rolls.) The one thing to keep in mind is that a recorded value
+is replayed positionally, so a log written by a different number of rolls per
+placement no longer lines up — `rollValidTarget` clamps its pick for that
+reason rather than indexing off the end of the list.
 
 The dice are not the only randomness. The **POI pool is shuffled once** into
 `initialSpecificGameState` and drawn in order thereafter, the way World
@@ -598,16 +684,40 @@ extract one `finishGame()` and put the `teamwin`/`teamloss` outcome inside it
 executing the game's own pass command through a per-game registry. If Outbreak got there first, skip the
 engine work — but Fires Out still registers its own timeout command,
 `FiresOutAction { kind: 'endTurn' }`, which it can only do once step 4 exists.
-Worth folding in while here: `turnOrder.findIndex(to => to === currentTurn)`
-followed by a modulo is now copy-pasted in five places, and gap 3 above is the
-sixth asking to be written — one `nextInTurnOrder(gameState, currentTurn)`
-helper retires all of them.
+**Both halves have landed**: Outbreak built the registry, and Fires Out's
+adapter is registered alongside its own in `turnTimeout.ts`. No new command
+kind was needed — `'endTurn'` already *is* the pass, and it is the only command
+that runs §7's Phase 2 and Phase 3 and syncs `currentTurn` to
+`activeFirefighter`, so one of them per stalled figure is the whole fix.
+`src/games/FiresOut/turnTimeout.test.ts` covers it: the turn advancing figure
+and player together, the fire resolving with its rolls recorded for the recap,
+a forced Advance Fire ending the game, one advance per figure for a player
+holding two, and gap 3's deadlocked game reporting `'stuck'` rather than being
+papered over. Such a turn is one only its owner can take, so `resolveStalledTurn`
+reports `'declined'` — the adapter ran nothing — and the cron banks the missed
+turn against `MAX_CONSECUTIVE_MISSED_TURNS` and restarts their timer: three of
+them and the game is abandoned like any other its player walked away from. (It
+used to bank nothing at all: the count was incremented in memory and dropped
+with the unsaved document, so such a game was swept every tick forever and
+never ended. `src/utils/games/turnTimeout.test.ts` covers declining against
+the other thing an adapter can fail to do — get `'stuck'` after commands have
+already run, which is thrown away rather than banked — and
+`src/app/api/cron/turntimer/route.test.ts` holds the sweep to both.)
+Still worth folding in: `turnOrder.findIndex(to => to === currentTurn)`
+followed by a modulo is copy-pasted in five places — and gap 3 turned out
+*not* to add a sixth, since `'endTurn'` delegates the advance to
+`CheckEndTurn` — so one `nextInTurnOrder(gameState, currentTurn)` helper still
+retires all five.
 
-**2 — Board data and pure rules.** `src/games/FiresOut/board.ts`: both layouts
-as space and edge tables, the d6/d8 coordinate mapping, the exterior track, the
-parking spots, and the printed Family setup. `rules.ts` alongside it is the
-whole fire system as pure functions — §9.1's four-row table, explosion
-radiation with shockwaves, flashover to fixpoint, knock-downs — taking a
+**2 — Board data and pure rules.** `src/games/FiresOut/board.ts`: the board as
+a space and edge table, the d6/d8 coordinate mapping, the exterior perimeter
+(a full ring round the building — the numbered strips above and below it and
+the dice strips down either side, all walkable and all parkable), the display
+grid that ring and the interior share, and the printed Family setup. §17.3's
+deviation note explains why this ships one layout rather than both. `rules.ts`
+alongside it is the whole fire system as pure functions — §9.1's four-row
+table, explosion radiation with shockwaves, flashover to fixpoint,
+knock-downs — taking a
 `nextRoll` callback rather than calling `DiceRoll` itself, which is what makes
 it both replayable and testable. Server-free, so the client can import it to
 show what an action costs and what is reachable (`docs/new-game.md`,
@@ -620,9 +730,12 @@ discriminators, `buildInitialFiresOutState`, `gameStateToModel` with the
 redaction above), `apiModels.ts`, `meta.ts` with `available: false`,
 `POST /api/newgame/firesout`, and the setup screen — `GameSetupLayout` +
 `UserInviteList` (`src/components/UserInviteList.tsx`, driven by `usePlayerList`)
-+ `TurnTimerSelect` + an `OptionSection` of `OptionToggleRow`s for board side
-and, later, ruleset. `meta.categories` claims `Strategy` and `Co-op` (adding
-`Co-op` to `GAME_CATEGORIES` in `src/utils/ui/games.ts` if Outbreak hasn't).
++ `TurnTimerSelect`. No board-side or ruleset picker yet — one layout exists
+(§17.3's deviation) and the ruleset is Family-only until step 8; an
+`OptionSection` of `OptionToggleRow`s is the place for both once there's
+something to pick between. `meta.categories` claims `Strategy` and `Co-op`
+(adding `Co-op` to `GAME_CATEGORIES` in `src/utils/ui/games.ts` if Outbreak
+hasn't).
 
 `FiresOutLogic.ts` has to exist by the end of this step, not step 4:
 `gameRegistry.test.ts` discovers games by the presence of `meta.ts` and then
@@ -686,7 +799,15 @@ earns its keep.
 **9 — Vehicles.** Engine and Ambulance parking, driving with riders, the
 ambulance as the rescue destination, and the deck gun's quadrant-and-roll
 targeting. Small, self-contained, and needed before two of the Specialists mean
-anything.
+anything. One thing about the rescue destination is worth spelling out, because
+it isn't always a move that reaches it. The Ambulance being *driven to* a
+firefighter holding a victim delivers them, exactly as walking to the Ambulance
+does (12.2's repositioning is why: a rescue point that moves can arrive rather
+than be arrived at) — and so does the fire knocking a carrier out of the
+building, since §10.3 keeps the victim in their arms and §10.2 makes every
+exterior space a rescue point in the Family game. All three go through one
+`deliverCarried` (`FiresOutLogic.ts`), which also disposes of a carried hazmat
+on the same terms, rather than one rule per way of arriving.
 
 **10 — Specialists.** All eight at once, chosen at setup, swappable at the
 Engine for 2 AP, expressed in `rules.ts` as AP-pool values and rule exceptions
@@ -709,10 +830,97 @@ nothing, silently, with no test failing (`gameRegistry.test.ts` checks the
 `compute*` half only). Then flip `meta.available`, add the "What's new" line to
 `src/utils/ui/whatsNew.ts`, and fold 17.3's deviations into this document.
 
+*Landed.* Replay needed no new snapshot machinery: `initialSpecificGameState`
+and `buildInitialFiresOutStateFromGameData` already existed from step 3 (§17.4
+decided this was a snapshot-replay game — the Family fire cluster and the POI
+shuffle are both creation-time randomness — before there was a step 2 to build
+around it), so the adapter registered in `replay.ts` is two lines pointing at
+what was already there. `plannableCommands: []`, same as every other
+unbuilt-planning game — §17.5 already worked out that Fires Out qualifies for
+*both* patterns once a UI exists (deck freeze **and** decoy, the one row in
+`turn-recap-and-planning.md`'s per-game table marked "both"), but that's steps
+13/14's job.
+
+`src/games/FiresOut/recap.ts` exports `firesOutRecapAdapter`. Per §7, the
+away-time story is the fire, not the crew's own choices, so `toEvents` leans on
+`IFiresOutEndTurnOutcome.advanceFire` — already the fully-resolved summary of
+one endTurn's chain of Advance Fire and any flare-ups (§9.4), built by
+`applyEndTurn` in `FiresOutLogic.ts` — rather than re-deriving it from a
+snapshot diff, the same shortcut World Domination's recap takes for its
+battles. The crew's own good news (a POI flipped face up, a rescue, a hazmat
+cleared, a Specialist swap) is read straight off each command's own `kind`/
+`target`/`specialist` fields instead: unlike Outbreak's cube counts, a move's
+`target` already names the one space that matters, so no whole-board diff is
+needed. Doors, extinguishing, chopping, driving and the deck gun are this
+game's equivalent of a Catan road — routine enough to stay silent. `tip` points
+at a revealed victim still waiting to be carried out, falling back to a hazmat
+left on the board.
+
+Result stats are the four pieces `GameResultData.ts` needs, added to
+`FiresOutModels.ts` alongside the invitation/state machinery already there:
+`IFiresOutGameResultStats`/`firesOutGameResultStatsSchemaDef`,
+`computeFiresOutResultStats` (rescued/lost straight off the final state,
+damage via `rules.ts`'s own `totalDamage` rather than a second total — §17.4's
+"never a stored total" applies here too — and turns lasted by counting
+`kind === 'endTurn'` in `commandHistory`, since `endTurn` is the one command
+type that ever appears there for a passive figure and the only one §17.4 lets
+consume randomness) and `formatFiresOutResultStats`. One game-wide stat group
+with no per-player breakdown, the same shape Outbreak's and Solitaire's own
+summaries use since a co-op table shares its result. Wired into
+`GAME_RESULT_STATS` under the `FiresOut` key.
+
+The board screen picked up `useTurnNavigation` + `TurnNavControls` and
+`useTurnRecap` + `TurnRecapScreen`, gated on `recap.show` before the normal
+board render — the same shape Outbreak uses — plus a "Show last recap" row in
+the options menu when `recap.hasRecap`. `isMyTurn` now gates on `nav.isLive`
+rather than a bare `true`, which is what makes every existing submit handler
+(move, door, extinguish, chop, drive, deck gun, treat, dispose, crew change,
+end turn) automatically read-only while reviewing, with no per-handler change
+needed. `recapAvailable` is `true` from the moment a game is created (the
+snapshot is written in `CreateGame`, not earned by playing), so "Review
+actions" is offered before anyone has taken a turn — unlike every other
+snapshot-replay game in the repo, which only reaches this state well into a
+match. `meta.available` is `true`, `GameLibrary` now lists Fires Out for real,
+and `src/utils/ui/whatsNew.ts` has its "New games" line. §17.3's deviations
+were re-read against this step's diff and none of them changed — solitaire,
+crew planning, the Fire Captain's own-turn-only command AP and the single board
+layout are all exactly as shipped in steps 3-10; no new deviation surfaced.
+
+This step's rulebook review caught one real step-3 gap, invisible until now
+because it only bites once real invites flow: `src/utils/ui/games.ts`'s
+`NAME_TO_URL` (the friendlyName → slug fallback `metaForGame` uses when only
+`gameType.friendlyName` is known, not `url`) had no `"fires out!"` entry, so
+the lobby screen, the home screen's incoming-invites list and the invite push
+notification all silently lost Fires Out's art/tagline/share-card image for
+any invite that reached them without a `url`. Fixed alongside this step
+rather than left for the next report to rediscover.
+
+An `e2e/specs/firesout-turns.spec.ts` proves the pipeline this step wires up
+end to end — invite, accept, take a live turn each, dismiss the Advance Fire
+payoff screen, and confirm "Review actions" is offered from the first turn —
+following `snakesandladders-turns.spec.ts`'s shape. `src/games/FiresOut/
+replay.test.ts` follows Train Time's `replay.test.ts` precedent: a passive
+game (every figure just ends its turn) replayed with `Math.random` stubbed to
+throw, `buildEventFeed` exercised on a real command log, and
+`computeFiresOutResultStats` checked against the final state.
+
 **12 — Solitaire, optional.** Multi-pawn control, closing gap 3 with the
 `activeFirefighter` design 17.2 describes — no duplicate entries in `turnOrder`,
 so every `findIndex` in the repo stays correct and a solo game can still take a
-real turn timer. The invitation is created with `userIdList: []` exactly as
+real turn timer. The turn timer is the one thing to settle about a solo game
+and the cron, because the two halves of this paragraph disagree: a solo board
+is one where every figure is the same player's, so the timeout adapter declines
+the turn (there is nobody to hand it to) and the sweep banks a missed turn
+instead of forcing a fire — which is the right answer for a board only its
+owner can move, and after `MAX_CONSECUTIVE_MISSED_TURNS` of them the game is
+abandoned like any other walked away from. **With the hardcoded
+`UNLIMITED_TURN_TIMER` below, none of that ever runs**: `actionableTurnFilter`
+excludes unlimited games by construction, so a solo game is never swept, never
+warned and never abandoned — it simply waits. Both are defensible; the step has
+to pick one, and offering the timer is what makes the declining path worth
+having.
+
+The invitation is created with `userIdList: []` exactly as
 Solitaire's `POST /api/newgame/solitaire` does, which makes
 `/api/invite/accept`'s "has everyone accepted?" check vacuously true on the
 first call. Per `docs/new-game.md`'s solo gotcha, the setup screen becomes

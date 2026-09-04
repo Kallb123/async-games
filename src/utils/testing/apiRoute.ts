@@ -24,6 +24,7 @@ import type { NextRequest } from 'next/server';
 import type { User } from '@clerk/nextjs/server';
 import type { PushNotification, SendPushOptions } from '@/utils/firebase/pushNotification';
 import type { IGameDataDocument } from '@/utils/mongodb/GameData';
+import type { ActionableTurnBranch } from '@/utils/games/TurnTimer';
 import { clearAfterCallbacks } from '@/utils/testing/afterStub';
 
 // Every module the stubs below stand in for is imported when `resetApiRouteStubs`
@@ -341,9 +342,79 @@ function findOneFromStore(filter: Record<string, unknown>) {
     return { exec: async () => (stored ? hydrate(stored) : null) };
 }
 
-// The dashboard's one query over the whole game store: every live game a
-// player is in — find({ userIdList: userId, complete: false }).exec().
+/**
+ * A comparator for a Mongo sort spec, honouring each key in order so a
+ * tiebreaker (the chat route sorts `{ timestamp: -1, messageId: -1 }`) is
+ * exercised rather than silently dropped. JS's own sort is stable and Mongo's
+ * is not, so a test that seeds a tie and asserts an order is only meaningful
+ * because the tiebreaker settles it here the way the index does in production.
+ */
+function bySortSpec<T>(spec: Record<string, number>): (a: T, b: T) => number {
+    const keys = Object.entries(spec);
+    return (a, b) => {
+        for (const [key, direction] of keys) {
+            const left = (a as Record<string, unknown>)[key] as string;
+            const right = (b as Record<string, unknown>)[key] as string;
+            if (left < right) return -direction;
+            if (left > right) return direction;
+        }
+        return 0;
+    };
+}
+
+/**
+ * The turn-timer sweep's candidate read (findSweepCandidates): the live games
+ * whose turn has been running long enough for their own timer to warn or
+ * expire, oldest first, projected down to four fields.
+ *
+ * The projection and the limit are applied rather than ignored, because that
+ * is the half of this query a route can get wrong: `lean()` means a field the
+ * projection leaves out reads as `undefined` and not as its schema default, so
+ * a stub that handed back whole games would pass a sweep that production
+ * couldn't make a decision in.
+ */
+function findSweepCandidatesFromStore(filter: Record<string, unknown>) {
+    const branches = filter.$or as ActionableTurnBranch[];
+    // Checked rather than assumed: `findManyFromStore` sends every `$or`
+    // filter here, so a future query with an unrelated one would otherwise
+    // match nothing and hand its test a clean, empty, meaningless pass.
+    const shape = filter.complete === false && Array.isArray(branches) && branches.length > 0
+        && branches.every(branch => typeof branch?.turnTimer === 'string'
+            && typeof branch?.lastTurnTimestamp?.$lte === 'string');
+    if (!shape) {
+        throw new Error(`The test game store's only $or query is the turn-timer sweep's, not ${JSON.stringify(filter)}`);
+    }
+    // Undefined until `select()`, so a query that never projects gets whole
+    // games back rather than a page of empty objects.
+    let fields: string[] | undefined;
+    let results = [...games.values()].filter(stored =>
+        stored.complete === false && branches.some(branch =>
+            branch.turnTimer === stored.turnTimer
+            && String(stored.lastTurnTimestamp) <= branch.lastTurnTimestamp.$lte));
+
+    const query = {
+        select: (projection: string) => {
+            fields = projection.split(' ').filter(field => !field.startsWith('-'));
+            return query;
+        },
+        sort: (spec: Record<string, number>) => {
+            results = [...results].sort(bySortSpec(spec));
+            return query;
+        },
+        limit: (count: number) => { results = results.slice(0, count); return query; },
+        lean: () => query,
+        exec: async () => results.map(stored =>
+            fields ? Object.fromEntries(fields.map(field => [field, stored[field]])) : stored),
+    };
+    return query;
+}
+
+// The two queries over the whole game store: the dashboard's every live game a
+// player is in — find({ userIdList: userId, complete: false }).exec() — and
+// the turn-timer sweep's candidate read above, which is the one with an $or.
 function findManyFromStore(filter: Record<string, unknown>) {
+    if (filter?.$or) return findSweepCandidatesFromStore(filter);
+
     const userId = filter?.userIdList;
     const complete = filter?.complete;
     if (typeof userId !== 'string' || typeof complete !== 'boolean' || Object.keys(filter).length !== 2) {
@@ -400,22 +471,8 @@ function findChatFromStore(filter: Record<string, unknown>) {
     }
     let results = chatMessages.filter(message => message.gameId === gameId && matchesCursor(message));
     const query = {
-        // Honours each sort key in order, so a tiebreaker (the route sorts
-        // { timestamp: -1, messageId: -1 }) is exercised, not silently dropped.
-        // JS's own sort is stable, Mongo's is not, so a test that seeds a tie
-        // and asserts an order is only meaningful because the tiebreaker settles
-        // it here the way the index does in production.
         sort: (spec: Record<string, 1 | -1>) => {
-            const keys = Object.entries(spec);
-            results = [...results].sort((a, b) => {
-                for (const [key, direction] of keys) {
-                    const left = (a as Record<string, string>)[key];
-                    const right = (b as Record<string, string>)[key];
-                    if (left < right) return -direction;
-                    if (left > right) return direction;
-                }
-                return 0;
-            });
+            results = [...results].sort(bySortSpec(spec));
             return query;
         },
         limit: (count: number) => {
@@ -545,9 +602,10 @@ function findOneAndUpdateChatReadFromStore(
 // ---------------------------------------------------------------- Requests
 
 /** A GET of `path`, query string and all — for a route that reads its own
- *  `nextUrl.searchParams`. */
-export function get(path: string): NextRequest {
-    return new nextServer.NextRequest(`https://async.games${path}`);
+ *  `nextUrl.searchParams`. `headers` is for the routes gated on one rather
+ *  than on a signed-in user, i.e. `/api/cron/*` and its bearer token. */
+export function get(path: string, headers?: Record<string, string>): NextRequest {
+    return new nextServer.NextRequest(`https://async.games${path}`, headers ? { headers } : {});
 }
 
 /** A POST of `body` as JSON, the way the client sends one. */

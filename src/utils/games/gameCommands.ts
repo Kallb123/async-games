@@ -94,6 +94,12 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
         "OutbreakDiscard",
         "OutbreakPlayEvent",
     ],
+    // docs/games/fires-out-gdd.md §17.6: step 3 added FiresOutGameType and a
+    // skeleton FiresOutAction; step 4 filled Execute in (move, door,
+    // extinguish, chop, endTurn).
+    FiresOutGameType: [
+        "FiresOutAction",
+    ],
 };
 
 /** The game types this map knows, for the test that guards it. */

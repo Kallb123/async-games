@@ -11,6 +11,9 @@ import { buildInitialTrainTimeState } from "@/games/TrainTime/board";
 import { gameStateToResponse as sacStateToResponse } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import type { ISACSpecificGameState } from "@/games/SettlementsAndCities/board";
 import { makeState as makeSacState, player as sacPlayer } from "@/games/SettlementsAndCities/testFixtures";
+import { gameStateToModel as firesOutStateToModel, IFiresOutSpecificGameState } from "@/games/FiresOut/FiresOutModels";
+import { buildEmptyEdges, buildEmptySpaces, newFirefighter } from "@/games/FiresOut/rules";
+import { AMBULANCE_START, EDGE_COUNT, ENGINE_START, INTERIOR_SPACE_COUNT, SPACE_COUNT, spaceIndex } from "@/games/FiresOut/board";
 
 // Two of the games this guards were once sending every player's hidden hand to
 // every player: World Domination shipped each player's territory cards, and
@@ -208,5 +211,86 @@ describe("Settlements & Cities' response", () => {
         // The counts the recap's resource deltas are built from survive.
         expect(response.playerStates.u1.resourceCount).toBe(3);
         expect(response.playerStates.u2.resourceCount).toBe(4);
+    });
+});
+
+// ─── Fires Out ────────────────────────────────────────────────────────────
+// The whole game turns on POI identity staying hidden from *every* player —
+// not per-opponent, since this is co-op — until a firefighter physically
+// reaches that space (fires-out-gdd.md §10.1's design note). Unlike the
+// three games above, redaction here doesn't key on the viewer at all, so
+// there's only one wire shape to check rather than "mine" vs. "theirs".
+
+function firesOutState(): IFiresOutSpecificGameState {
+    const spaces = buildEmptySpaces();
+    spaces[spaceIndex(0, 0)].poi = { id: 0, revealed: false, victim: true };
+    spaces[spaceIndex(0, 1)].poi = { id: 1, revealed: true, victim: false };
+    return {
+        ruleset: 'family',
+        difficulty: 'recruit',
+        spaces,
+        edges: buildEmptyEdges(),
+        poiPool: [true, false, true],
+        nextPoiId: 2,
+        rescued: 0,
+        lost: 0,
+        firefighters: [newFirefighter("u1")],
+        activeFirefighter: 0,
+        hotspotReserve: 0,
+        engine: ENGINE_START,
+        ambulance: AMBULANCE_START,
+    };
+}
+
+describe("Fires Out's response", () => {
+    it("keeps an unrevealed POI's identity off the wire entirely", () => {
+        const wire = JSON.parse(JSON.stringify(firesOutStateToModel(firesOutState(), NAMES, "u1")));
+
+        expect(wire.spaces[spaceIndex(0, 0)].poi).toEqual({ id: 0, revealed: false });
+        expect("victim" in wire.spaces[spaceIndex(0, 0)].poi).toBe(false);
+        // Scoped to the unrevealed marker alone — a second, already-revealed
+        // POI in the same state legitimately does carry "victim" on the wire.
+        expect(JSON.stringify(wire.spaces[spaceIndex(0, 0)].poi)).not.toContain("victim");
+    });
+
+    it("reveals identity once a POI has actually been flipped over", () => {
+        const wire = JSON.parse(JSON.stringify(firesOutStateToModel(firesOutState(), NAMES, "u1")));
+        expect(wire.spaces[spaceIndex(0, 1)].poi).toEqual({ id: 1, revealed: true, victim: false });
+    });
+
+    it("redacts the same way for every viewer, since nothing here is per-player", () => {
+        const state = firesOutState();
+        const asU1 = JSON.stringify(firesOutStateToModel(state, NAMES, "u1"));
+        const asU2 = JSON.stringify(firesOutStateToModel(state, NAMES, "u2"));
+        const asNobody = JSON.stringify(firesOutStateToModel(state, NAMES, null));
+        expect(asU1).not.toContain('"victim":true');
+        expect(asU2).toEqual(asU1);
+        expect(asNobody).toEqual(asU1);
+    });
+
+    it("sends the undrawn POI pool as a count, never the pool itself", () => {
+        const response = firesOutStateToModel(firesOutState(), NAMES, "u1");
+        expect((response as unknown as { poiPool?: unknown }).poiPool).toBeUndefined();
+        expect(response.poiPoolCount).toBe(3);
+    });
+
+    // A game saved before the exterior became a full perimeter ring has
+    // shorter spaces/edges arrays, which the response builder grows before
+    // serialising (rules.ts's boardAtCurrentLayout). The spaces it appends
+    // must be blank outdoor ones, not a copy of anything — so the grown board
+    // is checked here rather than only where the migration lives.
+    it("grows a board saved before the exterior perimeter without inventing a POI", () => {
+        const state = firesOutState();
+        state.spaces = state.spaces.slice(0, INTERIOR_SPACE_COUNT + 16);
+        state.edges = state.edges.slice(0, 98);
+
+        const response = firesOutStateToModel(state, NAMES, "u1");
+
+        expect(response.spaces).toHaveLength(SPACE_COUNT);
+        expect(response.edges).toHaveLength(EDGE_COUNT);
+        expect(response.spaces.slice(INTERIOR_SPACE_COUNT + 16).every(space => space.poi === null)).toBe(true);
+        expect(JSON.stringify(response)).not.toContain('"victim":true');
+        // The stored state is left exactly as it was — the response builder reads, it doesn't migrate.
+        expect(state.spaces).toHaveLength(INTERIOR_SPACE_COUNT + 16);
     });
 });

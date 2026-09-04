@@ -16,8 +16,15 @@ import { readableName } from '@/utils/ui/players';
  * `skipped` covers both "nothing due yet" and "the player moved while we were
  * looking" — a lost optimistic-concurrency save, which is a player taking
  * their turn, not a failure.
+ *
+ * The last two are the turns a game's own timeout adapter didn't resolve, and
+ * they are two different things (turnTimeout.ts's `unresolved`): `declined` is
+ * a shape of game the adapter says it can't play for its player, where the
+ * missed turn is banked against the abandon ladder and the turn stays where it
+ * is; `stuck` is an adapter that ran commands and still didn't finish the
+ * turn, where nothing is kept at all.
  */
-type SweepOutcome = 'expired' | 'abandoned' | 'warned' | 'skipped';
+type SweepOutcome = 'expired' | 'abandoned' | 'warned' | 'skipped' | 'declined' | 'stuck';
 
 /**
  * Ends a game whose current player has stopped turning up.
@@ -58,11 +65,6 @@ async function passTurnOn(gameData: IGameDataDocument, timedOutPlayerId: string)
 
     const resolution = await resolveStalledTurn(gameData, timedOutPlayerId, timedOutName);
 
-    if (resolution === 'stuck') {
-        console.error(`Turn-timeout adapter for game ${gameData.gameId} couldn't resolve ${timedOutPlayerId}'s stalled turn; leaving it for the next sweep`);
-        return 'skipped';
-    }
-
     if (resolution === 'gameOver') {
         // How it ended is the game's to say: a co-op game records 'teamwin' or
         // 'teamloss' on the way through CheckGameOver, and the `?? "win"` here
@@ -84,14 +86,48 @@ async function passTurnOn(gameData: IGameDataDocument, timedOutPlayerId: string)
         gameData.currentTurn = gameData.gameState.turnOrder[(currentIndex + 1) % gameData.gameState.turnOrder.length];
     }
 
+    if (resolution === 'stuck') {
+        // Commands ran and the turn still didn't end, which is an adapter bug
+        // rather than a shape of game (turnTimeout.ts's `unresolved`). Half a
+        // resolved turn is worse than none, so the document goes back
+        // unsaved — everything those commands did is dropped with it — and the
+        // next tick starts the turn over from where it really is.
+        console.error(`Turn-timeout adapter for game ${gameData.gameId} ran commands without finishing ${timedOutPlayerId}'s stalled turn; discarding them`);
+        return 'stuck';
+    }
+
+    if (resolution === 'declined') {
+        // The game says it can't play this turn for its player and ran
+        // nothing, so the only thing dirty here is the missed-turn count
+        // sweepGame incremented before calling. That count is the whole point:
+        // returning without a save threw it away every tick, so a turn the
+        // adapter can never resolve was swept forever —
+        // MAX_CONSECUTIVE_MISSED_TURNS never got past its first rung, the game
+        // was neither played on nor abandoned, and it cost a full document
+        // read every tick for as long as it lived. Fires Out will have exactly
+        // such a turn once §1's solitaire play lands (plan step 12): a board
+        // where every figure is the stalled player's, which no number of
+        // endTurns can hand to anybody else.
+        console.error(`Turn-timeout adapter for game ${gameData.gameId} declined ${timedOutPlayerId}'s stalled turn; banking the missed turn and restarting their timer`);
+    }
+
     // resolution === 'advanced': a registered timeout command already ran and
-    // CheckEndTurn moved currentTurn on. Either way there's a new current
-    // player now, so save and tell them.
+    // CheckEndTurn moved currentTurn on, so there's a new current player to
+    // tell. 'declined' has nobody new — the turn is still the same player's —
+    // but it is saved on the same terms, because the timer has to restart
+    // either way: for a turn that advanced it belongs to somebody new, and for
+    // one that didn't it gives the player who still owns it another full
+    // timer, and another expiry warning, to come back before the next rung of
+    // the ladder. A declined turn is not a turn nobody can take; it is one the
+    // *cron* can't take for them, so counting it off at cron cadence instead
+    // would abandon a 7-day game half an hour after its first missed turn.
     gameData.lastTurnTimestamp = new Date().toISOString();
     gameData.timerWarningNotificationSent = false;
     // A player may have taken their turn concurrently with this cron run —
     // leave this game rather than clobber their move with a stale expiry.
     if (!(await trySave(gameData))) return 'skipped';
+
+    if (resolution === 'declined') return 'declined';
 
     // The turn arrived because the previous player ran out of time, not
     // because they moved — say so, it's the more useful headline.
@@ -194,7 +230,7 @@ export async function GET(request: NextRequest) {
     const deadline = Date.now() + SWEEP_BUDGET_MS;
     const candidates: ISweepCandidate[] = await findSweepCandidates();
 
-    const tally: Record<SweepOutcome, number> = { expired: 0, abandoned: 0, warned: 0, skipped: 0 };
+    const tally: Record<SweepOutcome, number> = { expired: 0, abandoned: 0, warned: 0, skipped: 0, declined: 0, stuck: 0 };
     let failed = 0;
     let unswept = 0;
 
@@ -233,6 +269,13 @@ export async function GET(request: NextRequest) {
         warned: tally.warned,
         abandoned: tally.abandoned,
         skipped: tally.skipped,
+        // The turns no adapter resolved. `declined` is expected — a game shape
+        // its own rules can't play automatically — and each appearance is a
+        // rung up that game's abandon ladder. `stuck` should be zero: it is an
+        // adapter that ran commands without finishing a turn, and the work was
+        // discarded, so anything above zero here wants a look at the log.
+        declined: tally.declined,
+        stuck: tally.stuck,
         failed,
         // What this run didn't get to: games it had read but ran out of time
         // for, and whether the read itself was capped (so there were more

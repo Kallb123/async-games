@@ -2207,18 +2207,27 @@ a.ag-list-row, a.ag-list-row-main {
 
 /* ---- Die face (shared DieFace primitive) ---- */
 /* Sized entirely off --ag-die-size so pips stay proportional — and contained —
-   at any size, from the 30px battle dice to the 64px roll-result die. */
+   at any size, from the 30px battle dice to the 64px roll-result die. Painted
+   entirely off the three colour tokens below, so a game that rolls dice of
+   its own colour re-points them in its own `.ag-game--*` scope (Fires Out's
+   red Advance Fire dice) rather than overriding background, box-shadow and
+   pip colour one property at a time. */
 .ag-die {
     --ag-die-size: 64px;
+    /* The face, the pips/numerals printed on it, and the die's edge — the
+       band of colour under the face that makes it look like a solid object. */
+    --ag-die-face: var(--ag-surface);
+    --ag-die-ink: var(--ag-dark);
+    --ag-die-edge: oklch(0.75 0.05 60);
     width: var(--ag-die-size);
     height: var(--ag-die-size);
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     grid-template-rows: repeat(3, 1fr);
     padding: calc(var(--ag-die-size) * 0.17);
-    background: var(--ag-surface);
+    background: var(--ag-die-face);
     border-radius: calc(var(--ag-die-size) * 0.25);
-    box-shadow: 0 6px 0 oklch(0.75 0.05 60), 0 8px 14px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 6px 0 var(--ag-die-edge), 0 8px 14px rgba(0, 0, 0, 0.2);
     overflow: hidden;
     flex-shrink: 0;
 }
@@ -2232,7 +2241,7 @@ a.ag-list-row, a.ag-list-row-main {
     background: none;
     cursor: pointer;
 }
-.ag-die-btn:active .ag-die { transform: translateY(2px); box-shadow: 0 4px 0 oklch(0.75 0.05 60), 0 6px 10px rgba(0, 0, 0, 0.2); }
+.ag-die-btn:active .ag-die { transform: translateY(2px); box-shadow: 0 4px 0 var(--ag-die-edge), 0 6px 10px rgba(0, 0, 0, 0.2); }
 .ag-die-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .ag-die-pip {
@@ -2242,7 +2251,16 @@ a.ag-list-row, a.ag-list-row-main {
     align-self: center;
     justify-self: center;
 }
-.ag-die-pip--on { background: var(--ag-dark); }
+.ag-die-pip--on { background: var(--ag-die-ink); }
+
+/* A d8 (or any face above 6) is printed with a numeral, not pips. */
+.ag-die--numeral {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font: 800 calc(var(--ag-die-size) * 0.42) var(--ag-font);
+    color: var(--ag-die-ink);
+}
 
 /* ---- Dice row (shared Dice primitive: any number of pip dice together) ---- */
 .ag-dice-row { display: flex; gap: 8px; align-items: center; justify-content: center; }
@@ -2255,12 +2273,15 @@ a.ag-list-row, a.ag-list-row-main {
     100% { transform: rotate(0) scale(1); }
 }
 
-/* The move / verdict / new-square reveal fades in once the die settles. */
-.ag-sl-reveal { animation: ag-sl-fade-in 0.35s ease both; }
-@keyframes ag-sl-fade-in {
+/* The move / verdict / new-square reveal fades in once the die settles —
+   shared by any game's post-roll payoff screen (Snakes & Ladders, Fires
+   Out's Advance Fire) via its own `.ag-*-reveal` class, so the keyframes are
+   named for what they do rather than for whichever game defined them first. */
+@keyframes ag-reveal-fade-in {
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: none; }
 }
+.ag-sl-reveal { animation: ag-reveal-fade-in 0.35s ease both; }
 
 /* ---- Playing card (shared PlayingCard primitive: any card game) ---- */
 .ag-pcard {
@@ -2306,8 +2327,13 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-cascade { display: flex; flex-direction: column; }
 .ag-cascade > *:not(:first-child) { margin-top: calc(-1 * var(--ag-cascade-overlap, 40px)); }
 
-/* ---- Roll-result screen (the async payoff) ---- */
-.ag-sl-roll {
+/* ---- Payoff screen shell (the async payoff) — shared by any game's
+   full-screen "here's what your move did" reveal (PayoffScreen.tsx):
+   Snakes & Ladders' dice roll, Fires Out's Advance Fire. Each game supplies
+   its own `stageClassName` gradient modifier and stage content; only the
+   chrome around it — the fixed overlay, the stage frame, the bottom sheet —
+   is shared. ---- */
+.ag-payoff-screen {
     position: fixed;
     inset: 0;
     z-index: 60;
@@ -2319,7 +2345,7 @@ a.ag-list-row, a.ag-list-row-main {
        sliver of the app background at the edges on viewports just over 480px. */
     width: 100%;
 }
-.ag-sl-roll-stage {
+.ag-payoff-stage {
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -2329,6 +2355,27 @@ a.ag-list-row, a.ag-list-row-main {
     padding: 24px 22px;
     text-align: center;
 }
+.ag-payoff-icon {
+    width: 96px;
+    height: 96px;
+    border-radius: 26px;
+    background: var(--ag-surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 52px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    transform: rotate(-4deg);
+}
+.ag-payoff-sheet {
+    background: var(--ag-surface);
+    border-radius: 22px 22px 0 0;
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.12);
+    padding: 16px 16px 18px;
+}
+.ag-payoff-grip { width: 38px; height: 4px; border-radius: 99px; background: var(--ag-line); margin: 0 auto 14px; }
+
+/* ---- Snakes & Ladders' own reveal content, staged inside .ag-payoff-stage/-sheet above ---- */
 .ag-sl-roll-stage--snake { background: radial-gradient(circle at 50% 30%, oklch(0.78 0.09 30), oklch(0.62 0.12 28)); }
 .ag-sl-roll-stage--ladder { background: radial-gradient(circle at 50% 30%, oklch(0.82 0.09 150), oklch(0.6 0.11 150)); }
 .ag-sl-roll-stage--plain { background: radial-gradient(circle at 50% 30%, oklch(0.8 0.07 60), oklch(0.68 0.09 55)); }
@@ -2345,18 +2392,6 @@ a.ag-list-row, a.ag-list-row-main {
     font: 800 14px var(--ag-font);
 }
 .ag-sl-move-pill .ag-sl-move-from { opacity: 0.85; }
-.ag-sl-verdict-icon {
-    width: 96px;
-    height: 96px;
-    border-radius: 26px;
-    background: var(--ag-surface);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 52px;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
-    transform: rotate(-4deg);
-}
 .ag-sl-verdict-title { font: 800 27px/1.1 var(--ag-font); color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.19); }
 .ag-sl-verdict-sub { font: 600 13px/1.5 var(--ag-font); color: #fff; opacity: 0.92; margin-top: 5px; max-width: 260px; }
 .ag-sl-verdict-sub b { font-weight: 800; }
@@ -2371,13 +2406,6 @@ a.ag-list-row, a.ag-list-row-main {
 }
 .ag-sl-newsquare-label { font: 600 11px var(--ag-font); opacity: 0.8; }
 .ag-sl-newsquare-num { font: 800 20px var(--ag-font); color: var(--ag-gold); }
-.ag-sl-roll-sheet {
-    background: var(--ag-surface);
-    border-radius: 22px 22px 0 0;
-    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.12);
-    padding: 16px 16px 18px;
-}
-.ag-sl-roll-grip { width: 38px; height: 4px; border-radius: 99px; background: var(--ag-line); margin: 0 auto 14px; }
 .ag-sl-roll-note {
     display: flex;
     align-items: center;
@@ -3541,3 +3569,168 @@ button.ag-tt-ticket { cursor: pointer; }
     box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.35), 0 4px 0 oklch(0.22 0.045 250);
 }
 .ag-game--outbreak .ag-board-tag { background: var(--ob-crimson); }
+
+/* ==========================================================================
+   Fires Out! — smoke-charcoal chrome over the terracotta accent from meta.ts
+   ==========================================================================
+   Same deal as Train Time and Outbreak: scoped to .ag-game--firesout,
+   re-tinting the shared chrome rather than growing private copies of it. */
+.ag-game--firesout {
+    --fo-red: #d2432c;
+    --fo-red-deep: #a8341f;
+    /* The Advance Fire dice, specified as their own red. It lands within a
+       few units of --fo-red (the chrome accent from meta.ts) and is
+       effectively the same colour on screen, so if the two are ever meant to
+       be one, drop this and point .ag-game--firesout .ag-die at --fo-red. */
+    --fo-dice-red: #d34634;
+    --fo-char: oklch(0.24 0.02 40);
+    --fo-char-2: oklch(0.3 0.02 40);
+    --fo-wall: oklch(0.32 0.02 40);
+    --fo-wall-cracked: oklch(0.55 0.09 50);
+    --fo-door: #8a5a2b;
+    --fo-door-open: oklch(0.6 0.05 80);
+    --fo-smoke: oklch(0.74 0.01 40);
+    --fo-fire: #e8622f;
+    --fo-parchment: #fff8ec;
+}
+.ag-game--firesout .ag-game-topbar { background: var(--fo-char); }
+.ag-game--firesout .ag-scorestrip { background: var(--fo-char-2); }
+.ag-game--firesout .ag-score-pill--me {
+    background: var(--fo-red);
+    color: var(--ag-on-dark);
+    box-shadow: 0 0 0 2px oklch(0.6 0.15 40);
+}
+.ag-game--firesout .ag-btn--primary {
+    background: var(--fo-red);
+    color: var(--ag-on-dark);
+    box-shadow: 0 3px 0 var(--fo-red-deep);
+}
+.ag-game--firesout .ag-stat-row { background: var(--fo-char-2); padding: 0 12px 10px; }
+.ag-game--firesout .ag-stat { background: var(--ag-surface); border-radius: 9px; }
+/* The d6 and d8 of the Advance Fire reveal. They're the fire's dice, not a
+   player's, so they're red with white pips and numerals instead of the cream
+   house die. Fires Out only rolls dice on that one screen, so the game scope
+   is scope enough. */
+.ag-game--firesout .ag-die {
+    --ag-die-face: var(--fo-dice-red);
+    --ag-die-ink: #fff;
+    --ag-die-edge: var(--fo-red-deep);
+}
+
+/* ---- The board: the 6×8 interior grid inside its exterior perimeter, one
+   CSS grid — walls are cell borders and doors are gaps in them (see
+   FiresOutBoard.tsx). board.png sits behind the grid cells (see
+   .ag-fo-grid below); the frame itself stays a plain smoke-dark panel. ---- */
+.ag-game--firesout .ag-board-area { background: radial-gradient(circle at 50% 20%, var(--fo-char-2), var(--fo-char)); }
+.ag-firesout-frame { background: var(--fo-char); box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.35), 0 4px 0 oklch(0.18 0.02 40); }
+
+/* board.png (public/art/fires-out/board.png) is a 1195×896 scan of the whole
+   board: the house's outer wall runs x:245–1088, y:124.5–781.5, in 8 columns
+   of 105.4px and 6 rows of 109.5px. The display grid adds one cell of
+   exterior perimeter on every side (board.ts), so what belongs behind it is
+   that rectangle grown by one cell each way — x:139.6–1193.4, y:15–891,
+   which is very nearly the whole scan. The size/position pair below is that
+   crop, and it's why the numbered strips down the sides are on screen at all
+   now rather than cropped off. Every cell is the same shape (105.4/109.5),
+   so the art and the grid stay in step from one corner to the other. */
+.ag-fo-grid {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 2px;
+    background-image: url('/art/fires-out/board.png');
+    background-size: 113.4% 102.28%;
+    background-position: 98.87% 75%;
+    background-repeat: no-repeat;
+}
+.ag-fo-cell {
+    position: relative;
+    aspect-ratio: 0.9626;
+    box-sizing: border-box;
+    background: color-mix(in srgb, var(--fo-parchment) 22%, transparent);
+    border-radius: 3px;
+    border: none;
+    padding: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    cursor: default;
+}
+.ag-fo-cell--exterior { background: oklch(0.68 0.01 40 / 0.28); }
+.ag-fo-cell--valid { cursor: pointer; box-shadow: inset 0 0 0 3px var(--ag-gold); }
+.ag-fo-cell:disabled { cursor: default; }
+
+/* Smoke and fire (§9.1) are one double-sided marker in the physical game —
+   a token that flips over rather than swapping for a different piece — so
+   here too it's a single element restyled and remounted (FiresOutBoard.tsx
+   keys it on threat) to replay ag-fo-flip each time it changes, instead of
+   the cell's whole background changing colour. */
+.ag-fo-marker {
+    position: absolute;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+.ag-fo-token {
+    top: 3px; left: 3px; right: 3px; bottom: 11px;
+    font-size: 13px;
+    border: 1.5px solid rgba(0, 0, 0, 0.28);
+    box-shadow: 0 2px 2px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.35);
+}
+.ag-fo-token--smoke { background: radial-gradient(circle at 35% 28%, #efe9dd, var(--fo-smoke) 75%); }
+.ag-fo-token--fire { background: radial-gradient(circle at 35% 28%, #ffab63, var(--fo-fire) 75%); border-color: var(--fo-red-deep); }
+
+@keyframes ag-fo-flip {
+    0% { transform: rotateY(100deg) scale(0.7); opacity: 0.3; }
+    55% { transform: rotateY(-14deg) scale(1.06); opacity: 1; }
+    100% { transform: rotateY(0deg) scale(1); }
+}
+.ag-fo-token, .ag-fo-badge--poi { animation: ag-fo-flip 0.4s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+
+/* POIs, hazmat and hot spots are markers too (the printed game's own wooden
+   standees and card tokens), so they get the same small round-badge
+   treatment instead of a bare emoji floating on the room art — POI reuses
+   the flip animation above, since it's the same face-down-marker-turns-over
+   moment as smoke/fire. */
+/* Sized to still leave the cell's own art readable now that the perimeter
+   ring makes the grid 10 columns wide rather than 8. */
+.ag-fo-badge {
+    width: 13px;
+    height: 13px;
+    font-size: 9px;
+    background: color-mix(in srgb, var(--fo-parchment) 92%, transparent);
+    border: 1px solid rgba(0, 0, 0, 0.25);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.ag-fo-badge--poi { top: 2px; right: 2px; }
+.ag-fo-badge--poi.ag-fo-badge--victim { background: radial-gradient(circle at 35% 30%, #f3c98a, #c98a3f); border-color: #7a4a1d; }
+.ag-fo-badge--hazard { top: 2px; left: 2px; }
+.ag-fo-badge--vehicle { bottom: 2px; right: 2px; }
+
+.ag-fo-pawns { display: flex; gap: 1px; flex-wrap: wrap; justify-content: center; padding-bottom: 2px; }
+.ag-fo-pawn { width: 8px; height: 8px; border-radius: 50%; border: 1px solid #fff; display: inline-block; }
+.ag-fo-pawn--active { box-shadow: 0 0 0 1.5px var(--fo-red); }
+
+/* ---- Advance Fire reveal (§17.6 step 7) — the async payoff for ending a
+   turn, staged inside the shared .ag-payoff-stage/-sheet (PayoffScreen.tsx)
+   the same way Snakes & Ladders' own reveal content is above. Only the
+   content is Fires Out's own: two dice instead of one, and a resolution
+   state instead of a verdict. ---- */
+.ag-fo-advance-stage--plain { background: radial-gradient(circle at 50% 30%, var(--fo-char-2), var(--fo-char)); }
+.ag-fo-advance-stage--smoke { background: radial-gradient(circle at 50% 30%, var(--fo-smoke), var(--fo-char)); }
+.ag-fo-advance-stage--fire { background: radial-gradient(circle at 50% 30%, var(--fo-fire), var(--fo-red-deep)); }
+.ag-fo-advance-stage--explosion { background: radial-gradient(circle at 50% 30%, oklch(0.78 0.15 55), var(--fo-red-deep)); }
+.ag-fo-advance-title { font: 800 25px/1.1 var(--ag-font); color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.19); }
+.ag-fo-advance-sub { font: 600 13px var(--ag-font); color: #fff; opacity: 0.9; margin-top: 5px; }
+.ag-fo-advance-notes {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.14);
+    border-radius: 14px;
+    padding: 10px 16px;
+    color: #fff;
+    font: 600 12.5px var(--ag-font);
+}
+.ag-fo-advance-reveal { animation: ag-reveal-fade-in 0.35s ease both; }

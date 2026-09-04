@@ -77,6 +77,14 @@ New games should add their metadata to `src/utils/ui/games.ts` and reuse
 screen rather than rebuilding the form — and add themselves to the "What's
 new" notes (see Working practices below).
 
+Most also want a **game guide**: a `guide.ts` beside the game's `meta.ts`
+exporting a `GameGuide`, wired into `GAME_GUIDES` in
+`src/utils/ui/gameGuides.ts` and shown by the board screen through
+`useGameGuide`. It's the how-to-play popup a player gets on their first match
+and from the ⋮ menu after that. Five sections, `Goal` first, then `Your turn`,
+in the player's language — match the existing guides rather than restating the
+GDD.
+
 They also need a **share card**: the image a link to a game unfurls to in a
 chat app (today a join link, `/join?code=PLUM`). Run `npm run icons` and
 commit the `public/icons/og-game-<slug>.png` it writes. The script draws it
@@ -105,6 +113,19 @@ a system font** and skips the cards with a warning when it isn't.
   in the player's language, and drop the oldest line once a group runs past
   five. Internal-only work (refactors, docs, CI, dependency bumps) does not
   belong there.
+- **Only one "What's new" entry per feature branch.** A branch gets a single
+  line, in whichever group fits the change as a whole — not one per commit and
+  not one per fix along the way. Each group holds only five lines, so a branch
+  that adds three of its own evicts three shipped features that players can
+  still see; a reader wants "what changed", not this branch's commit log. Two
+  consequences worth spelling out:
+  - **Work on something not yet released has no entry of its own.** Fixing a
+    game (or a feature) that is still on a branch and has never shipped is
+    part of building it, so it stays inside that thing's one line. Players
+    never saw the broken version and cannot be told it is fixed.
+  - **If one line genuinely can't cover the branch, widen the line rather than
+    adding another** — and if the branch really is two player-visible changes,
+    that is the signal it should have been two branches.
 - Before committing UI changes, run `npm run build`, `npx tsc --noEmit` and
   `npm run lint`; all three must pass. If you touch the game engine
   (`src/utils/apiModels/`), also run `npm test` — the serializable-registry test
