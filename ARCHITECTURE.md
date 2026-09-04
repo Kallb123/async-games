@@ -1010,7 +1010,7 @@ one-liner fails with a message naming the exact file and line to add.
   suite are the safety net.
 - **Tests** run on [Vitest](https://vitest.dev) (`npm test`). Most of them are
   plain unit tests over the pure logic — game rules, recaps, replay, the turn
-  timer, the request-body helpers. Two other kinds are worth knowing about:
+  timer, the request-body helpers. Three other kinds are worth knowing about:
   - **Route-handler integration tests** call a handler with a real
     `NextRequest` and assert the response and what got written. Everything above
     the database is the real thing — the handler, the turn rules, the command
@@ -1021,6 +1021,19 @@ one-liner fails with a message naming the exact file and line to add.
     `src/app/api/game/gameRoutes.test.ts`. §23 of
     [`docs/robustness-review.md`](./docs/robustness-review.md) says what they
     cover and, as importantly, what they don't.
+  - **Client-hook tests** render the hook through `react-dom/server`, because
+    Vitest runs in `environment: "node"` here and there is no jsdom or
+    `@testing-library/react` to reach for. A two-line `Harness` component calls
+    the hook and returns `null`; `renderToString` runs it; the test asserts on
+    what the hook handed back. Stub whatever it fetches from (`useUser`,
+    `useRefreshableData`) with `vi.mock` and there is nothing else to set up.
+    Start from `src/utils/hooks/useGameChat.test.ts`. Effects don't run and each
+    call mounts a fresh tree, so this covers what a hook *computes* on a given
+    render, not what it fetches or how its state carries between renders — but
+    it does cover render-phase state, which is where a `setState` that never
+    settles turns into React's "Too many re-renders". Prefer a plain unit test over an
+    extracted pure function (`useAnimatedList`'s `planList`) where the logic
+    will come out; reach for this when it won't.
   - **Structural guards** scan the source for what should exist per game, then
     assert every shared file that should reference it does — so a new game is
     checked automatically with no hand-maintained list to keep in sync:
