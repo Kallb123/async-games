@@ -111,10 +111,16 @@ the bare file name and `theme.cards[id].art` is the resolved path. That is why
 no component that *draws* a card takes a theme — the card it is handed already
 knows its own name, its own rules text and its own picture.
 
-A theme whose art has not been drawn yet simply leaves `artDir` off and borrows
-the default theme's folder; its `note` is what tells the host so on the setup
-screen. Shipping the art later is two steps: drop the files in, and add
-`artDir` to the theme. Nothing else changes.
+**A new theme's folder starts as a copy of the default theme's**, so every one
+of its cards is drawable from the day the theme exists and nothing has to cope
+with a half-empty folder. Each face is then redrawn over its placeholder one at
+a time — overwrite the file under the name it already has, and that card changes
+with no code change at all. The theme's `note` is what tells the host on the
+setup screen that some faces are still placeholders; drop it once they aren't.
+`themes.test.ts` checks every card's resolved path against the filesystem, so a
+folder missing a file (or a face saved under the wrong name — the Train
+Station's is `station.png`) fails CI rather than serving a broken image on a
+real board.
 
 Themes that cannot rely on art still get to look different: Dice Cities' board
 gradient is driven by `--ag-dc-sky-1` / `--ag-dc-sky-2`, set per game from the

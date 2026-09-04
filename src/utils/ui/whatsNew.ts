@@ -55,7 +55,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "Play Dice Cities in the wasteland",
-                detail: "Dice Cities now has themes: pick one when you set up a game and everyone plays in it. Alongside the original there's Rust & Bottlecaps — a post-nuclear wasteland where you're an Overseer rebuilding a settlement, the Wheat Field is a Hydroponic Plot, the Ranch is a Brahmin Pen, and everything is paid for in caps. Only the names and the look change: every cost, number and rule is identical, so it plays exactly the same. Its own card art is still being drawn, so for now the cards keep the original faces.",
+                detail: "Dice Cities now has themes: pick one when you set up a game and everyone plays in it. Alongside the original there's Rust & Bottlecaps — a post-nuclear wasteland where you're an Overseer rebuilding a settlement, the Wheat Field is a Hydroponic Plot, the Ranch is a Brahmin Pen, and everything is paid for in caps. Only the names and the look change: every cost, number and rule is identical, so it plays exactly the same. Its card art is still being drawn, so some cards still wear the original faces for now.",
                 game: "dicecities",
             },
             {

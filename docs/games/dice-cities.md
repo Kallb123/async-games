@@ -238,11 +238,12 @@ and recap. The names below live in `src/games/DiceCities/themes.ts`, and the
 cross-game machinery around them is written up in
 [`docs/game-themes.md`](../game-themes.md). Two notes on what shipped:
 
-- **The wasteland's own card art has not been drawn.** The theme has no `artDir`
-  of its own yet, so its cards wear the Rising Sun illustrations and the setup
-  screen says so. Adding the art is dropping
-  `public/art/dicecities/wasteland/<the same file names>` in and giving the
-  theme an `artDir` — nothing else changes.
+- **The wasteland's card art has not been drawn yet.** Its folder,
+  `public/art/dicecities/wasteland/`, starts as a copy of the Rising Sun one, so
+  every card is drawable and the setup screen says the faces are placeholders.
+  Redrawing a card is overwriting its file under the name it already has —
+  `wheat-field.png` is the Hydroponic Plot's picture — with no code change, one
+  card at a time.
 - **App-level vocabulary is not re-skinned.** "Your turn", "End turn" and the
   turn timer belong to Async Games rather than to this game, so the "scavenging
   run" of §11.1 stays flavour: the board still rolls dice and takes turns.

@@ -47,11 +47,13 @@ interface DiceCitiesCardCopy {
 interface DiceCitiesThemeDef extends GameTheme {
     /**
      * The folder under `/public/art/dicecities/` holding this theme's card
-     * faces. Absent while a theme's own art is still being drawn — it then
-     * borrows the default theme's illustrations, which is what the theme's
-     * `note` warns the host about on the setup screen.
+     * faces, every one named the same as the default theme's. A new theme
+     * starts by copying that folder wholesale, so its cards are all drawable
+     * from day one and each face can be redrawn over its placeholder one at a
+     * time; the theme's `note` is what tells the host that some of them still
+     * are placeholders.
      */
-    artDir?: string;
+    artDir: string;
     /** The two colours the board's sky gradient runs between. */
     sky: [string, string];
     words: DiceCitiesWords;
@@ -67,14 +69,11 @@ export interface DiceCitiesTheme extends GameTheme {
      * Every card in the game, themed — same keys as `DiceCitiesCards`, so this
      * is a drop-in replacement for it on any screen that has a theme in hand.
      * Each card's `art` is resolved here from the file name `cards.ts` holds to
-     * the full path under this theme's folder, which is why nothing downstream
-     * has to combine the two.
+     * the full path under this theme's own folder, which is why nothing
+     * downstream has to combine the two.
      */
     cards: Record<string, IDiceCitiesCard>;
 }
-
-/** The theme whose art every other theme falls back to until it has its own. */
-const DEFAULT_ART_DIR = "japanese";
 
 /** Where a theme's card faces live in /public. Every theme names its files
  *  identically, so the card says which picture and the theme says which set. */
@@ -83,16 +82,15 @@ function artPath(artDir: string, fileName: string): string {
 }
 
 function buildTheme(def: DiceCitiesThemeDef): DiceCitiesTheme {
-    const artDir = def.artDir ?? DEFAULT_ART_DIR;
     const cards: Record<string, IDiceCitiesCard> = {};
     for (const [cardId, card] of Object.entries(DiceCitiesCards)) {
         cards[cardId] = {
             ...card,
             ...def.cards[cardId as DiceCitiesCardIds],
-            art: artPath(artDir, card.art),
+            art: artPath(def.artDir, card.art),
         };
     }
-    return { ...def, artDir, cards };
+    return { ...def, cards };
 }
 
 // ── Rising Sun: the game as it shipped ───────────────────────────────────────
@@ -127,11 +125,13 @@ const rustAndBottlecaps = buildTheme({
     name: "Rust & Bottlecaps",
     description: "A post-nuclear wasteland: survivors rebuilding a settlement out of scrap, paying in bottlecaps.",
     glyph: "☢️",
-    note: "Same rules, same numbers — only the names change. Its own card art is still being drawn, so cards wear the Rising Sun faces for now.",
-    // No artDir yet: the wasteland card faces don't exist, so the theme falls
-    // back to the Rising Sun illustrations. Drawing them is a matter of
-    // dropping `/public/art/dicecities/wasteland/<same file names>` in and
-    // adding `artDir: "wasteland"` here — nothing else changes.
+    note: "Same rules, same numbers — only the names change. Its card art is still being redrawn, so some cards still wear the Rising Sun faces.",
+    // Its folder starts as a copy of the Rising Sun one, so every card is
+    // drawable from the first day the theme exists. Redrawing a card is
+    // overwriting its file in `/public/art/dicecities/wasteland/` under the
+    // name it already has — no code change, and the rest keep their
+    // placeholder until someone gets to them.
+    artDir: "wasteland",
     sky: ["oklch(0.83 0.05 75)", "oklch(0.64 0.08 50)"],
     words: {
         coin: "cap",
