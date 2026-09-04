@@ -54,6 +54,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Dice Cities cards you can actually read",
+                detail: "The card art in your city, on the landmark track and in the market was too small to make out. Every card is now drawn as large as the space it sits in allows — the market fits another column and gives each card the full width of its slot — so most of them can be read where they are, and tapping any card opens it bigger still: the number it pays on, the cost and what it does, all legible at last. It works while you are waiting for your turn too, so you can plan your next build.",
+                game: "dicecities",
+            },
+            {
                 title: "Turn history behaves like chat now",
                 detail: "Tapping 📜 on the board now scrolls straight to the turn history panel, the way 💬 already does for chat, and it has its own ✕ to close it instead of only the ⋮ menu.",
             },
@@ -69,10 +74,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Talk to your opponents during a game",
                 detail: "Every game now has a chat thread: tap 💬 on the board to say something to the other players, and they get a nudge on their phone. It stays readable after the game ends, so “gg” has somewhere to go — and you can turn the notifications off in Settings if you'd rather just read it when you next open the board. Reading it on one device now clears it everywhere, the home screen shows how many messages are waiting in each game, and opening a game you're behind on tells you who messaged while you were away.",
-            },
-            {
-                title: "Check your notifications actually work",
-                detail: "Allowing notifications was only half of it: a phone can allow them and still quietly fail to sign itself up, and nothing told you. Settings now says where this device stands, has a Send a test notification button that tells you exactly what became of it, and a ? explaining everything which can stop one arriving — including the Android battery and per-app settings that block them without asking.",
             },
         ],
     },
