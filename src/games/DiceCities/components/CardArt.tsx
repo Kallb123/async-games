@@ -4,7 +4,7 @@ import { cardArt } from '@/games/DiceCities/ui';
 
 // The card illustrations are portrait PNGs of this size in /public. Passing the
 // real dimensions lets next/image serve an appropriately optimised copy — the
-// board draws these at ~50–75px tall, the enlarged view at the full width of
+// board draws these at ~85–190px tall, the enlarged view at the full width of
 // the popup, and the source files are ~75KB each. Exported because the portrait
 // ratio is also what shapes the tappable slot in ZoomableCardArt.
 export const ART_WIDTH = 162;
