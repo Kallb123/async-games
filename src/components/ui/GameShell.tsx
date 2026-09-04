@@ -1,11 +1,12 @@
 'use client'
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import BackArrow from '@/components/ui/BackArrow';
 import GameOptionsMenu, { GameOption } from '@/components/ui/GameOptionsMenu';
 import MatchHistory, { MatchHistoryProps } from '@/components/games/MatchHistory';
 import GameChat from '@/components/games/GameChat';
 import { useGameChat } from '@/utils/hooks/useGameChat';
+import { useScrollIntoViewOnOpen } from '@/utils/hooks/useScrollIntoViewOnOpen';
 
 /** What a game hands `GameShell`'s `chat` prop: the game and its roster. The
  *  roster pair (parallel arrays, seat order) is how a message gets a name and a
@@ -76,19 +77,12 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
     const hasChat = !!chat && chat.userIdList.length >= 2;
     const chatState = useGameChat(chat?.gameId ?? '', showChat, hasChat);
 
-    // The thread opens below the board, at the bottom of the page — so on a tall
-    // board the 💬 button can flip it on with nothing changing in view, reading
-    // as a dead tap. Bring it into view when it opens (its top, so a later height
-    // change as messages load doesn't move the target). Honour reduced motion,
-    // the way the CSS animations do.
-    const chatPanelRef = useRef<HTMLDivElement>(null);
-    useEffect(() => {
-        if (!showChat || !hasChat) {
-            return;
-        }
-        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        chatPanelRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
-    }, [showChat, hasChat]);
+    // Both panels open below the board, at the bottom of the page — so on a
+    // tall board the 💬/📜 button can flip one on with nothing changing in
+    // view, reading as a dead tap. `useScrollIntoViewOnOpen` brings each into
+    // view the moment it opens.
+    const chatPanelRef = useScrollIntoViewOnOpen(showChat && hasChat);
+    const logPanelRef = useScrollIntoViewOnOpen(showLog && !!log);
 
     const shellOptions: GameOption[] = log ? [{
         key: 'history',
@@ -129,7 +123,11 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
                 {right ?? (options && <GameOptionsMenu options={[...shellOptions, ...options]} />)}
             </div>
             {children}
-            {log && showLog && <MatchHistory {...log} />}
+            {log && showLog && (
+                <div ref={logPanelRef}>
+                    <MatchHistory {...log} onClose={() => setShowLog(false)} />
+                </div>
+            )}
             {hasChat && showChat && chat && (
                 <div ref={chatPanelRef}>
                     <GameChat
