@@ -54,6 +54,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Turn history behaves like chat now",
+                detail: "Tapping 📜 on the board now scrolls straight to the turn history panel, the way 💬 already does for chat, and it has its own ✕ to close it instead of only the ⋮ menu.",
+            },
+            {
                 title: "Fires Out's Experienced setup is clearer",
                 detail: "Starting an Experienced game now shows exactly what its dice rolled in the turn log — where each explosion caught, and which rooms its hazmats, hot spots and POI markers landed in — and the setup screen's Recruit/Veteran/Heroic descriptions now say what's actually different between them.",
                 game: "firesout",
@@ -69,10 +73,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Check your notifications actually work",
                 detail: "Allowing notifications was only half of it: a phone can allow them and still quietly fail to sign itself up, and nothing told you. Settings now says where this device stands, has a Send a test notification button that tells you exactly what became of it, and a ? explaining everything which can stop one arriving — including the Android battery and per-app settings that block them without asking.",
-            },
-            {
-                title: "Every game has a game guide",
-                detail: "Not sure what a phase does or which pile to worry about? A game guide now opens the first time you join a match of Dice Cities, Settlements & Cities, Train Time, World Domination or Outbreak, and any time after that from the ⋮ menu at the top of the board.",
             },
         ],
     },

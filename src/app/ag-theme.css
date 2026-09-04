@@ -1824,12 +1824,14 @@ a.ag-list-row, a.ag-list-row-main {
    a page-level action. */
 .ag-chat-load-earlier { margin-bottom: 10px; padding: 8px; font-size: 12px; }
 
-/* Title and its own ✕ on one row, mirroring the top-bar 💬 toggle so the panel
-   can be dismissed from itself. The title carries the log's 9px margin, so the
-   row takes it over and the title inside sits flush. */
-.ag-chat-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
-.ag-chat-head .ag-hand-title { margin-bottom: 0; }
-.ag-chat-close {
+/* Title and its own ✕ on one row, mirroring the top-bar 💬/📜 toggle so the
+   panel can be dismissed from itself. The title carries the log's 9px margin,
+   so the row takes it over and the title inside sits flush. Shared by the
+   chat thread and the turn-history panel — both are dismissible `.ag-log`
+   panels toggled from the top bar. */
+.ag-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
+.ag-panel-head .ag-hand-title { margin-bottom: 0; }
+.ag-panel-close {
     flex: none;
     border: none;
     background: transparent;
@@ -1841,23 +1843,23 @@ a.ag-list-row, a.ag-list-row-main {
     border-radius: 8px;
     cursor: pointer;
 }
-.ag-chat-close:hover { color: var(--ag-ink); background: rgba(0, 0, 0, 0.03); }
+.ag-panel-close:hover { color: var(--ag-ink); background: rgba(0, 0, 0, 0.03); }
 
-/* The thread opens at the bottom of the page and can be short, so it's easy to
-   miss even once scrolled into view. A background pulse on open marks where it
-   landed — a soft terracotta wash that settles back to the page. It flashes
-   three times (the iteration count) so it's still going after the smooth scroll
-   settles, not spent before the panel is even on screen. It fires on mount
-   because the panel mounts only when opened (GameShell), so there's no class to
-   toggle. */
-.ag-chat-panel { animation: ag-chat-open-pulse 1100ms ease-out 3; }
-@keyframes ag-chat-open-pulse {
+/* The chat thread and turn-history panel both open at the bottom of the page
+   and can be short, so it's easy to miss even once scrolled into view. A
+   background pulse on open marks where it landed — a soft terracotta wash
+   that settles back to the page. It flashes three times (the iteration count)
+   so it's still going after the smooth scroll settles, not spent before the
+   panel is even on screen. It fires on mount because each panel mounts only
+   when opened (GameShell), so there's no class to toggle. */
+.ag-panel-open-pulse { animation: ag-panel-open-pulse 1100ms ease-out 3; }
+@keyframes ag-panel-open-pulse {
     0% { background-color: transparent; }
     28% { background-color: color-mix(in oklch, var(--ag-terracotta) 30%, var(--ag-surface)); }
     100% { background-color: transparent; }
 }
 @media (prefers-reduced-motion: reduce) {
-    .ag-chat-panel { animation: none; }
+    .ag-panel-open-pulse { animation: none; }
 }
 
 /* Unread chat count — UnreadChatBadge, on the dashboard's turn card and list

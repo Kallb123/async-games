@@ -12,6 +12,13 @@ export interface MatchHistoryProps {
     oldestFirst?: boolean;
 }
 
+interface MatchHistoryComponentProps extends MatchHistoryProps {
+    /** Closes the panel — the panel's own ✕, mirroring the top-bar 📜 toggle
+     *  and the chat panel's close button. Supplied by `GameShell`, not by the
+     *  game — the game only hands over what to show, not how it closes. */
+    onClose: () => void;
+}
+
 // The in-game match history every game shows behind the log toggle: the turn
 // recap's timeline at its compact scale, each line dotted in the colour of
 // whoever it is about. Lines nobody made (setup, the narrator) stay neutral.
@@ -21,12 +28,15 @@ export interface MatchHistoryProps {
 // with — which picked the wrong player when one name prefixed another ("Dave"
 // and "DaveT", settled by seat order), and lost the colour entirely once a
 // player renamed and the frozen line no longer matched anybody.
-export default function MatchHistory({ entries, userIdList = [], oldestFirst = false }: MatchHistoryProps) {
+export default function MatchHistory({ entries, userIdList = [], oldestFirst = false, onClose }: MatchHistoryComponentProps) {
     const lines = oldestFirst ? entries.slice().reverse() : entries;
 
     return (
-        <div className="ag-log">
-            <div className="ag-hand-title">Match history</div>
+        <div className="ag-log ag-panel-open-pulse">
+            <div className="ag-panel-head">
+                <div className="ag-hand-title">Match history</div>
+                <button type="button" className="ag-panel-close" onClick={onClose} aria-label="Close turn history">✕</button>
+            </div>
             {lines.length === 0 ? (
                 <div className="ag-log-empty">No moves yet.</div>
             ) : (
