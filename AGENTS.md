@@ -113,8 +113,8 @@ a system font** and skips the cards with a warning when it isn't.
   in the player's language, and drop the oldest line once a group runs past
   ten. Internal-only work (refactors, docs, CI, dependency bumps) does not
   belong there. A group shows its newest three lines in full — game art and
-  the detail — and the seven behind them as compact title-only rows, so a
-  line's `title` has to stand on its own once it has aged out of the top.
+  the detail — and the rest as compact title-only rows, so a line's `title`
+  has to stand on its own once it has aged out of the top.
 - **Only one "What's new" entry per feature branch.** A branch gets a single
   line, in whichever group fits the change as a whole — not one per commit and
   not one per fix along the way. Each group holds only ten lines, so a branch
