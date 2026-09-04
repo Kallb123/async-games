@@ -8,7 +8,7 @@ import {
     rollLabel,
     yieldLabel,
 } from "@/games/DiceCities/ui";
-import CardArt from "@/games/DiceCities/components/CardArt";
+import ZoomableCardArt from "@/games/DiceCities/components/ZoomableCardArt";
 
 interface DiceCitiesBoardProps {
     /** The city being shown — usually the viewer's own. */
@@ -22,7 +22,8 @@ interface DiceCitiesBoardProps {
 /**
  * A player's city tableau: the landmark track (build all four to win) above the
  * grid of establishments they own, colour-coded by when each one pays out.
- * Presentational — every interactive control lives in DiceCitiesActions.
+ * Presentational — every interactive control lives in DiceCitiesActions, bar
+ * the tap-to-read on each card, which ZoomableCardArt owns.
  */
 export default function DiceCitiesBoard({ playerState, ownerLabel, enabledDocks }: DiceCitiesBoardProps) {
     // Establishments = every card the player owns, sorted by the number that
@@ -49,9 +50,8 @@ export default function DiceCitiesBoard({ playerState, ownerLabel, enabledDocks 
                             <div
                                 key={cardId}
                                 className={`ag-dc-landmark${built ? " ag-dc-landmark--built" : ""}`}
-                                title={card.text}
                             >
-                                <CardArt card={card} className="ag-dc-landmark-icon" />
+                                <ZoomableCardArt card={card} className="ag-dc-landmark-icon" />
                                 <div className="ag-dc-landmark-name">{card.title}</div>
                                 <div className="ag-dc-landmark-cost">{built ? "✓ built" : `${card.cost}🪙`}</div>
                             </div>
@@ -84,11 +84,10 @@ export default function DiceCitiesBoard({ playerState, ownerLabel, enabledDocks 
                                 key={cc.card}
                                 className="ag-dc-est"
                                 style={{ borderTopColor: color }}
-                                title={card.text}
                             >
                                 <span className="ag-dc-est-roll">{rollLabel(card)}</span>
                                 {cc.amount > 1 && <span className="ag-dc-est-count">×{cc.amount}</span>}
-                                <CardArt card={card} className="ag-dc-est-icon" />
+                                <ZoomableCardArt card={card} className="ag-dc-est-icon" />
                                 <div className="ag-dc-est-name">{card.title}</div>
                                 <div className="ag-dc-est-yield">{yieldLabel(card)}</div>
                             </div>

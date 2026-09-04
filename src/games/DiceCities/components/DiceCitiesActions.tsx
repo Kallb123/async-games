@@ -21,6 +21,7 @@ import {
 } from "@/utils/apiModels/GameLogic";
 import { ACTIVATION_META, activationFor, buildableLandmarks, rollLabel, yieldLabel } from "@/games/DiceCities/ui";
 import CardArt from "@/games/DiceCities/components/CardArt";
+import ZoomableCardArt from "@/games/DiceCities/components/ZoomableCardArt";
 import type { SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import Dice from "@/components/ui/Dice";
 import ActionButton from "@/components/ui/ActionButton";
@@ -155,7 +156,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
                             style={{ borderTopColor: ACTIVATION_META[activationFor(card)].color }}
                         >
                             <div className="ag-dc-market-card-top">
-                                <CardArt card={card} className="ag-dc-market-icon" />
+                                <ZoomableCardArt card={card} className="ag-dc-market-icon" />
                                 {pending
                                     ? <PendingTag label="Building" />
                                     : <span className="ag-dc-market-roll">🎲 {rollLabel(card)}</span>}

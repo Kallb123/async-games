@@ -2542,6 +2542,77 @@ a.ag-list-row, a.ag-list-row-main {
     gap: 12px;
 }
 
+/* ---- Card art: bigger, and tappable to enlarge ---- */
+/* The illustrations are whole card faces — roll number, name, cost and rules
+   text are printed on them — so a thumbnail is a shape you recognise rather
+   than something you can read. These slots are as large as each grid affords;
+   the ⤢ badge says the rest is one tap away (DiceCitiesCardModal). The slots
+   are wider than the portrait art they centre, so --ag-dc-art-ratio (set by
+   ZoomableCardArt, from the PNGs' own dimensions) shapes the tappable box to
+   the card rather than to the slot. */
+.ag-dc-cardzoom {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: zoom-in;
+}
+.ag-dc-cardzoom-art {
+    position: relative;
+    display: block;
+    height: 100%;
+    max-width: 100%;
+    aspect-ratio: var(--ag-dc-art-ratio);
+    border-radius: inherit;
+}
+.ag-dc-cardzoom-img { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: inherit; }
+/* Anchored to the art rather than to the slot, so it sits on the card's own
+   corner in the slots that are wider than the portrait art they centre — and
+   sized as a fixed box rather than a padded glyph, because ⤢ is not in
+   Bricolage Grotesque and a fallback with a tall em box grows a padded badge
+   until it covers half the card. */
+.ag-dc-cardzoom-art::after {
+    content: "⤢";
+    position: absolute;
+    right: 1px;
+    bottom: 1px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 13px;
+    height: 13px;
+    overflow: hidden;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.5);
+    color: var(--ag-on-dark);
+    font-family: var(--ag-font);
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 1;
+}
+.ag-dc-cardzoom:active { transform: scale(0.95); }
+
+/* ---- The enlarged card (DiceCitiesCardModal) ---- */
+.ag-dc-card-big {
+    display: block;
+    width: 100%;
+    max-width: 260px;
+    height: auto;
+    margin: 0 auto;
+    border-radius: 10px;
+}
+.ag-dc-card-facts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 14px 0 12px; }
+.ag-dc-card-fact {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--ag-surface-2);
+    border-radius: 99px;
+    padding: 4px 11px;
+    font: 800 11px var(--ag-font);
+    color: var(--ag-ink);
+}
+
 /* ---- Landmark track ---- */
 .ag-dc-landmarks {
     background: var(--ag-dark);
@@ -2571,9 +2642,8 @@ a.ag-list-row, a.ag-list-row-main {
     border: 1px solid var(--ag-terracotta);
 }
 .ag-dc-landmark-icon {
-    height: 30px;
+    height: 52px;
     width: 100%;
-    object-fit: contain;
     border-radius: 6px;
 }
 .ag-dc-landmark:not(.ag-dc-landmark--built) .ag-dc-landmark-icon { filter: grayscale(0.7); opacity: 0.85; }
@@ -2620,7 +2690,7 @@ a.ag-list-row, a.ag-list-row-main {
     padding: 0 5px;
     font: 800 8px var(--ag-font);
 }
-.ag-dc-est-icon { height: 26px; width: 100%; object-fit: contain; margin-top: 8px; }
+.ag-dc-est-icon { height: 70px; width: 100%; margin-top: 8px; }
 .ag-dc-est-name { font: 800 9.5px var(--ag-font); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ag-dc-est-yield { font: 600 8px var(--ag-font); color: var(--ag-ink-soft); }
 .ag-dc-city-empty { grid-column: 1 / -1; font: 500 11px var(--ag-font); color: var(--ag-ink-soft); text-align: center; padding: 12px 0; }
@@ -2692,8 +2762,10 @@ a.ag-list-row, a.ag-list-row-main {
     display: flex;
     flex-direction: column;
 }
-.ag-dc-market-card-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.ag-dc-market-icon { height: 30px; width: 34px; object-fit: contain; }
+/* Top-aligned, not centred: the card art is a tall portrait now, and the roll
+   number reads as its caption rather than floating in the middle of the gap. */
+.ag-dc-market-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+.ag-dc-market-icon { height: 74px; width: 50px; flex: none; }
 .ag-dc-market-roll { font: 800 9px var(--ag-font); color: var(--ag-ink-softer); white-space: nowrap; }
 .ag-dc-market-name { font: 800 12px var(--ag-font); margin-top: 4px; }
 .ag-dc-market-yield { font: 600 9px var(--ag-font); color: var(--ag-ink-soft); margin-top: 1px; }
@@ -2712,7 +2784,7 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-dc-landmark-buys { display: flex; flex-direction: column; gap: 8px; margin-top: 9px; }
 .ag-dc-landmark-buy { background: color-mix(in oklch, var(--ag-terracotta) 6%, var(--ag-surface)); }
 .ag-dc-landmark-buy:disabled { opacity: 0.55; cursor: not-allowed; }
-.ag-dc-landmark-buy-icon { object-fit: contain; background: var(--ag-surface-2); }
+.ag-dc-landmark-buy-icon { width: 34px; height: 52px; object-fit: contain; background: var(--ag-surface-2); }
 .ag-dc-reroll { margin-top: 10px; }
 .ag-dc-post .ag-btn--success { margin-top: 10px; }
 
@@ -2765,7 +2837,7 @@ a.ag-list-row, a.ag-list-row-main {
     gap: 3px;
 }
 .ag-dc-pick-card:disabled { opacity: 0.5; cursor: not-allowed; }
-.ag-dc-pick-card-icon { height: 28px; width: 100%; object-fit: contain; }
+.ag-dc-pick-card-icon { height: 54px; width: 100%; object-fit: contain; }
 .ag-dc-pick-card-name { font: 800 9px var(--ag-font); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 
 /* ---- Turn recap: "since you were last here" ---- */

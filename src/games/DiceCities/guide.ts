@@ -24,7 +24,7 @@ export const guide: GameGuide = {
         },
         {
             heading: "Watch the market",
-            body: "The cards on offer are shared — the one you need might not last until your next turn, so grab high-value blues and reds while they're there instead of banking coins for later.",
+            body: "The cards on offer are shared — the one you need might not last until your next turn, so grab high-value blues and reds while they're there instead of banking coins for later. Tap any card, in the market or in a city or on the landmark track, to see it full size and read exactly what it does.",
         },
         {
             heading: "The Docks",
