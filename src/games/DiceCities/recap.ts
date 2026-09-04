@@ -2,7 +2,8 @@ import type { IRecapAdapter, IGameEvent, IRecapSummary, IRecapTip } from "@/util
 import type { ITurnSnapshot } from "@/utils/games/replay";
 import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic";
 import { IDiceCitiesDiceRollOutcome } from "@/utils/apiModels/GameLogic";
-import { DiceCitiesCards, DiceCitiesCardIds, HARBOUR_BONUS, HARBOUR_MIN_ROLL } from "@/games/DiceCities/cards";
+import { DiceCitiesCardIds, HARBOUR_BONUS, HARBOUR_MIN_ROLL } from "@/games/DiceCities/cards";
+import { diceCitiesTheme } from "@/games/DiceCities/themes";
 import { LANDMARKS, landmarkCount } from "@/games/DiceCities/ui";
 import type { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
 import { playerByUserId } from "@/games/DiceCities/DiceCitiesModels";
@@ -27,6 +28,11 @@ function toEvents(
     outcome: ICommandOutcome
 ): IGameEvent[] {
     const name = command.senderUsername;
+    // The theme the game was played in, read off the state the replay engine
+    // just rebuilt — so a recap names the cards the way the board did, and an
+    // event replayed from a game older than themes reads as it always did.
+    const state = next.specificGameState as IDiceCitiesGameStateResponse | undefined;
+    const theme = diceCitiesTheme(state?.theme);
     const base = {
         id: command.id,
         commandId: command.id,
@@ -40,7 +46,7 @@ function toEvents(
     // decline the +2, so that command carries the beat instead.
     if (
         (command.className === "DiceCitiesRequestDiceRoll" || command.className === "DiceCitiesRequestRadioTowerReroll") &&
-        (next.specificGameState as IDiceCitiesGameStateResponse | undefined)?.awaitingHarbourChoice
+        state?.awaitingHarbourChoice
     ) {
         return [];
     }
@@ -64,13 +70,13 @@ function toEvents(
         let detail: string;
         if (rollerNet > 0) detail = `+${rollerNet}🪙`;
         else if (rollerNet < 0) detail = `${rollerNet}🪙`;
-        else detail = "no coins";
+        else detail = `no ${theme.words.coins}`;
 
         // The Harbour's +2 lands on the dice that were already thrown, so its
         // event tells the whole story: what came up, and what it became.
         const tookHarbourBonus = harbour && (command as unknown as { addBonus?: boolean }).addBonus === true;
         const title = tookHarbourBonus
-            ? `${name} rolled ${total}${dicePart}, Harbour +${HARBOUR_BONUS} → ${total + HARBOUR_BONUS}`
+            ? `${name} rolled ${total}${dicePart}, ${theme.cards[DiceCitiesCardIds.HARBOUR].title} +${HARBOUR_BONUS} → ${total + HARBOUR_BONUS}`
             : `${name} ${reroll ? "re-rolled" : "rolled"} ${total}${dicePart}`;
 
         return [
@@ -92,7 +98,7 @@ function toEvents(
                 ...base,
                 type: "dc_harbour",
                 glyph: "⚓",
-                title: `${name} built the Harbour`,
+                title: `${name} built the ${theme.cards[DiceCitiesCardIds.HARBOUR].title}`,
                 detail: `+${HARBOUR_BONUS} on a ${HARBOUR_MIN_ROLL} or better`,
             },
         ];
@@ -101,8 +107,8 @@ function toEvents(
     // ── Landmark unlocked: progress toward the four-landmark win. ───────────────
     const landmarkCardId = LANDMARK_BY_COMMAND[command.className];
     if (landmarkCardId) {
-        const card = DiceCitiesCards[landmarkCardId];
-        const roller = playerByUserId(next.specificGameState as IDiceCitiesGameStateResponse, command.senderId);
+        const card = theme.cards[landmarkCardId];
+        const roller = playerByUserId(state, command.senderId);
         const built = roller ? landmarkCount(roller) : 0;
         const won = built >= LANDMARKS.length;
         return [
@@ -111,9 +117,9 @@ function toEvents(
                 type: "dc_landmark",
                 glyph: won ? "🏆" : "🏛️",
                 title: won
-                    ? `${name} built the ${card.title} — all four landmarks!`
+                    ? `${name} built the ${card.title} — all four ${theme.words.landmarks}!`
                     : `${name} unlocked the ${card.title}`,
-                detail: won ? "winner!" : `${built}/${LANDMARKS.length} landmarks`,
+                detail: won ? "winner!" : `${built}/${LANDMARKS.length} ${theme.words.landmarks}`,
             },
         ];
     }
@@ -121,7 +127,7 @@ function toEvents(
     // ── Establishment bought. ───────────────────────────────────────────────────
     if (command.className === "DiceCitiesRequestCardPurchase") {
         const cardId = (command as unknown as { cardId: string }).cardId;
-        const card = DiceCitiesCards[cardId];
+        const card = theme.cards[cardId];
         if (!card) return [];
         return [
             {
@@ -139,6 +145,10 @@ function toEvents(
     return [];
 }
 
+// Deliberately app-voiced rather than themed: `summarize` is handed the events
+// and nothing else - no game state, so no theme to read - and the recap card's
+// headline is the app talking to a player between games rather than the board
+// talking about this one. The event rows above it carry the themed names.
 function summarize(events: IGameEvent[], forUserId: string): IRecapSummary {
     const rolls = events.filter((e) => e.type === "dc_roll" || e.type === "dc_reroll").length;
     const landmarks = events.filter((e) => e.type === "dc_landmark");
@@ -169,12 +179,13 @@ function tip(liveState: unknown, forUserId: string): IRecapTip | null {
     const state = liveState as IDiceCitiesGameStateResponse | undefined;
     const me = playerByUserId(state, forUserId);
     if (!me) return null;
+    const theme = diceCitiesTheme(state?.theme);
 
     // LANDMARKS is already in cost order (Train Station → Radio Tower).
     const next = LANDMARKS.find((l) => !me[l.flag]);
     if (!next) return null; // all four built — nothing left to nudge.
 
-    const card = DiceCitiesCards[next.cardId];
+    const card = theme.cards[next.cardId];
     if (me.money >= card.cost) {
         return {
             glyph: "🏛️",

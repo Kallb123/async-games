@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { diceCitiesRecapAdapter } from "./recap";
 import { BANK_TOTAL_COINS, DiceCitiesCardIds } from "./cards";
+import { DEFAULT_DICE_CITIES_THEME } from "./themes";
 import type { ITurnSnapshot } from "@/utils/games/replay";
 import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic";
 import type { IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "./apiModels";
@@ -40,6 +41,7 @@ function state(players: IDiceCitiesPlayerStateResponse[]): IDiceCitiesGameStateR
         harbourRoll1: null,
         harbourRoll2: null,
         enabledDocks: false,
+        theme: DEFAULT_DICE_CITIES_THEME.id,
     };
 }
 

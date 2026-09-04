@@ -794,8 +794,49 @@ a.ag-list-row, a.ag-list-row-main {
     border-bottom: 1.5px dashed var(--ag-line-dashed);
 }
 .ag-option-row:last-child { border-bottom: none; }
+.ag-option-main { flex: 1; min-width: 0; }
 .ag-option-title { font: 700 13.5px var(--ag-font); color: var(--ag-ink); }
 .ag-option-desc { font: 500 11px/1.35 var(--ag-font); color: var(--ag-ink-softer); margin-top: 1px; }
+
+/* The pick-one sibling of the toggle row above: a whole row is the control, so
+   it is a <button>, and a radio mark stands where the switch would. Always worn
+   alongside .ag-option-row, which already gives it the padding and the dashed
+   rule — this only undoes what a browser does to a button. Used by ThemeSelect;
+   anything else a setup screen offers one of belongs here too. */
+.ag-option-row--choice {
+    width: 100%;
+    background: none;
+    border: none;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+/* A button's content is phrasing-only, so the row's lines are spans and need
+   telling to stack. */
+.ag-option-row--choice .ag-option-title,
+.ag-option-row--choice .ag-option-desc,
+.ag-option-note { display: block; }
+.ag-option-glyph { font-size: 22px; line-height: 1; flex: none; }
+/* Set apart from the description above it without spending another colour:
+   the caveat is the line you read second. */
+.ag-option-note { font: 600 10.5px/1.35 var(--ag-font); color: var(--ag-ink-soft); margin-top: 4px; }
+.ag-option-radio {
+    width: 20px;
+    height: 20px;
+    flex: none;
+    border-radius: 50%;
+    border: 2px solid var(--ag-line);
+    position: relative;
+}
+.ag-option-row--on .ag-option-radio { border-color: var(--ag-terracotta); }
+.ag-option-row--on .ag-option-radio::after {
+    content: "";
+    position: absolute;
+    inset: 3px;
+    border-radius: 50%;
+    background: var(--ag-terracotta);
+}
 
 /* ---- Big CTA card ---- */
 .ag-cta {
@@ -2535,8 +2576,11 @@ a.ag-list-row, a.ag-list-row-main {
    ========================================================================== */
 
 /* The city sits on a bright "sky" (reuses .ag-board-area's padding). */
+/* The sky a Dice Cities board sits under. The two stops are set per game from
+   the theme it is played in (DiceCitiesBoard) — the fallbacks are the original
+   blue, so a board rendered without a theme looks exactly as it always did. */
 .ag-dc-area {
-    background: radial-gradient(circle at 50% 18%, oklch(0.85 0.06 235), oklch(0.73 0.08 240));
+    background: radial-gradient(circle at 50% 18%, var(--ag-dc-sky-1, oklch(0.85 0.06 235)), var(--ag-dc-sky-2, oklch(0.73 0.08 240)));
     display: flex;
     flex-direction: column;
     gap: 12px;

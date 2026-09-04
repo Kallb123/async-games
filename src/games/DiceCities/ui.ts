@@ -6,7 +6,7 @@
 // re-derived (and drifting) in each component.
 
 import { IDiceCitiesCard, IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
-import { DiceCitiesCardIds, DiceCitiesCards } from "@/games/DiceCities/cards";
+import { DiceCitiesCardIds } from "@/games/DiceCities/cards";
 
 /** When an establishment pays out, expressed as the three board colours. */
 export type Activation = "any" | "you" | "steal";
@@ -96,13 +96,3 @@ export function landmarkCount(playerState: IDiceCitiesPlayerStateResponse): numb
     return LANDMARKS.filter((l) => playerState[l.flag]).length;
 }
 
-/** The card metadata for a landmark by its player-state flag. */
-export function landmarkCard(flag: keyof IDiceCitiesPlayerStateResponse): IDiceCitiesCard {
-    const entry = LANDMARKS.find((l) => l.flag === flag);
-    return DiceCitiesCards[entry!.cardId];
-}
-
-/** Path to a card's illustration in /public. */
-export function cardArt(card: IDiceCitiesCard): string {
-    return `/art/dicecities/japanese/${card.art}`;
-}

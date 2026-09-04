@@ -7,6 +7,11 @@ export interface IDiceCitiesCard {
     cost: number,
     rollNumber: number[],
     text: string,
+    /**
+     * The card's illustration. `cards.ts` holds the bare file name; the themed
+     * card table in `themes.ts` — the one every screen actually renders from —
+     * rewrites it to the full path under that theme's art folder.
+     */
     art: string,
     type: cardType,
     icon: string,
@@ -69,7 +74,13 @@ export interface IDiceCitiesGameStateResponse {
     harbourRoll1: number | null,
     harbourRoll2: number | null,
     /** Docks: the expansion is in play. Fixed at creation, so replays match. */
-    enabledDocks: boolean
+    enabledDocks: boolean,
+    /**
+     * The theme this game is played in (see themes.ts) - which names every
+     * card and every noun on the board. Fixed at creation, and always one of
+     * the game's own themes by the time it reaches here.
+     */
+    theme: string
 }
 
 export interface IDiceCitiesGameDataResponse extends IGameDataResponse {

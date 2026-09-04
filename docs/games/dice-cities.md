@@ -231,6 +231,22 @@ with a different picture on it. The names below are a starting point to be
 taken or swapped to taste — the columns that matter are the ones to their
 right.
 
+**This is implemented.** The host picks between "Rising Sun" (the game as it
+ships) and "Rust & Bottlecaps" on the New Game screen, and the whole table
+plays in the chosen one — cards, market, landmark track, turn log, game guide
+and recap. The names below live in `src/games/DiceCities/themes.ts`, and the
+cross-game machinery around them is written up in
+[`docs/game-themes.md`](../game-themes.md). Two notes on what shipped:
+
+- **The wasteland's own card art has not been drawn.** The theme has no `artDir`
+  of its own yet, so its cards wear the Rising Sun illustrations and the setup
+  screen says so. Adding the art is dropping
+  `public/art/dicecities/wasteland/<the same file names>` in and giving the
+  theme an `artDir` — nothing else changes.
+- **App-level vocabulary is not re-skinned.** "Your turn", "End turn" and the
+  turn timer belong to Async Games rather than to this game, so the "scavenging
+  run" of §11.1 stays flavour: the board still rolls dice and takes turns.
+
 ### 11.1 Vocabulary
 
 | Base theme | Wasteland theme | Notes |
@@ -242,7 +258,7 @@ right.
 | **Establishment** | **Holding** | |
 | **Landmark** | **Reclamation Project** | |
 | **The market / supply** | **The Caravan Market** | The travelling traders who will sell anyone anything. |
-| **Dice roll** | **Scavenging run** | The number rolled is "what the run turned up". |
+| **Dice roll** | **Scavenging run** | The number rolled is "what the run turned up". Flavour only — the app's own "turn" and "roll" wording is shared with every other game and stays as it is. |
 | **Blue (Primary Industry)** | **Scavenging** | Pays on anyone's run. |
 | **Green (Secondary Industry)** | **Workshops** | Pays on your own run only. |
 | **Red (Restaurants)** | **Watering Holes** | Charges the scavenger who came back with the number. |

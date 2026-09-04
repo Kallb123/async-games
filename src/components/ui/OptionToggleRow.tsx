@@ -27,7 +27,7 @@ export default function OptionToggleRow({
 }: OptionToggleRowProps) {
     return (
         <div className="ag-option-row" aria-busy={loading || undefined}>
-            <div style={{ flex: 1 }}>
+            <div className="ag-option-main">
                 <div className="ag-option-title">{title}</div>
                 {description && <div className="ag-option-desc">{description}</div>}
             </div>

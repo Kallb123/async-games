@@ -54,6 +54,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Play Dice Cities in the wasteland",
+                detail: "Dice Cities now has themes: pick one when you set up a game and everyone plays in it. Alongside the original there's Rust & Bottlecaps — a post-nuclear wasteland where you're an Overseer rebuilding a settlement, the Wheat Field is a Hydroponic Plot, the Ranch is a Brahmin Pen, and everything is paid for in caps. Only the names and the look change: every cost, number and rule is identical, so it plays exactly the same. Its own card art is still being drawn, so for now the cards keep the original faces.",
+                game: "dicecities",
+            },
+            {
                 title: "Dice Cities cards you can actually read",
                 detail: "The card art in your city, on the landmark track and in the market was too small to make out. Every card is now drawn as large as the space it sits in allows — the market fits another column and gives each card the full width of its slot — so most of them can be read where they are, and tapping any card opens it bigger still: the number it pays on, the cost and what it does, all legible at last. It works while you are waiting for your turn too, so you can plan your next build.",
                 game: "dicecities",
@@ -70,10 +75,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "See which friends are around right now",
                 detail: "A green dot now sits on a friend's picture in your friends list while they're taking turns — anyone who has moved in a game in the last five minutes — so you can tell at a glance who is worth challenging now rather than tomorrow.",
-            },
-            {
-                title: "Talk to your opponents during a game",
-                detail: "Every game now has a chat thread: tap 💬 on the board to say something to the other players, and they get a nudge on their phone. It stays readable after the game ends, so “gg” has somewhere to go — and you can turn the notifications off in Settings if you'd rather just read it when you next open the board. Reading it on one device now clears it everywhere, the home screen shows how many messages are waiting in each game, and opening a game you're behind on tells you who messaged while you were away.",
             },
         ],
     },

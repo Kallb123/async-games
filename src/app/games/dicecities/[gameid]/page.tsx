@@ -12,7 +12,8 @@ import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import DiceCitiesBoard from "@/games/DiceCities/components/DiceCitiesBoard";
 import DiceCitiesActions from "@/games/DiceCities/components/DiceCitiesActions";
-import { guide as diceCitiesGuide } from "@/games/DiceCities/guide";
+import { buildDiceCitiesGuide } from "@/games/DiceCities/guide";
+import { diceCitiesTheme } from "@/games/DiceCities/themes";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
@@ -22,9 +23,10 @@ import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useGameGuide } from "@/utils/hooks/useGameGuide";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
-import { landmarkCount } from "@/games/DiceCities/ui";
+import { LANDMARKS, landmarkCount } from "@/games/DiceCities/ui";
 import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId } from "@/utils/ui/players";
+import { rematchTheme } from "@/utils/ui/rematch";
 
 // Sentinel used as "current turn" while reviewing a past turn, so no player's
 // interactive controls activate.
@@ -91,6 +93,10 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, getForfeitedByDisplayName());
     const hasRolled = displayed?.hasRolled ?? false;
     const enabledDocks = displayed?.enabledDocks === true;
+    // Fixed at creation and carried on the game state, so a game reviewed turn
+    // by turn stays in the theme it was played in. Total, so a game older than
+    // themes reads back as the game it shipped as.
+    const theme = diceCitiesTheme(displayed?.theme);
 
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
@@ -102,7 +108,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
         } else if (isMyTurn) {
             subtitle = hasRolled
                 ? <><span className="ag-hi">Your turn</span> · build or end turn</>
-                : <><span className="ag-hi">Your roll</span> · build all 4 landmarks to win</>;
+                : <><span className="ag-hi">Your roll</span> · build all {LANDMARKS.length} {theme.words.landmarks} to win</>;
         } else {
             subtitle = <>{currentTurnUsername}&apos;s turn</>;
         }
@@ -138,6 +144,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
             gameState={displayed}
             myState={myState}
             opponents={opponents}
+            theme={theme}
             submitCommand={controlsSubmit}
             pendingTarget={controlsPendingTarget}
             readOnly={!isMyTurn}
@@ -183,7 +190,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
         <GameShell title="Dice Cities" subtitle={subtitle} options={displayed ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList }} chat={{ gameId, userIdList, usernameList }}>
             <FcmTokenComp />
 
-            {gameGuide.open && <GameGuideModal guide={diceCitiesGuide} onClose={gameGuide.closeGuide} />}
+            {gameGuide.open && <GameGuideModal guide={buildDiceCitiesGuide(theme)} onClose={gameGuide.closeGuide} />}
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 
@@ -198,14 +205,18 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
                     userIdList={userIdList}
                     myUserId={myUserId}
                     turnTimer={gameData?.turnTimer}
+                    extraParams={rematchTheme(theme.id)}
                 />
             )}
 
             {boardPlayer && (
                 <DiceCitiesBoard
                     playerState={boardPlayer}
-                    ownerLabel={boardPlayer.userId === user?.id ? 'Your city' : `${boardPlayer.username}'s city`}
+                    ownerLabel={boardPlayer.userId === user?.id
+                        ? `Your ${theme.words.city}`
+                        : `${boardPlayer.username}'s ${theme.words.city}`}
                     enabledDocks={enabledDocks}
+                    theme={theme}
                 />
             )}
 

@@ -1,6 +1,5 @@
 import Image from 'next/image';
 import type { IDiceCitiesCard } from '@/games/DiceCities/apiModels';
-import { cardArt } from '@/games/DiceCities/ui';
 
 // The card illustrations are portrait PNGs of this size in /public. Passing the
 // real dimensions lets next/image serve an appropriately optimised copy — the
@@ -11,6 +10,9 @@ export const ART_WIDTH = 162;
 export const ART_HEIGHT = 248;
 
 interface CardArtProps {
+    /** A themed card — `theme.cards[id]`, whose `art` is already the path to
+     *  that theme's face for it (see themes.ts). Nothing here has to know
+     *  which theme that was. */
     card: IDiceCitiesCard;
     /** The ag-* class that sizes the slot this art sits in. */
     className: string;
@@ -22,7 +24,7 @@ export default function CardArt({ card, className }: CardArtProps) {
     return (
         <Image
             className={className}
-            src={cardArt(card)}
+            src={card.art}
             alt=""
             width={ART_WIDTH}
             height={ART_HEIGHT}

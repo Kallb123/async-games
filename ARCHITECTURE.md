@@ -962,6 +962,7 @@ runtime:
 | `src/utils/games/gameCommands.ts` | the game type's `className` as a key, its command `className`s as the list | `serializableRegistry.test.ts` ("assigns every command and game type to a game in the command registry") |
 | `src/utils/ui/games.ts` | import the game's `meta.ts` and add it to `GAME_META` | `src/games/gameRegistry.test.ts` ("wires every game's metadata into GAME_META") |
 | `src/utils/ui/gameGuides.ts` | *(only if the game has a `guide.ts`)* import the guide and add it to `GAME_GUIDES` | `src/games/gameRegistry.test.ts` ("wires every game's how-to-play guide into GAME_GUIDES") — without it `/api/gameguides` rejects the "seen" write, so the popup re-shows on every visit |
+| `src/utils/ui/gameThemes.ts` | *(only if the game has a `themes.ts`)* import the theme list and add it to `GAME_THEMES` | `src/games/gameRegistry.test.ts` ("wires every themed game's themes into GAME_THEMES") — without it the game plays fine in its default theme and silently offers no picker, so the alternative dressing is unreachable |
 
 `src/games/gameRegistry.test.ts` discovers games the same way
 `serializableRegistry.test.ts` discovers `@serializable` classes: by scanning,
@@ -1083,6 +1084,7 @@ one-liner fails with a message naming the exact file and line to add.
 - [`AGENTS.md`](./AGENTS.md) — contribution conventions and the component-reuse rules.
 - [`docs/new-game.md`](./docs/new-game.md) — step-by-step checklist for adding a new game, plus practical gotchas.
 - [`docs/turn-recap-and-planning.md`](./docs/turn-recap-and-planning.md) — the replay engine in depth.
+- [`docs/game-themes.md`](./docs/game-themes.md) — the cross-game theming system: how a game gets a second dressing (same rules, different names and art), where the chosen theme is stored, and how to add one.
 - [`docs/profile-pictures.md`](./docs/profile-pictures.md) — how a player's avatar is resolved, and the roadmap for uploads/unlockables.
 - [`docs/account-less-play.md`](./docs/account-less-play.md) — plan for Jackbox-style join-by-code lobbies and guest players: what the five identity choke points cost, and the commit-by-commit build order.
 - [`docs/games/`](./docs/games/) — per-game rules notes (Smartthink, Settlements & Cities).
