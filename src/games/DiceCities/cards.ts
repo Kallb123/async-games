@@ -5,7 +5,25 @@ import { IDiceCitiesCard } from "./apiModels";
 // card goes straight back in, so the bank plus all the players' purses always
 // add up to exactly this. A payout the bank can't cover is paid short rather
 // than minting coins that don't exist.
-export const BANK_TOTAL_COINS = 60;
+//
+// The boxed game's base supply: 42 ones, 24 fives and 10 tens. We count value
+// rather than coins, so denominations do not matter - only the 262 they total.
+export const BANK_TOTAL_COINS = 262;
+
+// The Docks brings its own money, as the Harbor expansion does: 12 pieces worth
+// 20 each, taking a Docks game's supply to 502.
+export const DOCKS_BANK_COINS = 240;
+
+// What games created before the supply matched the boxed game were played with.
+// Their stored state has no `bankTotal`, and replaying them against today's
+// larger bank would pay out coins the game never had - a roll the real bank
+// could only pay short would come out in full, moving player money.
+export const LEGACY_BANK_TOTAL_COINS = 60;
+
+/** The coin supply a game is played with: the base box, plus the Docks' own. */
+export function bankTotalCoins(enabledDocks: boolean): number {
+    return BANK_TOTAL_COINS + (enabledDocks ? DOCKS_BANK_COINS : 0);
+}
 
 // Coins each player is dealt out of the bank when the game is created.
 export const STARTING_PLAYER_COINS = 3;
@@ -40,7 +58,9 @@ export enum DiceCitiesCardIds {
     TUNA_BOAT = "a93d5c18-2e76-4b90-8d31-7f4c6a0b9e25"
 }
 
-// The die a Tuna Boat haul is set by: every owner earns whatever it shows.
+// The dice a Tuna Boat haul is thrown on - two, as in the boxed game, so the
+// haul runs 2-12 and averages 7. Every owner earns the total.
+export const TUNA_DICE = 2;
 export const TUNA_DIE_SIDES = 6;
 
 // The Harbour's passive: a total this high or better may be nudged up by

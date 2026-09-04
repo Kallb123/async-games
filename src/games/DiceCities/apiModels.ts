@@ -27,7 +27,7 @@ export interface IDiceCitiesCard {
     gainMultiplier: {type?: cardType[], cardIds?: string[], amountPerType: number} | null,
     /** Docks card that lies idle until its owner has built the Harbour. */
     requiresHarbour?: boolean,
-    /** Docks card paid by the shared tuna die rather than a fixed amount. */
+    /** Docks card paid by the shared tuna throw rather than a fixed amount. */
     sharedDieGain?: boolean
 }
 export interface IDiceCitiesCardCountResponse {

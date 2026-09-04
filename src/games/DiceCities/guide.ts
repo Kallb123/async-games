@@ -28,7 +28,7 @@ export const guide: GameGuide = {
         },
         {
             heading: "The Docks",
-            body: "If the game was set up with the Docks, your build track gains a fifth landmark: the Harbour, cheapest of the five at 2 coins. Once you've built it, any roll of 10 or more offers you +2 — your call each time — and it never counts toward winning, so the original four still decide that. The Docks also adds six cards: the Flower Shop pays a coin for every Flower Orchard you own and the Food Warehouse 2 for every dining card, while the three sea cards — Sushi Bar, Mackerel Boat, Tuna Boat — stay idle until their owner has built the Harbour. The Tuna Boat pays each of those owners the same shared die roll on 12 to 14, and 13 and 14 only come up with the +2.",
+            body: "If the game was set up with the Docks, your build track gains a fifth landmark: the Harbour, cheapest of the five at 2 coins. Once you've built it, any roll of 10 or more offers you +2 — your call each time — and it never counts toward winning, so the original four still decide that. The Docks also adds six cards: the Flower Shop pays a coin for every Flower Orchard you own and the Food Warehouse 2 for every dining card, while the three sea cards — Sushi Bar, Mackerel Boat, Tuna Boat — stay idle until their owner has built the Harbour. The Tuna Boat pays each of those owners the same shared two-dice haul on 12 to 14, and 13 and 14 only come up with the +2.",
         },
     ],
 };

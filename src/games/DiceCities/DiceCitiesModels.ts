@@ -1,7 +1,7 @@
 import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/utils/mongodb/GameData";
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
-import { BANK_TOTAL_COINS, DiceCitiesCardIds, DOCKS_ESTABLISHMENT_IDS, STARTING_PLAYER_COINS } from "./cards";
+import { BANK_TOTAL_COINS, bankTotalCoins, DiceCitiesCardIds, DOCKS_ESTABLISHMENT_IDS, STARTING_PLAYER_COINS } from "./cards";
 import { IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "./apiModels";
 import { uuidString, GameResultStatGroup, GameResultChart, formatPerTurnChart, compactCharts, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
@@ -34,7 +34,13 @@ export interface IDiceCitiesInvitationDataModel extends Model<IDiceCitiesInvitat
 // Used both at game creation and by the replay engine to reconstruct historical
 // / planned states from commandHistory. `enabledDocks` is fixed at creation, so
 // replaying it reproduces the market the recorded commands were played against.
-export function buildInitialDiceCitiesState(userIdList: string[], enabledDocks: boolean = false): IDiceCitiesGameState {
+export function buildInitialDiceCitiesState(
+    userIdList: string[],
+    enabledDocks: boolean = false,
+    // The supply this game is played with. Passed in only by replay, which has
+    // to rebuild a game against the bank it actually had rather than today's.
+    bankTotal: number = bankTotalCoins(enabledDocks),
+): IDiceCitiesGameState {
     const playerStates = new Map<string, IDiceCitiesPlayerState>();
     for (const userId of userIdList) {
         playerStates.set(userId, {
@@ -72,7 +78,8 @@ export function buildInitialDiceCitiesState(userIdList: string[], enabledDocks: 
             ...(enabledDocks ? DOCKS_ESTABLISHMENT_IDS.map(card => ({ card, amount: 6 })) : []),
         ],
         // The players' starting coins are dealt out of the bank's fixed supply.
-        bankMoney: BANK_TOTAL_COINS - (STARTING_PLAYER_COINS * userIdList.length),
+        bankMoney: bankTotal - (STARTING_PLAYER_COINS * userIdList.length),
+        bankTotal,
         playerStates,
         hasRolled: false,
         awaitingTSSelection: false,
@@ -168,6 +175,12 @@ export interface IDiceCitiesGameState {
     // with - bank payouts are paid short once it hits zero, and coins spent on
     // cards flow back in here.
     bankMoney: number,
+    /**
+     * The supply this game was dealt from, fixed at creation. Stored rather
+     * than read off a constant so a replay rebuilds the game against the bank
+     * it was actually played with, not whatever the constant says today.
+     */
+    bankTotal: number,
     playerStates: Map<string, IDiceCitiesPlayerState>,
     hasRolled: boolean,
     awaitingTSSelection: boolean,
@@ -210,6 +223,7 @@ var DiceCitiesGameDataSchema = new Schema<IDiceCitiesGameDataDocument>({
         // Games already in progress when bank tracking was added have no stored
         // balance; they hydrate with a full bank rather than an undefined one.
         bankMoney: { type: Number, default: BANK_TOTAL_COINS },
+        bankTotal: Number,
         playerStates: {
             type: Schema.Types.Map,
             of: {

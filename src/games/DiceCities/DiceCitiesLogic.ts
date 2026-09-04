@@ -7,7 +7,7 @@ import { deserializeJSON, serializable } from "@/utils/apiModels/Serialisable";
 import { playerHistory, userToken } from "@/utils/games/history";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { mongoMap } from "@/utils/games/mongoMaps";
-import { DiceCitiesCardIds, DiceCitiesCards, HARBOUR_BONUS, HARBOUR_MIN_ROLL, TUNA_DIE_SIDES } from "@/games/DiceCities/cards";
+import { DiceCitiesCardIds, DiceCitiesCards, HARBOUR_BONUS, HARBOUR_MIN_ROLL, TUNA_DICE, TUNA_DIE_SIDES } from "@/games/DiceCities/cards";
 import type { DiceCitiesBuildFlag } from "@/games/DiceCities/ui";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 
@@ -23,7 +23,7 @@ export interface IDiceCitiesDiceRollOutcome extends ICommandOutcome {
     // paid out (steals only move coins between players). Recorded so Undo can
     // put those coins back when a Radio Tower reroll discards the roll.
     bankChange: number,
-    // Docks: what the shared tuna die showed, when a Tuna Boat activated.
+    // Docks: what the shared tuna dice totalled, when a Tuna Boat activated.
     tunaRoll?: number | null
 }
 
@@ -404,7 +404,7 @@ export class DiceCitiesRequestHarbourBonus implements IGameCommand {
     moneyChanges: Map<string, number> = new Map;
     coinsEarnedChanges: Map<string, number> = new Map;
     bankChange: number = 0;
-    // Recorded RNG outcome of the shared tuna die, so the payout replays.
+    // Recorded RNG outcome of the shared tuna throw, so the payout replays.
     recordedTunaRoll?: number | null;
     readonly className = "DiceCitiesRequestHarbourBonus";
 
@@ -886,11 +886,21 @@ function takeFromBank(gameState: IDiceCitiesGameState, amount: number): number {
 }
 
 // The RNG a roll has to reproduce when it is replayed: the dice, plus the
-// shared tuna die when a Tuna Boat was in play.
+// shared tuna throw when a Tuna Boat was in play.
 interface IRecordedRolls {
     roll1: number,
     roll2: number | null,
     tunaRoll: number | null
+}
+
+// The tuna haul's own throw: TUNA_DICE dice summed, so it is 2-12 with a peak
+// at 7 rather than the flat spread a single die of twice the size would give.
+function rollTunaHaul(): number {
+    let total = 0;
+    for (let i = 0; i < TUNA_DICE; i++) {
+        total += DiceRoll(TUNA_DIE_SIDES);
+    }
+    return total;
 }
 
 // Bundles recorded dice values for replay, or returns undefined for a fresh roll.
@@ -1062,12 +1072,13 @@ function resolveRoll(dcGameData: IDiceCitiesGameData, rollerState: IDiceCitiesPl
     // What the bank paid out this roll, and what it couldn't cover.
     let bankPaid = 0;
     let bankShortfall = 0;
-    // The Docks' shared tuna haul: one die for the whole table, thrown at most
-    // once per roll and only if a Tuna Boat actually activates.
+    // The Docks' shared tuna haul: two dice for the whole table, thrown at most
+    // once per roll and only if a Tuna Boat actually activates. Every owner
+    // earns the same total.
     let tunaRoll: number | null = null;
     const tunaHaul = (): number => {
         if (tunaRoll === null) {
-            tunaRoll = recordedTunaRoll ?? DiceRoll(TUNA_DIE_SIDES);
+            tunaRoll = recordedTunaRoll ?? rollTunaHaul();
         }
         return tunaRoll;
     };

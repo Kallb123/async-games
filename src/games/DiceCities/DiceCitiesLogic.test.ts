@@ -10,6 +10,7 @@ import {
     DiceCitiesRequestUnlockHarbour,
     DiceCitiesRequestUnlockTrainStation,
 } from "./DiceCitiesLogic";
+import type { IDiceCitiesDiceRollOutcome } from "./DiceCitiesLogic";
 import { BANK_TOTAL_COINS, DiceCitiesCardIds, DiceCitiesCards, DOCKS_ESTABLISHMENT_IDS, STARTING_PLAYER_COINS } from "./cards";
 import { buildInitialDiceCitiesState } from "./DiceCitiesModels";
 import type { IDiceCitiesGameData, IDiceCitiesGameState, IDiceCitiesPlayerState } from "./DiceCitiesModels";
@@ -40,6 +41,7 @@ function makeState(overrides: Partial<IDiceCitiesGameState> = {}): IDiceCitiesGa
     return {
         bankCards: [{ card: DiceCitiesCardIds.CAFE, amount: 6 }],
         bankMoney: BANK_TOTAL_COINS,
+        bankTotal: BANK_TOTAL_COINS,
         playerStates: new Map([["u1", player()], ["u2", player()]]),
         hasRolled: false,
         awaitingTSSelection: false,
@@ -114,6 +116,29 @@ describe("Dice Cities bank supply", () => {
             expect(gs.bankMoney).toBe(BANK_TOTAL_COINS - (STARTING_PLAYER_COINS * playerCount));
             expect(coinsInPlay(gs)).toBe(BANK_TOTAL_COINS);
         }
+    });
+
+    it("brings the Docks' own coins to the supply, and records the total", () => {
+        // The boxed figures, written out rather than referred back to the
+        // constants: the base box holds 262 (42 ones, 24 fives, 10 tens) and
+        // the Docks adds 240 (12 twenties), for 502. Asserting the constants
+        // against themselves would pass whatever they were changed to.
+        const base = buildInitialDiceCitiesState(["u1", "u2"], false);
+        const docks = buildInitialDiceCitiesState(["u1", "u2"], true);
+
+        expect(base.bankTotal).toBe(262);
+        expect(docks.bankTotal).toBe(502);
+        expect(coinsInPlay(base)).toBe(262);
+        expect(coinsInPlay(docks)).toBe(502);
+    });
+
+    it("deals from the supply it is handed, so a replay rebuilds the old bank", () => {
+        // Games created before the supply matched the boxed game were played
+        // with 60. Replay passes that back in rather than today's constant.
+        const legacy = buildInitialDiceCitiesState(["u1", "u2"], false, 60);
+        expect(legacy.bankTotal).toBe(60);
+        expect(legacy.bankMoney).toBe(60 - (STARTING_PLAYER_COINS * 2));
+        expect(coinsInPlay(legacy)).toBe(60);
     });
 
     it("pays dice-roll income out of the bank", async () => {
@@ -435,6 +460,30 @@ describe("Dice Cities: the Docks", () => {
         expect(game.gameState.history.some(h => h.text.includes("The tuna haul was 4"))).toBe(true);
     });
 
+    it("throws the tuna haul on two dice, not one", async () => {
+        // 2-12 with a peak at 7, as in the boxed game. A single die could never
+        // pay more than 6, so a haul above that falsifies the old rule outright.
+        // The roller has no Harbour, so a 12 is not parked and pays out at once.
+        const hauls = new Set<number>();
+        for (let i = 0; i < 200; i++) {
+            const gs = makeState({
+                bankMoney: 40,
+                playerStates: new Map([
+                    ["u1", player({ doubleUnlocked: true })],
+                    ["u2", player({ harbourUnlocked: true, cards: cards(DiceCitiesCardIds.TUNA_BOAT) })],
+                ]),
+                enabledDocks: true,
+            });
+            const outcome = await rollCommand(6, "u1", 6).Execute(makeGame(gs, "u1")) as IDiceCitiesDiceRollOutcome;
+            hauls.add(outcome.tunaRoll!);
+        }
+
+        expect(Math.min(...hauls)).toBeGreaterThanOrEqual(2);
+        expect(Math.max(...hauls)).toBeLessThanOrEqual(12);
+        // Over 200 throws this is certain for 2d6 and impossible for 1d6.
+        expect(Math.max(...hauls)).toBeGreaterThan(6);
+    });
+
     it("only offers the Harbour's bonus to a Harbour owner", async () => {
         const gs = makeState({
             playerStates: new Map([
@@ -724,5 +773,34 @@ describe("Dice Cities: replaying a Docks game", () => {
         expect(finalState.playerStates["u1"].harbourUnlocked).toBe(true);
         expect(final.history.some(h => h.text.includes("turn a 11 into a 13"))).toBe(true);
         expect(finalState.awaitingHarbourChoice).toBe(false);
+    });
+
+    it("rebuilds a game against the bank it was played with, not today's", async () => {
+        // A game created before the supply matched the boxed game was dealt
+        // from 60, and its stored state says so. Replaying it against today's
+        // 262 would pay out coins that game never had - a roll its real bank
+        // could only cover in part would come out in full.
+        const gameData = {
+            gameId: "g1",
+            gameType: new DiceCitiesGameType(),
+            userIdList: ["u1", "u2"],
+            turnTimer: "1d",
+            currentTurn: "u1",
+            lastTurnTimestamp: "2026-07-21T09:00:00.000Z",
+            timerWarningNotificationSent: false,
+            gameState: { turnOrder: ["u1", "u2"], history: [], commandHistory: [rollCommand(1)] },
+            complete: false,
+            winner: "",
+            enabledBillionaireRow: false,
+            specificGameState: buildInitialDiceCitiesState(["u1", "u2"], false, 60),
+        } as unknown as IGameData;
+
+        const timeline = await buildTimeline(gameData, { u1: "u1", u2: "u2" });
+        const final = timeline.snapshots[timeline.snapshots.length - 1];
+        const finalState = final.specificGameState as IDiceCitiesGameStateResponse;
+
+        // 60 less 3 each at the deal is 54; the roll of 1 pays both Wheat
+        // Fields, leaving 52. Against a 262 bank it would read 254.
+        expect(finalState.bankMoney).toBe(52);
     });
 });
