@@ -14,6 +14,11 @@
 
 Dice Cities is a light, upbeat economic game set in a bustling region of rival towns. Every player begins with a single Wheat Field and a Bakery and the ambition to grow their sleepy hamlet into a thriving metropolis. Fortunes are decided by the roll of the dice: a lucky number sends money flowing into wheat farms, cafes, and factories, while a shrewd mayor arranges their establishments so that almost every roll pays out. The tone is friendly and competitive rather than confrontational — you build your own city, but you can occasionally reach into a neighbour's coin purse.
 
+The rules carry no dependency on that dressing. For a worked example of
+re-skinning the whole game — every base, Docks and Billionaires Row card — to a
+post-nuclear wasteland paid for in bottlecaps, see
+[§11 Alternative Theme](#11-appendix-alternative-theme--rust--bottlecaps).
+
 ---
 
 ## 3. Physical Components
@@ -208,3 +213,122 @@ Billionaires Row is a set of premium, high-value establishments and an alternate
 * **The Two-Die Decision:** The Train Station's "1 or 2 dice" choice is the central strategic pivot. A player invested in low numbers keeps rolling one die; a player invested in 7–12 cards switches to two. This makes the *order* in which you build your engine matter as much as *what* you build.
 * **Catch-Up Tension:** Red restaurants and purple major establishments are the game's balancing valves — a runaway leader taking many turns also hands opponents' restaurants repeated payouts. Billionaires Row leans into this with explicit "behind player" bonuses.
 * **Async Suitability:** Dice Cities fits the Async Games model well: each turn is a single roll plus a single build decision, all state (money, tableau, landmarks) is public, and the only hidden randomness is the dice roll — which the server resolves and records. There is no simultaneous action, so turns serialise cleanly into the asynchronous turn lifecycle.
+
+---
+
+## 11. Appendix: Alternative Theme — "Rust & Bottlecaps"
+
+The shipped theme of Dice Cities is a bright Japanese-inspired region of rival
+towns: wheat fields, bakeries, sushi bars and a radio tower. Nothing in the
+rules depends on that dressing, so the whole game re-skins cleanly to a
+post-nuclear wasteland in the vein of the Fallout games — a handful of
+survivors rebuilding a settlement out of scrap, paying for everything in
+**bottlecaps**.
+
+This appendix is a naming reference only. **No costs, activation numbers,
+colours, icons, limits or win conditions change** — a Brahmin Pen is a Ranch
+with a different picture on it. The names below are a starting point to be
+taken or swapped to taste — the columns that matter are the ones to their
+right.
+
+### 11.1 Vocabulary
+
+| Base theme | Wasteland theme | Notes |
+| --- | --- | --- |
+| **Coin** | **Bottlecap** ("cap") | Denominations of 1, 5 and 10 caps, plus the Docks' 20-cap rolls. Still public information. |
+| **The bank** | **The Cap Hoard** | The communal stash payouts come out of and purchases go back into. Its total is unchanged (262 caps, or 502 with the Docks). |
+| **Mayor** | **Overseer** | "The first Overseer to finish all four Reclamation Projects wins." |
+| **City / tableau** | **Settlement** | |
+| **Establishment** | **Holding** | |
+| **Landmark** | **Reclamation Project** | |
+| **The market / supply** | **The Caravan Market** | The travelling traders who will sell anyone anything. |
+| **Dice roll** | **Scavenging run** | The number rolled is "what the run turned up". |
+| **Blue (Primary Industry)** | **Scavenging** | Pays on anyone's run. |
+| **Green (Secondary Industry)** | **Workshops** | Pays on your own run only. |
+| **Red (Restaurants)** | **Watering Holes** | Charges the scavenger who came back with the number. |
+| **Purple (Major Establishments)** | **Power Players** | One each; big swings on your own run. |
+
+### 11.2 Holding types (icon groups)
+
+Several cards pay per type, so the renamed types carry through into their
+effect text ("get 3 caps for each **Livestock** holding that you own").
+
+| Base type | Wasteland type | Members |
+| --- | --- | --- |
+| `farm` (grain icon) | **Crop** | Hydroponic Plot, Mutfruit Grove, Glowcap Bed |
+| `pasture` (cow icon) | **Livestock** | Brahmin Pen |
+| `production` (gear icon) | **Salvage** | Blasted Timber Yard, Uranium Mine |
+| `store` (bread icon) | **Stall** | Snackcake Bakery, Salvage Trading Post, Chem Stand |
+| `dining` (cup icon) | **Canteen** | Roadside Diner, Scavvers' Mess Hall, Crab Cake Stand |
+| `factory` | **Works** | Jerky Smokehouse, Scrap Workshop, Ration Depot |
+| `market` | **Bazaar** | Caravan Bazaar |
+| `boat` | **Raft** | Fishing Raft, Deep-Water Trawler |
+| `landmark` | **Project** | The five Reclamation Projects and the three Power Players |
+
+### 11.3 Base game
+
+Each Overseer still starts with the two cheapest holdings — here a **Hydroponic
+Plot** and a **Snackcake Bakery** — and **3 caps**.
+
+| Base name | Wasteland name | Colour | Activates | Cost | Unchanged effect |
+| --- | --- | --- | --- | --- | --- |
+| **Wheat Field** | **Hydroponic Plot** | Blue | 1 | 1 | Get 1 cap from the hoard. |
+| **Ranch** | **Brahmin Pen** | Blue | 2 | 1 | Get 1 cap from the hoard. |
+| **Bakery** | **Snackcake Bakery** | Green | 2–3 | 1 | Get 1 cap from the hoard, on your run only. |
+| **Cafe** | **Roadside Diner** | Red | 3 | 2 | Take 1 cap from the scavenger. |
+| **Convenience Store** | **Salvage Trading Post** | Green | 4 | 2 | Get 3 caps from the hoard, on your run only. |
+| **Forest** | **Blasted Timber Yard** | Blue | 5 | 3 | Get 1 cap from the hoard. |
+| **Stadium** | **Cage Fight Arena** | Purple | 6 | 6 | Take 2 caps from every other Overseer. |
+| **TV Station** | **Pirate Radio Station** | Purple | 6 | 7 | Take 5 caps from any one Overseer. |
+| **Business Center** | **Barter Exchange** | Purple | 6 | 8 | Trade one non-Project holding with another Overseer. |
+| **Cheese Factory** | **Jerky Smokehouse** | Green | 7 | 5 | Get 3 caps per **Livestock** holding you own. |
+| **Furniture Factory** | **Scrap Workshop** | Green | 8 | 3 | Get 3 caps per **Salvage** holding you own. |
+| **Mine** | **Uranium Mine** | Blue | 9 | 6 | Get 5 caps from the hoard. |
+| **Family Restaurant** | **Scavvers' Mess Hall** | Red | 9–10 | 3 | Take 2 caps from the scavenger. |
+| **Apple Orchard** | **Mutfruit Grove** | Blue | 10 | 3 | Get 3 caps from the hoard. |
+| **Fruit and Vegetable Market** | **Caravan Bazaar** | Green | 11–12 | 2 | Get 2 caps per **Crop** holding you own. |
+
+### 11.4 Reclamation Projects (the win engine)
+
+Still four to build, still in this order of cost, and finishing the fourth
+still ends the game on the spot.
+
+| Base name | Wasteland name | Cost | Unchanged effect |
+| --- | --- | --- | --- |
+| **Train Station** | **Metro Junction** | 4 | Send out 1 or 2 scavengers (roll 1 or 2 dice), your choice each run. |
+| **Shopping Mall** | **Ruined Superstore** | 10 | Each of your **Stall** and **Canteen** holdings earns +1 cap when it activates. |
+| **Amusement Park** | **Abandoned Funfair** | 16 | Matching dice grant another run after this one. |
+| **Radio Tower** | **Signal Relay Mast** | 22 | Once per run, re-tune the signal (re-roll your dice). |
+
+### 11.5 The Docks expansion → "The Wharf"
+
+The coastal district becomes a flooded riverfront: sunken pre-war barges,
+irradiated fish that are worth good caps to anyone hungry enough, and the pier
+that makes reaching them possible.
+
+| Base name | Wasteland name | Colour | Activates | Cost | Unchanged effect |
+| --- | --- | --- | --- | --- | --- |
+| **Harbour** (5th landmark) | **Salvage Pier** | — | — | 2 | A run of 10 or more may be nudged +2. Optional; never needed to win. |
+| **Sushi Bar** | **Crab Cake Stand** | Red | 1 | 2 | With the Pier, take 3 caps from the scavenger. |
+| **Flower Orchard** | **Glowcap Bed** | Blue | 4 | 2 | Get 1 cap from the hoard. Feeds the Chem Stand. |
+| **Flower Shop** | **Chem Stand** | Green | 6 | 1 | Get 1 cap per **Glowcap Bed** you own, on your run only. |
+| **Mackerel Boat** | **Fishing Raft** | Blue | 8 | 2 | With the Pier, get 3 caps from the hoard. |
+| **Food Warehouse** | **Ration Depot** | Green | 12–13 | 2 | Get 2 caps per **Canteen** holding you own, on your run only. |
+| **Tuna Boat** | **Deep-Water Trawler** | Blue | 12–14 | 5 | With the Pier, a shared 2d6 haul pays every Trawler owner that many caps. |
+
+### 11.6 Billionaires Row expansion → "Kingpins' Row"
+
+The premium tier becomes the wasteland's opportunists: the people who got rich
+off other survivors rather than off the land.
+
+| Base name | Wasteland name | Colour | Activates | Cost | Unchanged effect |
+| --- | --- | --- | --- | --- | --- |
+| **Loan Office** | **Cap Lender's Booth** | Green | 5–6 | (gain 5 now) | 5 caps up front on purchase, then 2 caps every time it activates. |
+| **Publisher** | **Broadsheet Press** | Purple | 7 | 5 | Take 1 cap from every Overseer per **Stall + Canteen** icon they own. |
+| **Renovation Company** | **Wrecking Crew** | Purple | 8 | 4 | Shut down all holdings of one chosen type across every opponent; collect a fee per holding shut. |
+| **Tax Office** | **Tribute Collectors** | Purple | 8–9 | 4 | Take half (rounded down) the caps of any Overseer holding 10 or more. |
+| **Corporate HQ** | **Settlers' Council** | Green | 11–12 | 4 | Get 8 caps from the hoard if you are not leading on Projects. |
+| **Exhibition Hall** | **Pre-War Relic Hall** | Purple | 11–12 | 3 | Shut down one opponent holding worth 6+ and collect its value; its owner reopens it on their run. |
+
+A "closed" holding in this theme is **boarded up** — raiders have been through
+it — and its owner **reopens** it by working that type again on a later run.
