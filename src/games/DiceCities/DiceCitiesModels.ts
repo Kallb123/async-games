@@ -101,6 +101,11 @@ DiceCitiesInvitationSchema.methods.CreateGame = async function(invite: IDiceCiti
 
     const { turnOrder, history } = rollOffTurnOrder(userIdList);
 
+    const enabledDocks = this.enabledDocks === true;
+    if (enabledDocks) {
+        history.push({ text: "Setup: the Docks expansion is in play" });
+    }
+
     const gameData: IDiceCitiesGameData = {
         gameId: uuidv4() as uuidString,
         gameType: gameType,
@@ -119,7 +124,7 @@ DiceCitiesInvitationSchema.methods.CreateGame = async function(invite: IDiceCiti
         },
         complete: false,
         winner: "",
-        specificGameState: buildInitialDiceCitiesState(userIdList, this.enabledDocks === true),
+        specificGameState: buildInitialDiceCitiesState(userIdList, enabledDocks),
         enabledBillionaireRow: this.enabledBillionaireRow
     }
     return gameData;
