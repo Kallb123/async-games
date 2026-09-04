@@ -84,6 +84,12 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean): Ga
     // every render and defeat the `messages` useMemo below.
     const rawMessages = useMemo(() => data?.messages ?? [], [data]);
     const latest = rawMessages.length ? rawMessages[rawMessages.length - 1] : null;
+    // Normalised to `null` for an empty thread once, here, rather than at each
+    // use: `trackedLatestId` holds `null` when there is nothing to track, so
+    // comparing it against a bare `latest?.messageId` (`undefined`) reported a
+    // change on every render of an empty thread — a render-phase setState that
+    // never settled, which React ends with "Too many re-renders".
+    const latestId = latest?.messageId ?? null;
 
     // Earlier pages, oldest-first, prepended to the polled window — see the
     // "why no reconciliation" note above. Reset on a `gameId` change the same
@@ -206,10 +212,10 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean): Ga
             const cutoffMessage = readAt === null ? undefined
                 : [...rawMessages].reverse().find((message) => message.timestamp <= readAt);
             setUnreadCutoffId(cutoffMessage?.messageId ?? null);
-            setTrackedLatestId(latest?.messageId ?? null);
-        } else if (latest?.messageId !== trackedLatestId) {
+            setTrackedLatestId(latestId);
+        } else if (latestId !== trackedLatestId) {
             setUnreadCutoffId(trackedLatestId);
-            setTrackedLatestId(latest?.messageId ?? null);
+            setTrackedLatestId(latestId);
         }
     }
 
