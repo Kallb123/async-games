@@ -58,10 +58,7 @@ function makeState(overrides: Partial<IDiceCitiesGameState> = {}): IDiceCitiesGa
     };
 }
 
-function makeGame(gs: IDiceCitiesGameState, currentTurn = "u1", enabledDocks = false): IDiceCitiesGameData {
-    // The Docks flag lives in specificGameState, so switching it on here keeps
-    // the state the test already holds a reference to.
-    if (enabledDocks) gs.enabledDocks = true;
+function makeGame(gs: IDiceCitiesGameState, currentTurn = "u1"): IDiceCitiesGameData {
     return {
         currentTurn,
         userIdList: ["u1", "u2"],
@@ -346,8 +343,9 @@ describe("Dice Cities: the Docks", () => {
                 ["u1", player({ money: 5 })],
                 ["u2", player({ cards: cards(DiceCitiesCardIds.SUSHI_BAR) })],
             ]),
+            enabledDocks: true,
         });
-        await rollCommand(1).Execute(makeGame(dry, "u1", true));
+        await rollCommand(1).Execute(makeGame(dry, "u1"));
         expect(dry.playerStates.get("u2")!.money).toBe(0);
 
         const withHarbour = makeState({
@@ -355,8 +353,9 @@ describe("Dice Cities: the Docks", () => {
                 ["u1", player({ money: 5 })],
                 ["u2", player({ cards: cards(DiceCitiesCardIds.SUSHI_BAR), harbourUnlocked: true })],
             ]),
+            enabledDocks: true,
         });
-        await rollCommand(1).Execute(makeGame(withHarbour, "u1", true));
+        await rollCommand(1).Execute(makeGame(withHarbour, "u1"));
         expect(withHarbour.playerStates.get("u2")!.money).toBe(3);
         expect(withHarbour.playerStates.get("u1")!.money).toBe(2);
     });
@@ -367,8 +366,9 @@ describe("Dice Cities: the Docks", () => {
                 ["u1", player({ harbourUnlocked: true, doubleUnlocked: true, cards: cards(DiceCitiesCardIds.APPLE_ORCHARD) })],
                 ["u2", player()],
             ]),
+            enabledDocks: true,
         });
-        const game = makeGame(gs, "u1", true);
+        const game = makeGame(gs, "u1");
 
         await rollCommand(4, "u1", 6).Execute(game);
 
@@ -402,8 +402,9 @@ describe("Dice Cities: the Docks", () => {
                 })],
                 ["u2", player()],
             ]),
+            enabledDocks: true,
         });
-        const game = makeGame(gs, "u1", true);
+        const game = makeGame(gs, "u1");
 
         await rollCommand(5, "u1", 6).Execute(game);
         await harbourCommand(true).Execute(game);
@@ -419,8 +420,9 @@ describe("Dice Cities: the Docks", () => {
                 ["u1", player({ harbourUnlocked: true, doubleUnlocked: true, cards: cards(DiceCitiesCardIds.TUNA_BOAT) })],
                 ["u2", player({ harbourUnlocked: true, cards: cards(DiceCitiesCardIds.TUNA_BOAT) })],
             ]),
+            enabledDocks: true,
         });
-        const game = makeGame(gs, "u1", true);
+        const game = makeGame(gs, "u1");
 
         await rollCommand(6, "u1", 6).Execute(game);
         // The haul is a single shared die: 4 for the roller and 4 for the
@@ -439,8 +441,9 @@ describe("Dice Cities: the Docks", () => {
                 ["u1", player({ doubleUnlocked: true, cards: cards(DiceCitiesCardIds.APPLE_ORCHARD) })],
                 ["u2", player()],
             ]),
+            enabledDocks: true,
         });
-        const game = makeGame(gs, "u1", true);
+        const game = makeGame(gs, "u1");
 
         await rollCommand(4, "u1", 6).Execute(game);
 
@@ -455,11 +458,12 @@ describe("Dice Cities: the Docks", () => {
                 bankMoney: 0,
                 hasRolled: true,
                 playerStates: new Map([["u1", player({ money: 5 })], ["u2", player()]]),
+                enabledDocks,
             });
             const command = new DiceCitiesRequestUnlockHarbour();
             command.senderId = "u1";
             command.senderUsername = "u1";
-            const outcome = await command.Execute(makeGame(gs, "u1", enabledDocks));
+            const outcome = await command.Execute(makeGame(gs, "u1"));
             return { gs, outcome };
         };
 
@@ -482,8 +486,9 @@ describe("Dice Cities: the Docks", () => {
                 ["u1", player({ harbourUnlocked: true, doubleUnlocked: true, cards: cards(DiceCitiesCardIds.APPLE_ORCHARD) })],
                 ["u2", player()],
             ]),
+            enabledDocks: true,
         });
-        const game = makeGame(gs, "u1", true);
+        const game = makeGame(gs, "u1");
 
         const roll = rollCommand(4, "u1", 6);
         await roll.Execute(game);
@@ -513,8 +518,9 @@ describe("Dice Cities: the Docks", () => {
                 ["u1", player({ doubleUnlocked: true, bonusDiningAndStore: true, oneReroll: true, rerollDoubles: true })],
                 ["u2", player({ harbourUnlocked: true })],
             ]),
+            enabledDocks: true,
         });
-        const game = makeGame(gs, "u1", true);
+        const game = makeGame(gs, "u1");
 
         expect(new DiceCitiesGameType().CheckGameOver(game)).toBe(true);
         expect(game.winner).toBe("u1");

@@ -375,7 +375,7 @@ export class DiceCitiesRequestUnlockHarbour implements IGameCommand {
     }
 
     async Execute(gameData: IGameData) {
-        if (!(gameData as IDiceCitiesGameData).specificGameState.enabledDocks) {
+        if ((gameData as IDiceCitiesGameData).specificGameState.enabledDocks !== true) {
             return {
                 turnOver: false,
                 validMove: false
