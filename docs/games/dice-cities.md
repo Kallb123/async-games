@@ -306,7 +306,7 @@ copes, not drawing cities.
 
 | # | Option | What the player gets | Pros | Cons | Verdict |
 |---|---|---|---|---|---|
-| **B′** | **Stacked collapsible cities under a shared landmark track** (§11.4) — your city where it is today, one collapsed row per opponent below it, and a single landmark track at the top carrying every player's progress | Everyone's landmarks at a glance, always; any opponent's establishments one tap away | Requirements 1 and 2 never arise: your own city never moves, so nothing points `boardPlayer` elsewhere and the robbery pickers stay anchored. Several cities open at once for real comparison. Built from parts we own — `Collapse`/`CollapsingSection`, `ListRow`, `seatOrderFrom`, one `DiceCitiesBoard` per panel — plus a track that is a **split** of an existing component, not a new one. The shared track is smaller *and* says more than the four private tracks it replaces. Scrolls, screenshots and reads to a screen reader as one document. | Still the longest page of any option once panels are open. The track's pip row is the one genuinely new piece of markup, and its space budget is tight at five tiles on a narrow phone (§11.4). Costs a component split that A does not. | ✅ **Recommended** |
+| **B′** | **Stacked collapsible cities under a shared landmark track** (§11.4) — your city where it is today, one collapsed row per opponent below it, and a single landmark track at the top carrying every player's progress | Everyone's landmarks at a glance, always; any opponent's establishments one tap away | Requirements 1 and 2 never arise: your own city never moves, so nothing points `boardPlayer` elsewhere and the robbery pickers stay anchored. Several cities open at once for real comparison. Built from parts we own — the `ag-disclosure` `<details>` block (so the panels need no open state at all), `seatOrderFrom`, one `DiceCitiesBoard` per panel — plus a track that is a **split** of an existing component, not a new one. The shared track is smaller *and* says more than the four private tracks it replaces. Scrolls, screenshots and reads to a screen reader as one document. | Still the longest page of any option once panels are open. The track's pip row is the one genuinely new piece of markup, and its space budget is tight at five tiles on a narrow phone (§11.4). Costs a component split that A does not. | ✅ **Recommended** |
 | **A** | **Tap a scoreboard pill** — the board swaps to that player's city; tap again (or a "back to your city" bar) to return | One city at a time, chosen from the strip already at the top of the screen | Cheapest possible: `ScoreEntry` already carries `onClick` and `highlighted`, `boardPlayer` already accepts any seat, `ownerLabel` already captions it. **No new component at all** — one `useState` and a banner. Page height unchanged. Outbreak already teaches the tap-a-pill gesture. | Puts another player's tableau where yours normally sits, so requirement 1 has to be actively defended and requirement 2 is a live trap. One city at a time; comparison means tapping back and forth. A pill is a smallish tap target. | ⚠️ **Fallback** if the stack proves too long |
 | **C** | **Swipeable gallery** — one full-width city, swipe or arrow between seats, yours first | A deck of cities to flip through | Constant page height, full column width per city, cards stay big. Two cities land in the *same* screen position, so swiping diffs them in a way scrolling never does. | **The repo has no carousel, no swipe handler and no `scroll-snap` anywhere** — a new shared primitive to build, document and maintain (a caveman finding unless it is written for `components/ui/` and other games adopt it). Horizontal gestures fight vertical page scroll and the turn-nav controls. Needs dots/arrows and keyboard equivalents. Same requirement-1 exposure as A. | ⚠️ Only as a shared primitive |
 | **D** | **Roll-number summary strip** — per opponent, a row of chips 1–14 marking what pays them, expanding to the full city | The answer to "what does my roll pay them?" in two lines | Smallest footprint of anything here; scales cleanly to five players; answers the question the Red cards actually pose. | It is a *second* way of drawing a city — requirement 7 — unless the chip row is factored out and reused in the real board. Loses the card art the game just invested in being tappable. Still needs a route through to the detail. | ➕ An addition to B′, not an answer |
@@ -344,16 +344,18 @@ match the scoreboard, the log and the turn recap:
   scoreboard pill. It is redundant against the tile styling, but dropping
   it makes the row's positions depend on which seat is yours.
 
-**Space budget — this is the tight part.** On a 360px phone,
-`.ag-board-area` (14/12 padding) and `.ag-dc-landmarks` (11/12) leave about
-312px of row. Four `flex: 1` tiles with 7px gaps are ~73px each, ~65px
-inside the tile's own 4px padding — four 8px pips with 3px gaps need 41px,
-comfortable. The Docks' **five** tiles cut that to ~49px of tile content,
-and a 320px screen to ~41px, which is exactly where four pips run out of
-room. So: size the pip from a custom property rather than a literal, let
-the pip row `flex-wrap`, and treat the five-seat Docks board (§9's design
-space, which `meta.ts` cannot produce today) as the case that wraps to two
-rows rather than the case that breaks.
+**The pip is the app's seat swatch, not a new shape.** `.ag-score-dot` is
+9px and Dice Cities' own `.ag-dc-legend-dot` 8px, both radius 2 — a pip
+meant to echo the scoreboard pill should look like one.
+
+**Space budget.** In-game the column runs full width
+(`.ag-app:has(.ag-game)` drops the 480px cap), so a 360px phone leaves
+about 312px of row after `.ag-board-area` (14/12) and `.ag-dc-landmarks`
+(11/12): four `flex: 1` tiles at ~73px, ~65px inside their padding, against
+41px for four 8px pips with 3px gaps. Comfortable. It only gets tight at
+five tiles *and* five seats — the Docks board §9 designs for and `meta.ts`
+cannot deal — so let the pip row `flex-wrap` and that case degrades to two
+rows instead of overflowing.
 
 **The component split.** `DiceCitiesBoard` currently draws the track *and*
 the city from one `playerState`. The track has to become everyone's while
@@ -367,10 +369,28 @@ the city stays one player's, so the two separate:
   its `ownerLabel` — and *loses* its `enabledDocks` prop, which it only
   ever used to build the landmark list.
 
-The grid markup moves unchanged. This is a split of one component into two,
-not a second way of drawing a city, so requirement 7 is satisfied by
-construction. `ZoomableCardArt` keeps working on both halves, so tapping a
-landmark tile still opens the full card.
+**Where the sky goes.** `DiceCitiesBoard` wraps *both* halves in one
+`ag-board-area ag-dc-area` — the blue sky plus a 12px flex-column gap. That
+wrapper cannot move to both halves at once, and left unsaid the likely
+outcome is five stacked skies or a near-copy class. `page.tsx` keeps one
+wrapper around the track and the stack; the track renders only
+`.ag-dc-landmarks` and the board only `.ag-dc-city`. That *removes* a div
+from `DiceCitiesBoard` rather than adding one.
+
+Otherwise the grid markup moves unchanged. This is a split of one component
+into two, not a second way of drawing a city, so requirement 7 is satisfied
+by construction. `ZoomableCardArt` keeps working on both halves, so tapping
+a landmark tile still opens the full card.
+
+**The cheaper cousin, considered and passed over.** `ScoreEntry.sub` is
+already a `ReactNode` and already renders `★ 3/4` per seat, so the pips
+could go *there* instead — the transpose of this matrix, at zero new
+components and zero page height, which makes it the cheapest thing in this
+section. The track still wins: it carries the landmarks' names, art and
+costs, and reading *across* one tile ("who has the Train Station?") is the
+direction a question about an opponent's engine actually asks in, where a
+scoreboard `sub` can only be read per player. Worth revisiting if the pip
+row proves too tight in practice.
 
 ### 11.5 The city stack
 
@@ -380,33 +400,54 @@ means hunting the middle of a list:
 
 * **Your city stays exactly where it is today**, expanded and not
   collapsible. Nothing about taking your turn changes.
-* **Each opponent gets one collapsed row**, opening to a full
-  `DiceCitiesBoard`. `Collapse` drives the animation; the panel body is the
-  same component your own city renders.
-* **The collapsed row is a `ListRow`** — colour dot as `icon`, name as
-  `title`, "12 establishments · 7🪙" as `sub`, a chevron as `action`. That
-  summary is what a player needs to decide whether opening it is worth a
-  tap, and it costs one line per opponent, so a four-player board is barely
-  taller than today's until something is opened.
-* **Several may be open at once.** That is B′'s advantage over A and C and
-  the reason not to build it as an accordion.
-* **Open state is one `useState`.** Not `useStoredValue` — which panel you
-  had open last week is not worth persisting, and the app's single
-  `localStorage` caller should not grow a case for it.
+* **Each opponent's city is a native `<details className="ag-disclosure">`,
+  and its `<summary>` is the header the board already draws.**
+  `.ag-dc-city-head` prints "Dave's city · 12 establishments" today, so
+  making it the summary and adding an `ag-disclosure-chevron` gives the
+  collapsed row its content for nothing — no second header to write, and no
+  summary line that can drift out of step with the panel below it. (Keep
+  the activation-colour legend in that header to your own city's copy; an
+  opponent's summary wants the counts and the chevron, not a third copy of
+  the key.)
+* **There is no open state to keep.** `.ag-disclosure` exists for exactly
+  this, and says so in `ag-theme.css`: "being closed by default costs no
+  state and no JS". `<details>` elements without a shared `name` open
+  independently, so "several open at once" — B′'s advantage over A and C —
+  is the default rather than something to build. No `useState`, no toggle
+  callback, and no question about whether to persist the open set.
+
+The whole stack is therefore a `collapsible` flag on `DiceCitiesBoard`:
+when set, `.ag-dc-city` *is* the `<details>` and `.ag-dc-city-head` its
+`<summary>`. No new opponent-panel component, and nothing new that draws a
+city.
 
 ```tsx
-// page.tsx — the track once, then the cities, viewer first.
+// page.tsx — one sky, the track once, then the cities, viewer first.
 const seats = seatOrderFrom(userIdList, myUserId)
     .map(id => displayed?.playerStates?.[id])
     .filter((p): p is IDiceCitiesPlayerStateResponse => Boolean(p));
 
-<DiceCitiesLandmarkTrack seats={seats} userIdList={userIdList}
-                         myUserId={myUserId} enabledDocks={enabledDocks} />
-{seats.map(p => p.userId === myUserId
-    ? <DiceCitiesBoard key={p.userId} playerState={p} ownerLabel="Your city" />
-    : <OpponentCity key={p.userId} playerState={p} open={open.includes(p.userId)}
-                    onToggle={() => toggle(p.userId)} />)}
+<div className="ag-board-area ag-dc-area">
+    <DiceCitiesLandmarkTrack seats={seats} userIdList={userIdList}
+                             myUserId={myUserId} enabledDocks={enabledDocks} />
+    {seats.map(p => (
+        <DiceCitiesBoard
+            key={p.userId}
+            playerState={p}
+            ownerLabel={p.userId === myUserId ? 'Your city' : `${p.username}'s city`}
+            collapsible={p.userId !== myUserId}
+        />
+    ))}
+</div>
 ```
+
+**What `page.tsx` sheds.** `seats` replaces `players`, and `boardPlayer`
+and its fallback chain go with nothing left reading them — so requirement 2
+is discharged by deletion rather than by care: `opponents` re-anchors to
+`myState` directly and can no longer point anywhere else. Two tidy-ups fall
+in the same pass: `colorForUserId` is declared and never called, and the
+scoreboard hand-rolls `PLAYER_COLOURS[i % PLAYER_COLOURS.length]` where
+`playerColourForId` is the helper that exists for it.
 
 Because `seats` is derived from `displayed`, turn review (requirement 5)
 and finished games come free: a reviewed turn draws the cities and the pips
@@ -419,13 +460,15 @@ stays hidden as it already does.
 **Ship the shared landmark track first, then the city stack.** Two
 player-visible steps, in that order:
 
-1. **The track (§11.4)** — one new component, one prop removed, no
-   navigation change and no extra page height. It answers the landmark half
+1. **The track (§11.4)** — one new component; `DiceCitiesBoard` loses its
+   `enabledDocks` prop and its outer wrapper div, both of which move to
+   `page.tsx`. No navigation change and no extra page height. It answers the landmark half
    of "what have they built" for every player at once. If nothing else in
    this section is ever built, this is still worth having, and it is the
    cheapest thing here that a player would notice.
 2. **The stack (§11.5)** — the collapsed opponent panels, which answer the
-   establishment half.
+   establishment half. One `collapsible` prop and a `<details>`; no new
+   component and no new state.
 
 This reverses the verdict this section originally reached. A was
 recommended for costing nothing structurally, and that is still true. But
