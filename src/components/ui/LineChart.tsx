@@ -1,17 +1,18 @@
 'use client'
 
 import { useMemo, useState } from "react";
-import type { GameResultChart } from "@/utils/apiModels/GameDataApi";
+import type { GameResultChart, GameResultChartSeries } from "@/utils/apiModels/GameDataApi";
 import { playerColour } from "@/utils/ui/playerColours";
 
 interface LineChartProps {
     chart: GameResultChart;
     /** Usernames in player order, so each line's colour matches that
-     * player's colour everywhere else in the game (board, scoreboard, recap). */
+     * player's colour everywhere else in the game (board, scoreboard, recap).
+     * Ignored by a chart that names its own series. */
     players: string[];
-    /** The players' stable userIds, in the same order as `players`. The chart's
-     * per-turn series are keyed by these, so a shared display name can't collapse
-     * two players onto one line. */
+    /** The players' stable userIds, in the same order as `players`. A
+     * per-player chart's per-turn series are keyed by these, so a shared
+     * display name can't collapse two players onto one line. */
     playerIds: string[];
 }
 
@@ -25,29 +26,37 @@ const PLOT_WIDTH = VB_WIDTH - PAD_LEFT - PAD_RIGHT;
 const PLOT_HEIGHT = VB_HEIGHT - PAD_TOP - PAD_BOTTOM;
 const MIN_LABEL_GAP = 13;
 
-// Rounds up to a "clean" axis max (1/2/5 * 10^n), so gridline ticks read as
+// Rounds up to a "clean" axis max (1/2/3/5 * 10^n), so gridline ticks read as
 // round numbers rather than whatever the highest series value happens to be.
+// The 3 is there because without it everything from 21 to 50 shares an axis
+// top of 50 — which left Outbreak's 24-cube supplies drawn in the bottom half
+// of an axis half of which nothing could ever reach.
 function niceMax(max: number): number {
     if (max <= 0) return 10;
     const exponent = Math.floor(Math.log10(max));
     const fraction = max / 10 ** exponent;
-    const niceFraction = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10;
+    const niceFraction = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 3 ? 3 : fraction <= 5 ? 5 : 10;
     return niceFraction * 10 ** exponent;
 }
 
 // Turn-by-turn line chart for the GameResult page: turn number on the
-// x-axis, one line per player. Generic over any game's GameResultChart, so
-// every game can plug its own per-turn series into the same component.
+// x-axis, one line per player — or, when the chart names its own series
+// (GameResultChart.series), one line per whatever the game is plotting
+// instead. Generic over any game's GameResultChart, so every game can plug its
+// own per-turn series into the same component.
 export default function LineChart({ chart, players, playerIds }: LineChartProps) {
     const [hoverIndex, setHoverIndex] = useState<number | null>(null);
     const [showTable, setShowTable] = useState(false);
 
     const turnCount = chart.turns.length;
-    const series = useMemo(() => players.map((name, i) => ({
-        name,
-        color: playerColour(i),
-        values: chart.turns.map(turn => turn[playerIds[i]] ?? 0),
-    })), [players, playerIds, chart.turns]);
+    const series = useMemo(() => {
+        const lines: GameResultChartSeries[] = chart.series
+            ?? players.map((name, i) => ({ key: playerIds[i], name, color: playerColour(i) }));
+        return lines.map(line => ({
+            ...line,
+            values: chart.turns.map(turn => turn[line.key] ?? 0),
+        }));
+    }, [players, playerIds, chart.series, chart.turns]);
 
     if (turnCount === 0 || series.length === 0) return null;
 
@@ -61,9 +70,9 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
     // End-of-line value labels, nudged apart vertically when two players'
     // final values are close enough that the labels would collide.
     const endLabels = series
-        .map(s => ({ name: s.name, color: s.color, value: s.values[s.values.length - 1], y: yAt(s.values[s.values.length - 1]) }))
+        .map(s => ({ key: s.key, name: s.name, color: s.color, value: s.values[s.values.length - 1], y: yAt(s.values[s.values.length - 1]) }))
         .sort((a, b) => a.y - b.y)
-        .reduce<{ name: string; color: string; value: number; y: number }[]>((acc, s) => {
+        .reduce<{ key: string; name: string; color: string; value: number; y: number }[]>((acc, s) => {
             const prevY = acc.length ? acc[acc.length - 1].y : -Infinity;
             acc.push({ ...s, y: Math.max(s.y, prevY + MIN_LABEL_GAP) });
             return acc;
@@ -104,7 +113,7 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
 
                     {series.map(s => (
                         <path
-                            key={s.name}
+                            key={s.key}
                             className="ag-chart-line"
                             d={s.values.map((v, i) => `${i === 0 ? "M" : "L"}${xAt(i)},${yAt(v)}`).join(" ")}
                             style={{ stroke: s.color }}
@@ -113,7 +122,7 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
 
                     {series.map(s => (
                         <circle
-                            key={`dot-${s.name}`}
+                            key={`dot-${s.key}`}
                             className="ag-chart-enddot"
                             cx={xAt(turnCount - 1)}
                             cy={yAt(s.values[s.values.length - 1])}
@@ -131,7 +140,7 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
                             />
                             {series.map(s => (
                                 <circle
-                                    key={`hover-${s.name}`}
+                                    key={`hover-${s.key}`}
                                     className="ag-chart-hoverdot"
                                     cx={xAt(hoverIndex)}
                                     cy={yAt(s.values[hoverIndex])}
@@ -145,7 +154,7 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
 
                 {endLabels.map(l => (
                     <div
-                        key={l.name}
+                        key={l.key}
                         className="ag-chart-endlabel"
                         style={{ left: `${(xAt(turnCount - 1) / VB_WIDTH) * 100}%`, top: `${(l.y / VB_HEIGHT) * 100}%`, color: l.color }}
                     >
@@ -157,7 +166,7 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
                     <div className="ag-chart-tooltip" style={{ left: `${(xAt(hoverIndex) / VB_WIDTH) * 100}%` }}>
                         <div className="ag-chart-tooltip-turn">Turn {hoverIndex + 1}</div>
                         {series.map(s => (
-                            <div key={s.name} className="ag-chart-tooltip-row">
+                            <div key={s.key} className="ag-chart-tooltip-row">
                                 <span className="ag-chart-tooltip-key" style={{ background: s.color }} />
                                 <span className="ag-chart-tooltip-name">{s.name}</span>
                                 <span className="ag-chart-tooltip-value">{s.values[hoverIndex]}</span>
@@ -169,7 +178,7 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
 
             <div className="ag-chart-legend">
                 {series.map(s => (
-                    <span key={s.name} className="ag-chart-legend-item">
+                    <span key={s.key} className="ag-chart-legend-item">
                         <span className="ag-chart-legend-dot" style={{ background: s.color }} />
                         {s.name}
                     </span>
@@ -185,14 +194,14 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
                         <thead>
                             <tr>
                                 <th>Turn</th>
-                                {players.map((name, i) => <th key={playerIds[i]}>{name}</th>)}
+                                {series.map(s => <th key={s.key}>{s.name}</th>)}
                             </tr>
                         </thead>
                         <tbody>
                             {chart.turns.map((turn, i) => (
                                 <tr key={i}>
                                     <td>{i + 1}</td>
-                                    {players.map((name, i) => <td key={playerIds[i]}>{turn[playerIds[i]] ?? 0}</td>)}
+                                    {series.map(s => <td key={s.key}>{s.values[i]}</td>)}
                                 </tr>
                             ))}
                         </tbody>

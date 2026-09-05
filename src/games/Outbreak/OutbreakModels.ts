@@ -4,6 +4,7 @@ import { Model, Schema, models } from "mongoose";
 import { v4 as uuidv4 } from 'uuid';
 import {
     GameResultChart,
+    GameResultChartSeries,
     GameResultStatGroup,
     compactCharts,
     formatPerTurnChart,
@@ -25,6 +26,7 @@ import {
     CITY_COUNT,
     DIFFICULTIES,
     DISEASE_COLORS,
+    DISEASE_COLOR_DEFS,
     epidemicCountFor,
     EVENT_CARD_IDS,
     OutbreakCureState,
@@ -412,6 +414,9 @@ OutbreakGameDataSchema.methods.CreateDataResponse = async function(viewerId: str
         complete: doc.complete,
         winner: doc.winner,
         endReason: doc.endReason,
+        // Which §4.2 loss it was — 'teamloss' alone doesn't say (see
+        // endInTeamLoss, and GameEndDetail).
+        endDetail: doc.endDetail,
         forfeitedBy: doc.forfeitedBy,
         specificGameState: gameStateToModel(doc.specificGameState, userIdNameMap, viewerId),
         recapAvailable: !!doc.initialSpecificGameState,
@@ -487,6 +492,11 @@ export interface IOutbreakGameResultStats {
     difficulty: OutbreakDifficulty;
     cubesTreatedPerTurn: Map<string, number>[];
     timesTravelledPerTurn: Map<string, number>[];
+    // The one series here that isn't per player: each turn's remaining supply
+    // keyed by disease colour, not by userId. A colour hitting zero is one of
+    // the three ways the table loses (§4.2), so how fast each supply drained
+    // is the story of the game — see formatOutbreakCharts.
+    cubesLeftPerTurn: Map<string, number>[];
 }
 
 export const outbreakGameResultStatsSchemaDef = {
@@ -496,12 +506,14 @@ export const outbreakGameResultStatsSchemaDef = {
     difficulty: String,
     cubesTreatedPerTurn: [{ type: Schema.Types.Map, of: Number }],
     timesTravelledPerTurn: [{ type: Schema.Types.Map, of: Number }],
+    cubesLeftPerTurn: [{ type: Schema.Types.Map, of: Number }],
 };
 
 export function computeOutbreakResultStats(
     gameData: IOutbreakGameData,
     cubesTreatedPerTurn: Map<string, number>[],
     timesTravelledPerTurn: Map<string, number>[],
+    cubesLeftPerTurn: Map<string, number>[],
 ): IOutbreakGameResultStats {
     const gs = gameData.specificGameState;
     return {
@@ -514,11 +526,22 @@ export function computeOutbreakResultStats(
         difficulty: gs.difficulty,
         cubesTreatedPerTurn,
         timesTravelledPerTurn,
+        cubesLeftPerTurn,
     };
 }
 
-// Renders the two per-turn series as GameResult charts — mirrors Train
-// Time's formatTrainTimeCharts.
+// The four cube-supply lines, in their own disease colours rather than the
+// player colours a per-player chart uses — see GameResultChartSeries.
+const CUBE_SUPPLY_SERIES: GameResultChartSeries[] = DISEASE_COLORS.map(color => ({
+    key: color,
+    name: DISEASE_COLOR_DEFS[color].name,
+    color: DISEASE_COLOR_DEFS[color].hex,
+}));
+
+// Renders the per-turn series as GameResult charts — mirrors Train Time's
+// formatTrainTimeCharts. The last of them plots the board rather than the
+// table: one line per disease colour, dropping toward the zero that loses the
+// game.
 export function formatOutbreakCharts(
     stats: IOutbreakGameResultStats,
     usernameById: Map<string, string>,
@@ -526,6 +549,7 @@ export function formatOutbreakCharts(
     return compactCharts(
         formatPerTurnChart(stats.cubesTreatedPerTurn, "Cubes treated per turn", "Cubes"),
         formatPerTurnChart(stats.timesTravelledPerTurn, "Times travelled per turn", "Moves"),
+        formatPerTurnChart(stats.cubesLeftPerTurn ?? [], "Cubes left in supply", "Cubes", CUBE_SUPPLY_SERIES),
     );
 }
 

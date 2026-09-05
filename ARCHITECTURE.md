@@ -282,6 +282,7 @@ interface IGameResultData {
     playerIds: string[]; // gameData.userIdList
     winner: string;      // gameData.winner; "" means draw / no winner
     endReason?: GameEndReason; // how it ended, when "" alone doesn't say
+    endDetail?: GameEndDetail; // which shape of that ending, in the player's words
     forfeitedBy?: string;      // who went quiet, for an abandoned game
     endedAt: string;     // ISO, when the record was written
 }
@@ -311,6 +312,15 @@ Key properties:
   place that turns those fields into a player's win/loss/draw — both "recent
   form" and the per-game totals on a profile fold through it, rather than the
   totals re-encoding the rule as a Mongo `$cond`.
+- **`endDetail` says which shape of that ending it was**, as one lowercase
+  clause a player can read ("the player deck ran out of cards"). A co-op game
+  is what needs it: `'teamloss'` covers every way Outbreak's table can go under
+  (§4.2 — a colour's cube supply exhausted, the outbreak marker maxed out, the
+  player deck run dry), and the finish banner, the result page and the "your
+  team lost" push all want to name which. Only the rules know, so the game's
+  own logic writes it as it ends the game (`endInTeamLoss` in
+  `OutbreakLogic.ts`) — `finishGame` never sets it. Absent for every ending
+  that only happens one way.
 - **Idempotent on `gameId`.** The schema has a unique index on `gameId`;
   `recordGameResult` swallows the resulting duplicate-key error, so calling it
   twice for the same game (e.g. a retried request) is a no-op rather than a

@@ -191,14 +191,24 @@ export function buildGameLostNotification(gameData: IGameData, winnerName: strin
  * GameEndReason 'teamwin'/'teamloss'). There is no opponent to name and nobody
  * to congratulate individually, so the turns the table took together are the
  * measure — the same one the win and loss copy above uses.
+ *
+ * A defeat also leads with *which* defeat, when the game recorded one (see
+ * GameEndDetail): a co-op game usually has several ways to go under, and "your
+ * team lost" alone tells a player nothing they couldn't already guess. A game
+ * that records none keeps the copy it had.
  */
 export function buildTeamResultNotification(gameData: IGameData, won: boolean): PushNotification {
     const friendlyName = gameData.gameType.friendlyName;
     const { count, unit } = matchLength(gameData);
 
-    return won
-        ? gamePush(gameData, `🏆 Your team won ${friendlyName}!`, `You pulled it off together in ${pluralize(count, unit)}. Another run?`)
-        : gamePush(gameData, `Your team lost ${friendlyName}`, `It got away from you after ${pluralize(count, unit)}. Try again?`);
+    if (won) {
+        return gamePush(gameData, `🏆 Your team won ${friendlyName}!`, `You pulled it off together in ${pluralize(count, unit)}. Another run?`);
+    }
+
+    const detail = gameData.endDetail
+        ? `It got away from you after ${pluralize(count, unit)} — ${gameData.endDetail}. Try again?`
+        : `It got away from you after ${pluralize(count, unit)}. Try again?`;
+    return gamePush(gameData, `Your team lost ${friendlyName}`, detail);
 }
 
 /**

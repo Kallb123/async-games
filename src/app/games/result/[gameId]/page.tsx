@@ -49,7 +49,13 @@ export default function GameResultPage({ params }: { params: Promise<{ gameId: s
                             icon={meta ? <GameThumb meta={meta} size={ROW_THUMB_SIZE} radius={ROW_THUMB_RADIUS} /> : undefined}
                             title={meta?.name ?? result.url}
                             sub={<>
-                                {finishedGameCopy(result) ?? "Draw"} · {moment(result.endedAt).fromNow()} · {pluralize(result.totalTurns, lengthUnit(result.playerIds.length))}
+                                {/* endDetail says which of an ending's several
+                                    shapes this was — which of Outbreak's three
+                                    defeats, say. It rides with the outcome it
+                                    qualifies rather than as a fourth segment,
+                                    so "The team lost" and its reason read as
+                                    one phrase. */}
+                                {finishedGameCopy(result) ?? "Draw"}{result.endDetail ? ` — ${result.endDetail}` : ""} · {moment(result.endedAt).fromNow()} · {pluralize(result.totalTurns, lengthUnit(result.playerIds.length))}
                             </>}
                         />
                     )}

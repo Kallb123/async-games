@@ -393,6 +393,19 @@ export async function computePerTurnStat<TState>(
     gameData: IGameData,
     extractValue: (state: TState, userId: string) => number | undefined,
 ): Promise<Map<string, number>[]> {
+    return computePerTurnKeyedStat(gameData, gameData.userIdList, extractValue);
+}
+
+// The same replay, for a series whose lines aren't players: `keys` names them
+// (Outbreak's four disease colours) and each turn's Map comes back keyed by
+// those instead of by userId, ready for formatPerTurnChart's `series`. Every
+// per-player caller goes through computePerTurnStat above, which is this with
+// the roster as its keys — one replay loop, not two.
+export async function computePerTurnKeyedStat<TState>(
+    gameData: IGameData,
+    keys: string[],
+    extractValue: (state: TState, key: string) => number | undefined,
+): Promise<Map<string, number>[]> {
     const identityMap = Object.fromEntries(gameData.userIdList.map(userId => [userId, userId]));
     const perTurn: Map<string, number>[] = [];
     try {
@@ -402,8 +415,8 @@ export async function computePerTurnStat<TState>(
             }
             const responseState = step.next.specificGameState as TState;
             const entry = new Map<string, number>();
-            for (const userId of gameData.userIdList) {
-                entry.set(userId, extractValue(responseState, userId) ?? 0);
+            for (const key of keys) {
+                entry.set(key, extractValue(responseState, key) ?? 0);
             }
             perTurn.push(entry);
         });

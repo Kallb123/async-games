@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildInitialOutbreakState } from "./OutbreakModels";
-import { CITY_COUNT, DIFFICULTIES, EPIDEMIC_CARD_ID, EVENT_CARD_IDS, epidemicCountFor, isCityCardId, isEventCardId } from "./board";
+import { buildInitialOutbreakState, formatOutbreakCharts, type IOutbreakGameResultStats } from "./OutbreakModels";
+import { CITY_COUNT, DIFFICULTIES, DISEASE_COLOR_DEFS, EPIDEMIC_CARD_ID, EVENT_CARD_IDS, epidemicCountFor, isCityCardId, isEventCardId } from "./board";
 import { startingHandSize } from "./rules";
 
 const CARD_COUNT = CITY_COUNT + EVENT_CARD_IDS.length; // 53 (§5, §6 step 6)
@@ -50,4 +50,56 @@ describe("buildInitialOutbreakState — the epidemic-pile player deck (§6 step 
             expect(state.forecastResumePhase).toBeNull();
         });
     }
+});
+
+describe("Outbreak result charts", () => {
+    const NAMES = new Map([["u1", "Alice"], ["u2", "Bob"]]);
+
+    const stats = (overrides: Partial<IOutbreakGameResultStats> = {}): IOutbreakGameResultStats => ({
+        curesDiscovered: 1,
+        outbreaks: 2,
+        turnsLasted: 2,
+        difficulty: 'standard',
+        cubesTreatedPerTurn: [new Map([["u1", 0], ["u2", 2]]), new Map([["u1", 3], ["u2", 2]])],
+        timesTravelledPerTurn: [new Map([["u1", 1], ["u2", 1]]), new Map([["u1", 2], ["u2", 1]])],
+        cubesLeftPerTurn: [
+            new Map([["blue", 20], ["yellow", 19], ["black", 21], ["red", 22]]),
+            new Map([["blue", 18], ["yellow", 19], ["black", 17], ["red", 22]]),
+        ],
+        ...overrides,
+    });
+
+    it("plots the cube supplies as their own four lines, not as players", () => {
+        const charts = formatOutbreakCharts(stats(), NAMES);
+
+        expect(charts.map(c => c.title)).toEqual([
+            "Cubes treated per turn",
+            "Times travelled per turn",
+            "Cubes left in supply",
+        ]);
+
+        // The two per-player charts name no series — the result page draws
+        // one line per player from its own roster.
+        expect(charts[0].series).toBeUndefined();
+        expect(charts[1].series).toBeUndefined();
+
+        const supply = charts[2];
+        expect(supply.turns).toEqual([
+            { blue: 20, yellow: 19, black: 21, red: 22 },
+            { blue: 18, yellow: 19, black: 17, red: 22 },
+        ]);
+        expect(supply.series).toEqual([
+            { key: 'blue', name: 'Blue', color: DISEASE_COLOR_DEFS.blue.hex },
+            { key: 'yellow', name: 'Yellow', color: DISEASE_COLOR_DEFS.yellow.hex },
+            { key: 'black', name: 'Black', color: DISEASE_COLOR_DEFS.black.hex },
+            { key: 'red', name: 'Red', color: DISEASE_COLOR_DEFS.red.hex },
+        ]);
+    });
+
+    it("plots no supply chart for a result recorded before it was tracked", () => {
+        // Records written before cubesLeftPerTurn existed read back with no
+        // series at all, and a chart of nothing is worse than no chart.
+        const charts = formatOutbreakCharts(stats({ cubesLeftPerTurn: [] }), NAMES);
+        expect(charts.map(c => c.title)).toEqual(["Cubes treated per turn", "Times travelled per turn"]);
+    });
 });

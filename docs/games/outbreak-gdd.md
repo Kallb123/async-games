@@ -60,6 +60,8 @@ The team loses immediately if **any** of the following occurs:
 
 Three distinct failure vectors mean there is no single dominant strategy. Optimising purely against one loss condition accelerates another.
 
+Because there are three of them, the ending has to say which one it was: each records the clause naming it as the game's `endDetail` (see ARCHITECTURE.md, "Match results"), and the finish banner, the result page and the "your team lost" push all read it back. A table that has just gone under wants to know whether it was the cubes, the marker or the clock.
+
 ---
 
 ## 5. Components Manifest
@@ -873,9 +875,9 @@ colour's remaining `cubesLeft`, it stops the chain walk the instant supply
 runs out rather than completing it (§16), rather than becoming a second copy
 of the chain-walk logic. All three §4.2 losses — an empty player deck, a
 colour's cube supply, the outbreak marker reaching 8 — set `complete`/
-`winner`/`'teamloss'` directly where they're detected, since none of them can
-be re-derived from state afterward the way the win check can; `CheckGameOver`
-just passes that through. The board screen picked up the two controls this
+`winner`/`'teamloss'`/`endDetail` directly where they're detected, since none
+of them can be re-derived from state afterward the way the win check can;
+`CheckGameOver` just passes that through. The board screen picked up the two controls this
 makes necessary: an "End turn" prompt once `actionsLeft` hits zero, and a
 discard picker (reusing `ag-build-row`/`ag-build-row--active`, no new
 component) once `phase` is `'discard'`.
@@ -1129,6 +1131,19 @@ their own turn. It reuses `TurnRecap` rather than forking a new shell —
 `TurnRecap` picked up an optional `since` label and an optional per-event
 `timestamp` (a same-instant screen has nothing relative to say) to make that
 reuse possible instead of bespoke markup.
+
+*Revisited again.* Two gaps in what the ending actually told the table. First,
+every defeat looked the same: `'teamloss'` and a banner reading "the outbreak
+overwhelmed the team", which names none of §4.2's three. Each loss now records
+its own clause as `endDetail` (see §4.2) and the banner, the result page and
+the push all read it. Second, the two per-turn charts were both per player,
+and the number the whole game turns on — how much of each colour is left in
+the supply — was in none of them. `cubesLeftPerTurn` is a third series, keyed
+by disease colour rather than by userId, so `computePerTurnStat` grew a
+`computePerTurnKeyedStat` sibling (the same replay, different keys) and
+`GameResultChart` an optional `series` naming the lines and their colours for
+a chart that isn't per player. `LineChart` falls back to the roster when a
+chart names no series, so every other game's chart is untouched.
 
 **13 — The crew planner.** Last deliberately: it is the most novel thing here and
 the easiest to cut, and the game ships complete without it. Three pieces, per

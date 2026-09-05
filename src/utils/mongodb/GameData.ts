@@ -1,5 +1,5 @@
 import { Document, Model, Schema, model, models } from "mongoose";
-import { GameEndReason, IGameDataResponse, IGameResponse, uuidString } from "../apiModels/GameDataApi";
+import { GameEndDetail, GameEndReason, IGameDataResponse, IGameResponse, uuidString } from "../apiModels/GameDataApi";
 import { UserDirectory, userIdListToNamesAndMap } from "../users/clerk";
 import { IGameCommand, IGameType } from "../apiModels/GameLogic";
 import { actionableTurnFilter } from "../games/TurnTimer";
@@ -58,6 +58,11 @@ export interface IGameData {
     complete: boolean,
     winner: string,
     endReason?: GameEndReason,
+    // Which of an endReason's several shapes this was, in the player's own
+    // words — see GameEndDetail. Written by the game's own logic on the way
+    // through its Execute/CheckGameOver, not by finishGame, because only the
+    // rules know which ending happened.
+    endDetail?: GameEndDetail,
     forfeitedBy?: string
 }
 
@@ -122,6 +127,7 @@ export var GameDataSchema = new Schema<IGameDataDocument> ({
     complete: Boolean,
     winner: String,
     endReason: String,
+    endDetail: String,
     forfeitedBy: String
 }, {discriminatorKey: 'kind', optimisticConcurrency: true});
 
@@ -193,6 +199,7 @@ GameDataSchema.methods.CreateDataResponse = async function(_viewerId: string | n
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
         endReason: gameDataDocument.endReason,
+        endDetail: gameDataDocument.endDetail,
         forfeitedBy: gameDataDocument.forfeitedBy
     }
 };

@@ -368,7 +368,17 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                 <GameFinishBanner
                     message={abandoned
                         ? abandoned.message
-                        : gameData?.endReason === 'teamloss' ? 'The outbreak overwhelmed the team.' : 'The team cured every disease! 🎉'}
+                        : gameData?.endReason === 'teamloss'
+                            // Which §4.2 defeat it was, in the words the game
+                            // logged it in (endInTeamLoss). There are three of
+                            // them, and "the outbreak overwhelmed the team"
+                            // names none — that generic line is only the
+                            // fallback for a game that ended before the
+                            // reason was recorded.
+                            ? gameData.endDetail
+                                ? `The team lost — ${gameData.endDetail}.`
+                                : 'The outbreak overwhelmed the team.'
+                            : 'The team cured every disease! 🎉'}
                     gameId={gameId}
                     gameUrl="outbreak"
                     usernameList={usernameList}

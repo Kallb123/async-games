@@ -62,6 +62,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Outbreak tells you how you lost",
+                detail: "\"The team lost\" was all you got, whether a colour's cube supply had run dry, the outbreak marker had maxed out, or you had simply run out of player cards. The finish banner, the result page and the notification now all name which of the three it was — and the result page adds a chart of every colour's remaining cubes, turn by turn, so you can see which supply was draining while you were curing something else.",
+                game: "outbreak",
+            },
+            {
                 title: "What's new goes back further",
                 detail: "These notes used to show only the last handful of changes in each group, and everything older simply vanished. Each group now keeps the three newest in full and lists the ones before them underneath by name alone, so you can see everything that has landed since you last played without scrolling through paragraphs you have already read.",
             },
@@ -98,10 +103,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Your cards stay on screen between your turns",
                 detail: "Waiting for someone else to move used to leave you looking at the board and nothing else. Your hand, the face-up cards and what's left in the deck now stay put in Train Time, the market in Dice Cities and the cards you're holding in World Domination — greyed out until it's your go, so you can plan the move but not make it early.",
-            },
-            {
-                title: "Change the name friends invite you by",
-                detail: "The username you picked when you signed up used to be yours for good, typo and all. Your profile now has an Edit username button — take a new one and it follows you straight away: your friends' invite lists, the games you're already in, and your match history.",
             },
         ],
     },
