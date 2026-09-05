@@ -112,6 +112,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Dice Cities' Amusement Park can be built again",
+                detail: "Buying the Amusement Park quietly asked for the Radio Tower instead — so it was refused unless you could afford the more expensive one, and if you could, you got the wrong landmark for the wrong price. The two also had each other's powers: the extra turn on doubles belonged to the Radio Tower and the Amusement Park did nothing at all. Both now build, and cost, and do what their cards say.",
+                game: "dicecities",
+            },
+            {
                 title: "Chat opens on a game nobody has said anything in yet",
                 detail: "Tapping 💬 on a board where the thread was still empty broke the screen instead of opening it — “That didn't go to plan” — which was every game until someone got the first message in somehow. An empty thread now opens ready for it.",
             },
@@ -147,10 +152,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Your badge no longer flashes a stranger's initial",
                 detail: "For a moment before your profile loaded, the little circle on the home page and your profile showed a “T” or a “Y” — the first letter of the words standing in for your name. You now get a plain silhouette until your real initials or photo are ready.",
-            },
-            {
-                title: "The back arrow sits in the middle of its button",
-                detail: "The little round back arrow at the top of the library, your profile, settings and every other screen was leaning down and to one side of its circle. It's centred now.",
             },
         ],
     },
