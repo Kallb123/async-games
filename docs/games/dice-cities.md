@@ -17,7 +17,7 @@ Dice Cities is a light, upbeat economic game set in a bustling region of rival t
 The rules carry no dependency on that dressing. For a worked example of
 re-skinning the whole game — every base, Docks and Billionaires Row card — to a
 post-nuclear wasteland paid for in bottlecaps, see
-[§11 Alternative Theme](#11-appendix-alternative-theme--rust--bottlecaps).
+[§12 Alternative Theme](#12-appendix-alternative-theme--rust--bottlecaps).
 
 ---
 
@@ -216,7 +216,163 @@ Billionaires Row is a set of premium, high-value establishments and an alternate
 
 ---
 
-## 11. Appendix: Alternative Theme — "Rust & Bottlecaps"
+## 11. Public Information: Seeing the Other Cities
+
+Every card in Dice Cities sits face-up on the table. §10 already takes that
+as read — "all state (money, tableau, landmarks) is public, and the only
+hidden randomness is the dice roll" — and the rules lean on it hard. A Red
+card is paid out of the *roller's* pocket, so what an opponent has built is
+literally the price of your own turn: a player who cannot see the other
+cities cannot tell whether rolling a 3 costs them one coin or four, cannot
+tell whether the Cheese Factory is worth 5 coins to them and worthless to
+their neighbour, and cannot see the Stadium being lined up against them.
+
+The app does not show them. This section sets out why that is a rendering
+gap rather than a rules or privacy question, what a fix has to satisfy, and
+the shapes a fix could take.
+
+### 11.1 Where it stands today
+
+**Nothing is hidden on the wire.** `CreateDataResponse` in
+`DiceCitiesModels.ts` takes a `_viewerId` and ignores it, and
+`gameStateToModel` walks the entire `playerStates` map, sending every
+player's cards, coins, landmark flags and dice choice to everyone at the
+table. There is nothing to unredact and no API contract to change — the
+client is already holding every city it would need to draw.
+
+What the board screen does with that payload is the gap:
+
+* **`page.tsx` draws exactly one city.** `boardPlayer` is the viewer's own
+  seat, falling back to whoever's turn it is, falling back to the first
+  seat; it goes to `DiceCitiesBoard` and the other seats go to the action
+  sheet and nowhere else.
+* **The scoreboard stops one step short.** `GameScoreboard` already gives
+  every player a pill with their colour, name, landmark count and coins —
+  everything except what they own.
+* **Opponents' establishments already render in full, in one place.** The
+  Business Center's "choose an opponent's establishment to take" picker in
+  `DiceCitiesActions.tsx` lays out every opponent's cards, grouped by
+  player. The app therefore already accepts that these cards are the
+  viewer's to look at — just only while an 8-coin purple card is resolving.
+* **The history log leaks it all anyway.** Every purchase writes
+  "*Dave bought a Cafe*". A determined player can reconstruct all four
+  cities by scrolling back to turn one. The information is not secret; it
+  is merely tedious to assemble.
+
+One more fact shapes every option below: **`DiceCitiesBoard` is already the
+right component.** It takes a `playerState` plus an `ownerLabel` and draws
+whoever it is handed, captioning the tableau "Dave's city" when it isn't
+yours. The work is routing a second player state into a component that
+already copes, not drawing cities.
+
+### 11.2 What any answer has to do
+
+1. **Never leave any doubt whose city is on screen.** The build step always
+   spends *your* coins into *your* city; a screen that can show someone
+   else's tableau must say so loudly and offer an obvious way back.
+2. **Keep `opponents` anchored to the viewer's seat.** Today `opponents` is
+   derived from `boardPlayer` (`players.filter(p => p.userId !==
+   boardPlayer.userId)`). Any option that lets `boardPlayer` become someone
+   else must decouple the two, or the TV Station picker will offer to rob
+   the viewer and skip the player they happen to be looking at.
+3. **Cost nothing on the turn you are actually taking.** Roll → collect →
+   build is a handful of taps in an async game; browsing must not stand
+   between the player and their build.
+4. **Fit four players — five with Billionaires Row — in a phone column.**
+   A late-game city runs to a dozen-plus establishment types plus a
+   five-slot landmark track.
+5. **Work under turn review.** Past states carry the full `playerStates`
+   map, so whatever is built must read from `nav.displayedState` and keep
+   behaving while a reviewed or finished turn is on screen.
+6. **Not crash for a seatless viewer.** `myState` is `undefined` for anyone
+   opening a game they are not in; `boardPlayer` already falls back and the
+   turn sheet already hides itself.
+7. **Reuse `DiceCitiesBoard` rather than growing a second way to draw a
+   city.** A compact opponent-only tableau that drifts out of step with the
+   real one is the duplication `AGENTS.md` treats as a defect.
+
+### 11.3 The options
+
+| # | Option | What the player gets | Pros | Cons | Verdict |
+|---|---|---|---|---|---|
+| **A** | **Tap a scoreboard pill** — the board swaps to that player's city; tap again (or a "back to your city" bar) to return | One city at a time, chosen from the strip already at the top of the screen | Cheapest by a wide margin: `ScoreEntry` already carries `onClick` and `highlighted`, `boardPlayer` already accepts any seat, `ownerLabel` already captions it. **No new component at all** — one `useState` and a banner. Discoverable, because the pills already name everyone. Page height unchanged. Outbreak already teaches the tap-a-pill gesture. | One city at a time; no side-by-side comparison. Must remember to tap back (mitigated by requirement 1's banner). A pill is a smallish tap target. Requirement 2 has to be honoured or the robbery pickers invert. | ✅ **Recommended** |
+| **B** | **Stacked collapsible cities** — your board, then one collapsed panel per opponent below it | Every city on one page, opened and closed at will | Built entirely from parts we own: `Collapse`/`CollapsingSection` plus one `DiceCitiesBoard` per panel; `seatOrderFrom` gives the viewer-first order. Several cities can be open at once. Scrolls, screenshots and reads to a screen reader as one document. `OutbreakHands` is the same shape, so the pattern is precedented. | A four-player late game is four full tableaus plus four landmark tracks in a phone column — a long page, and comparing two open cities still means scrolling between them. Animating a body that tall is the least convincing use of `Collapse`. Repeating the landmark track four times is a lot of chrome for a 4/5 counter the scoreboard already shows. | ⚠️ Good second choice |
+| **C** | **Swipeable gallery** — one full-width city, swipe or arrow between seats, yours first | A deck of cities to flip through | Constant page height, full column width per city, cards stay big. Comparison is genuinely good: two cities land in the *same* screen position, so swiping back and forth diffs them in a way scrolling never does. Reads like the table it models. | **The repo has no carousel, no swipe handler and no `scroll-snap` anywhere** — this is a new shared primitive to build, document and maintain (a caveman finding unless it is written for `components/ui/` and other games actually adopt it). Horizontal gestures fight vertical page scroll and the turn-nav controls. Needs dots/arrows for discoverability and keyboard/AT equivalents for the gesture. Hides the fact that opponents exist behind an interaction. | ⚠️ Only as a shared primitive |
+| **D** | **Roll-number summary strip** — per opponent, a row of chips 1–14 marking what pays them, expanding to the full city | The answer to "what does my roll pay them?" in two lines | Smallest footprint of anything here; scales cleanly to five players; skips the landmark-track repetition; answers the question the Red cards actually pose. | It is a *second* way of drawing a city — requirement 7 — unless the chip row is factored out and reused in the real board. Loses the card art the game just invested in being tappable. Still needs a route through to the detail. | ➕ An addition to A/B/C, not an answer |
+| **E** | **Status quo** — Business Center picker and the history log | Nothing | No work. | Contradicts §10 and the game guide, both of which tell the player these cards are public and pay out on everyone's roll. Leaves the Red economy unreadable and makes the log the only route to public information. | ❌ Leaves a real defect |
+
+### 11.4 Recommendation
+
+**Ship A, keep B in reserve, and treat C as a separate investment.**
+
+A is recommended less for being cheap than for being *already built*: the
+scoreboard is the per-player index, it is pinned at the top of every board
+screen, it already knows how to be tapped and highlighted, and
+`DiceCitiesBoard` already draws and captions any seat handed to it. The
+whole feature is a piece of state and a way back:
+
+```ts
+// page.tsx — which city the board is pointed at; null = your own.
+const [viewing, setViewing] = useState<string | null>(null);
+const viewedPlayer = players.find(p => p.userId === viewing);
+const boardPlayer = viewedPlayer ?? myState
+    ?? players.find(p => p.userId === displayedCurrentTurn) ?? players[0];
+
+// Requirement 2: opponents stay relative to *me*, never to the viewed seat.
+const opponents = players.filter(p => p.userId !== (myState?.userId ?? boardPlayer?.userId));
+```
+
+with each `ScoreEntry` gaining `onClick: () => setViewing(v => v === userId ? null : userId)`
+and `highlighted: viewing === userId`, so the pill you tapped stays lit as
+the "you are here" marker while the board is somebody else's. `ownerLabel`
+already reads "Dave's city"; a return affordance above the board — "👀
+Viewing Dave's city · Back to yours" — covers requirement 1 and gives a
+tap target bigger than the pill.
+
+Two details to get right when it is built:
+
+* **Clear or re-resolve `viewing` when the viewed seat disappears** — the
+  fallback chain above already copes with a missing seat, but a stale id
+  should not survive a jump between reviewed turns.
+* **Leave the turn sheet alone.** It is the viewer's own row, wrapped in
+  `ReadOnlyPanel` off their turn, and must stay that way while the board
+  points elsewhere. Browsing a city is never a game action.
+
+B is the better answer to a different question — "show me the whole table
+at once" — and is the natural upgrade if playtesting shows people want two
+cities side by side rather than one at a time. It costs no new primitives
+either, so switching later is not wasted work: both options render the same
+`DiceCitiesBoard`, so A's per-seat routing is B's panel body.
+
+C should only be built if a swipeable gallery is wanted across the app —
+Outbreak's hands, Settlements' player boards and this screen would all use
+it — in which case it belongs in `src/components/ui/` as a shared
+component, not as a Dice Cities carousel. Built for one screen it is the
+most expensive option here and the only one that adds a maintenance
+surface, and it buys a comparison affordance that A largely matches for
+free (tap two pills in turn and the cities land in the same place).
+
+D is worth revisiting after A ships, as a strip inside each city's header
+rather than instead of the city — but only by extracting the chip row so
+the viewer's own board shows the same thing about them.
+
+### 11.5 When it ships
+
+* Shows up in the guide (`guide.ts`): the "Watch the market" section
+  already teaches tap-to-read, and the Goal/Your turn sections tell players
+  their cards pay out on everyone's roll — one clause on how to go and look
+  at those cities belongs beside them.
+* Adds a single **What's new** enhancement line (`whatsNew.ts`) in the same
+  PR, per `AGENTS.md` — one line for the branch, in the player's language.
+* Wants a `caveman` pass (it is a UI/reuse change, and options C and D are
+  where a second way of drawing a city would creep in) and a `rulebook`
+  pass (guide copy and the release note). No `croupier` pass is required
+  for its own sake: this makes public state visible, and §11.1 shows the
+  server was already sending it.
+
+---
+
+## 12. Appendix: Alternative Theme — "Rust & Bottlecaps"
 
 The shipped theme of Dice Cities is a bright Japanese-inspired region of rival
 towns: wheat fields, bakeries, sushi bars and a radio tower. Nothing in the
@@ -231,7 +387,7 @@ with a different picture on it. The names below are a starting point to be
 taken or swapped to taste — the columns that matter are the ones to their
 right.
 
-### 11.1 Vocabulary
+### 12.1 Vocabulary
 
 | Base theme | Wasteland theme | Notes |
 | --- | --- | --- |
@@ -248,7 +404,7 @@ right.
 | **Red (Restaurants)** | **Watering Holes** | Charges the scavenger who came back with the number. |
 | **Purple (Major Establishments)** | **Power Players** | One each; big swings on your own run. |
 
-### 11.2 Holding types (icon groups)
+### 12.2 Holding types (icon groups)
 
 Several cards pay per type, so the renamed types carry through into their
 effect text ("get 3 caps for each **Livestock** holding that you own").
@@ -265,7 +421,7 @@ effect text ("get 3 caps for each **Livestock** holding that you own").
 | `boat` | **Raft** | Fishing Raft, Deep-Water Trawler |
 | `landmark` | **Project** | The five Reclamation Projects and the three Power Players |
 
-### 11.3 Base game
+### 12.3 Base game
 
 Each Overseer still starts with the two cheapest holdings — here a **Hydroponic
 Plot** and a **Snackcake Bakery** — and **3 caps**.
@@ -288,7 +444,7 @@ Plot** and a **Snackcake Bakery** — and **3 caps**.
 | **Apple Orchard** | **Mutfruit Grove** | Blue | 10 | 3 | Get 3 caps from the hoard. |
 | **Fruit and Vegetable Market** | **Caravan Bazaar** | Green | 11–12 | 2 | Get 2 caps per **Crop** holding you own. |
 
-### 11.4 Reclamation Projects (the win engine)
+### 12.4 Reclamation Projects (the win engine)
 
 Still four to build, still in this order of cost, and finishing the fourth
 still ends the game on the spot.
@@ -300,7 +456,7 @@ still ends the game on the spot.
 | **Amusement Park** | **Abandoned Funfair** | 16 | Matching dice grant another run after this one. |
 | **Radio Tower** | **Signal Relay Mast** | 22 | Once per run, re-tune the signal (re-roll your dice). |
 
-### 11.5 The Docks expansion → "The Wharf"
+### 12.5 The Docks expansion → "The Wharf"
 
 The coastal district becomes a flooded riverfront: sunken pre-war barges,
 irradiated fish that are worth good caps to anyone hungry enough, and the pier
@@ -316,7 +472,7 @@ that makes reaching them possible.
 | **Food Warehouse** | **Ration Depot** | Green | 12–13 | 2 | Get 2 caps per **Canteen** holding you own, on your run only. |
 | **Tuna Boat** | **Deep-Water Trawler** | Blue | 12–14 | 5 | With the Pier, a shared 2d6 haul pays every Trawler owner that many caps. |
 
-### 11.6 Billionaires Row expansion → "Kingpins' Row"
+### 12.6 Billionaires Row expansion → "Kingpins' Row"
 
 The premium tier becomes the wasteland's opportunists: the people who got rich
 off other survivors rather than off the land.
