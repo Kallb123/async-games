@@ -11,6 +11,7 @@ import GameGuideModal from "@/components/ui/GameGuideModal";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import DiceCitiesBoard from "@/games/DiceCities/components/DiceCitiesBoard";
+import DiceCitiesLandmarkTrack from "@/games/DiceCities/components/DiceCitiesLandmarkTrack";
 import DiceCitiesActions from "@/games/DiceCities/components/DiceCitiesActions";
 import { guide as diceCitiesGuide } from "@/games/DiceCities/guide";
 import TurnNavControls from "@/components/games/TurnNavControls";
@@ -23,8 +24,8 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useGameGuide } from "@/utils/hooks/useGameGuide";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { landmarkCount } from "@/games/DiceCities/ui";
-import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
-import { abandonedGameStatus, isPlayersTurn, nameForUserId } from "@/utils/ui/players";
+import { playerColourForId } from "@/utils/ui/playerColours";
+import { abandonedGameStatus, isPlayersTurn, nameForUserId, seatOrderFrom } from "@/utils/ui/players";
 
 // Sentinel used as "current turn" while reviewing a past turn, so no player's
 // interactive controls activate.
@@ -74,15 +75,20 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const usernameList = gameData?.usernameList ?? [];
     const userIdList = gameData?.userIdList ?? [];
     const myUserId = user?.id ?? "";
-    const players: IDiceCitiesPlayerStateResponse[] = displayed?.playerStates ? Object.values(displayed.playerStates) : [];
-    const colorForUserId = (userId: string): string => playerColourForId(userId, userIdList);
+    // Every city at the table, the viewer's seat first — a spectator, who has
+    // none, gets the table's own order. One array feeds the landmark track and
+    // the city stack, so both read the same seats in the same order.
+    const seats: IDiceCitiesPlayerStateResponse[] = seatOrderFrom(userIdList, myUserId)
+        .map(userId => displayed?.playerStates?.[userId])
+        .filter((p): p is IDiceCitiesPlayerStateResponse => Boolean(p));
 
-    const myState = players.find(p => p.userId === user?.id);
-    const boardPlayer = myState ?? players.find(p => p.userId === displayedCurrentTurn) ?? players[0];
-    const opponents = boardPlayer ? players.filter(p => p.userId !== boardPlayer.userId) : [];
+    const myState = seats.find(p => p.userId === myUserId);
+    // Anchored to the viewer, never to whichever city is on screen: these are
+    // the players the TV Station and the Business Center may be pointed at.
+    const opponents = seats.filter(p => p.userId !== myUserId);
     const isMyTurn = isPlayersTurn(nav.isLive, user, displayedCurrentTurn) && !complete;
 
-    const leaderLandmarks = players.reduce((m, p) => Math.max(m, landmarkCount(p)), 0);
+    const leaderLandmarks = seats.reduce((m, p) => Math.max(m, landmarkCount(p)), 0);
     const playerName = (userId?: string): string => nameForUserId(gameData, userId);
     const getWinnerDisplayName = (): string => playerName(displayedWinner);
     const getForfeitedByDisplayName = (): string => playerName(gameData?.forfeitedBy);
@@ -110,7 +116,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
 
     // ── Scoreboard: landmark progress + coin bank per player ─────────────────
     const scoreEntries: ScoreEntry[] = displayed
-        ? userIdList.flatMap((userId, i): ScoreEntry[] => {
+        ? userIdList.flatMap((userId): ScoreEntry[] => {
             const ps = displayed.playerStates?.[userId];
             if (!ps) return [];
             const isMe = ps.userId === user?.id;
@@ -120,7 +126,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
             return [{
                 id: userId,
                 name: isMe ? 'You' : ps.username,
-                color: PLAYER_COLOURS[i % PLAYER_COLOURS.length],
+                color: playerColourForId(userId, userIdList),
                 sub: <>{isLeader ? '👑' : '★'} {lm}/4</>,
                 score: `${ps.money}🪙`,
                 isMe,
@@ -201,12 +207,23 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
                 />
             )}
 
-            {boardPlayer && (
-                <DiceCitiesBoard
-                    playerState={boardPlayer}
-                    ownerLabel={boardPlayer.userId === user?.id ? 'Your city' : `${boardPlayer.username}'s city`}
-                    enabledDocks={enabledDocks}
-                />
+            {seats.length > 0 && (
+                <div className="ag-board-area ag-dc-area">
+                    <DiceCitiesLandmarkTrack
+                        seats={seats}
+                        userIdList={userIdList}
+                        myUserId={myUserId}
+                        enabledDocks={enabledDocks}
+                    />
+                    {seats.map(p => (
+                        <DiceCitiesBoard
+                            key={p.userId}
+                            playerState={p}
+                            ownerLabel={p.userId === myUserId ? 'Your city' : `${p.username}'s city`}
+                            collapsible={p.userId !== myUserId}
+                        />
+                    ))}
+                </div>
             )}
 
             {nav.isLive && !complete && (

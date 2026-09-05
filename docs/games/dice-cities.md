@@ -216,7 +216,7 @@ Billionaires Row is a set of premium, high-value establishments and an alternate
 
 ---
 
-## 11. Public Information: Seeing the Other Cities (design proposal)
+## 11. Public Information: Seeing the Other Cities
 
 Every card in Dice Cities sits face-up on the table. §10 already takes that
 as read — "all state (money, tableau, landmarks) is public, and the only
@@ -228,13 +228,14 @@ tell whether the Cheese Factory is worth 6 coins a turn to them and nothing
 at all to their neighbour, and cannot see the Stadium being lined up
 against them.
 
-The app does not show them.
+The app did not show them.
 
-**This section is a proposal. None of it is implemented.** It sets out why
-that gap is a rendering question rather than a rules or privacy one, what a
-fix has to satisfy, and the shapes a fix could take.
+**Option B′ is built** — the shared landmark track of §11.4 and the city
+stack of §11.5 are what the board screen does today. §11.1 is kept as the
+record of what the gap was, and options A, C and D remain unbuilt: they are
+the alternatives this design was chosen over, and §11.6 says why.
 
-### 11.1 Where it stands today
+### 11.1 Where it stood before this
 
 **Nothing is hidden on the wire.** `CreateDataResponse` in
 `DiceCitiesModels.ts` takes a `_viewerId` and ignores it, and
@@ -243,17 +244,17 @@ player's cards, coins, landmark flags and dice choice to everyone at the
 table. There is nothing to unredact and no API contract to change — the
 client is already holding every city it would need to draw.
 
-What the board screen does with that payload is the gap:
+What the board screen did with that payload was the gap:
 
-* **`page.tsx` draws exactly one city.** `boardPlayer` is the viewer's own
-  seat, falling back to whoever's turn it is, falling back to the first
-  seat; it goes to `DiceCitiesBoard` and the other seats go to the action
+* **`page.tsx` drew exactly one city.** `boardPlayer` was the viewer's own
+  seat, falling back to whoever's turn it was, falling back to the first
+  seat; it went to `DiceCitiesBoard` and the other seats went to the action
   sheet and nowhere else.
-* **The landmark track only tracks one player.** `DiceCitiesBoard` draws
+* **The landmark track only tracked one player.** `DiceCitiesBoard` drew
   the four (five with the Docks) landmark tiles from
-  `buildableLandmarks()` and lights them from the `playerState` it was
-  handed — so the one component that already names every landmark on the
-  board reports a single city's progress.
+  `buildableLandmarks()` and lit them from the `playerState` it was
+  handed — so the one component that already named every landmark on the
+  board reported a single city's progress.
 * **The scoreboard stops one step short.** `GameScoreboard` already gives
   every player a pill with their colour, name, landmark count and coins —
   everything except what they own. `★ 3/4` says how close someone is
@@ -348,14 +349,20 @@ match the scoreboard, the log and the turn recap:
 9px and Dice Cities' own `.ag-dc-legend-dot` 8px, both radius 2 — a pip
 meant to echo the scoreboard pill should look like one.
 
-**Space budget.** In-game the column runs full width
-(`.ag-app:has(.ag-game)` drops the 480px cap), so a 360px phone leaves
-about 312px of row after `.ag-board-area` (14/12) and `.ag-dc-landmarks`
-(11/12): four `flex: 1` tiles at ~73px, ~65px inside their padding, against
-41px for four 8px pips with 3px gaps. Comfortable. It only gets tight at
-five tiles *and* five seats — the Docks board §9 designs for and `meta.ts`
-cannot deal — so let the pip row `flex-wrap` and that case degrades to two
-rows instead of overflowing.
+**Space budget, as measured in a browser** (four seats, `deviceScaleFactor`
+aside). In-game the column runs full width — `.ag-app:has(.ag-game)` drops
+the 480px cap — so a 360px phone gives each of four tiles 72.8px, 62.8px of
+it usable by the pip row, against the 41px four 8px pips with 3px gaps
+need. Comfortable. The Docks' five tiles cut that to 56.8px (46.8px usable)
+at 360px, still one row.
+
+Where it actually runs out is **five tiles on a 320px screen**: 48.8px per
+tile, 38.8px usable, and four pips wrap to two rows. That is narrower than
+the estimate this section first carried, which had the wrap starting only
+at five *seats* — so the `flex-wrap` is not a hypothetical for a board
+`meta.ts` cannot deal, it is load-bearing on the smallest phones a Docks
+game runs on. It degrades exactly as intended: the row wraps, the tiles
+grow together, and nothing overflows.
 
 **The component split.** `DiceCitiesBoard` currently draws the track *and*
 the city from one `playerState`. The track has to become everyone's while
@@ -493,22 +500,22 @@ D is worth revisiting after B′ ships, as a strip inside each city's header
 rather than instead of the city — but only by extracting the chip row so
 the viewer's own board shows the same thing about them.
 
-### 11.7 When it ships
+### 11.7 What shipped
 
-* The guide (`guide.ts`) needs a clause: the "Watch the market" section
-  already teaches tap-to-read, and Goal/Your turn already tell players
-  their cards pay out on everyone's roll — how to go and look at those
-  cities belongs beside them.
-* **What's new** (`whatsNew.ts`) takes one enhancement line per branch, per
-  `AGENTS.md`. If the track and the stack ship as two branches, that is one
-  line each — which is the rule working as intended, since they are two
-  changes a player would notice separately. If they ship together, they
-  share one line and it is written to cover both.
-* Wants a `caveman` pass (it is a UI/reuse change; the component split in
-  §11.4 and options C and D are where a second way of drawing a city would
-  creep in) and a `rulebook` pass (guide copy and the release note). No
-  `croupier` pass is required for its own sake: this makes public state
-  visible, and §11.1 shows the server was already sending it.
+The track and the stack landed together, so they share one **What's new**
+enhancement line ("See every city in Dice Cities") rather than taking one
+each — one line per branch, per `AGENTS.md`. The game guide's "Card
+colours" section gained the clause that sends a player looking: it is the
+section that already explains why an opponent's cards cost you money.
+
+Files: `DiceCitiesLandmarkTrack.tsx` is new; `DiceCitiesBoard.tsx` lost the
+landmark track, its `enabledDocks` prop and its outer wrapper, and gained
+`collapsible`; `page.tsx` lost `boardPlayer`, its fallback chain and a dead
+`colorForUserId`, and now builds one `seats` array for both. The pips and
+the collapsed head are the only new CSS.
+
+No `croupier` pass was needed for its own sake: this makes public state
+visible, and §11.1 shows the server was already sending it.
 
 ---
 
