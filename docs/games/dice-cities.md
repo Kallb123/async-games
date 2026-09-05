@@ -310,12 +310,36 @@ Plot** and a **Snackcake Bakery** — and **3 caps**.
 Still four to build, still in this order of cost, and finishing the fourth
 still ends the game on the spot.
 
+The cheapest and the dearest of them are the pre-war Vault your settlement grew
+up around: the first thing an Overseer does is get its door open, and the last
+is get its command terminal running again.
+
 | Base name | Wasteland name | Cost | Unchanged effect |
 | --- | --- | --- | --- |
-| **Train Station** | **Metro Junction** | 4 | Send out 1 or 2 scavengers (roll 1 or 2 dice), your choice each run. |
+| **Train Station** | **Vault Door** | 4 | Send out 1 or 2 scavenging parties (roll 1 or 2 dice), your choice each run. |
 | **Shopping Mall** | **Ruined Superstore** | 10 | Each of your **Stall** and **Canteen** holdings earns +1 cap when it activates. |
 | **Amusement Park** | **Abandoned Funfair** | 16 | Matching dice grant another run after this one. |
-| **Radio Tower** | **Signal Relay Mast** | 22 | Once per run, re-tune the signal (re-roll your dice). |
+| **Radio Tower** | **Overseer's Terminal** | 22 | Once per run, re-task the run from the terminal (re-roll your dice). |
+
+Why these two rather than the transport-and-transmitter names they replace:
+
+- The **Vault Door** is the theme's own version of the Train Station's job.
+  Mechanically it is the landmark that opens the whole upper half of the number
+  range, and the wasteland's founding image is a sealed door grinding open and
+  people walking out into it. A "Metro Junction" only carried the base game's
+  idea of *travel*; the door carries the theme's, and its being the cheapest
+  project suits it — getting the door open is the first thing that happens to a
+  settlement, not the last. The cost of 4 is the base game's either way.
+- The **Overseer's Terminal** is the Radio Tower's re-roll without a second
+  radio in the game. The theme already has a **Pirate Radio Station** (§11.3),
+  so a "Signal Relay Mast" beside it made two masts on one board and blunted
+  both; a terminal is a thing you *operate*, which is what a re-roll is — the
+  run comes back, you re-task it and send it out again. The player is already
+  the **Overseer** (§11.1), so the priciest project on the board reading as
+  their own command room is the point.
+
+Neither name touches a cost, a number or an effect — the Vault Door is a Train
+Station with a different picture on it.
 
 ### 11.5 The Docks expansion → "The Wharf"
 

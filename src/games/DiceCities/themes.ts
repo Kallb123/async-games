@@ -206,7 +206,7 @@ const rustAndBottlecaps = buildTheme({
             text: "If this is your turn, trade one non-project holding with another player.",
         },
         [DiceCitiesCardIds.TRAIN_STATION]: {
-            title: "Metro Junction",
+            title: "Vault Door",
             text: "You may roll 1 or 2 dice.",
         },
         [DiceCitiesCardIds.SHOPPING_MALL]: {
@@ -218,7 +218,7 @@ const rustAndBottlecaps = buildTheme({
             text: "If you roll matching dice, take another turn after this one.",
         },
         [DiceCitiesCardIds.RADIO_TOWER]: {
-            title: "Signal Relay Mast",
+            title: "Overseer's Terminal",
             text: "Once every turn, you can choose to re-roll your dice.",
         },
         [DiceCitiesCardIds.HARBOUR]: {
