@@ -386,6 +386,88 @@ describe("Dice Cities landmarks", () => {
     });
 });
 
+// A roll that leaves the roller with nothing to spend has nothing left to do
+// but pass - every establishment and landmark costs at least 1 coin - so the
+// turn should end itself rather than wait on an "End turn" click.
+describe("Dice Cities: auto-passing on zero coins", () => {
+    it("ends the turn automatically when a roll leaves the roller with no coins and nothing to do", async () => {
+        const gs = makeState({
+            bankMoney: 10,
+            playerStates: new Map([
+                ["u1", player({ money: 1 })],
+                ["u2", player({ cards: cards(DiceCitiesCardIds.CAFE) })],
+            ]),
+        });
+        const game = makeGame(gs);
+
+        // The Cafe takes u1's last coin.
+        const outcome = await rollCommand(3).Execute(game) as IDiceCitiesDiceRollOutcome;
+
+        expect(gs.playerStates.get("u1")!.money).toBe(0);
+        expect(gs.hasRolled).toBe(false);
+        expect(outcome.turnOver).toBe(true);
+        expect(game.gameState.history.some(h => h.text.includes("had no coins"))).toBe(true);
+    });
+
+    it("keeps the turn open on zero coins when an unused Radio Tower reroll is still available", async () => {
+        const gs = makeState({
+            bankMoney: 10,
+            playerStates: new Map([
+                ["u1", player({ money: 1, oneReroll: true })],
+                ["u2", player({ cards: cards(DiceCitiesCardIds.CAFE) })],
+            ]),
+        });
+        const game = makeGame(gs);
+
+        const outcome = await rollCommand(3).Execute(game) as IDiceCitiesDiceRollOutcome;
+
+        expect(gs.playerStates.get("u1")!.money).toBe(0);
+        expect(gs.hasRolled).toBe(true);
+        expect(outcome.turnOver).toBe(false);
+    });
+
+    it("auto-passes once the Radio Tower's one reroll is already spent and coins are still zero", async () => {
+        const gs = makeState({
+            bankMoney: 10,
+            playerStates: new Map([["u1", player({ oneReroll: true })], ["u2", player()]]),
+        });
+        const game = makeGame(gs);
+
+        const roll = rollCommand(2);
+        await roll.Execute(game);
+        game.gameState.commandHistory.push(roll);
+
+        const reroll = new DiceCitiesRequestRadioTowerReroll();
+        reroll.senderId = "u1";
+        reroll.senderUsername = "u1";
+        reroll.recordedRoll1 = 2;
+        const outcome = await reroll.Execute(game) as IDiceCitiesDiceRollOutcome;
+
+        expect(gs.playerStates.get("u1")!.money).toBe(0);
+        expect(gs.hasRolled).toBe(false);
+        expect(outcome.turnOver).toBe(true);
+    });
+
+    it("auto-passes once a mandatory TV Station selection leaves the roller still broke", async () => {
+        const gs = makeState({
+            bankMoney: 10,
+            awaitingTSSelection: true,
+            playerStates: new Map([["u1", player()], ["u2", player()]]),
+        });
+        const game = makeGame(gs);
+        const command = new DiceCitiesRequestTvStationSelection();
+        command.senderId = "u1";
+        command.senderUsername = "u1";
+        command.selectedUser = "u2";
+
+        const outcome = await command.Execute(game);
+
+        expect(gs.playerStates.get("u1")!.money).toBe(0);
+        expect(gs.hasRolled).toBe(false);
+        expect(outcome.turnOver).toBe(true);
+    });
+});
+
 describe("Dice Cities activation numbers", () => {
     it("pays the Fruit and Vegetable Market on both of its numbers", async () => {
         for (const [die1, die2] of [[5, 6], [6, 6]]) {

@@ -26,6 +26,7 @@ import type { SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import Dice from "@/components/ui/Dice";
 import ActionButton from "@/components/ui/ActionButton";
 import PendingTag from "@/components/ui/PendingTag";
+import { mongoMap } from "@/utils/games/mongoMaps";
 import { useEffect, useRef, useState } from "react";
 
 interface DiceCitiesActionsProps {
@@ -64,14 +65,16 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
     // The most recent roll, kept locally so the dice + total stay on screen
     // through the build step (rolling does not advance the turn). `bonus` is the
     // Harbour's +2 once taken, so the total on screen is the one that paid out.
-    const [roll, setRoll] = useState<{ roll1: number; roll2: number | null; bonus: number } | null>(null);
+    // `changes` is that roll's per-player coin deltas, so the payout is visible
+    // the moment it happens rather than only inferred from the coin counts.
+    const [roll, setRoll] = useState<{ roll1: number; roll2: number | null; bonus: number; changes: Map<string, number> } | null>(null);
     const [rolling, setRolling] = useState(false);
     const [face, setFace] = useState<{ a: number; b: number }>({ a: 1, b: 1 });
     const tumble = useRef<ReturnType<typeof setInterval> | null>(null);
 
     // Tumble the dice for a beat, then settle on the real values.
-    const animateRoll = (r: { roll1: number; roll2: number | null }) => {
-        setRoll({ ...r, bonus: 0 });
+    const animateRoll = (r: { roll1: number; roll2: number | null }, changes: Map<string, number>) => {
+        setRoll({ ...r, bonus: 0, changes });
         setRolling(true);
         if (tumble.current) clearInterval(tumble.current);
         tumble.current = setInterval(() => {
@@ -94,24 +97,27 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
         command.doubleDice = double;
         send(command, "roll", (response) => {
             const outcome = response.outcome as IDiceCitiesDiceRollOutcome | undefined;
-            if (typeof outcome?.roll1 === "number") animateRoll({ roll1: outcome.roll1, roll2: outcome.roll2 ?? null });
+            if (typeof outcome?.roll1 === "number") animateRoll({ roll1: outcome.roll1, roll2: outcome.roll2 ?? null }, mongoMap(outcome.moneyChanges ?? {}));
         });
     };
 
     const doReroll = () => {
         send(new DiceCitiesRequestRadioTowerReroll(), "reroll", (response) => {
             const outcome = response.outcome as IDiceCitiesDiceRollOutcome | undefined;
-            if (typeof outcome?.roll1 === "number") animateRoll({ roll1: outcome.roll1, roll2: outcome.roll2 ?? null });
+            if (typeof outcome?.roll1 === "number") animateRoll({ roll1: outcome.roll1, roll2: outcome.roll2 ?? null }, mongoMap(outcome.moneyChanges ?? {}));
         });
     };
 
     // Answers the Harbour's offer on a parked 10-or-better roll. Taking it pays
-    // the table out at the higher total, so the dice on screen gain the +2.
+    // the table out at the higher total, so the dice on screen gain the +2 and
+    // the coin deltas swap from the zeroed placeholder to what actually paid.
     const answerHarbour = (addBonus: boolean) => {
         const command = new DiceCitiesRequestHarbourBonus();
         command.addBonus = addBonus;
-        send(command, `harbour:${addBonus ? "add" : "keep"}`, () => {
-            if (addBonus) setRoll((r) => (r ? { ...r, bonus: HARBOUR_BONUS } : r));
+        send(command, `harbour:${addBonus ? "add" : "keep"}`, (response) => {
+            const outcome = response.outcome as IDiceCitiesDiceRollOutcome | undefined;
+            const changes = mongoMap(outcome?.moneyChanges ?? {});
+            setRoll((r) => (r ? { ...r, bonus: addBonus ? HARBOUR_BONUS : r.bonus, changes } : r));
         });
     };
 
@@ -364,7 +370,9 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
                         : [rolling ? face.a : roll.roll1]}
                     rolling={rolling}
                     headline={rolling ? "Rolling…" : `Total ${total}${roll.bonus > 0 ? ` (Harbour +${roll.bonus})` : ""}`}
-                    sub={rolling ? "the dice are tumbling" : "payouts are in — build one, or end your turn"}
+                    sub={rolling
+                        ? "the dice are tumbling"
+                        : `${coinChangeSummary(roll.changes, gameState, myState.userId) || "no coins changed hands"} — build one, or end your turn`}
                 />
             )}
 
@@ -400,6 +408,18 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
             </div>
         </div>
     );
+}
+
+// A roll's payout, worded as "You +3🪙, Alice -1🪙" — who it paid, who it took
+// from, and by how much. Empty when nothing moved (a roll that hit nothing).
+function coinChangeSummary(changes: Map<string, number>, gameState: IDiceCitiesGameStateResponse, myUserId: string): string {
+    return [...changes.entries()]
+        .filter(([, amount]) => amount !== 0)
+        .map(([userId, amount]) => {
+            const name = userId === myUserId ? "You" : (gameState.playerStates[userId]?.username ?? "Someone");
+            return `${name} ${amount > 0 ? "+" : ""}${amount}🪙`;
+        })
+        .join(", ");
 }
 
 // Disabled when: not affordable, out of stock, or at the per-player own-limit.

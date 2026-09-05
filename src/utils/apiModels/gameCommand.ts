@@ -51,3 +51,21 @@ export function stripRecordedRandomness(command: IGameCommand): void {
         }
     }
 }
+
+// A command outcome that carries a native Map (Dice Cities' roll payouts do,
+// keyed by userId) can't survive `NextResponse.json`: a Map has no own
+// enumerable properties, so plain JSON.stringify sends it over as `{}`. Every
+// reader of a stored map already treats it as "however it arrived" rather than
+// assuming a live Map (see mongoMap()), so this hands each one over the same
+// way Mongo already does after a round trip: as a plain object.
+export function serializeOutcomeMaps<T extends ICommandOutcome>(outcome: T): T {
+    const fields = outcome as unknown as Record<string, unknown>;
+    const serialized: Record<string, unknown> = { ...fields };
+    for (const key of Object.keys(serialized)) {
+        const value = serialized[key];
+        if (value instanceof Map) {
+            serialized[key] = Object.fromEntries(value);
+        }
+    }
+    return serialized as T;
+}
