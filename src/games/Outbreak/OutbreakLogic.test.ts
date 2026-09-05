@@ -565,6 +565,10 @@ describe("OutbreakEndTurn", () => {
         // and does it without the player token the log line carries, since
         // nothing resolves tokens in a push or on the result page.
         expect(game.endDetail).toBe('the player deck ran out of cards');
+        // Never a {{userId}} token: nothing outside gameState.history
+        // resolves one, so a token here would render raw in the finish
+        // banner, on the result page and in the push (see endInTeamLoss).
+        expect(game.endDetail).not.toMatch(/\{\{/);
         expect(game.currentTurn).toBe('');
         expect(gameType.CheckGameOver(game)).toBe(true);
     });
@@ -623,6 +627,7 @@ describe("OutbreakEndTurn", () => {
         expect(game.complete).toBe(true);
         expect(game.endReason).toBe('teamloss');
         expect(game.endDetail).toBe(`the outbreak marker reached ${OUTBREAK_LOSS_THRESHOLD}`);
+        expect(game.endDetail).not.toMatch(/\{\{/);
         expect(gameType.CheckGameOver(game)).toBe(true);
     });
 
@@ -641,6 +646,7 @@ describe("OutbreakEndTurn", () => {
         expect(game.complete).toBe(true);
         expect(game.endReason).toBe('teamloss');
         expect(game.endDetail).toBe('no Blue cubes remain in supply');
+        expect(game.endDetail).not.toMatch(/\{\{/);
     });
 
     it("skips cube placement for an eradicated disease but still discards the card", async () => {

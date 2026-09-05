@@ -563,9 +563,14 @@ function infectionPhaseOutcome(turnOver: boolean, infectionLog: IOutbreakInfecti
 // `reason` is the log line's clause. It is also the one `endDetail` carries to
 // the finish banner, the result page and the "your team lost" push (see
 // GameEndDetail) — 'teamloss' alone can't say which of the three it was, and
-// a table that has just lost wants to know. `detail` splits the two only where
-// the log line names a player: a token resolves in the game log, which
-// resolves them, but not in a push notification or on the result page.
+// a table that has just lost wants to know.
+//
+// `detail` splits the two only where the log line names a player, and a fourth
+// defeat that names one must split them too: `endDetail` must never carry a
+// `{{userId}}` token, because only gameState.history is run through
+// resolveHistory — a token reaching the finish banner, the result page or a
+// push would be rendered raw. OutbreakLogic.test.ts holds every defeat to
+// that.
 function endInTeamLoss(outbreakData: IOutbreakGameData, reason: string, detail: string = reason): void {
     outbreakData.complete = true;
     outbreakData.winner = '';
