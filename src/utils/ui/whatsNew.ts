@@ -2,9 +2,14 @@
 //
 // KEEP THIS UP TO DATE: when a change lands that a player would notice — a new
 // game, an enhancement, a fix — add a line to the right group in the same PR,
-// newest first, and drop the oldest line once a group runs past five. This is
+// newest first, and drop the oldest line once a group runs past ten. This is
 // a "what changed since you last played" note, not a full changelog: write it
 // in the player's language and leave the internals out.
+//
+// A group is shown in two tiers: the newest `WHATS_NEW_FEATURED` in full, with
+// the game's art and the detail line, and the rest as compact title-only rows.
+// So the `detail` on an older line still has to earn its place while the line
+// is near the top, and the `title` has to stand on its own once it isn't.
 
 export interface WhatsNewItem {
     /** What changed, as a player would describe it. */
@@ -21,6 +26,9 @@ export interface WhatsNewGroup {
     icon: string;
     items: WhatsNewItem[];
 }
+
+/** How many of a group's newest items get the full row. The rest are compact. */
+export const WHATS_NEW_FEATURED = 3;
 
 export const WHATS_NEW: WhatsNewGroup[] = [
     {
@@ -54,6 +62,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "What's new goes back further",
+                detail: "These notes used to show only the last handful of changes in each group, and everything older simply vanished. Each group now keeps the three newest in full and lists the ones before them underneath by name alone, so you can see everything that has landed since you last played without scrolling through paragraphs you have already read.",
+            },
+            {
                 title: "Dice Cities cards you can actually read",
                 detail: "The card art in your city, on the landmark track and in the market was too small to make out. Every card is now drawn as large as the space it sits in allows — the market fits another column and gives each card the full width of its slot — so most of them can be read where they are, and tapping any card opens it bigger still: the number it pays on, the cost and what it does, all legible at last. It works while you are waiting for your turn too, so you can plan your next build.",
                 game: "dicecities",
@@ -74,6 +86,22 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Talk to your opponents during a game",
                 detail: "Every game now has a chat thread: tap 💬 on the board to say something to the other players, and they get a nudge on their phone. It stays readable after the game ends, so “gg” has somewhere to go — and you can turn the notifications off in Settings if you'd rather just read it when you next open the board. Reading it on one device now clears it everywhere, the home screen shows how many messages are waiting in each game, and opening a game you're behind on tells you who messaged while you were away.",
+            },
+            {
+                title: "Check your notifications actually work",
+                detail: "Allowing notifications was only half of it: a phone can allow them and still quietly fail to sign itself up, and nothing told you. Settings now says where this device stands, has a Send a test notification button that tells you exactly what became of it, and a ? explaining everything which can stop one arriving — including the Android battery and per-app settings that block them without asking.",
+            },
+            {
+                title: "Every game has a game guide",
+                detail: "Not sure what a phase does or which pile to worry about? A game guide now opens the first time you join a match of Dice Cities, Settlements & Cities, Train Time, World Domination or Outbreak, and any time after that from the ⋮ menu at the top of the board.",
+            },
+            {
+                title: "Your cards stay on screen between your turns",
+                detail: "Waiting for someone else to move used to leave you looking at the board and nothing else. Your hand, the face-up cards and what's left in the deck now stay put in Train Time, the market in Dice Cities and the cards you're holding in World Domination — greyed out until it's your go, so you can plan the move but not make it early.",
+            },
+            {
+                title: "Change the name friends invite you by",
+                detail: "The username you picked when you signed up used to be yours for good, typo and all. Your profile now has an Edit username button — take a new one and it follows you straight away: your friends' invite lists, the games you're already in, and your match history.",
             },
         ],
     },
@@ -100,6 +128,27 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Map connections that go round the world stay off the map",
                 detail: "On the World Domination and Outbreak boards, the routes that cross from one side of the world to the other — Alaska to Kamchatka, San Francisco to Tokyo — used to be drawn as a long line straight across the whole map, over everything in the way. Each now heads off its own edge with a label naming where it comes out on the far side.",
+            },
+            {
+                title: "The logo on a join link takes you home",
+                detail: "Landing on a friend's join screen with nothing filled in used to be a dead end — there was no way back except the browser's own back button. Tapping the logo at the top now takes you home.",
+            },
+            {
+                title: "Train Time's scores read properly when you look back",
+                detail: "Stepping back through a Train Time match showed every score, train count and route tally as “NaN”. Reviewing a turn now shows the standings exactly as they stood at the time — and the points and longest-run graphs on a finished match are filled in again.",
+                game: "traintime",
+            },
+            {
+                title: "The name a guest picks is the name everyone sees",
+                detail: "Take a seat as a guest and the name you typed now follows you everywhere — the move you just made, the recap of what you missed, stepping back through the turns, your profile, the reaction you send someone and the “you won” line. They used to show the jumble of letters your account was filed under instead.",
+            },
+            {
+                title: "Your badge no longer flashes a stranger's initial",
+                detail: "For a moment before your profile loaded, the little circle on the home page and your profile showed a “T” or a “Y” — the first letter of the words standing in for your name. You now get a plain silhouette until your real initials or photo are ready.",
+            },
+            {
+                title: "The back arrow sits in the middle of its button",
+                detail: "The little round back arrow at the top of the library, your profile, settings and every other screen was leaning down and to one side of its circle. It's centred now.",
             },
         ],
     },

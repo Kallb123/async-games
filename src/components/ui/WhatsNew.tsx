@@ -4,7 +4,7 @@ import ListSection from "@/components/ui/ListSection";
 import ListRow from "@/components/ui/ListRow";
 import GameThumb, { ROW_THUMB_RADIUS, ROW_THUMB_SIZE } from "@/components/ui/GameThumb";
 import { GAME_META } from "@/utils/ui/games";
-import { WHATS_NEW } from "@/utils/ui/whatsNew";
+import { WHATS_NEW, WHATS_NEW_FEATURED } from "@/utils/ui/whatsNew";
 
 /**
  * The release notes at the bottom of the home page — new games, enhancements
@@ -13,6 +13,13 @@ import { WHATS_NEW } from "@/utils/ui/whatsNew";
  * Collapsed by default: the notes are worth having but are not why anyone opens
  * the app, so they sit behind a heading you tap to unfold. A native `<details>`
  * does that without any state to hold.
+ *
+ * Each group reads newest first and in two tiers. The newest
+ * `WHATS_NEW_FEATURED` get the full row — the game's art or the group's glyph,
+ * and the paragraph saying what changed. Everything older is still listed, but
+ * as a compact title-only row: a player coming back after a while wants to see
+ * how far the list goes without scrolling through paragraphs they have already
+ * read.
  *
  * The copy lives in `src/utils/ui/whatsNew.ts`; this only lays it out, so the
  * signed-in dashboard and the public landing page show the same notes.
@@ -27,7 +34,12 @@ export default function WhatsNew() {
 
             {WHATS_NEW.map(group => (
                 <ListSection key={group.label} label={group.label} isLoading={false}>
-                    {group.items.map(item => {
+                    {group.items.map((item, index) => {
+                        if (index >= WHATS_NEW_FEATURED) {
+                            return (
+                                <ListRow key={item.title} compact title={item.title} />
+                            );
+                        }
                         const meta = item.game ? GAME_META[item.game] : undefined;
                         return (
                             <ListRow

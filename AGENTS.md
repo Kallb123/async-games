@@ -111,11 +111,13 @@ a system font** and skips the cards with a warning when it isn't.
   and bug fixes — from `src/utils/ui/whatsNew.ts`. Any change a player would
   notice adds a line to the right group in the same PR: newest first, written
   in the player's language, and drop the oldest line once a group runs past
-  five. Internal-only work (refactors, docs, CI, dependency bumps) does not
-  belong there.
+  ten. Internal-only work (refactors, docs, CI, dependency bumps) does not
+  belong there. A group shows its newest three lines in full — game art and
+  the detail — and the rest as compact title-only rows, so a line's `title`
+  has to stand on its own once it has aged out of the top.
 - **Only one "What's new" entry per feature branch.** A branch gets a single
   line, in whichever group fits the change as a whole — not one per commit and
-  not one per fix along the way. Each group holds only five lines, so a branch
+  not one per fix along the way. Each group holds only ten lines, so a branch
   that adds three of its own evicts three shipped features that players can
   still see; a reader wants "what changed", not this branch's commit log. Two
   consequences worth spelling out:

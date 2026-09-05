@@ -958,9 +958,9 @@ placeholder rather than misaligning the list.
   that exist — and step 11's whole shape came out of asking that question first
   (no new route, no new hook, no second share button).
 - **Player-visible commits (10, 11, 15 and 16):** a `whatsNew.ts` line in the
-  same PR, newest first, oldest dropped once the group runs past five.
-  Enhancements is already at five, so each of these drops one. Every other
-  step is internal and earns none.
+  same PR, newest first, oldest dropped once the group runs past five (the
+  cap is ten now). Enhancements is already at five, so each of these drops
+  one. Every other step is internal and earns none.
 - **Tests:** the suite is fifteen files — five game-logic suites, two registry
   scans, and pure unit tests for helpers — with no route or database harness at
   all. So the *pure* modules this feature adds (`joinCode.ts`, `lobby.ts`'s seat

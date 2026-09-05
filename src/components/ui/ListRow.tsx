@@ -13,6 +13,10 @@ interface ListRowProps {
     sub?: ReactNode;
     /** Trailing control: a remove button, a timestamp, an accept pill. */
     action?: ReactNode;
+    /** The tighter, quieter row: title only, no icon and no sub-line. For the
+     *  tail of a long list, where the older rows are still worth listing but
+     *  no longer worth a paragraph each. */
+    compact?: boolean;
 }
 
 /**
@@ -23,15 +27,15 @@ interface ListRowProps {
  * their classes live here once rather than in each caller. The `ag-list` card
  * around the rows belongs to `ListSection`.
  */
-export default function ListRow({ icon, title, sub, action }: ListRowProps) {
+export default function ListRow({ icon, title, sub, action, compact = false }: ListRowProps) {
     return (
-        <div className="ag-list-row">
-            {typeof icon === "string"
+        <div className={`ag-list-row${compact ? " ag-list-row--compact" : ""}`}>
+            {!compact && (typeof icon === "string"
                 ? <span className="ag-icon-box" aria-hidden>{icon}</span>
-                : icon}
+                : icon)}
             <div className="ag-list-row-main">
                 <div className="ag-list-row-title">{title}</div>
-                {sub !== undefined && <div className="ag-list-row-sub">{sub}</div>}
+                {!compact && sub !== undefined && <div className="ag-list-row-sub">{sub}</div>}
             </div>
             {action}
         </div>
