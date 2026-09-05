@@ -6,6 +6,7 @@ import { dbConnect, invitationModelFor } from '@/utils/mongodb/mongodb';
 import { IInvitationDataDocument, IUserIdAcceptance, IInvitationRequest } from '@/utils/mongodb/InvitationData';
 import { canHostGame, usersByUsername } from '@/utils/users/clerk';
 import { GAME_META, partySizeErrorMessage } from '@/utils/ui/games';
+import { themeIdFor } from '@/utils/ui/gameThemes';
 import { OPEN_SEAT_ID, lobbyTtlMs } from '@/utils/games/lobby';
 import { isValidTurnTimer } from '@/utils/games/TurnTimer';
 import { generateJoinCode } from '@/utils/games/joinCode';
@@ -97,6 +98,13 @@ export async function POST(request: NextRequest) {
 
     let invite: IInvitationDataDocument | undefined;
     for (let attempt = 0; !invite; attempt++) {
+        // The spread comes first on purpose: every field the server decides —
+        // ids, the sender, the seats, the timer, the game, the theme, the code
+        // and its expiry — is re-set below it, so a body that sent one of them
+        // is overwritten rather than believed. Moving any of those keys above
+        // the spread would hand the client its own value back. What survives it
+        // is each game's own settings (`enabledDocks` and friends), which
+        // Mongoose's strict mode limits to that game's schema.
         const candidate: IInvitationDataDocument = new invitationModel({
             ...gameSettings,
             inviteId: randomUUID(),
@@ -106,6 +114,11 @@ export async function POST(request: NextRequest) {
             timestamp: (new Date()).toISOString(),
             gameType,
             gameFriendlyName: meta.name,
+            // Every game's theme in one place: `gameSettings` carried whatever
+            // the client asked for, and this is what decides the game is
+            // actually played in one of that game's own themes (or, for a game
+            // with none, in nothing at all).
+            theme: themeIdFor(gameType.toLowerCase(), gameSettings.theme),
             joinCode: generateJoinCode(),
             expiresAt: new Date(Date.now() + lobbyTtlMs(turnTimer)),
             senderName: readableName(thisUser),

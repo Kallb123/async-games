@@ -133,6 +133,11 @@ none fit, it's a single source of truth other UI derives from), `players`,
   `GameOption`s, and `{gameGuide.open && <GameGuideModal guide={…} …/>}` — the
   same six lines on every board that has one. Keep it to five sections, `Goal`
   first, then `Your turn`, matching the existing guides.
+- `src/games/<Game>/themes.ts` *(optional)* — the dressings the game can be
+  played in, if it has more than one: same rules and numbers, different names
+  and art, picked by the host on the setup screen with `<ThemeSelect>`. See
+  [`game-themes.md`](./game-themes.md) for the shape and the guard test that
+  keeps a theme from quietly changing a rule.
 - `src/app/api/newgame/<game>/route.ts` — creates the `Invitation` document.
 
 ### 6. Wire the shared files
@@ -151,6 +156,7 @@ rather than the game breaking silently at runtime.
 | `src/utils/games/gameCommands.ts` | the game type's `className` as a key, its command `className`s as the list |
 | `src/utils/mongodb/GameResultData.ts` | *(only if you added `compute<Game>ResultStats`)* the discriminator + wire it into `GAME_RESULT_STATS`, with a `charts` entry if you added per-turn series |
 | `src/utils/ui/gameGuides.ts` | *(only if you added a `guide.ts`)* import it and add it to `GAME_GUIDES` — the popup can't record itself as seen without this, so it re-shows every visit |
+| `src/utils/ui/gameThemes.ts` | *(only if you added a `themes.ts`)* import the list and add it to `GAME_THEMES` — without it the game plays in its default theme and silently offers no picker, so the other dressings are unreachable |
 
 ### 7. Turn recap & planning
 

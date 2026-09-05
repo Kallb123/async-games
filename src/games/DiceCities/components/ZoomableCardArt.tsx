@@ -4,9 +4,13 @@ import React, { useState } from 'react';
 import type { IDiceCitiesCard } from '@/games/DiceCities/apiModels';
 import CardArt, { ART_HEIGHT, ART_WIDTH } from '@/games/DiceCities/components/CardArt';
 import DiceCitiesCardModal from '@/games/DiceCities/components/DiceCitiesCardModal';
+import type { DiceCitiesTheme } from '@/games/DiceCities/themes';
 
 interface ZoomableCardArtProps {
     card: IDiceCitiesCard;
+    /** Only the popup needs it: the card carries its own name and picture, but
+     *  what a landmark is *called* belongs to the theme rather than to a card. */
+    theme: DiceCitiesTheme;
     /** The ag-* class that sizes the slot this art sits in. */
     className: string;
 }
@@ -25,7 +29,7 @@ interface ZoomableCardArtProps {
  * track. Owning the popup here rather than at each of those callsites is what
  * keeps the state and the wiring out of the board and the turn sheet.
  */
-export default function ZoomableCardArt({ card, className }: ZoomableCardArtProps) {
+export default function ZoomableCardArt({ card, theme, className }: ZoomableCardArtProps) {
     const [zoomed, setZoomed] = useState(false);
 
     return (
@@ -48,7 +52,7 @@ export default function ZoomableCardArt({ card, className }: ZoomableCardArtProp
                     <CardArt card={card} className="ag-dc-cardzoom-img" />
                 </span>
             </span>
-            {zoomed && <DiceCitiesCardModal card={card} onClose={() => setZoomed(false)} />}
+            {zoomed && <DiceCitiesCardModal card={card} theme={theme} onClose={() => setZoomed(false)} />}
         </>
     );
 }

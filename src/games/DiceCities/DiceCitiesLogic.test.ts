@@ -13,6 +13,7 @@ import {
 import type { IDiceCitiesDiceRollOutcome } from "./DiceCitiesLogic";
 import { BANK_TOTAL_COINS, DiceCitiesCardIds, DiceCitiesCards, DOCKS_ESTABLISHMENT_IDS, STARTING_PLAYER_COINS } from "./cards";
 import { buildInitialDiceCitiesState } from "./DiceCitiesModels";
+import { DEFAULT_DICE_CITIES_THEME, diceCitiesTheme } from "./themes";
 import type { IDiceCitiesGameData, IDiceCitiesGameState, IDiceCitiesPlayerState } from "./DiceCitiesModels";
 import type { IDiceCitiesGameStateResponse } from "./apiModels";
 import type { IGameData } from "@/utils/mongodb/GameData";
@@ -56,6 +57,7 @@ function makeState(overrides: Partial<IDiceCitiesGameState> = {}): IDiceCitiesGa
         harbourRoll1: null,
         harbourRoll2: null,
         enabledDocks: false,
+        theme: DEFAULT_DICE_CITIES_THEME.id,
         ...overrides,
     };
 }
@@ -464,7 +466,7 @@ describe("Dice Cities: the Docks", () => {
         expect(gs.playerStates.get("u1")!.money).toBe(4);
         expect(gs.playerStates.get("u2")!.money).toBe(4);
         expect(gs.bankMoney).toBe(12);
-        expect(game.gameState.history.some(h => h.text.includes("The tuna haul was 4"))).toBe(true);
+        expect(game.gameState.history.some(h => h.text.includes("The shared haul was 4"))).toBe(true);
     });
 
     it("throws the tuna haul on two dice, not one", async () => {
@@ -809,5 +811,83 @@ describe("Dice Cities: replaying a Docks game", () => {
         // 60 less 3 each at the deal is 54; the roll of 1 pays both Wheat
         // Fields, leaving 52. Against a 262 bank it would read 254.
         expect(finalState.bankMoney).toBe(52);
+    });
+});
+
+describe("Dice Cities themes", () => {
+    // The rules never read a theme - but the history log does, and unlike a
+    // screen string a log line is written into the game and kept. These play a
+    // command in the wasteland and read the line back, which is the only way to
+    // catch a history line that was left in the base vocabulary.
+    const wasteland = diceCitiesTheme("wasteland");
+    const latest = (game: IDiceCitiesGameData) => game.gameState.history[0].text;
+
+    it("names a bought card the way the wasteland board does", async () => {
+        const gs = makeState({
+            hasRolled: true,
+            playerStates: new Map([["u1", player({ money: 5 })], ["u2", player()]]),
+            theme: "wasteland",
+        });
+        const game = makeGame(gs);
+        const command = new DiceCitiesRequestCardPurchase();
+        command.senderId = "u1";
+        command.senderUsername = "u1";
+        command.cardId = DiceCitiesCardIds.CAFE;
+
+        await command.Execute(game);
+
+        expect(latest(game)).toContain(wasteland.cards[DiceCitiesCardIds.CAFE].title);
+        expect(latest(game)).not.toContain(DiceCitiesCards[DiceCitiesCardIds.CAFE].title);
+    });
+
+    it("names a built landmark the way the wasteland board does", async () => {
+        const gs = makeState({
+            hasRolled: true,
+            playerStates: new Map([["u1", player({ money: 20 })], ["u2", player()]]),
+            theme: "wasteland",
+        });
+        const game = makeGame(gs);
+        const command = new DiceCitiesRequestUnlockTrainStation();
+        command.senderId = "u1";
+        command.senderUsername = "u1";
+
+        await command.Execute(game);
+
+        expect(latest(game)).toContain(wasteland.cards[DiceCitiesCardIds.TRAIN_STATION].title);
+    });
+
+    it("names the Harbour's offer the way the wasteland board does", async () => {
+        const gs = makeState({
+            playerStates: new Map([
+                ["u1", player({ harbourUnlocked: true, doubleUnlocked: true })],
+                ["u2", player()],
+            ]),
+            enabledDocks: true,
+            theme: "wasteland",
+        });
+        const game = makeGame(gs, "u1");
+        await rollCommand(5, "u1", 6).Execute(game);
+        await harbourCommand(true).Execute(game);
+
+        expect(latest(game)).toContain(wasteland.cards[DiceCitiesCardIds.HARBOUR].title);
+        expect(latest(game)).not.toContain("Harbour");
+    });
+
+    it("leaves a game with no stored theme reading exactly as it always did", async () => {
+        // Every game created before themes existed.
+        const gs = makeState({
+            hasRolled: true,
+            playerStates: new Map([["u1", player({ money: 5 })], ["u2", player()]]),
+            theme: undefined as unknown as string,
+        });
+        const game = makeGame(gs);
+        const command = new DiceCitiesRequestCardPurchase();
+        command.senderId = "u1";
+        command.senderUsername = "u1";
+        command.cardId = DiceCitiesCardIds.CAFE;
+
+        await command.Execute(game);
+
+        expect(latest(game)).toContain(DiceCitiesCards[DiceCitiesCardIds.CAFE].title);
     });
 });

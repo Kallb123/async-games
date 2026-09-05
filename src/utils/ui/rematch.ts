@@ -5,6 +5,7 @@
 
 const PLAYERS_PARAM = "players";
 const TURN_TIMER_PARAM = "turnTimer";
+const THEME_PARAM = "theme";
 
 export interface RematchOptions {
     invitees: string[];
@@ -32,6 +33,21 @@ export function readRematchPlayers(searchParams: URLSearchParams): string[] {
 
 export function readRematchTurnTimer(searchParams: URLSearchParams, fallback: string): string {
     return searchParams.get(TURN_TIMER_PARAM) ?? fallback;
+}
+
+/**
+ * Carries the finished game's theme into the rematch's setup screen, so
+ * "play that again" means the game they just played rather than the default
+ * dressing (see utils/ui/gameThemes.ts). Shaped as `extraParams`, since only
+ * a themed game has one to pass.
+ */
+export function rematchTheme(theme: string | undefined): Record<string, string> {
+    return theme ? { [THEME_PARAM]: theme } : {};
+}
+
+/** The theme a rematch link asks for, if any — normalise it before using it. */
+export function readRematchTheme(searchParams: URLSearchParams): string | null {
+    return searchParams.get(THEME_PARAM);
 }
 
 /** Encodes one on/off game option for `RematchOptions.extraParams`. */

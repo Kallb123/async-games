@@ -62,6 +62,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Play Dice Cities in the wasteland",
+                detail: "Dice Cities now has themes: pick one when you set up a game and everyone plays in it. Alongside the original there's Rust & Bottlecaps — a post-nuclear wasteland where you're an Overseer rebuilding a settlement, the Wheat Field is a Hydroponic Plot, the Ranch is a Brahmin Pen, and everything is paid for in caps. Only the names and the look change: every cost, number and rule is identical, so it plays exactly the same. Its card art is still being drawn, so some cards still wear the original faces for now.",
+                game: "dicecities",
+            },
+            {
                 title: "What's new goes back further",
                 detail: "These notes used to show only the last handful of changes in each group, and everything older simply vanished. Each group now keeps the three newest in full and lists the ones before them underneath by name alone, so you can see everything that has landed since you last played without scrolling through paragraphs you have already read.",
             },
@@ -98,10 +103,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Your cards stay on screen between your turns",
                 detail: "Waiting for someone else to move used to leave you looking at the board and nothing else. Your hand, the face-up cards and what's left in the deck now stay put in Train Time, the market in Dice Cities and the cards you're holding in World Domination — greyed out until it's your go, so you can plan the move but not make it early.",
-            },
-            {
-                title: "Change the name friends invite you by",
-                detail: "The username you picked when you signed up used to be yours for good, typo and all. Your profile now has an Edit username button — take a new one and it follows you straight away: your friends' invite lists, the games you're already in, and your match history.",
             },
         ],
     },

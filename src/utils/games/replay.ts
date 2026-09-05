@@ -140,16 +140,19 @@ registerReplayAdapter({
 
 registerReplayAdapter({
     className: "DiceCitiesGameType",
-    // The Docks and the coin supply are both fixed at creation, so replaying a
-    // game restocks the same market and deals from the same bank the recorded
-    // commands were actually played against. A game saved before the supply
-    // matched the boxed game has no stored total and gets the one it had.
+    // The Docks, the coin supply and the theme are all fixed at creation, so
+    // replaying a game restocks the same market, deals from the same bank and
+    // names every card the way the recorded commands were actually played
+    // against. A game saved before the supply matched the boxed game has no
+    // stored total and gets the one it had; one saved before themes existed
+    // has no stored theme and gets the game as it shipped.
     buildInitialSpecificGameState: (gameData) => {
         const played = (gameData as IDiceCitiesGameData).specificGameState;
         return buildInitialDiceCitiesState(
             gameData.userIdList,
             played?.enabledDocks === true,
             played?.bankTotal ?? LEGACY_BANK_TOTAL_COINS,
+            played?.theme,
         );
     },
     toResponseState: (specificGameState, userIdNameMap) =>

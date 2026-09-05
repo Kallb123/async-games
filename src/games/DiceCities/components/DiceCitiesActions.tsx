@@ -1,6 +1,6 @@
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import { IDiceCitiesCard, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
-import { DiceCitiesCards, HARBOUR_BONUS } from "@/games/DiceCities/cards";
+import { DiceCitiesCardIds, HARBOUR_BONUS } from "@/games/DiceCities/cards";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import {
     DiceCitiesRequestBusinessCenterOpponentSelection,
@@ -20,18 +20,27 @@ import {
     IGameCommand,
 } from "@/utils/apiModels/GameLogic";
 import { ACTIVATION_META, activationFor, buildableLandmarks, rollLabel, yieldLabel } from "@/games/DiceCities/ui";
+import type { DiceCitiesTheme } from "@/games/DiceCities/themes";
 import CardArt from "@/games/DiceCities/components/CardArt";
 import ZoomableCardArt from "@/games/DiceCities/components/ZoomableCardArt";
 import type { SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import Dice from "@/components/ui/Dice";
 import ActionButton from "@/components/ui/ActionButton";
 import PendingTag from "@/components/ui/PendingTag";
+import { capitalise } from "@/utils/ui/text";
 import { useEffect, useRef, useState } from "react";
 
 interface DiceCitiesActionsProps {
     gameState: IDiceCitiesGameStateResponse;
     myState: IDiceCitiesPlayerStateResponse;
     opponents: IDiceCitiesPlayerStateResponse[];
+    /**
+     * The theme this game is played in. `theme.cards` is the card table every
+     * lookup below goes through — same keys as `DiceCitiesCards`, themed names
+     * and rules text — and `theme.words` names the coins, the bank and the
+     * landmark track in the copy around them.
+     */
+    theme: DiceCitiesTheme;
     submitCommand: SubmitCommand;
     /** The `target` of the in-flight command, so only the tapped control or card
      *  shows as processing. Null when nothing is in flight — which also means it
@@ -55,7 +64,17 @@ const LANDMARK_UNLOCK: Record<string, new () => IGameCommand> = {
     harbourUnlocked: DiceCitiesRequestUnlockHarbour,
 };
 
-export default function DiceCitiesActions({ gameState, myState, opponents, submitCommand, pendingTarget, readOnly = false }: DiceCitiesActionsProps) {
+export default function DiceCitiesActions({ gameState, myState, opponents, theme, submitCommand, pendingTarget, readOnly = false }: DiceCitiesActionsProps) {
+    const cards = theme.cards;
+    const words = theme.words;
+    // The four cards this sheet names in its own copy rather than in a list —
+    // the two mid-turn selections it takes over the screen for, the landmark
+    // that unlocks the second die, and the one that offers the +2. Read off the
+    // themed table so the prompt and the card the player is holding agree.
+    const harbourCard = cards[DiceCitiesCardIds.HARBOUR];
+    const tvStationCard = cards[DiceCitiesCardIds.TV_STATION];
+    const businessCentreCard = cards[DiceCitiesCardIds.BUSINESS_CENTER];
+    const trainStationCard = cards[DiceCitiesCardIds.TRAIN_STATION];
     // A command is in flight — disable the sheet so a double-tap can't fire two
     // commands before the first response lands.
     const busy = pendingTarget !== null;
@@ -133,20 +152,20 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
     // their turn reads it here — and it is the very block they build from once
     // the dice come round to them.
     const buyable = [...gameState.bankCards].sort(
-        (a, b) => DiceCitiesCards[a.card].rollNumber[0] - DiceCitiesCards[b.card].rollNumber[0],
+        (a, b) => cards[a.card].rollNumber[0] - cards[b.card].rollNumber[0],
     );
     const unbuiltLandmarks = buildableLandmarks(gameState.enabledDocks).filter((l) => !myState[l.flag]);
     const marketSheet = (
         <>
             <div className="ag-dc-market-head">
-                <span className="ag-dc-market-title">{readOnly ? 'Market' : 'Market · build one'}</span>
-                <CoinPill amount={gameState.bankMoney} label="in bank" pill />
+                <span className="ag-dc-market-title">{readOnly ? words.market : `${words.market} · build one`}</span>
+                <CoinPill amount={gameState.bankMoney} label={`in ${words.bank}`} pill />
                 <CoinPill amount={myState.money} pill />
             </div>
 
             <div className="ag-dc-market-grid ag-pending-group">
                 {buyable.map((cc) => {
-                    const card = DiceCitiesCards[cc.card];
+                    const card = cards[cc.card];
                     const disabled = purchaseDisabled(card, cc.amount, myState) || busy;
                     const pending = pendingTarget === `build:${cc.card}`;
                     return (
@@ -156,7 +175,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
                             style={{ borderTopColor: ACTIVATION_META[activationFor(card)].color }}
                         >
                             <div className="ag-dc-market-card-top">
-                                <ZoomableCardArt card={card} className="ag-dc-market-icon" />
+                                <ZoomableCardArt card={card} theme={theme} className="ag-dc-market-icon" />
                                 {pending
                                     ? <PendingTag label="Building" />
                                     : <span className="ag-dc-market-roll">🎲 {rollLabel(card)}</span>}
@@ -178,7 +197,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
             {unbuiltLandmarks.length > 0 && (
                 <div className="ag-dc-landmark-buys ag-pending-group">
                     {unbuiltLandmarks.map(({ cardId, flag }) => {
-                        const card = DiceCitiesCards[cardId];
+                        const card = cards[cardId];
                         const disabled = card.cost > myState.money || busy;
                         const pending = pendingTarget === `landmark:${flag}`;
                         return (
@@ -190,7 +209,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
                             >
                                 <CardArt card={card} className="ag-icon-box ag-dc-landmark-buy-icon" />
                                 <span className="ag-build-main">
-                                    <span className="ag-build-name">Landmark · {card.title}</span>
+                                    <span className="ag-build-name">{capitalise(words.landmark)} · {card.title}</span>
                                     <span className="ag-build-cost">{card.text}</span>
                                 </span>
                                 {pending
@@ -215,7 +234,11 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
         const rolled = dice.reduce((a, b) => a + b, 0);
         return (
             <div className="ag-actionsheet">
-                <SelectionHead icon="⚓" title="Harbour" sub={`You rolled ${rolled}. The Harbour can add ${HARBOUR_BONUS} to it.`} />
+                <SelectionHead
+                    icon="⚓"
+                    title={harbourCard.title}
+                    sub={`You rolled ${rolled}. The ${harbourCard.title} can add ${HARBOUR_BONUS} to it.`}
+                />
                 <RollReadout values={dice} headline={`Total ${rolled}`} sub="nobody is paid until you decide" />
                 <div className="ag-dc-pick-list ag-pending-group">
                     <PickRow
@@ -240,7 +263,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
     if (gameState.awaitingTSSelection) {
         return (
             <div className="ag-actionsheet">
-                <SelectionHead icon="📺" title="TV Station" sub="Take 5 coins from any one player." />
+                <SelectionHead icon="📺" title={tvStationCard.title} sub={tvStationCard.text} />
                 <div className="ag-dc-pick-list ag-pending-group">
                     {opponents.map((op) => (
                         <PickRow
@@ -264,12 +287,16 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
     }
 
     if (gameState.awaitingBCSelectionOwn) {
-        const mine = myState.cards.filter((cc) => cc.amount > 0 && DiceCitiesCards[cc.card].type !== "landmark");
+        const mine = myState.cards.filter((cc) => cc.amount > 0 && cards[cc.card].type !== "landmark");
         return (
             <div className="ag-actionsheet">
-                <SelectionHead icon="🏢" title="Business Center" sub="Choose one of your establishments to give away." />
+                <SelectionHead
+                    icon="🏢"
+                    title={businessCentreCard.title}
+                    sub={`Choose one of your ${words.establishments} to give away.`}
+                />
                 <CardPickGrid
-                    cards={mine.map((cc) => cc.card as uuidString)}
+                    cards={mine.map((cc) => cards[cc.card])}
                     disabled={busy}
                     isPending={(cardId) => pendingTarget === `give:${cardId}`}
                     onPick={(cardId) => {
@@ -285,15 +312,19 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
     if (gameState.awaitingBCSelectionOpponent) {
         return (
             <div className="ag-actionsheet">
-                <SelectionHead icon="🏢" title="Business Center" sub="Choose an opponent's establishment to take." />
+                <SelectionHead
+                    icon="🏢"
+                    title={businessCentreCard.title}
+                    sub={`Choose an opponent's ${words.establishment} to take.`}
+                />
                 {opponents.map((op) => {
-                    const theirs = op.cards.filter((cc) => cc.amount > 0 && DiceCitiesCards[cc.card].type !== "landmark");
+                    const theirs = op.cards.filter((cc) => cc.amount > 0 && cards[cc.card].type !== "landmark");
                     if (theirs.length === 0) return null;
                     return (
                         <div key={op.userId} className="ag-dc-pick-group">
                             <div className="ag-dc-pick-group-name">{op.username}</div>
                             <CardPickGrid
-                                cards={theirs.map((cc) => cc.card as uuidString)}
+                                cards={theirs.map((cc) => cards[cc.card])}
                                 disabled={busy}
                                 isPending={(cardId) => pendingTarget === `take:${op.userId}:${cardId}`}
                                 onPick={(cardId) => {
@@ -317,10 +348,12 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
         return (
             <div className="ag-dc-bank ag-pending-group">
                 <div className="ag-dc-bank-head">
-                    <CoinPill amount={myState.money} label="coins" />
-                    <CoinPill amount={gameState.bankMoney} label="in bank" pill />
+                    <CoinPill amount={myState.money} label={words.coins} />
+                    <CoinPill amount={gameState.bankMoney} label={`in ${words.bank}`} pill />
                     <span className="ag-dc-bank-note">
-                        {canDouble ? "Train Station lets you roll 2 dice" : "Build the Train Station to roll 2 dice"}
+                        {canDouble
+                            ? `${trainStationCard.title} lets you roll 2 dice`
+                            : `Build the ${trainStationCard.title} to roll 2 dice`}
                     </span>
                 </div>
                 <div className="ag-dc-dice-picker">
@@ -363,7 +396,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
                         ? [rolling ? face.a : roll.roll1, rolling ? face.b : roll.roll2]
                         : [rolling ? face.a : roll.roll1]}
                     rolling={rolling}
-                    headline={rolling ? "Rolling…" : `Total ${total}${roll.bonus > 0 ? ` (Harbour +${roll.bonus})` : ""}`}
+                    headline={rolling ? "Rolling…" : `Total ${total}${roll.bonus > 0 ? ` (${harbourCard.title} +${roll.bonus})` : ""}`}
                     sub={rolling ? "the dice are tumbling" : "payouts are in — build one, or end your turn"}
                 />
             )}
@@ -480,7 +513,8 @@ function SelectionHead({ icon, title, sub }: { icon: string; title: string; sub:
 }
 
 function CardPickGrid({ cards, disabled, isPending, onPick }: {
-    cards: uuidString[];
+    /** The themed cards to offer — already named and illustrated. */
+    cards: IDiceCitiesCard[];
     disabled: boolean;
     /** True for the card whose command is in flight — it wears the pending skin. */
     isPending: (cardId: uuidString) => boolean;
@@ -488,8 +522,8 @@ function CardPickGrid({ cards, disabled, isPending, onPick }: {
 }) {
     return (
         <div className="ag-dc-pick-grid ag-pending-group">
-            {cards.map((cardId, i) => {
-                const card = DiceCitiesCards[cardId];
+            {cards.map((card, i) => {
+                const cardId = card.cardId;
                 const pending = isPending(cardId);
                 return (
                     <button

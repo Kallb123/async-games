@@ -10,6 +10,7 @@ import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { DiceCitiesGameType } from "@/utils/apiModels/GameLogic";
 import { LANDMARKS } from "./ui";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
+import { DEFAULT_DICE_CITIES_THEME, diceCitiesTheme } from "./themes";
 
 export interface DiceCitiesInvitationRequest extends IInvitationRequest {
     enabledDocks: boolean,
@@ -40,6 +41,11 @@ export function buildInitialDiceCitiesState(
     // The supply this game is played with. Passed in only by replay, which has
     // to rebuild a game against the bank it actually had rather than today's.
     bankTotal: number = bankTotalCoins(enabledDocks),
+    // Which dressing the game is played in. Presentation only - it renames
+    // cards and copy and changes nothing the engine computes - but it is fixed
+    // at creation like `enabledDocks`, so it lives beside it and a replay
+    // rebuilds a game in the theme it was actually played in.
+    theme: string = DEFAULT_DICE_CITIES_THEME.id,
 ): IDiceCitiesGameState {
     const playerStates = new Map<string, IDiceCitiesPlayerState>();
     for (const userId of userIdList) {
@@ -94,6 +100,10 @@ export function buildInitialDiceCitiesState(
         harbourRoll1: null,
         harbourRoll2: null,
         enabledDocks,
+        // Laundered here rather than trusted from the caller, so "a stored
+        // theme is always one this game has" is true by construction instead of
+        // by every caller remembering to normalise first.
+        theme: diceCitiesTheme(theme).id,
     };
 }
 
@@ -111,6 +121,15 @@ DiceCitiesInvitationSchema.methods.CreateGame = async function(invite: IDiceCiti
     const enabledDocks = this.enabledDocks === true;
     if (enabledDocks) {
         history.push({ text: "Setup: the Docks expansion is in play" });
+    }
+
+    // The invitation carries whatever the host picked on the setup screen;
+    // `diceCitiesTheme` is what makes it one of this game's own themes, so a
+    // withdrawn or malformed id becomes the default here rather than reaching
+    // the board. Only worth a log line when it isn't the game as it ships.
+    const theme = diceCitiesTheme(this.theme);
+    if (theme.id !== DEFAULT_DICE_CITIES_THEME.id) {
+        history.push({ text: `Setup: played in the ${theme.name} theme` });
     }
 
     const gameData: IDiceCitiesGameData = {
@@ -131,7 +150,7 @@ DiceCitiesInvitationSchema.methods.CreateGame = async function(invite: IDiceCiti
         },
         complete: false,
         winner: "",
-        specificGameState: buildInitialDiceCitiesState(userIdList, enabledDocks),
+        specificGameState: buildInitialDiceCitiesState(userIdList, enabledDocks, bankTotalCoins(enabledDocks), theme.id),
         enabledBillionaireRow: this.enabledBillionaireRow
     }
     return gameData;
@@ -197,7 +216,16 @@ export interface IDiceCitiesGameState {
     harbourRoll1: number | null,
     harbourRoll2: number | null,
     /** Expansion chosen at setup: the Docks is in play. Never changes. */
-    enabledDocks: boolean
+    enabledDocks: boolean,
+    /**
+     * Theme chosen at setup (see themes.ts). Never changes, and never affects
+     * a number the engine computes - it only decides what the cards, the coins
+     * and the landmark track are called. Stored on the game state rather than
+     * read from the invitation because the invitation is deleted the moment
+     * the game exists, and because a replay has to rebuild the game in the
+     * theme its recorded history was written in.
+     */
+    theme: string
 }
 
 export interface IDiceCitiesGameData extends IGameData {
@@ -253,7 +281,8 @@ var DiceCitiesGameDataSchema = new Schema<IDiceCitiesGameDataDocument>({
         awaitingHarbourChoice: Boolean,
         harbourRoll1: Number,
         harbourRoll2: Number,
-        enabledDocks: Boolean
+        enabledDocks: Boolean,
+        theme: String
     }
 }, {discriminatorKey: 'kind'});
 DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(_viewerId: string | null): Promise<IDiceCitiesGameDataResponse> {
@@ -324,7 +353,10 @@ export function gameStateToModel(gameState: IDiceCitiesGameState, userIdNameMap:
         harbourRoll1: gameState.harbourRoll1 ?? null,
         harbourRoll2: gameState.harbourRoll2 ?? null,
         // Games that started before the Docks shipped have no stored flag.
-        enabledDocks: gameState.enabledDocks === true
+        enabledDocks: gameState.enabledDocks === true,
+        // Likewise for themes: a game that predates them is the game as it
+        // shipped, which is exactly what the default theme names.
+        theme: diceCitiesTheme(gameState.theme).id
     }
 }
 
