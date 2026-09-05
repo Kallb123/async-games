@@ -72,12 +72,28 @@ export interface DiceCitiesLandmarkEntry {
 /**
  * The four landmarks in cost order, each paired with the player-state flag that
  * records whether it's been built. Building all four wins the game.
+ *
+ * Mind the last two. Both flags are named for rolling again, which makes them
+ * easy to transpose — and they were, until the market's Amusement Park row was
+ * found sending the Radio Tower's command. `buildLandmark` in
+ * `DiceCitiesLogic` decides the pairing and this table has to match it:
+ *
+ * - Amusement Park → `rerollDoubles`: roll doubles and the turn comes back to
+ *   you. A whole further turn, not a re-roll of the dice you just threw, so
+ *   the name is looser than it looks.
+ * - Radio Tower → `oneReroll`: one re-roll a turn, discarding what the first
+ *   throw paid.
+ *
+ * The names stay because they are persisted schema fields — a player who has
+ * built the Amusement Park already has `rerollDoubles` stored against them, so
+ * renaming means migrating every game in the database for no player benefit.
+ * `DiceCitiesLogic.test.ts` holds the two tables together instead.
  */
 export const LANDMARKS: { cardId: string; flag: DiceCitiesLandmarkFlag }[] = [
     { cardId: DiceCitiesCardIds.TRAIN_STATION, flag: "doubleUnlocked" },
     { cardId: DiceCitiesCardIds.SHOPPING_MALL, flag: "bonusDiningAndStore" },
-    { cardId: DiceCitiesCardIds.AMUSEMENT_PARK, flag: "oneReroll" },
-    { cardId: DiceCitiesCardIds.RADIO_TOWER, flag: "rerollDoubles" },
+    { cardId: DiceCitiesCardIds.AMUSEMENT_PARK, flag: "rerollDoubles" },
+    { cardId: DiceCitiesCardIds.RADIO_TOWER, flag: "oneReroll" },
 ];
 
 /**

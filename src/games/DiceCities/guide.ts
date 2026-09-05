@@ -16,7 +16,7 @@ export const guide: GameGuide = {
         },
         {
             heading: "Card colours",
-            body: "Blue cards pay out to whoever rolls, on anyone's turn. Green cards only pay you, and only on your own roll. Red cards let you take coins straight from whoever just rolled — build a few and their bad luck is your good luck.",
+            body: "Blue cards pay out to whoever rolls, on anyone's turn. Green cards only pay you, and only on your own roll. Red cards let you take coins straight from whoever just rolled — build a few and their bad luck is your good luck. Because every roll touches every city, nobody's cards are secret: the landmark track shows a dot per player, and tapping an opponent's name below your own city opens theirs.",
         },
         {
             heading: "Landmarks",

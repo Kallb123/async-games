@@ -2662,9 +2662,34 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-dc-landmark-name { font: 800 8.5px var(--ag-font); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ag-dc-landmark-cost { font: 700 8px var(--ag-font); opacity: 0.85; margin-top: 1px; }
 
+/* Whose landmark: one pip per seat under every tile, in the same position on
+   each, so the row reads across for "who has this one" and down for "what has
+   this player got". Filled is built and hollow is not — the state is carried by
+   shape so that colour is free to carry identity, the same seat colour the
+   scoreboard and the log use. It wraps because five tiles on a 320px screen —
+   a Docks game on the narrowest phones — leave less room than four pips need;
+   measured figures are in docs/games/dice-cities.md §11.4. */
+.ag-dc-pips { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; margin-top: 4px; }
+.ag-dc-pip {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    box-shadow: inset 0 0 0 1.5px currentColor;
+}
+.ag-dc-pip--built { background: currentColor; box-shadow: none; }
+/* Your own seat, ringed the way `.ag-score-pill--me` rings your score dot. */
+.ag-dc-pip--me { outline: 1.5px solid var(--ag-on-dark); }
+
 /* ---- City establishments ---- */
 .ag-dc-city { background: var(--ag-surface); border-radius: 16px; padding: 11px 12px; }
 .ag-dc-city-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
+/* An opponent's city is a `<details>` wearing these same classes, so its header
+   is the summary rather than a second row written to match it. The chevron
+   stands in for the colour key, and a closed city has nothing below its head to
+   space itself away from. */
+.ag-dc-city > summary.ag-dc-city-head { align-items: center; }
+.ag-dc-city:not([open]) > .ag-dc-city-head { margin-bottom: 0; }
 .ag-dc-city-title {
     font: 800 10px var(--ag-font);
     letter-spacing: 0.05em;

@@ -7,9 +7,12 @@ import {
     DiceCitiesRequestPassTurn,
     DiceCitiesRequestRadioTowerReroll,
     DiceCitiesRequestTvStationSelection,
+    DiceCitiesRequestUnlockAmusementPark,
     DiceCitiesRequestUnlockHarbour,
+    DiceCitiesRequestUnlockRadioTower,
     DiceCitiesRequestUnlockTrainStation,
 } from "./DiceCitiesLogic";
+import { LANDMARKS } from "./ui";
 import type { IDiceCitiesDiceRollOutcome } from "./DiceCitiesLogic";
 import { BANK_TOTAL_COINS, DiceCitiesCardIds, DiceCitiesCards, DOCKS_ESTABLISHMENT_IDS, STARTING_PLAYER_COINS } from "./cards";
 import { buildInitialDiceCitiesState } from "./DiceCitiesModels";
@@ -316,6 +319,73 @@ describe("Dice Cities bank supply", () => {
 // A card's rollNumber is the list of totals it activates on. Writing a range as
 // one number ("11.12") reads fine but matches nothing, so the card silently
 // never pays - which is exactly what the Fruit and Vegetable Market did.
+describe("Dice Cities landmarks", () => {
+    // The market draws a buy row per LANDMARKS entry, prices it from `cardId`
+    // and dispatches the command keyed by `flag`. If the table pairs a card
+    // with the flag some *other* landmark's command lights, that row charges
+    // one price and builds the other thing - which is how the Amusement Park
+    // came to send the Radio Tower's command and be refused for costing 22.
+    it.each([
+        ["Amusement Park", DiceCitiesCardIds.AMUSEMENT_PARK, DiceCitiesRequestUnlockAmusementPark],
+        ["Radio Tower", DiceCitiesCardIds.RADIO_TOWER, DiceCitiesRequestUnlockRadioTower],
+        ["Train Station", DiceCitiesCardIds.TRAIN_STATION, DiceCitiesRequestUnlockTrainStation],
+    ])("%s lights the flag LANDMARKS pairs it with", async (_name, cardId, Command) => {
+        const entry = LANDMARKS.find(l => l.cardId === cardId)!;
+        const gs = makeState({
+            hasRolled: true,
+            playerStates: new Map([["u1", player({ money: 40 })], ["u2", player()]]),
+        });
+        const game = makeGame(gs);
+
+        const command = new Command();
+        command.senderId = "u1";
+        command.senderUsername = "u1";
+        const outcome = await command.Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(gs.playerStates.get("u1")![entry.flag]).toBe(true);
+        // Charged the price its own buy row advertises, not another card's.
+        expect(gs.playerStates.get("u1")!.money).toBe(40 - DiceCitiesCards[cardId].cost);
+    });
+
+    it("gives the Amusement Park's owner another turn on doubles", async () => {
+        const gs = makeState({
+            playerStates: new Map([
+                ["u1", player({ doubleUnlocked: true, rerollDoubles: true })],
+                ["u2", player()],
+            ]),
+        });
+        const game = makeGame(gs);
+        const gameType = new DiceCitiesGameType();
+
+        const roll = rollCommand(3, "u1", 3);
+        const outcome = await roll.Execute(game);
+        expect(gs.awaitingDoubleReroll).toBe(true);
+
+        gameType.CheckEndTurn(game, { ...outcome, turnOver: true });
+        expect(game.currentTurn).toBe("u1");
+        expect(gs.hasRolled).toBe(false);
+    });
+
+    it("does not give the Radio Tower's owner an extra turn on doubles", async () => {
+        const gs = makeState({
+            playerStates: new Map([
+                ["u1", player({ doubleUnlocked: true, oneReroll: true })],
+                ["u2", player()],
+            ]),
+        });
+        const game = makeGame(gs);
+        const gameType = new DiceCitiesGameType();
+
+        const roll = rollCommand(3, "u1", 3);
+        const outcome = await roll.Execute(game);
+        expect(gs.awaitingDoubleReroll).toBe(false);
+
+        gameType.CheckEndTurn(game, { ...outcome, turnOver: true });
+        expect(game.currentTurn).toBe("u2");
+    });
+});
+
 describe("Dice Cities activation numbers", () => {
     it("pays the Fruit and Vegetable Market on both of its numbers", async () => {
         for (const [die1, die2] of [[5, 6], [6, 6]]) {
