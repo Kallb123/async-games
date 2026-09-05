@@ -216,7 +216,7 @@ Billionaires Row is a set of premium, high-value establishments and an alternate
 
 ---
 
-## 11. Public Information: Seeing the Other Cities
+## 11. Public Information: Seeing the Other Cities (design proposal)
 
 Every card in Dice Cities sits face-up on the table. §10 already takes that
 as read — "all state (money, tableau, landmarks) is public, and the only
@@ -224,12 +224,15 @@ hidden randomness is the dice roll" — and the rules lean on it hard. A Red
 card is paid out of the *roller's* pocket, so what an opponent has built is
 literally the price of your own turn: a player who cannot see the other
 cities cannot tell whether rolling a 3 costs them one coin or four, cannot
-tell whether the Cheese Factory is worth 5 coins to them and worthless to
-their neighbour, and cannot see the Stadium being lined up against them.
+tell whether the Cheese Factory is worth 6 coins a turn to them and nothing
+at all to their neighbour, and cannot see the Stadium being lined up
+against them.
 
-The app does not show them. This section sets out why that is a rendering
-gap rather than a rules or privacy question, what a fix has to satisfy, and
-the shapes a fix could take.
+The app does not show them.
+
+**This section is a proposal. None of it is implemented.** It sets out why
+that gap is a rendering question rather than a rules or privacy one, what a
+fix has to satisfy, and the shapes a fix could take.
 
 ### 11.1 Where it stands today
 
@@ -278,8 +281,9 @@ already copes, not drawing cities.
 3. **Cost nothing on the turn you are actually taking.** Roll → collect →
    build is a handful of taps in an async game; browsing must not stand
    between the player and their build.
-4. **Fit four players — five with Billionaires Row — in a phone column.**
-   A late-game city runs to a dozen-plus establishment types plus a
+4. **Fit four players in a phone column** — and leave room for the five §9
+   designs for, even though `meta.ts` caps the shipped game at four seats
+   today. A late-game city runs to a dozen-plus establishment types plus a
    five-slot landmark track.
 5. **Work under turn review.** Past states carry the full `playerStates`
    map, so whatever is built must read from `nav.displayedState` and keep
