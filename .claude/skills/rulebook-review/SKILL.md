@@ -100,7 +100,8 @@ AGENTS.md:
 
 - **A change a player would notice adds a line in the same PR** — right group
   (new games / enhancements / bug fixes), newest first, written in the player's
-  language, and drop the oldest once a group runs past five.
+  language, and drop the oldest once a group runs past ten. The newest three
+  in a group render in full, the rest as compact title-only rows.
 - **Internal-only work does not** — refactors, docs, CI, dependency bumps,
   tests, tooling.
 

@@ -387,6 +387,18 @@ button {
 
 .ag-list-row:last-child { border-bottom: none; }
 
+/* The tail of a long list: rows that are still worth listing but no longer
+   worth a paragraph each — the older entries under a "What's new" group. The
+   title-only shape is `ListRow`'s (`compact`); this is what it looks like. */
+.ag-list-row--compact {
+    padding: 7px 0;
+}
+
+.ag-list-row--compact .ag-list-row-title {
+    font: 600 12px/1.35 var(--ag-font);
+    color: var(--ag-ink-soft);
+}
+
 /* Lets a <button> stand in for a .ag-list-row (e.g. a clickable list entry)
    without every call site re-deriving its own reset. */
 .ag-list-row--button {
