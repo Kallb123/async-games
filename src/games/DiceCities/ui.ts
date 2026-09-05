@@ -73,14 +73,21 @@ export interface DiceCitiesLandmarkEntry {
  * The four landmarks in cost order, each paired with the player-state flag that
  * records whether it's been built. Building all four wins the game.
  *
- * The flag names read backwards for the last two and are kept anyway: they are
- * persisted field names, so a player who built the Amusement Park has
- * `rerollDoubles` stored against them and renaming would strand every game in
- * the database. `buildLandmark` in `DiceCitiesLogic` is what decides the
- * pairing — the Amusement Park lights `rerollDoubles` (roll doubles, take
- * another turn) and the Radio Tower `oneReroll` (one re-roll a turn). This
- * table has to say the same, or the market's buy row sends the other
- * landmark's command; `DiceCitiesLogic.test.ts` holds them together.
+ * Mind the last two. Both flags are named for rolling again, which makes them
+ * easy to transpose — and they were, until the market's Amusement Park row was
+ * found sending the Radio Tower's command. `buildLandmark` in
+ * `DiceCitiesLogic` decides the pairing and this table has to match it:
+ *
+ * - Amusement Park → `rerollDoubles`: roll doubles and the turn comes back to
+ *   you. A whole further turn, not a re-roll of the dice you just threw, so
+ *   the name is looser than it looks.
+ * - Radio Tower → `oneReroll`: one re-roll a turn, discarding what the first
+ *   throw paid.
+ *
+ * The names stay because they are persisted schema fields — a player who has
+ * built the Amusement Park already has `rerollDoubles` stored against them, so
+ * renaming means migrating every game in the database for no player benefit.
+ * `DiceCitiesLogic.test.ts` holds the two tables together instead.
  */
 export const LANDMARKS: { cardId: string; flag: DiceCitiesLandmarkFlag }[] = [
     { cardId: DiceCitiesCardIds.TRAIN_STATION, flag: "doubleUnlocked" },

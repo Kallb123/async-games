@@ -1037,8 +1037,8 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean, recorded
 
     // The Amusement Park's effect: roll doubles and the turn comes back to you
     // (CheckEndTurn holds the seat rather than advancing it). Its flag is
-    // `rerollDoubles` - see LANDMARKS in ui.ts for why that name is stuck.
-    // `oneReroll` is the Radio Tower and buys the once-a-turn re-roll instead.
+    // `rerollDoubles`; the similarly named `oneReroll` is the Radio Tower's
+    // once-a-turn re-roll, which is a different power - see LANDMARKS in ui.ts.
     if (roll1 === roll2 && rollerState.rerollDoubles) {
         dcGameData.specificGameState.awaitingDoubleReroll = true;
     }
