@@ -259,11 +259,11 @@ What the board screen did with that payload was the gap:
   every player a pill with their colour, name, landmark count and coins —
   everything except what they own. `★ 3/4` says how close someone is
   without saying to what.
-* **Opponents' establishments already render in full, in one place.** The
+* **Opponents' establishments already rendered in full, in one place.** The
   Business Center's "choose an opponent's establishment to take" picker in
-  `DiceCitiesActions.tsx` lays out every opponent's cards, grouped by
-  player. The app therefore already accepts that these cards are the
-  viewer's to look at — just only while an 8-coin purple card is resolving.
+  `DiceCitiesActions.tsx` laid out every opponent's cards, grouped by
+  player. The app already accepted that these cards were the viewer's to
+  look at — just only while an 8-coin purple card was resolving.
 * **The history log leaks it all anyway.** Every purchase writes
   "*Dave bought a Cafe*". A determined player can reconstruct all four
   cities by scrolling back to turn one. The information is not secret; it
@@ -281,11 +281,12 @@ copes, not drawing cities.
    spends *your* coins into *your* city; anything that can put another
    tableau in front of the player must say so loudly and offer an obvious
    way back.
-2. **Keep `opponents` anchored to the viewer's seat.** Today `opponents` is
+2. **Keep `opponents` anchored to the viewer's seat.** `opponents` was
    derived from `boardPlayer` (`players.filter(p => p.userId !==
-   boardPlayer.userId)`). Any option that lets `boardPlayer` become someone
-   else must decouple the two, or the TV Station picker will offer to rob
-   the viewer and skip the player they happen to be looking at.
+   boardPlayer.userId)`), so any option that let `boardPlayer` become
+   someone else had to decouple the two, or the TV Station picker would
+   offer to rob the viewer and skip the player they were looking at. B′
+   discharged this by deleting `boardPlayer` outright.
 3. **Cost nothing on the turn you are actually taking.** Roll → collect →
    build is a handful of taps in an async game; browsing must not stand
    between the player and their build.
@@ -297,8 +298,9 @@ copes, not drawing cities.
    map, so whatever is built must read from `nav.displayedState` and keep
    behaving while a reviewed or finished turn is on screen.
 6. **Not crash for a seatless viewer.** `myState` is `undefined` for anyone
-   opening a game they are not in; `boardPlayer` already falls back and the
-   turn sheet already hides itself.
+   opening a game they are not in. Under B′ they simply match no seat, so
+   every city is an opponent's and the turn sheet hides itself as it
+   already did.
 7. **Reuse `DiceCitiesBoard` rather than growing a second way to draw a
    city.** A compact opponent-only tableau that drifts out of step with the
    real one is the duplication `AGENTS.md` treats as a defect.
@@ -316,8 +318,7 @@ copes, not drawing cities.
 ### 11.4 The shared landmark track
 
 This is the piece that makes B′ worth doing, and it is **separable from the
-option choice** — A and C would both be better with it too. It can ship on
-its own, ahead of any browsing decision.
+option choice** — A and C would both have been better with it too.
 
 **The insight:** landmarks are not like establishments. A city's
 establishment grid is open-ended and differs wildly between players, which
@@ -334,8 +335,10 @@ match the scoreboard, the log and the turn recap:
 
 * **Filled pip = built. Hollow pip = not built.** The state is carried by
   shape, not colour, so the row survives colour-blindness and greyscale;
-  colour only carries *identity*. Each pip needs a `title`/`aria-label`
-  naming the player and the landmark.
+  colour only carries *identity*. The pips themselves are `aria-hidden`
+  behind one `role="img"` label on the row — "Train Station: built by you,
+  Sam" — so a screen reader gets one sentence per tile rather than a pip
+  each.
 * **Every seat always has a pip, in the same position on every tile.** That
   makes the row a small matrix: read across one tile to see who holds that
   landmark, read down the same position across tiles to see what one player
@@ -364,8 +367,8 @@ at five *seats* — so the `flex-wrap` is not a hypothetical for a board
 game runs on. It degrades exactly as intended: the row wraps, the tiles
 grow together, and nothing overflows.
 
-**The component split.** `DiceCitiesBoard` currently draws the track *and*
-the city from one `playerState`. The track has to become everyone's while
+**The component split.** `DiceCitiesBoard` drew the track *and* the city
+from one `playerState`. The track had to become everyone's while
 the city stays one player's, so the two separate:
 
 * **`DiceCitiesLandmarkTrack.tsx`** (new) — takes the ordered seats,
@@ -462,22 +465,15 @@ as they stood then. A seatless viewer (requirement 6) simply has no seat
 matching `myUserId`, so every panel is an opponent panel and the turn sheet
 stays hidden as it already does.
 
-### 11.6 Recommendation
+### 11.6 Why B′ and not the others
 
-**Ship the shared landmark track first, then the city stack.** Two
-player-visible steps, in that order:
+**The track (§11.4) and the stack (§11.5) shipped together.** They were
+planned as two steps — the track first, since it needs no navigation change
+and would have been worth having even alone — but together they came to one
+new component, one prop each way on `DiceCitiesBoard` and no new state, so
+splitting them across two branches would have bought nothing.
 
-1. **The track (§11.4)** — one new component; `DiceCitiesBoard` loses its
-   `enabledDocks` prop and its outer wrapper div, both of which move to
-   `page.tsx`. No navigation change and no extra page height. It answers the landmark half
-   of "what have they built" for every player at once. If nothing else in
-   this section is ever built, this is still worth having, and it is the
-   cheapest thing here that a player would notice.
-2. **The stack (§11.5)** — the collapsed opponent panels, which answer the
-   establishment half. One `collapsible` prop and a `<details>`; no new
-   component and no new state.
-
-This reverses the verdict this section originally reached. A was
+B′ reversed the verdict this section originally reached. A was
 recommended for costing nothing structurally, and that is still true. But
 the shared track removes B's chief liability — four repeated landmark
 tracks and the page length that came with them — and once that is gone B′

@@ -119,7 +119,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
         ? userIdList.flatMap((userId): ScoreEntry[] => {
             const ps = displayed.playerStates?.[userId];
             if (!ps) return [];
-            const isMe = ps.userId === user?.id;
+            const isMe = ps.userId === myUserId;
             const isActive = ps.userId === displayedCurrentTurn && !complete;
             const lm = landmarkCount(ps);
             const isLeader = lm === leaderLandmarks && lm > 0;
@@ -216,12 +216,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
                         enabledDocks={enabledDocks}
                     />
                     {seats.map(p => (
-                        <DiceCitiesBoard
-                            key={p.userId}
-                            playerState={p}
-                            ownerLabel={p.userId === myUserId ? 'Your city' : `${p.username}'s city`}
-                            collapsible={p.userId !== myUserId}
-                        />
+                        <DiceCitiesBoard key={p.userId} playerState={p} isViewer={p.userId === myUserId} />
                     ))}
                 </div>
             )}

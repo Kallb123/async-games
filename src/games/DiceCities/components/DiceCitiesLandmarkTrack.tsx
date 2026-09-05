@@ -30,8 +30,6 @@ interface DiceCitiesLandmarkTrackProps {
  * See docs/games/dice-cities.md §11.4.
  */
 export default function DiceCitiesLandmarkTrack({ seats, userIdList, myUserId, enabledDocks }: DiceCitiesLandmarkTrackProps) {
-    const me = seats.find((s) => s.userId === myUserId);
-
     return (
         <div className="ag-dc-landmarks">
             <div className="ag-dc-landmarks-head">
@@ -40,8 +38,8 @@ export default function DiceCitiesLandmarkTrack({ seats, userIdList, myUserId, e
             <div className="ag-dc-landmark-row">
                 {buildableLandmarks(enabledDocks).map(({ cardId, flag }) => {
                     const card = DiceCitiesCards[cardId];
-                    const built = Boolean(me?.[flag]);
                     const builders = seats.filter((s) => s[flag]);
+                    const built = builders.some((b) => b.userId === myUserId);
                     return (
                         <div
                             key={cardId}
@@ -55,9 +53,9 @@ export default function DiceCitiesLandmarkTrack({ seats, userIdList, myUserId, e
                                 that landmark, down a column for what one player
                                 has. Filled means built and hollow means not, so
                                 shape carries the state and colour is left to
-                                carry identity. The pips themselves are hidden
-                                from assistive tech in favour of the one label
-                                on the row, which says the same thing in words. */}
+                                carry identity. The row is one `img` to
+                                assistive tech, labelled with the same thing in
+                                words, rather than a pip each to wade through. */}
                             <div
                                 className="ag-dc-pips"
                                 role="img"
@@ -68,7 +66,6 @@ export default function DiceCitiesLandmarkTrack({ seats, userIdList, myUserId, e
                                 {seats.map((s) => (
                                     <span
                                         key={s.userId}
-                                        aria-hidden="true"
                                         className={`ag-dc-pip${s[flag] ? " ag-dc-pip--built" : ""}${s.userId === myUserId ? " ag-dc-pip--me" : ""}`}
                                         style={{ color: playerColourForId(s.userId, userIdList) }}
                                     />

@@ -2666,8 +2666,9 @@ a.ag-list-row, a.ag-list-row-main {
    each, so the row reads across for "who has this one" and down for "what has
    this player got". Filled is built and hollow is not — the state is carried by
    shape so that colour is free to carry identity, the same seat colour the
-   scoreboard and the log use. It wraps because a five-tile Docks board at five
-   seats (which §9 designs for and meta.ts can't yet deal) runs out of tile. */
+   scoreboard and the log use. It wraps because five tiles on a 320px screen —
+   a Docks game on the narrowest phones — leave less room than four pips need;
+   measured figures are in docs/games/dice-cities.md §11.4. */
 .ag-dc-pips { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; margin-top: 4px; }
 .ag-dc-pip {
     flex: none;
