@@ -39,6 +39,7 @@ export function toCompletedGames(results: IGameResultDataDocument[], directory: 
         winner: directory.name(result.winner),
         winnerId: result.winner || undefined,
         endReason: result.endReason,
+        endDetail: result.endDetail,
         forfeitedBy: result.forfeitedBy ? directory.name(result.forfeitedBy) : undefined,
         endedAt: result.endedAt,
     }));

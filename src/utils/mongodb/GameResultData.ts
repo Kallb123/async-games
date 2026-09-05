@@ -1,6 +1,6 @@
 import { Document, Model, Schema, model, models } from "mongoose";
 import type { IGameData } from "./GameData";
-import type { uuidString, GameEndDetail, GameEndReason, GameResultStatGroup, GameResultChart } from "../apiModels/GameDataApi";
+import type { uuidString, GameEndReason, GameResultStatGroup, GameResultChart } from "../apiModels/GameDataApi";
 // The shared, generic player lookup. The older games each wrap it in a typed
 // alias of their own; a new one doesn't need to — the state type infers the
 // player type.
@@ -16,7 +16,7 @@ import {
     playerByUserId as diceCitiesPlayerByUserId,
 } from "@/games/DiceCities/DiceCitiesModels";
 import type { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
-import { computePerTurnKeyedStat, computePerTurnStat } from "@/utils/games/replay";
+import { computePerTurnStat } from "@/utils/games/replay";
 import { gameLength } from "@/utils/games/turnCount";
 import {
     ISmartthinkGameData,
@@ -94,10 +94,10 @@ export interface IGameResultData {
     winner: string,
     endReason?: GameEndReason,
     // Which of the endReason's shapes it was, in the player's own words — see
-    // GameEndDetail. Copied off the finished game so the result page can say
-    // "the team lost — the player deck ran out of cards" long after the game
-    // document it came from is gone.
-    endDetail?: GameEndDetail,
+    // IGameData.endDetail. Copied off the finished game so the result page can
+    // say "the team lost — the player deck ran out of cards" long after the
+    // game document it came from is gone.
+    endDetail?: string,
     forfeitedBy?: string,
     endedAt: string,
     // How long the game ran: turns for a game with opponents, moves for a solo
@@ -352,11 +352,11 @@ const GAME_RESULT_STATS: Record<string, {
                 (state, userId) => playerByUserId(state, userId)?.timesTravelled,
             );
             // Keyed by disease colour rather than by userId — the supply
-            // belongs to the board, not to a player (see computePerTurnKeyedStat).
-            const cubesLeftPerTurn = await computePerTurnKeyedStat<IOutbreakSpecificGameStateResponse>(
+            // belongs to the board, not to a player.
+            const cubesLeftPerTurn = await computePerTurnStat<IOutbreakSpecificGameStateResponse>(
                 outbreakGameData,
-                DISEASE_COLORS,
                 (state, color) => state.cubesLeft?.[color as OutbreakDiseaseColor],
+                DISEASE_COLORS,
             );
             return computeOutbreakResultStats(outbreakGameData, cubesTreatedPerTurn, timesTravelledPerTurn, cubesLeftPerTurn);
         },

@@ -234,7 +234,7 @@ export function abandonedGameCopy(forfeitedName?: string): { subtitle: string; s
 // How a finished game ended, with every id already resolved to a name. Taken
 // off the DTO both callers pass in, rather than restated, so it can't drift
 // from what a finished game actually carries.
-export type FinishedGameOutcome = Pick<ICompletedGame, 'winner' | 'endReason' | 'forfeitedBy'>;
+export type FinishedGameOutcome = Pick<ICompletedGame, 'winner' | 'endReason' | 'endDetail' | 'forfeitedBy'>;
 
 // The short line naming how a finished game ended: the "Finished" list on the
 // home page and the result page's summary row both need one, and both worked
@@ -244,12 +244,17 @@ export type FinishedGameOutcome = Pick<ICompletedGame, 'winner' | 'endReason' | 
 // Null when there is nothing to say beyond "nobody won", which the two screens
 // word differently: "complete" in a list of many games, "Draw" on the page
 // about one.
+// `endDetail` says which shape of the ending it was, for a game that has more
+// than one (see IGameData.endDetail) — appended here rather than at each
+// screen, so the two lists and the result page can't word the same ending
+// three ways.
 export function finishedGameCopy(game: FinishedGameOutcome): string | null {
+    const detail = game.endDetail ? ` — ${game.endDetail}` : "";
     // A co-op table's result belongs to all of them, and reads the same to
     // everyone — including a friend looking at a game they weren't part of.
-    if (game.endReason === 'teamwin') return "The team won";
-    if (game.endReason === 'teamloss') return "The team lost";
-    if (game.winner) return `${game.winner} won`;
+    if (game.endReason === 'teamwin') return `The team won${detail}`;
+    if (game.endReason === 'teamloss') return `The team lost${detail}`;
+    if (game.winner) return `${game.winner} won${detail}`;
     if (game.endReason === 'abandoned') return abandonedGameCopy(game.forfeitedBy).short;
     return null;
 }

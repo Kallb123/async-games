@@ -193,9 +193,9 @@ export function buildGameLostNotification(gameData: IGameData, winnerName: strin
  * measure — the same one the win and loss copy above uses.
  *
  * A defeat also leads with *which* defeat, when the game recorded one (see
- * GameEndDetail): a co-op game usually has several ways to go under, and "your
- * team lost" alone tells a player nothing they couldn't already guess. A game
- * that records none keeps the copy it had.
+ * IGameData.endDetail): a co-op game usually has several ways to go under,
+ * and "your team lost" alone tells a player nothing they couldn't already
+ * guess. A game that records none keeps the copy it had.
  */
 export function buildTeamResultNotification(gameData: IGameData, won: boolean): PushNotification {
     const friendlyName = gameData.gameType.friendlyName;

@@ -562,8 +562,8 @@ function infectionPhaseOutcome(turnOver: boolean, infectionLog: IOutbreakInfecti
 //
 // `reason` is the log line's clause. It is also the one `endDetail` carries to
 // the finish banner, the result page and the "your team lost" push (see
-// GameEndDetail) — 'teamloss' alone can't say which of the three it was, and
-// a table that has just lost wants to know.
+// IGameData.endDetail) — 'teamloss' alone can't say which of the three it
+// was, and a table that has just lost wants to know.
 //
 // `detail` splits the two only where the log line names a player, and a fourth
 // defeat that names one must split them too: `endDetail` must never carry a

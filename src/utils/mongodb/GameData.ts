@@ -1,5 +1,5 @@
 import { Document, Model, Schema, model, models } from "mongoose";
-import { GameEndDetail, GameEndReason, IGameDataResponse, IGameResponse, uuidString } from "../apiModels/GameDataApi";
+import { GameEndReason, IGameDataResponse, IGameResponse, uuidString } from "../apiModels/GameDataApi";
 import { UserDirectory, userIdListToNamesAndMap } from "../users/clerk";
 import { IGameCommand, IGameType } from "../apiModels/GameLogic";
 import { actionableTurnFilter } from "../games/TurnTimer";
@@ -58,11 +58,21 @@ export interface IGameData {
     complete: boolean,
     winner: string,
     endReason?: GameEndReason,
-    // Which of an endReason's several shapes this was, in the player's own
-    // words — see GameEndDetail. Written by the game's own logic on the way
-    // through its Execute/CheckGameOver, not by finishGame, because only the
-    // rules know which ending happened.
-    endDetail?: GameEndDetail,
+    // The one player-facing clause that says *which* ending this was, when
+    // endReason has more than one shape. A co-op game is the case that needs
+    // it: 'teamloss' covers every way Outbreak's table can go under — a
+    // colour's cube supply exhausted, the outbreak marker maxed out, the
+    // player deck run dry — and "the team lost" alone leaves everyone asking
+    // which. Written as a lowercase clause so it can follow a dash ("The team
+    // lost — the player deck ran out of cards") or stand as its own sentence,
+    // and never with a {{userId}} token in it: only gameState.history is
+    // resolved, so a token here would render raw.
+    //
+    // Written by the game's own logic as it ends the game (Outbreak's
+    // endInTeamLoss), never by finishGame, because only the rules know which
+    // ending happened. Absent for every ending that only happens one way, and
+    // for every game that never writes one.
+    endDetail?: string,
     forfeitedBy?: string
 }
 

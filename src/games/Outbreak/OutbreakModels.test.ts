@@ -88,18 +88,23 @@ describe("Outbreak result charts", () => {
             { blue: 20, yellow: 19, black: 21, red: 22 },
             { blue: 18, yellow: 19, black: 17, red: 22 },
         ]);
+        // inkHex, not hex: the chart prints each line's final value as text on
+        // the cream card, which is what board.ts reserves inkHex for.
         expect(supply.series).toEqual([
-            { key: 'blue', name: 'Blue', color: DISEASE_COLOR_DEFS.blue.hex },
-            { key: 'yellow', name: 'Yellow', color: DISEASE_COLOR_DEFS.yellow.hex },
-            { key: 'black', name: 'Black', color: DISEASE_COLOR_DEFS.black.hex },
-            { key: 'red', name: 'Red', color: DISEASE_COLOR_DEFS.red.hex },
+            { key: 'blue', name: 'Blue', color: DISEASE_COLOR_DEFS.blue.inkHex },
+            { key: 'yellow', name: 'Yellow', color: DISEASE_COLOR_DEFS.yellow.inkHex },
+            { key: 'black', name: 'Black', color: DISEASE_COLOR_DEFS.black.inkHex },
+            { key: 'red', name: 'Red', color: DISEASE_COLOR_DEFS.red.inkHex },
         ]);
     });
 
     it("plots no supply chart for a result recorded before it was tracked", () => {
         // Records written before cubesLeftPerTurn existed read back with no
-        // series at all, and a chart of nothing is worse than no chart.
-        const charts = formatOutbreakCharts(stats({ cubesLeftPerTurn: [] }), NAMES);
-        expect(charts.map(c => c.title)).toEqual(["Cubes treated per turn", "Times travelled per turn"]);
+        // series at all — missing as well as empty — and a chart of nothing is
+        // worse than no chart.
+        for (const cubesLeftPerTurn of [[], undefined as unknown as Map<string, number>[]]) {
+            const charts = formatOutbreakCharts(stats({ cubesLeftPerTurn }), NAMES);
+            expect(charts.map(c => c.title)).toEqual(["Cubes treated per turn", "Times travelled per turn"]);
+        }
     });
 });

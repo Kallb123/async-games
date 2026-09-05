@@ -389,22 +389,14 @@ export async function buildTimeline(
 // every other game's result stats already use, so an arbitrary (identity)
 // userIdNameMap is enough - extractValue is expected to look players up by
 // their `.userId` field regardless of how the map keyed them.
+// `keys` are the roster unless a game says otherwise — pass its own keys
+// (Outbreak's four disease colours) for a series whose lines aren't players,
+// and each turn's Map comes back keyed by those instead, ready for
+// formatPerTurnChart's `series`.
 export async function computePerTurnStat<TState>(
     gameData: IGameData,
-    extractValue: (state: TState, userId: string) => number | undefined,
-): Promise<Map<string, number>[]> {
-    return computePerTurnKeyedStat(gameData, gameData.userIdList, extractValue);
-}
-
-// The same replay, for a series whose lines aren't players: `keys` names them
-// (Outbreak's four disease colours) and each turn's Map comes back keyed by
-// those instead of by userId, ready for formatPerTurnChart's `series`. Every
-// per-player caller goes through computePerTurnStat above, which is this with
-// the roster as its keys — one replay loop, not two.
-export async function computePerTurnKeyedStat<TState>(
-    gameData: IGameData,
-    keys: string[],
     extractValue: (state: TState, key: string) => number | undefined,
+    keys: string[] = gameData.userIdList,
 ): Promise<Map<string, number>[]> {
     const identityMap = Object.fromEntries(gameData.userIdList.map(userId => [userId, userId]));
     const perTurn: Map<string, number>[] = [];

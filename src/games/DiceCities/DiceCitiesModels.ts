@@ -273,6 +273,7 @@ DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(_viewerId: 
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
         endReason: gameDataDocument.endReason,
+        endDetail: gameDataDocument.endDetail,
         forfeitedBy: gameDataDocument.forfeitedBy,
         enabledBillionaireRow: gameDataDocument.enabledBillionaireRow,
         specificGameState: gameStateToModel(gameDataDocument.specificGameState, userIdNameMap)

@@ -415,7 +415,7 @@ OutbreakGameDataSchema.methods.CreateDataResponse = async function(viewerId: str
         winner: doc.winner,
         endReason: doc.endReason,
         // Which §4.2 loss it was — 'teamloss' alone doesn't say (see
-        // endInTeamLoss, and GameEndDetail).
+        // endInTeamLoss, and IGameData.endDetail).
         endDetail: doc.endDetail,
         forfeitedBy: doc.forfeitedBy,
         specificGameState: gameStateToModel(doc.specificGameState, userIdNameMap, viewerId),
@@ -532,10 +532,15 @@ export function computeOutbreakResultStats(
 
 // The four cube-supply lines, in their own disease colours rather than the
 // player colours a per-player chart uses — see GameResultChartSeries.
+//
+// `inkHex`, not `hex`: LineChart paints the stroke and the end-of-line value
+// label the one colour it is given, and a label is text on the cream card —
+// exactly the case board.ts reserves inkHex for. Cube yellow (#fdcd0d) as a
+// 10px number there would be unreadable.
 const CUBE_SUPPLY_SERIES: GameResultChartSeries[] = DISEASE_COLORS.map(color => ({
     key: color,
     name: DISEASE_COLOR_DEFS[color].name,
-    color: DISEASE_COLOR_DEFS[color].hex,
+    color: DISEASE_COLOR_DEFS[color].inkHex,
 }));
 
 // Renders the per-turn series as GameResult charts — mirrors Train Time's
@@ -549,7 +554,7 @@ export function formatOutbreakCharts(
     return compactCharts(
         formatPerTurnChart(stats.cubesTreatedPerTurn, "Cubes treated per turn", "Cubes"),
         formatPerTurnChart(stats.timesTravelledPerTurn, "Times travelled per turn", "Moves"),
-        formatPerTurnChart(stats.cubesLeftPerTurn ?? [], "Cubes left in supply", "Cubes", CUBE_SUPPLY_SERIES),
+        formatPerTurnChart(stats.cubesLeftPerTurn, "Cubes left in supply", "Cubes", CUBE_SUPPLY_SERIES),
     );
 }
 

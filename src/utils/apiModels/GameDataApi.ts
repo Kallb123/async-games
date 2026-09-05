@@ -17,18 +17,6 @@ export type uuidString = `${string}-${string}-${string}-${string}-${string}`;
 // for every player at once (see finishGame and outcomeFor).
 export type GameEndReason = 'win' | 'ended' | 'abandoned' | 'teamwin' | 'teamloss';
 
-// The one player-facing clause that says *which* ending it was, when the
-// reason above has more than one shape. A co-op game is the case that needs
-// it: 'teamloss' covers every way Outbreak's table can go under — a colour's
-// cube supply exhausted, the outbreak marker maxed out, the player deck run
-// dry — and "the team lost" alone leaves everyone asking which. Written as a
-// lowercase clause so it can follow a dash ("The team lost — the player deck
-// ran out of cards") or stand as its own sentence.
-//
-// Set by the game's own logic as it ends the game (Outbreak's endInTeamLoss);
-// absent for every ending that only happens one way, and for every game that
-// never writes one.
-export type GameEndDetail = string;
 
 export interface IGameResponse {
     gameId: uuidString,
@@ -105,12 +93,16 @@ export interface GameResultChart {
 // GameResultChartSeries) — so a non-player chart reuses this rather than
 // growing its own formatter.
 export function formatPerTurnChart(
-    perTurn: Map<string, number>[],
+    perTurn: Map<string, number>[] | undefined,
     title: string,
     yLabel: string,
     series?: GameResultChartSeries[],
 ): GameResultChart | undefined {
-    if (perTurn.length === 0) return undefined;
+    // Undefined as well as empty: a series added to a game's stats after some
+    // results were already recorded reads back missing on those records, and a
+    // chart of nothing is worse than no chart. Tolerated here so no game has
+    // to remember a `?? []` of its own.
+    if (!perTurn?.length) return undefined;
     return {
         title,
         yLabel,
@@ -163,7 +155,8 @@ export interface IGameDataResponse {
     complete: boolean,
     winner: string,
     endReason?: GameEndReason,
-    endDetail?: GameEndDetail,
+    // Which shape of that ending it was — see IGameData.endDetail.
+    endDetail?: string,
     forfeitedBy?: string
 }
 
@@ -179,6 +172,8 @@ export interface ICompletedGame {
     // display name — which a namesake would answer wrongly.
     winnerId?: string;
     endReason?: GameEndReason;
+    // Which shape of that ending it was — see IGameData.endDetail.
+    endDetail?: string;
     forfeitedBy?: string;
     endedAt: string;
 }
