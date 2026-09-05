@@ -401,6 +401,13 @@ describe("Dice Cities: the Docks", () => {
         expect(gs.hasRolled).toBe(false);
         expect(gs.harbourRoll1).toBe(4);
         expect(gs.harbourRoll2).toBe(6);
+        // harbourRoll1/2 go to every player unredacted, which is only safe
+        // because the log already carries the same dice. Deferring this line
+        // until the choice settles - the way the recap defers its event - would
+        // quietly make the parked state the only thing holding an unsettled
+        // roll, still sent to opponents and drawn on nobody's screen but the
+        // roller's. Assert the two stay coupled.
+        expect(game.gameState.history.some(h => h.text.includes("rolled a 10 (4 and 6)"))).toBe(true);
         // The Apple Orchard's 10 hasn't paid yet - the total isn't settled.
         expect(gs.playerStates.get("u1")!.money).toBe(0);
 
