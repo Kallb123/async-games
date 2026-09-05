@@ -12,6 +12,10 @@ export interface IGameResultResponse {
     url: string;
     winner: string;
     endReason?: GameEndReason;
+    // Which shape of that ending it was, in the player's own words — see
+    // IGameData.endDetail. Carries no player id or name, so there is nothing
+    // here to resolve through Clerk.
+    endDetail?: string;
     forfeitedBy?: string;
     players: string[];
     // The players' stable Clerk userIds, parallel to `players` (same order).
@@ -57,6 +61,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         url: result.url,
         winner: result.winner ? (usernameById.get(result.winner) ?? result.winner) : "",
         endReason: result.endReason,
+        endDetail: result.endDetail,
         forfeitedBy: result.forfeitedBy ? (usernameById.get(result.forfeitedBy) ?? result.forfeitedBy) : undefined,
         players: playerIds.map(playerId => usernameById.get(playerId) ?? playerId),
         playerIds,

@@ -58,6 +58,21 @@ export interface IGameData {
     complete: boolean,
     winner: string,
     endReason?: GameEndReason,
+    // The one player-facing clause that says *which* ending this was, when
+    // endReason has more than one shape. A co-op game is the case that needs
+    // it: 'teamloss' covers every way Outbreak's table can go under — a
+    // colour's cube supply exhausted, the outbreak marker maxed out, the
+    // player deck run dry — and "the team lost" alone leaves everyone asking
+    // which. Written as a lowercase clause so it can follow a dash ("The team
+    // lost — the player deck ran out of cards") or stand as its own sentence,
+    // and never with a {{userId}} token in it: only gameState.history is
+    // resolved, so a token here would render raw.
+    //
+    // Written by the game's own logic as it ends the game (Outbreak's
+    // endInTeamLoss), never by finishGame, because only the rules know which
+    // ending happened. Absent for every ending that only happens one way, and
+    // for every game that never writes one.
+    endDetail?: string,
     forfeitedBy?: string
 }
 
@@ -122,6 +137,7 @@ export var GameDataSchema = new Schema<IGameDataDocument> ({
     complete: Boolean,
     winner: String,
     endReason: String,
+    endDetail: String,
     forfeitedBy: String
 }, {discriminatorKey: 'kind', optimisticConcurrency: true});
 
@@ -193,6 +209,7 @@ GameDataSchema.methods.CreateDataResponse = async function(_viewerId: string | n
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
         endReason: gameDataDocument.endReason,
+        endDetail: gameDataDocument.endDetail,
         forfeitedBy: gameDataDocument.forfeitedBy
     }
 };

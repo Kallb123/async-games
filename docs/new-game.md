@@ -92,7 +92,11 @@ handful of one-line additions to shared files in the last step.
 - One `@serializable class <Game>GameType implements IGameType`:
   `CheckEndTurn` (advance `currentTurn`, or a no-op for solo games) and
   `CheckGameOver` (set `complete`/`winner` — and, for a co-op game, an
-  `endReason` of `'teamwin'`/`'teamloss'` — when finished).
+  `endReason` of `'teamwin'`/`'teamloss'` — when finished). A game with more
+  than one way to end the same way (Outbreak's three defeats) also sets
+  `endDetail`, the lowercase clause naming which; forward it from your
+  `CreateDataResponse` alongside `endReason`, and never put a `{{userId}}`
+  token in it — only `gameState.history` is resolved.
 - One `@serializable` class per command, `implements IGameCommand`. Each
   `Execute` validates against current state, returns
   `{ validMove: false }` and mutates nothing if illegal, or mutates

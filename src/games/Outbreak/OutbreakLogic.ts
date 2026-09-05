@@ -559,10 +559,23 @@ function infectionPhaseOutcome(turnOver: boolean, infectionLog: IOutbreakInfecti
 // conditions is detected — mirroring what CheckGameOver already does for a
 // win (OutbreakGameType.CheckGameOver, above), since a loss can only be
 // noticed here, mid-resolution, rather than re-derived afterwards from state.
-function endInTeamLoss(outbreakData: IOutbreakGameData, reason: string): void {
+//
+// `reason` is the log line's clause. It is also the one `endDetail` carries to
+// the finish banner, the result page and the "your team lost" push (see
+// IGameData.endDetail) — 'teamloss' alone can't say which of the three it
+// was, and a table that has just lost wants to know.
+//
+// `detail` splits the two only where the log line names a player, and a fourth
+// defeat that names one must split them too: `endDetail` must never carry a
+// `{{userId}}` token, because only gameState.history is run through
+// resolveHistory — a token reaching the finish banner, the result page or a
+// push would be rendered raw. OutbreakLogic.test.ts holds every defeat to
+// that.
+function endInTeamLoss(outbreakData: IOutbreakGameData, reason: string, detail: string = reason): void {
     outbreakData.complete = true;
     outbreakData.winner = '';
     outbreakData.endReason = 'teamloss';
+    outbreakData.endDetail = detail;
     outbreakData.currentTurn = '';
     outbreakData.gameState.history.unshift({ text: `The team loses — ${reason}.` });
 }
@@ -803,7 +816,11 @@ export class OutbreakEndTurn implements IGameCommand {
         let intensifyIndex = 0;
         for (let i = 0; i < CARDS_DRAWN_PER_TURN; i++) {
             if (isPlayerDeckEmptyLoss(gs.playerDeck.length)) {
-                endInTeamLoss(outbreakData, `${userToken(this.senderId)} had to draw with the player deck empty`);
+                endInTeamLoss(
+                    outbreakData,
+                    `${userToken(this.senderId)} had to draw with the player deck empty`,
+                    'the player deck ran out of cards',
+                );
                 return infectionPhaseOutcome(true, infectionLog);
             }
 

@@ -266,6 +266,7 @@ SmartthinkGameDataSchema.methods.CreateDataResponse = async function(_viewerId: 
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
         endReason: gameDataDocument.endReason,
+        endDetail: gameDataDocument.endDetail,
         forfeitedBy: gameDataDocument.forfeitedBy,
         specificGameState: gameStateToModel(gameDataDocument.specificGameState, userIdNameMap)
     };

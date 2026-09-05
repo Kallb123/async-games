@@ -389,9 +389,14 @@ export async function buildTimeline(
 // every other game's result stats already use, so an arbitrary (identity)
 // userIdNameMap is enough - extractValue is expected to look players up by
 // their `.userId` field regardless of how the map keyed them.
+// `keys` are the roster unless a game says otherwise — pass its own keys
+// (Outbreak's four disease colours) for a series whose lines aren't players,
+// and each turn's Map comes back keyed by those instead, ready for
+// formatPerTurnChart's `series`.
 export async function computePerTurnStat<TState>(
     gameData: IGameData,
-    extractValue: (state: TState, userId: string) => number | undefined,
+    extractValue: (state: TState, key: string) => number | undefined,
+    keys: string[] = gameData.userIdList,
 ): Promise<Map<string, number>[]> {
     const identityMap = Object.fromEntries(gameData.userIdList.map(userId => [userId, userId]));
     const perTurn: Map<string, number>[] = [];
@@ -402,8 +407,8 @@ export async function computePerTurnStat<TState>(
             }
             const responseState = step.next.specificGameState as TState;
             const entry = new Map<string, number>();
-            for (const userId of gameData.userIdList) {
-                entry.set(userId, extractValue(responseState, userId) ?? 0);
+            for (const key of keys) {
+                entry.set(key, extractValue(responseState, key) ?? 0);
             }
             perTurn.push(entry);
         });

@@ -401,6 +401,7 @@ FiresOutGameDataSchema.methods.CreateDataResponse = async function(viewerId: str
         complete: doc.complete,
         winner: doc.winner,
         endReason: doc.endReason,
+        endDetail: doc.endDetail,
         forfeitedBy: doc.forfeitedBy,
         specificGameState: gameStateToModel(doc.specificGameState, userIdNameMap, viewerId),
         recapAvailable: !!doc.initialSpecificGameState,

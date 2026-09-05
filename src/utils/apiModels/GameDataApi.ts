@@ -17,6 +17,7 @@ export type uuidString = `${string}-${string}-${string}-${string}-${string}`;
 // for every player at once (see finishGame and outcomeFor).
 export type GameEndReason = 'win' | 'ended' | 'abandoned' | 'teamwin' | 'teamloss';
 
+
 export interface IGameResponse {
     gameId: uuidString,
     gameType: string,
@@ -53,6 +54,16 @@ export interface GameResultStatGroup {
     lines: string[];
 }
 
+// One line on a GameResultChart whose lines aren't the players: the key each
+// turn's Record is keyed by, the name to label it with, and the colour to draw
+// it in. Outbreak's cube supplies are the first of these — four lines that
+// belong to the board rather than to anybody at the table.
+export interface GameResultChartSeries {
+    key: string;
+    name: string;
+    color: string;
+}
+
 // A turn-by-turn line chart for the GameResult page: turn number on the
 // x-axis, one line per series (typically per player). What's plotted varies
 // by game (coins, score, territory...), so this shape only fixes the
@@ -63,6 +74,11 @@ export interface GameResultChart {
     title: string;
     yLabel: string;
     turns: Record<string, number>[];
+    // Absent on a per-player chart, which is most of them: the renderer draws
+    // one line per player from the result's own roster. Present when the lines
+    // are something else entirely (Outbreak's four cube supplies), naming each
+    // one instead — same component, same shape, no second chart to maintain.
+    series?: GameResultChartSeries[];
 }
 
 // Turns a per-turn Map<userId, number> series (as produced by a replay-based
@@ -71,22 +87,33 @@ export interface GameResultChart {
 // rename can't shift a key. Shared by every game that plots a cumulative
 // per-player stat (coins, resources, ...) so only the series/labels differ per
 // game.
+//
+// `series` names the lines for a chart that isn't per player — the same
+// per-turn Map, keyed by something the game names itself (see
+// GameResultChartSeries) — so a non-player chart reuses this rather than
+// growing its own formatter.
 export function formatPerTurnChart(
-    perTurn: Map<string, number>[],
+    perTurn: Map<string, number>[] | undefined,
     title: string,
     yLabel: string,
+    series?: GameResultChartSeries[],
 ): GameResultChart | undefined {
-    if (perTurn.length === 0) return undefined;
+    // Undefined as well as empty: a series added to a game's stats after some
+    // results were already recorded reads back missing on those records, and a
+    // chart of nothing is worse than no chart. Tolerated here so no game has
+    // to remember a `?? []` of its own.
+    if (!perTurn?.length) return undefined;
     return {
         title,
         yLabel,
         turns: perTurn.map(turn => {
             const entry: Record<string, number> = {};
-            for (const [userId, value] of turn) {
-                entry[userId] = value;
+            for (const [key, value] of turn) {
+                entry[key] = value;
             }
             return entry;
         }),
+        ...(series ? { series } : {}),
     };
 }
 
@@ -128,6 +155,8 @@ export interface IGameDataResponse {
     complete: boolean,
     winner: string,
     endReason?: GameEndReason,
+    // Which shape of that ending it was — see IGameData.endDetail.
+    endDetail?: string,
     forfeitedBy?: string
 }
 
@@ -143,6 +172,8 @@ export interface ICompletedGame {
     // display name — which a namesake would answer wrongly.
     winnerId?: string;
     endReason?: GameEndReason;
+    // Which shape of that ending it was — see IGameData.endDetail.
+    endDetail?: string;
     forfeitedBy?: string;
     endedAt: string;
 }
