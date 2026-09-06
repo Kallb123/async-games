@@ -1182,8 +1182,8 @@ far:
   deadlocks. The same harness doubles as the only practical way to sanity-check
   the §3 win-rate target without a hundred human playtests.
 * **Replay equality**, on the model of `src/games/TrainTime/replay.test.ts` —
-  play a game, rebuild it through `buildTimeline()` with `Math.random` stubbed to
-  throw, and assert the final snapshot equals the live state. SAC and World
+  play a game, rebuild it through `buildTimeline()` with the CSPRNG (`crypto.getRandomValues`) stubbed to throw,
+  and assert the final snapshot equals the live state. SAC and World
   Domination never got this and the doc says so; a game with an epidemic shuffle
   in it should not be the third.
 * **The planner resolves nothing hidden.** Assert that a planned command list

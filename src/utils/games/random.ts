@@ -17,7 +17,9 @@
  *
  * Cosmetic randomness — the dice faces that tumble on screen before the real
  * roll lands, a guest's suggested name — stays on `Math.random()`. Nothing is
- * decided by it, so it does not need to be unguessable.
+ * decided by it, so it does not need to be unguessable. The one deliberate
+ * crossover is the decorative die on the join screen, which borrows `DiceRoll`
+ * because that is the dice API rather than because the face matters.
  */
 
 const UINT32_RANGE = 0x100000000;

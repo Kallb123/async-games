@@ -40,13 +40,18 @@ const PLAYERS = ["u1", "u2", "u3"];
 const NAMES = { u1: "Alice", u2: "Bob", u3: "Cara" };
 
 function noRandomness<T>(run: () => T): T {
-    const entropy = vi.spyOn(globalThis.crypto, "getRandomValues").mockImplementation(() => {
-        throw new Error("replay consumed randomness");
-    });
+    // Both sources: the game rules draw through crypto.getRandomValues
+    // (src/utils/games/random.ts), but a command that reached for Math.random
+    // directly would replay non-deterministically just the same, and this
+    // guard is worthless if it can pass without noticing.
+    const consumed = () => { throw new Error("replay consumed randomness"); };
+    const entropy = vi.spyOn(globalThis.crypto, "getRandomValues").mockImplementation(consumed);
+    const random = vi.spyOn(Math, "random").mockImplementation(consumed);
     try {
         return run();
     } finally {
         entropy.mockRestore();
+        random.mockRestore();
     }
 }
 
