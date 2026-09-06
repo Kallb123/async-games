@@ -129,12 +129,64 @@ describe("Dice Cities recap adapter", () => {
         expect(events[0].detail).toBe("2🪙");
     });
 
-    it("stays silent for passes and mid-roll selections", () => {
-        for (const className of ["DiceCitiesRequestPassTurn", "DiceCitiesRequestTvStationSelection", "DiceCitiesRequestBusinessCenterOwnSelection"]) {
+    it("stays silent for passes and unfinished mid-roll selections", () => {
+        // The Business Center needs both sides to pick before it moves anything, and
+        // the TV Station's victim isn't chosen until this command runs - so an
+        // outcome with no steal/trade fields yet means nothing happened to report.
+        for (const className of ["DiceCitiesRequestPassTurn", "DiceCitiesRequestTvStationSelection", "DiceCitiesRequestBusinessCenterOwnSelection", "DiceCitiesRequestBusinessCenterOpponentSelection"]) {
             expect(
                 diceCitiesRecapAdapter.toEvents(snap(state([])), snap(state([])), cmd({ className }), { validMove: true, turnOver: false } as ICommandOutcome),
             ).toEqual([]);
         }
+    });
+
+    it("reports a TV Station steal once the victim is chosen", () => {
+        const events = diceCitiesRecapAdapter.toEvents(
+            snap(state([])),
+            snap(state([player({ userId: "u2", username: "Bob" })])),
+            cmd({ className: "DiceCitiesRequestTvStationSelection" }),
+            { validMove: true, turnOver: true, stolenFromId: "u2", stolenAmount: 5 } as ICommandOutcome,
+        );
+        expect(events).toHaveLength(1);
+        expect(events[0].type).toBe("dc_tvsteal");
+        expect(events[0].title).toBe("Alice used the TV Station to steal from Bob");
+        expect(events[0].detail).toBe("5🪙");
+        expect(events[0].affectedIds).toEqual(["u1", "u2"]);
+    });
+
+    it("reports a Business Center trade, whichever selection command completes it", () => {
+        const nextState = snap(state([player({ userId: "u2", username: "Bob" })]));
+        for (const className of ["DiceCitiesRequestBusinessCenterOwnSelection", "DiceCitiesRequestBusinessCenterOpponentSelection"]) {
+            const events = diceCitiesRecapAdapter.toEvents(
+                snap(state([])),
+                nextState,
+                cmd({ className }),
+                {
+                    validMove: true,
+                    turnOver: true,
+                    tradedWithId: "u2",
+                    gaveCardId: DiceCitiesCardIds.CAFE,
+                    receivedCardId: DiceCitiesCardIds.BAKERY,
+                } as ICommandOutcome,
+            );
+            expect(events).toHaveLength(1);
+            expect(events[0].type).toBe("dc_bctrade");
+            expect(events[0].title).toContain("Bob's");
+            expect(events[0].title).toContain("Business Center");
+            expect(events[0].detail).toContain("Cafe");
+            expect(events[0].affectedIds).toEqual(["u1", "u2"]);
+        }
+    });
+
+    it("calls out stolen property in the summary before a generic dice swing", () => {
+        const stolen = diceCitiesRecapAdapter.summarize(
+            [
+                { id: "1", commandId: "1", timestamp: "", actorId: "u2", actorUsername: "Bob", type: "dc_roll", title: "", affectedIds: ["u1"] },
+                { id: "2", commandId: "2", timestamp: "", actorId: "u2", actorUsername: "Bob", type: "dc_bctrade", title: "", affectedIds: ["u2", "u1"] },
+            ],
+            "u1",
+        );
+        expect(stolen.subline).toContain("made off with your property");
     });
 
     it("holds the roll's beat back while the Harbour's offer is unanswered", () => {
