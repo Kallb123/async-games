@@ -1,19 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { diceCitiesRecapAdapter } from "./recap";
-import { BANK_TOTAL_COINS, DiceCitiesCardIds, DiceCitiesCards, STARTING_PLAYER_COINS } from "./cards";
+import { BANK_TOTAL_COINS, DiceCitiesCardIds, DiceCitiesCards } from "./cards";
 import { DEFAULT_DICE_CITIES_THEME } from "./themes";
 import {
-    DiceCitiesGameType,
     DiceCitiesRequestBusinessCenterOpponentSelection,
     DiceCitiesRequestBusinessCenterOwnSelection,
-    DiceCitiesRequestCardPurchase,
-    DiceCitiesRequestDiceRoll,
-    DiceCitiesRequestPassTurn,
     DiceCitiesRequestTvStationSelection,
 } from "./DiceCitiesLogic";
-import { buildInitialDiceCitiesState } from "./DiceCitiesModels";
+import { buyCommand, passCommand, replayableGame, rollCommand, saveUpTo, sentBy } from "./testHarness";
 import { buildEventFeed } from "@/utils/games/recap";
-import type { IGameData } from "@/utils/mongodb/GameData";
 import type { ITurnSnapshot } from "@/utils/games/replay";
 import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic";
 import type { IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "./apiModels";
@@ -312,71 +307,17 @@ describe("Dice Cities recap adapter", () => {
 // an existing game picks these rows up on its next recap — there is no
 // "played before this shipped" version of a Dice Cities game to miss out.
 describe("Dice Cities recap, replayed from a real command log", () => {
-    function roll(r: number, sender: string): IGameCommand {
-        const c = new DiceCitiesRequestDiceRoll();
-        c.senderId = sender;
-        c.senderUsername = sender;
-        c.recordedRoll1 = r;
-        return c as unknown as IGameCommand;
-    }
-
-    function pass(sender: string): IGameCommand {
-        const c = new DiceCitiesRequestPassTurn();
-        c.senderId = sender;
-        c.senderUsername = sender;
-        return c as unknown as IGameCommand;
-    }
-
-    function buy(cardId: DiceCitiesCardIds, sender: string): IGameCommand {
-        const c = new DiceCitiesRequestCardPurchase();
-        c.senderId = sender;
-        c.senderUsername = sender;
-        c.cardId = cardId as unknown as typeof c.cardId;
-        return c as unknown as IGameCommand;
-    }
-
-    // Both players open on 3 coins holding a Wheat Field, which pays every
-    // owner a coin on any roll of 1. So a run of 1s is the shortest honest way
-    // to get one player to a major establishment's price.
-    function saveUpTo(coins: number, saver: string, other: string): IGameCommand[] {
-        const commands: IGameCommand[] = [];
-        for (let money = STARTING_PLAYER_COINS; money < coins; money++) {
-            const sender = commands.length % 4 === 0 ? saver : other;
-            commands.push(roll(1, sender), pass(sender));
-        }
-        return commands;
-    }
-
-    function gameWith(commandHistory: IGameCommand[]): IGameData {
-        return {
-            gameId: "g1",
-            gameType: new DiceCitiesGameType(),
-            userIdList: ["u1", "u2"],
-            turnTimer: "1d",
-            // Back to Alice, so the recap she is owed is the one being built.
-            currentTurn: "u1",
-            lastTurnTimestamp: "2026-07-21T09:00:00.000Z",
-            timerWarningNotificationSent: false,
-            gameState: { turnOrder: ["u1", "u2"], history: [], commandHistory },
-            complete: false,
-            winner: "",
-            specificGameState: buildInitialDiceCitiesState(["u1", "u2"]),
-        } as unknown as IGameData;
-    }
-
     it("tells the victim the TV Station took their coins while they were away", async () => {
-        const steal = new DiceCitiesRequestTvStationSelection();
-        steal.senderId = "u2";
-        steal.senderUsername = "u2";
+        const steal = sentBy(new DiceCitiesRequestTvStationSelection(), "u2");
         steal.selectedUser = "u1";
         steal.selectedUserName = "u1";
 
-        const game = gameWith([
+        const game = replayableGame([
             ...saveUpTo(DiceCitiesCards[DiceCitiesCardIds.TV_STATION].cost, "u2", "u1"),
-            roll(1, "u2"), buy(DiceCitiesCardIds.TV_STATION, "u2"),
-            roll(1, "u1"), pass("u1"),
+            rollCommand(1, "u2"), buyCommand(DiceCitiesCardIds.TV_STATION, "u2"),
+            rollCommand(1, "u1"), passCommand("u1"),
             // The TV Station pays out on a 6, on its owner's own turn.
-            roll(6, "u2"), steal as unknown as IGameCommand, pass("u2"),
+            rollCommand(6, "u2"), steal, passCommand("u2"),
         ]);
 
         const feed = await buildEventFeed(game, { u1: "Alice", u2: "Bob" }, "u1");
@@ -388,24 +329,17 @@ describe("Dice Cities recap, replayed from a real command log", () => {
     });
 
     it("tells the victim which card the Business Center took, and what it left", async () => {
-        const own = new DiceCitiesRequestBusinessCenterOwnSelection();
-        own.senderId = "u2";
-        own.senderUsername = "u2";
-        own.selectedCard = DiceCitiesCardIds.WHEAT_FIELD as unknown as typeof own.selectedCard;
-        const opponent = new DiceCitiesRequestBusinessCenterOpponentSelection();
-        opponent.senderId = "u2";
-        opponent.senderUsername = "u2";
+        const own = sentBy(new DiceCitiesRequestBusinessCenterOwnSelection(), "u2");
+        own.selectedCard = DiceCitiesCardIds.WHEAT_FIELD;
+        const opponent = sentBy(new DiceCitiesRequestBusinessCenterOpponentSelection(), "u2");
         opponent.selectedUser = "u1";
-        opponent.selectedCard = DiceCitiesCardIds.BAKERY as unknown as typeof opponent.selectedCard;
+        opponent.selectedCard = DiceCitiesCardIds.BAKERY;
 
-        const game = gameWith([
+        const game = replayableGame([
             ...saveUpTo(DiceCitiesCards[DiceCitiesCardIds.BUSINESS_CENTER].cost, "u2", "u1"),
-            roll(1, "u2"), buy(DiceCitiesCardIds.BUSINESS_CENTER, "u2"),
-            roll(1, "u1"), pass("u1"),
-            roll(6, "u2"),
-            own as unknown as IGameCommand,
-            opponent as unknown as IGameCommand,
-            pass("u2"),
+            rollCommand(1, "u2"), buyCommand(DiceCitiesCardIds.BUSINESS_CENTER, "u2"),
+            rollCommand(1, "u1"), passCommand("u1"),
+            rollCommand(6, "u2"), own, opponent, passCommand("u2"),
         ]);
 
         const feed = await buildEventFeed(game, { u1: "Alice", u2: "Bob" }, "u1");
@@ -414,5 +348,4 @@ describe("Dice Cities recap, replayed from a real command log", () => {
         expect(traded?.detail).toBe("gave a Wheat Field for it");
         expect(traded?.affectedIds).toContain("u1");
     });
-
 });

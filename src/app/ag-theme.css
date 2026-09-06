@@ -2841,6 +2841,12 @@ a.ag-list-row, a.ag-list-row-main {
     padding: 12px 14px;
     color: var(--ag-on-dark);
 }
+/* Inside a sheet the roll card leads and something else follows it - the
+   pending selection's head, or the market on a turn that auto-passed. Neither
+   carries a top margin, and the roll card's own margins are set for the
+   post-roll view where it is the last thing in its column, so the gap belongs
+   here rather than on either of them. */
+.ag-actionsheet .ag-dc-roll { margin-bottom: 12px; }
 .ag-dc-roll-main { flex: 1; min-width: 0; }
 .ag-dc-roll-total { font: 800 15px var(--ag-font); }
 .ag-dc-roll-sub { font: 600 10px var(--ag-font); opacity: 0.8; margin-top: 2px; }

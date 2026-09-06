@@ -29,7 +29,7 @@ import ActionButton from "@/components/ui/ActionButton";
 import PendingTag from "@/components/ui/PendingTag";
 import { capitalise } from "@/utils/ui/text";
 import { mongoMap } from "@/utils/games/mongoMaps";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 interface DiceCitiesActionsProps {
     gameState: IDiceCitiesGameStateResponse;
@@ -287,13 +287,14 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
         const dice = [gameState.harbourRoll1 ?? 0, ...(gameState.harbourRoll2 != null ? [gameState.harbourRoll2] : [])];
         const rolled = dice.reduce((a, b) => a + b, 0);
         return (
-            <div className="ag-actionsheet">
-                <RollReadout values={dice} headline={`Total ${rolled}`} sub="nobody is paid until you decide" />
-                <SelectionHead
+            <PendingSheet
+                readout={<RollReadout values={dice} headline={`Total ${rolled}`} sub="nobody is paid until you decide" />}
+                head={<SelectionHead
                     icon="⚓"
                     title={harbourCard.title}
                     sub={`You rolled ${rolled}. The ${harbourCard.title} can add ${HARBOUR_BONUS} to it.`}
-                />
+                />}
+            >
                 <div className="ag-dc-pick-list ag-pending-group">
                     <PickRow
                         label={`Add +${HARBOUR_BONUS} · make it ${rolled + HARBOUR_BONUS}`}
@@ -310,15 +311,16 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
                         onClick={() => answerHarbour(false)}
                     />
                 </div>
-            </div>
+            </PendingSheet>
         );
     }
 
     if (gameState.awaitingTSSelection) {
         return (
-            <div className="ag-actionsheet">
-                {rollReadout(`choose who to take ${words.coins} from`)}
-                <SelectionHead icon="📺" title={tvStationCard.title} sub={tvStationCard.text} />
+            <PendingSheet
+                readout={rollReadout(`choose who to take ${words.coins} from`)}
+                head={<SelectionHead icon="📺" title={tvStationCard.title} sub={tvStationCard.text} />}
+            >
                 <div className="ag-dc-pick-list ag-pending-group">
                     {opponents.map((op) => (
                         <PickRow
@@ -337,20 +339,21 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
                         />
                     ))}
                 </div>
-            </div>
+            </PendingSheet>
         );
     }
 
     if (gameState.awaitingBCSelectionOwn) {
         const mine = myState.cards.filter((cc) => cc.amount > 0 && cards[cc.card].type !== "landmark");
         return (
-            <div className="ag-actionsheet">
-                {rollReadout("choose a card to give away")}
-                <SelectionHead
+            <PendingSheet
+                readout={rollReadout("choose a card to give away")}
+                head={<SelectionHead
                     icon="🏢"
                     title={businessCentreCard.title}
                     sub={`Choose one of your ${words.establishments} to give away.`}
-                />
+                />}
+            >
                 <CardPickGrid
                     cards={mine.map((cc) => cards[cc.card])}
                     disabled={busy}
@@ -361,19 +364,20 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
                         send(command, `give:${cardId}`);
                     }}
                 />
-            </div>
+            </PendingSheet>
         );
     }
 
     if (gameState.awaitingBCSelectionOpponent) {
         return (
-            <div className="ag-actionsheet">
-                {rollReadout("choose a card to take")}
-                <SelectionHead
+            <PendingSheet
+                readout={rollReadout("choose a card to take")}
+                head={<SelectionHead
                     icon="🏢"
                     title={businessCentreCard.title}
                     sub={`Choose an opponent's ${words.establishment} to take.`}
-                />
+                />}
+            >
                 {opponents.map((op) => {
                     const theirs = op.cards.filter((cc) => cc.amount > 0 && cards[cc.card].type !== "landmark");
                     if (theirs.length === 0) return null;
@@ -394,7 +398,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
                         </div>
                     );
                 })}
-            </div>
+            </PendingSheet>
         );
     }
 
@@ -544,6 +548,23 @@ function PickRow({ label, meta, pending, pendingLabel, disabled, onClick }: {
                 ? <PendingTag label={pendingLabel} />
                 : meta && <span className="ag-dc-pick-meta">{meta}</span>}
         </button>
+    );
+}
+
+/**
+ * A pending selection's sheet: what you just rolled, then what is being asked
+ * of you, then the picker. All four of them are this, so the order lives here
+ * rather than being repeated - and got repeated - at each branch. The readout
+ * is a prop rather than built here because the Harbour's is different: its
+ * dice are parked on the game state, unpaid until the player answers.
+ */
+function PendingSheet({ readout, head, children }: { readout: ReactNode; head: ReactNode; children: ReactNode }) {
+    return (
+        <div className="ag-actionsheet">
+            {readout}
+            {head}
+            {children}
+        </div>
     );
 }
 
