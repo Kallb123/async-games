@@ -587,7 +587,7 @@ Vitest runs in CI (`npm test`), but there is no checked-in replay-determinism
 test for SAC (Train Time's `replay.test.ts`, below, is the model for one). Determinism was instead verified with a throwaway
 synthetic harness that mirrors `buildTimeline` (Execute → CheckGameOver →
 CheckEndTurn), runs a command sequence with seeded RNG, then replays the
-persisted commands from a fresh initial state **with `Math.random` disabled** and
+persisted commands from a fresh initial state **with randomness disabled** and
 asserts `recap == live`. It covers a 7-roll (discard), a robber steal, and a
 dev-card draw. Since SAC is the most randomness-heavy game, also
 **sanity-check recap in the live app** on a real game before relying on it.
@@ -657,7 +657,7 @@ viewer.
 `src/games/TrainTime/replay.test.ts` is the checked-in determinism test the
 earlier snapshot games never got, and is worth copying for the next one. It
 plays a full random game through the real command pipeline, then replays the
-persisted log through `buildTimeline` **with `Math.random` stubbed to throw**,
+persisted log through `buildTimeline` **with the CSPRNG (`crypto.getRandomValues`) stubbed to throw**,
 and asserts the final snapshot equals the live state — so anything reaching for
 fresh randomness fails the test rather than quietly dealing a different game. It
 also covers both recycle paths (a blind draw and a mid-market-refill) through a

@@ -1,3 +1,5 @@
+import { randomInt } from "./random";
+
 // Fisher-Yates shuffle. Shared by every game that randomises a deck or a
 // starting layout (Settlements & Cities' terrain/number/harbour pools and dev
 // card deck, World Domination's territory deal and World Domination card deck) — reuse this rather
@@ -5,7 +7,7 @@
 export function shuffle<T>(arr: T[]): T[] {
     const a = [...arr];
     for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = randomInt(i + 1);
         [a[i], a[j]] = [a[j], a[i]];
     }
     return a;

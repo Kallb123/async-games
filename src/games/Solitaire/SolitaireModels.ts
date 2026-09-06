@@ -8,7 +8,8 @@ import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { v4 as uuidv4 } from 'uuid';
 import { SolitaireGameType } from "@/utils/apiModels/GameLogic";
 import { UNLIMITED_TURN_TIMER } from "@/utils/games/TurnTimer";
-import { ICard, Suit, buildStandardDeck, shuffleDeck } from "@/utils/games/Cards";
+import { ICard, Suit, buildStandardDeck } from "@/utils/games/Cards";
+import { shuffle } from "@/utils/games/shuffle";
 import { computeFinalScore, foundationCardCount, formatDuration, isStalemated, toLegalMoveState } from "./rules";
 
 export type SolitaireDrawMode = 'DRAW_1' | 'DRAW_3';
@@ -148,7 +149,7 @@ SolitaireGameDataSchema.methods.CreateDataResponse = async function(_viewerId: s
 // Deals a fresh shuffled deck per docs/games/solitaire.md §3: column n gets n
 // cards (n-1 face-down, 1 face-up), the remaining 24 go face-down to stock.
 export function buildInitialSolitaireState(drawMode: SolitaireDrawMode): ISolitaireGameState {
-    const deck = shuffleDeck(buildStandardDeck());
+    const deck = shuffle(buildStandardDeck());
     const tableau: ICard[][] = [];
     let cursor = 0;
     for (let column = 0; column < 7; column++) {
