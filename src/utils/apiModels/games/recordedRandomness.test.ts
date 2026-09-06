@@ -63,9 +63,11 @@ describe("stripRecordedRandomness", () => {
         command.recordedRoll = 6;
 
         stripRecordedRandomness(command);
-        // 0.0 -> 1 + floor(0 * 6) = 1, so a fresh roll is distinguishable from
-        // the 6 the caller tried to supply.
-        vi.spyOn(Math, "random").mockReturnValue(0);
+        // All-zero entropy -> randomInt(6) === 0 -> a roll of 1, so a fresh
+        // roll is distinguishable from the 6 the caller tried to supply.
+        vi.spyOn(globalThis.crypto, "getRandomValues").mockImplementation(
+            (array) => { (array as Uint32Array).fill(0); return array; },
+        );
         const gameData = makeSnakesAndLaddersGame("user-1");
         await command.Execute(gameData);
 

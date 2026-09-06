@@ -1,18 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
     DiceCitiesGameType,
+    DiceCitiesRequestBusinessCenterOpponentSelection,
+    DiceCitiesRequestBusinessCenterOwnSelection,
     DiceCitiesRequestCardPurchase,
     DiceCitiesRequestDiceRoll,
     DiceCitiesRequestHarbourBonus,
     DiceCitiesRequestPassTurn,
     DiceCitiesRequestRadioTowerReroll,
     DiceCitiesRequestTvStationSelection,
+    DiceCitiesRequestUnlockAmusementPark,
     DiceCitiesRequestUnlockHarbour,
+    DiceCitiesRequestUnlockRadioTower,
     DiceCitiesRequestUnlockTrainStation,
 } from "./DiceCitiesLogic";
-import type { IDiceCitiesDiceRollOutcome } from "./DiceCitiesLogic";
+import { LANDMARKS } from "./ui";
+import type { IDiceCitiesBusinessCenterOutcome, IDiceCitiesDiceRollOutcome, IDiceCitiesTvStationOutcome } from "./DiceCitiesLogic";
 import { BANK_TOTAL_COINS, DiceCitiesCardIds, DiceCitiesCards, DOCKS_ESTABLISHMENT_IDS, STARTING_PLAYER_COINS } from "./cards";
 import { buildInitialDiceCitiesState } from "./DiceCitiesModels";
+import { harbourCommand, passCommand, replayableGame, rollCommand, sentBy } from "./testHarness";
 import { DEFAULT_DICE_CITIES_THEME, diceCitiesTheme } from "./themes";
 import type { IDiceCitiesGameData, IDiceCitiesGameState, IDiceCitiesPlayerState } from "./DiceCitiesModels";
 import type { IDiceCitiesGameStateResponse } from "./apiModels";
@@ -62,11 +68,15 @@ function makeState(overrides: Partial<IDiceCitiesGameState> = {}): IDiceCitiesGa
     };
 }
 
-function makeGame(gs: IDiceCitiesGameState, currentTurn = "u1"): IDiceCitiesGameData {
+// Seats the game in the order the state lists its players, unless a test needs
+// a turn order that differs from it - payouts follow the turn order, so the two
+// have to be tellable apart.
+function makeGame(gs: IDiceCitiesGameState, currentTurn = "u1", turnOrder?: string[]): IDiceCitiesGameData {
+    const seats = turnOrder ?? [...gs.playerStates.keys()];
     return {
         currentTurn,
-        userIdList: ["u1", "u2"],
-        gameState: { turnOrder: ["u1", "u2"], history: [], commandHistory: [] },
+        userIdList: seats,
+        gameState: { turnOrder: seats, history: [], commandHistory: [] },
         specificGameState: gs,
         complete: false,
         winner: "",
@@ -79,31 +89,6 @@ function coinsInPlay(gs: IDiceCitiesGameState): number {
     let total = gs.bankMoney;
     gs.playerStates.forEach(ps => { total += ps.money; });
     return total;
-}
-
-// A roll with its dice pre-recorded, so payouts are deterministic. Passing a
-// second die rolls two, which the Docks' higher numbers need.
-function rollCommand(roll1: number, sender = "u1", roll2?: number): DiceCitiesRequestDiceRoll {
-    const command = new DiceCitiesRequestDiceRoll();
-    command.senderId = sender;
-    command.senderUsername = sender;
-    command.recordedRoll1 = roll1;
-    if (roll2 !== undefined) {
-        command.doubleDice = true;
-        command.recordedRoll2 = roll2;
-    }
-    return command;
-}
-
-// Answers the Harbour's offer on a parked roll, with the shared tuna die
-// pre-recorded so a Tuna Boat payout is deterministic too.
-function harbourCommand(addBonus: boolean, tunaRoll?: number): DiceCitiesRequestHarbourBonus {
-    const command = new DiceCitiesRequestHarbourBonus();
-    command.senderId = "u1";
-    command.senderUsername = "u1";
-    command.addBonus = addBonus;
-    command.recordedTunaRoll = tunaRoll ?? null;
-    return command;
 }
 
 function cards(cardId: string, amount = 1) {
@@ -203,6 +188,146 @@ describe("Dice Cities bank supply", () => {
         expect(gs.bankMoney).toBe(10);
     });
 
+    it("pays a restaurant once for every copy its owner holds", async () => {
+        // Three Cafes on a roll of 3 take a coin each, not one between them.
+        const gs = makeState({
+            bankMoney: 10,
+            playerStates: new Map([
+                ["u1", player({ money: 5 })],
+                ["u2", player({ money: 0, cards: cards(DiceCitiesCardIds.CAFE, 3) })],
+            ]),
+        });
+        const game = makeGame(gs);
+
+        const outcome = await rollCommand(3).Execute(game) as IDiceCitiesDiceRollOutcome;
+
+        expect(gs.playerStates.get("u1")!.money).toBe(2);
+        expect(gs.playerStates.get("u2")!.money).toBe(3);
+        expect(gs.playerStates.get("u2")!.totalCoinsEarned).toBe(3);
+        expect(outcome.moneyChanges.get("u1")).toBe(-3);
+        expect(outcome.moneyChanges.get("u2")).toBe(3);
+        expect(gs.bankMoney).toBe(10);
+        expect(coinsInPlay(gs)).toBe(15);
+    });
+
+    it("adds the Shopping Mall's coin to every copy of a restaurant", async () => {
+        // Two Family Restaurants take 2 each on a 9, plus 1 each for the mall.
+        const gs = makeState({
+            bankMoney: 10,
+            playerStates: new Map([
+                ["u1", player({ money: 8 })],
+                ["u2", player({ money: 0, bonusDiningAndStore: true, cards: cards(DiceCitiesCardIds.FAMILY_RESTAURANT, 2) })],
+            ]),
+        });
+        const game = makeGame(gs);
+
+        await rollCommand(9).Execute(game);
+
+        expect(gs.playerStates.get("u1")!.money).toBe(2);
+        expect(gs.playerStates.get("u2")!.money).toBe(6);
+    });
+
+    it("stops paying restaurants once the roller has been cleaned out", async () => {
+        // Four Cafes want a coin each, but the roller only has 2 to give - and
+        // never goes into debt covering the rest.
+        const gs = makeState({
+            bankMoney: 10,
+            playerStates: new Map([
+                ["u1", player({ money: 2 })],
+                ["u2", player({ money: 0, cards: cards(DiceCitiesCardIds.CAFE, 4) })],
+            ]),
+        });
+        const game = makeGame(gs);
+
+        const outcome = await rollCommand(3).Execute(game) as IDiceCitiesDiceRollOutcome;
+
+        expect(gs.playerStates.get("u1")!.money).toBe(0);
+        expect(gs.playerStates.get("u2")!.money).toBe(2);
+        expect(gs.playerStates.get("u2")!.totalCoinsEarned).toBe(2);
+        expect(outcome.moneyChanges.get("u1")).toBe(-2);
+        expect(coinsInPlay(gs)).toBe(12);
+    });
+
+    it("shares a drained roller out between the opponents who are owed", async () => {
+        // Both opponents own a Cafe on a 3, but the roller has a single coin:
+        // the first paid takes it and the second gets nothing.
+        const gs = makeState({
+            bankMoney: 10,
+            playerStates: new Map([
+                ["u1", player({ money: 1 })],
+                ["u2", player({ money: 0, cards: cards(DiceCitiesCardIds.CAFE) })],
+                ["u3", player({ money: 0, cards: cards(DiceCitiesCardIds.CAFE) })],
+            ]),
+        });
+        const game = makeGame(gs);
+
+        await rollCommand(3).Execute(game);
+
+        expect(gs.playerStates.get("u1")!.money).toBe(0);
+        expect(gs.playerStates.get("u2")!.money).toBe(1);
+        expect(gs.playerStates.get("u3")!.money).toBe(0);
+        expect(coinsInPlay(gs)).toBe(11);
+    });
+
+    it("pays the restaurants in turn order from the roller, not state order", async () => {
+        // u2 rolls with a single coin and both opponents own a Cafe. Turn order
+        // puts u3 next, so u3 takes the coin - even though u1 comes first in
+        // the state's own player map.
+        const gs = makeState({
+            bankMoney: 10,
+            playerStates: new Map([
+                ["u1", player({ money: 0, cards: cards(DiceCitiesCardIds.CAFE) })],
+                ["u2", player({ money: 1 })],
+                ["u3", player({ money: 0, cards: cards(DiceCitiesCardIds.CAFE) })],
+            ]),
+        });
+        const game = makeGame(gs, "u2", ["u1", "u2", "u3"]);
+
+        await rollCommand(3, "u2").Execute(game);
+
+        expect(gs.playerStates.get("u2")!.money).toBe(0);
+        expect(gs.playerStates.get("u3")!.money).toBe(1);
+        expect(gs.playerStates.get("u1")!.money).toBe(0);
+        expect(coinsInPlay(gs)).toBe(11);
+    });
+
+    it("pays bank income in turn order from the roller when the bank runs dry", async () => {
+        // One coin left in the bank and two Wheat Fields want it on a 1. The
+        // seat after the roller is paid; the seat before goes short.
+        const gs = makeState({
+            bankMoney: 1,
+            playerStates: new Map([
+                ["u1", player({ cards: cards(DiceCitiesCardIds.WHEAT_FIELD) })],
+                ["u2", player()],
+                ["u3", player({ cards: cards(DiceCitiesCardIds.WHEAT_FIELD) })],
+            ]),
+        });
+        const game = makeGame(gs, "u2", ["u1", "u2", "u3"]);
+
+        await rollCommand(1, "u2").Execute(game);
+
+        expect(gs.playerStates.get("u3")!.money).toBe(1);
+        expect(gs.playerStates.get("u1")!.money).toBe(0);
+        expect(gs.bankMoney).toBe(0);
+        expect(game.gameState.history.some(h => h.text.includes("The bank ran out of coins - 1 coin "))).toBe(true);
+    });
+
+    it("still pays a player the turn order forgot, at the back of the queue", async () => {
+        // A turn order that doesn't name u3 shouldn't lose u3 their income.
+        const gs = makeState({
+            playerStates: new Map([
+                ["u1", player()],
+                ["u2", player()],
+                ["u3", player({ cards: cards(DiceCitiesCardIds.WHEAT_FIELD) })],
+            ]),
+        });
+        const game = makeGame(gs, "u1", ["u1", "u2"]);
+
+        await rollCommand(1).Execute(game);
+
+        expect(gs.playerStates.get("u3")!.money).toBe(1);
+    });
+
     it("never lets a steal hand over coins the target doesn't have", async () => {
         const gs = makeState({
             bankMoney: 10,
@@ -215,12 +340,16 @@ describe("Dice Cities bank supply", () => {
         command.senderUsername = "u1";
         command.selectedUser = "u2";
 
-        await command.Execute(game);
+        const outcome = await command.Execute(game) as IDiceCitiesTvStationOutcome;
 
         // TV Station takes 5, but the target only has 2 to give.
         expect(gs.playerStates.get("u1")!.money).toBe(2);
         expect(gs.playerStates.get("u2")!.money).toBe(0);
         expect(coinsInPlay(gs)).toBe(12);
+        // The outcome reports what was actually taken, not the card's face value,
+        // so the recap can say the same "2, not 5" the state itself paid out.
+        expect(outcome.stolenFromId).toBe("u2");
+        expect(outcome.stolenAmount).toBe(2);
     });
 
     it("returns the coins spent on an establishment to the bank", async () => {
@@ -318,6 +447,223 @@ describe("Dice Cities bank supply", () => {
 // A card's rollNumber is the list of totals it activates on. Writing a range as
 // one number ("11.12") reads fine but matches nothing, so the card silently
 // never pays - which is exactly what the Fruit and Vegetable Market did.
+describe("Dice Cities landmarks", () => {
+    // The market draws a buy row per LANDMARKS entry, prices it from `cardId`
+    // and dispatches the command keyed by `flag`. If the table pairs a card
+    // with the flag some *other* landmark's command lights, that row charges
+    // one price and builds the other thing - which is how the Amusement Park
+    // came to send the Radio Tower's command and be refused for costing 22.
+    it.each([
+        ["Amusement Park", DiceCitiesCardIds.AMUSEMENT_PARK, DiceCitiesRequestUnlockAmusementPark],
+        ["Radio Tower", DiceCitiesCardIds.RADIO_TOWER, DiceCitiesRequestUnlockRadioTower],
+        ["Train Station", DiceCitiesCardIds.TRAIN_STATION, DiceCitiesRequestUnlockTrainStation],
+    ])("%s lights the flag LANDMARKS pairs it with", async (_name, cardId, Command) => {
+        const entry = LANDMARKS.find(l => l.cardId === cardId)!;
+        const gs = makeState({
+            hasRolled: true,
+            playerStates: new Map([["u1", player({ money: 40 })], ["u2", player()]]),
+        });
+        const game = makeGame(gs);
+
+        const command = new Command();
+        command.senderId = "u1";
+        command.senderUsername = "u1";
+        const outcome = await command.Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(gs.playerStates.get("u1")![entry.flag]).toBe(true);
+        // Charged the price its own buy row advertises, not another card's.
+        expect(gs.playerStates.get("u1")!.money).toBe(40 - DiceCitiesCards[cardId].cost);
+    });
+
+    it("gives the Amusement Park's owner another turn on doubles", async () => {
+        const gs = makeState({
+            playerStates: new Map([
+                ["u1", player({ doubleUnlocked: true, rerollDoubles: true })],
+                ["u2", player()],
+            ]),
+        });
+        const game = makeGame(gs);
+        const gameType = new DiceCitiesGameType();
+
+        const roll = rollCommand(3, "u1", 3);
+        const outcome = await roll.Execute(game);
+        expect(gs.awaitingDoubleReroll).toBe(true);
+
+        gameType.CheckEndTurn(game, { ...outcome, turnOver: true });
+        expect(game.currentTurn).toBe("u1");
+        expect(gs.hasRolled).toBe(false);
+    });
+
+    it("does not give the Radio Tower's owner an extra turn on doubles", async () => {
+        const gs = makeState({
+            playerStates: new Map([
+                ["u1", player({ doubleUnlocked: true, oneReroll: true })],
+                ["u2", player()],
+            ]),
+        });
+        const game = makeGame(gs);
+        const gameType = new DiceCitiesGameType();
+
+        const roll = rollCommand(3, "u1", 3);
+        const outcome = await roll.Execute(game);
+        expect(gs.awaitingDoubleReroll).toBe(false);
+
+        gameType.CheckEndTurn(game, { ...outcome, turnOver: true });
+        expect(game.currentTurn).toBe("u2");
+    });
+});
+
+// A roll that leaves the roller with nothing to spend has nothing left to do
+// but pass - every establishment and landmark costs at least 1 coin - so the
+// turn should end itself rather than wait on an "End turn" click.
+describe("Dice Cities: auto-passing on zero coins", () => {
+    it("ends the turn automatically when a roll leaves the roller with no coins and nothing to do", async () => {
+        const gs = makeState({
+            bankMoney: 10,
+            playerStates: new Map([
+                ["u1", player({ money: 1 })],
+                ["u2", player({ cards: cards(DiceCitiesCardIds.CAFE) })],
+            ]),
+        });
+        const game = makeGame(gs);
+
+        // The Cafe takes u1's last coin.
+        const outcome = await rollCommand(3).Execute(game) as IDiceCitiesDiceRollOutcome;
+
+        expect(gs.playerStates.get("u1")!.money).toBe(0);
+        expect(gs.hasRolled).toBe(false);
+        expect(outcome.turnOver).toBe(true);
+        expect(game.gameState.history.some(h => h.text.includes("had no coins"))).toBe(true);
+    });
+
+    it("keeps the turn open on zero coins when an unused Radio Tower reroll is still available", async () => {
+        const gs = makeState({
+            bankMoney: 10,
+            playerStates: new Map([
+                ["u1", player({ money: 1, oneReroll: true })],
+                ["u2", player({ cards: cards(DiceCitiesCardIds.CAFE) })],
+            ]),
+        });
+        const game = makeGame(gs);
+
+        const outcome = await rollCommand(3).Execute(game) as IDiceCitiesDiceRollOutcome;
+
+        expect(gs.playerStates.get("u1")!.money).toBe(0);
+        expect(gs.hasRolled).toBe(true);
+        expect(outcome.turnOver).toBe(false);
+    });
+
+    it("auto-passes once the Radio Tower's one reroll is already spent and coins are still zero", async () => {
+        const gs = makeState({
+            bankMoney: 10,
+            playerStates: new Map([["u1", player({ oneReroll: true })], ["u2", player()]]),
+        });
+        const game = makeGame(gs);
+
+        const roll = rollCommand(2);
+        await roll.Execute(game);
+        game.gameState.commandHistory.push(roll);
+
+        const reroll = new DiceCitiesRequestRadioTowerReroll();
+        reroll.senderId = "u1";
+        reroll.senderUsername = "u1";
+        reroll.recordedRoll1 = 2;
+        const outcome = await reroll.Execute(game) as IDiceCitiesDiceRollOutcome;
+
+        expect(gs.playerStates.get("u1")!.money).toBe(0);
+        expect(gs.hasRolled).toBe(false);
+        expect(outcome.turnOver).toBe(true);
+    });
+
+    it("auto-passes once a mandatory TV Station selection leaves the roller still broke", async () => {
+        const gs = makeState({
+            bankMoney: 10,
+            awaitingTSSelection: true,
+            playerStates: new Map([["u1", player()], ["u2", player()]]),
+        });
+        const game = makeGame(gs);
+        const command = new DiceCitiesRequestTvStationSelection();
+        command.senderId = "u1";
+        command.senderUsername = "u1";
+        command.selectedUser = "u2";
+
+        const outcome = await command.Execute(game) as IDiceCitiesTvStationOutcome;
+
+        expect(gs.playerStates.get("u1")!.money).toBe(0);
+        expect(gs.hasRolled).toBe(false);
+        expect(outcome.turnOver).toBe(true);
+        // A broke target still reports as stolen from, just for nothing.
+        expect(outcome.stolenFromId).toBe("u2");
+        expect(outcome.stolenAmount).toBe(0);
+    });
+
+    it("reports the Business Center trade on whichever selection completes it", async () => {
+        const gs = makeState({
+            awaitingBCSelectionOwn: true,
+            awaitingBCSelectionOpponent: true,
+            playerStates: new Map([
+                ["u1", player({ cards: cards(DiceCitiesCardIds.CAFE) })],
+                ["u2", player({ cards: cards(DiceCitiesCardIds.BAKERY) })],
+            ]),
+        });
+        const game = makeGame(gs);
+
+        const ownSelection = new DiceCitiesRequestBusinessCenterOwnSelection();
+        ownSelection.senderId = "u1";
+        ownSelection.senderUsername = "u1";
+        ownSelection.selectedCard = DiceCitiesCardIds.CAFE;
+        const firstOutcome = await ownSelection.Execute(game) as IDiceCitiesBusinessCenterOutcome;
+
+        // Still waiting on the opponent's side, so nothing has traded yet.
+        expect(firstOutcome.tradedWithId).toBeUndefined();
+
+        const opponentSelection = new DiceCitiesRequestBusinessCenterOpponentSelection();
+        opponentSelection.senderId = "u1";
+        opponentSelection.senderUsername = "u1";
+        opponentSelection.selectedUser = "u2";
+        opponentSelection.selectedCard = DiceCitiesCardIds.BAKERY;
+        const secondOutcome = await opponentSelection.Execute(game) as IDiceCitiesBusinessCenterOutcome;
+
+        expect(secondOutcome.tradedWithId).toBe("u2");
+        expect(secondOutcome.gaveCardId).toBe(DiceCitiesCardIds.CAFE);
+        expect(secondOutcome.receivedCardId).toBe(DiceCitiesCardIds.BAKERY);
+        expect(gs.playerStates.get("u1")!.cards.find(cc => cc.card === DiceCitiesCardIds.BAKERY)?.amount).toBe(1);
+        expect(gs.playerStates.get("u2")!.cards.find(cc => cc.card === DiceCitiesCardIds.CAFE)?.amount).toBe(1);
+    });
+
+    it("reports the Business Center trade the same way when the opponent's card is chosen first", async () => {
+        const gs = makeState({
+            awaitingBCSelectionOwn: true,
+            awaitingBCSelectionOpponent: true,
+            playerStates: new Map([
+                ["u1", player({ cards: cards(DiceCitiesCardIds.CAFE) })],
+                ["u2", player({ cards: cards(DiceCitiesCardIds.BAKERY) })],
+            ]),
+        });
+        const game = makeGame(gs);
+
+        const opponentSelection = new DiceCitiesRequestBusinessCenterOpponentSelection();
+        opponentSelection.senderId = "u1";
+        opponentSelection.senderUsername = "u1";
+        opponentSelection.selectedUser = "u2";
+        opponentSelection.selectedCard = DiceCitiesCardIds.BAKERY;
+        const firstOutcome = await opponentSelection.Execute(game) as IDiceCitiesBusinessCenterOutcome;
+
+        expect(firstOutcome.tradedWithId).toBeUndefined();
+
+        const ownSelection = new DiceCitiesRequestBusinessCenterOwnSelection();
+        ownSelection.senderId = "u1";
+        ownSelection.senderUsername = "u1";
+        ownSelection.selectedCard = DiceCitiesCardIds.CAFE;
+        const secondOutcome = await ownSelection.Execute(game) as IDiceCitiesBusinessCenterOutcome;
+
+        expect(secondOutcome.tradedWithId).toBe("u2");
+        expect(secondOutcome.gaveCardId).toBe(DiceCitiesCardIds.CAFE);
+        expect(secondOutcome.receivedCardId).toBe(DiceCitiesCardIds.BAKERY);
+    });
+});
+
 describe("Dice Cities activation numbers", () => {
     it("pays the Fruit and Vegetable Market on both of its numbers", async () => {
         for (const [die1, die2] of [[5, 6], [6, 6]]) {
@@ -733,47 +1079,20 @@ describe("Dice Cities: the Docks", () => {
 // Harbour's parked roll paying out at the wrong total.
 describe("Dice Cities: replaying a Docks game", () => {
     it("replays the Harbour's bonus from the command history", async () => {
-        const pass = () => {
-            const command = new DiceCitiesRequestPassTurn();
-            command.senderId = "u1";
-            command.senderUsername = "u1";
-            return command;
-        };
-        const unlock = <T extends { senderId: string; senderUsername: string }>(command: T): T => {
-            command.senderId = "u1";
-            command.senderUsername = "u1";
-            return command;
-        };
-
         // Every roll of 1 pays the starting Wheat Field, which is how u1 saves up
         // for the Train Station (two dice) and then the Harbour.
-        const commandHistory = [
+        // The Docks flag rides in specificGameState — the replay adapter reads
+        // it from there to restock the same market.
+        const gameData = replayableGame([
             rollCommand(1),
-            unlock(new DiceCitiesRequestUnlockTrainStation()),
+            sentBy(new DiceCitiesRequestUnlockTrainStation()),
             rollCommand(1),
-            pass(),
+            passCommand(),
             rollCommand(1),
-            unlock(new DiceCitiesRequestUnlockHarbour()),
+            sentBy(new DiceCitiesRequestUnlockHarbour()),
             rollCommand(5, "u1", 6),
             harbourCommand(true),
-        ];
-
-        const gameData = {
-            gameId: "g1",
-            gameType: new DiceCitiesGameType(),
-            userIdList: ["u1", "u2"],
-            turnTimer: "1d",
-            currentTurn: "u1",
-            lastTurnTimestamp: "2026-07-21T09:00:00.000Z",
-            timerWarningNotificationSent: false,
-            gameState: { turnOrder: ["u1", "u2"], history: [], commandHistory },
-            complete: false,
-            winner: "",
-            enabledBillionaireRow: false,
-            // The Docks flag rides in specificGameState — the replay adapter
-            // reads it from there to restock the same market.
-            specificGameState: buildInitialDiceCitiesState(["u1", "u2"], true),
-        } as unknown as IGameData;
+        ], buildInitialDiceCitiesState(["u1", "u2"], true));
 
         const timeline = await buildTimeline(gameData, { u1: "u1", u2: "u2" });
         const final = timeline.snapshots[timeline.snapshots.length - 1];
@@ -789,20 +1108,10 @@ describe("Dice Cities: replaying a Docks game", () => {
         // from 60, and its stored state says so. Replaying it against today's
         // 262 would pay out coins that game never had - a roll its real bank
         // could only cover in part would come out in full.
-        const gameData = {
-            gameId: "g1",
-            gameType: new DiceCitiesGameType(),
-            userIdList: ["u1", "u2"],
-            turnTimer: "1d",
-            currentTurn: "u1",
-            lastTurnTimestamp: "2026-07-21T09:00:00.000Z",
-            timerWarningNotificationSent: false,
-            gameState: { turnOrder: ["u1", "u2"], history: [], commandHistory: [rollCommand(1)] },
-            complete: false,
-            winner: "",
-            enabledBillionaireRow: false,
-            specificGameState: buildInitialDiceCitiesState(["u1", "u2"], false, 60),
-        } as unknown as IGameData;
+        const gameData = replayableGame(
+            [rollCommand(1)],
+            buildInitialDiceCitiesState(["u1", "u2"], false, 60),
+        );
 
         const timeline = await buildTimeline(gameData, { u1: "u1", u2: "u2" });
         const final = timeline.snapshots[timeline.snapshots.length - 1];

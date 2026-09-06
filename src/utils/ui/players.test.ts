@@ -215,6 +215,13 @@ describe('finishedGameCopy', () => {
         expect(finishedGameCopy({ winner: '', endReason: 'teamloss' })).toBe('The team lost');
     });
 
+    it('names which ending it was when the game recorded a detail', () => {
+        // A game with several ways to end the same way (Outbreak's three
+        // defeats) says which here, once, rather than at each screen showing it.
+        expect(finishedGameCopy({ winner: '', endReason: 'teamloss', endDetail: 'the player deck ran out of cards' }))
+            .toBe('The team lost — the player deck ran out of cards');
+    });
+
     it('reuses the abandoned-game wording for a game nobody stayed for', () => {
         expect(finishedGameCopy({ winner: '', endReason: 'abandoned', forfeitedBy: 'Priya' }))
             .toBe('Ended — Priya went quiet');

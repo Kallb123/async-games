@@ -339,6 +339,47 @@ describe("getLegalMoves ordering", () => {
         expect(moves[0].destination.zone).toBe('foundation');
         expect(moves[0].recommended).toBe(true);
     });
+
+    it("doesn't recommend an oscillating tableau reshuffle while the stock still has an untried card", () => {
+        const state = baseState();
+        // A black 8 sitting alone can shuffle onto either red 9 forever
+        // without ever freeing a hidden card or reaching a foundation.
+        state.tableau[0] = [{ rank: 9, suit: 'H', faceUp: true }];
+        state.tableau[1] = [{ rank: 9, suit: 'D', faceUp: true }];
+        state.tableau[2] = [{ rank: 8, suit: 'S', faceUp: true }];
+        state.stock = [{ rank: 2, suit: 'C', faceUp: false }];
+
+        const moves = getLegalMoves(toLegalMoveState(state));
+
+        expect(moves.length).toBeGreaterThanOrEqual(2);
+        expect(moves.every(m => !m.recommended)).toBe(true);
+    });
+
+    it("recommends a waste move over a reshuffle even while the stock still has cards", () => {
+        const state = baseState();
+        // The waste's black 8 can only go onto the red 9 - a real move, not a
+        // reshuffle - and there's a card left behind it in the stock.
+        state.waste = [{ rank: 8, suit: 'S', faceUp: true }];
+        state.tableau[0] = [{ rank: 9, suit: 'H', faceUp: true }];
+        state.stock = [{ rank: 2, suit: 'C', faceUp: false }];
+
+        const moves = getLegalMoves(toLegalMoveState(state));
+
+        expect(moves).toHaveLength(1);
+        expect(moves[0].source.zone).toBe('waste');
+        expect(moves[0].recommended).toBe(true);
+    });
+
+    it("falls back to the reshuffle once the stock and waste are both empty", () => {
+        const state = baseState();
+        state.tableau[0] = [{ rank: 9, suit: 'H', faceUp: true }];
+        state.tableau[1] = [{ rank: 9, suit: 'D', faceUp: true }];
+        state.tableau[2] = [{ rank: 8, suit: 'S', faceUp: true }];
+
+        const moves = getLegalMoves(toLegalMoveState(state));
+
+        expect(moves.filter(m => m.recommended)).toHaveLength(1);
+    });
 });
 
 describe("getLegalMoves and empty columns", () => {

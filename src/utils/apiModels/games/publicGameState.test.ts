@@ -104,4 +104,22 @@ describe("every CreateDataResponse", () => {
         expect(signature, `no CreateDataResponse found in ${relativePath}`).not.toBeNull();
         expect(signature![1]).toMatch(/^_?viewerId:/);
     });
+
+    // The same hole a third time, on the way out rather than in. `endDetail`
+    // says which of an ending's several shapes happened (IGameData.endDetail),
+    // and a builder that forwards `endReason` but not it type-checks fine and
+    // silently tells the board screen nothing — the co-op game that adds a
+    // second defeat would find out from a player, not a test. Solitaire
+    // forwards neither and is left alone: a solo game has one ending.
+    it.each(RESPONSE_BUILDERS)("forwards %s's endDetail wherever it forwards endReason", (relativePath) => {
+        const source = readFileSync(path.join(srcRoot, relativePath), "utf8");
+
+        const body = /CreateDataResponse\s*=\s*async function[\s\S]*?\n};/.exec(source);
+        expect(body, `no CreateDataResponse found in ${relativePath}`).not.toBeNull();
+
+        const endReason = /^[ \t]*endReason:[ \t]*(\S+)\.endReason,$/m.exec(body![0]);
+        if (!endReason) return;
+        expect(body![0], `${relativePath} forwards endReason but not endDetail`)
+            .toContain(`endDetail: ${endReason[1]}.endDetail,`);
+    });
 });

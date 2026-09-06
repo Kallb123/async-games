@@ -20,6 +20,7 @@ import {
 import { stationCityIds } from '@/games/Outbreak/rules';
 import { OutbreakPlayEvent } from '@/utils/apiModels/GameLogic';
 import { playerColourForId } from '@/utils/ui/playerColours';
+import { seatOrderFrom } from '@/utils/ui/players';
 
 // A board-targeted event still in progress — lifted to the page (like
 // movement's moveMode) because only the page owns the map's click handler.
@@ -35,6 +36,9 @@ interface OutbreakEventTrayProps {
     gs: IOutbreakSpecificGameStateResponse;
     myUserId: string;
     userIdList: string[];
+    /** Player seats in the real turn order (see OutbreakHands' prop docs) —
+     *  seats the Airlift picker the same way the hand rows above it are. */
+    turnOrder: string[];
     submitCommand: SubmitCommand;
     pendingTarget: string | null;
     targeting: OutbreakEventTargeting | null;
@@ -67,7 +71,7 @@ function PickerSheet({ hint, onCancel, children }: { hint: React.ReactNode; onCa
  * though — unlike playing one — it costs an action.
  */
 export default function OutbreakEventTray({
-    gs, myUserId, userIdList, submitCommand, pendingTarget, targeting, onStartTargeting, onCancelTargeting,
+    gs, myUserId, userIdList, turnOrder, submitCommand, pendingTarget, targeting, onStartTargeting, onCancelTargeting,
 }: OutbreakEventTrayProps) {
     const [pickingAirliftTarget, setPickingAirliftTarget] = useState(false);
     const [pickingResilientPopulation, setPickingResilientPopulation] = useState(false);
@@ -150,7 +154,7 @@ export default function OutbreakEventTray({
                 hint={<p className="ag-action-hint" style={{ marginTop: 0 }}>✈️ Airlift — whose pawn moves?</p>}
                 onCancel={() => setPickingAirliftTarget(false)}
             >
-                {userIdList.flatMap(userId => {
+                {seatOrderFrom(turnOrder, myUserId).flatMap(userId => {
                     const p = gs.playerStates[userId];
                     if (!p) return [];
                     return [

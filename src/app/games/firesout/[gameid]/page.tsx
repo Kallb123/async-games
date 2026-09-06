@@ -43,7 +43,7 @@ import {
     totalDamage,
     VehicleId,
 } from "@/games/FiresOut/rules";
-import { abandonedGameStatus, isPlayersTurn, nameForUserId } from "@/utils/ui/players";
+import { abandonedGameStatus, isPlayersTurn, nameForUserId, reorderByIds, scoreboardSeatOrder } from "@/utils/ui/players";
 import { playerColourForId } from "@/utils/ui/playerColours";
 
 // fires-out-gdd.md §17.6 step 5 (board), step 11 (turn recap). The crew
@@ -233,7 +233,8 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     const carryingLabel: Record<'victim' | 'hazmat' | 'escort', string> = {
         victim: '🧍 carrying', hazmat: '☣️ carrying', escort: '🚶 escorting',
     };
-    const scoreEntries: ScoreEntry[] = (gs?.firefighters ?? []).map((ff) => ({
+    const scoreboardFirefighters = reorderByIds(gs?.firefighters ?? [], scoreboardSeatOrder(gameData, myUserId), ff => ff.ownerId);
+    const scoreEntries: ScoreEntry[] = scoreboardFirefighters.map((ff) => ({
         id: ff.ownerId,
         name: nameOrYou(ff.ownerId, ff.username),
         color: playerColourForId(ff.ownerId, userIdList),

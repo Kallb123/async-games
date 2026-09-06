@@ -50,12 +50,5 @@ export function buildStandardDeck(): ICard[] {
     return deck;
 }
 
-// Fisher-Yates shuffle, matching DiceRoll's Math.random-based approach.
-export function shuffleDeck(deck: ICard[]): ICard[] {
-    const shuffled = [...deck];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-}
+// Shuffling a deck is `shuffle()` from ./shuffle — same Fisher-Yates, same
+// CSPRNG, no second copy to keep in step.

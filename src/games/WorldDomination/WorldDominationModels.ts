@@ -255,6 +255,7 @@ WorldDominationGameDataSchema.methods.CreateDataResponse = async function(viewer
         complete: doc.complete,
         winner: doc.winner,
         endReason: doc.endReason,
+        endDetail: doc.endDetail,
         forfeitedBy: doc.forfeitedBy,
         specificGameState: gameStateToResponse(doc.specificGameState, userIdNameMap, viewerId),
         recapAvailable: !!doc.initialSpecificGameState,

@@ -9,6 +9,7 @@ import { HAND_LIMIT, OutbreakMoveType, cureCardsRequired, getLegalMoves, opsExpe
 import { OutbreakAction, OutbreakDiscard, OutbreakEndTurn, OutbreakPlayEvent } from '@/utils/apiModels/GameLogic';
 import { useResettingState } from '@/utils/hooks/useResettingState';
 import { playerColourForId } from '@/utils/ui/playerColours';
+import { seatOrderFrom } from '@/utils/ui/players';
 
 const MOVE_DEFS: { type: OutbreakMoveType; icon: string; name: string; hint: string }[] = [
     { type: 'drive', icon: '🚗', name: 'Drive / Ferry', hint: 'Move to a connected city' },
@@ -132,6 +133,10 @@ interface OutbreakActionsProps {
     /** Every player id, in the app's stable seat order — drives the Dispatcher
      *  player picker's colours so they match the pawns on the board. */
     userIdList: string[];
+    /** Player seats in the real turn order (see OutbreakHands' prop docs for
+     *  why this differs from userIdList) — seats the Dispatcher and Share
+     *  Knowledge pickers the same way the hand rows above them are seated. */
+    turnOrder: string[];
     /** The movement kind currently being targeted on the board, if any. */
     moveMode: OutbreakMoveType | null;
     setMoveMode: (m: OutbreakMoveType | null) => void;
@@ -157,7 +162,7 @@ interface OutbreakActionsProps {
     pendingTarget: string | null;
 }
 
-export default function OutbreakActions({ gs, myUserId, userIdList, moveMode, setMoveMode, opsFlightActive, onStartOpsFlight, dispatchBoard, onStartDispatchMove, onStartDispatchRelocate, onCancelBoardTarget, submitCommand, pendingTarget }: OutbreakActionsProps) {
+export default function OutbreakActions({ gs, myUserId, userIdList, turnOrder, moveMode, setMoveMode, opsFlightActive, onStartOpsFlight, dispatchBoard, onStartDispatchMove, onStartDispatchRelocate, onCancelBoardTarget, submitCommand, pendingTarget }: OutbreakActionsProps) {
     const [relocating, setRelocating] = useState(false);
     // Operations Expert (§11): picking which city card pays for her flight,
     // before the map lights up for the destination.
@@ -182,6 +187,14 @@ export default function OutbreakActions({ gs, myUserId, userIdList, moveMode, se
 
     const me = gs.playerStates[myUserId];
     if (!me) return null;
+
+    // Every seated player, in the same real turn order OutbreakHands seats
+    // them in, the viewer's own seat first — see seatOrderFrom.
+    const orderedPlayers = seatOrderFrom(turnOrder, myUserId)
+        .flatMap(userId => {
+            const p = gs.playerStates[userId];
+            return p ? [p] : [];
+        });
 
     function send(overrides: Partial<OutbreakAction>, target: string) {
         const cmd = new OutbreakAction();
@@ -398,7 +411,7 @@ export default function OutbreakActions({ gs, myUserId, userIdList, moveMode, se
 
     // ── Dispatcher move, step 1 (§11): whose pawn to move with my hand. ──────
     if (dispatch?.stage === 'moveWho') {
-        const others = Object.values(gs.playerStates).filter(p => p.userId !== me.userId);
+        const others = orderedPlayers.filter(p => p.userId !== me.userId);
         return (
             <PlayerPickerSheet
                 hint="🧭 Dispatcher — whose pawn do you want to move?"
@@ -436,7 +449,7 @@ export default function OutbreakActions({ gs, myUserId, userIdList, moveMode, se
     // ── Dispatcher relocate (§11): which pawn to send to a city another pawn
     //     already occupies — no card, no adjacency, just an action. ───────────
     if (dispatch?.stage === 'relocateWho') {
-        const everyone = Object.values(gs.playerStates).map(p => ({ userId: p.userId, username: p.userId === me.userId ? 'You' : p.username, city: p.city, role: p.role }));
+        const everyone = orderedPlayers.map(p => ({ userId: p.userId, username: p.userId === me.userId ? 'You' : p.username, city: p.city, role: p.role }));
         return (
             <PlayerPickerSheet
                 hint="🧭 Dispatcher — which pawn do you want to send to a teammate?"
@@ -459,7 +472,7 @@ export default function OutbreakActions({ gs, myUserId, userIdList, moveMode, se
     const needsRelocate = stations.length >= MAX_RESEARCH_STATIONS;
 
     const treatable = DISEASE_COLORS.filter(color => cityState.cubes[color] > 0);
-    const citymates = Object.values(gs.playerStates).filter(p => p.userId !== me.userId && p.city === me.city);
+    const citymates = orderedPlayers.filter(p => p.userId !== me.userId && p.city === me.city);
     const cureColors = DISEASE_COLORS.filter(color => gs.cures[color] === 'none' && me.hand.some(id => isCityCardId(id) && CITIES[id].color === color));
     const cureRequired = cureCardsRequired(me.role === 'scientist');
     const stationIsFree = opsExpertBuildsFree(me.role);
@@ -469,8 +482,8 @@ export default function OutbreakActions({ gs, myUserId, userIdList, moveMode, se
     // teammate; the second needs two pawns in different cities to have a shared
     // destination at all.
     const isDispatcher = me.role === 'dispatcher';
-    const hasOtherPlayers = Object.values(gs.playerStates).some(p => p.userId !== me.userId);
-    const pawnsSpread = new Set(Object.values(gs.playerStates).map(p => p.city)).size >= 2;
+    const hasOtherPlayers = orderedPlayers.some(p => p.userId !== me.userId);
+    const pawnsSpread = new Set(orderedPlayers.map(p => p.city)).size >= 2;
 
     return (
         <div className="ag-actionsheet">

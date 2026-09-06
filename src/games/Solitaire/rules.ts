@@ -154,10 +154,17 @@ export function getLegalMoves(state: ISolitaireLegalMoveState): ISolitaireLegalM
     // (Array.prototype.sort is stable, so ties keep their original order).
     moves.sort((a, b) => (a.destination.zone === "foundation" ? 0 : 1) - (b.destination.zone === "foundation" ? 0 : 1));
 
-    // Recommend: a foundation move beats freeing a hidden card beats any other reshuffle.
+    // Recommend: a foundation move beats freeing a hidden card beats clearing
+    // the waste beats any other reshuffle. A bare tableau-to-tableau reshuffle
+    // that does none of those is speculative - with a King-headed run sitting
+    // at the bottom of one column and a matching run at the bottom of another,
+    // it can be shuffled back and forth forever without ever changing what's
+    // playable - so it only gets recommended once there's nothing left to
+    // draw or recycle; otherwise a fresh card off the stock is the safer bet.
     let recommendedIndex = moves.findIndex((m) => m.destination.zone === "foundation");
     if (recommendedIndex === -1) recommendedIndex = moves.findIndex((m) => m.reason === "Frees a face-down card");
-    if (recommendedIndex === -1 && moves.length > 0) recommendedIndex = 0;
+    if (recommendedIndex === -1) recommendedIndex = moves.findIndex((m) => m.source.zone === "waste");
+    if (recommendedIndex === -1 && !canDraw(state.stockCount, state.waste.length) && moves.length > 0) recommendedIndex = 0;
     if (recommendedIndex >= 0) moves[recommendedIndex].recommended = true;
 
     return moves;

@@ -302,6 +302,7 @@ DiceCitiesGameDataSchema.methods.CreateDataResponse = async function(_viewerId: 
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
         endReason: gameDataDocument.endReason,
+        endDetail: gameDataDocument.endDetail,
         forfeitedBy: gameDataDocument.forfeitedBy,
         enabledBillionaireRow: gameDataDocument.enabledBillionaireRow,
         specificGameState: gameStateToModel(gameDataDocument.specificGameState, userIdNameMap)
@@ -387,16 +388,26 @@ export interface IDiceCitiesGameResultStats {
     // game's GAME_RESULT_STATS entry in GameResultData.ts, since it isn't
     // tracked incrementally on specificGameState.
     coinsPerTurn: Map<string, number>[];
+    // Total establishments owned (sum of cards[].amount, landmarks excluded)
+    // per player at the end of each turn, in turn order. Powers a
+    // buildings/turn chart, letting players compare building early to
+    // snowball against saving up. Computed the same way as coinsPerTurn.
+    buildingsPerTurn: Map<string, number>[];
 }
 
 export const diceCitiesGameResultStatsSchemaDef = {
     coins: { type: Schema.Types.Map, of: Number },
     coinsEarned: { type: Schema.Types.Map, of: Number },
     landmarksUnlocked: { type: Schema.Types.Map, of: [String] },
-    coinsPerTurn: [{ type: Schema.Types.Map, of: Number }]
+    coinsPerTurn: [{ type: Schema.Types.Map, of: Number }],
+    buildingsPerTurn: [{ type: Schema.Types.Map, of: Number }]
 };
 
-export function computeDiceCitiesResultStats(gameData: IDiceCitiesGameData, coinsPerTurn: Map<string, number>[]): IDiceCitiesGameResultStats {
+export function computeDiceCitiesResultStats(
+    gameData: IDiceCitiesGameData,
+    coinsPerTurn: Map<string, number>[],
+    buildingsPerTurn: Map<string, number>[]
+): IDiceCitiesGameResultStats {
     const coins = new Map<string, number>();
     const coinsEarned = new Map<string, number>();
     const landmarksUnlocked = new Map<string, string[]>();
@@ -405,7 +416,7 @@ export function computeDiceCitiesResultStats(gameData: IDiceCitiesGameData, coin
         coinsEarned.set(userId, playerState.totalCoinsEarned);
         landmarksUnlocked.set(userId, LANDMARKS.filter(l => playerState[l.flag]).map(l => l.cardId));
     }
-    return { coins, coinsEarned, landmarksUnlocked, coinsPerTurn };
+    return { coins, coinsEarned, landmarksUnlocked, coinsPerTurn, buildingsPerTurn };
 }
 
 // Renders IDiceCitiesGameResultStats as one stat group per player, for the
@@ -425,8 +436,11 @@ export function formatDiceCitiesResultStats(stats: IDiceCitiesGameResultStats, u
     return groups;
 }
 
-// Renders coinsPerTurn as GameResult charts: one entry per turn, keyed by
-// username, for the result page's coins/turn chart.
+// Renders coinsPerTurn and buildingsPerTurn as GameResult charts: one entry
+// per turn, keyed by username, for the result page's charts.
 export function formatDiceCitiesCharts(stats: IDiceCitiesGameResultStats, usernameById: Map<string, string>): GameResultChart[] {
-    return compactCharts(formatPerTurnChart(stats.coinsPerTurn, "Coins per turn", "Coins"));
+    return compactCharts(
+        formatPerTurnChart(stats.coinsPerTurn, "Coins per turn", "Coins"),
+        formatPerTurnChart(stats.buildingsPerTurn, "Buildings per turn", "Buildings"),
+    );
 }

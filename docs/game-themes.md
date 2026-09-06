@@ -4,7 +4,7 @@ How a game gets more than one dressing: the same rules, costs and numbers,
 played under different names and artwork. Dice Cities is the first game to use
 it — the shipped Japanese-inspired region of rival towns, and the post-nuclear
 "Rust & Bottlecaps" re-skin written up in
-[`docs/games/dice-cities.md` §11](./games/dice-cities.md#11-appendix-alternative-theme--rust--bottlecaps).
+[`docs/games/dice-cities.md` §12](./games/dice-cities.md#12-appendix-alternative-theme--rust--bottlecaps).
 
 ## 1. What a theme is (and is not)
 
@@ -136,11 +136,20 @@ theme, so the wasteland sits under a dust-ochre sky rather than a blue one.
 
 ## 7. Known edges
 
-- **Post-game stats** (`formatDiceCitiesResultStats`) are computed from the
-  `GameResult` document, which does not carry the theme, so the result screen
-  still says "Earned 12 coins". Fixing that means storing the theme on
+- **The result page is not themed.** Both the stat lines
+  (`formatDiceCitiesResultStats`) and the charts beside them
+  (`formatDiceCitiesCharts`, labelled "Coins per turn" and "Buildings per
+  turn") are computed from the `GameResult` document, which does not carry the
+  theme — so a game played entirely in caps and holdings still finishes on a
+  page that says "Earned 12 coins". Fixing that means storing the theme on
   `GameResult` too, and is deliberately out of scope until a second themed game
   makes the shape worth settling.
+- **The 🪙 glyph is not themed.** The words around it are — "caps", "the Cap
+  Hoard" — but the coin itself is printed literally wherever a number of them
+  appears: the roll payout line, the market and bank pills, a landmark's cost,
+  the scoreboard and the recap tip. It reads as a currency mark rather than as
+  a picture of a coin, which is why `DiceCitiesWords` names the noun and not
+  the glyph. A theme that needs its own mark adds the field then.
 - **App-wide vocabulary is not themed.** "Your turn", "End turn", the turn timer
   and the push copy stay as they are — they belong to the app, not the game, and
   a game that renamed half of them would read as two products at once. The

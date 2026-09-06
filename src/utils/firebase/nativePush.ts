@@ -145,6 +145,14 @@ export async function showForegroundNotification(notification: PushNotificationS
                 body: notification.body || 'Something happened in one of your games.',
                 channelId: ANDROID_NOTIFICATION_CHANNEL_ID,
                 extra: notification.data,
+                // This fires immediately — there's no future trigger time to be
+                // exact about — but the plugin defaults to `true` and, without it,
+                // treats every foreground push as a request for the exact-alarm
+                // permission: since the manifest no longer holds that permission,
+                // `canScheduleExactAlarms()` is permanently false, so every push
+                // would otherwise pop Android's "Alarms and reminders" settings
+                // screen (`LocalNotificationsPlugin.kt`'s `doSchedule`).
+                isExactNotification: false,
             }],
         });
     } catch (error) {

@@ -353,6 +353,7 @@ SettlementsAndCitiesGameDataSchema.methods.CreateDataResponse = async function(v
         complete: doc.complete,
         winner: doc.winner,
         endReason: doc.endReason,
+        endDetail: doc.endDetail,
         forfeitedBy: doc.forfeitedBy,
         specificGameState: gameStateToResponse(doc.specificGameState, userIdNameMap, viewerId),
         // Turn recap replays from the stored initial snapshot; only games created
