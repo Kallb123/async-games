@@ -171,9 +171,10 @@ function toEvents(
     ) {
         const bc = outcome as IDiceCitiesBusinessCenterOutcome;
         if (!bc.tradedWithId || !bc.gaveCardId || !bc.receivedCardId) return [];
-        const opponent = playerByUserId(next.specificGameState as IDiceCitiesGameStateResponse, bc.tradedWithId);
         const gave = DiceCitiesCards[bc.gaveCardId];
         const received = DiceCitiesCards[bc.receivedCardId];
+        if (!gave || !received) return [];
+        const opponent = playerByUserId(next.specificGameState as IDiceCitiesGameStateResponse, bc.tradedWithId);
         return [
             {
                 ...base,
