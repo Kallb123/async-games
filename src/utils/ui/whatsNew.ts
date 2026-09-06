@@ -114,6 +114,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "No more “Alarms and reminders” prompt on Android",
+                detail: "The Android app asked for permission to set alarms and reminders even though it never actually schedules one — a notification's plugin quietly carried the request along. It's gone for good now.",
+            },
+            {
                 title: "Dice Cities' Amusement Park can be built again",
                 detail: "Buying the Amusement Park quietly asked for the Radio Tower instead — so it was refused unless you could afford the more expensive one, and if you could, you got the wrong landmark for the wrong price. The two also had each other's powers: the extra turn on doubles belonged to the Radio Tower and the Amusement Park did nothing at all. Both now build, and cost, and do what their cards say.",
                 game: "dicecities",
@@ -150,10 +154,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "The name a guest picks is the name everyone sees",
                 detail: "Take a seat as a guest and the name you typed now follows you everywhere — the move you just made, the recap of what you missed, stepping back through the turns, your profile, the reaction you send someone and the “you won” line. They used to show the jumble of letters your account was filed under instead.",
-            },
-            {
-                title: "Your badge no longer flashes a stranger's initial",
-                detail: "For a moment before your profile loaded, the little circle on the home page and your profile showed a “T” or a “Y” — the first letter of the words standing in for your name. You now get a plain silhouette until your real initials or photo are ready.",
             },
         ],
     },
