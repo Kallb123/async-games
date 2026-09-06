@@ -114,6 +114,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Solitaire's Hint stops repeating a move that goes nowhere",
+                detail: "When the only card that could move was a run bouncing between two columns forever, Hint kept recommending that same swap instead of anything else — even with cards still sitting in the stock. It now tells you to draw or recycle the stock instead whenever a real move isn't available.",
+                game: "solitaire",
+            },
+            {
                 title: "No more “Alarms and reminders” prompt on Android",
                 detail: "The Android app asked for permission to set alarms and reminders even though it never actually schedules one — a notification's plugin quietly carried the request along. It's gone for good now.",
             },
@@ -150,10 +155,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Train Time's scores read properly when you look back",
                 detail: "Stepping back through a Train Time match showed every score, train count and route tally as “NaN”. Reviewing a turn now shows the standings exactly as they stood at the time — and the points and longest-run graphs on a finished match are filled in again.",
                 game: "traintime",
-            },
-            {
-                title: "The name a guest picks is the name everyone sees",
-                detail: "Take a seat as a guest and the name you typed now follows you everywhere — the move you just made, the recap of what you missed, stepping back through the turns, your profile, the reaction you send someone and the “you won” line. They used to show the jumble of letters your account was filed under instead.",
             },
         ],
     },
