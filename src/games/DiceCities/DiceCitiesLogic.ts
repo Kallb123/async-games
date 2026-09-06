@@ -138,7 +138,6 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
 
         dcGameData.gameState.history.unshift(playerHistory(this.senderId, `rolled a ${totalRoll}${outcome.roll2 ? ` (${outcome.roll1} and ${outcome.roll2})` : ""}`));
 
-        // TODO: Maybe end turn if nothin available to buy?
         return outcome;
     }
 
@@ -513,11 +512,12 @@ export class DiceCitiesRequestTvStationSelection implements IGameCommand {
 
         dcGameData.gameState.history.unshift(playerHistory(this.senderId, `stole ${amountToSteal} coins from ${userToken(selectedUserId)}`));
         dcGameData.specificGameState.awaitingTSSelection = false;
+        let turnOver = false;
         if (!dcGameData.specificGameState.awaitingBCSelectionOwn && !dcGameData.specificGameState.awaitingBCSelectionOpponent) {
-            dcGameData.specificGameState.hasRolled = true;
+            turnOver = settleRoll(dcGameData, rollerState);
         }
         return {
-            turnOver: false,
+            turnOver,
             validMove: true
         };
     }
@@ -629,11 +629,12 @@ export class DiceCitiesRequestBusinessCenterOwnSelection implements IGameCommand
         dcGameData.specificGameState.bcSelectedOpponent = "";
         dcGameData.specificGameState.bcSelectedOpponent = "";
         dcGameData.specificGameState.bcSelectedOpponentCard = NIL_UUID as uuidString;
+        let turnOver = false;
         if (!dcGameData.specificGameState.awaitingTSSelection) {
-            dcGameData.specificGameState.hasRolled = true;
+            turnOver = settleRoll(dcGameData, rollerState);
         }
         return {
-            turnOver: false,
+            turnOver,
             validMove: true
         };
     }
@@ -748,11 +749,12 @@ export class DiceCitiesRequestBusinessCenterOpponentSelection implements IGameCo
         dcGameData.specificGameState.bcSelectedOpponent = "";
         dcGameData.specificGameState.bcSelectedOpponent = "";
         dcGameData.specificGameState.bcSelectedOpponentCard = NIL_UUID as uuidString;
+        let turnOver = false;
         if (!dcGameData.specificGameState.awaitingTSSelection) {
-            dcGameData.specificGameState.hasRolled = true;
+            turnOver = settleRoll(dcGameData, rollerState);
         }
         return {
-            turnOver: false,
+            turnOver,
             validMove: true
         };
     }
@@ -1015,6 +1017,30 @@ function cardIsActive(card: IDiceCitiesCard, playerState: IDiceCitiesPlayerState
     return !card.requiresHarbour || playerState.harbourUnlocked === true;
 }
 
+// True once a roll has fully paid out and left the roller with nothing they
+// could still do besides pass: every establishment and landmark costs at
+// least 1 coin, so 0 coins rules out buying anything - unless a Radio Tower
+// still has its once-a-turn reroll unused, which costs nothing to use.
+function noActionsAvailable(dcGameData: IDiceCitiesGameData, rollerState: IDiceCitiesPlayerState): boolean {
+    if (rollerState.money !== 0) {
+        return false;
+    }
+    return !(rollerState.oneReroll && !dcGameData.specificGameState.hasReRolled);
+}
+
+// Marks a settled roll's action phase live, unless the roller has nothing
+// left to do this turn - in which case the turn ends itself rather than
+// making a broke player click "End turn" for no reason.
+function settleRoll(dcGameData: IDiceCitiesGameData, rollerState: IDiceCitiesPlayerState): boolean {
+    if (noActionsAvailable(dcGameData, rollerState)) {
+        dcGameData.specificGameState.hasRolled = false;
+        dcGameData.gameState.history.unshift(playerHistory(dcGameData.currentTurn, `had no coins and nothing to do, so their turn passed automatically`));
+        return true;
+    }
+    dcGameData.specificGameState.hasRolled = true;
+    return false;
+}
+
 function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean, recorded?: IRecordedRolls): IDiceCitiesDiceRollOutcome {
     const roll1 = recorded?.roll1 ?? DiceRoll(6);
     let roll2: number | null = null;
@@ -1243,11 +1269,15 @@ function resolveRoll(dcGameData: IDiceCitiesGameData, rollerState: IDiceCitiesPl
         }
     }
 
-    dcGameData.specificGameState.hasRolled = shouldRolled;
-    // TODO: Maybe end turn if nothin available to buy?
+    let turnOver = false;
+    if (shouldRolled) {
+        turnOver = settleRoll(dcGameData, rollerState);
+    } else {
+        dcGameData.specificGameState.hasRolled = false;
+    }
 
     const outcome: IDiceCitiesDiceRollOutcome = {
-        turnOver: false,
+        turnOver,
         validMove: true,
         roll1,
         roll2,

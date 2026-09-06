@@ -13,13 +13,22 @@ interface ReadOnlyPanelProps {
  * them: this wrapper is what takes them out of play, so a screen wraps its turn
  * sheet once and stops asking whose turn it is.
  *
- * It is a `fieldset` because `disabled` on one disables every control inside in
- * a single stroke — no tap, no focus, whatever the panels within know about
- * whose turn it is — while leaving the content readable to a screen reader,
- * which `inert` would not. Nothing here says whose move it is: the sticky top
- * bar has said so all along.
+ * It is always a `fieldset`, never conditionally a bare fragment: `disabled`
+ * on one disables every control inside in a single stroke — no tap, no focus,
+ * whatever the panels within know about whose turn it is — while leaving the
+ * content readable to a screen reader, which `inert` would not. Switching
+ * between a fragment and a fieldset would change the element type at this
+ * spot in the tree, and React remounts a changed element type from scratch —
+ * which used to wipe out a turn sheet's own local state (Dice Cities' just-
+ * rolled dice, still worth showing after a roll that auto-passes) in the very
+ * same render that took the turn away. Keeping the element stable and only
+ * toggling `disabled`/the dimming class is what lets that state survive.
+ * Nothing here says whose move it is: the sticky top bar has said so all along.
  */
 export default function ReadOnlyPanel({ readOnly, children }: ReadOnlyPanelProps) {
-    if (!readOnly) return <>{children}</>;
-    return <fieldset className="ag-readonly" disabled>{children}</fieldset>;
+    return (
+        <fieldset className={`ag-readonly-panel${readOnly ? ' ag-readonly' : ''}`} disabled={readOnly}>
+            {children}
+        </fieldset>
+    );
 }

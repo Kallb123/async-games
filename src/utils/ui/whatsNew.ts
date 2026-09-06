@@ -62,6 +62,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Dice Cities rolls now show who got paid",
+                detail: "Every roll's payout now names who gained or lost coins and how many, right under the dice — no more working it out from the coin counts changing. And if it leaves you with nothing to spend and no free reroll left, your turn ends on its own instead of waiting for you to tap End turn.",
+                game: "dicecities",
+            },
+            {
                 title: "See every city in Dice Cities",
                 detail: "Everyone's cards are face up on the table, but you could only ever see your own — so there was no way to tell what a roll of 3 was about to pay an opponent, or who was one landmark from winning. The landmark track at the top now shows every player's progress at once, a dot each per landmark, and every opponent's city sits under yours to open and close as you like.",
                 game: "dicecities",
@@ -100,10 +105,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Check your notifications actually work",
                 detail: "Allowing notifications was only half of it: a phone can allow them and still quietly fail to sign itself up, and nothing told you. Settings now says where this device stands, has a Send a test notification button that tells you exactly what became of it, and a ? explaining everything which can stop one arriving — including the Android battery and per-app settings that block them without asking.",
-            },
-            {
-                title: "Every game has a game guide",
-                detail: "Not sure what a phase does or which pile to worry about? A game guide now opens the first time you join a match of Dice Cities, Settlements & Cities, Train Time, World Domination or Outbreak, and any time after that from the ⋮ menu at the top of the board.",
             },
         ],
     },
