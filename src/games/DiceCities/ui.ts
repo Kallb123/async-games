@@ -122,3 +122,18 @@ export function landmarkCard(flag: keyof IDiceCitiesPlayerStateResponse): IDiceC
 export function cardArt(card: IDiceCitiesCard): string {
     return `/art/dicecities/japanese/${card.art}`;
 }
+
+/**
+ * A roll's payout, per player: every steal or bank payout it moved, named
+ * rather than netted — a roll that robs one opponent to pay another reads as
+ * `["Bob +2🪙", "Alice -2🪙"]`, not just whatever the roller's own line came
+ * to. Empty when nothing moved. `nameFor` is left to the caller because the
+ * two callers need different names for the same userId: the live board says
+ * "You" for the viewer, and the turn recap — built once and read by every
+ * player — never can.
+ */
+export function coinChangeParts(changes: Map<string, number>, nameFor: (userId: string) => string): string[] {
+    return [...changes.entries()]
+        .filter(([, amount]) => amount !== 0)
+        .map(([userId, amount]) => `${nameFor(userId)} ${amount > 0 ? "+" : ""}${amount}🪙`);
+}
