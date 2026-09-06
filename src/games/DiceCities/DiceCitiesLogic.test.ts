@@ -206,6 +206,87 @@ describe("Dice Cities bank supply", () => {
         expect(gs.bankMoney).toBe(10);
     });
 
+    it("pays a restaurant once for every copy its owner holds", async () => {
+        // Three Cafes on a roll of 3 take a coin each, not one between them.
+        const gs = makeState({
+            bankMoney: 10,
+            playerStates: new Map([
+                ["u1", player({ money: 5 })],
+                ["u2", player({ money: 0, cards: cards(DiceCitiesCardIds.CAFE, 3) })],
+            ]),
+        });
+        const game = makeGame(gs);
+
+        const outcome = await rollCommand(3).Execute(game) as IDiceCitiesDiceRollOutcome;
+
+        expect(gs.playerStates.get("u1")!.money).toBe(2);
+        expect(gs.playerStates.get("u2")!.money).toBe(3);
+        expect(gs.playerStates.get("u2")!.totalCoinsEarned).toBe(3);
+        expect(outcome.moneyChanges.get("u1")).toBe(-3);
+        expect(outcome.moneyChanges.get("u2")).toBe(3);
+        expect(gs.bankMoney).toBe(10);
+        expect(coinsInPlay(gs)).toBe(15);
+    });
+
+    it("adds the Shopping Mall's coin to every copy of a restaurant", async () => {
+        // Two Family Restaurants take 2 each on a 9, plus 1 each for the mall.
+        const gs = makeState({
+            bankMoney: 10,
+            playerStates: new Map([
+                ["u1", player({ money: 8 })],
+                ["u2", player({ money: 0, bonusDiningAndStore: true, cards: cards(DiceCitiesCardIds.FAMILY_RESTAURANT, 2) })],
+            ]),
+        });
+        const game = makeGame(gs);
+
+        await rollCommand(9).Execute(game);
+
+        expect(gs.playerStates.get("u1")!.money).toBe(2);
+        expect(gs.playerStates.get("u2")!.money).toBe(6);
+    });
+
+    it("stops paying restaurants once the roller has been cleaned out", async () => {
+        // Four Cafes want a coin each, but the roller only has 2 to give - and
+        // never goes into debt covering the rest.
+        const gs = makeState({
+            bankMoney: 10,
+            playerStates: new Map([
+                ["u1", player({ money: 2 })],
+                ["u2", player({ money: 0, cards: cards(DiceCitiesCardIds.CAFE, 4) })],
+            ]),
+        });
+        const game = makeGame(gs);
+
+        const outcome = await rollCommand(3).Execute(game) as IDiceCitiesDiceRollOutcome;
+
+        expect(gs.playerStates.get("u1")!.money).toBe(0);
+        expect(gs.playerStates.get("u2")!.money).toBe(2);
+        expect(gs.playerStates.get("u2")!.totalCoinsEarned).toBe(2);
+        expect(outcome.moneyChanges.get("u1")).toBe(-2);
+        expect(coinsInPlay(gs)).toBe(12);
+    });
+
+    it("shares a drained roller out between the opponents who are owed", async () => {
+        // Both opponents own a Cafe on a 3, but the roller has a single coin:
+        // the first paid takes it and the second gets nothing.
+        const gs = makeState({
+            bankMoney: 10,
+            playerStates: new Map([
+                ["u1", player({ money: 1 })],
+                ["u2", player({ money: 0, cards: cards(DiceCitiesCardIds.CAFE) })],
+                ["u3", player({ money: 0, cards: cards(DiceCitiesCardIds.CAFE) })],
+            ]),
+        });
+        const game = makeGame(gs);
+
+        await rollCommand(3).Execute(game);
+
+        expect(gs.playerStates.get("u1")!.money).toBe(0);
+        expect(gs.playerStates.get("u2")!.money).toBe(1);
+        expect(gs.playerStates.get("u3")!.money).toBe(0);
+        expect(coinsInPlay(gs)).toBe(11);
+    });
+
     it("never lets a steal hand over coins the target doesn't have", async () => {
         const gs = makeState({
             bankMoney: 10,
