@@ -36,19 +36,14 @@ const LARGE_BYTES = 400 * 1024;
  *  run leave an already-quantised file exactly as it is. */
 const MIN_SAVING = 0.1;
 
-/** Folders holding masters rather than art the app draws: the untouched
- *  originals every optimised face was made from, kept so a face can be redone
- *  at any time. Quantising those would be quantising the backup. */
-const SKIP_DIRS = new Set(['fullsize']);
-
-/** Every .png under public/art, at any depth bar the masters. */
+/** Every .png under public/art, at any depth. The untouched originals live
+ *  outside it, under /art-masters, so there is nothing here to step around:
+ *  this only ever walks art the app actually serves. */
 async function pngsUnder(dir) {
     const entries = await readdir(dir, { withFileTypes: true });
     const found = await Promise.all(entries.map(async (entry) => {
         const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-            return SKIP_DIRS.has(entry.name) ? [] : pngsUnder(full);
-        }
+        if (entry.isDirectory()) return pngsUnder(full);
         return entry.name.endsWith('.png') ? [full] : [];
     }));
     return found.flat();

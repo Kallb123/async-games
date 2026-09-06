@@ -103,6 +103,13 @@ from the game's own `meta` — name, tagline, accent, art or glyph — so there
 is nothing to design or list, but it needs **Bricolage Grotesque installed as
 a system font** and skips the cards with a warning when it isn't.
 
+Any **hand-drawn art** a game brings — board maps, card faces — arrives from an
+art tool essentially uncompressed, at megabytes a file. Save the export to
+[`/art-masters`](./art-masters/README.md) under the path it mirrors in
+`public/art`, then run `npm run optimise-art` and commit what it writes: it
+quantises the served copy to roughly a third of the file at the same
+resolution, and never touches the master.
+
 ## Design system conventions
 
 - Font is Bricolage Grotesque (`var(--ag-font)`); palette is warm cream +
