@@ -295,6 +295,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
         return (
             <div className="ag-actionsheet">
                 <SelectionHead icon="📺" title="TV Station" sub="Take 5 coins from any one player." />
+                {rollReadout("choose who to take coins from")}
                 <div className="ag-dc-pick-list ag-pending-group">
                     {opponents.map((op) => (
                         <PickRow
@@ -322,6 +323,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
         return (
             <div className="ag-actionsheet">
                 <SelectionHead icon="🏢" title="Business Center" sub="Choose one of your establishments to give away." />
+                {rollReadout("choose a card to give away")}
                 <CardPickGrid
                     cards={mine.map((cc) => cc.card as uuidString)}
                     disabled={busy}
@@ -340,6 +342,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, submi
         return (
             <div className="ag-actionsheet">
                 <SelectionHead icon="🏢" title="Business Center" sub="Choose an opponent's establishment to take." />
+                {rollReadout("choose a card to take")}
                 {opponents.map((op) => {
                     const theirs = op.cards.filter((cc) => cc.amount > 0 && DiceCitiesCards[cc.card].type !== "landmark");
                     if (theirs.length === 0) return null;
