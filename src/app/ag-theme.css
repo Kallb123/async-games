@@ -1648,19 +1648,22 @@ a.ag-list-row, a.ag-list-row-main {
 }
 
 /* ---- Read-only panels (what you can look at while you wait) ---- */
-/* Off your turn a game still shows you your hand and the face-up cards — the
-   same panels it shows on your turn, wrapped in ReadOnlyPanel's disabled
-   fieldset. These rules undo the browser's fieldset chrome so those panels sit
-   exactly where they always do, and dim the block as a whole so it reads as
-   one thing that is off rather than a screen of individually greyed-out
-   controls. */
-.ag-readonly {
+/* A game's turn sheet always sits in ReadOnlyPanel's fieldset, on your turn or
+   not — a stable element type there is what lets a sheet's own local state
+   (Dice Cities' just-rolled dice) survive the moment control passes away,
+   rather than being remounted from scratch. `.ag-readonly-panel` undoes the
+   browser's fieldset chrome unconditionally, so it never nudges layout even
+   on your turn; `.ag-readonly` (added only while disabled) dims the block as
+   a whole so it reads as one thing that is off, not a screen of individually
+   greyed-out controls. */
+.ag-readonly-panel {
+    display: block;
     min-width: 0;
     margin: 0;
     padding: 0;
     border: 0;
-    opacity: 0.85;
 }
+.ag-readonly { opacity: 0.85; }
 /* Disabled here means "not your turn", not "this one is out of reach", so the
    controls inside keep their own colour — a card you cannot read is no use to
    the player waiting to plan their next move. The element selector outranks
