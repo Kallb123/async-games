@@ -190,7 +190,7 @@ export default function OutbreakActions({ gs, myUserId, userIdList, turnOrder, m
 
     // Every seated player, in the same real turn order OutbreakHands seats
     // them in, the viewer's own seat first — see seatOrderFrom.
-    const orderedPlayers = seatOrderFrom(turnOrder.length ? turnOrder : userIdList, myUserId)
+    const orderedPlayers = seatOrderFrom(turnOrder, myUserId)
         .flatMap(userId => {
             const p = gs.playerStates[userId];
             return p ? [p] : [];

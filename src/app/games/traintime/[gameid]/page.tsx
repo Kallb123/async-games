@@ -184,8 +184,10 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     }
 
     // ── Players ──────────────────────────────────────────────────────────────
-    // The standings, the ticket reveal and the final score sheet are all
-    // per-player lists over the same seating order, so the join happens once.
+    // The join-order base every per-player list here builds on. The final
+    // score sheet reads it directly (it re-sorts by score itself, so seating
+    // order doesn't matter); the scoreboard, legend and ticket reveal instead
+    // read scoreboardPlayers below, the same list reordered viewer-first.
     const players = gs
         ? userIdList.flatMap((userId, i) => {
             const ps = gs.playerStates[userId];

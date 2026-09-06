@@ -154,7 +154,7 @@ export default function OutbreakEventTray({
                 hint={<p className="ag-action-hint" style={{ marginTop: 0 }}>✈️ Airlift — whose pawn moves?</p>}
                 onCancel={() => setPickingAirliftTarget(false)}
             >
-                {seatOrderFrom(turnOrder.length ? turnOrder : userIdList, myUserId).flatMap(userId => {
+                {seatOrderFrom(turnOrder, myUserId).flatMap(userId => {
                     const p = gs.playerStates[userId];
                     if (!p) return [];
                     return [
