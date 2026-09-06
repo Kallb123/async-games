@@ -8,7 +8,7 @@ import type { IDiceCitiesCard } from './apiModels';
 
 // The fields a theme is allowed to touch: what the card is called, what its
 // rules text says, and which set of faces it is drawn from. Everything else on
-// a card is the rules — see docs/games/dice-cities.md §11: "No costs,
+// a card is the rules — see docs/games/dice-cities.md §12: "No costs,
 // activation numbers, colours, icons, limits or win conditions change".
 const THEMED_FIELDS: (keyof IDiceCitiesCard)[] = ['title', 'text', 'art'];
 

@@ -234,7 +234,7 @@ export function abandonedGameCopy(forfeitedName?: string): { subtitle: string; s
 // How a finished game ended, with every id already resolved to a name. Taken
 // off the DTO both callers pass in, rather than restated, so it can't drift
 // from what a finished game actually carries.
-export type FinishedGameOutcome = Pick<ICompletedGame, 'winner' | 'endReason' | 'forfeitedBy'>;
+export type FinishedGameOutcome = Pick<ICompletedGame, 'winner' | 'endReason' | 'endDetail' | 'forfeitedBy'>;
 
 // The short line naming how a finished game ended: the "Finished" list on the
 // home page and the result page's summary row both need one, and both worked
@@ -244,12 +244,17 @@ export type FinishedGameOutcome = Pick<ICompletedGame, 'winner' | 'endReason' | 
 // Null when there is nothing to say beyond "nobody won", which the two screens
 // word differently: "complete" in a list of many games, "Draw" on the page
 // about one.
+// `endDetail` says which shape of the ending it was, for a game that has more
+// than one (see IGameData.endDetail) — appended here rather than at each
+// screen, so the two lists and the result page can't word the same ending
+// three ways.
 export function finishedGameCopy(game: FinishedGameOutcome): string | null {
+    const detail = game.endDetail ? ` — ${game.endDetail}` : "";
     // A co-op table's result belongs to all of them, and reads the same to
     // everyone — including a friend looking at a game they weren't part of.
-    if (game.endReason === 'teamwin') return "The team won";
-    if (game.endReason === 'teamloss') return "The team lost";
-    if (game.winner) return `${game.winner} won`;
+    if (game.endReason === 'teamwin') return `The team won${detail}`;
+    if (game.endReason === 'teamloss') return `The team lost${detail}`;
+    if (game.winner) return `${game.winner} won${detail}`;
     if (game.endReason === 'abandoned') return abandonedGameCopy(game.forfeitedBy).short;
     return null;
 }
@@ -294,4 +299,33 @@ export function seatOrderFrom(userIdList: string[], viewerId: string | null | un
     const seat = viewerId ? userIdList.indexOf(viewerId) : -1;
     if (seat <= 0) return userIdList;
     return [...userIdList.slice(seat), ...userIdList.slice(0, seat)];
+}
+
+// The order every game's top-of-screen scoreboard seats its players in: the
+// viewer first (seatOrderFrom), then the game's real running order —
+// `gameState.turnOrder`, rolled off or shuffled at setup and not necessarily
+// the same as `userIdList`'s join order (see OutbreakHands' prop docs for why
+// the two can differ). Falls back to userIdList before a game's turnOrder has
+// loaded, so the scoreboard has something to seat on the first render.
+export function scoreboardSeatOrder(
+    game: { userIdList: string[]; gameState?: { turnOrder?: string[] } } | null | undefined,
+    viewerId: string | null | undefined,
+): string[] {
+    const turnOrder = game?.gameState?.turnOrder ?? [];
+    return seatOrderFrom(turnOrder.length ? turnOrder : (game?.userIdList ?? []), viewerId);
+}
+
+// Reorders `items` to the id sequence `order` (typically scoreboardSeatOrder's
+// output), keyed by the id `idOf` reads off each one. Every scoreboard needs
+// this join once it has its own per-player array (rather than an id-keyed
+// record it can just look up into) — Fires Out's firefighters, Train Time's
+// per-player standings. An id in `order` with no matching item (a seat that
+// hasn't loaded yet) is silently dropped, matching what every caller already
+// did by hand.
+export function reorderByIds<T>(items: T[], order: string[], idOf: (item: T) => string): T[] {
+    const byId = new Map(items.map(item => [idOf(item), item]));
+    return order.flatMap(id => {
+        const item = byId.get(id);
+        return item ? [item] : [];
+    });
 }

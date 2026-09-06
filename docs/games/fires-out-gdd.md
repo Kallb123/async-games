@@ -900,8 +900,7 @@ end to end — invite, accept, take a live turn each, dismiss the Advance Fire
 payoff screen, and confirm "Review actions" is offered from the first turn —
 following `snakesandladders-turns.spec.ts`'s shape. `src/games/FiresOut/
 replay.test.ts` follows Train Time's `replay.test.ts` precedent: a passive
-game (every figure just ends its turn) replayed with `Math.random` stubbed to
-throw, `buildEventFeed` exercised on a real command log, and
+game (every figure just ends its turn) replayed with the CSPRNG (`crypto.getRandomValues`) stubbed to throw, `buildEventFeed` exercised on a real command log, and
 `computeFiresOutResultStats` checked against the final state.
 
 **12 — Solitaire, optional.** Multi-pawn control, closing gap 3 with the

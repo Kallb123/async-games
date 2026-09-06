@@ -46,6 +46,21 @@ export interface IDiceCitiesDiceRollOutcome extends ICommandOutcome {
 // Tower re-roll can hand every coin back, whichever of them actually paid.
 type RollPayoutCommand = DiceCitiesRequestDiceRoll | DiceCitiesRequestHarbourBonus;
 
+export interface IDiceCitiesTvStationOutcome extends ICommandOutcome {
+    // Who paid, and how much - so the recap can name the victim of the steal.
+    stolenFromId?: string,
+    stolenAmount?: number,
+}
+
+export interface IDiceCitiesBusinessCenterOutcome extends ICommandOutcome {
+    // Set only once both sides have selected and the swap has actually
+    // happened - either selection command can be the one that completes it,
+    // so both record the same fields when they're the one that finishes.
+    tradedWithId?: string,
+    gaveCardId?: string,
+    receivedCardId?: string,
+}
+
 @serializable
 export class DiceCitiesGameType implements IGameType {
     gameId: uuidString = uuidv4() as uuidString;
@@ -152,7 +167,6 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
 
         dcGameData.gameState.history.unshift(playerHistory(this.senderId, `rolled a ${totalRoll}${outcome.roll2 ? ` (${outcome.roll1} and ${outcome.roll2})` : ""}`));
 
-        // TODO: Maybe end turn if nothin available to buy?
         return outcome;
     }
 
@@ -530,13 +544,17 @@ export class DiceCitiesRequestTvStationSelection implements IGameCommand {
         const stolen = pluralize(amountToSteal, names.words.coin, names.words.coins);
         dcGameData.gameState.history.unshift(playerHistory(this.senderId, `stole ${stolen} from ${userToken(selectedUserId)}`));
         dcGameData.specificGameState.awaitingTSSelection = false;
+        let turnOver = false;
         if (!dcGameData.specificGameState.awaitingBCSelectionOwn && !dcGameData.specificGameState.awaitingBCSelectionOpponent) {
-            dcGameData.specificGameState.hasRolled = true;
+            turnOver = settleRoll(dcGameData, rollerState);
         }
-        return {
-            turnOver: false,
-            validMove: true
+        const outcome: IDiceCitiesTvStationOutcome = {
+            turnOver,
+            validMove: true,
+            stolenFromId: selectedUserId,
+            stolenAmount: amountToSteal
         };
+        return outcome;
     }
 
     Undo (gameData: IGameData) {
@@ -639,7 +657,7 @@ export class DiceCitiesRequestBusinessCenterOwnSelection implements IGameCommand
         removeCardFromPlayerState(dcGameData.specificGameState.bcSelectedOpponentCard, selectedOpponentState);
         addCardToPlayerState(dcGameData.specificGameState.bcSelectedOpponentCard, rollerState);
 
-        return finishBusinessCentreSwap(dcGameData, this.senderId, dcGameData.specificGameState.bcSelectedOpponent, selectedOpponentCard, selectedOwnCard);
+        return finishBusinessCentreSwap(dcGameData, rollerState, this.senderId, dcGameData.specificGameState.bcSelectedOpponent, selectedOpponentCard, selectedOwnCard);
     }
 
     Undo (gameData: IGameData) {
@@ -745,7 +763,7 @@ export class DiceCitiesRequestBusinessCenterOpponentSelection implements IGameCo
         removeCardFromPlayerState(this.selectedCard, opponentState);
         addCardToPlayerState(this.selectedCard, rollerState);
 
-        return finishBusinessCentreSwap(dcGameData, this.senderId, this.selectedUser, selectedOpponentCard, selectedOwnCard);
+        return finishBusinessCentreSwap(dcGameData, rollerState, this.senderId, this.selectedUser, selectedOpponentCard, selectedOwnCard);
     }
 
     Undo (gameData: IGameData) {
@@ -765,13 +783,14 @@ export class DiceCitiesRequestBusinessCenterOpponentSelection implements IGameCo
  */
 function finishBusinessCentreSwap(
     dcGameData: IDiceCitiesGameData,
+    rollerState: IDiceCitiesPlayerState,
     senderId: string,
     /** Who was traded with. Passed in because the callers have already
      *  established it exists; the state field it came from is cleared below. */
     opponentId: string,
     takenCard: IDiceCitiesCard,
     givenCard: IDiceCitiesCard,
-): ICommandOutcome {
+): IDiceCitiesBusinessCenterOutcome {
     const names = logNames(dcGameData);
     // Written before the selection is cleared - it names who was traded with.
     dcGameData.gameState.history.unshift(playerHistory(
@@ -780,12 +799,16 @@ function finishBusinessCentreSwap(
     ));
     dcGameData.specificGameState.bcSelectedOpponent = "";
     dcGameData.specificGameState.bcSelectedOpponentCard = NIL_UUID as uuidString;
+    let turnOver = false;
     if (!dcGameData.specificGameState.awaitingTSSelection) {
-        dcGameData.specificGameState.hasRolled = true;
+        turnOver = settleRoll(dcGameData, rollerState);
     }
     return {
-        turnOver: false,
-        validMove: true
+        turnOver,
+        validMove: true,
+        tradedWithId: opponentId,
+        gaveCardId: givenCard.cardId,
+        receivedCardId: takenCard.cardId
     };
 }
 
@@ -1041,6 +1064,30 @@ function cardIsActive(card: IDiceCitiesCard, playerState: IDiceCitiesPlayerState
     return !card.requiresHarbour || playerState.harbourUnlocked === true;
 }
 
+// True once a roll has fully paid out and left the roller with nothing they
+// could still do besides pass: every establishment and landmark costs at
+// least 1 coin, so 0 coins rules out buying anything - unless a Radio Tower
+// still has its once-a-turn reroll unused, which costs nothing to use.
+function noActionsAvailable(dcGameData: IDiceCitiesGameData, rollerState: IDiceCitiesPlayerState): boolean {
+    if (rollerState.money !== 0) {
+        return false;
+    }
+    return !(rollerState.oneReroll && !dcGameData.specificGameState.hasReRolled);
+}
+
+// Marks a settled roll's action phase live, unless the roller has nothing
+// left to do this turn - in which case the turn ends itself rather than
+// making a broke player click "End turn" for no reason.
+function settleRoll(dcGameData: IDiceCitiesGameData, rollerState: IDiceCitiesPlayerState): boolean {
+    if (noActionsAvailable(dcGameData, rollerState)) {
+        dcGameData.specificGameState.hasRolled = false;
+        dcGameData.gameState.history.unshift(playerHistory(dcGameData.currentTurn, `had no ${logNames(dcGameData).words.coins} and nothing to do, so their turn passed automatically`));
+        return true;
+    }
+    dcGameData.specificGameState.hasRolled = true;
+    return false;
+}
+
 function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean, recorded?: IRecordedRolls): IDiceCitiesDiceRollOutcome {
     const roll1 = recorded?.roll1 ?? DiceRoll(6);
     let roll2: number | null = null;
@@ -1061,7 +1108,11 @@ function doDiceRoll(dcGameData: IDiceCitiesGameData, isDouble: boolean, recorded
         };
     }
 
-    if (roll1 === roll2 && rollerState.oneReroll) {
+    // The Amusement Park's effect: roll doubles and the turn comes back to you
+    // (CheckEndTurn holds the seat rather than advancing it). Its flag is
+    // `rerollDoubles`; the similarly named `oneReroll` is the Radio Tower's
+    // once-a-turn re-roll, which is a different power - see LANDMARKS in ui.ts.
+    if (roll1 === roll2 && rollerState.rerollDoubles) {
         dcGameData.specificGameState.awaitingDoubleReroll = true;
     }
 
@@ -1267,11 +1318,15 @@ function resolveRoll(dcGameData: IDiceCitiesGameData, rollerState: IDiceCitiesPl
         }
     }
 
-    dcGameData.specificGameState.hasRolled = shouldRolled;
-    // TODO: Maybe end turn if nothin available to buy?
+    let turnOver = false;
+    if (shouldRolled) {
+        turnOver = settleRoll(dcGameData, rollerState);
+    } else {
+        dcGameData.specificGameState.hasRolled = false;
+    }
 
     const outcome: IDiceCitiesDiceRollOutcome = {
-        turnOver: false,
+        turnOver,
         validMove: true,
         roll1,
         roll2,

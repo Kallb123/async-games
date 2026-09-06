@@ -230,6 +230,7 @@ TrainTimeGameDataSchema.methods.CreateDataResponse = async function(viewerId: st
         complete: doc.complete,
         winner: doc.winner,
         endReason: doc.endReason,
+        endDetail: doc.endDetail,
         forfeitedBy: doc.forfeitedBy,
         specificGameState: gameStateToModel(doc.specificGameState, userIdNameMap, viewerId),
         recapAvailable: !!doc.initialSpecificGameState,

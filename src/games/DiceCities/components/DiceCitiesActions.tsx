@@ -1,7 +1,7 @@
 import type { ICommandResponse } from "@/app/api/game/command/route";
 import { IDiceCitiesCard, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
 import { DiceCitiesCardIds, HARBOUR_BONUS } from "@/games/DiceCities/cards";
-import { uuidString } from "@/utils/apiModels/GameDataApi";
+import { playerByUserId, uuidString } from "@/utils/apiModels/GameDataApi";
 import {
     DiceCitiesRequestBusinessCenterOpponentSelection,
     DiceCitiesRequestBusinessCenterOwnSelection,
@@ -19,7 +19,7 @@ import {
     IDiceCitiesDiceRollOutcome,
     IGameCommand,
 } from "@/utils/apiModels/GameLogic";
-import { ACTIVATION_META, activationFor, buildableLandmarks, rollLabel, yieldLabel } from "@/games/DiceCities/ui";
+import { ACTIVATION_META, activationFor, buildableLandmarks, coinChangeParts, rollLabel, yieldLabel } from "@/games/DiceCities/ui";
 import type { DiceCitiesTheme } from "@/games/DiceCities/themes";
 import CardArt from "@/games/DiceCities/components/CardArt";
 import ZoomableCardArt from "@/games/DiceCities/components/ZoomableCardArt";
@@ -27,6 +27,7 @@ import type { SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import Dice from "@/components/ui/Dice";
 import ActionButton from "@/components/ui/ActionButton";
 import PendingTag from "@/components/ui/PendingTag";
+import { mongoMap } from "@/utils/games/mongoMaps";
 import { capitalise } from "@/utils/ui/text";
 import { useEffect, useRef, useState } from "react";
 
@@ -83,14 +84,19 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
     // The most recent roll, kept locally so the dice + total stay on screen
     // through the build step (rolling does not advance the turn). `bonus` is the
     // Harbour's +2 once taken, so the total on screen is the one that paid out.
-    const [roll, setRoll] = useState<{ roll1: number; roll2: number | null; bonus: number } | null>(null);
+    // `changes` is that roll's per-player coin deltas, so the payout is visible
+    // the moment it happens rather than only inferred from the coin counts.
+    // `turnJustEnded` is true when this very roll auto-passed the turn (0 coins,
+    // nothing left to do) — the one case the sheet still needs to show the roll
+    // after control has already moved to the next player.
+    const [roll, setRoll] = useState<{ roll1: number; roll2: number | null; bonus: number; changes: Map<string, number>; turnJustEnded: boolean } | null>(null);
     const [rolling, setRolling] = useState(false);
     const [face, setFace] = useState<{ a: number; b: number }>({ a: 1, b: 1 });
     const tumble = useRef<ReturnType<typeof setInterval> | null>(null);
 
     // Tumble the dice for a beat, then settle on the real values.
-    const animateRoll = (r: { roll1: number; roll2: number | null }) => {
-        setRoll({ ...r, bonus: 0 });
+    const animateRoll = (r: { roll1: number; roll2: number | null }, changes: Map<string, number>, turnJustEnded: boolean) => {
+        setRoll({ ...r, bonus: 0, changes, turnJustEnded });
         setRolling(true);
         if (tumble.current) clearInterval(tumble.current);
         tumble.current = setInterval(() => {
@@ -104,6 +110,15 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
     };
     useEffect(() => () => { if (tumble.current) clearInterval(tumble.current); }, []);
 
+    // Once the next player's own roll actually lands, our last roll is stale -
+    // clear it so a turn that auto-passed on 0 coins doesn't linger as read-only
+    // furniture once real play has moved past it. Adjusted during render
+    // (react.dev's pattern for resetting state on a prop change) rather than in
+    // an effect, since our own auto-pass leaves `hasRolled` unchanged — clearing
+    // `roll` is itself the guard against looping, since that's what the
+    // condition checks.
+    if (readOnly && gameState.hasRolled && roll) setRoll(null);
+
     const send = (command: IGameCommand, target: string, after?: (r: ICommandResponse) => void) => {
         submitCommand(command, after, target);
     };
@@ -113,24 +128,33 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
         command.doubleDice = double;
         send(command, "roll", (response) => {
             const outcome = response.outcome as IDiceCitiesDiceRollOutcome | undefined;
-            if (typeof outcome?.roll1 === "number") animateRoll({ roll1: outcome.roll1, roll2: outcome.roll2 ?? null });
+            if (typeof outcome?.roll1 === "number") {
+                animateRoll({ roll1: outcome.roll1, roll2: outcome.roll2 ?? null }, mongoMap(outcome.moneyChanges ?? {}), outcome.turnOver);
+            }
         });
     };
 
     const doReroll = () => {
         send(new DiceCitiesRequestRadioTowerReroll(), "reroll", (response) => {
             const outcome = response.outcome as IDiceCitiesDiceRollOutcome | undefined;
-            if (typeof outcome?.roll1 === "number") animateRoll({ roll1: outcome.roll1, roll2: outcome.roll2 ?? null });
+            if (typeof outcome?.roll1 === "number") {
+                animateRoll({ roll1: outcome.roll1, roll2: outcome.roll2 ?? null }, mongoMap(outcome.moneyChanges ?? {}), outcome.turnOver);
+            }
         });
     };
 
     // Answers the Harbour's offer on a parked 10-or-better roll. Taking it pays
-    // the table out at the higher total, so the dice on screen gain the +2.
+    // the table out at the higher total, so the dice on screen gain the +2 and
+    // the coin deltas swap from the zeroed placeholder to what actually paid —
+    // and if that payout leaves the roller broke, this is the roll that ends up
+    // auto-passing the turn, not the earlier parked one.
     const answerHarbour = (addBonus: boolean) => {
         const command = new DiceCitiesRequestHarbourBonus();
         command.addBonus = addBonus;
-        send(command, `harbour:${addBonus ? "add" : "keep"}`, () => {
-            if (addBonus) setRoll((r) => (r ? { ...r, bonus: HARBOUR_BONUS } : r));
+        send(command, `harbour:${addBonus ? "add" : "keep"}`, (response) => {
+            const outcome = response.outcome as IDiceCitiesDiceRollOutcome | undefined;
+            const changes = mongoMap(outcome?.moneyChanges ?? {});
+            setRoll((r) => (r ? { ...r, bonus: addBonus ? HARBOUR_BONUS : r.bonus, changes, turnJustEnded: outcome?.turnOver === true } : r));
         });
     };
 
@@ -223,8 +247,38 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
         </>
     );
 
-    // Off your turn that market is the whole sheet.
-    if (readOnly) return <div className="ag-actionsheet ag-dc-market">{marketSheet}</div>;
+    // The dice + total + coin changes for the most recent roll, shared by the
+    // interactive post-roll view and the read-only one a turn that auto-passed
+    // still needs to show — only `trailer` differs between the two, and only
+    // once the dice have settled.
+    const rollReadout = (trailer: string) => {
+        if (!roll) return null;
+        const total = roll.roll1 + (roll.roll2 ?? 0) + roll.bonus;
+        const changes = coinChangeParts(roll.changes, (userId) => (userId === myState.userId ? "You" : (playerByUserId(gameState, userId)?.username ?? "Someone")));
+        return (
+            <RollReadout
+                values={roll.roll2 != null
+                    ? [rolling ? face.a : roll.roll1, rolling ? face.b : roll.roll2]
+                    : [rolling ? face.a : roll.roll1]}
+                rolling={rolling}
+                headline={rolling ? "Rolling…" : `Total ${total}${roll.bonus > 0 ? ` (${harbourCard.title} +${roll.bonus})` : ""}`}
+                sub={rolling ? "the dice are tumbling" : `${changes.join(", ") || `no ${words.coins} changed hands`} — ${trailer}`}
+            />
+        );
+    };
+
+    // Off your turn that market is the whole sheet — except right after a roll
+    // that emptied your coins and auto-passed in the same beat: without this
+    // you'd never see what you rolled, since control moves away before the
+    // result ever reaches the screen.
+    if (readOnly) {
+        return (
+            <div className="ag-actionsheet ag-dc-market">
+                {roll?.turnJustEnded && rollReadout("nothing left to do, so your turn ended")}
+                {marketSheet}
+            </div>
+        );
+    }
 
     // ── Pending selections take over the sheet until resolved ────────────────
     if (gameState.awaitingHarbourChoice) {
@@ -264,6 +318,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
         return (
             <div className="ag-actionsheet">
                 <SelectionHead icon="📺" title={tvStationCard.title} sub={tvStationCard.text} />
+                {rollReadout(`choose who to take ${words.coins} from`)}
                 <div className="ag-dc-pick-list ag-pending-group">
                     {opponents.map((op) => (
                         <PickRow
@@ -295,6 +350,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
                     title={businessCentreCard.title}
                     sub={`Choose one of your ${words.establishments} to give away.`}
                 />
+                {rollReadout("choose a card to give away")}
                 <CardPickGrid
                     cards={mine.map((cc) => cards[cc.card])}
                     disabled={busy}
@@ -317,6 +373,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
                     title={businessCentreCard.title}
                     sub={`Choose an opponent's ${words.establishment} to take.`}
                 />
+                {rollReadout("choose a card to take")}
                 {opponents.map((op) => {
                     const theirs = op.cards.filter((cc) => cc.amount > 0 && cards[cc.card].type !== "landmark");
                     if (theirs.length === 0) return null;
@@ -385,21 +442,11 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
     }
 
     // ── Post-roll: dice result + market ──────────────────────────────────────
-    const total = roll ? roll.roll1 + (roll.roll2 ?? 0) + roll.bonus : null;
     const canReroll = myState.oneReroll && !gameState.hasReRolled;
 
     return (
         <div className="ag-dc-post">
-            {roll && (
-                <RollReadout
-                    values={roll.roll2 != null
-                        ? [rolling ? face.a : roll.roll1, rolling ? face.b : roll.roll2]
-                        : [rolling ? face.a : roll.roll1]}
-                    rolling={rolling}
-                    headline={rolling ? "Rolling…" : `Total ${total}${roll.bonus > 0 ? ` (${harbourCard.title} +${roll.bonus})` : ""}`}
-                    sub={rolling ? "the dice are tumbling" : "payouts are in — build one, or end your turn"}
-                />
-            )}
+            {rollReadout("build one, or end your turn")}
 
             {gameState.awaitingDoubleReroll && (
                 <div className="ag-callout ag-dc-callout">🎉 Doubles! You&apos;ll take another turn after this one.</div>

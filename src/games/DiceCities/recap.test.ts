@@ -60,18 +60,31 @@ function cmd(overrides: Partial<IGameCommand> & { className: string }): IGameCom
 }
 
 describe("Dice Cities recap adapter", () => {
-    it("turns a dice roll into a single roll event with the roller's net money and affected players", () => {
+    it("turns a dice roll into a single roll event naming every player it paid, and the affected players", () => {
         const events = diceCitiesRecapAdapter.toEvents(
-            snap(state([player({ userId: "u1", username: "Alice" })])),
-            snap(state([player({ userId: "u1", username: "Alice" })])),
+            snap(state([])),
+            snap(state([player({ userId: "u1", username: "Alice" }), player({ userId: "u2", username: "Bob" })])),
             cmd({ className: "DiceCitiesRequestDiceRoll" }),
             { validMove: true, turnOver: false, roll1: 3, roll2: null, moneyChanges: new Map([["u1", 2], ["u2", -2]]) } as ICommandOutcome,
         );
         expect(events).toHaveLength(1);
         expect(events[0].type).toBe("dc_roll");
         expect(events[0].title).toBe("Alice rolled 3");
-        expect(events[0].detail).toBe("+2🪙");
+        expect(events[0].detail).toBe("Alice +2🪙, Bob -2🪙");
         expect(events[0].affectedIds).toEqual(["u1", "u2"]);
+    });
+
+    it("still reports an opponent's swing even when the roller's own net is zero", () => {
+        // Before this, only the roller's own net was reported, so a roll that
+        // steals from one opponent and hands it to another - netting the
+        // roller nothing - read as "no coins" even though two purses moved.
+        const events = diceCitiesRecapAdapter.toEvents(
+            snap(state([])),
+            snap(state([player({ userId: "u2", username: "Bob" }), player({ userId: "u3", username: "Carol" })])),
+            cmd({ className: "DiceCitiesRequestDiceRoll" }),
+            { validMove: true, turnOver: false, roll1: 6, roll2: null, moneyChanges: new Map([["u1", 0], ["u2", 2], ["u3", -2]]) } as ICommandOutcome,
+        );
+        expect(events[0].detail).toBe("Bob +2🪙, Carol -2🪙");
     });
 
     it("shows both dice for a double roll", () => {
@@ -118,12 +131,64 @@ describe("Dice Cities recap adapter", () => {
         expect(events[0].detail).toBe("2🪙");
     });
 
-    it("stays silent for passes and mid-roll selections", () => {
-        for (const className of ["DiceCitiesRequestPassTurn", "DiceCitiesRequestTvStationSelection", "DiceCitiesRequestBusinessCenterOwnSelection"]) {
+    it("stays silent for passes and unfinished mid-roll selections", () => {
+        // The Business Center needs both sides to pick before it moves anything, and
+        // the TV Station's victim isn't chosen until this command runs - so an
+        // outcome with no steal/trade fields yet means nothing happened to report.
+        for (const className of ["DiceCitiesRequestPassTurn", "DiceCitiesRequestTvStationSelection", "DiceCitiesRequestBusinessCenterOwnSelection", "DiceCitiesRequestBusinessCenterOpponentSelection"]) {
             expect(
                 diceCitiesRecapAdapter.toEvents(snap(state([])), snap(state([])), cmd({ className }), { validMove: true, turnOver: false } as ICommandOutcome),
             ).toEqual([]);
         }
+    });
+
+    it("reports a TV Station steal once the victim is chosen", () => {
+        const events = diceCitiesRecapAdapter.toEvents(
+            snap(state([])),
+            snap(state([player({ userId: "u2", username: "Bob" })])),
+            cmd({ className: "DiceCitiesRequestTvStationSelection" }),
+            { validMove: true, turnOver: true, stolenFromId: "u2", stolenAmount: 5 } as ICommandOutcome,
+        );
+        expect(events).toHaveLength(1);
+        expect(events[0].type).toBe("dc_tvsteal");
+        expect(events[0].title).toBe("Alice used the TV Station to steal from Bob");
+        expect(events[0].detail).toBe("5🪙");
+        expect(events[0].affectedIds).toEqual(["u1", "u2"]);
+    });
+
+    it("reports a Business Center trade, whichever selection command completes it", () => {
+        const nextState = snap(state([player({ userId: "u2", username: "Bob" })]));
+        for (const className of ["DiceCitiesRequestBusinessCenterOwnSelection", "DiceCitiesRequestBusinessCenterOpponentSelection"]) {
+            const events = diceCitiesRecapAdapter.toEvents(
+                snap(state([])),
+                nextState,
+                cmd({ className }),
+                {
+                    validMove: true,
+                    turnOver: true,
+                    tradedWithId: "u2",
+                    gaveCardId: DiceCitiesCardIds.CAFE,
+                    receivedCardId: DiceCitiesCardIds.BAKERY,
+                } as ICommandOutcome,
+            );
+            expect(events).toHaveLength(1);
+            expect(events[0].type).toBe("dc_bctrade");
+            expect(events[0].title).toContain("Bob's");
+            expect(events[0].title).toContain("Business Center");
+            expect(events[0].detail).toContain("Cafe");
+            expect(events[0].affectedIds).toEqual(["u1", "u2"]);
+        }
+    });
+
+    it("calls out stolen property in the summary before a generic dice swing", () => {
+        const stolen = diceCitiesRecapAdapter.summarize(
+            [
+                { id: "1", commandId: "1", timestamp: "", actorId: "u2", actorUsername: "Bob", type: "dc_roll", title: "", affectedIds: ["u1"] },
+                { id: "2", commandId: "2", timestamp: "", actorId: "u2", actorUsername: "Bob", type: "dc_bctrade", title: "", affectedIds: ["u2", "u1"] },
+            ],
+            "u1",
+        );
+        expect(stolen.subline).toContain("made off with your property");
     });
 
     it("holds the roll's beat back while the Harbour's offer is unanswered", () => {
@@ -145,14 +210,14 @@ describe("Dice Cities recap adapter", () => {
     it("tells the whole story on the roll the Harbour's bonus settles", () => {
         const events = diceCitiesRecapAdapter.toEvents(
             snap(state([])),
-            snap(state([])),
+            snap(state([player({ userId: "u1", username: "Alice" })])),
             cmd({ className: "DiceCitiesRequestHarbourBonus", addBonus: true } as Partial<IGameCommand> & { className: string }),
             { validMove: true, turnOver: false, roll1: 5, roll2: 6, moneyChanges: new Map([["u1", 4]]) } as ICommandOutcome,
         );
         expect(events).toHaveLength(1);
         expect(events[0].title).toBe("Alice rolled 11 (5+6), Harbour +2 → 13");
         expect(events[0].glyph).toBe("⚓");
-        expect(events[0].detail).toBe("+4🪙");
+        expect(events[0].detail).toBe("Alice +4🪙");
     });
 
     it("reports a declined bonus as the plain roll it stayed", () => {

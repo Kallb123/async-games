@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <application
         android:allowBackup="true"
@@ -80,4 +81,11 @@
          made from the same "Enable" button the web build uses, through
          `useNotificationPermission`. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- @capacitor/local-notifications' own manifest unconditionally requests
+         this (it's how the plugin *could* schedule a future alarm), but
+         `showForegroundNotification` (nativePush.ts) only ever calls
+         `schedule()` to draw a push immediately, never with a future `at`
+         time — so the app doesn't need it, and Android's "Alarms and
+         reminders" permission popup is otherwise just noise for players. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" tools:node="remove" />
 </manifest>

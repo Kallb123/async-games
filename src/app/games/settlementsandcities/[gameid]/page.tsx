@@ -26,8 +26,8 @@ import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useGameGuide } from "@/utils/hooks/useGameGuide";
 import { useSubmitCommand, type SubmitCommand } from "@/utils/hooks/useSubmitCommand";
-import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
-import { abandonedGameStatus, isPlayersTurn, nameForUserId } from "@/utils/ui/players";
+import { playerColourForId } from "@/utils/ui/playerColours";
+import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
 import {
     SACPlaceSettlementSetup,
     SACPlaceRoadSetup,
@@ -105,6 +105,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     const usernameList = gameData?.usernameList ?? [];
     const userIdList = gameData?.userIdList ?? [];
     const colorForOwner = (owner: string | null): string => playerColourForId(owner, userIdList);
+    const scoreboardOrder = scoreboardSeatOrder(gameData, myUserId);
 
     // Compute valid placements for board interaction
     const validVertices = new Set<number>();
@@ -258,7 +259,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     // ── Scoreboard entries ───────────────────────────────────────────────────
     const victoryTarget = gs?.victoryTarget ?? 10;
     const scoreEntries: ScoreEntry[] = gs
-        ? userIdList.flatMap((userId, i): ScoreEntry[] => {
+        ? scoreboardOrder.flatMap((userId): ScoreEntry[] => {
             const ps = gs.playerStates?.[userId];
             if (!ps) return [];
             const isMe = userId === myUserId;
@@ -271,7 +272,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             return [{
                 id: userId,
                 name: isMe ? 'You' : ps.username,
-                color: PLAYER_COLOURS[i % PLAYER_COLOURS.length],
+                color: colorForOwner(userId),
                 sub,
                 score: <>{ps.visibleVP}<span className="ag-score-vp-target">/{victoryTarget}</span></>,
                 isMe,

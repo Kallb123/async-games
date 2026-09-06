@@ -5,7 +5,7 @@ import { UNKNOWN_PLAYER_NAME } from '@/utils/ui/players';
 import { auth } from '@clerk/nextjs/server';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
-import { ICommandOutcome, IGameCommand, IGameType, stripRecordedRandomness } from '@/utils/apiModels/GameLogic';
+import { ICommandOutcome, IGameCommand, IGameType, serializeOutcomeMaps, stripRecordedRandomness } from '@/utils/apiModels/GameLogic';
 import { IGameData, trySave } from '@/utils/mongodb/GameData';
 import { requireLiveGame } from '@/utils/games/liveGame';
 import { isCommandForGameType } from '@/utils/games/gameCommands';
@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
     }
 
     const response: ICommandResponse = {
-      outcome: commandOutcome,
+      outcome: serializeOutcomeMaps(commandOutcome),
       gameData: await gameData.CreateDataResponse(userId)
     }
 
@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
   }
 
   const response: ICommandResponse = {
-    outcome: commandOutcome,
+    outcome: serializeOutcomeMaps(commandOutcome),
     gameData: await gameData.CreateDataResponse(userId)
   }
 
