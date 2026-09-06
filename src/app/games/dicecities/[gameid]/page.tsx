@@ -25,7 +25,7 @@ import { useGameGuide } from "@/utils/hooks/useGameGuide";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { landmarkCount } from "@/games/DiceCities/ui";
 import { playerColourForId } from "@/utils/ui/playerColours";
-import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
+import { abandonedGameStatus, isPlayersTurn, nameForUserId, reorderByIds, scoreboardSeatOrder } from "@/utils/ui/players";
 
 // Sentinel used as "current turn" while reviewing a past turn, so no player's
 // interactive controls activate.
@@ -78,9 +78,11 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     // Every city at the table, the viewer's seat first, then the real turn
     // order. One array feeds the landmark track, the city stack and the
     // scoreboard, so all three read the same seats in the same order.
-    const seats: IDiceCitiesPlayerStateResponse[] = scoreboardSeatOrder(gameData, myUserId)
-        .map(userId => displayed?.playerStates?.[userId])
-        .filter((p): p is IDiceCitiesPlayerStateResponse => Boolean(p));
+    const seats: IDiceCitiesPlayerStateResponse[] = reorderByIds(
+        Object.values(displayed?.playerStates ?? {}),
+        scoreboardSeatOrder(gameData, myUserId),
+        p => p.userId,
+    );
 
     const myState = seats.find(p => p.userId === myUserId);
     // Anchored to the viewer, never to whichever city is on screen: these are

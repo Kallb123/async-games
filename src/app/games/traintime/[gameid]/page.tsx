@@ -43,7 +43,7 @@ import { TrainTimeClaimRoute, TrainTimeDrawTickets, TrainTimeKeepTickets } from 
 import { TRACK_PALETTE } from "@/games/TrainTime/ui";
 import { playerColour, playerColourForId } from "@/utils/ui/playerColours";
 import { pluralize } from "@/utils/ui/text";
-import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
+import { abandonedGameStatus, isPlayersTurn, nameForUserId, reorderByIds, scoreboardSeatOrder } from "@/utils/ui/players";
 
 // Trains at or below this leave a player one big route from ending the game —
 // the standings ring them so everybody can see the clock running down.
@@ -213,11 +213,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     // The scoreboard seats the viewer first, then follows the real turn order.
     // Colours stay tied to each player's `players` entry (join-order index) so
     // they don't shift when the display order does.
-    const scoreboardOrder = scoreboardSeatOrder(gameData, myUserId);
-    const scoreboardPlayers = scoreboardOrder.flatMap(userId => {
-        const p = players.find(pl => pl.userId === userId);
-        return p ? [p] : [];
-    });
+    const scoreboardPlayers = reorderByIds(players, scoreboardSeatOrder(gameData, myUserId), p => p.userId);
 
     const scoreEntries: ScoreEntry[] = scoreboardPlayers.map(({ userId, username, ps, colour, isMe }) => {
         const isActive = userId === displayedCurrentTurn && !complete;

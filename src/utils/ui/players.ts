@@ -314,3 +314,18 @@ export function scoreboardSeatOrder(
     const turnOrder = game?.gameState?.turnOrder ?? [];
     return seatOrderFrom(turnOrder.length ? turnOrder : (game?.userIdList ?? []), viewerId);
 }
+
+// Reorders `items` to the id sequence `order` (typically scoreboardSeatOrder's
+// output), keyed by the id `idOf` reads off each one. Every scoreboard needs
+// this join once it has its own per-player array (rather than an id-keyed
+// record it can just look up into) — Fires Out's firefighters, Train Time's
+// per-player standings. An id in `order` with no matching item (a seat that
+// hasn't loaded yet) is silently dropped, matching what every caller already
+// did by hand.
+export function reorderByIds<T>(items: T[], order: string[], idOf: (item: T) => string): T[] {
+    const byId = new Map(items.map(item => [idOf(item), item]));
+    return order.flatMap(id => {
+        const item = byId.get(id);
+        return item ? [item] : [];
+    });
+}
