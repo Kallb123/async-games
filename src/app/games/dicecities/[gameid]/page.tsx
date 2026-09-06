@@ -25,7 +25,7 @@ import { useGameGuide } from "@/utils/hooks/useGameGuide";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { landmarkCount } from "@/games/DiceCities/ui";
 import { playerColourForId } from "@/utils/ui/playerColours";
-import { abandonedGameStatus, isPlayersTurn, nameForUserId, seatOrderFrom } from "@/utils/ui/players";
+import { abandonedGameStatus, isPlayersTurn, nameForUserId, reorderByIds, scoreboardSeatOrder } from "@/utils/ui/players";
 
 // Sentinel used as "current turn" while reviewing a past turn, so no player's
 // interactive controls activate.
@@ -75,12 +75,14 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const usernameList = gameData?.usernameList ?? [];
     const userIdList = gameData?.userIdList ?? [];
     const myUserId = user?.id ?? "";
-    // Every city at the table, the viewer's seat first — a spectator, who has
-    // none, gets the table's own order. One array feeds the landmark track and
-    // the city stack, so both read the same seats in the same order.
-    const seats: IDiceCitiesPlayerStateResponse[] = seatOrderFrom(userIdList, myUserId)
-        .map(userId => displayed?.playerStates?.[userId])
-        .filter((p): p is IDiceCitiesPlayerStateResponse => Boolean(p));
+    // Every city at the table, the viewer's seat first, then the real turn
+    // order. One array feeds the landmark track, the city stack and the
+    // scoreboard, so all three read the same seats in the same order.
+    const seats: IDiceCitiesPlayerStateResponse[] = reorderByIds(
+        Object.values(displayed?.playerStates ?? {}),
+        scoreboardSeatOrder(gameData, myUserId),
+        p => p.userId,
+    );
 
     const myState = seats.find(p => p.userId === myUserId);
     // Anchored to the viewer, never to whichever city is on screen: these are
@@ -116,22 +118,20 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
 
     // ── Scoreboard: landmark progress + coin bank per player ─────────────────
     const scoreEntries: ScoreEntry[] = displayed
-        ? userIdList.flatMap((userId): ScoreEntry[] => {
-            const ps = displayed.playerStates?.[userId];
-            if (!ps) return [];
+        ? seats.map((ps): ScoreEntry => {
             const isMe = ps.userId === myUserId;
             const isActive = ps.userId === displayedCurrentTurn && !complete;
             const lm = landmarkCount(ps);
             const isLeader = lm === leaderLandmarks && lm > 0;
-            return [{
-                id: userId,
+            return {
+                id: ps.userId,
                 name: isMe ? 'You' : ps.username,
-                color: playerColourForId(userId, userIdList),
+                color: playerColourForId(ps.userId, userIdList),
                 sub: <>{isLeader ? '👑' : '★'} {lm}/4</>,
                 score: `${ps.money}🪙`,
                 isMe,
                 isActive,
-            }];
+            };
         })
         : [];
 

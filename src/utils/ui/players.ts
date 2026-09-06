@@ -300,3 +300,32 @@ export function seatOrderFrom(userIdList: string[], viewerId: string | null | un
     if (seat <= 0) return userIdList;
     return [...userIdList.slice(seat), ...userIdList.slice(0, seat)];
 }
+
+// The order every game's top-of-screen scoreboard seats its players in: the
+// viewer first (seatOrderFrom), then the game's real running order —
+// `gameState.turnOrder`, rolled off or shuffled at setup and not necessarily
+// the same as `userIdList`'s join order (see OutbreakHands' prop docs for why
+// the two can differ). Falls back to userIdList before a game's turnOrder has
+// loaded, so the scoreboard has something to seat on the first render.
+export function scoreboardSeatOrder(
+    game: { userIdList: string[]; gameState?: { turnOrder?: string[] } } | null | undefined,
+    viewerId: string | null | undefined,
+): string[] {
+    const turnOrder = game?.gameState?.turnOrder ?? [];
+    return seatOrderFrom(turnOrder.length ? turnOrder : (game?.userIdList ?? []), viewerId);
+}
+
+// Reorders `items` to the id sequence `order` (typically scoreboardSeatOrder's
+// output), keyed by the id `idOf` reads off each one. Every scoreboard needs
+// this join once it has its own per-player array (rather than an id-keyed
+// record it can just look up into) — Fires Out's firefighters, Train Time's
+// per-player standings. An id in `order` with no matching item (a seat that
+// hasn't loaded yet) is silently dropped, matching what every caller already
+// did by hand.
+export function reorderByIds<T>(items: T[], order: string[], idOf: (item: T) => string): T[] {
+    const byId = new Map(items.map(item => [idOf(item), item]));
+    return order.flatMap(id => {
+        const item = byId.get(id);
+        return item ? [item] : [];
+    });
+}

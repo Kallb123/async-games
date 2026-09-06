@@ -32,8 +32,8 @@ import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { IOutbreakInfectionPhaseOutcome, OutbreakAction, OutbreakPlayEvent } from "@/utils/apiModels/GameLogic";
 import { HAND_LIMIT, IOutbreakInfectionLogEntry, OutbreakMoveType, getLegalMoves, infectionRateFor, stationCityIds } from "@/games/Outbreak/rules";
 import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, EVENT_CARD_AIRLIFT, EVENT_CARD_GOVERNMENT_GRANT, MAX_RESEARCH_STATIONS } from "@/games/Outbreak/board";
-import { playerColour } from "@/utils/ui/playerColours";
-import { abandonedGameStatus, isPlayersTurn, nameForUserId } from "@/utils/ui/players";
+import { playerColourForId } from "@/utils/ui/playerColours";
+import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
 
 // What the map is being used to pick right now: a movement destination, or
 // the destination/target an in-flight event card still needs. One state
@@ -112,6 +112,9 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     // OutbreakModels.ts's CreateGame) and need not match userIdList's join
     // order — OutbreakHands needs the real one for seating and turn markers.
     const turnOrder = gameData?.gameState?.turnOrder ?? [];
+    // The top scoreboard seats the viewer first, then follows the same real
+    // turn order OutbreakHands uses below.
+    const scoreboardOrder = scoreboardSeatOrder(gameData, myUserId);
     const me = gs?.playerStates[myUserId];
 
     // What the board is targeting right now, if anything — reset whenever the
@@ -247,7 +250,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     }
 
     const scoreEntries: ScoreEntry[] = gs
-        ? userIdList.flatMap((userId, i): ScoreEntry[] => {
+        ? scoreboardOrder.flatMap((userId): ScoreEntry[] => {
             const ps = gs.playerStates[userId];
             if (!ps) return [];
             const isMe = userId === myUserId;
@@ -255,7 +258,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
             return [{
                 id: userId,
                 name: isMe ? 'You' : ps.username,
-                color: playerColour(i),
+                color: playerColourForId(userId, userIdList),
                 sub: isActive ? `${ps.actionsLeft} actions · ${CITIES[ps.city].name}` : CITIES[ps.city].name,
                 score: ps.hand.length,
                 isMe,
@@ -420,6 +423,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                             gs={gs}
                             myUserId={myUserId}
                             userIdList={userIdList}
+                            turnOrder={turnOrder}
                             submitCommand={submitCommand}
                             pendingTarget={pendingTarget}
                             targeting={eventTargeting}
@@ -433,6 +437,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                             gs={gs}
                             myUserId={myUserId}
                             userIdList={userIdList}
+                            turnOrder={turnOrder}
                             moveMode={boardTarget?.kind === 'move' ? boardTarget.type : null}
                             setMoveMode={m => setBoardTarget(m ? { kind: 'move', type: m } : null)}
                             opsFlightActive={boardTarget?.kind === 'opsFlight'}

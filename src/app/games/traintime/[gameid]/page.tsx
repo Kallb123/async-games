@@ -43,7 +43,7 @@ import { TrainTimeClaimRoute, TrainTimeDrawTickets, TrainTimeKeepTickets } from 
 import { TRACK_PALETTE } from "@/games/TrainTime/ui";
 import { playerColour, playerColourForId } from "@/utils/ui/playerColours";
 import { pluralize } from "@/utils/ui/text";
-import { abandonedGameStatus, isPlayersTurn, nameForUserId } from "@/utils/ui/players";
+import { abandonedGameStatus, isPlayersTurn, nameForUserId, reorderByIds, scoreboardSeatOrder } from "@/utils/ui/players";
 
 // Trains at or below this leave a player one big route from ending the game —
 // the standings ring them so everybody can see the clock running down.
@@ -184,8 +184,10 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     }
 
     // ── Players ──────────────────────────────────────────────────────────────
-    // The standings, the ticket reveal and the final score sheet are all
-    // per-player lists over the same seating order, so the join happens once.
+    // The join-order base every per-player list here builds on. The final
+    // score sheet reads it directly (it re-sorts by score itself, so seating
+    // order doesn't matter); the scoreboard, legend and ticket reveal instead
+    // read scoreboardPlayers below, the same list reordered viewer-first.
     const players = gs
         ? userIdList.flatMap((userId, i) => {
             const ps = gs.playerStates[userId];
@@ -210,7 +212,12 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
         return longestRun(owners, myUserId);
     }, [gs, selectedRouteId, myUserId, myRun]);
 
-    const scoreEntries: ScoreEntry[] = players.map(({ userId, username, ps, colour, isMe }) => {
+    // The scoreboard seats the viewer first, then follows the real turn order.
+    // Colours stay tied to each player's `players` entry (join-order index) so
+    // they don't shift when the display order does.
+    const scoreboardPlayers = reorderByIds(players, scoreboardSeatOrder(gameData, myUserId), p => p.userId);
+
+    const scoreEntries: ScoreEntry[] = scoreboardPlayers.map(({ userId, username, ps, colour, isMe }) => {
         const isActive = userId === displayedCurrentTurn && !complete;
         return {
             id: userId,
@@ -272,7 +279,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
 
     // Tickets are secret while the game runs and face-up once it's scored (§10).
     const ticketGroups: TrainTimeTicketGroup[] = scored
-        ? players.flatMap(({ username, ps, isMe }): TrainTimeTicketGroup[] => (
+        ? scoreboardPlayers.flatMap(({ username, ps, isMe }): TrainTimeTicketGroup[] => (
             ps.tickets
                 ? [{ title: isMe ? 'Your tickets' : `${username}’s tickets`, tickets: ps.tickets }]
                 : []
@@ -438,7 +445,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                             boardTag={boardTag}
                         />
                         <div className="ag-tt-legend">
-                            {players.map(({ userId, username, ps, colour, isMe }) => (
+                            {scoreboardPlayers.map(({ userId, username, ps, colour, isMe }) => (
                                 <span key={userId} className="ag-tt-legend-item">
                                     <span className="ag-tt-legend-rail" style={{ background: colour }} />
                                     {isMe ? 'You' : username} {ps.routesClaimed}

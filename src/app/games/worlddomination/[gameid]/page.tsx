@@ -25,8 +25,8 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useGameGuide } from "@/utils/hooks/useGameGuide";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
-import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
-import { abandonedGameStatus, isPlayersTurn, nameForUserId } from "@/utils/ui/players";
+import { playerColourForId } from "@/utils/ui/playerColours";
+import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
 
 const PHASE_LABEL: Record<IWorldDominationSpecificGameStateResponse['phase'], string> = {
     setup: 'Setup',
@@ -69,6 +69,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
 
     const usernameList = gameData?.usernameList ?? [];
     const userIdList = gameData?.userIdList ?? [];
+    const scoreboardOrder = scoreboardSeatOrder(gameData, myUserId);
     function colorForOwner(owner: string | null): string {
         if (!owner) return '#888';
         return playerColourForId(owner, userIdList);
@@ -189,7 +190,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
 
     // ── Scoreboard ────────────────────────────────────────────────────────────
     const scoreEntries: ScoreEntry[] = gs
-        ? userIdList.flatMap((userId, i): ScoreEntry[] => {
+        ? scoreboardOrder.flatMap((userId): ScoreEntry[] => {
             const ps = gs.playerStates?.[userId];
             if (!ps) return [];
             const isMe = userId === myUserId;
@@ -201,7 +202,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
             return [{
                 id: userId,
                 name: isMe ? 'You' : ps.username,
-                color: PLAYER_COLOURS[i % PLAYER_COLOURS.length],
+                color: playerColourForId(userId, userIdList),
                 sub,
                 score: ps.territoryCount,
                 isMe,
