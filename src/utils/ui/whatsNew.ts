@@ -62,6 +62,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "See whether building early pays off in Dice Cities",
+                detail: "The result page now charts how many establishments each player owned at the end of every turn, alongside the coins chart — so you can see whether building up early snowballed into a win, or whether saving for the big cards paid off instead.",
+                game: "dicecities",
+            },
+            {
                 title: "Dice Cities rolls now show who got paid",
                 detail: "Every roll's payout now names who gained or lost coins and how many, right under the dice — no more working it out from the coin counts changing. And if it leaves you with nothing to spend and no free reroll left, your turn ends on its own instead of waiting for you to tap End turn.",
                 game: "dicecities",
@@ -101,10 +106,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Talk to your opponents during a game",
                 detail: "Every game now has a chat thread: tap 💬 on the board to say something to the other players, and they get a nudge on their phone. It stays readable after the game ends, so “gg” has somewhere to go — and you can turn the notifications off in Settings if you'd rather just read it when you next open the board. Reading it on one device now clears it everywhere, the home screen shows how many messages are waiting in each game, and opening a game you're behind on tells you who messaged while you were away.",
-            },
-            {
-                title: "Check your notifications actually work",
-                detail: "Allowing notifications was only half of it: a phone can allow them and still quietly fail to sign itself up, and nothing told you. Settings now says where this device stands, has a Send a test notification button that tells you exactly what became of it, and a ? explaining everything which can stop one arriving — including the Android battery and per-app settings that block them without asking.",
             },
         ],
     },

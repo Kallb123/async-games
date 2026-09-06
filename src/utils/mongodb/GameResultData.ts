@@ -272,7 +272,11 @@ const GAME_RESULT_STATS: Record<string, {
                 dcGameData,
                 (state, userId) => diceCitiesPlayerByUserId(state, userId)?.totalCoinsEarned,
             );
-            return computeDiceCitiesResultStats(dcGameData, coinsPerTurn);
+            const buildingsPerTurn = await computePerTurnStat<IDiceCitiesGameStateResponse>(
+                dcGameData,
+                (state, userId) => diceCitiesPlayerByUserId(state, userId)?.cards.reduce((sum, c) => sum + c.amount, 0),
+            );
+            return computeDiceCitiesResultStats(dcGameData, coinsPerTurn, buildingsPerTurn);
         },
         format: formatDiceCitiesResultStats,
         charts: formatDiceCitiesCharts,
