@@ -130,6 +130,11 @@ under `public/art` to a 256-colour palette, which costs about two thirds of the
 file and nothing an eye can find, at the original resolution. It leaves a file
 it has already been through alone, so there is no harm in running it twice.
 
+A `fullsize/` folder beside the faces holds the untouched originals they were
+made from, so a face can be redrawn or re-encoded from source at any time. The
+optimiser skips it by name for that reason — quantising it would be quantising
+the backup — and no card ever resolves to a path inside it.
+
 Themes that cannot rely on art still get to look different: Dice Cities' board
 gradient is driven by `--ag-dc-sky-1` / `--ag-dc-sky-2`, set per game from the
 theme, so the wasteland sits under a dust-ochre sky rather than a blue one.
