@@ -122,6 +122,14 @@ folder missing a file (or a face saved under the wrong name — the Train
 Station's is `station.png`) fails CI rather than serving a broken image on a
 real board.
 
+**Run `npm run optimise-art` after dropping new faces in, and commit what it
+writes.** A full-colour illustration comes out of most art tools essentially
+uncompressed — the first wasteland faces landed at ~3MB each — and that weight
+is carried by the repo and every deploy. The script quantises anything oversized
+under `public/art` to a 256-colour palette, which costs about two thirds of the
+file and nothing an eye can find, at the original resolution. It leaves a file
+it has already been through alone, so there is no harm in running it twice.
+
 Themes that cannot rely on art still get to look different: Dice Cities' board
 gradient is driven by `--ag-dc-sky-1` / `--ag-dc-sky-2`, set per game from the
 theme, so the wasteland sits under a dust-ochre sky rather than a blue one.
