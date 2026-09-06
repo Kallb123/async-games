@@ -22,7 +22,7 @@ interface DiceCitiesBoardProps {
      */
     isViewer: boolean;
     /**
-     * The theme this game is played in: it names every card in the city and
+     * The theme this game is played in: it names every card on the board and
      * the nouns the caption uses.
      */
     theme: DiceCitiesTheme;

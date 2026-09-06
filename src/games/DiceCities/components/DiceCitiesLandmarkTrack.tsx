@@ -1,7 +1,7 @@
 import { IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
 import { DiceCitiesCardIds } from "@/games/DiceCities/cards";
-import type { DiceCitiesTheme } from "@/games/DiceCities/themes";
 import { buildableLandmarks, LANDMARKS } from "@/games/DiceCities/ui";
+import type { DiceCitiesTheme } from "@/games/DiceCities/themes";
 import ZoomableCardArt from "@/games/DiceCities/components/ZoomableCardArt";
 import { capitalise } from "@/utils/ui/text";
 import { playerColourForId } from "@/utils/ui/playerColours";
@@ -15,7 +15,8 @@ interface DiceCitiesLandmarkTrackProps {
     myUserId: string;
     /** Docks games add the Harbour to the track. */
     enabledDocks: boolean;
-    /** The theme this game is played in: it names every landmark on the track. */
+    /** The theme this game is played in: it names every card on the track and
+     *  the nouns the head line uses. */
     theme: DiceCitiesTheme;
 }
 

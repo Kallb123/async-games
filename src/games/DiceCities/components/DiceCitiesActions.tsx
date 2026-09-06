@@ -27,8 +27,8 @@ import type { SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import Dice from "@/components/ui/Dice";
 import ActionButton from "@/components/ui/ActionButton";
 import PendingTag from "@/components/ui/PendingTag";
-import { mongoMap } from "@/utils/games/mongoMaps";
 import { capitalise } from "@/utils/ui/text";
+import { mongoMap } from "@/utils/games/mongoMaps";
 import { useEffect, useRef, useState } from "react";
 
 interface DiceCitiesActionsProps {

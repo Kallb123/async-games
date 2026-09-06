@@ -657,7 +657,7 @@ export class DiceCitiesRequestBusinessCenterOwnSelection implements IGameCommand
         removeCardFromPlayerState(dcGameData.specificGameState.bcSelectedOpponentCard, selectedOpponentState);
         addCardToPlayerState(dcGameData.specificGameState.bcSelectedOpponentCard, rollerState);
 
-        return finishBusinessCentreSwap(dcGameData, rollerState, this.senderId, dcGameData.specificGameState.bcSelectedOpponent, selectedOpponentCard, selectedOwnCard);
+        return finishBusinessCentreSwap(dcGameData, this.senderId, rollerState, dcGameData.specificGameState.bcSelectedOpponent, selectedOpponentCard, selectedOwnCard);
     }
 
     Undo (gameData: IGameData) {
@@ -763,7 +763,7 @@ export class DiceCitiesRequestBusinessCenterOpponentSelection implements IGameCo
         removeCardFromPlayerState(this.selectedCard, opponentState);
         addCardToPlayerState(this.selectedCard, rollerState);
 
-        return finishBusinessCentreSwap(dcGameData, rollerState, this.senderId, this.selectedUser, selectedOpponentCard, selectedOwnCard);
+        return finishBusinessCentreSwap(dcGameData, this.senderId, rollerState, this.selectedUser, selectedOpponentCard, selectedOwnCard);
     }
 
     Undo (gameData: IGameData) {
@@ -783,8 +783,8 @@ export class DiceCitiesRequestBusinessCenterOpponentSelection implements IGameCo
  */
 function finishBusinessCentreSwap(
     dcGameData: IDiceCitiesGameData,
-    rollerState: IDiceCitiesPlayerState,
     senderId: string,
+    rollerState: IDiceCitiesPlayerState,
     /** Who was traded with. Passed in because the callers have already
      *  established it exists; the state field it came from is cleared below. */
     opponentId: string,

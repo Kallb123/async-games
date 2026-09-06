@@ -4,7 +4,7 @@ import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic"
 import { IDiceCitiesDiceRollOutcome } from "@/utils/apiModels/GameLogic";
 import type { IDiceCitiesTvStationOutcome, IDiceCitiesBusinessCenterOutcome } from "@/utils/apiModels/GameLogic";
 import { DiceCitiesCardIds, HARBOUR_BONUS, HARBOUR_MIN_ROLL } from "@/games/DiceCities/cards";
-import { diceCitiesTheme, type DiceCitiesTheme } from "@/games/DiceCities/themes";
+import { diceCitiesTheme, DiceCitiesTheme } from "@/games/DiceCities/themes";
 import { coinChangeParts, LANDMARKS, landmarkCount } from "@/games/DiceCities/ui";
 import type { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
 import { playerByUserId } from "@/games/DiceCities/DiceCitiesModels";
@@ -23,11 +23,7 @@ const LANDMARK_BY_COMMAND: Record<string, string> = {
 // instead of only the roller's own line disappearing into "no coins" if
 // theirs happened to net to zero. Every reader of this recap sees the same
 // text, so - unlike the live board's version of this line - nobody gets "You".
-function coinChangeDetail(
-    changes: Map<string, number>,
-    state: IDiceCitiesGameStateResponse | undefined,
-    theme: DiceCitiesTheme
-): string {
+function coinChangeDetail(changes: Map<string, number>, state: IDiceCitiesGameStateResponse | undefined, theme: DiceCitiesTheme): string {
     const parts = coinChangeParts(changes, (userId) => playerByUserId(state, userId)?.username ?? "someone");
     return parts.length ? parts.join(", ") : `no ${theme.words.coins}`;
 }
