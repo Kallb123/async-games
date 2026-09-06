@@ -32,6 +32,21 @@ export interface IDiceCitiesDiceRollOutcome extends ICommandOutcome {
 // Tower re-roll can hand every coin back, whichever of them actually paid.
 type RollPayoutCommand = DiceCitiesRequestDiceRoll | DiceCitiesRequestHarbourBonus;
 
+export interface IDiceCitiesTvStationOutcome extends ICommandOutcome {
+    // Who paid, and how much - so the recap can name the victim of the steal.
+    stolenFromId?: string,
+    stolenAmount?: number,
+}
+
+export interface IDiceCitiesBusinessCenterOutcome extends ICommandOutcome {
+    // Set only once both sides have selected and the swap has actually
+    // happened - either selection command can be the one that completes it,
+    // so both record the same fields when they're the one that finishes.
+    tradedWithId?: string,
+    gaveCardId?: string,
+    receivedCardId?: string,
+}
+
 @serializable
 export class DiceCitiesGameType implements IGameType {
     gameId: uuidString = uuidv4() as uuidString;
@@ -516,10 +531,13 @@ export class DiceCitiesRequestTvStationSelection implements IGameCommand {
         if (!dcGameData.specificGameState.awaitingBCSelectionOwn && !dcGameData.specificGameState.awaitingBCSelectionOpponent) {
             turnOver = settleRoll(dcGameData, rollerState);
         }
-        return {
+        const outcome: IDiceCitiesTvStationOutcome = {
             turnOver,
-            validMove: true
+            validMove: true,
+            stolenFromId: selectedUserId,
+            stolenAmount: amountToSteal
         };
+        return outcome;
     }
 
     Undo (gameData: IGameData) {
@@ -626,6 +644,8 @@ export class DiceCitiesRequestBusinessCenterOwnSelection implements IGameCommand
             this.senderId,
             `stole a ${selectedOpponentCard.title} for a ${selectedOwnCard.title} coins from ${userToken(dcGameData.specificGameState.bcSelectedOpponent)}`
         ));
+        const tradedWithId = dcGameData.specificGameState.bcSelectedOpponent;
+        const receivedCardId = dcGameData.specificGameState.bcSelectedOpponentCard;
         dcGameData.specificGameState.bcSelectedOpponent = "";
         dcGameData.specificGameState.bcSelectedOpponent = "";
         dcGameData.specificGameState.bcSelectedOpponentCard = NIL_UUID as uuidString;
@@ -633,10 +653,14 @@ export class DiceCitiesRequestBusinessCenterOwnSelection implements IGameCommand
         if (!dcGameData.specificGameState.awaitingTSSelection) {
             turnOver = settleRoll(dcGameData, rollerState);
         }
-        return {
+        const outcome: IDiceCitiesBusinessCenterOutcome = {
             turnOver,
-            validMove: true
+            validMove: true,
+            tradedWithId: tradedWithId ?? undefined,
+            gaveCardId: this.selectedCard,
+            receivedCardId: receivedCardId ?? undefined
         };
+        return outcome;
     }
 
     Undo (gameData: IGameData) {
@@ -746,6 +770,7 @@ export class DiceCitiesRequestBusinessCenterOpponentSelection implements IGameCo
             this.senderId,
             `stole a ${selectedOpponentCard.title} for a ${selectedOwnCard.title} coins from ${userToken(dcGameData.specificGameState.bcSelectedOpponent)}`
         ));
+        const gaveCardId = dcGameData.specificGameState.bcSelectedOwnCard;
         dcGameData.specificGameState.bcSelectedOpponent = "";
         dcGameData.specificGameState.bcSelectedOpponent = "";
         dcGameData.specificGameState.bcSelectedOpponentCard = NIL_UUID as uuidString;
@@ -753,10 +778,14 @@ export class DiceCitiesRequestBusinessCenterOpponentSelection implements IGameCo
         if (!dcGameData.specificGameState.awaitingTSSelection) {
             turnOver = settleRoll(dcGameData, rollerState);
         }
-        return {
+        const outcome: IDiceCitiesBusinessCenterOutcome = {
             turnOver,
-            validMove: true
+            validMove: true,
+            tradedWithId: this.selectedUser,
+            gaveCardId: gaveCardId ?? undefined,
+            receivedCardId: this.selectedCard
         };
+        return outcome;
     }
 
     Undo (gameData: IGameData) {

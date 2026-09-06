@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
     DiceCitiesGameType,
+    DiceCitiesRequestBusinessCenterOpponentSelection,
+    DiceCitiesRequestBusinessCenterOwnSelection,
     DiceCitiesRequestCardPurchase,
     DiceCitiesRequestDiceRoll,
     DiceCitiesRequestHarbourBonus,
@@ -13,7 +15,7 @@ import {
     DiceCitiesRequestUnlockTrainStation,
 } from "./DiceCitiesLogic";
 import { LANDMARKS } from "./ui";
-import type { IDiceCitiesDiceRollOutcome } from "./DiceCitiesLogic";
+import type { IDiceCitiesBusinessCenterOutcome, IDiceCitiesDiceRollOutcome, IDiceCitiesTvStationOutcome } from "./DiceCitiesLogic";
 import { BANK_TOTAL_COINS, DiceCitiesCardIds, DiceCitiesCards, DOCKS_ESTABLISHMENT_IDS, STARTING_PLAYER_COINS } from "./cards";
 import { buildInitialDiceCitiesState } from "./DiceCitiesModels";
 import type { IDiceCitiesGameData, IDiceCitiesGameState, IDiceCitiesPlayerState } from "./DiceCitiesModels";
@@ -216,12 +218,16 @@ describe("Dice Cities bank supply", () => {
         command.senderUsername = "u1";
         command.selectedUser = "u2";
 
-        await command.Execute(game);
+        const outcome = await command.Execute(game) as IDiceCitiesTvStationOutcome;
 
         // TV Station takes 5, but the target only has 2 to give.
         expect(gs.playerStates.get("u1")!.money).toBe(2);
         expect(gs.playerStates.get("u2")!.money).toBe(0);
         expect(coinsInPlay(gs)).toBe(12);
+        // The outcome reports what was actually taken, not the card's face value,
+        // so the recap can say the same "2, not 5" the state itself paid out.
+        expect(outcome.stolenFromId).toBe("u2");
+        expect(outcome.stolenAmount).toBe(2);
     });
 
     it("returns the coins spent on an establishment to the bank", async () => {
@@ -460,11 +466,79 @@ describe("Dice Cities: auto-passing on zero coins", () => {
         command.senderUsername = "u1";
         command.selectedUser = "u2";
 
-        const outcome = await command.Execute(game);
+        const outcome = await command.Execute(game) as IDiceCitiesTvStationOutcome;
 
         expect(gs.playerStates.get("u1")!.money).toBe(0);
         expect(gs.hasRolled).toBe(false);
         expect(outcome.turnOver).toBe(true);
+        // A broke target still reports as stolen from, just for nothing.
+        expect(outcome.stolenFromId).toBe("u2");
+        expect(outcome.stolenAmount).toBe(0);
+    });
+
+    it("reports the Business Center trade on whichever selection completes it", async () => {
+        const gs = makeState({
+            awaitingBCSelectionOwn: true,
+            awaitingBCSelectionOpponent: true,
+            playerStates: new Map([
+                ["u1", player({ cards: cards(DiceCitiesCardIds.CAFE) })],
+                ["u2", player({ cards: cards(DiceCitiesCardIds.BAKERY) })],
+            ]),
+        });
+        const game = makeGame(gs);
+
+        const ownSelection = new DiceCitiesRequestBusinessCenterOwnSelection();
+        ownSelection.senderId = "u1";
+        ownSelection.senderUsername = "u1";
+        ownSelection.selectedCard = DiceCitiesCardIds.CAFE;
+        const firstOutcome = await ownSelection.Execute(game) as IDiceCitiesBusinessCenterOutcome;
+
+        // Still waiting on the opponent's side, so nothing has traded yet.
+        expect(firstOutcome.tradedWithId).toBeUndefined();
+
+        const opponentSelection = new DiceCitiesRequestBusinessCenterOpponentSelection();
+        opponentSelection.senderId = "u1";
+        opponentSelection.senderUsername = "u1";
+        opponentSelection.selectedUser = "u2";
+        opponentSelection.selectedCard = DiceCitiesCardIds.BAKERY;
+        const secondOutcome = await opponentSelection.Execute(game) as IDiceCitiesBusinessCenterOutcome;
+
+        expect(secondOutcome.tradedWithId).toBe("u2");
+        expect(secondOutcome.gaveCardId).toBe(DiceCitiesCardIds.CAFE);
+        expect(secondOutcome.receivedCardId).toBe(DiceCitiesCardIds.BAKERY);
+        expect(gs.playerStates.get("u1")!.cards.find(cc => cc.card === DiceCitiesCardIds.BAKERY)?.amount).toBe(1);
+        expect(gs.playerStates.get("u2")!.cards.find(cc => cc.card === DiceCitiesCardIds.CAFE)?.amount).toBe(1);
+    });
+
+    it("reports the Business Center trade the same way when the opponent's card is chosen first", async () => {
+        const gs = makeState({
+            awaitingBCSelectionOwn: true,
+            awaitingBCSelectionOpponent: true,
+            playerStates: new Map([
+                ["u1", player({ cards: cards(DiceCitiesCardIds.CAFE) })],
+                ["u2", player({ cards: cards(DiceCitiesCardIds.BAKERY) })],
+            ]),
+        });
+        const game = makeGame(gs);
+
+        const opponentSelection = new DiceCitiesRequestBusinessCenterOpponentSelection();
+        opponentSelection.senderId = "u1";
+        opponentSelection.senderUsername = "u1";
+        opponentSelection.selectedUser = "u2";
+        opponentSelection.selectedCard = DiceCitiesCardIds.BAKERY;
+        const firstOutcome = await opponentSelection.Execute(game) as IDiceCitiesBusinessCenterOutcome;
+
+        expect(firstOutcome.tradedWithId).toBeUndefined();
+
+        const ownSelection = new DiceCitiesRequestBusinessCenterOwnSelection();
+        ownSelection.senderId = "u1";
+        ownSelection.senderUsername = "u1";
+        ownSelection.selectedCard = DiceCitiesCardIds.CAFE;
+        const secondOutcome = await ownSelection.Execute(game) as IDiceCitiesBusinessCenterOutcome;
+
+        expect(secondOutcome.tradedWithId).toBe("u2");
+        expect(secondOutcome.gaveCardId).toBe(DiceCitiesCardIds.CAFE);
+        expect(secondOutcome.receivedCardId).toBe(DiceCitiesCardIds.BAKERY);
     });
 });
 

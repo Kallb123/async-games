@@ -2,6 +2,7 @@ import type { IRecapAdapter, IGameEvent, IRecapSummary, IRecapTip } from "@/util
 import type { ITurnSnapshot } from "@/utils/games/replay";
 import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic";
 import { IDiceCitiesDiceRollOutcome } from "@/utils/apiModels/GameLogic";
+import type { IDiceCitiesTvStationOutcome, IDiceCitiesBusinessCenterOutcome } from "@/utils/apiModels/GameLogic";
 import { DiceCitiesCards, DiceCitiesCardIds, HARBOUR_BONUS, HARBOUR_MIN_ROLL } from "@/games/DiceCities/cards";
 import { coinChangeParts, LANDMARKS, landmarkCount } from "@/games/DiceCities/ui";
 import type { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
@@ -139,8 +140,54 @@ function toEvents(
         ];
     }
 
-    // Passes, and the mid-roll TV Station / Business Center selection steps, don't
-    // earn their own recap row — the roll they belong to already captures the swing.
+    // ── TV Station: coins stolen from a chosen opponent, mid-roll. ─────────────
+    // Unlike the café/restaurant steals folded into the roll's own moneyChanges,
+    // this is a separate follow-up command - so it needs its own event, and
+    // only once the steal has actually happened (the outcome carries no
+    // stolenFromId while the selection is still outstanding).
+    if (command.className === "DiceCitiesRequestTvStationSelection") {
+        const tv = outcome as IDiceCitiesTvStationOutcome;
+        if (!tv.stolenFromId) return [];
+        const victim = playerByUserId(next.specificGameState as IDiceCitiesGameStateResponse, tv.stolenFromId);
+        return [
+            {
+                ...base,
+                type: "dc_tvsteal",
+                glyph: "📺",
+                title: `${name} used the TV Station to steal from ${victim?.username ?? "an opponent"}`,
+                detail: `${tv.stolenAmount ?? 0}🪙`,
+                affectedIds: [command.senderId, tv.stolenFromId],
+            },
+        ];
+    }
+
+    // ── Business Center: a card swapped for one of an opponent's. ──────────────
+    // Either selection command can be the one that completes the trade
+    // (whichever side picks last), so both are checked here the same way -
+    // only the one carrying the finished swap's fields produces an event.
+    if (
+        command.className === "DiceCitiesRequestBusinessCenterOwnSelection" ||
+        command.className === "DiceCitiesRequestBusinessCenterOpponentSelection"
+    ) {
+        const bc = outcome as IDiceCitiesBusinessCenterOutcome;
+        if (!bc.tradedWithId || !bc.gaveCardId || !bc.receivedCardId) return [];
+        const gave = DiceCitiesCards[bc.gaveCardId];
+        const received = DiceCitiesCards[bc.receivedCardId];
+        if (!gave || !received) return [];
+        const opponent = playerByUserId(next.specificGameState as IDiceCitiesGameStateResponse, bc.tradedWithId);
+        return [
+            {
+                ...base,
+                type: "dc_bctrade",
+                glyph: "🔄",
+                title: `${name} used the Business Center to steal ${opponent?.username ?? "an opponent"}'s ${received.title}`,
+                detail: `gave a ${gave.title} for it`,
+                affectedIds: [command.senderId, bc.tradedWithId],
+            },
+        ];
+    }
+
+    // Passes don't earn their own recap row.
     return [];
 }
 
@@ -148,8 +195,12 @@ function summarize(events: IGameEvent[], forUserId: string): IRecapSummary {
     const rolls = events.filter((e) => e.type === "dc_roll" || e.type === "dc_reroll").length;
     const landmarks = events.filter((e) => e.type === "dc_landmark");
     const won = landmarks.some((e) => e.detail === "winner!");
+    // Was the viewer the mark of a TV Station steal or a Business Center trade
+    // while they were away? Called out ahead of the generic dice swing below,
+    // since "someone made off with your property" is worth surfacing on its own.
+    const stolenFromYou = events.some((e) => (e.type === "dc_tvsteal" || e.type === "dc_bctrade") && e.affectedIds?.includes(forUserId));
     // Did any roll move coins to or from the viewer while they were away?
-    const touchedYou = events.some((e) => e.affectedIds?.includes(forUserId));
+    const diceTouchedYou = events.some((e) => (e.type === "dc_roll" || e.type === "dc_reroll") && e.affectedIds?.includes(forUserId));
 
     let tail = ".";
     if (won) {
@@ -158,7 +209,9 @@ function summarize(events: IGameEvent[], forUserId: string): IRecapSummary {
         tail = landmarks.length > 1
             ? " — landmarks are going up fast."
             : " — a rival unlocked a landmark.";
-    } else if (touchedYou) {
+    } else if (stolenFromYou) {
+        tail = " — and someone made off with your property.";
+    } else if (diceTouchedYou) {
         tail = " — and the dice touched your coin purse.";
     }
 
