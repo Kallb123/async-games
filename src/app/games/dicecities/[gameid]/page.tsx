@@ -133,7 +133,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
                 id: ps.userId,
                 name: isMe ? 'You' : ps.username,
                 color: playerColourForId(ps.userId, userIdList),
-                sub: <>{isLeader ? '👑' : '★'} {lm}/4</>,
+                sub: <>{isLeader ? '👑' : '★'} {lm}/{LANDMARKS.length}</>,
                 score: `${ps.money}🪙`,
                 isMe,
                 isActive,

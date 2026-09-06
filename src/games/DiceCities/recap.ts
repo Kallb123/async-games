@@ -154,7 +154,7 @@ function toEvents(
     if (command.className === "DiceCitiesRequestTvStationSelection") {
         const tv = outcome as IDiceCitiesTvStationOutcome;
         if (!tv.stolenFromId) return [];
-        const victim = playerByUserId(next.specificGameState as IDiceCitiesGameStateResponse, tv.stolenFromId);
+        const victim = playerByUserId(state, tv.stolenFromId);
         return [
             {
                 ...base,
@@ -180,7 +180,7 @@ function toEvents(
         const gave = theme.cards[bc.gaveCardId];
         const received = theme.cards[bc.receivedCardId];
         if (!gave || !received) return [];
-        const opponent = playerByUserId(next.specificGameState as IDiceCitiesGameStateResponse, bc.tradedWithId);
+        const opponent = playerByUserId(state, bc.tradedWithId);
         return [
             {
                 ...base,

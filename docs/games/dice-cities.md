@@ -630,7 +630,7 @@ is get its command terminal running again.
 | **Radio Tower** | **Overseer's Terminal** | 22 | Once per run, re-task it from the terminal (re-roll your dice). |
 
 The Terminal is not a second transmitter on purpose: the theme already has a
-**Pirate Radio Station** (§11.3), and a terminal is a thing you *operate*,
+**Pirate Radio Station** (§12.3), and a terminal is a thing you *operate*,
 which is what a re-roll is.
 
 ### 12.5 The Docks expansion → "The Wharf"

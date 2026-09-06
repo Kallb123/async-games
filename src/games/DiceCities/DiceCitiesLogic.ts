@@ -657,7 +657,7 @@ export class DiceCitiesRequestBusinessCenterOwnSelection implements IGameCommand
         removeCardFromPlayerState(dcGameData.specificGameState.bcSelectedOpponentCard, selectedOpponentState);
         addCardToPlayerState(dcGameData.specificGameState.bcSelectedOpponentCard, rollerState);
 
-        return finishBusinessCentreSwap(dcGameData, this.senderId, rollerState, dcGameData.specificGameState.bcSelectedOpponent, selectedOpponentCard, selectedOwnCard);
+        return finishBusinessCentreSwap(dcGameData, this.senderId, rollerState, dcGameData.specificGameState.bcSelectedOpponent, dcGameData.specificGameState.bcSelectedOpponentCard, this.selectedCard);
     }
 
     Undo (gameData: IGameData) {
@@ -763,53 +763,13 @@ export class DiceCitiesRequestBusinessCenterOpponentSelection implements IGameCo
         removeCardFromPlayerState(this.selectedCard, opponentState);
         addCardToPlayerState(this.selectedCard, rollerState);
 
-        return finishBusinessCentreSwap(dcGameData, this.senderId, rollerState, this.selectedUser, selectedOpponentCard, selectedOwnCard);
+        return finishBusinessCentreSwap(dcGameData, this.senderId, rollerState, this.selectedUser, this.selectedCard, dcGameData.specificGameState.bcSelectedOwnCard);
     }
 
     Undo (gameData: IGameData) {
         // TODO: Implement Undo
         console.error("Command Undo not implemented yet")
     }
-}
-
-/**
- * Closes out a Business Center swap once both cards have been chosen: the log
- * line naming the trade, the cleared selection state, and whether the roll is
- * finished (it isn't if the TV Station is still waiting on a target).
- *
- * The two selections can be made in either order, so both commands reach this
- * same ending - it lived twice, byte for byte, until the log line had to be
- * themed and had to be edited in both copies to stay in step.
- */
-function finishBusinessCentreSwap(
-    dcGameData: IDiceCitiesGameData,
-    senderId: string,
-    rollerState: IDiceCitiesPlayerState,
-    /** Who was traded with. Passed in because the callers have already
-     *  established it exists; the state field it came from is cleared below. */
-    opponentId: string,
-    takenCard: IDiceCitiesCard,
-    givenCard: IDiceCitiesCard,
-): IDiceCitiesBusinessCenterOutcome {
-    const names = logNames(dcGameData);
-    // Written before the selection is cleared - it names who was traded with.
-    dcGameData.gameState.history.unshift(playerHistory(
-        senderId,
-        `stole a ${names.cards[takenCard.cardId].title} for a ${names.cards[givenCard.cardId].title} from ${userToken(opponentId)}`
-    ));
-    dcGameData.specificGameState.bcSelectedOpponent = "";
-    dcGameData.specificGameState.bcSelectedOpponentCard = NIL_UUID as uuidString;
-    let turnOver = false;
-    if (!dcGameData.specificGameState.awaitingTSSelection) {
-        turnOver = settleRoll(dcGameData, rollerState);
-    }
-    return {
-        turnOver,
-        validMove: true,
-        tradedWithId: opponentId,
-        gaveCardId: givenCard.cardId,
-        receivedCardId: takenCard.cardId
-    };
 }
 
 @serializable
@@ -895,6 +855,45 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
         // TODO: Implement Undo
         console.error("Command Undo not implemented yet")
     }
+}
+
+/**
+ * Closes out a Business Center swap once both cards have been chosen: the log
+ * line naming the trade, the cleared selection state, and whether the roll is
+ * finished (it isn't if the TV Station is still waiting on a target).
+ *
+ * The two selections can be made in either order, so both commands reach this
+ * same ending - it lived twice, byte for byte, until the log line had to be
+ * themed and had to be edited in both copies to stay in step.
+ */
+function finishBusinessCentreSwap(
+    dcGameData: IDiceCitiesGameData,
+    senderId: string,
+    rollerState: IDiceCitiesPlayerState,
+    /** Who was traded with. Passed in because the callers have already
+     *  established it exists; the state field it came from is cleared below. */
+    opponentId: string,
+    takenCardId: uuidString,
+    givenCardId: uuidString,
+): IDiceCitiesBusinessCenterOutcome {
+    const names = logNames(dcGameData);
+    dcGameData.gameState.history.unshift(playerHistory(
+        senderId,
+        `stole a ${names.cards[takenCardId].title} for a ${names.cards[givenCardId].title} from ${userToken(opponentId)}`
+    ));
+    dcGameData.specificGameState.bcSelectedOpponent = "";
+    dcGameData.specificGameState.bcSelectedOpponentCard = NIL_UUID as uuidString;
+    let turnOver = false;
+    if (!dcGameData.specificGameState.awaitingTSSelection) {
+        turnOver = settleRoll(dcGameData, rollerState);
+    }
+    return {
+        turnOver,
+        validMove: true,
+        tradedWithId: opponentId,
+        gaveCardId: givenCardId,
+        receivedCardId: takenCardId
+    };
 }
 
 function addCardToPlayerState(cardId: uuidString, playerState: IDiceCitiesPlayerState) {

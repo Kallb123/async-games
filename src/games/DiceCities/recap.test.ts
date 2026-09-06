@@ -21,7 +21,7 @@ function player(overrides: Partial<IDiceCitiesPlayerStateResponse> & { userId: s
     };
 }
 
-function state(players: IDiceCitiesPlayerStateResponse[]): IDiceCitiesGameStateResponse {
+function state(players: IDiceCitiesPlayerStateResponse[], theme = DEFAULT_DICE_CITIES_THEME.id): IDiceCitiesGameStateResponse {
     const playerStates: { [key: string]: IDiceCitiesPlayerStateResponse } = {};
     for (const p of players) playerStates[p.userId] = p;
     return {
@@ -41,7 +41,7 @@ function state(players: IDiceCitiesPlayerStateResponse[]): IDiceCitiesGameStateR
         harbourRoll1: null,
         harbourRoll2: null,
         enabledDocks: false,
-        theme: DEFAULT_DICE_CITIES_THEME.id,
+        theme,
     };
 }
 
@@ -243,6 +243,42 @@ describe("Dice Cities recap adapter", () => {
         expect(events[0].title).toBe("Alice built the Harbour");
         // Not "1/4 landmarks": the Harbour never counts toward the win.
         expect(events[0].detail).toBe("+2 on a 10 or better");
+    });
+
+    // The recap is rebuilt from a replayed game, so it is the one screen that
+    // could name a card from the base table and never be noticed - the board it
+    // is describing has long since gone. Every name in a row comes from the
+    // theme the game was actually played in.
+    it("names a wasteland game's cards the way its board did", () => {
+        const wasteland = state([player({ userId: "u2", username: "Bob" })], "wasteland");
+        const events = diceCitiesRecapAdapter.toEvents(
+            snap(state([], "wasteland")),
+            snap(wasteland),
+            cmd({ className: "DiceCitiesRequestBusinessCenterOwnSelection" }),
+            {
+                validMove: true,
+                turnOver: true,
+                tradedWithId: "u2",
+                gaveCardId: DiceCitiesCardIds.CAFE,
+                receivedCardId: DiceCitiesCardIds.BAKERY,
+            } as ICommandOutcome,
+        );
+        expect(events[0].title).toContain("Barter Exchange");
+        expect(events[0].title).toContain("Snackcake Bakery");
+        expect(events[0].detail).toContain("Roadside Diner");
+
+        // And the nouns around them: a roll that paid nobody says so in caps.
+        const quiet = diceCitiesRecapAdapter.toEvents(
+            snap(state([], "wasteland")),
+            snap(wasteland),
+            cmd({ className: "DiceCitiesRequestDiceRoll" }),
+            { validMove: true, turnOver: false, roll1: 3, roll2: null, moneyChanges: new Map() } as ICommandOutcome,
+        );
+        expect(quiet[0].detail).toBe("no caps");
+
+        // The tip is handed the live state, so it reads the theme from there.
+        const tip = diceCitiesRecapAdapter.tip!(state([player({ userId: "u1", username: "Alice", money: 5 })], "wasteland"), "u1");
+        expect(tip?.text).toContain("Vault Door");
     });
 
     it("tips the viewer toward the cheapest landmark they can afford", () => {
