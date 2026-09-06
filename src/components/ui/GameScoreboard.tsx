@@ -13,8 +13,11 @@ export interface ScoreEntry {
     sub?: React.ReactNode;
     /** The big number on the right — victory points. */
     score: React.ReactNode;
+    /** Tints the pill faintly — this is the viewer's own seat. */
     isMe?: boolean;
-    /** It's this player's turn — draws the caret beside their name. */
+    /** It's this player's turn — draws the caret beside their name and rings
+     *  the pill, the stronger of the two cues (deliberately: the viewer's own
+     *  seat is already easy to find by position and its "You" label). */
     isActive?: boolean;
     /** Ring this player in the danger colour — they're about to end the game
      *  (Train Time's trains running out). */
@@ -39,7 +42,7 @@ export default function GameScoreboard({ entries }: { entries: ScoreEntry[] }) {
             {entries.map((e) => (
                 <div
                     key={e.id}
-                    className={`ag-score-pill${e.isMe ? ' ag-score-pill--me' : ''}${e.warn ? ' ag-score-pill--warn' : ''}${e.onClick ? ' ag-score-pill--tappable' : ''}${e.highlighted ? ' ag-score-pill--highlighted' : ''}`}
+                    className={`ag-score-pill${e.isMe ? ' ag-score-pill--me' : ''}${e.isActive ? ' ag-score-pill--active' : ''}${e.warn ? ' ag-score-pill--warn' : ''}${e.onClick ? ' ag-score-pill--tappable' : ''}${e.highlighted ? ' ag-score-pill--highlighted' : ''}`}
                     onClick={e.onClick}
                     role={e.onClick ? 'button' : undefined}
                     tabIndex={e.onClick ? 0 : undefined}

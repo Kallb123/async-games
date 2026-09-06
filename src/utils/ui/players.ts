@@ -300,3 +300,17 @@ export function seatOrderFrom(userIdList: string[], viewerId: string | null | un
     if (seat <= 0) return userIdList;
     return [...userIdList.slice(seat), ...userIdList.slice(0, seat)];
 }
+
+// The order every game's top-of-screen scoreboard seats its players in: the
+// viewer first (seatOrderFrom), then the game's real running order —
+// `gameState.turnOrder`, rolled off or shuffled at setup and not necessarily
+// the same as `userIdList`'s join order (see OutbreakHands' prop docs for why
+// the two can differ). Falls back to userIdList before a game's turnOrder has
+// loaded, so the scoreboard has something to seat on the first render.
+export function scoreboardSeatOrder(
+    game: { userIdList: string[]; gameState?: { turnOrder?: string[] } } | null | undefined,
+    viewerId: string | null | undefined,
+): string[] {
+    const turnOrder = game?.gameState?.turnOrder ?? [];
+    return seatOrderFrom(turnOrder.length ? turnOrder : (game?.userIdList ?? []), viewerId);
+}

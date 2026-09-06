@@ -19,9 +19,9 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import type { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
 import { SMARTTHINK_CODE_LENGTH } from "@/games/Smartthink/ui";
-import { abandonedGameStatus, isPlayersTurn } from "@/utils/ui/players";
+import { abandonedGameStatus, isPlayersTurn, scoreboardSeatOrder } from "@/utils/ui/players";
+import { playerColourForId } from "@/utils/ui/playerColours";
 
-const PLAYER_COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c"];
 const emptyGuess = (): (number | null)[] => Array(SMARTTHINK_CODE_LENGTH).fill(null);
 
 export default function GameSmartthink({ params }: { params: Promise<{ gameid: uuidString }> }) {
@@ -89,20 +89,25 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
     }
 
     // ── Scoreboard: setter/breaker roles + guesses made ──────────────────────
+    // The scoreboard seats the viewer first, then follows the real turn order
+    // rather than the server's arbitrary player-map order.
+    const scoreboardOrder = scoreboardSeatOrder(gameData, myUserId);
     const scoreEntries: ScoreEntry[] = displayed
-        ? (displayed.players ?? []).map((p, i): ScoreEntry => {
+        ? scoreboardOrder.flatMap((userId): ScoreEntry[] => {
+            const p = displayed.players?.find(pl => pl.userId === userId);
+            if (!p) return [];
             const isMe = p.userId === user?.id;
             const isSetter = p.userId === displayed.codeSetterId;
             const isActive = p.userId === nav.displayedCurrentTurn && !complete;
-            return {
+            return [{
                 id: p.userId,
                 name: isMe ? 'You' : p.username,
-                color: PLAYER_COLORS[i % PLAYER_COLORS.length],
+                color: playerColourForId(p.userId, userIdList),
                 sub: isSetter ? '🔒 setter' : '🔓 breaker',
                 score: isSetter ? '🔒' : displayed.guessRows.length,
                 isMe,
                 isActive,
-            };
+            }];
         })
         : [];
 

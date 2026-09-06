@@ -26,8 +26,8 @@ import { ISnakesAndLaddersGameStateResponse } from "@/games/SnakesAndLadders/api
 import { ISnakesAndLaddersDiceRollOutcome, SnakesAndLaddersRequestDiceRoll } from "@/utils/apiModels/GameLogic";
 import { SL_REROLL_PARAM } from "@/games/SnakesAndLadders/ui";
 import { rematchFlag } from "@/utils/ui/rematch";
-import { PLAYER_COLOURS, playerColourForId } from "@/utils/ui/playerColours";
-import { abandonedGameStatus, isPlayersTurn, nameForUserId } from "@/utils/ui/players";
+import { playerColourForId } from "@/utils/ui/playerColours";
+import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
 
 export default function GameSnakesAndLadders({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
@@ -95,6 +95,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     const myUserId = user?.id ?? "";
     const players = boardState?.playerStates ? Object.values(boardState.playerStates) : [];
     const colorForUserId = (userId: string): string => playerColourForId(userId, userIdList);
+    const scoreboardOrder = scoreboardSeatOrder(gameData, myUserId);
 
     const displayedCurrentTurn = nav.displayedCurrentTurn;
     const displayedWinner = nav.displayedWinner;
@@ -123,7 +124,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
 
     // ── Scoreboard: each player's square is their score ──────────────────────
     const scoreEntries: ScoreEntry[] = boardState
-        ? userIdList.flatMap((userId, i): ScoreEntry[] => {
+        ? scoreboardOrder.flatMap((userId): ScoreEntry[] => {
             const ps = boardState.playerStates?.[userId];
             if (!ps) return [];
             const isMe = ps.userId === user?.id;
@@ -134,7 +135,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
             return [{
                 id: userId,
                 name: isMe ? 'You' : ps.username,
-                color: PLAYER_COLOURS[i % PLAYER_COLOURS.length],
+                color: colorForUserId(userId),
                 sub,
                 score: ps.position,
                 isMe,

@@ -62,6 +62,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Your own card leads the scoreboard",
+                detail: "The player strip at the top of every game now puts you first and seats everyone else in the order they actually play, instead of the order you all joined — so you're never hunting for your own card in the middle of the row. Your card carries a soft tint to say it's yours; a bold ring now marks whoever's turn it is instead.",
+            },
+            {
                 title: "See whether building early pays off in Dice Cities",
                 detail: "The result page now charts how many establishments each player owned at the end of every turn, alongside the coins chart — so you can see whether building up early snowballed into a win, or whether saving for the big cards paid off instead.",
                 game: "dicecities",
@@ -102,10 +106,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "See which friends are around right now",
                 detail: "A green dot now sits on a friend's picture in your friends list while they're taking turns — anyone who has moved in a game in the last five minutes — so you can tell at a glance who is worth challenging now rather than tomorrow.",
-            },
-            {
-                title: "Talk to your opponents during a game",
-                detail: "Every game now has a chat thread: tap 💬 on the board to say something to the other players, and they get a nudge on their phone. It stays readable after the game ends, so “gg” has somewhere to go — and you can turn the notifications off in Settings if you'd rather just read it when you next open the board. Reading it on one device now clears it everywhere, the home screen shows how many messages are waiting in each game, and opening a game you're behind on tells you who messaged while you were away.",
             },
         ],
     },

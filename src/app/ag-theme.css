@@ -1385,12 +1385,12 @@ a.ag-list-row, a.ag-list-row-main {
     padding: 6px 8px;
     color: var(--ag-ink);
 }
-.ag-score-pill--me {
-    background: var(--ag-terracotta);
-    color: var(--ag-on-dark);
-    border-color: transparent;
-    box-shadow: 0 0 0 2px var(--ag-gold);
-}
+/* Identity — "this pill is you" — and turn state are deliberately different
+   cues so they compose on your own turn, the same split as `.ag-hand--me` /
+   `.ag-hand--active` one component down: a faint tint says who you are, a
+   strong ring says whose turn it is. */
+.ag-score-pill--me { background: color-mix(in oklch, var(--ag-terracotta) 8%, var(--ag-surface)); }
+.ag-score-pill--active { box-shadow: 0 0 0 2px var(--ag-gold); }
 .ag-score-pill--warn { box-shadow: inset 0 0 0 1.5px var(--ag-danger); }
 .ag-score-pill--tappable { cursor: pointer; }
 .ag-score-pill--tappable:active { filter: brightness(0.96); }
@@ -1411,7 +1411,6 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-score-dot { flex: none; }
 /* Inside the uppercase hand title, so it aligns to the text, not the box. */
 .ag-hand-dot { display: inline-block; margin-right: 6px; }
-.ag-score-pill--me .ag-score-dot { outline: 1.5px solid var(--ag-on-dark); }
 .ag-score-main { flex: 1; min-width: 0; }
 .ag-score-name {
     font: 800 11px/1 var(--ag-font);
@@ -3116,11 +3115,8 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-game--traintime .ag-game-topbar { background: var(--tt-oxblood); }
 .ag-game--traintime .ag-scorestrip { background: var(--tt-oxblood-2); }
 .ag-game--traintime .ag-score-pill { background: var(--tt-panel-2); border-color: transparent; min-width: 72px; }
-.ag-game--traintime .ag-score-pill--me {
-    background: var(--tt-brass);
-    color: var(--tt-on-brass);
-    box-shadow: 0 0 0 2px var(--tt-brass-ring);
-}
+.ag-game--traintime .ag-score-pill--me { background: color-mix(in oklch, var(--tt-brass) 15%, var(--tt-panel-2)); }
+.ag-game--traintime .ag-score-pill--active { box-shadow: 0 0 0 2px var(--tt-brass-ring); }
 .ag-game--traintime .ag-score-pill--warn { box-shadow: inset 0 0 0 1.5px var(--tt-bad); }
 .ag-game--traintime .ag-score-pill--warn .ag-score-sub { color: var(--tt-bad); font-weight: 700; }
 .ag-game--traintime .ag-btn--primary {
@@ -3621,11 +3617,8 @@ button.ag-tt-ticket { cursor: pointer; }
 }
 .ag-game--outbreak .ag-game-topbar { background: var(--ob-navy); }
 .ag-game--outbreak .ag-scorestrip { background: var(--ob-navy-2); }
-.ag-game--outbreak .ag-score-pill--me {
-    background: var(--ob-crimson);
-    color: var(--ag-on-dark);
-    box-shadow: 0 0 0 2px oklch(0.6 0.15 25);
-}
+.ag-game--outbreak .ag-score-pill--me { background: color-mix(in oklch, var(--ob-crimson) 8%, var(--ag-surface)); }
+.ag-game--outbreak .ag-score-pill--active { box-shadow: 0 0 0 2px oklch(0.6 0.15 25); }
 .ag-game--outbreak .ag-hand--me { background: color-mix(in oklch, var(--ob-crimson) 8%, transparent); }
 .ag-game--outbreak .ag-hand--active { box-shadow: inset 3px 0 0 var(--ob-crimson); }
 .ag-game--outbreak .ag-tag:not(.ag-tag--quiet) { background: color-mix(in oklch, var(--ob-crimson) 14%, var(--ag-surface)); color: var(--ob-crimson-deep); }
@@ -3717,11 +3710,8 @@ button.ag-tt-ticket { cursor: pointer; }
 }
 .ag-game--firesout .ag-game-topbar { background: var(--fo-char); }
 .ag-game--firesout .ag-scorestrip { background: var(--fo-char-2); }
-.ag-game--firesout .ag-score-pill--me {
-    background: var(--fo-red);
-    color: var(--ag-on-dark);
-    box-shadow: 0 0 0 2px oklch(0.6 0.15 40);
-}
+.ag-game--firesout .ag-score-pill--me { background: color-mix(in oklch, var(--fo-red) 8%, var(--ag-surface)); }
+.ag-game--firesout .ag-score-pill--active { box-shadow: 0 0 0 2px oklch(0.6 0.15 40); }
 .ag-game--firesout .ag-btn--primary {
     background: var(--fo-red);
     color: var(--ag-on-dark);
