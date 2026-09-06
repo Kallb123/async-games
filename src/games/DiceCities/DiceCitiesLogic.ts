@@ -7,6 +7,7 @@ import { deserializeJSON, serializable } from "@/utils/apiModels/Serialisable";
 import { playerHistory, userToken } from "@/utils/games/history";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { mongoMap } from "@/utils/games/mongoMaps";
+import { seatOrderFrom } from "@/utils/ui/players";
 import { DiceCitiesCardIds, DiceCitiesCards, HARBOUR_BONUS, HARBOUR_MIN_ROLL, TUNA_DICE, TUNA_DIE_SIDES } from "@/games/DiceCities/cards";
 import type { DiceCitiesBuildFlag } from "@/games/DiceCities/ui";
 import { diceCitiesTheme, type DiceCitiesTheme } from "@/games/DiceCities/themes";
@@ -1063,6 +1064,50 @@ function cardIsActive(card: IDiceCitiesCard, playerState: IDiceCitiesPlayerState
     return !card.requiresHarbour || playerState.harbourUnlocked === true;
 }
 
+// The order a roll pays its players in: the roller first, then the seats that
+// follow them round the table. It only shows when there isn't enough to go
+// round - a roller who can't cover every restaurant, or a bank that runs dry
+// mid-roll - and then it decides who is paid and who is shorted, so it has to
+// be the game's own turn order rather than whatever order `playerStates`
+// happens to have been built in. A player the turn order doesn't name is still
+// paid, at the back: a state that disagrees with itself should short someone,
+// not drop them.
+function payoutOrder(dcGameData: IDiceCitiesGameData): [string, IDiceCitiesPlayerState][] {
+    const playerStates = dcGameData.specificGameState.playerStates;
+    const ordered: [string, IDiceCitiesPlayerState][] = [];
+    const paid = new Set<string>();
+    seatOrderFrom(dcGameData.gameState.turnOrder ?? [], dcGameData.currentTurn).forEach(userId => {
+        const playerState = playerStates.get(userId);
+        if (playerState && !paid.has(userId)) {
+            ordered.push([userId, playerState]);
+            paid.add(userId);
+        }
+    });
+    playerStates.forEach((playerState, userId) => {
+        if (!paid.has(userId)) {
+            ordered.push([userId, playerState]);
+        }
+    });
+    return ordered;
+}
+
+// Every copy of a player's cards that this total sets off, once per copy: two
+// Cafes take a coin each, so the card comes back twice. Callers pass what their
+// own payout step cares about - a restaurant taking from the roller, or a card
+// drawing on the bank - and get the copies of the cards that match it.
+function activatedCopies(playerState: IDiceCitiesPlayerState, totalRoll: number, pays: (card: IDiceCitiesCard) => boolean): IDiceCitiesCard[] {
+    return playerState.cards.flatMap(cardCount => {
+        const cardObject = DiceCitiesCards[cardCount.card.toString()];
+        if (!cardObject.rollNumber.includes(totalRoll)) {
+            return [];
+        }
+        if (!pays(cardObject) || !cardIsActive(cardObject, playerState)) {
+            return [];
+        }
+        return Array<IDiceCitiesCard>(cardCount.amount).fill(cardObject);
+    });
+}
+
 // True once a roll has fully paid out and left the roller with nothing they
 // could still do besides pass: every establishment and landmark costs at
 // least 1 coin, so 0 coins rules out buying anything - unless a Radio Tower
@@ -1159,27 +1204,14 @@ function resolveRoll(dcGameData: IDiceCitiesGameData, rollerState: IDiceCitiesPl
         return tunaRoll;
     };
     // Award red cards
-    dcGameData.specificGameState.playerStates.forEach((playerState, userId) => {
+    payoutOrder(dcGameData).forEach(([userId, playerState]) => {
         if (userId === dcGameData.currentTurn) {
             return;
         }
-        const hitCards : IDiceCitiesCard[] = playerState.cards.flatMap(cardCount => {
-            const cardObject = DiceCitiesCards[cardCount.card.toString()];
-            if (!cardObject.rollNumber.includes(totalRoll)) {
-                return [];
-            }
-            if (cardObject.stealRollerGain === 0) {
-                return [];
-            }
-            if (!cardObject.onOponentsTurn) {
-                return [];
-            }
-            if (!cardIsActive(cardObject, playerState)) {
-                return [];
-            }
-            console.log(`Rolled ${totalRoll}, ${cardObject.title} stealing money from roller to ${userId}. CurrentTurn: ${dcGameData.currentTurn}`);
-            return [cardObject];
-        });
+        const hitCards = activatedCopies(playerState, totalRoll, card => card.stealRollerGain !== 0 && card.onOponentsTurn);
+        // Each copy takes its own coins, and each takes only what the roller
+        // still has: once they are cleaned out the rest of the restaurants on
+        // the table go unpaid rather than pushing them into debt.
         hitCards.forEach(card => {
             const cardAmount = card.type === "dining" && playerState.bonusDiningAndStore ? card.stealRollerGain+1 : card.stealRollerGain;
             const amountToSteal = Math.min(rollerState.money, cardAmount);
@@ -1192,39 +1224,11 @@ function resolveRoll(dcGameData: IDiceCitiesGameData, rollerState: IDiceCitiesPl
         });
     });
     // Award bank money (green and blue)
-    dcGameData.specificGameState.playerStates.forEach((playerState, userId) => {
-        const hitCards : IDiceCitiesCard[] = playerState.cards.flatMap(cardCount => {
-            const cardObject = DiceCitiesCards[cardCount.card.toString()];
-            if (!cardObject.rollNumber.includes(totalRoll)) {
-                return [];
-            }
-            if (cardObject.bankGain === 0 && cardObject.gainMultiplier === null && !cardObject.sharedDieGain) {
-                return [];
-            }
-            if (!cardIsActive(cardObject, playerState)) {
-                return [];
-            }
-            if (userId === dcGameData.currentTurn) {
-                if (cardObject.onOwnTurn) {
-                    let output = [];
-                    for(let i = 0; i < cardCount.amount; i++) {
-                        console.log(`Rolled ${totalRoll}, adding money from ${cardObject.title} to ${userId}. CurrentTurn: ${dcGameData.currentTurn}`);
-                        output.push(cardObject);
-                    }
-                    return output;
-                }
-            } else {
-                if (cardObject.onOponentsTurn) {
-                    let output = [];
-                    for(let i = 0; i < cardCount.amount; i++) {
-                        console.log(`Rolled ${totalRoll}, adding money from ${cardObject.title} to ${userId}. CurrentTurn: ${dcGameData.currentTurn}`);
-                        output.push(cardObject);
-                    }
-                    return output;
-                }
-            }
-            return [];
-        });
+    payoutOrder(dcGameData).forEach(([userId, playerState]) => {
+        const isRoller = userId === dcGameData.currentTurn;
+        const hitCards = activatedCopies(playerState, totalRoll, card =>
+            (card.bankGain !== 0 || card.gainMultiplier !== null || card.sharedDieGain === true)
+            && (isRoller ? card.onOwnTurn : card.onOponentsTurn));
         hitCards.forEach(card => {
             let cardAmount = 0;
             const multiplier = card.gainMultiplier;
