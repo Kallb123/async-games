@@ -22,3 +22,13 @@ export function truncate(text: string, max: number): string {
     if (text.length <= max) return text;
     return `${text.slice(0, max - 1).trimEnd()}…`;
 }
+
+/**
+ * `text` with its first letter upper-cased and nothing else touched — for a
+ * word stored the way it reads mid-sentence ("holdings") that has to start a
+ * line ("Holdings · 4 built"). Storing both cases of every themed noun would
+ * be two things to keep in step; this is the one that isn't.
+ */
+export function capitalise(text: string): string {
+    return text.charAt(0).toUpperCase() + text.slice(1);
+}

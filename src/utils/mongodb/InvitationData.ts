@@ -14,6 +14,13 @@ export interface IInvitationData {
     timestamp: string,
     gameType: string,
     gameFriendlyName: string,
+    // Which of the game's themes the host chose on the setup screen (see
+    // utils/ui/gameThemes.ts). A cross-game setting like the turn timer, and
+    // stored here rather than in each game's own invitation discriminator so
+    // the lobby route can carry it through for every game without a branch.
+    // Absent for a game with no themes, and for an invitation created before
+    // that game had any — both read back as the game's default.
+    theme?: string,
     // Present only on an open, join-by-code lobby. A real Date (unlike the
     // ISO-string timestamps above) because the TTL index below only expires
     // Date-typed fields.
@@ -49,6 +56,7 @@ export var InvitationSchema = new Schema<IInvitationDataDocument> ({
     timestamp: String,
     gameType: String,
     gameFriendlyName: String,
+    theme: String,
     joinCode: String,
     expiresAt: Date,
     senderName: String
@@ -90,5 +98,8 @@ export interface IInvitationResponse {
 
 export interface IInvitationRequest {
     userList: string[],
-    turnTimer: string
+    turnTimer: string,
+    /** The game theme the host picked, if the game offers any. Normalised
+     *  through `themeIdFor` before it is stored — never trusted as sent. */
+    theme?: string
 }

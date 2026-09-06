@@ -10,7 +10,21 @@ import { mongoMap } from "@/utils/games/mongoMaps";
 import { seatOrderFrom } from "@/utils/ui/players";
 import { DiceCitiesCardIds, DiceCitiesCards, HARBOUR_BONUS, HARBOUR_MIN_ROLL, TUNA_DICE, TUNA_DIE_SIDES } from "@/games/DiceCities/cards";
 import type { DiceCitiesBuildFlag } from "@/games/DiceCities/ui";
+import { diceCitiesTheme, type DiceCitiesTheme } from "@/games/DiceCities/themes";
+import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
+
+/**
+ * The names this game's log is written in. A themed game's history should read
+ * the way its board does - a player who bought a Brahmin Pen should not find a
+ * Ranch in the log - so every history line below looks its card up here rather
+ * than in the base `DiceCitiesCards` table. Rules never do: a themed card is
+ * the same card, and the engine reads the base table for everything it
+ * computes.
+ */
+function logNames(dcGameData: IDiceCitiesGameData): DiceCitiesTheme {
+    return diceCitiesTheme(dcGameData.specificGameState.theme);
+}
 
 export interface IDiceCitiesDiceRollOutcome extends ICommandOutcome {
     roll1: number,
@@ -234,7 +248,7 @@ export class DiceCitiesRequestCardPurchase implements IGameCommand {
         }
 
         dcGameData.specificGameState.hasRolled = false;
-        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `bought a ${cardObject.title}`));
+        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `bought a ${logNames(dcGameData).cards[this.cardId].title}`));
         return {
             turnOver: true,
             validMove: true
@@ -458,9 +472,10 @@ export class DiceCitiesRequestHarbourBonus implements IGameCommand {
         gameState.harbourRoll1 = null;
         gameState.harbourRoll2 = null;
 
+        const harbour = logNames(dcGameData).cards[DiceCitiesCardIds.HARBOUR].title;
         dcGameData.gameState.history.unshift(playerHistory(this.senderId, this.addBonus
-            ? `used the Harbour to turn a ${rolled} into a ${totalRoll}`
-            : `passed on the Harbour's bonus and stayed on ${rolled}`));
+            ? `used the ${harbour} to turn a ${rolled} into a ${totalRoll}`
+            : `passed on the ${harbour}'s bonus and stayed on ${rolled}`));
         return outcome;
     }
 
@@ -526,7 +541,9 @@ export class DiceCitiesRequestTvStationSelection implements IGameCommand {
         rollerState.money += amountToSteal;
         rollerState.totalCoinsEarned += amountToSteal;
 
-        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `stole ${amountToSteal} coins from ${userToken(selectedUserId)}`));
+        const names = logNames(dcGameData);
+        const stolen = pluralize(amountToSteal, names.words.coin, names.words.coins);
+        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `stole ${stolen} from ${userToken(selectedUserId)}`));
         dcGameData.specificGameState.awaitingTSSelection = false;
         let turnOver = false;
         if (!dcGameData.specificGameState.awaitingBCSelectionOwn && !dcGameData.specificGameState.awaitingBCSelectionOpponent) {
@@ -641,27 +658,7 @@ export class DiceCitiesRequestBusinessCenterOwnSelection implements IGameCommand
         removeCardFromPlayerState(dcGameData.specificGameState.bcSelectedOpponentCard, selectedOpponentState);
         addCardToPlayerState(dcGameData.specificGameState.bcSelectedOpponentCard, rollerState);
 
-        dcGameData.gameState.history.unshift(playerHistory(
-            this.senderId,
-            `stole a ${selectedOpponentCard.title} for a ${selectedOwnCard.title} coins from ${userToken(dcGameData.specificGameState.bcSelectedOpponent)}`
-        ));
-        const tradedWithId = dcGameData.specificGameState.bcSelectedOpponent;
-        const receivedCardId = dcGameData.specificGameState.bcSelectedOpponentCard;
-        dcGameData.specificGameState.bcSelectedOpponent = "";
-        dcGameData.specificGameState.bcSelectedOpponent = "";
-        dcGameData.specificGameState.bcSelectedOpponentCard = NIL_UUID as uuidString;
-        let turnOver = false;
-        if (!dcGameData.specificGameState.awaitingTSSelection) {
-            turnOver = settleRoll(dcGameData, rollerState);
-        }
-        const outcome: IDiceCitiesBusinessCenterOutcome = {
-            turnOver,
-            validMove: true,
-            tradedWithId: tradedWithId ?? undefined,
-            gaveCardId: this.selectedCard,
-            receivedCardId: receivedCardId ?? undefined
-        };
-        return outcome;
+        return finishBusinessCentreSwap(dcGameData, this.senderId, rollerState, dcGameData.specificGameState.bcSelectedOpponent, dcGameData.specificGameState.bcSelectedOpponentCard, this.selectedCard);
     }
 
     Undo (gameData: IGameData) {
@@ -767,26 +764,7 @@ export class DiceCitiesRequestBusinessCenterOpponentSelection implements IGameCo
         removeCardFromPlayerState(this.selectedCard, opponentState);
         addCardToPlayerState(this.selectedCard, rollerState);
 
-        dcGameData.gameState.history.unshift(playerHistory(
-            this.senderId,
-            `stole a ${selectedOpponentCard.title} for a ${selectedOwnCard.title} coins from ${userToken(dcGameData.specificGameState.bcSelectedOpponent)}`
-        ));
-        const gaveCardId = dcGameData.specificGameState.bcSelectedOwnCard;
-        dcGameData.specificGameState.bcSelectedOpponent = "";
-        dcGameData.specificGameState.bcSelectedOpponent = "";
-        dcGameData.specificGameState.bcSelectedOpponentCard = NIL_UUID as uuidString;
-        let turnOver = false;
-        if (!dcGameData.specificGameState.awaitingTSSelection) {
-            turnOver = settleRoll(dcGameData, rollerState);
-        }
-        const outcome: IDiceCitiesBusinessCenterOutcome = {
-            turnOver,
-            validMove: true,
-            tradedWithId: this.selectedUser,
-            gaveCardId: gaveCardId ?? undefined,
-            receivedCardId: this.selectedCard
-        };
-        return outcome;
+        return finishBusinessCentreSwap(dcGameData, this.senderId, rollerState, this.selectedUser, this.selectedCard, dcGameData.specificGameState.bcSelectedOwnCard);
     }
 
     Undo (gameData: IGameData) {
@@ -878,6 +856,45 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
         // TODO: Implement Undo
         console.error("Command Undo not implemented yet")
     }
+}
+
+/**
+ * Closes out a Business Center swap once both cards have been chosen: the log
+ * line naming the trade, the cleared selection state, and whether the roll is
+ * finished (it isn't if the TV Station is still waiting on a target).
+ *
+ * The two selections can be made in either order, so both commands reach this
+ * same ending - it lived twice, byte for byte, until the log line had to be
+ * themed and had to be edited in both copies to stay in step.
+ */
+function finishBusinessCentreSwap(
+    dcGameData: IDiceCitiesGameData,
+    senderId: string,
+    rollerState: IDiceCitiesPlayerState,
+    /** Who was traded with. Passed in because the callers have already
+     *  established it exists; the state field it came from is cleared below. */
+    opponentId: string,
+    takenCardId: uuidString,
+    givenCardId: uuidString,
+): IDiceCitiesBusinessCenterOutcome {
+    const names = logNames(dcGameData);
+    dcGameData.gameState.history.unshift(playerHistory(
+        senderId,
+        `stole a ${names.cards[takenCardId].title} for a ${names.cards[givenCardId].title} from ${userToken(opponentId)}`
+    ));
+    dcGameData.specificGameState.bcSelectedOpponent = "";
+    dcGameData.specificGameState.bcSelectedOpponentCard = NIL_UUID as uuidString;
+    let turnOver = false;
+    if (!dcGameData.specificGameState.awaitingTSSelection) {
+        turnOver = settleRoll(dcGameData, rollerState);
+    }
+    return {
+        turnOver,
+        validMove: true,
+        tradedWithId: opponentId,
+        gaveCardId: givenCardId,
+        receivedCardId: takenCardId
+    };
 }
 
 function addCardToPlayerState(cardId: uuidString, playerState: IDiceCitiesPlayerState) {
@@ -1022,7 +1039,7 @@ function buildLandmark(gameData: IGameData, cardId: DiceCitiesCardIds, flag: Dic
     currentPlayerState[flag] = true;
 
     dcGameData.specificGameState.hasRolled = false;
-    dcGameData.gameState.history.unshift(playerHistory(senderId, `bought a ${cardObject.title}`));
+    dcGameData.gameState.history.unshift(playerHistory(senderId, `bought a ${logNames(dcGameData).cards[cardId].title}`));
     return {
         turnOver: true,
         validMove: true
@@ -1108,7 +1125,7 @@ function noActionsAvailable(dcGameData: IDiceCitiesGameData, rollerState: IDiceC
 function settleRoll(dcGameData: IDiceCitiesGameData, rollerState: IDiceCitiesPlayerState): boolean {
     if (noActionsAvailable(dcGameData, rollerState)) {
         dcGameData.specificGameState.hasRolled = false;
-        dcGameData.gameState.history.unshift(playerHistory(dcGameData.currentTurn, `had no coins and nothing to do, so their turn passed automatically`));
+        dcGameData.gameState.history.unshift(playerHistory(dcGameData.currentTurn, `had no ${logNames(dcGameData).words.coins} and nothing to do, so their turn passed automatically`));
         return true;
     }
     dcGameData.specificGameState.hasRolled = true;
@@ -1253,11 +1270,13 @@ function resolveRoll(dcGameData: IDiceCitiesGameData, rollerState: IDiceCitiesPl
             moneyChanges.set(userId, (moneyChanges.get(userId) ?? 0) + paid);
         });
     });
+    const names = logNames(dcGameData);
     if (tunaRoll !== null) {
-        dcGameData.gameState.history.unshift({ text: `The tuna haul was ${tunaRoll} - every Tuna Boat paid out ${tunaRoll} coins` });
+        const tunaBoat = names.cards[DiceCitiesCardIds.TUNA_BOAT].title;
+        dcGameData.gameState.history.unshift({ text: `The shared haul was ${tunaRoll} - every ${tunaBoat} paid out ${pluralize(tunaRoll, names.words.coin, names.words.coins)}` });
     }
     if (bankShortfall > 0) {
-        dcGameData.gameState.history.unshift({ text: `The bank ran out of coins - ${bankShortfall} coin${bankShortfall === 1 ? "" : "s"} of income went unpaid` });
+        dcGameData.gameState.history.unshift({ text: `The ${names.words.bank} ran out of ${names.words.coins} - ${pluralize(bankShortfall, names.words.coin, names.words.coins)} of income went unpaid` });
     }
     // Award purple cards
     const stadiumCard = DiceCitiesCards[DiceCitiesCardIds.STADIUM];

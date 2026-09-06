@@ -9,11 +9,13 @@ import PartySizeHint from "@/components/ui/PartySizeHint";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
 import OptionSection from "@/components/ui/OptionSection";
 import SeatCountSelect from "@/components/ui/SeatCountSelect";
+import ThemeSelect from "@/components/ui/ThemeSelect";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
 import { useCreateLobbyOrInvite } from "@/utils/hooks/useCreateLobbyOrInvite";
 import { GAME_META } from "@/utils/ui/games";
-import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
+import { themeIdFor } from "@/utils/ui/gameThemes";
+import { readRematchPlayers, readRematchTheme, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { DiceCitiesInvitationRequest } from "@/games/DiceCities/DiceCitiesModels";
 
 function NewGameDiceCitiesForm() {
@@ -25,6 +27,9 @@ function NewGameDiceCitiesForm() {
   const [enabledDocks, setEnabledDocks] = useState(false);
   const [enabledBillionaireRow, setEnabledBillionaireRow] = useState(false);
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
+  // A rematch of a themed game starts in that theme; anything else — including
+  // a link with a theme that no longer exists — starts in the default.
+  const [theme, setTheme] = useState(() => themeIdFor('dicecities', readRematchTheme(searchParams)));
   const gameMeta = GAME_META.dicecities;
   const { seatCount, setSeatCount, maxSeats, partySize, canSubmit, actionLabel, footnote, submit } = useCreateLobbyOrInvite({
     meta: gameMeta,
@@ -40,7 +45,8 @@ function NewGameDiceCitiesForm() {
       userList: players,
       enabledDocks,
       enabledBillionaireRow,
-      turnTimer
+      turnTimer,
+      theme
     };
     await submit(data);
   }
@@ -58,6 +64,8 @@ function NewGameDiceCitiesForm() {
 
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
       <PartySizeHint meta={gameMeta} total={partySize} />
+
+      <ThemeSelect gameUrl="dicecities" value={theme} onChange={setTheme} />
 
       <OptionSection label="Dice Cities options">
         <OptionToggleRow

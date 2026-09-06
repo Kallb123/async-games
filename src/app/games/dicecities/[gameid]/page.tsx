@@ -1,5 +1,5 @@
 'use client'
-import { use } from "react";
+import { use, type CSSProperties } from "react";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { usePathname } from "next/navigation";
 import { IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
@@ -13,7 +13,8 @@ import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import DiceCitiesBoard from "@/games/DiceCities/components/DiceCitiesBoard";
 import DiceCitiesLandmarkTrack from "@/games/DiceCities/components/DiceCitiesLandmarkTrack";
 import DiceCitiesActions from "@/games/DiceCities/components/DiceCitiesActions";
-import { guide as diceCitiesGuide } from "@/games/DiceCities/guide";
+import { buildDiceCitiesGuide } from "@/games/DiceCities/guide";
+import { diceCitiesTheme } from "@/games/DiceCities/themes";
 import TurnNavControls from "@/components/games/TurnNavControls";
 import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
@@ -23,9 +24,10 @@ import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useGameGuide } from "@/utils/hooks/useGameGuide";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
-import { landmarkCount } from "@/games/DiceCities/ui";
+import { LANDMARKS, landmarkCount } from "@/games/DiceCities/ui";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId, reorderByIds, scoreboardSeatOrder } from "@/utils/ui/players";
+import { rematchTheme } from "@/utils/ui/rematch";
 
 // Sentinel used as "current turn" while reviewing a past turn, so no player's
 // interactive controls activate.
@@ -99,6 +101,10 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, getForfeitedByDisplayName());
     const hasRolled = displayed?.hasRolled ?? false;
     const enabledDocks = displayed?.enabledDocks === true;
+    // Fixed at creation and carried on the game state, so a game reviewed turn
+    // by turn stays in the theme it was played in. Total, so a game older than
+    // themes reads back as the game it shipped as.
+    const theme = diceCitiesTheme(displayed?.theme);
 
     // ── Top-bar status line ──────────────────────────────────────────────────
     let subtitle: React.ReactNode = 'Loading…';
@@ -110,7 +116,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
         } else if (isMyTurn) {
             subtitle = hasRolled
                 ? <><span className="ag-hi">Your turn</span> · build or end turn</>
-                : <><span className="ag-hi">Your roll</span> · build all 4 landmarks to win</>;
+                : <><span className="ag-hi">Your roll</span> · build all {LANDMARKS.length} {theme.words.landmarks} to win</>;
         } else {
             subtitle = <>{currentTurnUsername}&apos;s turn</>;
         }
@@ -127,7 +133,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
                 id: ps.userId,
                 name: isMe ? 'You' : ps.username,
                 color: playerColourForId(ps.userId, userIdList),
-                sub: <>{isLeader ? '👑' : '★'} {lm}/4</>,
+                sub: <>{isLeader ? '👑' : '★'} {lm}/{LANDMARKS.length}</>,
                 score: `${ps.money}🪙`,
                 isMe,
                 isActive,
@@ -144,6 +150,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
             gameState={displayed}
             myState={myState}
             opponents={opponents}
+            theme={theme}
             submitCommand={controlsSubmit}
             pendingTarget={controlsPendingTarget}
             readOnly={!isMyTurn}
@@ -189,7 +196,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
         <GameShell title="Dice Cities" subtitle={subtitle} options={displayed ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList }} chat={{ gameId, userIdList, usernameList }}>
             <FcmTokenComp />
 
-            {gameGuide.open && <GameGuideModal guide={diceCitiesGuide} onClose={gameGuide.closeGuide} />}
+            {gameGuide.open && <GameGuideModal guide={buildDiceCitiesGuide(theme)} onClose={gameGuide.closeGuide} />}
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 
@@ -204,19 +211,28 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
                     userIdList={userIdList}
                     myUserId={myUserId}
                     turnTimer={gameData?.turnTimer}
+                    extraParams={rematchTheme(theme.id)}
                 />
             )}
 
             {seats.length > 0 && (
-                <div className="ag-board-area ag-dc-area">
+                // The sky is the one part of the board a theme repaints without
+                // any art: `--ag-dc-sky-*` are the two stops of the gradient
+                // .ag-dc-area draws, which falls back to the original blue if
+                // they're ever unset.
+                <div
+                    className="ag-board-area ag-dc-area"
+                    style={{ "--ag-dc-sky-1": theme.sky[0], "--ag-dc-sky-2": theme.sky[1] } as CSSProperties}
+                >
                     <DiceCitiesLandmarkTrack
                         seats={seats}
                         userIdList={userIdList}
                         myUserId={myUserId}
                         enabledDocks={enabledDocks}
+                        theme={theme}
                     />
                     {seats.map(p => (
-                        <DiceCitiesBoard key={p.userId} playerState={p} isViewer={p.userId === myUserId} />
+                        <DiceCitiesBoard key={p.userId} playerState={p} isViewer={p.userId === myUserId} theme={theme} />
                     ))}
                 </div>
             )}

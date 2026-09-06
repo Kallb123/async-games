@@ -1,7 +1,9 @@
 import { IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
-import { DiceCitiesCards } from "@/games/DiceCities/cards";
-import { buildableLandmarks } from "@/games/DiceCities/ui";
+import { DiceCitiesCardIds } from "@/games/DiceCities/cards";
+import { buildableLandmarks, LANDMARKS } from "@/games/DiceCities/ui";
+import type { DiceCitiesTheme } from "@/games/DiceCities/themes";
 import ZoomableCardArt from "@/games/DiceCities/components/ZoomableCardArt";
+import { capitalise } from "@/utils/ui/text";
 import { playerColourForId } from "@/utils/ui/playerColours";
 
 interface DiceCitiesLandmarkTrackProps {
@@ -13,6 +15,9 @@ interface DiceCitiesLandmarkTrackProps {
     myUserId: string;
     /** Docks games add the Harbour to the track. */
     enabledDocks: boolean;
+    /** The theme this game is played in: it names every card on the track and
+     *  the nouns the head line uses. */
+    theme: DiceCitiesTheme;
 }
 
 /**
@@ -29,15 +34,17 @@ interface DiceCitiesLandmarkTrackProps {
  *
  * See docs/games/dice-cities.md §11.4.
  */
-export default function DiceCitiesLandmarkTrack({ seats, userIdList, myUserId, enabledDocks }: DiceCitiesLandmarkTrackProps) {
+export default function DiceCitiesLandmarkTrack({ seats, userIdList, myUserId, enabledDocks, theme }: DiceCitiesLandmarkTrackProps) {
+    const words = theme.words;
     return (
         <div className="ag-dc-landmarks">
             <div className="ag-dc-landmarks-head">
-                Landmarks · build all 4 to win{enabledDocks ? " · the Harbour is a bonus" : ""}
+                {capitalise(words.landmarks)} · build all {LANDMARKS.length} to win
+                {enabledDocks ? ` · the ${theme.cards[DiceCitiesCardIds.HARBOUR].title} is a bonus` : ""}
             </div>
             <div className="ag-dc-landmark-row">
                 {buildableLandmarks(enabledDocks).map(({ cardId, flag }) => {
-                    const card = DiceCitiesCards[cardId];
+                    const card = theme.cards[cardId];
                     const builders = seats.filter((s) => s[flag]);
                     const built = builders.some((b) => b.userId === myUserId);
                     return (
@@ -45,7 +52,7 @@ export default function DiceCitiesLandmarkTrack({ seats, userIdList, myUserId, e
                             key={cardId}
                             className={`ag-dc-landmark${built ? " ag-dc-landmark--built" : ""}`}
                         >
-                            <ZoomableCardArt card={card} className="ag-dc-landmark-icon" />
+                            <ZoomableCardArt card={card} theme={theme} className="ag-dc-landmark-icon" />
                             <div className="ag-dc-landmark-name">{card.title}</div>
                             <div className="ag-dc-landmark-cost">{built ? "✓ built" : `${card.cost}🪙`}</div>
                             {/* One pip per seat, always in the same position on

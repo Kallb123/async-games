@@ -18,6 +18,8 @@ import { LANDMARKS } from "./ui";
 import type { IDiceCitiesBusinessCenterOutcome, IDiceCitiesDiceRollOutcome, IDiceCitiesTvStationOutcome } from "./DiceCitiesLogic";
 import { BANK_TOTAL_COINS, DiceCitiesCardIds, DiceCitiesCards, DOCKS_ESTABLISHMENT_IDS, STARTING_PLAYER_COINS } from "./cards";
 import { buildInitialDiceCitiesState } from "./DiceCitiesModels";
+import { harbourCommand, passCommand, replayableGame, rollCommand, sentBy } from "./testHarness";
+import { DEFAULT_DICE_CITIES_THEME, diceCitiesTheme } from "./themes";
 import type { IDiceCitiesGameData, IDiceCitiesGameState, IDiceCitiesPlayerState } from "./DiceCitiesModels";
 import type { IDiceCitiesGameStateResponse } from "./apiModels";
 import type { IGameData } from "@/utils/mongodb/GameData";
@@ -61,6 +63,7 @@ function makeState(overrides: Partial<IDiceCitiesGameState> = {}): IDiceCitiesGa
         harbourRoll1: null,
         harbourRoll2: null,
         enabledDocks: false,
+        theme: DEFAULT_DICE_CITIES_THEME.id,
         ...overrides,
     };
 }
@@ -86,31 +89,6 @@ function coinsInPlay(gs: IDiceCitiesGameState): number {
     let total = gs.bankMoney;
     gs.playerStates.forEach(ps => { total += ps.money; });
     return total;
-}
-
-// A roll with its dice pre-recorded, so payouts are deterministic. Passing a
-// second die rolls two, which the Docks' higher numbers need.
-function rollCommand(roll1: number, sender = "u1", roll2?: number): DiceCitiesRequestDiceRoll {
-    const command = new DiceCitiesRequestDiceRoll();
-    command.senderId = sender;
-    command.senderUsername = sender;
-    command.recordedRoll1 = roll1;
-    if (roll2 !== undefined) {
-        command.doubleDice = true;
-        command.recordedRoll2 = roll2;
-    }
-    return command;
-}
-
-// Answers the Harbour's offer on a parked roll, with the shared tuna die
-// pre-recorded so a Tuna Boat payout is deterministic too.
-function harbourCommand(addBonus: boolean, tunaRoll?: number): DiceCitiesRequestHarbourBonus {
-    const command = new DiceCitiesRequestHarbourBonus();
-    command.senderId = "u1";
-    command.senderUsername = "u1";
-    command.addBonus = addBonus;
-    command.recordedTunaRoll = tunaRoll ?? null;
-    return command;
 }
 
 function cards(cardId: string, amount = 1) {
@@ -834,7 +812,7 @@ describe("Dice Cities: the Docks", () => {
         expect(gs.playerStates.get("u1")!.money).toBe(4);
         expect(gs.playerStates.get("u2")!.money).toBe(4);
         expect(gs.bankMoney).toBe(12);
-        expect(game.gameState.history.some(h => h.text.includes("The tuna haul was 4"))).toBe(true);
+        expect(game.gameState.history.some(h => h.text.includes("The shared haul was 4"))).toBe(true);
     });
 
     it("throws the tuna haul on two dice, not one", async () => {
@@ -1101,47 +1079,20 @@ describe("Dice Cities: the Docks", () => {
 // Harbour's parked roll paying out at the wrong total.
 describe("Dice Cities: replaying a Docks game", () => {
     it("replays the Harbour's bonus from the command history", async () => {
-        const pass = () => {
-            const command = new DiceCitiesRequestPassTurn();
-            command.senderId = "u1";
-            command.senderUsername = "u1";
-            return command;
-        };
-        const unlock = <T extends { senderId: string; senderUsername: string }>(command: T): T => {
-            command.senderId = "u1";
-            command.senderUsername = "u1";
-            return command;
-        };
-
         // Every roll of 1 pays the starting Wheat Field, which is how u1 saves up
         // for the Train Station (two dice) and then the Harbour.
-        const commandHistory = [
+        // The Docks flag rides in specificGameState — the replay adapter reads
+        // it from there to restock the same market.
+        const gameData = replayableGame([
             rollCommand(1),
-            unlock(new DiceCitiesRequestUnlockTrainStation()),
+            sentBy(new DiceCitiesRequestUnlockTrainStation()),
             rollCommand(1),
-            pass(),
+            passCommand(),
             rollCommand(1),
-            unlock(new DiceCitiesRequestUnlockHarbour()),
+            sentBy(new DiceCitiesRequestUnlockHarbour()),
             rollCommand(5, "u1", 6),
             harbourCommand(true),
-        ];
-
-        const gameData = {
-            gameId: "g1",
-            gameType: new DiceCitiesGameType(),
-            userIdList: ["u1", "u2"],
-            turnTimer: "1d",
-            currentTurn: "u1",
-            lastTurnTimestamp: "2026-07-21T09:00:00.000Z",
-            timerWarningNotificationSent: false,
-            gameState: { turnOrder: ["u1", "u2"], history: [], commandHistory },
-            complete: false,
-            winner: "",
-            enabledBillionaireRow: false,
-            // The Docks flag rides in specificGameState — the replay adapter
-            // reads it from there to restock the same market.
-            specificGameState: buildInitialDiceCitiesState(["u1", "u2"], true),
-        } as unknown as IGameData;
+        ], buildInitialDiceCitiesState(["u1", "u2"], true));
 
         const timeline = await buildTimeline(gameData, { u1: "u1", u2: "u2" });
         const final = timeline.snapshots[timeline.snapshots.length - 1];
@@ -1157,20 +1108,10 @@ describe("Dice Cities: replaying a Docks game", () => {
         // from 60, and its stored state says so. Replaying it against today's
         // 262 would pay out coins that game never had - a roll its real bank
         // could only cover in part would come out in full.
-        const gameData = {
-            gameId: "g1",
-            gameType: new DiceCitiesGameType(),
-            userIdList: ["u1", "u2"],
-            turnTimer: "1d",
-            currentTurn: "u1",
-            lastTurnTimestamp: "2026-07-21T09:00:00.000Z",
-            timerWarningNotificationSent: false,
-            gameState: { turnOrder: ["u1", "u2"], history: [], commandHistory: [rollCommand(1)] },
-            complete: false,
-            winner: "",
-            enabledBillionaireRow: false,
-            specificGameState: buildInitialDiceCitiesState(["u1", "u2"], false, 60),
-        } as unknown as IGameData;
+        const gameData = replayableGame(
+            [rollCommand(1)],
+            buildInitialDiceCitiesState(["u1", "u2"], false, 60),
+        );
 
         const timeline = await buildTimeline(gameData, { u1: "u1", u2: "u2" });
         const final = timeline.snapshots[timeline.snapshots.length - 1];
@@ -1179,5 +1120,83 @@ describe("Dice Cities: replaying a Docks game", () => {
         // 60 less 3 each at the deal is 54; the roll of 1 pays both Wheat
         // Fields, leaving 52. Against a 262 bank it would read 254.
         expect(finalState.bankMoney).toBe(52);
+    });
+});
+
+describe("Dice Cities themes", () => {
+    // The rules never read a theme - but the history log does, and unlike a
+    // screen string a log line is written into the game and kept. These play a
+    // command in the wasteland and read the line back, which is the only way to
+    // catch a history line that was left in the base vocabulary.
+    const wasteland = diceCitiesTheme("wasteland");
+    const latest = (game: IDiceCitiesGameData) => game.gameState.history[0].text;
+
+    it("names a bought card the way the wasteland board does", async () => {
+        const gs = makeState({
+            hasRolled: true,
+            playerStates: new Map([["u1", player({ money: 5 })], ["u2", player()]]),
+            theme: "wasteland",
+        });
+        const game = makeGame(gs);
+        const command = new DiceCitiesRequestCardPurchase();
+        command.senderId = "u1";
+        command.senderUsername = "u1";
+        command.cardId = DiceCitiesCardIds.CAFE;
+
+        await command.Execute(game);
+
+        expect(latest(game)).toContain(wasteland.cards[DiceCitiesCardIds.CAFE].title);
+        expect(latest(game)).not.toContain(DiceCitiesCards[DiceCitiesCardIds.CAFE].title);
+    });
+
+    it("names a built landmark the way the wasteland board does", async () => {
+        const gs = makeState({
+            hasRolled: true,
+            playerStates: new Map([["u1", player({ money: 20 })], ["u2", player()]]),
+            theme: "wasteland",
+        });
+        const game = makeGame(gs);
+        const command = new DiceCitiesRequestUnlockTrainStation();
+        command.senderId = "u1";
+        command.senderUsername = "u1";
+
+        await command.Execute(game);
+
+        expect(latest(game)).toContain(wasteland.cards[DiceCitiesCardIds.TRAIN_STATION].title);
+    });
+
+    it("names the Harbour's offer the way the wasteland board does", async () => {
+        const gs = makeState({
+            playerStates: new Map([
+                ["u1", player({ harbourUnlocked: true, doubleUnlocked: true })],
+                ["u2", player()],
+            ]),
+            enabledDocks: true,
+            theme: "wasteland",
+        });
+        const game = makeGame(gs, "u1");
+        await rollCommand(5, "u1", 6).Execute(game);
+        await harbourCommand(true).Execute(game);
+
+        expect(latest(game)).toContain(wasteland.cards[DiceCitiesCardIds.HARBOUR].title);
+        expect(latest(game)).not.toContain("Harbour");
+    });
+
+    it("leaves a game with no stored theme reading exactly as it always did", async () => {
+        // Every game created before themes existed.
+        const gs = makeState({
+            hasRolled: true,
+            playerStates: new Map([["u1", player({ money: 5 })], ["u2", player()]]),
+            theme: undefined as unknown as string,
+        });
+        const game = makeGame(gs);
+        const command = new DiceCitiesRequestCardPurchase();
+        command.senderId = "u1";
+        command.senderUsername = "u1";
+        command.cardId = DiceCitiesCardIds.CAFE;
+
+        await command.Execute(game);
+
+        expect(latest(game)).toContain(DiceCitiesCards[DiceCitiesCardIds.CAFE].title);
     });
 });

@@ -5,9 +5,13 @@ import { useCloseRequest } from '@/utils/hooks/useCloseRequest';
 import type { IDiceCitiesCard } from '@/games/DiceCities/apiModels';
 import { ACTIVATION_META, activationFor, rollLabel } from '@/games/DiceCities/ui';
 import CardArt from '@/games/DiceCities/components/CardArt';
+import type { DiceCitiesTheme } from '@/games/DiceCities/themes';
 
 interface DiceCitiesCardModalProps {
     card: IDiceCitiesCard;
+    /** Only for what a landmark is called on this board — the card names and
+     *  illustrates itself. */
+    theme: DiceCitiesTheme;
     onClose: () => void;
 }
 
@@ -21,7 +25,7 @@ interface DiceCitiesCardModalProps {
  * The rules text is repeated under the art because the source images are only
  * 162px wide: blown up they read, but not crisply.
  */
-export default function DiceCitiesCardModal({ card, onClose }: DiceCitiesCardModalProps) {
+export default function DiceCitiesCardModal({ card, theme, onClose }: DiceCitiesCardModalProps) {
     useCloseRequest(true, onClose);
     const activation = ACTIVATION_META[activationFor(card)];
     const rolls = rollLabel(card);
@@ -37,7 +41,7 @@ export default function DiceCitiesCardModal({ card, onClose }: DiceCitiesCardMod
                     {rolls && <span className="ag-dc-card-fact">🎲 {rolls}</span>}
                     <span className="ag-dc-card-fact">{card.cost}🪙</span>
                     {card.type === 'landmark'
-                        ? <span className="ag-dc-card-fact">landmark</span>
+                        ? <span className="ag-dc-card-fact">{theme.words.landmark}</span>
                         : (
                             <span className="ag-dc-card-fact">
                                 <span className="ag-dc-legend-dot" style={{ background: activation.color }} />

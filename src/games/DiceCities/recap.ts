@@ -3,7 +3,8 @@ import type { ITurnSnapshot } from "@/utils/games/replay";
 import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic";
 import { IDiceCitiesDiceRollOutcome } from "@/utils/apiModels/GameLogic";
 import type { IDiceCitiesTvStationOutcome, IDiceCitiesBusinessCenterOutcome } from "@/utils/apiModels/GameLogic";
-import { DiceCitiesCards, DiceCitiesCardIds, HARBOUR_BONUS, HARBOUR_MIN_ROLL } from "@/games/DiceCities/cards";
+import { DiceCitiesCardIds, HARBOUR_BONUS, HARBOUR_MIN_ROLL } from "@/games/DiceCities/cards";
+import { diceCitiesTheme, DiceCitiesTheme } from "@/games/DiceCities/themes";
 import { coinChangeParts, LANDMARKS, landmarkCount } from "@/games/DiceCities/ui";
 import type { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
 import { playerByUserId } from "@/games/DiceCities/DiceCitiesModels";
@@ -22,9 +23,9 @@ const LANDMARK_BY_COMMAND: Record<string, string> = {
 // instead of only the roller's own line disappearing into "no coins" if
 // theirs happened to net to zero. Every reader of this recap sees the same
 // text, so - unlike the live board's version of this line - nobody gets "You".
-function coinChangeDetail(changes: Map<string, number>, state: IDiceCitiesGameStateResponse | undefined): string {
+function coinChangeDetail(changes: Map<string, number>, state: IDiceCitiesGameStateResponse | undefined, theme: DiceCitiesTheme): string {
     const parts = coinChangeParts(changes, (userId) => playerByUserId(state, userId)?.username ?? "someone");
-    return parts.length ? parts.join(", ") : "no coins";
+    return parts.length ? parts.join(", ") : `no ${theme.words.coins}`;
 }
 
 // Turns one replayed Dice Cities command into zero or more recap events. The
@@ -38,6 +39,11 @@ function toEvents(
     outcome: ICommandOutcome
 ): IGameEvent[] {
     const name = command.senderUsername;
+    // The theme the game was played in, read off the state the replay engine
+    // just rebuilt — so a recap names the cards the way the board did, and an
+    // event replayed from a game older than themes reads as it always did.
+    const state = next.specificGameState as IDiceCitiesGameStateResponse | undefined;
+    const theme = diceCitiesTheme(state?.theme);
     const base = {
         id: command.id,
         commandId: command.id,
@@ -51,7 +57,7 @@ function toEvents(
     // decline the +2, so that command carries the beat instead.
     if (
         (command.className === "DiceCitiesRequestDiceRoll" || command.className === "DiceCitiesRequestRadioTowerReroll") &&
-        (next.specificGameState as IDiceCitiesGameStateResponse | undefined)?.awaitingHarbourChoice
+        state?.awaitingHarbourChoice
     ) {
         return [];
     }
@@ -70,13 +76,13 @@ function toEvents(
         // every coin a café/restaurant/stadium moved between players this roll.
         const changes = roll.moneyChanges instanceof Map ? roll.moneyChanges : new Map<string, number>();
         const affectedIds = [...changes.entries()].filter(([, v]) => v !== 0).map(([id]) => id);
-        const detail = coinChangeDetail(changes, next.specificGameState as IDiceCitiesGameStateResponse | undefined);
+        const detail = coinChangeDetail(changes, state, theme);
 
         // The Harbour's +2 lands on the dice that were already thrown, so its
         // event tells the whole story: what came up, and what it became.
         const tookHarbourBonus = harbour && (command as unknown as { addBonus?: boolean }).addBonus === true;
         const title = tookHarbourBonus
-            ? `${name} rolled ${total}${dicePart}, Harbour +${HARBOUR_BONUS} → ${total + HARBOUR_BONUS}`
+            ? `${name} rolled ${total}${dicePart}, ${theme.cards[DiceCitiesCardIds.HARBOUR].title} +${HARBOUR_BONUS} → ${total + HARBOUR_BONUS}`
             : `${name} ${reroll ? "re-rolled" : "rolled"} ${total}${dicePart}`;
 
         return [
@@ -98,7 +104,7 @@ function toEvents(
                 ...base,
                 type: "dc_harbour",
                 glyph: "⚓",
-                title: `${name} built the Harbour`,
+                title: `${name} built the ${theme.cards[DiceCitiesCardIds.HARBOUR].title}`,
                 detail: `+${HARBOUR_BONUS} on a ${HARBOUR_MIN_ROLL} or better`,
             },
         ];
@@ -107,8 +113,8 @@ function toEvents(
     // ── Landmark unlocked: progress toward the four-landmark win. ───────────────
     const landmarkCardId = LANDMARK_BY_COMMAND[command.className];
     if (landmarkCardId) {
-        const card = DiceCitiesCards[landmarkCardId];
-        const roller = playerByUserId(next.specificGameState as IDiceCitiesGameStateResponse, command.senderId);
+        const card = theme.cards[landmarkCardId];
+        const roller = playerByUserId(state, command.senderId);
         const built = roller ? landmarkCount(roller) : 0;
         const won = built >= LANDMARKS.length;
         return [
@@ -117,9 +123,9 @@ function toEvents(
                 type: "dc_landmark",
                 glyph: won ? "🏆" : "🏛️",
                 title: won
-                    ? `${name} built the ${card.title} — all four landmarks!`
+                    ? `${name} built the ${card.title} — all four ${theme.words.landmarks}!`
                     : `${name} unlocked the ${card.title}`,
-                detail: won ? "winner!" : `${built}/${LANDMARKS.length} landmarks`,
+                detail: won ? "winner!" : `${built}/${LANDMARKS.length} ${theme.words.landmarks}`,
             },
         ];
     }
@@ -127,7 +133,7 @@ function toEvents(
     // ── Establishment bought. ───────────────────────────────────────────────────
     if (command.className === "DiceCitiesRequestCardPurchase") {
         const cardId = (command as unknown as { cardId: string }).cardId;
-        const card = DiceCitiesCards[cardId];
+        const card = theme.cards[cardId];
         if (!card) return [];
         return [
             {
@@ -148,13 +154,13 @@ function toEvents(
     if (command.className === "DiceCitiesRequestTvStationSelection") {
         const tv = outcome as IDiceCitiesTvStationOutcome;
         if (!tv.stolenFromId) return [];
-        const victim = playerByUserId(next.specificGameState as IDiceCitiesGameStateResponse, tv.stolenFromId);
+        const victim = playerByUserId(state, tv.stolenFromId);
         return [
             {
                 ...base,
                 type: "dc_tvsteal",
                 glyph: "📺",
-                title: `${name} used the TV Station to steal from ${victim?.username ?? "an opponent"}`,
+                title: `${name} used the ${theme.cards[DiceCitiesCardIds.TV_STATION].title} to steal from ${victim?.username ?? "an opponent"}`,
                 detail: `${tv.stolenAmount ?? 0}🪙`,
                 affectedIds: [command.senderId, tv.stolenFromId],
             },
@@ -171,16 +177,16 @@ function toEvents(
     ) {
         const bc = outcome as IDiceCitiesBusinessCenterOutcome;
         if (!bc.tradedWithId || !bc.gaveCardId || !bc.receivedCardId) return [];
-        const gave = DiceCitiesCards[bc.gaveCardId];
-        const received = DiceCitiesCards[bc.receivedCardId];
+        const gave = theme.cards[bc.gaveCardId];
+        const received = theme.cards[bc.receivedCardId];
         if (!gave || !received) return [];
-        const opponent = playerByUserId(next.specificGameState as IDiceCitiesGameStateResponse, bc.tradedWithId);
+        const opponent = playerByUserId(state, bc.tradedWithId);
         return [
             {
                 ...base,
                 type: "dc_bctrade",
                 glyph: "🔄",
-                title: `${name} used the Business Center to steal ${opponent?.username ?? "an opponent"}'s ${received.title}`,
+                title: `${name} used the ${theme.cards[DiceCitiesCardIds.BUSINESS_CENTER].title} to steal ${opponent?.username ?? "an opponent"}'s ${received.title}`,
                 detail: `gave a ${gave.title} for it`,
                 affectedIds: [command.senderId, bc.tradedWithId],
             },
@@ -191,6 +197,10 @@ function toEvents(
     return [];
 }
 
+// Deliberately app-voiced rather than themed: `summarize` is handed the events
+// and nothing else - no game state, so no theme to read - and the recap card's
+// headline is the app talking to a player between games rather than the board
+// talking about this one. The event rows above it carry the themed names.
 function summarize(events: IGameEvent[], forUserId: string): IRecapSummary {
     const rolls = events.filter((e) => e.type === "dc_roll" || e.type === "dc_reroll").length;
     const landmarks = events.filter((e) => e.type === "dc_landmark");
@@ -227,12 +237,13 @@ function tip(liveState: unknown, forUserId: string): IRecapTip | null {
     const state = liveState as IDiceCitiesGameStateResponse | undefined;
     const me = playerByUserId(state, forUserId);
     if (!me) return null;
+    const theme = diceCitiesTheme(state?.theme);
 
     // LANDMARKS is already in cost order (Train Station → Radio Tower).
     const next = LANDMARKS.find((l) => !me[l.flag]);
     if (!next) return null; // all four built — nothing left to nudge.
 
-    const card = DiceCitiesCards[next.cardId];
+    const card = theme.cards[next.cardId];
     if (me.money >= card.cost) {
         return {
             glyph: "🏛️",

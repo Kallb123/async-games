@@ -44,7 +44,9 @@ out. A second copy is the signal to extract the first one.
   inline-styled variants.
 - `src/components/ui/` — presentational primitives:
   `Brand` (the mark + wordmark lockup every top bar that names the app uses),
-  `Avatar`, `GameThumb`, `TurnTimerSelect`, `GameSetupLayout`, `GameLibrary`
+  `Avatar`, `GameThumb`, `TurnTimerSelect`, `ThemeSelect` (the pick-a-dressing
+  block on a setup screen, which renders nothing for a game with no themes),
+  `GameSetupLayout`, `GameLibrary`
   (the filter-chips + featured + grid game browser, shared by `/newgame` and
   the public landing page). Every heading-and-body block on a page is a
   `Section`; `CollapsingSection` adds the animation for one that comes and
@@ -63,7 +65,9 @@ out. A second copy is the signal to extract the first one.
   (Outbreak is the exception: every hand is public there, so `OutbreakHands`
   renders them all, on or off your turn, and needs no wrapper.)
 - `src/utils/ui/` — pure presentation helpers: `games.ts` (per-game metadata:
-  name, art, accent, players), `avatar.ts` (deterministic avatar colours),
+  name, art, accent, players), `gameThemes.ts` (the themes each game can be
+  played in — see [`docs/game-themes.md`](./docs/game-themes.md)),
+  `avatar.ts` (deterministic avatar colours),
   `players.ts` (opponent summaries), `mapEdges.ts` (the wrap geometry `MapEdges`
   draws), `mapLabels.ts` (the label placement `MapLabelLayer` draws).
 - `src/utils/hooks/` — shared stateful logic, e.g. `usePlayerList` (the
@@ -85,12 +89,26 @@ and from the ⋮ menu after that. Five sections, `Goal` first, then `Your turn`,
 in the player's language — match the existing guides rather than restating the
 GDD.
 
+A game can also offer **themes** — alternative dressings picked on the setup
+screen, changing every name, every piece of copy and the art while changing no
+rule, cost or number (Dice Cities ships two). That is a `themes.ts` beside the
+game's `meta.ts`, one line in `GAME_THEMES` and one `<ThemeSelect>` on the setup
+screen; [`docs/game-themes.md`](./docs/game-themes.md) is the full recipe,
+including the guard test that keeps a theme from quietly changing a rule.
+
 They also need a **share card**: the image a link to a game unfurls to in a
 chat app (today a join link, `/join?code=PLUM`). Run `npm run icons` and
 commit the `public/icons/og-game-<slug>.png` it writes. The script draws it
 from the game's own `meta` — name, tagline, accent, art or glyph — so there
 is nothing to design or list, but it needs **Bricolage Grotesque installed as
 a system font** and skips the cards with a warning when it isn't.
+
+Any **hand-drawn art** a game brings — board maps, card faces — arrives from an
+art tool essentially uncompressed, at megabytes a file. Save the export to
+[`/art-masters`](./art-masters/README.md) under the path it mirrors in
+`public/art`, then run `npm run optimise-art` and commit what it writes: it
+quantises the served copy to roughly a third of the file at the same
+resolution, and never touches the master.
 
 ## Design system conventions
 

@@ -1,5 +1,4 @@
 import { IDiceCitiesPlayerStateResponse } from "@/games/DiceCities/apiModels";
-import { DiceCitiesCards } from "@/games/DiceCities/cards";
 import {
     ACTIVATION_META,
     Activation,
@@ -7,7 +6,9 @@ import {
     rollLabel,
     yieldLabel,
 } from "@/games/DiceCities/ui";
+import type { DiceCitiesTheme } from "@/games/DiceCities/themes";
 import ZoomableCardArt from "@/games/DiceCities/components/ZoomableCardArt";
+import { pluralize } from "@/utils/ui/text";
 
 interface DiceCitiesBoardProps {
     /** The city being shown. */
@@ -20,6 +21,11 @@ interface DiceCitiesBoardProps {
      * be collapsible at the same time.
      */
     isViewer: boolean;
+    /**
+     * The theme this game is played in: it names every card on the board and
+     * the nouns the caption uses.
+     */
+    theme: DiceCitiesTheme;
 }
 
 /**
@@ -37,26 +43,27 @@ interface DiceCitiesBoardProps {
  * whose city is open is the browser's business rather than the page's, and any
  * number of them can be open at once. See docs/games/dice-cities.md §11.5.
  */
-export default function DiceCitiesBoard({ playerState, isViewer }: DiceCitiesBoardProps) {
+export default function DiceCitiesBoard({ playerState, isViewer, theme }: DiceCitiesBoardProps) {
     // Establishments = every card the player owns, sorted by the number that
     // triggers them so the city reads left-to-right like the dice. The four
     // win-condition landmarks are tracked by flags (never in `cards`), so this
     // list is just regular establishments plus any purple majors bought.
     const establishments = [...playerState.cards]
         .filter((cc) => cc.amount > 0)
-        .sort((a, b) => DiceCitiesCards[a.card].rollNumber[0] - DiceCitiesCards[b.card].rollNumber[0]);
+        .sort((a, b) => theme.cards[a.card].rollNumber[0] - theme.cards[b.card].rollNumber[0]);
     const establishmentCount = establishments.reduce((n, cc) => n + cc.amount, 0);
+    const words = theme.words;
 
     const title = (
         <span className="ag-dc-city-title">
-            {isViewer ? "Your city" : `${playerState.username}'s city`} · {establishmentCount} establishment{establishmentCount === 1 ? "" : "s"}
+            {isViewer ? `Your ${words.city}` : `${playerState.username}'s ${words.city}`} · {pluralize(establishmentCount, words.establishment, words.establishments)}
         </span>
     );
 
     const grid = (
         <div className="ag-dc-grid">
             {establishments.map((cc) => {
-                const card = DiceCitiesCards[cc.card];
+                const card = theme.cards[cc.card];
                 const color = ACTIVATION_META[activationFor(card)].color;
                 return (
                     <div
@@ -66,14 +73,14 @@ export default function DiceCitiesBoard({ playerState, isViewer }: DiceCitiesBoa
                     >
                         <span className="ag-dc-est-roll">{rollLabel(card)}</span>
                         {cc.amount > 1 && <span className="ag-dc-est-count">×{cc.amount}</span>}
-                        <ZoomableCardArt card={card} className="ag-dc-est-icon" />
+                        <ZoomableCardArt card={card} theme={theme} className="ag-dc-est-icon" />
                         <div className="ag-dc-est-name">{card.title}</div>
                         <div className="ag-dc-est-yield">{yieldLabel(card)}</div>
                     </div>
                 );
             })}
             {establishments.length === 0 && (
-                <div className="ag-dc-city-empty">No establishments yet — roll and build one.</div>
+                <div className="ag-dc-city-empty">No {words.establishments} yet — roll and build one.</div>
             )}
         </div>
     );

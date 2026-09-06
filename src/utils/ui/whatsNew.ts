@@ -62,6 +62,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Play Dice Cities in the wasteland",
+                detail: "Dice Cities now has themes: pick one when you set up a game and everyone plays in it. Alongside the original there's Rust & Bottlecaps — a post-nuclear wasteland where you're an Overseer rebuilding a settlement, the Wheat Field is a Hydroponic Plot, the Ranch is a Brahmin Pen, and everything is paid for in caps. Only the names and the look change: every cost, number and rule is identical, so it plays exactly the same. Its card art is still being drawn, so some cards still wear the original faces for now.",
+                game: "dicecities",
+            },
+            {
                 title: "Your own card leads the scoreboard",
                 detail: "The player strip at the top of every game now puts you first and seats everyone else in the order they actually play, instead of the order you all joined — so you're never hunting for your own card in the middle of the row. Your card carries a soft tint to say it's yours; a bold ring now marks whoever's turn it is instead.",
             },
@@ -102,10 +107,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Fires Out's Experienced setup is clearer",
                 detail: "Starting an Experienced game now shows exactly what its dice rolled in the turn log — where each explosion caught, and which rooms its hazmats, hot spots and POI markers landed in — and the setup screen's Recruit/Veteran/Heroic descriptions now say what's actually different between them.",
                 game: "firesout",
-            },
-            {
-                title: "See which friends are around right now",
-                detail: "A green dot now sits on a friend's picture in your friends list while they're taking turns — anyone who has moved in a game in the last five minutes — so you can tell at a glance who is worth challenging now rather than tomorrow.",
             },
         ],
     },

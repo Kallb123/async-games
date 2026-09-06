@@ -5,6 +5,7 @@ import { sendGameInvitePush } from '@/utils/firebase/invitePush';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { DiceCitiesInvitationModel, DiceCitiesInvitationRequest } from '@/games/DiceCities/DiceCitiesModels';
 import { IInvitationDataDocument } from '@/utils/mongodb/InvitationData';
+import { themeIdFor } from '@/utils/ui/gameThemes';
 
 export async function POST(request: NextRequest) {
   console.log(`POST ${request.nextUrl.pathname}`);
@@ -27,6 +28,9 @@ export async function POST(request: NextRequest) {
     userIdList: seatsFor(invitees),
     enabledDocks: body.enabledDocks,
     enabledBillionaireRow: body.enabledBillionaireRow,
+    // Presentation, not rules — an unknown theme is played in the default one
+    // rather than turned into a 400. See themeIdFor.
+    theme: themeIdFor('dicecities', body.theme),
     turnTimer,
     timestamp: (new Date()).toISOString(),
     gameType: 'DiceCities',

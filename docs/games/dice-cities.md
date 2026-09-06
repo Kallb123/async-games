@@ -372,12 +372,15 @@ from one `playerState`. The track had to become everyone's while
 the city stays one player's, so the two separate:
 
 * **`DiceCitiesLandmarkTrack.tsx`** (new) — takes the ordered seats,
-  `userIdList`, `myUserId` and `enabledDocks`; draws the tiles from
+  `userIdList`, `myUserId`, `enabledDocks` and `theme`; draws the tiles from
   `buildableLandmarks()` exactly as today, plus the pip row. `page.tsx`
   renders it once, above the city stack.
 * **`DiceCitiesBoard.tsx`** keeps the establishment grid, its legend and
-  its `ownerLabel` — and *loses* its `enabledDocks` prop, which it only
-  ever used to build the landmark list.
+  `theme` — and *loses* its `enabledDocks` prop, which it only ever used to
+  build the landmark list. `ownerLabel` collapses into a single `isViewer`
+  flag: the caption and the collapsibility were never two independent
+  choices (a city cannot read "Your city" and fold away behind a
+  `<summary>` at the same time), so one boolean drives both.
 
 **Where the sky goes.** `DiceCitiesBoard` wraps *both* halves in one
 `ag-board-area ag-dc-area` — the blue sky plus a 12px flex-column gap. That
@@ -426,8 +429,8 @@ means hunting the middle of a list:
   is the default rather than something to build. No `useState`, no toggle
   callback, and no question about whether to persist the open set.
 
-The whole stack is therefore a `collapsible` flag on `DiceCitiesBoard`:
-when set, `.ag-dc-city` *is* the `<details>` and `.ag-dc-city-head` its
+The whole stack is therefore an `isViewer` flag on `DiceCitiesBoard`: when
+false, `.ag-dc-city` *is* the `<details>` and `.ag-dc-city-head` its
 `<summary>`. No new opponent-panel component, and nothing new that draws a
 city.
 
@@ -437,19 +440,23 @@ const seats = seatOrderFrom(userIdList, myUserId)
     .map(id => displayed?.playerStates?.[id])
     .filter((p): p is IDiceCitiesPlayerStateResponse => Boolean(p));
 
-<div className="ag-board-area ag-dc-area">
+<div className="ag-board-area ag-dc-area" style={{ "--ag-dc-sky-1": theme.sky[0], "--ag-dc-sky-2": theme.sky[1] }}>
     <DiceCitiesLandmarkTrack seats={seats} userIdList={userIdList}
-                             myUserId={myUserId} enabledDocks={enabledDocks} />
+                             myUserId={myUserId} enabledDocks={enabledDocks} theme={theme} />
     {seats.map(p => (
         <DiceCitiesBoard
             key={p.userId}
             playerState={p}
-            ownerLabel={p.userId === myUserId ? 'Your city' : `${p.username}'s city`}
-            collapsible={p.userId !== myUserId}
+            isViewer={p.userId === myUserId}
+            theme={theme}
         />
     ))}
 </div>
 ```
+
+Both components take `theme` alongside the props above: a theme names every
+card on the track and in the grid (`theme.cards`) and the nouns the captions
+use (`theme.words`), exactly as `DiceCitiesActions` already did — see §12.
 
 **What `page.tsx` sheds.** `seats` replaces `players`, and `boardPlayer`
 and its fallback chain go with nothing left reading them — so requirement 2
@@ -505,10 +512,12 @@ colours" section gained the clause that sends a player looking: it is the
 section that already explains why an opponent's cards cost you money.
 
 Files: `DiceCitiesLandmarkTrack.tsx` is new; `DiceCitiesBoard.tsx` lost the
-landmark track, its `enabledDocks` prop and its outer wrapper, and gained
-`collapsible`; `page.tsx` lost `boardPlayer`, its fallback chain and a dead
-`colorForUserId`, and now builds one `seats` array for both. The pips and
-the collapsed head are the only new CSS.
+landmark track, its `enabledDocks` prop and its outer wrapper, and traded
+`ownerLabel` for `isViewer`; `page.tsx` lost `boardPlayer`, its fallback
+chain and a dead `colorForUserId`, and now builds one `seats` array for
+both. Both components also take `theme` (§12), threaded through the same
+way `DiceCitiesActions` already reads it. The pips and the collapsed head
+are the only new CSS.
 
 No `croupier` pass was needed for its own sake: this makes public state
 visible, and §11.1 shows the server was already sending it.
@@ -530,6 +539,23 @@ with a different picture on it. The names below are a starting point to be
 taken or swapped to taste — the columns that matter are the ones to their
 right.
 
+**This is implemented.** The host picks between "Rising Sun" (the game as it
+ships) and "Rust & Bottlecaps" on the New Game screen, and the whole table
+plays in the chosen one — cards, market, landmark track, turn log, game guide
+and recap. The names below live in `src/games/DiceCities/themes.ts`, and the
+cross-game machinery around them is written up in
+[`docs/game-themes.md`](../game-themes.md). Two notes on what shipped:
+
+- **The wasteland's card art has not been drawn yet.** Its folder,
+  `public/art/dicecities/wasteland/`, starts as a copy of the Rising Sun one, so
+  every card is drawable and the setup screen says the faces are placeholders.
+  Redrawing a card is overwriting its file under the name it already has —
+  `wheat-field.png` is the Hydroponic Plot's picture — with no code change, one
+  card at a time.
+- **App-level vocabulary is not re-skinned.** "Your turn", "End turn" and the
+  turn timer belong to Async Games rather than to this game, so the "scavenging
+  run" of §12.1 stays flavour: the board still rolls dice and takes turns.
+
 ### 12.1 Vocabulary
 
 | Base theme | Wasteland theme | Notes |
@@ -541,7 +567,7 @@ right.
 | **Establishment** | **Holding** | |
 | **Landmark** | **Reclamation Project** | |
 | **The market / supply** | **The Caravan Market** | The travelling traders who will sell anyone anything. |
-| **Dice roll** | **Scavenging run** | The number rolled is "what the run turned up". |
+| **Dice roll** | **Scavenging run** | The number rolled is "what the run turned up". Flavour only — the app's own "turn" and "roll" wording is shared with every other game and stays as it is. |
 | **Blue (Primary Industry)** | **Scavenging** | Pays on anyone's run. |
 | **Green (Secondary Industry)** | **Workshops** | Pays on your own run only. |
 | **Red (Restaurants)** | **Watering Holes** | Charges the scavenger who came back with the number. |
@@ -592,12 +618,20 @@ Plot** and a **Snackcake Bakery** — and **3 caps**.
 Still four to build, still in this order of cost, and finishing the fourth
 still ends the game on the spot.
 
+The cheapest and the dearest of them are the pre-war Vault your settlement grew
+up around: the first thing an Overseer does is get its door open, and the last
+is get its command terminal running again.
+
 | Base name | Wasteland name | Cost | Unchanged effect |
 | --- | --- | --- | --- |
-| **Train Station** | **Metro Junction** | 4 | Send out 1 or 2 scavengers (roll 1 or 2 dice), your choice each run. |
+| **Train Station** | **Vault Door** | 4 | Roll 1 or 2 dice on each run, your choice. |
 | **Shopping Mall** | **Ruined Superstore** | 10 | Each of your **Stall** and **Canteen** holdings earns +1 cap when it activates. |
 | **Amusement Park** | **Abandoned Funfair** | 16 | Matching dice grant another run after this one. |
-| **Radio Tower** | **Signal Relay Mast** | 22 | Once per run, re-tune the signal (re-roll your dice). |
+| **Radio Tower** | **Overseer's Terminal** | 22 | Once per run, re-task it from the terminal (re-roll your dice). |
+
+The Terminal is not a second transmitter on purpose: the theme already has a
+**Pirate Radio Station** (§12.3), and a terminal is a thing you *operate*,
+which is what a re-roll is.
 
 ### 12.5 The Docks expansion → "The Wharf"
 

@@ -128,6 +128,25 @@ describe("game registry completeness", () => {
         ).toEqual([]);
     });
 
+    it("wires every themed game's themes into GAME_THEMES", () => {
+        // Themes are opt-in per game via a src/games/<Game>/themes.ts exporting
+        // the game's list — same opt-in shape as guide.ts above. A game that
+        // ships one but isn't in GAME_THEMES compiles and plays fine in its
+        // default theme, and silently offers no picker on its setup screen, so
+        // the alternative dressing is unreachable rather than broken.
+        const themes = read("src/utils/ui/gameThemes.ts");
+        const withThemes = gameNames.filter((name) =>
+            existsSync(path.join(gamesRoot, name, "themes.ts")),
+        );
+        const missing = withThemes.filter((name) => !themes.includes(`@/games/${name}/themes`));
+        expect(
+            missing,
+            `These games have a themes.ts that isn't imported by ` +
+                `src/utils/ui/gameThemes.ts, so their themes are missing from GAME_THEMES:\n` +
+                missing.map((n) => `  - ${n} (import its theme list and add it to GAME_THEMES)`).join("\n"),
+        ).toEqual([]);
+    });
+
     it("wires every game's result-stats calculator into the GameResult dispatch table", () => {
         // Per-game GameResult stats (AGENTS.md: "GameResult storage should include
         // some game specific statistics") are opt-in per game via a
