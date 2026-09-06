@@ -8,13 +8,14 @@ import { serializable } from "@/utils/apiModels/Serialisable";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import { playerHistory, userToken } from "@/utils/games/history";
+import { randomFloat, randomInt } from "@/utils/games/random";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  SETTLEMENTS AND CITIES
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── Helper: randomly discard half of a player's cards ───────────────────────
-// Records the raw Math.random() draws a command consumes the first time it runs
+// Records the raw randomFloat() draws a command consumes the first time it runs
 // so an identical sequence can be replayed later (turn recap). Construct with a
 // previously recorded log to replay it, or with nothing to record fresh. Used
 // for the SAC discard shuffle, whose number of draws varies per roll. The log
@@ -33,9 +34,9 @@ export class SACRandomLog {
     // short (defensive — should never happen for a faithfully recorded log).
     next(): number {
         if (this.replaying) {
-            return this.draws[this.cursor++] ?? Math.random();
+            return this.draws[this.cursor++] ?? randomFloat();
         }
-        const value = Math.random();
+        const value = randomFloat();
         this.draws.push(value);
         return value;
     }
@@ -561,7 +562,7 @@ export class SACMoveRobber implements IGameCommand {
                 for (let i = 0; i < victim.resources[r]; i++) pool.push(r);
             }
             if (pool.length > 0) {
-                const stealIndex = this.recordedStealIndex ?? Math.floor(Math.random() * pool.length);
+                const stealIndex = this.recordedStealIndex ?? randomInt(pool.length);
                 this.recordedStealIndex = stealIndex;
                 const stolen = pool[stealIndex];
                 victim.resources[stolen]--;

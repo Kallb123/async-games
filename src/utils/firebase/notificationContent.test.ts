@@ -199,6 +199,23 @@ describe('other push copy', () => {
         expect(lost.body).toBe('It got away from you after 34 turns. Try again?');
     });
 
+    it('names which defeat it was when the game recorded one', () => {
+        const lost = buildTeamResultNotification(game({
+            gameState: { turnOrder: [], history: [], commandHistory: historyOfTurns(34) },
+            endDetail: 'the player deck ran out of cards',
+        } as Partial<IGameData>), false);
+        expect(lost.title).toBe('Your team lost Snakes and Ladders');
+        expect(lost.body).toBe('It got away from you after 34 turns — the player deck ran out of cards. Try again?');
+    });
+
+    it('leaves a win alone even when a detail was recorded', () => {
+        const won = buildTeamResultNotification(game({
+            gameState: { turnOrder: [], history: [], commandHistory: historyOfTurns(34) },
+            endDetail: 'the player deck ran out of cards',
+        } as Partial<IGameData>), true);
+        expect(won.body).toBe('You pulled it off together in 34 turns. Another run?');
+    });
+
     it('says how long a nudger has been waiting', () => {
         const push = buildNudgeNotification('Priya', game());
         expect(push.title).toBe('👉 Priya is waiting on you');

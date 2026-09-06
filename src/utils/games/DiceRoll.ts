@@ -1,19 +1,9 @@
-export async function DiceRollRequest(diceNumber: number): Promise<number> {
-    return new Promise((resolve) => {
-        fetch(`/api/utils/rolldice/${diceNumber}`)
-        .then(response => {
-            if (response.ok) {
-                return response.json();
-            }
-        })
-        .then(data => {
-            if (data.roll) {
-                resolve(data.roll);
-            }
-        });
-    });
-}
+import { randomInt } from "./random";
 
+/**
+ * One die of `diceNumber` faces, from 1. Every game's rolls go through here —
+ * see `random.ts` for why it is the CSPRNG rather than `Math.random()`.
+ */
 export function DiceRoll(diceNumber: number): number {
-    return 1 + Math.floor(Math.random() * diceNumber);
+    return 1 + randomInt(diceNumber);
 }

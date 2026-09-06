@@ -119,6 +119,7 @@ SnakesAndLaddersGameDataSchema.methods.CreateDataResponse = async function(_view
         complete: gameDataDocument.complete,
         winner: gameDataDocument.winner,
         endReason: gameDataDocument.endReason,
+        endDetail: gameDataDocument.endDetail,
         forfeitedBy: gameDataDocument.forfeitedBy,
         specificGameState: gameStateToModel(gameDataDocument.specificGameState, userIdNameMap)
     };

@@ -32,7 +32,7 @@ import { playerByUserId } from "@/utils/apiModels/GameDataApi";
 // Train Time deals two shuffled decks and reshuffles the discards back in when
 // the deck runs dry, so recap can only replay it if the starting snapshot is
 // stored and every recycle is recorded on the command that caused it. These
-// tests hold that line: they replay real command logs with Math.random ripped
+// tests hold that line: they replay real command logs with the CSPRNG ripped
 // out, so anything that reaches for fresh randomness fails loudly instead of
 // quietly dealing a different game.
 
@@ -40,12 +40,17 @@ const PLAYERS = ["u1", "u2", "u3"];
 const NAMES = { u1: "Alice", u2: "Bob", u3: "Cara" };
 
 function noRandomness<T>(run: () => T): T {
-    const random = vi.spyOn(Math, "random").mockImplementation(() => {
-        throw new Error("replay consumed randomness");
-    });
+    // Both sources: the game rules draw through crypto.getRandomValues
+    // (src/utils/games/random.ts), but a command that reached for Math.random
+    // directly would replay non-deterministically just the same, and this
+    // guard is worthless if it can pass without noticing.
+    const consumed = () => { throw new Error("replay consumed randomness"); };
+    const entropy = vi.spyOn(globalThis.crypto, "getRandomValues").mockImplementation(consumed);
+    const random = vi.spyOn(Math, "random").mockImplementation(consumed);
     try {
         return run();
     } finally {
+        entropy.mockRestore();
         random.mockRestore();
     }
 }

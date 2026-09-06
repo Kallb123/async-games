@@ -3,8 +3,8 @@ import type { ITurnSnapshot } from "@/utils/games/replay";
 import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic";
 import { IDiceCitiesDiceRollOutcome } from "@/utils/apiModels/GameLogic";
 import { DiceCitiesCardIds, HARBOUR_BONUS, HARBOUR_MIN_ROLL } from "@/games/DiceCities/cards";
-import { diceCitiesTheme } from "@/games/DiceCities/themes";
-import { LANDMARKS, landmarkCount } from "@/games/DiceCities/ui";
+import { diceCitiesTheme, DiceCitiesTheme } from "@/games/DiceCities/themes";
+import { coinChangeParts, LANDMARKS, landmarkCount } from "@/games/DiceCities/ui";
 import type { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
 import { playerByUserId } from "@/games/DiceCities/DiceCitiesModels";
 
@@ -16,6 +16,16 @@ const LANDMARK_BY_COMMAND: Record<string, string> = {
     DiceCitiesRequestUnlockAmusementPark: DiceCitiesCardIds.AMUSEMENT_PARK,
     DiceCitiesRequestUnlockRadioTower: DiceCitiesCardIds.RADIO_TOWER,
 };
+
+// A roll's full payout, named rather than netted: every steal or bank payout
+// it moved, so a Cafe robbing the roller reads as "Bob +1🪙, Alice -1🪙"
+// instead of only the roller's own line disappearing into "no coins" if
+// theirs happened to net to zero. Every reader of this recap sees the same
+// text, so - unlike the live board's version of this line - nobody gets "You".
+function coinChangeDetail(changes: Map<string, number>, state: IDiceCitiesGameStateResponse | undefined, theme: DiceCitiesTheme): string {
+    const parts = coinChangeParts(changes, (userId) => playerByUserId(state, userId)?.username ?? "someone");
+    return parts.length ? parts.join(", ") : `no ${theme.words.coins}`;
+}
 
 // Turns one replayed Dice Cities command into zero or more recap events. The
 // meaningful beats are the roll (whose money movement already folds in every
@@ -64,13 +74,8 @@ function toEvents(
         // moneyChanges is a live Map keyed by userId: the roller's own net plus
         // every coin a café/restaurant/stadium moved between players this roll.
         const changes = roll.moneyChanges instanceof Map ? roll.moneyChanges : new Map<string, number>();
-        const rollerNet = changes.get(command.senderId) ?? 0;
         const affectedIds = [...changes.entries()].filter(([, v]) => v !== 0).map(([id]) => id);
-
-        let detail: string;
-        if (rollerNet > 0) detail = `+${rollerNet}🪙`;
-        else if (rollerNet < 0) detail = `${rollerNet}🪙`;
-        else detail = `no ${theme.words.coins}`;
+        const detail = coinChangeDetail(changes, next.specificGameState as IDiceCitiesGameStateResponse | undefined, theme);
 
         // The Harbour's +2 lands on the dice that were already thrown, so its
         // event tells the whole story: what came up, and what it became.

@@ -60,18 +60,31 @@ function cmd(overrides: Partial<IGameCommand> & { className: string }): IGameCom
 }
 
 describe("Dice Cities recap adapter", () => {
-    it("turns a dice roll into a single roll event with the roller's net money and affected players", () => {
+    it("turns a dice roll into a single roll event naming every player it paid, and the affected players", () => {
         const events = diceCitiesRecapAdapter.toEvents(
-            snap(state([player({ userId: "u1", username: "Alice" })])),
-            snap(state([player({ userId: "u1", username: "Alice" })])),
+            snap(state([])),
+            snap(state([player({ userId: "u1", username: "Alice" }), player({ userId: "u2", username: "Bob" })])),
             cmd({ className: "DiceCitiesRequestDiceRoll" }),
             { validMove: true, turnOver: false, roll1: 3, roll2: null, moneyChanges: new Map([["u1", 2], ["u2", -2]]) } as ICommandOutcome,
         );
         expect(events).toHaveLength(1);
         expect(events[0].type).toBe("dc_roll");
         expect(events[0].title).toBe("Alice rolled 3");
-        expect(events[0].detail).toBe("+2🪙");
+        expect(events[0].detail).toBe("Alice +2🪙, Bob -2🪙");
         expect(events[0].affectedIds).toEqual(["u1", "u2"]);
+    });
+
+    it("still reports an opponent's swing even when the roller's own net is zero", () => {
+        // Before this, only the roller's own net was reported, so a roll that
+        // steals from one opponent and hands it to another - netting the
+        // roller nothing - read as "no coins" even though two purses moved.
+        const events = diceCitiesRecapAdapter.toEvents(
+            snap(state([])),
+            snap(state([player({ userId: "u2", username: "Bob" }), player({ userId: "u3", username: "Carol" })])),
+            cmd({ className: "DiceCitiesRequestDiceRoll" }),
+            { validMove: true, turnOver: false, roll1: 6, roll2: null, moneyChanges: new Map([["u1", 0], ["u2", 2], ["u3", -2]]) } as ICommandOutcome,
+        );
+        expect(events[0].detail).toBe("Bob +2🪙, Carol -2🪙");
     });
 
     it("shows both dice for a double roll", () => {
@@ -145,14 +158,14 @@ describe("Dice Cities recap adapter", () => {
     it("tells the whole story on the roll the Harbour's bonus settles", () => {
         const events = diceCitiesRecapAdapter.toEvents(
             snap(state([])),
-            snap(state([])),
+            snap(state([player({ userId: "u1", username: "Alice" })])),
             cmd({ className: "DiceCitiesRequestHarbourBonus", addBonus: true } as Partial<IGameCommand> & { className: string }),
             { validMove: true, turnOver: false, roll1: 5, roll2: 6, moneyChanges: new Map([["u1", 4]]) } as ICommandOutcome,
         );
         expect(events).toHaveLength(1);
         expect(events[0].title).toBe("Alice rolled 11 (5+6), Harbour +2 → 13");
         expect(events[0].glyph).toBe("⚓");
-        expect(events[0].detail).toBe("+4🪙");
+        expect(events[0].detail).toBe("Alice +4🪙");
     });
 
     it("reports a declined bonus as the plain roll it stayed", () => {

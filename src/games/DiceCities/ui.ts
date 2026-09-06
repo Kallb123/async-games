@@ -72,12 +72,28 @@ export interface DiceCitiesLandmarkEntry {
 /**
  * The four landmarks in cost order, each paired with the player-state flag that
  * records whether it's been built. Building all four wins the game.
+ *
+ * Mind the last two. Both flags are named for rolling again, which makes them
+ * easy to transpose — and they were, until the market's Amusement Park row was
+ * found sending the Radio Tower's command. `buildLandmark` in
+ * `DiceCitiesLogic` decides the pairing and this table has to match it:
+ *
+ * - Amusement Park → `rerollDoubles`: roll doubles and the turn comes back to
+ *   you. A whole further turn, not a re-roll of the dice you just threw, so
+ *   the name is looser than it looks.
+ * - Radio Tower → `oneReroll`: one re-roll a turn, discarding what the first
+ *   throw paid.
+ *
+ * The names stay because they are persisted schema fields — a player who has
+ * built the Amusement Park already has `rerollDoubles` stored against them, so
+ * renaming means migrating every game in the database for no player benefit.
+ * `DiceCitiesLogic.test.ts` holds the two tables together instead.
  */
 export const LANDMARKS: { cardId: string; flag: DiceCitiesLandmarkFlag }[] = [
     { cardId: DiceCitiesCardIds.TRAIN_STATION, flag: "doubleUnlocked" },
     { cardId: DiceCitiesCardIds.SHOPPING_MALL, flag: "bonusDiningAndStore" },
-    { cardId: DiceCitiesCardIds.AMUSEMENT_PARK, flag: "oneReroll" },
-    { cardId: DiceCitiesCardIds.RADIO_TOWER, flag: "rerollDoubles" },
+    { cardId: DiceCitiesCardIds.AMUSEMENT_PARK, flag: "rerollDoubles" },
+    { cardId: DiceCitiesCardIds.RADIO_TOWER, flag: "oneReroll" },
 ];
 
 /**
@@ -96,3 +112,17 @@ export function landmarkCount(playerState: IDiceCitiesPlayerStateResponse): numb
     return LANDMARKS.filter((l) => playerState[l.flag]).length;
 }
 
+/**
+ * A roll's payout, per player: every steal or bank payout it moved, named
+ * rather than netted — a roll that robs one opponent to pay another reads as
+ * `["Bob +2🪙", "Alice -2🪙"]`, not just whatever the roller's own line came
+ * to. Empty when nothing moved. `nameFor` is left to the caller because the
+ * two callers need different names for the same userId: the live board says
+ * "You" for the viewer, and the turn recap — built once and read by every
+ * player — never can.
+ */
+export function coinChangeParts(changes: Map<string, number>, nameFor: (userId: string) => string): string[] {
+    return [...changes.entries()]
+        .filter(([, amount]) => amount !== 0)
+        .map(([userId, amount]) => `${nameFor(userId)} ${amount > 0 ? "+" : ""}${amount}🪙`);
+}

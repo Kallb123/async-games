@@ -67,6 +67,26 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 game: "dicecities",
             },
             {
+                title: "See whether building early pays off in Dice Cities",
+                detail: "The result page now charts how many establishments each player owned at the end of every turn, alongside the coins chart — so you can see whether building up early snowballed into a win, or whether saving for the big cards paid off instead.",
+                game: "dicecities",
+            },
+            {
+                title: "Dice Cities rolls now show who got paid",
+                detail: "Every roll's payout now names who gained or lost coins and how many, right under the dice — no more working it out from the coin counts changing. And if it leaves you with nothing to spend and no free reroll left, your turn ends on its own instead of waiting for you to tap End turn.",
+                game: "dicecities",
+            },
+            {
+                title: "See every city in Dice Cities",
+                detail: "Everyone's cards are face up on the table, but you could only ever see your own — so there was no way to tell what a roll of 3 was about to pay an opponent, or who was one landmark from winning. The landmark track at the top now shows every player's progress at once, a dot each per landmark, and every opponent's city sits under yours to open and close as you like.",
+                game: "dicecities",
+            },
+            {
+                title: "Outbreak tells you how you lost",
+                detail: "\"The team lost\" was all you got, whether a colour's cube supply had run dry, the outbreak marker had maxed out, or you had simply run out of player cards. The finish banner, the result page and the notification now all name which of the three it was — and the result page adds a chart of every colour's remaining cubes, turn by turn, so you can see which supply was draining while you were curing something else.",
+                game: "outbreak",
+            },
+            {
                 title: "What's new goes back further",
                 detail: "These notes used to show only the last handful of changes in each group, and everything older simply vanished. Each group now keeps the three newest in full and lists the ones before them underneath by name alone, so you can see everything that has landed since you last played without scrolling through paragraphs you have already read.",
             },
@@ -88,28 +108,17 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "See which friends are around right now",
                 detail: "A green dot now sits on a friend's picture in your friends list while they're taking turns — anyone who has moved in a game in the last five minutes — so you can tell at a glance who is worth challenging now rather than tomorrow.",
             },
-            {
-                title: "Talk to your opponents during a game",
-                detail: "Every game now has a chat thread: tap 💬 on the board to say something to the other players, and they get a nudge on their phone. It stays readable after the game ends, so “gg” has somewhere to go — and you can turn the notifications off in Settings if you'd rather just read it when you next open the board. Reading it on one device now clears it everywhere, the home screen shows how many messages are waiting in each game, and opening a game you're behind on tells you who messaged while you were away.",
-            },
-            {
-                title: "Check your notifications actually work",
-                detail: "Allowing notifications was only half of it: a phone can allow them and still quietly fail to sign itself up, and nothing told you. Settings now says where this device stands, has a Send a test notification button that tells you exactly what became of it, and a ? explaining everything which can stop one arriving — including the Android battery and per-app settings that block them without asking.",
-            },
-            {
-                title: "Every game has a game guide",
-                detail: "Not sure what a phase does or which pile to worry about? A game guide now opens the first time you join a match of Dice Cities, Settlements & Cities, Train Time, World Domination or Outbreak, and any time after that from the ⋮ menu at the top of the board.",
-            },
-            {
-                title: "Your cards stay on screen between your turns",
-                detail: "Waiting for someone else to move used to leave you looking at the board and nothing else. Your hand, the face-up cards and what's left in the deck now stay put in Train Time, the market in Dice Cities and the cards you're holding in World Domination — greyed out until it's your go, so you can plan the move but not make it early.",
-            },
         ],
     },
     {
         label: "Bug fixes",
         icon: "🔧",
         items: [
+            {
+                title: "Dice Cities' Amusement Park can be built again",
+                detail: "Buying the Amusement Park quietly asked for the Radio Tower instead — so it was refused unless you could afford the more expensive one, and if you could, you got the wrong landmark for the wrong price. The two also had each other's powers: the extra turn on doubles belonged to the Radio Tower and the Amusement Park did nothing at all. Both now build, and cost, and do what their cards say.",
+                game: "dicecities",
+            },
             {
                 title: "Chat opens on a game nobody has said anything in yet",
                 detail: "Tapping 💬 on a board where the thread was still empty broke the screen instead of opening it — “That didn't go to plan” — which was every game until someone got the first message in somehow. An empty thread now opens ready for it.",
@@ -146,10 +155,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Your badge no longer flashes a stranger's initial",
                 detail: "For a moment before your profile loaded, the little circle on the home page and your profile showed a “T” or a “Y” — the first letter of the words standing in for your name. You now get a plain silhouette until your real initials or photo are ready.",
-            },
-            {
-                title: "The back arrow sits in the middle of its button",
-                detail: "The little round back arrow at the top of the library, your profile, settings and every other screen was leaning down and to one side of its circle. It's centred now.",
             },
         ],
     },

@@ -31,7 +31,7 @@ export function buildDiceCitiesGuide(theme: DiceCitiesTheme): GameGuide {
             },
             {
                 heading: "Card colours",
-                body: `Blue cards pay out to whoever rolls, on anyone's turn. Green cards only pay you, and only on your own roll. Red cards let you take ${words.coins} straight from whoever just rolled — build a few and their bad luck is your good luck.`,
+                body: `Blue cards pay out to whoever rolls, on anyone's turn. Green cards only pay you, and only on your own roll. Red cards let you take ${words.coins} straight from whoever just rolled — build a few and their bad luck is your good luck. Because every roll touches every ${words.city}, nobody's cards are secret: the ${words.landmark} track shows a dot per player, and opening an opponent's row below your own ${words.city} shows theirs.`,
             },
             {
                 heading: capitalise(words.landmarks),

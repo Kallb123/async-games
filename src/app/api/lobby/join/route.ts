@@ -21,8 +21,9 @@ export interface ILobbyJoinRequest {
 }
 
 // The app's first public write endpoint — a guest claims a seat with no
-// session at all — so a script walking the 234k-code space gets throttled
-// here rather than being free to hammer it (docs/account-less-play.md §4).
+// session at all — so a script walking the 1M-code space (32 characters to the
+// 4th) gets throttled here rather than being free to hammer it
+// (docs/account-less-play.md §4).
 // Generous enough that a real player mistyping a code a few times, or two
 // devices racing the same lobby, never trips it.
 const JOIN_RATE_LIMIT = 20;
