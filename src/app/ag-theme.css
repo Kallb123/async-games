@@ -2664,7 +2664,7 @@ a.ag-list-row, a.ag-list-row-main {
     max-width: 260px;
     height: auto;
     margin: 0 auto;
-    border-radius: 10px;
+    border-radius: 20px;
 }
 .ag-dc-card-facts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 14px 0 12px; }
 .ag-dc-card-fact {
