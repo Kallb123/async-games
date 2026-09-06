@@ -4,7 +4,7 @@ How a game gets more than one dressing: the same rules, costs and numbers,
 played under different names and artwork. Dice Cities is the first game to use
 it — the shipped Japanese-inspired region of rival towns, and the post-nuclear
 "Rust & Bottlecaps" re-skin written up in
-[`docs/games/dice-cities.md` §11](./games/dice-cities.md#11-appendix-alternative-theme--rust--bottlecaps).
+[`docs/games/dice-cities.md` §12](./games/dice-cities.md#12-appendix-alternative-theme--rust--bottlecaps).
 
 ## 1. What a theme is (and is not)
 

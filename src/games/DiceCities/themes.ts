@@ -4,7 +4,7 @@
 // costs, activation numbers, activation colours, icon combos, bank total and
 // win condition, with different names, rules copy and card faces over the top.
 // A Brahmin Pen is a Ranch with a different picture on it — see
-// docs/games/dice-cities.md §11, which this file implements.
+// docs/games/dice-cities.md §12, which this file implements.
 //
 // Everything themed about a card lives on the themed card table below, so a
 // screen looks a card up in `theme.cards` exactly as it used to look it up in
@@ -117,7 +117,7 @@ const risingSun = buildTheme({
     cards: {},
 });
 
-// ── Rust & Bottlecaps: the post-nuclear re-skin (dice-cities.md §11) ─────────
+// ── Rust & Bottlecaps: the post-nuclear re-skin (dice-cities.md §12) ─────────
 // Names only. Every cost, number, colour and limit beside them is the base
 // game's, untouched — which is the whole point of the appendix this comes from.
 const rustAndBottlecaps = buildTheme({
