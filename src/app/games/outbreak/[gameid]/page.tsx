@@ -423,6 +423,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                             gs={gs}
                             myUserId={myUserId}
                             userIdList={userIdList}
+                            turnOrder={turnOrder}
                             submitCommand={submitCommand}
                             pendingTarget={pendingTarget}
                             targeting={eventTargeting}
@@ -436,6 +437,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                             gs={gs}
                             myUserId={myUserId}
                             userIdList={userIdList}
+                            turnOrder={turnOrder}
                             moveMode={boardTarget?.kind === 'move' ? boardTarget.type : null}
                             setMoveMode={m => setBoardTarget(m ? { kind: 'move', type: m } : null)}
                             opsFlightActive={boardTarget?.kind === 'opsFlight'}

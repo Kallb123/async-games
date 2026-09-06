@@ -277,7 +277,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
 
     // Tickets are secret while the game runs and face-up once it's scored (§10).
     const ticketGroups: TrainTimeTicketGroup[] = scored
-        ? players.flatMap(({ username, ps, isMe }): TrainTimeTicketGroup[] => (
+        ? scoreboardPlayers.flatMap(({ username, ps, isMe }): TrainTimeTicketGroup[] => (
             ps.tickets
                 ? [{ title: isMe ? 'Your tickets' : `${username}’s tickets`, tickets: ps.tickets }]
                 : []
@@ -443,7 +443,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                             boardTag={boardTag}
                         />
                         <div className="ag-tt-legend">
-                            {players.map(({ userId, username, ps, colour, isMe }) => (
+                            {scoreboardPlayers.map(({ userId, username, ps, colour, isMe }) => (
                                 <span key={userId} className="ag-tt-legend-item">
                                     <span className="ag-tt-legend-rail" style={{ background: colour }} />
                                     {isMe ? 'You' : username} {ps.routesClaimed}
