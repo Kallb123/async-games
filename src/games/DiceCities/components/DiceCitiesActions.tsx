@@ -288,12 +288,12 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
         const rolled = dice.reduce((a, b) => a + b, 0);
         return (
             <div className="ag-actionsheet">
+                <RollReadout values={dice} headline={`Total ${rolled}`} sub="nobody is paid until you decide" />
                 <SelectionHead
                     icon="⚓"
                     title={harbourCard.title}
                     sub={`You rolled ${rolled}. The ${harbourCard.title} can add ${HARBOUR_BONUS} to it.`}
                 />
-                <RollReadout values={dice} headline={`Total ${rolled}`} sub="nobody is paid until you decide" />
                 <div className="ag-dc-pick-list ag-pending-group">
                     <PickRow
                         label={`Add +${HARBOUR_BONUS} · make it ${rolled + HARBOUR_BONUS}`}
@@ -317,8 +317,8 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
     if (gameState.awaitingTSSelection) {
         return (
             <div className="ag-actionsheet">
-                <SelectionHead icon="📺" title={tvStationCard.title} sub={tvStationCard.text} />
                 {rollReadout(`choose who to take ${words.coins} from`)}
+                <SelectionHead icon="📺" title={tvStationCard.title} sub={tvStationCard.text} />
                 <div className="ag-dc-pick-list ag-pending-group">
                     {opponents.map((op) => (
                         <PickRow
@@ -345,12 +345,12 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
         const mine = myState.cards.filter((cc) => cc.amount > 0 && cards[cc.card].type !== "landmark");
         return (
             <div className="ag-actionsheet">
+                {rollReadout("choose a card to give away")}
                 <SelectionHead
                     icon="🏢"
                     title={businessCentreCard.title}
                     sub={`Choose one of your ${words.establishments} to give away.`}
                 />
-                {rollReadout("choose a card to give away")}
                 <CardPickGrid
                     cards={mine.map((cc) => cards[cc.card])}
                     disabled={busy}
@@ -368,12 +368,12 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
     if (gameState.awaitingBCSelectionOpponent) {
         return (
             <div className="ag-actionsheet">
+                {rollReadout("choose a card to take")}
                 <SelectionHead
                     icon="🏢"
                     title={businessCentreCard.title}
                     sub={`Choose an opponent's ${words.establishment} to take.`}
                 />
-                {rollReadout("choose a card to take")}
                 {opponents.map((op) => {
                     const theirs = op.cards.filter((cc) => cc.amount > 0 && cards[cc.card].type !== "landmark");
                     if (theirs.length === 0) return null;
