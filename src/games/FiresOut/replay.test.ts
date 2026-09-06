@@ -14,7 +14,7 @@ import {
 
 // §17.6 step 11: the fire is the one thing recap and result stats have to get
 // exactly right, since a single endTurn can roll an unknown-in-advance number
-// of times (§17.4). These tests replay real command logs with Math.random
+// of times (§17.4). These tests replay real command logs with the CSPRNG
 // ripped out — mirrors src/games/TrainTime/replay.test.ts, the model
 // docs/turn-recap-and-planning.md points at for the next snapshot-replay game.
 
@@ -22,13 +22,13 @@ const PLAYERS = ["u1", "u2", "u3"];
 const NAMES = { u1: "Alice", u2: "Bob", u3: "Cara" };
 
 function noRandomness<T>(run: () => T): T {
-    const random = vi.spyOn(Math, "random").mockImplementation(() => {
+    const entropy = vi.spyOn(globalThis.crypto, "getRandomValues").mockImplementation(() => {
         throw new Error("replay consumed randomness");
     });
     try {
         return run();
     } finally {
-        random.mockRestore();
+        entropy.mockRestore();
     }
 }
 

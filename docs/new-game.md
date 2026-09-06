@@ -39,7 +39,7 @@ For the component-reuse rules you must follow while building the UI, see
      shrinks, a hand dealt face-down), the answer is no and you need a
      persisted `initialSpecificGameState` snapshot — decided in `CreateGame`,
      on day one.
-   - **Does every `Execute` that touches `Math.random` record its outcome?**
+   - **Does every `Execute` that consumes randomness record its outcome?**
    - **Does your response converter redact per viewer?** That's fine — the
      replay adapter takes a viewer — but the converter still has to be a pure
      function of state, name map and that viewer.
@@ -105,9 +105,11 @@ handful of one-line additions to shared files in the last step.
   token, never by a name that can change (`src/utils/games/history.ts`) — and
   returns `{ validMove: true, turnOver }`.
 - **Any `Execute` that consumes randomness records its outcome on the command**
-  (`this.recordedRoll ?? DiceRoll(6)`) — §7(b). Do this as you write the
-  command, not as a later pass: commands already in `commandHistory` can never
-  be given the field retroactively.
+  (`this.recordedRoll ?? DiceRoll(6)`) — §7(b). Draw it through
+  `src/utils/games/random.ts` (`DiceRoll`, `shuffle`, `randomInt`,
+  `randomFloat`), never `Math.random`, so a player cannot predict it. Do this
+  as you write the command, not as a later pass: commands already in
+  `commandHistory` can never be given the field retroactively.
 - If your validation logic is non-trivial (legal-move computation, sequence
   checks, scoring formulas), put it in a separate pure `rules.ts` module
   instead of inlining it in the command classes — see "Isomorphic rules
@@ -258,8 +260,10 @@ table can see (Train Time names a face-up card taken, never a blind draw).
 Add a `recap.test.ts` alongside the adapter (see `DiceCities/recap.test.ts`) —
 it's plain snapshot-in, events-out, so it needs no Mongo or Clerk. If your game
 records RNG, add a `replay.test.ts` too (see `TrainTime/replay.test.ts`): it
-replays a played-out game with `Math.random` stubbed to throw, which is the only
-cheap way to know a recorded outcome actually covers every random path.
+replays a played-out game with `crypto.getRandomValues` stubbed to throw (the
+one source of randomness in the game rules — see `src/utils/games/random.ts`),
+which is the only cheap way to know a recorded outcome actually covers every
+random path.
 
 **Planning mode** (queueing hypothetical future turns) is a further opt-in on
 top of replay, and it takes two: `plannableCommands` on your replay adapter,

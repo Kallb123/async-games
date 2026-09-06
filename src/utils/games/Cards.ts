@@ -3,6 +3,8 @@
 // reusable components/utilities, not per-game copies). Parallels DiceRoll.ts:
 // a small cross-game "randomness + domain facts" utility.
 
+import { randomInt } from "./random";
+
 export type Suit = 'S' | 'H' | 'D' | 'C';
 
 export const SUITS: Suit[] = ['S', 'H', 'D', 'C'];
@@ -50,11 +52,12 @@ export function buildStandardDeck(): ICard[] {
     return deck;
 }
 
-// Fisher-Yates shuffle, matching DiceRoll's Math.random-based approach.
+// Fisher-Yates shuffle, drawing from the same CSPRNG as the dice — a deck
+// order a player could predict is a hand they can read.
 export function shuffleDeck(deck: ICard[]): ICard[] {
     const shuffled = [...deck];
     for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = randomInt(i + 1);
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
     return shuffled;

@@ -22,7 +22,7 @@ vi.mock('@/utils/mongodb/mongodb', async () => (await import('@/utils/testing/ap
 vi.mock('@/utils/firebase/pushNotification', async () => (await import('@/utils/testing/apiRoute')).pushNotificationStub());
 vi.mock('@/utils/mongodb/GameResultData', () => ({ recordGameResult }));
 // A fixed die, so a rolled position is something a test can assert.
-vi.mock('@/utils/games/DiceRoll', () => ({ DiceRoll: () => 3, DiceRollRequest: async () => 3 }));
+vi.mock('@/utils/games/DiceRoll', () => ({ DiceRoll: () => 3 }));
 
 import { runAfterCallbacks } from '@/utils/testing/afterStub';
 import {

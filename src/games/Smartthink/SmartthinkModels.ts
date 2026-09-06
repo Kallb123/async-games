@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { UserDirectory, userIdListToNamesAndMap, userIdListToUsernameMap } from "@/utils/users/clerk";
 import { SmartthinkGameType } from "@/utils/apiModels/GameLogic";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
+import { randomInt } from "@/utils/games/random";
 
 export const SMARTTHINK_COMPUTER_ID = "Computer";
 export const SMARTTHINK_COMPUTER_USERNAME = "Computer";
@@ -52,8 +53,11 @@ export interface ISmartthinkGameDataModel extends Model<ISmartthinkGameDataDocum
 }
 
 
+// The code the breaker is trying to guess, so it is drawn from the CSPRNG
+// (see random.ts) rather than a generator whose next output a breaker who has
+// watched enough games could narrow down.
 function generateSmartthinkSecretCode(): number[] {
-    return Array.from({ length: 4 }, () => Math.floor(Math.random() * 6));
+    return Array.from({ length: 4 }, () => randomInt(6));
 }
 
 export function CreateSmartthinkSoloGameData(userId: string, username: string, turnTimer: string): ISmartthinkGameData {
