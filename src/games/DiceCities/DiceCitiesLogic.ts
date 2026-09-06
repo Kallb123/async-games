@@ -7,6 +7,7 @@ import { deserializeJSON, serializable } from "@/utils/apiModels/Serialisable";
 import { playerHistory, userToken } from "@/utils/games/history";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { mongoMap } from "@/utils/games/mongoMaps";
+import { seatOrderFrom } from "@/utils/ui/players";
 import { DiceCitiesCardIds, DiceCitiesCards, HARBOUR_BONUS, HARBOUR_MIN_ROLL, TUNA_DICE, TUNA_DIE_SIDES } from "@/games/DiceCities/cards";
 import type { DiceCitiesBuildFlag } from "@/games/DiceCities/ui";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
@@ -1046,6 +1047,33 @@ function cardIsActive(card: IDiceCitiesCard, playerState: IDiceCitiesPlayerState
     return !card.requiresHarbour || playerState.harbourUnlocked === true;
 }
 
+// The order a roll pays its players in: the roller first, then the seats that
+// follow them round the table. It only shows when there isn't enough to go
+// round - a roller who can't cover every restaurant, or a bank that runs dry
+// mid-roll - and then it decides who is paid and who is shorted, so it has to
+// be the game's own turn order rather than whatever order `playerStates`
+// happens to have been built in. A player the turn order doesn't name is still
+// paid, at the back: a state that disagrees with itself should short someone,
+// not drop them.
+function payoutOrder(dcGameData: IDiceCitiesGameData): [string, IDiceCitiesPlayerState][] {
+    const playerStates = dcGameData.specificGameState.playerStates;
+    const ordered: [string, IDiceCitiesPlayerState][] = [];
+    const paid = new Set<string>();
+    seatOrderFrom(dcGameData.gameState.turnOrder ?? [], dcGameData.currentTurn).forEach(userId => {
+        const playerState = playerStates.get(userId);
+        if (playerState && !paid.has(userId)) {
+            ordered.push([userId, playerState]);
+            paid.add(userId);
+        }
+    });
+    playerStates.forEach((playerState, userId) => {
+        if (!paid.has(userId)) {
+            ordered.push([userId, playerState]);
+        }
+    });
+    return ordered;
+}
+
 // Every copy of a player's cards that this total sets off, once per copy: two
 // Cafes take a coin each, so the card comes back twice. Callers pass what their
 // own payout step cares about - a restaurant taking from the roller, or a card
@@ -1159,7 +1187,7 @@ function resolveRoll(dcGameData: IDiceCitiesGameData, rollerState: IDiceCitiesPl
         return tunaRoll;
     };
     // Award red cards
-    dcGameData.specificGameState.playerStates.forEach((playerState, userId) => {
+    payoutOrder(dcGameData).forEach(([userId, playerState]) => {
         if (userId === dcGameData.currentTurn) {
             return;
         }
@@ -1179,7 +1207,7 @@ function resolveRoll(dcGameData: IDiceCitiesGameData, rollerState: IDiceCitiesPl
         });
     });
     // Award bank money (green and blue)
-    dcGameData.specificGameState.playerStates.forEach((playerState, userId) => {
+    payoutOrder(dcGameData).forEach(([userId, playerState]) => {
         const isRoller = userId === dcGameData.currentTurn;
         const hitCards = activatedCopies(playerState, totalRoll, card =>
             (card.bankGain !== 0 || card.gainMultiplier !== null || card.sharedDieGain === true)

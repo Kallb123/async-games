@@ -65,11 +65,15 @@ function makeState(overrides: Partial<IDiceCitiesGameState> = {}): IDiceCitiesGa
     };
 }
 
-function makeGame(gs: IDiceCitiesGameState, currentTurn = "u1"): IDiceCitiesGameData {
+// Seats the game in the order the state lists its players, unless a test needs
+// a turn order that differs from it - payouts follow the turn order, so the two
+// have to be tellable apart.
+function makeGame(gs: IDiceCitiesGameState, currentTurn = "u1", turnOrder?: string[]): IDiceCitiesGameData {
+    const seats = turnOrder ?? [...gs.playerStates.keys()];
     return {
         currentTurn,
-        userIdList: ["u1", "u2"],
-        gameState: { turnOrder: ["u1", "u2"], history: [], commandHistory: [] },
+        userIdList: seats,
+        gameState: { turnOrder: seats, history: [], commandHistory: [] },
         specificGameState: gs,
         complete: false,
         winner: "",
@@ -285,6 +289,65 @@ describe("Dice Cities bank supply", () => {
         expect(gs.playerStates.get("u2")!.money).toBe(1);
         expect(gs.playerStates.get("u3")!.money).toBe(0);
         expect(coinsInPlay(gs)).toBe(11);
+    });
+
+    it("pays the restaurants in turn order from the roller, not state order", async () => {
+        // u2 rolls with a single coin and both opponents own a Cafe. Turn order
+        // puts u3 next, so u3 takes the coin - even though u1 comes first in
+        // the state's own player map.
+        const gs = makeState({
+            bankMoney: 10,
+            playerStates: new Map([
+                ["u1", player({ money: 0, cards: cards(DiceCitiesCardIds.CAFE) })],
+                ["u2", player({ money: 1 })],
+                ["u3", player({ money: 0, cards: cards(DiceCitiesCardIds.CAFE) })],
+            ]),
+        });
+        const game = makeGame(gs, "u2", ["u1", "u2", "u3"]);
+
+        await rollCommand(3, "u2").Execute(game);
+
+        expect(gs.playerStates.get("u2")!.money).toBe(0);
+        expect(gs.playerStates.get("u3")!.money).toBe(1);
+        expect(gs.playerStates.get("u1")!.money).toBe(0);
+        expect(coinsInPlay(gs)).toBe(11);
+    });
+
+    it("pays bank income in turn order from the roller when the bank runs dry", async () => {
+        // One coin left in the bank and two Wheat Fields want it on a 1. The
+        // seat after the roller is paid; the seat before goes short.
+        const gs = makeState({
+            bankMoney: 1,
+            playerStates: new Map([
+                ["u1", player({ cards: cards(DiceCitiesCardIds.WHEAT_FIELD) })],
+                ["u2", player()],
+                ["u3", player({ cards: cards(DiceCitiesCardIds.WHEAT_FIELD) })],
+            ]),
+        });
+        const game = makeGame(gs, "u2", ["u1", "u2", "u3"]);
+
+        await rollCommand(1, "u2").Execute(game);
+
+        expect(gs.playerStates.get("u3")!.money).toBe(1);
+        expect(gs.playerStates.get("u1")!.money).toBe(0);
+        expect(gs.bankMoney).toBe(0);
+        expect(game.gameState.history.some(h => h.text.includes("The bank ran out of coins - 1 coin "))).toBe(true);
+    });
+
+    it("still pays a player the turn order forgot, at the back of the queue", async () => {
+        // A turn order that doesn't name u3 shouldn't lose u3 their income.
+        const gs = makeState({
+            playerStates: new Map([
+                ["u1", player()],
+                ["u2", player()],
+                ["u3", player({ cards: cards(DiceCitiesCardIds.WHEAT_FIELD) })],
+            ]),
+        });
+        const game = makeGame(gs, "u1", ["u1", "u2"]);
+
+        await rollCommand(1).Execute(game);
+
+        expect(gs.playerStates.get("u3")!.money).toBe(1);
     });
 
     it("never lets a steal hand over coins the target doesn't have", async () => {
