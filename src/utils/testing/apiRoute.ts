@@ -85,6 +85,12 @@ export async function resetApiRouteStubs() {
     clearAfterCallbacks();
     sentPushes.length = 0;
     vi.spyOn(gameData.GameDataModel, 'findOne').mockImplementation(findOneFromStore as GameData['GameDataModel']['findOne']);
+    // A game that doesn't exist yet — `new SomeGameDataModel(...).save()`, which
+    // is how a game is created (startGameFromInvitation) and how one is copied
+    // (duplicateGame). Every discriminator model inherits this prototype, and a
+    // game fetched out of the store carries its own `save` (see `hydrate`), so
+    // this only ever catches the inserts.
+    vi.spyOn(gameData.GameDataModel.prototype, 'save').mockImplementation(insertIntoStore);
     vi.spyOn(gameData.GameDataModel, 'find').mockImplementation(findManyFromStore as GameData['GameDataModel']['find']);
     vi.spyOn(chatMessageData.ChatMessageModel, 'find').mockImplementation(findChatFromStore as typeof chatMessageData.ChatMessageModel.find);
     vi.spyOn(chatMessageData.ChatMessageModel, 'aggregate').mockImplementation(aggregateChatFromStore as unknown as typeof chatMessageData.ChatMessageModel.aggregate);
@@ -249,6 +255,15 @@ export async function rateLimitStub() {
  */
 function asStored(value: Record<string, unknown>): StoredGame {
     return JSON.parse(JSON.stringify(value)) as StoredGame;
+}
+
+/**
+ * A brand new game document saving itself for the first time. Version 0, and
+ * no version check to make: nothing is there to have moved underneath it.
+ */
+async function insertIntoStore(this: IGameDataDocument) {
+    games.set(this.gameId, asStored({ ...this.toObject({ flattenMaps: true }), __v: 0 }));
+    return this;
 }
 
 /** Puts a game in the store, as if it had been created earlier. */

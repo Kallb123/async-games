@@ -140,9 +140,15 @@ button {
    marked, including the ones a future screen adds, and no screen has to
    remember to opt in. It rides in the title group of the light bars (a flex
    row, so it lands beside the name) and at the end of the dark in-game bar,
-   whose title is a single ellipsed line with no room to share. */
+   whose title is a single ellipsed line with no room to share.
+
+   `.ag-dev-badge` is the same badge as a real button: on a game's board screen
+   it opens the dev-tools menu (`DevGameMenu`) instead of just labelling the
+   bar. It shares this rule so the two are one badge and not two that drift —
+   `content` does nothing on an element, which carries its own text. */
 [data-env="dev"] .ag-topbar-title::after,
-[data-env="dev"] .ag-game-topbar::after {
+[data-env="dev"] .ag-game-topbar:not(:has(.ag-dev-badge))::after,
+.ag-dev-badge {
     content: "🚧 DEV";
     flex: none;
     padding: 3px 9px;
@@ -155,10 +161,17 @@ button {
 
 /* Same badge, recoloured for the dark bar it sits on — the same white scrim
    `.ag-sync-pill` already uses there, rather than a third opacity. */
-[data-env="dev"] .ag-game-topbar::after {
+[data-env="dev"] .ag-game-topbar:not(:has(.ag-dev-badge))::after,
+.ag-dev-badge {
     background: rgba(255, 255, 255, 0.12);
     color: var(--ag-on-dark);
 }
+
+/* Button-only: a ::after has no border to reset and nothing to click. */
+.ag-dev-badge { border: none; cursor: pointer; }
+
+/* Open, the badge reads open the same way the kebab beside it does. */
+.ag-dev-badge--on, .ag-dev-badge--on:hover { background: var(--ag-terracotta); }
 
 .ag-back {
     width: 40px;

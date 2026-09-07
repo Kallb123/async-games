@@ -24,6 +24,12 @@ interface GameOptionsMenuProps {
     options: GameOption[];
     /** Accessible label for the trigger button. */
     label?: string;
+    /** What the trigger button shows. Defaults to the kebab dots. */
+    trigger?: React.ReactNode;
+    /** Class on the trigger button, for a menu that hangs off something other
+     *  than a top-bar icon button (the dev badge). The open state adds a
+     *  `--on` modifier to whatever this is, the same way the default does. */
+    triggerClassName?: string;
 }
 
 /**
@@ -31,8 +37,12 @@ interface GameOptionsMenuProps {
  * (kebab) button that opens a dropdown of per-game actions — replay the last
  * recap, toggle the turn-history list, end the game, etc. Every game reuses
  * this and just supplies its own `options`.
+ *
+ * `trigger`/`triggerClassName` let a second menu in the same bar hang off a
+ * different button — the dev deployment's 🚧 DEV badge (`DevGameMenu`) — with
+ * the same dropdown, the same dismiss behaviour and the same rows.
  */
-export default function GameOptionsMenu({ options, label = 'Game options' }: GameOptionsMenuProps) {
+export default function GameOptionsMenu({ options, label = 'Game options', trigger = '⋮', triggerClassName = 'ag-game-topbar-btn' }: GameOptionsMenuProps) {
     const { open, setOpen, rootRef } = useDismissablePopup<HTMLDivElement>();
 
     if (options.length === 0) return null;
@@ -41,12 +51,12 @@ export default function GameOptionsMenu({ options, label = 'Game options' }: Gam
         <div className="ag-gom" ref={rootRef}>
             <button
                 type="button"
-                className={`ag-game-topbar-btn${open ? ' ag-game-topbar-btn--on' : ''}`}
+                className={`${triggerClassName}${open ? ` ${triggerClassName}--on` : ''}`}
                 onClick={() => setOpen(v => !v)}
                 aria-label={label}
                 aria-haspopup="menu"
                 aria-expanded={open}
-            >⋮</button>
+            >{trigger}</button>
 
             {open && (
                 <div className="ag-gom-menu" role="menu">
