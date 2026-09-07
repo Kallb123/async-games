@@ -7,10 +7,12 @@ import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
  * locally right away — the log's own twin of useTurnRecap's `react`, keyed by
  * `commandId` (what a history line carries) rather than `eventId` (what a
  * recap event carries); the reaction route accepts either. Applied
- * optimistically because the log stays open while a player browses it, so a
- * round trip before the pill appeared would read as a missed tap; on
- * failure — most likely this player already reacted from another tab —
- * `getGameData` refetches to pick up the server's actual state.
+ * optimistically first, so the pill appears the instant it's tapped rather
+ * than after a round trip, then reconciled with a real `getGameData` refetch
+ * once the request settles either way — the log otherwise had nothing to make
+ * it refetch on its own (no new command, no push, and polling is off while
+ * it's this player's own turn), so a sent reaction stayed missing from the
+ * panel until something else happened to refresh it.
  *
  * Only meaningful against the *live* history (`gameData.gameState.history`,
  * what `setGameData`/`getGameData` own): a past turn reconstructed for
@@ -45,9 +47,7 @@ export function useHistoryReactions<T extends IGameDataResponse>(
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ commandId, reaction }),
         })
-            .then((res) => {
-                if (!res.ok) getGameData();
-            })
+            .then(() => getGameData())
             .catch(() => getGameData());
     }, [gameId, viewerId, setGameData, getGameData]);
 }

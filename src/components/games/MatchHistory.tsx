@@ -51,7 +51,10 @@ export default function MatchHistory({ entries, userIdList = [], oldestFirst = f
     return (
         <div className="ag-log ag-panel-open-pulse">
             <div className="ag-panel-head">
-                <div className="ag-hand-title">Match history</div>
+                <div>
+                    <div className="ag-hand-title">Match history</div>
+                    <div className="ag-panel-subtitle">{oldestFirst ? "Latest at the bottom" : "Latest at the top"}</div>
+                </div>
                 <button type="button" className="ag-panel-close" onClick={onClose} aria-label="Close turn history">✕</button>
             </div>
             {lines.length === 0 ? (
