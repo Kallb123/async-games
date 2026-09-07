@@ -21,6 +21,7 @@ import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
+import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useSubmitCommand, type SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { ISnakesAndLaddersGameStateResponse } from "@/games/SnakesAndLadders/apiModels";
 import { ISnakesAndLaddersDiceRollOutcome, SnakesAndLaddersRequestDiceRoll } from "@/utils/apiModels/GameLogic";
@@ -45,6 +46,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     const gameId = gameid;
 
     const { gameData, setGameData, getGameData } = useGameData<ISnakesAndLaddersGameDataResponse>(gameId);
+    const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
 
     const { submitCommand, submitting } = useSubmitCommand<ISnakesAndLaddersGameDataResponse>(gameId, user, setGameData, getGameData);
 
@@ -193,7 +195,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
     }
 
     return (
-        <GameShell title="Snakes & Ladders" subtitle={subtitle} options={boardState ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true }} chat={{ gameId, userIdList, usernameList }}>
+        <GameShell title="Snakes & Ladders" subtitle={subtitle} options={boardState ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}

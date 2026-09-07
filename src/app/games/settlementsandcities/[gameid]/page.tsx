@@ -25,6 +25,7 @@ import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useGameGuide } from "@/utils/hooks/useGameGuide";
+import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useSubmitCommand, type SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
@@ -63,6 +64,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     const gameId = gameid;
 
     const { gameData, setGameData, getGameData } = useGameData<ISACGameDataResponse>(gameId);
+    const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
 
     const { submitCommand: sendCommand, submitting, pendingTarget } = useSubmitCommand<ISACGameDataResponse>(gameId, user, setGameData, getGameData);
     const submitCommand: SubmitCommand = (command, callback, target) =>
@@ -325,7 +327,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     }
 
     return (
-        <GameShell title="Settlements & Cities" subtitle={subtitle} options={gs ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true }} chat={{ gameId, userIdList, usernameList }}>
+        <GameShell title="Settlements & Cities" subtitle={subtitle} options={gs ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }}>
             <FcmTokenComp />
 
             {gameGuide.open && <GameGuideModal guide={settlementsAndCitiesGuide} onClose={gameGuide.closeGuide} />}

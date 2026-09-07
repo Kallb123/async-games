@@ -7,6 +7,7 @@ import { ChatMessageModel } from '@/utils/mongodb/ChatMessageData';
 import { ChatReadModel, IChatReadDataDocument } from '@/utils/mongodb/ChatReadData';
 import { userIdListToUserIdNameMap } from '@/utils/users/clerk';
 import { buildEventFeed, IGameEvent } from '@/utils/games/recap';
+import { viewerReaction } from '@/utils/reactions';
 import { metaForGame } from '@/utils/ui/games';
 import { playerColour } from '@/utils/ui/playerColours';
 
@@ -16,7 +17,11 @@ export interface IGetRecapParams {
 
 // One recap row as sent to the client: the game-agnostic event plus the actor's
 // player colour (for the timeline dot), a pre-formatted "affects you" flag,
-// and the reaction already dropped on it (there's only ever one — the viewer's).
+// and the reaction the *viewer* already dropped on it, if any — picked out of
+// every player's reactions on the event, since each may have their own. This
+// is what the interactive picker in TurnRecap needs to know whether to show
+// itself or the viewer's own sent pill; it says nothing about whether anyone
+// else has reacted.
 export interface IRecapEventResponse extends IGameEvent {
     dotColour: string;
     affectsMe: boolean;
@@ -108,12 +113,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IG
         }
 
         const meta = metaForGame({ url: gameData.gameType.url, friendlyName: gameData.gameType.friendlyName });
-        const reactionByEventId = await reactionMapBy(gameid, 'eventId', feed.events.map((e) => e.id));
+        const reactionsByEventId = await reactionMapBy(gameid, 'eventId', feed.events.map((e) => e.id));
         const events: IRecapEventResponse[] = feed.events.map((event) => ({
             ...event,
             dotColour: playerColour(gameData.userIdList.indexOf(event.actorId)),
             affectsMe: event.affectedIds?.includes(userId) ?? false,
-            reaction: reactionByEventId.get(event.id) ?? null,
+            reaction: viewerReaction(reactionsByEventId.get(event.id), userId),
         }));
 
         const chat = await unreadChatSince(gameid, userId, userIdNameMap);

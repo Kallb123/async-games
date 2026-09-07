@@ -17,12 +17,13 @@ interface ReactionPickerProps {
 }
 
 /**
- * The 💬 control on a recap timeline entry: opens a small anchored popup of
- * canned phrases plus an emoji row. Reuses the game-options kebab menu's
- * open/outside-click/Escape shell and its `.ag-gom-*` popup/row styling —
- * only the emoji row is a genuinely new layout. Once a reaction has been
- * sent, renders it as a fixed pill instead — only one reaction per action
- * is allowed.
+ * The 💬 control on a recap or match-history entry: opens a small anchored
+ * popup of canned phrases plus an emoji row. Reuses the game-options kebab
+ * menu's open/outside-click/Escape shell and its `.ag-gom-*` popup/row
+ * styling — only the emoji row is a genuinely new layout. Once *this* player
+ * has reacted, renders their own reaction as a fixed pill instead — one
+ * reaction per player per action is allowed, so a caller renders one
+ * `ReactionPicker` per player who reacted (or could still react).
  */
 export default function ReactionPicker({ reacted, onReact, reactedLabel }: ReactionPickerProps) {
     const { open, setOpen, rootRef } = useDismissablePopup<HTMLDivElement>();

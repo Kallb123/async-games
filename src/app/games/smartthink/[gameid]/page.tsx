@@ -16,6 +16,7 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
+import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import type { ISmartthinkGameStateResponse } from "@/games/Smartthink/apiModels";
 import { SMARTTHINK_CODE_LENGTH } from "@/games/Smartthink/ui";
@@ -34,6 +35,7 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
     const gameId = gameid;
 
     const { gameData, setGameData, getGameData } = useGameData<ISmartthinkGameDataResponse>(gameId);
+    const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
 
     const { submitCommand, submitting } = useSubmitCommand<ISmartthinkGameDataResponse>(gameId, user, setGameData, getGameData);
 
@@ -124,7 +126,7 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
     ];
 
     return (
-        <GameShell title="Smartthink" subtitle={subtitle} options={displayed ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true }} chat={{ gameId, userIdList, usernameList }}>
+        <GameShell title="Smartthink" subtitle={subtitle} options={displayed ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}

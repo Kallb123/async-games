@@ -35,6 +35,7 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useGameGuide } from "@/utils/hooks/useGameGuide";
+import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
@@ -59,6 +60,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     const gameId = gameid;
 
     const { gameData, setGameData, getGameData } = useGameData<ITrainTimeGameDataResponse>(gameId);
+    const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
     const { submitCommand, submitting, pendingTarget } = useSubmitCommand<ITrainTimeGameDataResponse>(gameId, user, setGameData, getGameData);
     const { endGame } = useEndGame(gameId);
 
@@ -354,7 +356,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                 : undefined}
             options={gs ? menuOptions : undefined}
             syncing={submitting}
-            log={{ entries: nav.displayedHistory, userIdList }}
+            log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }}
             chat={{ gameId, userIdList, usernameList }}
             className="ag-game--traintime"
         >

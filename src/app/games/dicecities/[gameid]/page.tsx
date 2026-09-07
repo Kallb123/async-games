@@ -22,6 +22,7 @@ import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
+import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useGameGuide } from "@/utils/hooks/useGameGuide";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { LANDMARKS, landmarkCount } from "@/games/DiceCities/ui";
@@ -43,6 +44,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const gameId = gameid;
 
     const { gameData, setGameData, getGameData } = useGameData<IDiceCitiesGameDataResponse>(gameId);
+    const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
 
     const { submitCommand, submitting, pendingTarget } = useSubmitCommand<IDiceCitiesGameDataResponse>(gameId, user, setGameData, getGameData);
 
@@ -193,7 +195,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     }
 
     return (
-        <GameShell title="Dice Cities" subtitle={subtitle} options={displayed ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList }} chat={{ gameId, userIdList, usernameList }}>
+        <GameShell title="Dice Cities" subtitle={subtitle} options={displayed ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }}>
             <FcmTokenComp />
 
             {gameGuide.open && <GameGuideModal guide={buildDiceCitiesGuide(theme)} onClose={gameGuide.closeGuide} />}

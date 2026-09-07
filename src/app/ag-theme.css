@@ -3106,6 +3106,11 @@ a.ag-list-row, a.ag-list-row-main {
 /* ---- Reaction picker (recap timeline) ---- */
 /* Trigger/sent state reuse .ag-pill-action; the popup shell and text rows
    reuse .ag-gom-menu / .ag-gom-item. Only the emoji row below is new. */
+/* Wraps several players' sent-reaction pills on one match-history line, now
+   that each player can drop their own rather than sharing a single pill.
+   Pairs with .ag-chips for the flex/wrap shell; only the gap and alignment
+   differ from a filter-chip row. */
+.ag-recap-reactions { gap: 4px; justify-content: flex-end; }
 .ag-reaction-menu-emojis {
     display: flex;
     justify-content: space-between;

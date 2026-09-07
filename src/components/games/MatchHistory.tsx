@@ -11,6 +11,15 @@ export interface MatchHistoryProps {
     userIdList?: string[];
     /** Read the log the other way up, oldest line first. */
     oldestFirst?: boolean;
+    /** The signed-in viewer's userId — tells their own reaction (shown as
+     *  their sent pill, or the picker to add one) apart from every other
+     *  player's (always read-only). Required alongside `onReact` to react from
+     *  the log; omit both for a fully read-only log. */
+    viewerId?: string;
+    /** Adds the viewer's reaction to one line, keyed by its commandId. Omit
+     *  (along with `viewerId`) for a read-only log — e.g. while reviewing a
+     *  past or hypothetical turn that was never really played. */
+    onReact?: (commandId: string, reaction: string) => void;
 }
 
 interface MatchHistoryComponentProps extends MatchHistoryProps {
@@ -30,11 +39,14 @@ interface MatchHistoryComponentProps extends MatchHistoryProps {
 // and "DaveT", settled by seat order), and lost the colour entirely once a
 // player renamed and the frozen line no longer matched anybody.
 //
-// A line's reaction (if any) renders as a read-only pill — ReactionPicker with
-// no onReact — because reacting only happens from the recap screen, on the
-// window of actions a player was actually shown; this panel just shows what
-// landed, on any line, to anyone still able to see it.
-export default function MatchHistory({ entries, userIdList = [], oldestFirst = false, onClose }: MatchHistoryComponentProps) {
+// Every other player's reaction on a line (if any) renders as a read-only
+// pill — ReactionPicker with no onReact. The viewer's own slot is the same
+// pill once they've reacted, or — when `onReact` is wired up — the picker
+// trigger so they can add one right here instead of only from the recap
+// screen. Without `onReact` (reviewing a past or hypothetical turn, which
+// isn't a real stored line to react to) the viewer's own reaction, if any,
+// just joins the read-only row like anyone else's.
+export default function MatchHistory({ entries, userIdList = [], oldestFirst = false, viewerId, onReact, onClose }: MatchHistoryComponentProps) {
     const lines = oldestFirst ? entries.slice().reverse() : entries;
 
     return (
@@ -48,12 +60,34 @@ export default function MatchHistory({ entries, userIdList = [], oldestFirst = f
             ) : (
                 <RecapTimeline
                     compact
-                    events={lines.map((entry, i) => ({
-                        id: String(i),
-                        dotColour: playerColourForId(entry.actorId, userIdList),
-                        title: entry.text,
-                        trailing: entry.reaction ? <ReactionPicker reacted={entry.reaction} /> : undefined,
-                    }))}
+                    events={lines.map((entry, i) => {
+                        const canReact = !!(onReact && viewerId && entry.commandId);
+                        const mine = canReact ? entry.reactions?.find((r) => r.actorId === viewerId) : undefined;
+                        const others = mine ? (entry.reactions ?? []).filter((r) => r !== mine) : (entry.reactions ?? []);
+
+                        return {
+                            id: String(i),
+                            dotColour: playerColourForId(entry.actorId, userIdList),
+                            title: entry.text,
+                            trailing: (others.length || canReact) ? (
+                                <div className="ag-chips ag-recap-reactions">
+                                    {others.map((r) => (
+                                        <ReactionPicker
+                                            key={r.actorId}
+                                            reacted={r.reaction}
+                                            reactedLabel={`${r.actorUsername} reacted ${r.reaction}`}
+                                        />
+                                    ))}
+                                    {canReact && (
+                                        <ReactionPicker
+                                            reacted={mine?.reaction ?? null}
+                                            onReact={(reaction) => onReact!(entry.commandId!, reaction)}
+                                        />
+                                    )}
+                                </div>
+                            ) : undefined,
+                        };
+                    })}
                 />
             )}
         </div>

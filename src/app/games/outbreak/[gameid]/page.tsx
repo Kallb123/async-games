@@ -25,6 +25,7 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useGameGuide } from "@/utils/hooks/useGameGuide";
+import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { SubmitCommand, useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
@@ -60,6 +61,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     const gameId = gameid;
 
     const { gameData, setGameData, getGameData } = useGameData<IOutbreakGameDataResponse>(gameId);
+    const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
     const { submitCommand: rawSubmitCommand, submitting, pendingTarget } = useSubmitCommand<IOutbreakGameDataResponse>(gameId, user, setGameData, getGameData);
     const { endGame } = useEndGame(gameId);
 
@@ -318,7 +320,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     }
 
     return (
-        <GameShell title="Outbreak" subtitle={subtitle} options={gs ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList }} chat={{ gameId, userIdList, usernameList }} className="ag-game--outbreak">
+        <GameShell title="Outbreak" subtitle={subtitle} options={gs ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }} className="ag-game--outbreak">
             <FcmTokenComp />
 
             {/* Game guide before role guide — a player needs to know the game
