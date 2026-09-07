@@ -19,7 +19,7 @@ export interface IGameResultResponse {
     forfeitedBy?: string;
     players: string[];
     // The players' stable Clerk userIds, parallel to `players` (same order).
-    // The per-turn charts are keyed by these, so a shared display name can't
+    // The per-round charts are keyed by these, so a shared display name can't
     // collapse two players onto one line.
     playerIds: string[];
     endedAt: string;

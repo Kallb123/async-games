@@ -115,8 +115,8 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
-                title: "Dice Cities' turn charts don't double-count doubles",
-                detail: "Rolling doubles with the Amusement Park lets you go again without your turn actually ending — but the coins and buildings charts on the result page were still plotting that bonus roll as a second turn, so a game with a lot of doubles read as running longer than it did. Every per-turn chart in the app now counts real turns, matching the turn total shown everywhere else on the page.",
+                title: "Result charts plot by round, not by action or by doubles",
+                detail: "A result page chart could run ahead of the \"N turns\" line on the same page: Dice Cities' Amusement Park bonus roll was plotted as an extra turn, and even a normal turn's roll and build were two points instead of one. Every per-turn chart across every game now agrees with the turn count — and, since a multiplayer chart was still one wiggly point per player per turn, it now groups by round instead: one point per lap of the table, so a game with several players reads at a glance.",
                 game: "dicecities",
             },
             {

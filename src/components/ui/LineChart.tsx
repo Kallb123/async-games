@@ -11,7 +11,7 @@ interface LineChartProps {
      * Ignored by a chart that names its own series. */
     players: string[];
     /** The players' stable userIds, in the same order as `players`. A
-     * per-player chart's per-turn series are keyed by these, so a shared
+     * per-player chart's per-round series are keyed by these, so a shared
      * display name can't collapse two players onto one line. */
     playerIds: string[];
 }
@@ -39,31 +39,31 @@ function niceMax(max: number): number {
     return niceFraction * 10 ** exponent;
 }
 
-// Turn-by-turn line chart for the GameResult page: turn number on the
+// Round-by-round line chart for the GameResult page: round number on the
 // x-axis, one line per player — or, when the chart names its own series
 // (GameResultChart.series), one line per whatever the game is plotting
 // instead. Generic over any game's GameResultChart, so every game can plug its
-// own per-turn series into the same component.
+// own per-round series into the same component.
 export default function LineChart({ chart, players, playerIds }: LineChartProps) {
     const [hoverIndex, setHoverIndex] = useState<number | null>(null);
     const [showTable, setShowTable] = useState(false);
 
-    const turnCount = chart.turns.length;
+    const roundCount = chart.rounds.length;
     const series = useMemo(() => {
         const lines: GameResultChartSeries[] = chart.series
             ?? players.map((name, i) => ({ key: playerIds[i], name, color: playerColour(i) }));
         return lines.map(line => ({
             ...line,
-            values: chart.turns.map(turn => turn[line.key] ?? 0),
+            values: chart.rounds.map(round => round[line.key] ?? 0),
         }));
-    }, [players, playerIds, chart.series, chart.turns]);
+    }, [players, playerIds, chart.series, chart.rounds]);
 
-    if (turnCount === 0 || series.length === 0) return null;
+    if (roundCount === 0 || series.length === 0) return null;
 
     const maxValue = Math.max(0, ...series.flatMap(s => s.values));
     const top = niceMax(maxValue);
-    const xStep = turnCount > 1 ? PLOT_WIDTH / (turnCount - 1) : 0;
-    const xAt = (i: number) => PAD_LEFT + (turnCount > 1 ? i * xStep : PLOT_WIDTH / 2);
+    const xStep = roundCount > 1 ? PLOT_WIDTH / (roundCount - 1) : 0;
+    const xAt = (i: number) => PAD_LEFT + (roundCount > 1 ? i * xStep : PLOT_WIDTH / 2);
     const yAt = (v: number) => PAD_TOP + PLOT_HEIGHT - (v / top) * PLOT_HEIGHT;
     const gridValues = [0, top / 2, top];
 
@@ -81,8 +81,8 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
     function handlePointer(clientX: number, rect: DOMRect) {
         const fraction = (clientX - rect.left) / rect.width;
         const svgX = fraction * VB_WIDTH;
-        const idx = turnCount > 1 ? Math.round((svgX - PAD_LEFT) / xStep) : 0;
-        setHoverIndex(Math.min(turnCount - 1, Math.max(0, idx)));
+        const idx = roundCount > 1 ? Math.round((svgX - PAD_LEFT) / xStep) : 0;
+        setHoverIndex(Math.min(roundCount - 1, Math.max(0, idx)));
     }
 
     return (
@@ -106,9 +106,9 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
                             {Math.round(v)}
                         </text>
                     ))}
-                    <text className="ag-chart-tick" x={xAt(0)} y={VB_HEIGHT - 6} textAnchor="start">Turn 1</text>
-                    {turnCount > 1 && (
-                        <text className="ag-chart-tick" x={xAt(turnCount - 1)} y={VB_HEIGHT - 6} textAnchor="end">Turn {turnCount}</text>
+                    <text className="ag-chart-tick" x={xAt(0)} y={VB_HEIGHT - 6} textAnchor="start">Round 1</text>
+                    {roundCount > 1 && (
+                        <text className="ag-chart-tick" x={xAt(roundCount - 1)} y={VB_HEIGHT - 6} textAnchor="end">Round {roundCount}</text>
                     )}
 
                     {series.map(s => (
@@ -124,7 +124,7 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
                         <circle
                             key={`dot-${s.key}`}
                             className="ag-chart-enddot"
-                            cx={xAt(turnCount - 1)}
+                            cx={xAt(roundCount - 1)}
                             cy={yAt(s.values[s.values.length - 1])}
                             r={4}
                             style={{ fill: s.color }}
@@ -156,7 +156,7 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
                     <div
                         key={l.key}
                         className="ag-chart-endlabel"
-                        style={{ left: `${(xAt(turnCount - 1) / VB_WIDTH) * 100}%`, top: `${(l.y / VB_HEIGHT) * 100}%`, color: l.color }}
+                        style={{ left: `${(xAt(roundCount - 1) / VB_WIDTH) * 100}%`, top: `${(l.y / VB_HEIGHT) * 100}%`, color: l.color }}
                     >
                         {l.value}
                     </div>
@@ -164,7 +164,7 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
 
                 {hoverIndex !== null && (
                     <div className="ag-chart-tooltip" style={{ left: `${(xAt(hoverIndex) / VB_WIDTH) * 100}%` }}>
-                        <div className="ag-chart-tooltip-turn">Turn {hoverIndex + 1}</div>
+                        <div className="ag-chart-tooltip-round">Round {hoverIndex + 1}</div>
                         {series.map(s => (
                             <div key={s.key} className="ag-chart-tooltip-row">
                                 <span className="ag-chart-tooltip-key" style={{ background: s.color }} />
@@ -186,19 +186,19 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
             </div>
 
             <button type="button" className="ag-chart-table-toggle" onClick={() => setShowTable(v => !v)}>
-                {showTable ? "Hide turn-by-turn table" : "Show turn-by-turn table"}
+                {showTable ? "Hide round-by-round table" : "Show round-by-round table"}
             </button>
             {showTable && (
                 <div className="ag-chart-table-wrap">
                     <table className="ag-chart-table">
                         <thead>
                             <tr>
-                                <th>Turn</th>
+                                <th>Round</th>
                                 {series.map(s => <th key={s.key}>{s.name}</th>)}
                             </tr>
                         </thead>
                         <tbody>
-                            {chart.turns.map((turn, i) => (
+                            {chart.rounds.map((round, i) => (
                                 <tr key={i}>
                                     <td>{i + 1}</td>
                                     {series.map(s => <td key={s.key}>{s.values[i]}</td>)}

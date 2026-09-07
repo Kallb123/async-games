@@ -73,8 +73,8 @@ describe("Outbreak result charts", () => {
         const charts = formatOutbreakCharts(stats(), NAMES);
 
         expect(charts.map(c => c.title)).toEqual([
-            "Cubes treated per turn",
-            "Times travelled per turn",
+            "Cubes treated per round",
+            "Times travelled per round",
             "Cubes left in supply",
         ]);
 
@@ -84,8 +84,9 @@ describe("Outbreak result charts", () => {
         expect(charts[1].series).toBeUndefined();
 
         const supply = charts[2];
-        expect(supply.turns).toEqual([
-            { blue: 20, yellow: 19, black: 21, red: 22 },
+        // Two players and two turns is one full round, so the chart collapses
+        // to the state at the end of it rather than plotting both turns.
+        expect(supply.rounds).toEqual([
             { blue: 18, yellow: 19, black: 17, red: 22 },
         ]);
         // inkHex, not hex: the chart prints each line's final value as text on
@@ -104,7 +105,7 @@ describe("Outbreak result charts", () => {
         // worse than no chart.
         for (const cubesLeftPerTurn of [[], undefined as unknown as Map<string, number>[]]) {
             const charts = formatOutbreakCharts(stats({ cubesLeftPerTurn }), NAMES);
-            expect(charts.map(c => c.title)).toEqual(["Cubes treated per turn", "Times travelled per turn"]);
+            expect(charts.map(c => c.title)).toEqual(["Cubes treated per round", "Times travelled per round"]);
         }
     });
 });
