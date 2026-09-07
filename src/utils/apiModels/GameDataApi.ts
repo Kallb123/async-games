@@ -95,9 +95,8 @@ export interface GameResultChart {
 // incomplete.
 export function collapseToRounds<T>(perTurn: readonly T[], playerCount: number): T[] {
     const rounds = perTurn.filter((_, i) => (i + 1) % playerCount === 0);
-    const last = perTurn[perTurn.length - 1];
-    if (last !== undefined && rounds[rounds.length - 1] !== last) {
-        rounds.push(last);
+    if (perTurn.length % playerCount !== 0) {
+        rounds.push(perTurn[perTurn.length - 1]);
     }
     return rounds;
 }

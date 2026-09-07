@@ -115,9 +115,8 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
-                title: "Result charts plot by round, not by action or by doubles",
-                detail: "A result page chart could run ahead of the \"N turns\" line on the same page: Dice Cities' Amusement Park bonus roll was plotted as an extra turn, and even a normal turn's roll and build were two points instead of one. Every per-turn chart across every game now agrees with the turn count — and, since a multiplayer chart was still one wiggly point per player per turn, it now groups by round instead: one point per lap of the table, so a game with several players reads at a glance.",
-                game: "dicecities",
+                title: "Result charts plot by round, and don't double-count doubles",
+                detail: "Dice Cities' Amusement Park lets you go again on doubles without your turn actually ending, but its result-page charts were plotting that bonus roll as an extra turn — running ahead of the \"N turns\" line on the same page. Every per-turn chart across every game now agrees with the turn count, and since a multiplayer chart was still one point per player per turn, it now groups by round instead: one point per lap of the table, so a game with several players reads at a glance.",
             },
             {
                 title: "Solitaire's Hint stops repeating a move that goes nowhere",
