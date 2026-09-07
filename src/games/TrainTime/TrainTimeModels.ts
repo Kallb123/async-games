@@ -388,15 +388,15 @@ export function computeTrainTimeResultStats(
     return { playerStats, pointsPerTurn, longestRunPerTurn };
 }
 
-// Renders the per-turn series as GameResult charts: the points race, and the
-// Long Haul race beside it.
+// Renders the per-turn series as GameResult charts, one entry per round: the
+// points race, and the Long Haul race beside it.
 export function formatTrainTimeCharts(
     stats: ITrainTimeGameResultStats,
     usernameById: Map<string, string>,
 ): GameResultChart[] {
     return compactCharts(
-        formatPerTurnChart(stats.pointsPerTurn, "Route points per turn", "Points"),
-        formatPerTurnChart(stats.longestRunPerTurn, "Longest run per turn", "Track"),
+        formatPerTurnChart(stats.pointsPerTurn, "Route points per round", "Points", usernameById.size),
+        formatPerTurnChart(stats.longestRunPerTurn, "Longest run per round", "Track", usernameById.size),
     );
 }
 

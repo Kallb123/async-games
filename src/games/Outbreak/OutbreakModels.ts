@@ -543,18 +543,18 @@ const CUBE_SUPPLY_SERIES: GameResultChartSeries[] = DISEASE_COLORS.map(color => 
     color: DISEASE_COLOR_DEFS[color].inkHex,
 }));
 
-// Renders the per-turn series as GameResult charts — mirrors Train Time's
-// formatTrainTimeCharts. The last of them plots the board rather than the
-// table: one line per disease colour, dropping toward the zero that loses the
-// game.
+// Renders the per-turn series as GameResult charts, one entry per round —
+// mirrors Train Time's formatTrainTimeCharts. The last of them plots the
+// board rather than the table: one line per disease colour, dropping toward
+// the zero that loses the game.
 export function formatOutbreakCharts(
     stats: IOutbreakGameResultStats,
     usernameById: Map<string, string>,
 ): GameResultChart[] {
     return compactCharts(
-        formatPerTurnChart(stats.cubesTreatedPerTurn, "Cubes treated per turn", "Cubes"),
-        formatPerTurnChart(stats.timesTravelledPerTurn, "Times travelled per turn", "Moves"),
-        formatPerTurnChart(stats.cubesLeftPerTurn, "Cubes left in supply", "Cubes", CUBE_SUPPLY_SERIES),
+        formatPerTurnChart(stats.cubesTreatedPerTurn, "Cubes treated per round", "Cubes", usernameById.size),
+        formatPerTurnChart(stats.timesTravelledPerTurn, "Times travelled per round", "Moves", usernameById.size),
+        formatPerTurnChart(stats.cubesLeftPerTurn, "Cubes left in supply", "Cubes", usernameById.size, CUBE_SUPPLY_SERIES),
     );
 }
 

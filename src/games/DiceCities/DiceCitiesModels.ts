@@ -437,10 +437,10 @@ export function formatDiceCitiesResultStats(stats: IDiceCitiesGameResultStats, u
 }
 
 // Renders coinsPerTurn and buildingsPerTurn as GameResult charts: one entry
-// per turn, keyed by username, for the result page's charts.
+// per round, keyed by username, for the result page's charts.
 export function formatDiceCitiesCharts(stats: IDiceCitiesGameResultStats, usernameById: Map<string, string>): GameResultChart[] {
     return compactCharts(
-        formatPerTurnChart(stats.coinsPerTurn, "Coins per turn", "Coins"),
-        formatPerTurnChart(stats.buildingsPerTurn, "Buildings per turn", "Buildings"),
+        formatPerTurnChart(stats.coinsPerTurn, "Coins per round", "Coins", usernameById.size),
+        formatPerTurnChart(stats.buildingsPerTurn, "Buildings per round", "Buildings", usernameById.size),
     );
 }

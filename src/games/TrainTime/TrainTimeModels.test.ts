@@ -117,9 +117,11 @@ describe("Train Time result charts", () => {
     it("plots the points race and the Long Haul race, keyed by userId", () => {
         const charts = formatTrainTimeCharts(stats(), NAMES);
 
-        expect(charts.map(c => c.title)).toEqual(["Route points per turn", "Longest run per turn"]);
-        expect(charts[0].turns).toEqual([{ u1: 0, u2: 4 }, { u1: 7, u2: 4 }]);
-        expect(charts[1].turns[1]).toEqual({ u1: 4, u2: 3 });
+        expect(charts.map(c => c.title)).toEqual(["Route points per round", "Longest run per round"]);
+        // Two players and two turns is one full round, so the chart collapses
+        // to the state at the end of it rather than plotting both turns.
+        expect(charts[0].rounds).toEqual([{ u1: 7, u2: 4 }]);
+        expect(charts[1].rounds[0]).toEqual({ u1: 4, u2: 3 });
     });
 
     it("plots nothing for a game that couldn't be replayed", () => {

@@ -403,11 +403,11 @@ export function formatWorldDominationResultStats(stats: IWorldDominationGameResu
 }
 
 // Renders armiesDeployedPerTurn/totalArmiesDeployedPerTurn as GameResult
-// charts: one entry per turn, keyed by username, for the result page's
-// armies/turn charts.
+// charts: one entry per round, keyed by username, for the result page's
+// armies/round charts.
 export function formatWorldDominationCharts(stats: IWorldDominationGameResultStats, usernameById: Map<string, string>): GameResultChart[] {
     return compactCharts(
-        formatPerTurnChart(stats.armiesDeployedPerTurn, "Armies deployed per turn", "Armies"),
-        formatPerTurnChart(stats.totalArmiesDeployedPerTurn, "Cumulative armies deployed per turn", "Armies"),
+        formatPerTurnChart(stats.armiesDeployedPerTurn, "Armies deployed per round", "Armies", usernameById.size),
+        formatPerTurnChart(stats.totalArmiesDeployedPerTurn, "Cumulative armies deployed per round", "Armies", usernameById.size),
     );
 }

@@ -115,6 +115,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Result charts plot by round, and don't double-count doubles",
+                detail: "Dice Cities' Amusement Park lets you go again on doubles without your turn actually ending, but its result-page charts were plotting that bonus roll as an extra turn — running ahead of the \"N turns\" line on the same page. Every per-turn chart across every game now agrees with the turn count, and since a multiplayer chart was still one point per player per turn, it now groups by round instead: one point per lap of the table, so a game with several players reads at a glance.",
+            },
+            {
                 title: "Solitaire's Hint stops repeating a move that goes nowhere",
                 detail: "When the only card that could move was a run bouncing between two columns forever, Hint kept recommending that same swap instead of anything else — even with cards still sitting in the stock. It now tells you to draw or recycle the stock instead whenever a real move isn't available.",
                 game: "solitaire",
@@ -151,11 +155,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "The logo on a join link takes you home",
                 detail: "Landing on a friend's join screen with nothing filled in used to be a dead end — there was no way back except the browser's own back button. Tapping the logo at the top now takes you home.",
-            },
-            {
-                title: "Train Time's scores read properly when you look back",
-                detail: "Stepping back through a Train Time match showed every score, train count and route tally as “NaN”. Reviewing a turn now shows the standings exactly as they stood at the time — and the points and longest-run graphs on a finished match are filled in again.",
-                game: "traintime",
             },
         ],
     },

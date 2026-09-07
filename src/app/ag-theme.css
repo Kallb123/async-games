@@ -2110,7 +2110,7 @@ a.ag-list-row, a.ag-list-row-main {
     white-space: nowrap;
     z-index: 1;
 }
-.ag-chart-tooltip-turn {
+.ag-chart-tooltip-round {
     font-weight: 800;
     opacity: 0.75;
     margin-bottom: 3px;

@@ -64,16 +64,16 @@ export interface GameResultChartSeries {
     color: string;
 }
 
-// A turn-by-turn line chart for the GameResult page: turn number on the
+// A round-by-round line chart for the GameResult page: round number on the
 // x-axis, one line per series (typically per player). What's plotted varies
 // by game (coins, score, territory...), so this shape only fixes the
-// structure - one entry per turn, keyed by the player's stable userId - letting
+// structure - one entry per round, keyed by the player's stable userId - letting
 // any game's GameResult stats power the same chart component. The chart renderer
 // pairs each userId with a display name and colour through the players list.
 export interface GameResultChart {
     title: string;
     yLabel: string;
-    turns: Record<string, number>[];
+    rounds: Record<string, number>[];
     // Absent on a per-player chart, which is most of them: the renderer draws
     // one line per player from the result's own roster. Present when the lines
     // are something else entirely (Outbreak's four cube supplies), naming each
@@ -81,12 +81,32 @@ export interface GameResultChart {
     series?: GameResultChartSeries[];
 }
 
+// Collapses a per-turn series (one entry per real turn - see countTurns() in
+// turnCount.ts and computePerTurnStat() in replay.ts) down to one entry per
+// round, where a round is every player having taken one turn. A multiplayer
+// game's per-turn chart would otherwise plot N points before anyone's second
+// action - a lot of visual noise for what a player thinks of as "everyone's
+// gone once" - so the chart groups by round while the "N turns" summary line
+// elsewhere on the result page keeps counting turns precisely.
+//
+// Keeps the entry at the end of every complete round (every playerCount-th
+// turn) plus the final entry, so a round the game ended partway through still
+// shows its own most recent state rather than being dropped for being
+// incomplete.
+export function collapseToRounds<T>(perTurn: readonly T[], playerCount: number): T[] {
+    const rounds = perTurn.filter((_, i) => (i + 1) % playerCount === 0);
+    if (perTurn.length % playerCount !== 0) {
+        rounds.push(perTurn[perTurn.length - 1]);
+    }
+    return rounds;
+}
+
 // Turns a per-turn Map<userId, number> series (as produced by a replay-based
-// computeXPerTurn helper) into a GameResultChart, keying each turn's entries by
-// userId. A shared display name can't collapse two players onto one line, and a
-// rename can't shift a key. Shared by every game that plots a cumulative
-// per-player stat (coins, resources, ...) so only the series/labels differ per
-// game.
+// computeXPerTurn helper) into a round-by-round GameResultChart, keying each
+// round's entries by userId. A shared display name can't collapse two players
+// onto one line, and a rename can't shift a key. Shared by every game that
+// plots a cumulative per-player stat (coins, resources, ...) so only the
+// series/labels differ per game.
 //
 // `series` names the lines for a chart that isn't per player — the same
 // per-turn Map, keyed by something the game names itself (see
@@ -96,6 +116,7 @@ export function formatPerTurnChart(
     perTurn: Map<string, number>[] | undefined,
     title: string,
     yLabel: string,
+    playerCount: number,
     series?: GameResultChartSeries[],
 ): GameResultChart | undefined {
     // Undefined as well as empty: a series added to a game's stats after some
@@ -106,7 +127,7 @@ export function formatPerTurnChart(
     return {
         title,
         yLabel,
-        turns: perTurn.map(turn => {
+        rounds: collapseToRounds(perTurn, playerCount).map(turn => {
             const entry: Record<string, number> = {};
             for (const [key, value] of turn) {
                 entry[key] = value;

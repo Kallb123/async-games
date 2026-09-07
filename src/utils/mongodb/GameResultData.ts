@@ -384,7 +384,7 @@ export function formatGameResultStats(gameType: string, stats: unknown, username
 }
 
 // Renders a GameResult document's discriminated `stats` field into zero or
-// more turn-by-turn charts, for games that register any. Returns [] for
+// more round-by-round charts, for games that register any. Returns [] for
 // games with no charts registered (or no stats present).
 export function formatGameResultCharts(gameType: string, stats: unknown, usernameById: Map<string, string>): GameResultChart[] {
     const specific = GAME_RESULT_STATS[gameType];
