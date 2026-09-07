@@ -52,7 +52,7 @@ type StoredChatReadMarker = { gameId: string, userId: string, readAt: string };
 let signedInUserId: string | null = null;
 let clerkUsers: User[] = [];
 /** A stored reaction, as the Reaction collection would hold it. */
-type StoredReaction = { gameId: string, commandId: string, reaction: string };
+type StoredReaction = { gameId: string, commandId?: string, eventId?: string, reaction: string };
 
 const games = new Map<string, StoredGame>();
 const chatMessages: StoredChatMessage[] = [];
@@ -629,21 +629,22 @@ export function seedReaction(reaction: StoredReaction) {
     reactions.push(reaction);
 }
 
-// The one read a game's data response makes when it attaches reactions to its
-// match history (attachHistoryReactions / attachHistoryReactionsToEach):
-// find({ gameId, commandId: { $in } }).exec() — unlike the recap screen's own
-// { gameId, eventId } lookup, which this store doesn't need to understand
-// because no route test exercises it yet.
+// The one read reactionMapBy makes, however it's called: find({ gameId,
+// <field>: { $in } }).exec() — commandId for a game's match history
+// (attachHistoryReactions / attachHistoryReactionsToEach), eventId for the
+// recap screen's own window.
 function findReactionsFromStore(filter: Record<string, unknown>) {
     const gameId = filter?.gameId;
-    const commandId = filter?.commandId as { $in?: unknown } | undefined;
-    const shape = typeof gameId === 'string' && Object.keys(filter).length === 2
-        && Array.isArray(commandId?.$in) && commandId.$in.length > 0;
+    const keys = Object.keys(filter).filter(key => key !== 'gameId');
+    const field = keys[0] as 'commandId' | 'eventId' | undefined;
+    const idFilter = field ? filter[field] as { $in?: unknown } : undefined;
+    const shape = typeof gameId === 'string' && keys.length === 1 && (field === 'commandId' || field === 'eventId')
+        && Array.isArray(idFilter?.$in) && idFilter.$in.length > 0;
     if (!shape) {
-        throw new Error(`The test reaction store only looks reactions up by gameId and a non-empty commandId $in, not ${JSON.stringify(filter)}`);
+        throw new Error(`The test reaction store only looks reactions up by gameId and a non-empty commandId or eventId $in, not ${JSON.stringify(filter)}`);
     }
-    const ids = new Set(commandId!.$in as string[]);
-    const matches = reactions.filter(reaction => reaction.gameId === gameId && ids.has(reaction.commandId));
+    const ids = new Set(idFilter!.$in as string[]);
+    const matches = reactions.filter(reaction => reaction.gameId === gameId && ids.has(reaction[field!] ?? ''));
     return { exec: async () => matches };
 }
 

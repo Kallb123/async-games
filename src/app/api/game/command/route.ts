@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
 
   const response: ICommandResponse = {
     outcome: serializeOutcomeMaps(commandOutcome),
-    gameData: await gameData.CreateDataResponse(userId)
+    gameData: await dataResponseWithReactions(gameData, userId)
   }
 
   if (!commandOutcome.turnOver) {

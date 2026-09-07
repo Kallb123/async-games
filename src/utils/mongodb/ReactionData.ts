@@ -47,3 +47,28 @@ export var ReactionSchema = new Schema<IReactionDataDocument>({
 // a better answer than a duplicate-key error; this catches the pair that race.
 ReactionSchema.index({ gameId: 1, eventId: 1 }, { unique: true });
 export var ReactionModel = models.Reaction || model<IReactionDataDocument, IReactionDataModel>('Reaction', ReactionSchema);
+
+/**
+ * The reaction (if any) on each of a game's events, keyed by whichever id
+ * they're being looked up by: `eventId` for the recap screen's own window, or
+ * `commandId` for the match-history log's full-game join (see
+ * utils/games/historyReactions.ts) — the two ids every ReactionData doc
+ * already carries.
+ *
+ * A lookup failure only decorates whatever it's attached to (a recap, a
+ * history line), so it's swallowed to "nothing found" rather than failing an
+ * otherwise-good response — the same trade the recap route's own
+ * unreadChatSince makes for unread chat counts.
+ */
+export async function reactionMapBy(gameId: string, field: 'eventId' | 'commandId', ids: string[]): Promise<Map<string, string>> {
+    if (ids.length === 0) {
+        return new Map();
+    }
+    try {
+        const reactions = await ReactionModel.find({ gameId, [field]: { $in: ids } }).exec();
+        return new Map(reactions.map((reaction) => [reaction[field], reaction.reaction as string]));
+    } catch (error) {
+        console.error(`Failed to read reactions for game ${gameId}`, error);
+        return new Map();
+    }
+}
