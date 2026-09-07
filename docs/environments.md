@@ -59,10 +59,37 @@ curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/turn
 ## Dev-only tooling
 
 The Settings footer carries two buttons that wipe collections outright
-(`DevTools`, calling `/api/dev/clearlive` and `/api/dev/clearresults`). Both
-sides are gated on `isDevDeployment` (`src/utils/devEnvironment.ts`): the
-buttons don't render, and the endpoints answer 404 as though they were never
-deployed, on anything that isn't a dev deployment.
+(`DevTools`, calling `/api/dev/clearlive` and `/api/dev/clearresults`).
+
+The 🚧 DEV badge on a game's top bar is a menu rather than a label
+(`DevGameMenu`), and its one row today is **Duplicate this game**
+(`POST /api/dev/duplicategame`): the game is copied into a new one with a new
+id, the same players and the same state, and you land on the copy. The copy is
+a deep one (`src/utils/games/duplicateGame.ts` — `toObject` clones the history,
+the private `commandHistory` replay log and the game's own `specificGameState`),
+so the two games diverge from the moment they exist and a turn played in one
+can't be seen in the other. It's how you get a second run at an interesting
+position without setting it up move by move.
+
+A live game only, through the same `requireLiveGame` guard the routes that
+change a game use — a finished game answers 409. Its rules cleared
+`currentTurn` when it ended, so a copy of one would be a board nobody can play,
+and no `GameResult` is written for a copy, so neither dashboard list would show
+it either: an orphan whose only way back is the URL you were pushed to.
+
+What a copy doesn't inherit: the lobby the original started from, its chat
+thread, its reactions, and the turn clock — both halves of it. The copy's turn
+starts when you make it and its `missedTurnCounts` start at nothing, so a game
+whose turn was nearly up doesn't hand you a copy the turn-timer sweep expires
+on sight, and one whose current player had already missed two turns doesn't
+hand you a copy the sweep abandons on its first tick.
+
+Every side of this is gated on `isDevDeployment`
+(`src/utils/devEnvironment.ts`): the buttons and the badge menu don't render,
+and the endpoints answer 404 as though they were never deployed, on anything
+that isn't a dev deployment. Duplication additionally requires the caller to be
+a player in the game being copied — a copy is a readable game, and the dev
+tooling shouldn't be a way into a table you aren't at.
 
 "Dev deployment" means `VERCEL_ENV` (mirrored to the browser as
 `NEXT_PUBLIC_VERCEL_ENV`, which Vercel injects for you) is `preview` or
@@ -71,8 +98,8 @@ does not. Off Vercel it falls back to `NODE_ENV`, so `npm run dev` counts and
 a local production build doesn't. Anywhere the environment can't be
 identified the tooling stays off.
 
-They still have no authentication of their own, so treat any dev deployment's
-database as wipeable by anyone who can reach it.
+Beyond being signed in they have no authentication of their own, so treat any
+dev deployment's database as wipeable by anyone who can reach it.
 
 ## End-to-end tests (Playwright)
 

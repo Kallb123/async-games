@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import BackArrow from '@/components/ui/BackArrow';
 import GameOptionsMenu, { GameOption } from '@/components/ui/GameOptionsMenu';
+import DevGameMenu from '@/components/ui/DevGameMenu';
 import MatchHistory, { MatchHistoryProps } from '@/components/games/MatchHistory';
 import GameChat from '@/components/games/GameChat';
 import { useGameChat } from '@/utils/hooks/useGameChat';
@@ -121,6 +122,9 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
                     </button>
                 )}
                 {right ?? (options && <GameOptionsMenu options={[...shellOptions, ...options]} />)}
+                {/* Last in the bar, where the CSS badge used to sit. Renders
+                    nothing off a dev deployment. */}
+                <DevGameMenu />
             </div>
             {children}
             {log && showLog && (
