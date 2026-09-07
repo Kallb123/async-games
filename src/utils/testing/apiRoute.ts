@@ -37,6 +37,7 @@ let mongo: typeof import('@/utils/mongodb/mongodb');
 let gameData: GameData;
 let chatMessageData: typeof import('@/utils/mongodb/ChatMessageData');
 let chatReadData: typeof import('@/utils/mongodb/ChatReadData');
+let reactionData: typeof import('@/utils/mongodb/ReactionData');
 let nextServer: typeof import('next/server');
 
 /** A stored game, as the database would hold it: plain, with a version. */
@@ -50,9 +51,13 @@ type StoredChatReadMarker = { gameId: string, userId: string, readAt: string };
 
 let signedInUserId: string | null = null;
 let clerkUsers: User[] = [];
+/** A stored reaction, as the Reaction collection would hold it. */
+type StoredReaction = { gameId: string, commandId?: string, eventId?: string, reaction: string };
+
 const games = new Map<string, StoredGame>();
 const chatMessages: StoredChatMessage[] = [];
 const chatReadMarkers: StoredChatReadMarker[] = [];
+const reactions: StoredReaction[] = [];
 
 /** Every push a request sent, in the order it sent them. */
 export const sentPushes: {
@@ -73,6 +78,7 @@ export async function resetApiRouteStubs() {
     gameData = await import('@/utils/mongodb/GameData');
     chatMessageData = await import('@/utils/mongodb/ChatMessageData');
     chatReadData = await import('@/utils/mongodb/ChatReadData');
+    reactionData = await import('@/utils/mongodb/ReactionData');
     nextServer = await import('next/server');
 
     signedInUserId = null;
@@ -82,6 +88,7 @@ export async function resetApiRouteStubs() {
     games.clear();
     chatMessages.length = 0;
     chatReadMarkers.length = 0;
+    reactions.length = 0;
     clearAfterCallbacks();
     sentPushes.length = 0;
     vi.spyOn(gameData.GameDataModel, 'findOne').mockImplementation(findOneFromStore as GameData['GameDataModel']['findOne']);
@@ -100,6 +107,7 @@ export async function resetApiRouteStubs() {
     vi.spyOn(chatReadData.ChatReadModel, 'findOne').mockImplementation(findOneChatReadFromStore as typeof chatReadData.ChatReadModel.findOne);
     vi.spyOn(chatReadData.ChatReadModel, 'find').mockImplementation(findManyChatReadFromStore as typeof chatReadData.ChatReadModel.find);
     vi.spyOn(chatReadData.ChatReadModel, 'findOneAndUpdate').mockImplementation(findOneAndUpdateChatReadFromStore as typeof chatReadData.ChatReadModel.findOneAndUpdate);
+    vi.spyOn(reactionData.ReactionModel, 'find').mockImplementation(findReactionsFromStore as typeof reactionData.ReactionModel.find);
 }
 
 // ---------------------------------------------------------------- Clerk
@@ -612,6 +620,32 @@ function findOneAndUpdateChatReadFromStore(
             return chatReadData.ChatReadModel.hydrate(marker);
         }
     };
+}
+
+// ---------------------------------------------------------------- Reactions
+
+/** Puts a reaction in the store, as if it had been sent earlier. */
+export function seedReaction(reaction: StoredReaction) {
+    reactions.push(reaction);
+}
+
+// The one read reactionMapBy makes, however it's called: find({ gameId,
+// <field>: { $in } }).exec() — commandId for a game's match history
+// (attachHistoryReactions / attachHistoryReactionsToEach), eventId for the
+// recap screen's own window.
+function findReactionsFromStore(filter: Record<string, unknown>) {
+    const gameId = filter?.gameId;
+    const keys = Object.keys(filter).filter(key => key !== 'gameId');
+    const field = keys[0] as 'commandId' | 'eventId' | undefined;
+    const idFilter = field ? filter[field] as { $in?: unknown } : undefined;
+    const shape = typeof gameId === 'string' && keys.length === 1 && (field === 'commandId' || field === 'eventId')
+        && Array.isArray(idFilter?.$in) && idFilter.$in.length > 0;
+    if (!shape) {
+        throw new Error(`The test reaction store only looks reactions up by gameId and a non-empty commandId or eventId $in, not ${JSON.stringify(filter)}`);
+    }
+    const ids = new Set(idFilter!.$in as string[]);
+    const matches = reactions.filter(reaction => reaction.gameId === gameId && ids.has(reaction[field!] ?? ''));
+    return { exec: async () => matches };
 }
 
 // ---------------------------------------------------------------- Requests

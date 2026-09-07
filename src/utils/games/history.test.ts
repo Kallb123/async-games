@@ -52,6 +52,11 @@ describe("resolveHistory", () => {
         expect(resolveHistory([{ text: "{{user_gone}} passed" }], NAMES))
             .toEqual([{ text: `${UNKNOWN_PLAYER_NAME} passed` }]);
     });
+
+    it("carries a line's commandId through, so a reaction can still find it", () => {
+        expect(resolveHistory([{ text: "{{user_a}} rolled a 6", actorId: "user_a", commandId: "cmd-1" }], NAMES))
+            .toEqual([{ text: "Alice rolled a 6", actorId: "user_a", commandId: "cmd-1" }]);
+    });
 });
 
 describe("playerHistory", () => {

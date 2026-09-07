@@ -22,6 +22,14 @@ export interface IHistoryEntry {
      * writes about the board itself.
      */
     actorId?: string;
+    /**
+     * The command that produced this line, when one did — stamped by
+     * runCommand (commandPipeline.ts) rather than by the game itself, so no
+     * game has to thread its own command id into every history write. It's
+     * the join key a reaction lands on (ReactionData.commandId), which is how
+     * the match history log knows which line to show one against.
+     */
+    commandId?: string;
 }
 
 /**
@@ -66,6 +74,9 @@ export function resolveHistory(
         // Mongoose document, and spreading a subdocument copies its internals
         // rather than its fields — including `$__parent`, the whole game
         // document, hidden state and all, straight into the response.
-        return entry.actorId ? { text, actorId: entry.actorId } : { text };
+        const resolved: IHistoryEntry = { text };
+        if (entry.actorId) resolved.actorId = entry.actorId;
+        if (entry.commandId) resolved.commandId = entry.commandId;
+        return resolved;
     });
 }

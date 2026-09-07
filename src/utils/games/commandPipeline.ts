@@ -26,9 +26,21 @@ export async function runCommand(
     gameType: IGameType,
     command: IGameCommand,
 ): Promise<RunCommandResult> {
+    const historyCountBefore = gameData.gameState.history.length;
     const outcome = await command.Execute(gameData);
     if (!outcome.validMove) {
         return { outcome, gameOver: false };
+    }
+
+    // Every line Execute() just wrote landed at the front (games only ever
+    // unshift onto gameState.history), so the new ones are exactly the first
+    // (new length − old length) entries. Stamping them here — the one place
+    // every command passes through — is what lets a reaction find its way
+    // back to the line it landed on without every game threading its own
+    // command id into every history write.
+    const linesWritten = gameData.gameState.history.length - historyCountBefore;
+    for (let i = 0; i < linesWritten; i++) {
+        gameData.gameState.history[i].commandId = command.id;
     }
 
     gameData.gameState.commandHistory.push(command);

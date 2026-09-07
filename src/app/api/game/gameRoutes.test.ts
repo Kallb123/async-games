@@ -26,7 +26,7 @@ vi.mock('@/utils/games/DiceRoll', () => ({ DiceRoll: () => 3 }));
 
 import { runAfterCallbacks } from '@/utils/testing/afterStub';
 import {
-    ANN, BOB, jsonPost, rawPost, resetApiRouteStubs, seedSnakesAndLadders, sentPushes, signIn,
+    ANN, BOB, jsonPost, rawPost, resetApiRouteStubs, seedReaction, seedSnakesAndLadders, sentPushes, signIn,
     signInUnresolvable, SQUARES, storedGame, stubClerkUsers
 } from '@/utils/testing/apiRoute';
 import { POST as command } from './command/route';
@@ -175,6 +175,29 @@ describe('POST /api/game/command', () => {
         expect(positions(saved)[ANN.id].position).toBe(13);
         expect(commandHistory(saved)).toHaveLength(1);
         expect(saved.currentTurn).toBe(BOB.id);
+    });
+
+    it('shows a reaction already dropped on an earlier move, not just at game end', async () => {
+        // The regression this guards: the response for a move that keeps the
+        // game going is built at a different call site than the one for a move
+        // that ends it, and only the latter was wired up to attach reactions —
+        // so every reaction would silently vanish from the match-history log
+        // for exactly the response players see far more often.
+        signIn(ANN);
+        seedSnakesAndLadders({
+            gameState: {
+                turnOrder: [ANN.id, BOB.id],
+                history: [{ text: `{{${ANN.id}}} rolled a 4`, actorId: ANN.id, commandId: 'earlier-command' }],
+                commandHistory: [{ ...diceRoll(), id: '00000000-0000-0000-0000-000000000000' }]
+            }
+        });
+        seedReaction({ gameId: 'game_1', commandId: 'earlier-command', reaction: '😱' });
+
+        const response = await command(jsonPost('/api/game/command', diceRoll()));
+
+        expect(response.status).toBe(200);
+        const history: { commandId?: string, reaction?: string | null }[] = (await response.json()).gameData.gameState.history;
+        expect(history.find(entry => entry.commandId === 'earlier-command')?.reaction).toBe('😱');
     });
 
     it('rolls its own dice, whatever roll the request brought with it', async () => {

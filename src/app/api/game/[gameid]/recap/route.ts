@@ -2,7 +2,7 @@ import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
-import { ReactionModel } from '@/utils/mongodb/ReactionData';
+import { reactionMapBy } from '@/utils/mongodb/ReactionData';
 import { ChatMessageModel } from '@/utils/mongodb/ChatMessageData';
 import { ChatReadModel, IChatReadDataDocument } from '@/utils/mongodb/ChatReadData';
 import { userIdListToUserIdNameMap } from '@/utils/users/clerk';
@@ -108,8 +108,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IG
         }
 
         const meta = metaForGame({ url: gameData.gameType.url, friendlyName: gameData.gameType.friendlyName });
-        const reactions = await ReactionModel.find({ gameId: gameid, eventId: { $in: feed.events.map((e) => e.id) } }).exec();
-        const reactionByEventId = new Map(reactions.map((r) => [r.eventId, r.reaction as string]));
+        const reactionByEventId = await reactionMapBy(gameid, 'eventId', feed.events.map((e) => e.id));
         const events: IRecapEventResponse[] = feed.events.map((event) => ({
             ...event,
             dotColour: playerColour(gameData.userIdList.indexOf(event.actorId)),

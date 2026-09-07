@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from "../../../../utils/mongodb/mongodb";
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
+import { attachHistoryReactions } from '@/utils/games/historyReactions';
 
 export interface IGetGameParams {
     gameid: string
@@ -39,6 +40,7 @@ export async function GET(request: NextRequest, {params}: { params: Promise<IGet
     }
 
     const gameDataResponse = await gameData.CreateDataResponse(userId);
+    gameDataResponse.gameState.history = await attachHistoryReactions(gameid, gameDataResponse.gameState.history);
 
     return NextResponse.json({success: true, gameData: gameDataResponse});
 }

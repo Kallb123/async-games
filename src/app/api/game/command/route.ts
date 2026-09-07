@@ -6,17 +6,25 @@ import { auth } from '@clerk/nextjs/server';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { ICommandOutcome, IGameCommand, IGameType, serializeOutcomeMaps, stripRecordedRandomness } from '@/utils/apiModels/GameLogic';
-import { IGameData, trySave } from '@/utils/mongodb/GameData';
+import { IGameData, IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
 import { requireLiveGame } from '@/utils/games/liveGame';
 import { isCommandForGameType } from '@/utils/games/gameCommands';
 import { finishGame } from '@/utils/games/finishGame';
 import { runCommand } from '@/utils/games/commandPipeline';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
 import { IGameDataResponse } from '@/utils/apiModels/GameDataApi';
+import { attachHistoryReactions } from '@/utils/games/historyReactions';
 
 export interface ICommandResponse {
   outcome: ICommandOutcome,
   gameData: IGameDataResponse
+}
+
+/** The game's response, with each history line's reaction (if any) attached. */
+async function dataResponseWithReactions(gameData: IGameDataDocument, userId: string): Promise<IGameDataResponse> {
+  const response = await gameData.CreateDataResponse(userId);
+  response.gameState.history = await attachHistoryReactions(gameData.gameId, response.gameState.history);
+  return response;
 }
 
 /**
@@ -168,7 +176,7 @@ export async function POST(request: NextRequest) {
 
     const response: ICommandResponse = {
       outcome: serializeOutcomeMaps(commandOutcome),
-      gameData: await gameData.CreateDataResponse(userId)
+      gameData: await dataResponseWithReactions(gameData, userId)
     }
 
     // Recording the match result and telling everyone the game is over doesn't
@@ -190,7 +198,7 @@ export async function POST(request: NextRequest) {
 
   const response: ICommandResponse = {
     outcome: serializeOutcomeMaps(commandOutcome),
-    gameData: await gameData.CreateDataResponse(userId)
+    gameData: await dataResponseWithReactions(gameData, userId)
   }
 
   if (!commandOutcome.turnOver) {
