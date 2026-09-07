@@ -1,11 +1,12 @@
 import RecapTimeline from "@/components/ui/RecapTimeline";
+import ReactionPicker from "@/components/ui/ReactionPicker";
 import { playerColourForId } from "@/utils/ui/playerColours";
-import { IHistoryEntry } from "@/utils/games/history";
+import { IHistoryEntryResponse } from "@/utils/apiModels/GameDataApi";
 
 /** What a game hands `GameShell`'s `log` prop. */
 export interface MatchHistoryProps {
     /** The game's log lines, newest first as the game state stores them. */
-    entries: IHistoryEntry[];
+    entries: IHistoryEntryResponse[];
     /** The game's players in seat order — a line is dotted in its actor's colour. */
     userIdList?: string[];
     /** Read the log the other way up, oldest line first. */
@@ -28,6 +29,11 @@ interface MatchHistoryComponentProps extends MatchHistoryProps {
 // with — which picked the wrong player when one name prefixed another ("Dave"
 // and "DaveT", settled by seat order), and lost the colour entirely once a
 // player renamed and the frozen line no longer matched anybody.
+//
+// A line's reaction (if any) renders as a read-only pill — ReactionPicker with
+// no onReact — because reacting only happens from the recap screen, on the
+// window of actions a player was actually shown; this panel just shows what
+// landed, on any line, to anyone still able to see it.
 export default function MatchHistory({ entries, userIdList = [], oldestFirst = false, onClose }: MatchHistoryComponentProps) {
     const lines = oldestFirst ? entries.slice().reverse() : entries;
 
@@ -46,6 +52,7 @@ export default function MatchHistory({ entries, userIdList = [], oldestFirst = f
                         id: String(i),
                         dotColour: playerColourForId(entry.actorId, userIdList),
                         title: entry.text,
+                        trailing: entry.reaction ? <ReactionPicker reacted={entry.reaction} /> : undefined,
                     }))}
                 />
             )}

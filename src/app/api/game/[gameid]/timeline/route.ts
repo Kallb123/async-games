@@ -6,6 +6,7 @@ import { userIdListToUserIdNameMap } from '@/utils/users/clerk';
 import { buildTimeline, plannableCommands } from '@/utils/games/replay';
 import { IGameCommand } from '@/utils/apiModels/GameLogic';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
+import { attachHistoryReactionsToEach } from '@/utils/games/historyReactions';
 
 export interface IGetTimelineParams {
     gameid: string;
@@ -77,7 +78,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
         // The requesting player is the viewer, so a game with hidden information
         // reconstructs their own hand across the timeline — and nobody else's.
         const timeline = await buildTimeline(gameData, userIdNameMap, plannedCommands, undefined, userId);
-        return NextResponse.json({ success: true, ...timeline, userIdNameMap });
+        // One query across every snapshot's history, so a reaction stays on its
+        // line whichever point in the game a player is stepping through — not
+        // just the live one.
+        const snapshots = (await attachHistoryReactionsToEach(gameid, timeline.snapshots.map((snapshot) => snapshot.history)))
+            .map((history, i) => ({ ...timeline.snapshots[i], history }));
+        return NextResponse.json({ success: true, ...timeline, snapshots, userIdNameMap });
     } catch (error) {
         console.error("Failed to build timeline", error);
         return NextResponse.json({}, { status: 500, statusText: "Unable to build timeline" });

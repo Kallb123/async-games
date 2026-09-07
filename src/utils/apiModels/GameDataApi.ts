@@ -17,6 +17,20 @@ export type uuidString = `${string}-${string}-${string}-${string}-${string}`;
 // for every player at once (see finishGame and outcomeFor).
 export type GameEndReason = 'win' | 'ended' | 'abandoned' | 'teamwin' | 'teamloss';
 
+// One line of match history as sent to a client: the game-agnostic entry plus
+// the reaction (if any) dropped on the action it records — attached by
+// withHistoryReactions, the same { gameId, commandId } join the recap route
+// makes by { gameId, eventId } (IRecapEventResponse). A reaction is public
+// information about a public history line, so it's sent to every player, not
+// scoped to a viewer the way a hand or a hidden card would be.
+export interface IHistoryEntryResponse extends IHistoryEntry {
+    // Optional only so publicGameState's pre-attachment output (which doesn't
+    // know about reactions at all) still type-checks as this shape — every
+    // route that actually sends IGameDataResponse to a client fills it in via
+    // attachHistoryReactions/attachHistoryReactionsToEach before responding.
+    reaction?: string | null;
+}
+
 
 export interface IGameResponse {
     gameId: uuidString,
@@ -171,7 +185,7 @@ export interface IGameDataResponse {
         turnOrder: string[],
         // Newest first, with every {{userId}} token already resolved to a name
         // — ready to render. `actorId` says whose line it is.
-        history: IHistoryEntry[]
+        history: IHistoryEntryResponse[]
     },
     complete: boolean,
     winner: string,
