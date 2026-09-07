@@ -13,11 +13,14 @@ import {
     FAMILY_STARTING_FIRE,
     FAMILY_STARTING_POI,
     INTERIOR_SPACE_COUNT,
+    MAX_SOLO_CREW,
+    MIN_SOLO_CREW,
     QUADRANT_COUNT,
     ROWS,
     SPACE_COUNT,
     START_SPACE,
     colOf,
+    crewSizeFor,
     edgeBetween,
     edgesOf,
     exteriorBottomSpace,
@@ -277,5 +280,39 @@ describe("space names", () => {
     it("reads inside a sentence as well as on a label", () => {
         expect(spacePhrase(spaceIndex(3, 3))).toBe("the kitchen");
         expect(spacePhrase(EXTERIOR_CORNERS.topLeft)).toBe("the north-west corner");
+    });
+});
+
+// fires-out-gdd.md §1's solitaire play, §17.6 step 12: how many figures a
+// board holds. One entry per *player* stays in `turnOrder` (so every
+// `turnOrder.findIndex` in the repo stays correct) and one per *figure* goes
+// in `firefighters` — §17.2 gap 3's distinction — so this is the only thing
+// that decides how many of the latter there are.
+describe("crewSizeFor", () => {
+    it("gives a crew game one figure per seat and ignores any claim on the invitation", () => {
+        expect(crewSizeFor(2, undefined)).toBe(2);
+        expect(crewSizeFor(4, 6)).toBe(4);
+        // A lobby invitation carries whatever the client put in its per-game
+        // settings, so this is the case that has to be ignored rather than
+        // trusted.
+        expect(crewSizeFor(3, 99)).toBe(3);
+    });
+
+    it("clamps a solo crew into the playable range", () => {
+        expect(crewSizeFor(1, 4)).toBe(4);
+        expect(crewSizeFor(1, 1)).toBe(MIN_SOLO_CREW);
+        expect(crewSizeFor(1, 99)).toBe(MAX_SOLO_CREW);
+        expect(crewSizeFor(1, -3)).toBe(MIN_SOLO_CREW);
+        expect(crewSizeFor(1, 3.6)).toBe(4);
+    });
+
+    it("falls back to the smallest playable crew for anything that isn't a number", () => {
+        // Not a theoretical set of inputs: every one of these can be sitting
+        // in `crewSize` by the time CreateGame reads it, and an unclamped
+        // NaN deals a board of `Array.from({ length: NaN })` — no figures at
+        // all, and a game nobody can take a turn in.
+        for (const claimed of [undefined, null, "", "lots", {}, [], NaN, Infinity]) {
+            expect(crewSizeFor(1, claimed)).toBe(MIN_SOLO_CREW);
+        }
     });
 });

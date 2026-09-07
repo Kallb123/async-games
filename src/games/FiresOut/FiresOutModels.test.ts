@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildInitialFiresOutState, buildInitialFiresOutStateFromGameData, cloneFiresOutState, FiresOutGameDataModel, gameStateToModel, IFiresOutGameData } from "./FiresOutModels";
-import { INTERIOR_SPACE_COUNT } from "./board";
+import { INTERIOR_SPACE_COUNT, MAX_SOLO_CREW } from "./board";
 
 // Regression test for a classic Mongoose footgun (see WorldDominationModels.test.ts
 // for the sibling one this game hit): a bare nested object schema path —
@@ -128,5 +128,71 @@ describe("cloneFiresOutState off a hydrated document", () => {
 
         expect(gameStateToModel(snapshot, {}, null))
             .toEqual(gameStateToModel(doc.specificGameState, {}, null));
+    });
+});
+
+// fires-out-gdd.md §1's solitaire play, §17.6 step 12: one seat, a whole crew
+// of figures. The distinction that makes it work is §17.2 gap 3's — `turnOrder`
+// keeps one entry per *player* (so every `turnOrder.findIndex` in the repo
+// stays correct) and `firefighters` holds one entry per *figure*, indexed by
+// `activeFirefighter`. (crewSizeFor, which decides how many of them there
+// are, is tested beside itself in board.test.ts.)
+describe("buildInitialFiresOutState for a solo crew", () => {
+    it("gives one player every figure, without repeating them in turnOrder", () => {
+        const { specificGameState } = buildInitialFiresOutState(["u1"], "family", "recruit", 4);
+
+        expect(specificGameState.firefighters).toHaveLength(4);
+        expect(specificGameState.firefighters.map(ff => ff.ownerId)).toEqual(["u1", "u1", "u1", "u1"]);
+        expect(specificGameState.activeFirefighter).toBe(0);
+    });
+
+    it("deals every figure of an Experienced solo crew its own specialist", () => {
+        // dealSpecialists used to key by user, which handed one card to the
+        // whole crew and `undefined` to the rest of it.
+        const { specificGameState } = buildInitialFiresOutState(["u1"], "experienced", "veteran", MAX_SOLO_CREW);
+
+        const specialists = specificGameState.firefighters.map(ff => ff.specialist);
+        expect(specialists).toHaveLength(MAX_SOLO_CREW);
+        expect(new Set(specialists).size).toBe(MAX_SOLO_CREW);
+        expect(specialists).not.toContain(undefined);
+    });
+
+    it("scales the Experienced setup by the size of the crew, not the number of players holding it", () => {
+        // §6.2 places its hot spots off the crew size, so a solo player with
+        // five figures has to meet the building a five-player crew would.
+        const solo = buildInitialFiresOutState(["u1"], "experienced", "heroic", 5).specificGameState;
+        const crew = buildInitialFiresOutState(["u1", "u2", "u3", "u4", "u5"], "experienced", "heroic").specificGameState;
+
+        expect(solo.firefighters).toHaveLength(crew.firefighters.length);
+        expect(solo.hotspotReserve).toBe(crew.hotspotReserve);
+    });
+
+    it("defaults to one figure per seat when no crew size is given", () => {
+        const { specificGameState } = buildInitialFiresOutState(["u1", "u2", "u3"], "family", "recruit");
+        expect(specificGameState.firefighters.map(ff => ff.ownerId)).toEqual(["u1", "u2", "u3"]);
+    });
+
+    it("survives schema casting with the whole crew intact", () => {
+        const { specificGameState } = buildInitialFiresOutState(["u1"], "family", "recruit", MAX_SOLO_CREW);
+
+        const doc = new FiresOutGameDataModel({
+            gameId: "33333333-3333-3333-3333-333333333333",
+            gameType: { gameId: "g", gameType: "FiresOut", friendlyName: "Fires Out!", icon: "", url: "firesout", className: "FiresOutGameType" },
+            userIdList: ["u1"],
+            turnTimer: "1d",
+            currentTurn: "u1",
+            lastTurnTimestamp: new Date().toISOString(),
+            timerWarningNotificationSent: false,
+            gameState: { turnOrder: ["u1"], history: [], commandHistory: [] },
+            complete: false,
+            winner: "",
+            specificGameState,
+            initialSpecificGameState: cloneFiresOutState(specificGameState),
+        });
+
+        expect(doc.validateSync()).toBeUndefined();
+        const response = gameStateToModel(doc.specificGameState, { u1: "Alice" }, "u1");
+        expect(response.firefighters).toHaveLength(MAX_SOLO_CREW);
+        expect(response.firefighters.every(ff => ff.ownerId === "u1")).toBe(true);
     });
 });

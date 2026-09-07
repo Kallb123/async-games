@@ -15,7 +15,7 @@ import type { IFiresOutAdvanceFireOutcome } from '@/games/FiresOut/FiresOutLogic
 export interface AdvanceFireDisplay extends IFiresOutAdvanceFireOutcome {
     /** The endTurn command's id — a fresh roll needs a fresh mount even if the numbers repeat. */
     id: string;
-    /** Display names for knockedDownOwnerIds, resolved by the page (which already has usernameList). */
+    /** Display names for knockedDownFirefighters, resolved by the page (which already has the roster figureIdentity needs). */
     knockedDownNames: string[];
 }
 
@@ -23,12 +23,12 @@ export interface AdvanceFireDisplay extends IFiresOutAdvanceFireOutcome {
 export function buildAdvanceFireDisplay(
     id: string,
     advance: IFiresOutAdvanceFireOutcome,
-    nameFor: (ownerId: string) => string,
+    nameFor: (firefighter: number) => string,
 ): AdvanceFireDisplay {
     return {
         ...advance,
         id,
-        knockedDownNames: advance.knockedDownOwnerIds.map(nameFor),
+        knockedDownNames: advance.knockedDownFirefighters.map(nameFor),
     };
 }
 

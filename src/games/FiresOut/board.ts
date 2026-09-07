@@ -402,13 +402,45 @@ export const FAMILY_STARTING_POI: number[] = [
 ];
 
 // §1's "1-6 players, solitaire supported by controlling multiple pawns" is
-// two modes: this wires up the multiplayer one (2-6, one figure each).
-// §17.3's deviation is deliberate — solitaire needs step 12's
-// activeFirefighter/multi-pawn control and ships as a separate mode later,
-// not as MIN_PLAYERS: 1 on the ordinary invite flow, which would let a
-// one-firefighter game through the AP economy makes close to unwinnable.
+// two modes, and these are the crew one's bounds: 2-6 players, one figure
+// each, through the ordinary invite flow. Deliberately not MIN_PLAYERS: 1 —
+// a one-player game there would be a *one-firefighter* game, which the AP
+// economy makes close to unwinnable. Solitaire is the other mode (§17.6 step
+// 12): one player, a whole crew of figures, its own branch of the setup
+// screen and its own bounds below.
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 6;
+
+// §1's solitaire play, §17.6 step 12: how many figures one player may hold.
+// The floor is 2 for the reason MIN_PLAYERS isn't 1 — a lone firefighter on
+// 4 AP a turn cannot cover the building — and the ceiling is the six
+// firefighter figures §3's component table puts in the box, which is also
+// how many colours playerColour() has to tell them apart with.
+export const MIN_SOLO_CREW = 2;
+export const MAX_SOLO_CREW = MAX_PLAYERS;
+/** What the setup screen offers first: enough of a crew to cover the building without six figures' worth of bookkeeping on a first solo game. */
+export const DEFAULT_SOLO_CREW = 4;
+
+/**
+ * §17.6 step 12: how many figures a board holds, given how many seats
+ * accepted and what was claimed for it.
+ *
+ * A crew game is one figure per player (§17.3), full stop — so a claim is only
+ * ever consulted for a one-seat game, which is what §1's solitaire mode is.
+ * Normalised rather than trusted, for the same reason `asRulesetId` and
+ * `difficultyTier` below are: `POST /api/lobby` spreads a client's per-game
+ * settings into an invitation unchecked against a schema of bare types, so
+ * anything at all can be sitting in `crewSize` by the time `CreateGame` reads
+ * it — and an unclamped `NaN` deals `Array.from({ length: NaN })`, a board
+ * with no figures on it and no turn anybody can take. The setup screen shares
+ * it to clamp the crew size a rematch link asks for.
+ */
+export function crewSizeFor(seatCount: number, claimed: unknown): number {
+    if (seatCount !== 1) return seatCount;
+    const size = Math.round(Number(claimed));
+    if (!Number.isFinite(size)) return MIN_SOLO_CREW;
+    return Math.min(MAX_SOLO_CREW, Math.max(MIN_SOLO_CREW, size));
+}
 
 // §5: the three end conditions.
 export const VICTIMS_TO_WIN = 7;

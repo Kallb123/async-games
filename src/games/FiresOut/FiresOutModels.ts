@@ -9,7 +9,7 @@ import { shuffle } from "@/utils/games/shuffle";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { FiresOutGameType } from "@/utils/apiModels/GameLogic";
 import { DiceRoll } from "@/utils/games/DiceRoll";
-import { AMBULANCE_START, DAMAGE_TO_COLLAPSE, DifficultyId, ENGINE_START, RulesetId, START_SPACE, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN, asRulesetId, difficultyTier, spacePhrase } from "./board";
+import { AMBULANCE_START, DAMAGE_TO_COLLAPSE, DifficultyId, ENGINE_START, RulesetId, START_SPACE, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN, asRulesetId, crewSizeFor, difficultyTier, spacePhrase } from "./board";
 import {
     IFiresOutEdgeState,
     IFiresOutFirefighterState,
@@ -44,11 +44,20 @@ import {
 export interface IFiresOutInvitationData extends IInvitationData {
     ruleset: RulesetId;
     difficulty: DifficultyId;
+    /**
+     * §1's solitaire play, §17.6 step 12: how many figures one player holds.
+     * Only ever set by the solo mode, and only ever read for a game whose
+     * accepted roster is one person — a crew game is one figure per player
+     * (§17.3), so `undefined` means "one each" and `CreateGame` ignores a
+     * value that reaches it any other way.
+     */
+    crewSize?: number;
 }
 
 export interface IFiresOutInvitationRequest extends IInvitationRequest {
     ruleset: RulesetId;
     difficulty: DifficultyId;
+    crewSize?: number;
 }
 
 export interface IFiresOutInvitationDataDocument extends IFiresOutInvitationData, IInvitationDataDocument {}
@@ -71,6 +80,7 @@ function setupPlacementLine(
 var FiresOutInvitationSchema = new Schema<IFiresOutInvitationDataDocument>({
     ruleset: String,
     difficulty: String,
+    crewSize: { type: Number, default: undefined },
 }, { discriminatorKey: 'kind' });
 FiresOutInvitationSchema.methods.CreateGame = async function(
     invite: IFiresOutInvitationData,
@@ -89,9 +99,20 @@ FiresOutInvitationSchema.methods.CreateGame = async function(
 
     // Who's up first is arbitrary (no printed rule decides it) — drawn at
     // random the same way Outbreak and Train Time decide their opening order.
+    // One entry per *player*, never one per figure: §17.2 gap 3 is explicit
+    // that a duplicate here would break the five `turnOrder.findIndex(to => to
+    // === currentTurn)` sites in the repo, so a solitaire crew is one seat in
+    // `turnOrder` and several entries in `firefighters` (whose index
+    // `activeFirefighter` names) instead.
     const turnOrder = shuffle(userIdList);
+
+    const crewSize = crewSizeFor(turnOrder.length, this.crewSize);
+    const solo = crewSize !== turnOrder.length;
+
     const history = [
-        { text: `Setup: running order is ${turnOrder.map(userToken).join(' → ')}` },
+        { text: solo
+            ? `Setup: ${userToken(turnOrder[0])} takes a solo crew of ${pluralize(crewSize, 'firefighter')}`
+            : `Setup: running order is ${turnOrder.map(userToken).join(' → ')}` },
         { text: ruleset === 'experienced'
             ? `Setup: ${difficulty} difficulty — the crew arrives to a building already compromised by explosion`
             : `Setup: the crew arrives to a fire already spreading through the house` },
@@ -108,7 +129,7 @@ FiresOutInvitationSchema.methods.CreateGame = async function(
     // the returned specificGameState instead, the same way Outbreak's
     // CreateGame reads its own setup facts (infectedCount, cubesPlaced) off
     // the state buildInitialOutbreakState just built.
-    const { specificGameState, explosionLog } = buildInitialFiresOutState(turnOrder, ruleset, difficulty);
+    const { specificGameState, explosionLog } = buildInitialFiresOutState(turnOrder, ruleset, difficulty, crewSize);
     for (const line of explosionLog) history.push({ text: line });
     if (ruleset === 'experienced') {
         const hazmatLine = setupPlacementLine(specificGameState.spaces, 'hazmat', s => s.hazmat);
@@ -248,6 +269,12 @@ export function buildInitialFiresOutState(
     turnOrder: string[],
     ruleset: RulesetId,
     difficulty: DifficultyId,
+    /**
+     * How many figures the board starts with (§17.6 step 12). Defaults to one
+     * per seat, which is every crew game; §1's solitaire mode passes more than
+     * `turnOrder.length` and every figure ends up owned by the one seat.
+     */
+    crewSize: number = turnOrder.length,
 ): { specificGameState: IFiresOutSpecificGameState; explosionLog: string[] } {
     const spaces = buildEmptySpaces();
     const edges = buildEmptyEdges();
@@ -258,8 +285,11 @@ export function buildInitialFiresOutState(
     let hotspotReserve: number;
     let explosionLog: string[];
     if (ruleset === 'experienced') {
+        // §6.2 scales its setup by the size of the *crew*, not the number of
+        // people holding it — a solo player with five figures faces the same
+        // building a five-player crew does.
         ({ nextPoiId, hotspotReserve, explosionLog } =
-            applyExperiencedSetup(spaces, edges, poiPool, difficulty, turnOrder.length, realRoll));
+            applyExperiencedSetup(spaces, edges, poiPool, difficulty, crewSize, realRoll));
     } else {
         applyFamilySetup(spaces, poiPool);
         nextPoiId = 3; // applyFamilySetup already assigned ids 0-2
@@ -276,10 +306,16 @@ export function buildInitialFiresOutState(
     // specialist (bankedAp is still 0, so this is exactly what their first
     // CheckEndTurn would compute) — the same call CheckEndTurn itself makes
     // every turn after, so a specialist's numbers are derived in one place.
-    const specialists = ruleset === 'experienced' ? dealSpecialists(turnOrder) : null;
-    const firefighters = turnOrder.map(userId => {
-        const ff = newFirefighter(userId, START_SPACE);
-        if (specialists) ff.specialist = specialists.get(userId)!;
+    const specialists = ruleset === 'experienced' ? dealSpecialists(crewSize) : null;
+    // One figure per seat for a crew game, and `crewSize` figures dealt round
+    // the seats for §1's solitaire mode — where there is one seat, so all of
+    // them are that player's. Figure order is the order this builds them in
+    // and nothing ever reorders it (cloneFiresOutState's own note), which is
+    // what makes an index into `firefighters` the stable name for a figure
+    // that `activeFirefighter` and a Fire Captain's direction both use.
+    const firefighters = Array.from({ length: crewSize }, (_, index) => {
+        const ff = newFirefighter(turnOrder[index % turnOrder.length], START_SPACE);
+        if (specialists) ff.specialist = specialists[index];
         refillFirefighterAp(ff, ruleset);
         return ff;
     });

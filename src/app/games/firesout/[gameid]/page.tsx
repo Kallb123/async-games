@@ -5,7 +5,7 @@ import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { FiresOutAction, IFiresOutEndTurnOutcome } from "@/utils/apiModels/GameLogic";
 import type { IFiresOutGameDataResponse, IFiresOutSpecificGameStateResponse } from "@/games/FiresOut/apiModels";
-import FiresOutBoard from "@/games/FiresOut/components/FiresOutBoard";
+import FiresOutBoard, { figureIdentity } from "@/games/FiresOut/components/FiresOutBoard";
 import FiresOutActions, { FiresOutBoardMode } from "@/games/FiresOut/components/FiresOutActions";
 import FiresOutAdvanceFireResult, { AdvanceFireDisplay, buildAdvanceFireDisplay } from "@/games/FiresOut/components/FiresOutAdvanceFireResult";
 import GameShell from "@/components/ui/GameShell";
@@ -27,6 +27,7 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { guide as firesOutGuide } from "@/games/FiresOut/guide";
+import { rematchFlag } from "@/utils/ui/rematch";
 import { VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN } from "@/games/FiresOut/board";
 import {
     canCrewChange,
@@ -44,8 +45,7 @@ import {
     totalDamage,
     VehicleId,
 } from "@/games/FiresOut/rules";
-import { abandonedGameStatus, isPlayersTurn, nameForUserId, reorderByIds, scoreboardSeatOrder } from "@/utils/ui/players";
-import { playerColourForId } from "@/utils/ui/playerColours";
+import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
 
 // fires-out-gdd.md §17.6 step 5 (board), step 11 (turn recap). The crew
 // planner is still a later step (13) — useTurnNavigation is wired with
@@ -89,9 +89,13 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     const userIdList = gameData?.userIdList ?? [];
     const usernameList = gameData?.usernameList ?? [];
     const myUserId = user?.id ?? '';
-    const nameOrYou = (ownerId: string, name: string): string => ownerId === myUserId ? 'You' : name;
     const isMyTurn = isPlayersTurn(nav.isLive, user, displayedCurrentTurn) && !complete;
     const activeFf = gs?.firefighters[gs.activeFirefighter];
+    // §1's solitaire mode (§17.6 step 12): one seat holding the whole crew.
+    // Told from the roster rather than from a flag on the state — a board
+    // with one player is a solo board by construction — and used only for
+    // presentation, since every rule already works per figure.
+    const solo = userIdList.length === 1;
 
     // What the board is targeting right now, if anything — reset whenever the
     // active figure changes so a stale pick from the previous turn (or the
@@ -99,12 +103,15 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     const targetKey = `${displayedCurrentTurn}-${gs?.activeFirefighter ?? ''}`;
     const [mode, setModeRaw] = useResettingState<FiresOutBoardMode | null>(null, targetKey);
     const [carryOnMove, setCarryOnMove] = useResettingState(false, targetKey);
-    // §11: a Fire Captain may direct a teammate's firefighter instead of
-    // their own — the owner id of who's being directed, or null for
-    // themselves. Only ever set while mode === 'move' (tap a teammate's
-    // scoreboard pill, then a board space), and cleared whenever the mode
-    // changes away from 'move' so it can't linger into a door/chop/etc.
-    const [directing, setDirecting] = useResettingState<string | null>(null, targetKey);
+    // §11: a Fire Captain may direct another firefighter instead of their own
+    // — the *index* of the figure being directed, or null for themselves.
+    // An index rather than an owner id because a solitaire crew's figures
+    // share one (§17.2 gap 3, resolveMover's own note), which is also what
+    // lets a solo Fire Captain spend their command AP at all. Only ever set
+    // while mode === 'move' (tap a crewmate's scoreboard pill, then a board
+    // space), and cleared whenever the mode changes away from 'move' so it
+    // can't linger into a door/chop/etc.
+    const [directing, setDirecting] = useResettingState<number | null>(null, targetKey);
     function setMode(next: FiresOutBoardMode | null) {
         setModeRaw(next);
         if (next !== 'move') setDirecting(null);
@@ -115,7 +122,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     // FiresOutLogic.ts, mirrors Outbreak's Dispatcher/targetUserId).
     // Reachability, carry pickup and the AP cost preview all follow the
     // *mover*; only the AP itself is paid by the active firefighter.
-    const mover = (directing && gs && gs.firefighters.find(f => f.ownerId === directing)) || activeFf;
+    const mover = (directing !== null && gs?.firefighters[directing]) || activeFf;
 
     const carrying = !!mover?.carrying;
     const ownSpace = gs && mover ? gs.spaces[mover.space] : null;
@@ -184,7 +191,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
         command.target = space;
         if (mode === 'move') {
             command.carry = carryOnMove;
-            if (directing) command.targetUserId = directing;
+            if (directing !== null) command.targetFirefighter = directing;
         }
         if (mode === 'drive' && vehicleHere) command.vehicle = vehicleHere;
         submitCommand(command, () => { setMode(null); }, `space:${space}`);
@@ -226,8 +233,16 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
             setCarryOnMove(false);
             const advance = (response.outcome as IFiresOutEndTurnOutcome).advanceFire;
             if (advance) {
+                // Named per figure rather than per owner: a solo crew's
+                // knocked-down pawns are all the same player, so naming them
+                // by owner read "You, You". The roster is fixed for the life
+                // of a game (buildInitialFiresOutState builds it once and
+                // nothing reorders it), so reading it off the board we were
+                // looking at when the turn ended names the same figures the
+                // fire caught.
+                const roster = gs?.firefighters ?? [];
                 setAdvanceFireResult(buildAdvanceFireDisplay(command.id, advance,
-                    ownerId => nameOrYou(ownerId, nameForUserId(response.gameData, ownerId))));
+                    index => figureIdentity(index, roster[index], userIdList, myUserId).name));
             }
         }, 'endTurn');
     }
@@ -235,27 +250,48 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     const carryingLabel: Record<'victim' | 'hazmat' | 'escort', string> = {
         victim: '🧍 carrying', hazmat: '☣️ carrying', escort: '🚶 escorting',
     };
-    const scoreboardFirefighters = reorderByIds(gs?.firefighters ?? [], scoreboardSeatOrder(gameData, myUserId), ff => ff.ownerId);
-    const scoreEntries: ScoreEntry[] = scoreboardFirefighters.map((ff) => ({
-        id: ff.ownerId,
-        name: nameOrYou(ff.ownerId, ff.username),
-        color: playerColourForId(ff.ownerId, userIdList),
-        sub: [
-            experienced ? specialistDef(ff.specialist).label : null,
-            `${ff.apLeft} AP${ff.bankedAp > 0 ? ` · ${ff.bankedAp} banked` : ''}`,
-            ff.carrying ? carryingLabel[ff.carrying] : null,
-        ].filter(Boolean).join(' · '),
-        score: ff.apLeft,
-        isMe: ff.ownerId === myUserId,
-        isActive: ff.ownerId === activeFf?.ownerId,
-        // §11: a Fire Captain picking a move may tap a teammate's pill here
-        // to direct their firefighter instead of their own (§17.6 step 10)
-        // — tapping it again returns control to themselves.
-        onClick: canDirect && ff.ownerId !== activeFf?.ownerId
-            ? () => setDirecting(directing === ff.ownerId ? null : ff.ownerId)
-            : undefined,
-        highlighted: canDirect && directing === ff.ownerId,
-    }));
+    // §17.6 step 5: the crew roster is one pill per *figure*, so a solitaire
+    // crew gets one each rather than one for the lot. Ordered by seat with the
+    // viewer's own first (scoreboardSeatOrder) and, within a seat, in board
+    // order — a sort rather than players.ts's reorderByIds, which keys by id
+    // and would collapse a whole solo crew into a single pill. Array#sort is
+    // stable, so figures behind one seat keep the order firefighters holds
+    // them in, which is the order their turns come round in.
+    const seatOrder = scoreboardSeatOrder(gameData, myUserId);
+    const seatIndexOf = (ownerId: string) => {
+        const seat = seatOrder.indexOf(ownerId);
+        return seat < 0 ? seatOrder.length : seat;
+    };
+    const scoreEntries: ScoreEntry[] = (gs?.firefighters ?? [])
+        .map((ff, index) => ({ ff, index }))
+        .sort((a, b) => seatIndexOf(a.ff.ownerId) - seatIndexOf(b.ff.ownerId))
+        .map(({ ff, index }) => {
+            const { name, colour } = figureIdentity(index, ff, userIdList, myUserId);
+            return {
+                id: `ff-${index}`,
+                name,
+                color: colour,
+                sub: [
+                    experienced ? specialistDef(ff.specialist).label : null,
+                    `${ff.apLeft} AP${ff.bankedAp > 0 ? ` · ${ff.bankedAp} banked` : ''}`,
+                    ff.carrying ? carryingLabel[ff.carrying] : null,
+                ].filter(Boolean).join(' · '),
+                score: ff.apLeft,
+                // Every pill on a solo board is the viewer's, so the "your
+                // seat" tint would say nothing there; the active ring is what
+                // distinguishes them.
+                isMe: !solo && ff.ownerId === myUserId,
+                isActive: index === gs?.activeFirefighter,
+                // §11: a Fire Captain picking a move may tap another
+                // firefighter's pill here to direct them instead of moving
+                // themselves (§17.6 step 10) — tapping it again returns
+                // control to their own figure.
+                onClick: canDirect && index !== gs?.activeFirefighter
+                    ? () => setDirecting(directing === index ? null : index)
+                    : undefined,
+                highlighted: canDirect && directing === index,
+            };
+        });
 
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, nameForUserId(gameData, gameData?.forfeitedBy));
 
@@ -360,7 +396,9 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
                                 endTurnPending={pendingTarget === 'endTurn'}
                                 experienced={experienced}
                                 specialist={activeFf?.specialist ?? 'generalist'}
-                                directingName={directing ? nameOrYou(directing, nameForUserId(gameData, directing)) : null}
+                                directingName={directing !== null && gs?.firefighters[directing]
+                                    ? figureIdentity(directing, gs.firefighters[directing], userIdList, myUserId).name
+                                    : null}
                                 showTreat={showTreat}
                                 onTreat={handleTreat}
                                 treatPending={pendingTarget === 'treat'}
@@ -385,6 +423,11 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
                             userIdList={userIdList}
                             myUserId={myUserId}
                             turnTimer={gameData?.turnTimer}
+                            // A solo game has no invitees to pre-fill, so a
+                            // plain rematch link landed on the crew form with
+                            // nobody named and its button dead. Carry the
+                            // mode and the crew size instead (§17.6 step 12).
+                            extraParams={solo ? { ...rematchFlag('solo', true), crew: String(gs.firefighters.length) } : undefined}
                         />
                     )}
 

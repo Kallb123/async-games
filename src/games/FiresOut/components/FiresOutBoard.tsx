@@ -2,7 +2,7 @@
 import React from 'react';
 import { DISPLAY_COLS, DISPLAY_ROWS, edgeBetween, isInteriorSpace, spaceAtDisplayCell, spaceName } from '@/games/FiresOut/board';
 import type { IFiresOutEdgeResponse, IFiresOutFirefighterResponse, IFiresOutSpaceResponse } from '@/games/FiresOut/apiModels';
-import { playerColourForId } from '@/utils/ui/playerColours';
+import { playerColour, playerColourForId } from '@/utils/ui/playerColours';
 
 // The 6×8 interior grid inside its exterior perimeter, rendered as the one
 // (ROWS + 2) × (COLS + 2) display grid board.ts lays the two out on — every
@@ -11,6 +11,37 @@ import { playerColourForId } from '@/utils/ui/playerColours';
 // cell borders and doors are gaps in them (fires-out-gdd.md §17.6 step 5):
 // the art is decoration, so this still reads wall/door state straight off
 // `edges` rather than drawing over the picture of it.
+
+/**
+ * The name and the colour one figure is shown by — on the board here, and on
+ * the scoreboard pills the game screen builds from the same call.
+ *
+ * A crew board takes both from the figure's *owner*, which is the colour and
+ * the name every other surface already uses for that player: the log, the
+ * recap, the scoreboard's seat order. §1's solitaire crew (§17.6 step 12) has
+ * one owner for every figure, so doing that there would paint the whole crew
+ * a single colour and label all six of them "You" — §17.2 gap 3's index into
+ * `firefighters` is the only thing that tells one from another, so it is what
+ * names and colours them. `playerColour` has exactly six colours and
+ * MAX_SOLO_CREW is six, so a solo crew never wraps.
+ *
+ * `viewerId` is optional because a board tooltip wants the player's real name
+ * where a scoreboard pill wants "You".
+ */
+export function figureIdentity(
+    index: number,
+    ff: Pick<IFiresOutFirefighterResponse, 'ownerId' | 'username'>,
+    userIdList: string[],
+    viewerId?: string,
+): { name: string; colour: string } {
+    if (userIdList.length === 1) {
+        return { name: `Firefighter ${index + 1}`, colour: playerColour(index) };
+    }
+    return {
+        name: ff.ownerId === viewerId ? 'You' : ff.username,
+        colour: playerColourForId(ff.ownerId, userIdList),
+    };
+}
 
 function edgeBorder(edge: IFiresOutEdgeResponse | undefined): string {
     if (!edge || edge.kind === 'open') return 'none';
@@ -45,9 +76,12 @@ interface FiresOutBoardProps {
 }
 
 export default function FiresOutBoard({ spaces, edges, firefighters, userIdList, activeFirefighter, validSpaces, onSpaceClick, engine, ambulance }: FiresOutBoardProps) {
-    const pawnsBySpace = new Map<number, IFiresOutFirefighterResponse[]>();
-    firefighters.forEach(ff => pawnsBySpace.set(ff.space, [...(pawnsBySpace.get(ff.space) ?? []), ff]));
-    const activeOwnerId = firefighters[activeFirefighter]?.ownerId;
+    // Keyed by figure index, not by owner: a solitaire crew stacks several of
+    // one player's figures on a space (they all start on START_SPACE), and the
+    // index is what tells them apart — for the pawn's own React key as much as
+    // for which one of them is up.
+    const pawnsBySpace = new Map<number, number[]>();
+    firefighters.forEach((ff, index) => pawnsBySpace.set(ff.space, [...(pawnsBySpace.get(ff.space) ?? []), index]));
 
     const cells: React.ReactNode[] = [];
     for (let displayRow = 0; displayRow < DISPLAY_ROWS; displayRow++) {
@@ -119,14 +153,17 @@ export default function FiresOutBoard({ spaces, edges, firefighters, userIdList,
                     )}
                     {pawns.length > 0 && (
                         <span className="ag-fo-pawns">
-                            {pawns.map(ff => (
-                                <span
-                                    key={ff.ownerId}
-                                    className={`ag-fo-pawn${ff.ownerId === activeOwnerId ? ' ag-fo-pawn--active' : ''}`}
-                                    style={{ background: playerColourForId(ff.ownerId, userIdList) }}
-                                    title={ff.username}
-                                />
-                            ))}
+                            {pawns.map(index => {
+                                const { name, colour } = figureIdentity(index, firefighters[index], userIdList);
+                                return (
+                                    <span
+                                        key={index}
+                                        className={`ag-fo-pawn${index === activeFirefighter ? ' ag-fo-pawn--active' : ''}`}
+                                        style={{ background: colour }}
+                                        title={name}
+                                    />
+                                );
+                            })}
                         </span>
                     )}
                 </button>,

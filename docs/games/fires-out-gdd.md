@@ -391,9 +391,12 @@ needed.
 ### 17.3 Deviations from this document
 
 * **Solitaire is a separate mode, not the default.** §1's "control multiple
-  pawns" is gap 3 above; until that step lands, a one-player game is a
-  one-firefighter game, which the AP economy makes close to unwinnable. Ship it
-  as an option, not as the entry point.
+  pawns" is gap 3 above; a one-*player* game must never be a
+  one-*firefighter* game, which the AP economy makes close to unwinnable. It
+  shipped in step 12 as the second of two modes on the same setup screen,
+  reached by a picker rather than by leaving the invite list empty:
+  `MIN_PLAYERS` is still 2 for the crew game and a solo crew has its own
+  bounds (`MIN_SOLO_CREW`/`MAX_SOLO_CREW`, 2-6 figures).
 * **Crew planning is out of band.** §14.2's quarterback problem and the crew
   discussion the Specialists exist to provoke both assume a table talking. The
   app now has a chat thread on every board (`docs/in-game-chat.md`), but planning
@@ -903,7 +906,7 @@ replay.test.ts` follows Train Time's `replay.test.ts` precedent: a passive
 game (every figure just ends its turn) replayed with the CSPRNG (`crypto.getRandomValues`) stubbed to throw, `buildEventFeed` exercised on a real command log, and
 `computeFiresOutResultStats` checked against the final state.
 
-**12 — Solitaire, optional.** Multi-pawn control, closing gap 3 with the
+**12 — Solitaire, optional.** *Landed.* Multi-pawn control, closing gap 3 with the
 `activeFirefighter` design 17.2 describes — no duplicate entries in `turnOrder`,
 so every `findIndex` in the repo stays correct and a solo game can still take a
 real turn timer. The turn timer is the one thing to settle about a solo game
@@ -923,8 +926,71 @@ The invitation is created with `userIdList: []` exactly as
 Solitaire's `POST /api/newgame/solitaire` does, which makes
 `/api/invite/accept`'s "has everyone accepted?" check vacuously true on the
 first call. Per `docs/new-game.md`'s solo gotcha, the setup screen becomes
-mode-dependent: solo hardcodes `UNLIMITED_TURN_TIMER` and drops both
-`TurnTimerSelect` and `UserInviteList`, in favour of a crew-size picker.
+mode-dependent: solo drops both `UserInviteList` and `SeatCountSelect` in
+favour of a crew-size picker.
+
+**The timer is offered**, which is the half of that paragraph this step
+picked: `TurnTimerSelect` stays on the solo form, so the declining path above
+is a path a real game takes rather than dead code. What that means in
+practice, spelled out because the two halves interact: a solo turn never
+hands over, so `lastTurnTimestamp` (moved by the command route only on
+`turnOver`) sits where `CreateGame` left it, and the sweep reaches the game
+one timer after it started however busily its owner has been playing. That
+sweep declines, banks a missed turn, restarts the timer and re-arms the
+expiry warning — and the command route zeroes that player's
+`missedTurnCounts` on their very next accepted command, so the abandon
+ladder only ever climbs for somebody who really has stopped turning up. The
+cost of the choice is therefore one "your turn is nearly up" nudge per timer
+to a player who is mid-game, which for a game whose own subject is time
+pressure is a defensible thing for a timer they chose to do. A player who
+wants none of it picks Unlimited, which is what the hardcoding half would
+have picked for them.
+
+*Landed.* The engine needed nothing: §17.2 gap 3's `activeFirefighter` had
+already made a turn a *figure's* rather than a player's, and `applyEndTurn`
+already advanced it and returned `turnOver: nextOwner !== previousOwner`,
+which on a one-owner board is false forever — so `turnOrder` keeps its single
+entry, every `turnOrder.findIndex` in the repo stays correct, and the fire
+still advances once per figure. What step 12 actually added is the setup path
+and the places that had quietly assumed one figure per player:
+
+* `crewSizeFor(seatCount, claimed)` (`FiresOutModels.ts`) decides how many
+  figures a board holds — the seat count for a crew game, and a clamped
+  `crewSize` off the invitation for a one-seat one. Clamped for `asRulesetId`'s
+  reason (`POST /api/lobby` spreads a client's per-game settings into an
+  invitation unchecked), and an unclamped `NaN` would have dealt a board of no
+  figures at all.
+* `dealSpecialists` deals per figure and returns an array, not a `Map` keyed by
+  user: a solo crew shares one owner id, so keying by user gave one figure a
+  card and the rest `undefined`. `applyExperiencedSetup` now takes the crew
+  size rather than the seat count too, so §6.2 builds a solo player of five
+  figures the same building a five-player crew gets.
+* A direction is named by **index**, not by owner: `FiresOutAction.targetFirefighter`
+  replaces `targetUserId` (still read, and only read, so a 'move' recorded
+  before this step replays as the move it was). This is what makes a solo Fire
+  Captain's +2 command AP spendable at all — `applyMove` only bills that pool
+  when the mover isn't the actor, and by owner every figure on a solo board
+  *is* the actor. `IFiresOutAdvanceFireOutcome` reports
+  `knockedDownFirefighters` as indices for the same reason; the recap resolves
+  them back to owner ids (deduped) because its `affectedIds` are about people.
+* `figureIdentity` (`FiresOutBoard.tsx`) is the one place a figure's name and
+  colour are decided, and the board and the scoreboard pills both call it. A
+  crew board still takes both from the owner — the colour and name every other
+  screen uses for that player — and a solo board takes them from the figure
+  index, so six pawns aren't one colour and six pills aren't all "You". The
+  scoreboard also sorts by seat rather than going through `reorderByIds`, which
+  keys by id and collapsed a whole solo crew into one pill.
+* `useStartSoloGame` (`src/utils/hooks/`) is the create-invitation → accept-it →
+  go-to-the-board sequence, extracted from Solitaire's setup page rather than
+  copied: Fires Out is its second caller and the sequence is not per-game.
+
+`e2e/specs/firesout-solo.spec.ts` covers the two things only the real routes
+prove — that an invitation with nobody in it deals a game on its own accept,
+and that the turn walks the crew without ever leaving the player — and shares
+its endTurn helper with the crew spec via `e2e/firesout.ts`. `meta` claims the
+`Solo` category and "1–6 players" now; `minPlayers`/`maxPlayers` stay the crew
+game's bounds, since the party-size hint and the invite flow are the only
+things that read them.
 
 **13 — The crew planner.** Mode 1 of 17.5, and cheap by this point: no schema
 change and no new command, because AP already lives on the figure and `endTurn`

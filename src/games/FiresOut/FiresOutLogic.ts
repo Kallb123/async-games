@@ -144,16 +144,38 @@ function requireTarget(target: number | undefined): target is number {
     return isInteriorSpace(target) || isExteriorSpace(target);
 }
 
-// §11 Fire Captain: `action.targetUserId`, if set, names whose pawn a 'move'
-// command moves — the sender (`ff`) still pays with their own AP. Named and
-// shaped after Outbreak's own `targetUserId`/dispatcherCanControlOthers
+// §11 Fire Captain: `action.targetFirefighter`, if set, names which pawn a
+// 'move' command moves — the sender (`ff`) still pays with their own AP.
+// Shaped after Outbreak's own `targetUserId`/dispatcherCanControlOthers
 // (OutbreakLogic.ts:484-487, rules.ts:410-412) — the same "actor pays, mover
 // moves" split, for the same reason (§17.3: "it's the pawn that moves, not
 // the turn"). Resolving to `ff` itself (no direction) is always allowed.
+//
+// §17.2 gap 3 decides the *index*, not the owner id, and §17.6 step 12 is
+// where that stops being pedantry: a solitaire crew's six figures share one
+// owner id, so a direction named by owner can only ever resolve to the first
+// of them — which is to say a solo Fire Captain could never spend their
+// command AP on anything, since applyMove only bills that pool when
+// `mover !== ff`. `targetUserId` is the pre-solitaire spelling, still read
+// (and only read) so a 'move' recorded before this step replays as the move
+// it actually was rather than as the sender moving themselves.
 function resolveMover(gs: IFiresOutSpecificGameState, ff: IFiresOutFirefighterState, action: FiresOutAction): IFiresOutFirefighterState | null {
-    if (action.targetUserId === undefined || action.targetUserId === ff.ownerId) return ff;
+    let directed: IFiresOutFirefighterState | undefined;
+    if (action.targetFirefighter !== undefined) {
+        // Integer-checked for requireTarget's reason: `firefighters["0"]` and
+        // `firefighters[0.5]` are a forged body away, and the first of them
+        // resolves to a real figure the sender never named.
+        if (!Number.isInteger(action.targetFirefighter)) return null;
+        directed = gs.firefighters[action.targetFirefighter];
+    } else if (action.targetUserId !== undefined) {
+        directed = gs.firefighters.find(f => f.ownerId === action.targetUserId);
+    } else {
+        directed = ff;
+    }
+    if (!directed) return null;
+    if (directed === ff) return ff;
     if (!fireCaptainCanControlOthers(ff.specialist)) return null;
-    return gs.firefighters.find(f => f.ownerId === action.targetUserId) ?? null;
+    return directed;
 }
 
 /**
@@ -477,8 +499,8 @@ export interface IFiresOutAdvanceFireOutcome {
     rolls: { d6: number; d8: number };
     target: number;
     resolution: 'smoke' | 'fire' | 'explosion';
-    /** Owner ids of firefighters caught by the fire across this Advance Fire and any hot spot flare-ups it chained into. */
-    knockedDownOwnerIds: string[];
+    /** Indices in `firefighters` of the figures caught by the fire across this Advance Fire and any hot spot flare-ups it chained into. By index, not by owner (§17.2 gap 3): a solitaire crew's figures share an owner id, so owner ids named the same player twice for two different pawns. */
+    knockedDownFirefighters: number[];
     victimsLost: number;
     poiPlaced: number;
     /** §9.4: how many additional full Advance Fire resolutions this one's hot spots chained into. */
@@ -570,7 +592,7 @@ function applyEndTurn(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff:
             rolls: advance.rolls,
             target: advance.target,
             resolution: advance.resolution,
-            knockedDownOwnerIds: knockedDownIndices.map(i => gs.firefighters[i].ownerId),
+            knockedDownFirefighters: knockedDownIndices,
             victimsLost,
             poiPlaced,
             flareUpCount: chain.length - 1,
@@ -593,7 +615,9 @@ export class FiresOutAction implements IGameCommand {
     carry?: boolean;
     /** 'drive' only: which vehicle — the firefighter must already be at its space (§12.1-12.2). */
     vehicle?: VehicleId;
-    /** 'move' only: a Fire Captain (§11) may set this to the owner id of the teammate whose firefighter moves instead of their own — resolveMover. */
+    /** 'move' only: a Fire Captain (§11) may set this to the index in `firefighters` of the figure that moves instead of their own — resolveMover. */
+    targetFirefighter?: number;
+    /** 'move' only: `targetFirefighter`'s pre-solitaire spelling, by owner id. Never sent any more; still read so an already-recorded command replays as itself (resolveMover). */
     targetUserId?: string;
     /** 'crewChange' only: the specialist to swap to (§8, §11). */
     specialist?: SpecialistId;
