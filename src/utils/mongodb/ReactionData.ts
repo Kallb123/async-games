@@ -46,6 +46,11 @@ export var ReactionSchema = new Schema<IReactionDataDocument>({
 // route still does the lookup first, because "you already reacted to this" is
 // a better answer than a duplicate-key error; this catches the pair that race.
 ReactionSchema.index({ gameId: 1, eventId: 1 }, { unique: true });
+// reactionMapBy's other lookup — a game's whole match-history log joins its
+// reactions by commandId, on every board load and every move (see
+// utils/games/historyReactions.ts) — so it gets the same treatment as the
+// eventId read above rather than falling back to a collection scan.
+ReactionSchema.index({ gameId: 1, commandId: 1 });
 export var ReactionModel = models.Reaction || model<IReactionDataDocument, IReactionDataModel>('Reaction', ReactionSchema);
 
 /**
@@ -61,11 +66,15 @@ export var ReactionModel = models.Reaction || model<IReactionDataDocument, IReac
  * unreadChatSince makes for unread chat counts.
  */
 export async function reactionMapBy(gameId: string, field: 'eventId' | 'commandId', ids: string[]): Promise<Map<string, string>> {
-    if (ids.length === 0) {
+    // Deduped once here rather than by every caller — attachHistoryReactionsToEach
+    // in particular hands over one id per line per snapshot, the same handful
+    // of ids repeated once per step through the timeline.
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0) {
         return new Map();
     }
     try {
-        const reactions = await ReactionModel.find({ gameId, [field]: { $in: ids } }).exec();
+        const reactions = await ReactionModel.find({ gameId, [field]: { $in: uniqueIds } }).exec();
         return new Map(reactions.map((reaction) => [reaction[field], reaction.reaction as string]));
     } catch (error) {
         console.error(`Failed to read reactions for game ${gameId}`, error);
