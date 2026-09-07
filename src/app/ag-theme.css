@@ -1900,13 +1900,17 @@ a.ag-list-row, a.ag-list-row-main {
    a page-level action. */
 .ag-chat-load-earlier { margin-bottom: 10px; padding: 8px; font-size: 12px; }
 
-/* Title and its own ✕ on one row, mirroring the top-bar 💬/📜 toggle so the
-   panel can be dismissed from itself. The title carries the log's 9px margin,
-   so the row takes it over and the title inside sits flush. Shared by the
-   chat thread and the turn-history panel — both are dismissible `.ag-log`
-   panels toggled from the top bar. */
+/* Title (plus an optional dim subtitle under it) and its own ✕ on one row,
+   mirroring the top-bar 💬/📜 toggle so the panel can be dismissed from
+   itself. The title carries the log's 9px margin, so the row takes it over
+   and the title inside sits flush. Shared by the chat thread and the
+   turn-history panel — both are dismissible `.ag-log` panels toggled from the
+   top bar, and both tell the player which end is newest since the two run in
+   opposite directions (chat always oldest-to-newest; the turn-history log
+   depends on the game — see MatchHistory's `oldestFirst`). */
 .ag-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
 .ag-panel-head .ag-hand-title { margin-bottom: 0; }
+.ag-panel-subtitle { font: 600 10.5px var(--ag-font); color: var(--ag-ink-softer); margin-top: 2px; }
 .ag-panel-close {
     flex: none;
     border: none;
@@ -3106,6 +3110,18 @@ a.ag-list-row, a.ag-list-row-main {
 /* ---- Reaction picker (recap timeline) ---- */
 /* Trigger/sent state reuse .ag-pill-action; the popup shell and text rows
    reuse .ag-gom-menu / .ag-gom-item. Only the emoji row below is new. */
+/* The trigger's smiley sits a shade lighter than .ag-pill-action's default
+   ink — grey and quiet until a reaction is actually chosen, rather than
+   competing with the line it sits on. Its hover still inverts to on-dark via
+   .ag-pill-action:hover, same as every other pill. Centred like the topbar's
+   own icon buttons — .ag-pill-action never needed that itself, since every
+   other pill only ever held text, which centres fine on its own. */
+.ag-reaction-trigger { display: flex; align-items: center; justify-content: center; color: var(--ag-ink-soft); }
+/* Wraps several players' sent-reaction pills on one match-history line, now
+   that each player can drop their own rather than sharing a single pill.
+   Pairs with .ag-chips for the flex/wrap shell; only the gap and alignment
+   differ from a filter-chip row. */
+.ag-recap-reactions { gap: 4px; justify-content: flex-end; }
 .ag-reaction-menu-emojis {
     display: flex;
     justify-content: space-between;

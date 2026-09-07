@@ -196,8 +196,8 @@ describe('POST /api/game/command', () => {
         const response = await command(jsonPost('/api/game/command', diceRoll()));
 
         expect(response.status).toBe(200);
-        const history: { commandId?: string, reaction?: string | null }[] = (await response.json()).gameData.gameState.history;
-        expect(history.find(entry => entry.commandId === 'earlier-command')?.reaction).toBe('😱');
+        const history: { commandId?: string, reactions?: { reaction: string, actorId: string, actorUsername: string }[] }[] = (await response.json()).gameData.gameState.history;
+        expect(history.find(entry => entry.commandId === 'earlier-command')?.reactions).toEqual([{ reaction: '😱', actorId: 'user_reactor', actorUsername: 'Reactor' }]);
     });
 
     it('rolls its own dice, whatever roll the request brought with it', async () => {

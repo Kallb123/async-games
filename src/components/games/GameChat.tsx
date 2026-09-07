@@ -111,7 +111,10 @@ export default function GameChat({ messages, isLoading, isRefreshing, sending, s
     return (
         <div className="ag-log ag-panel-open-pulse">
             <div className="ag-panel-head">
-                <div className="ag-hand-title">Chat</div>
+                <div>
+                    <div className="ag-hand-title">Chat</div>
+                    <div className="ag-panel-subtitle">Latest at the bottom</div>
+                </div>
                 <button type="button" className="ag-panel-close" onClick={onClose} aria-label="Close chat">✕</button>
             </div>
             {isLoading ? (

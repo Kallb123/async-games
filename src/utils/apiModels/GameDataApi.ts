@@ -1,6 +1,7 @@
 import type { IGameType } from "./gameCommand";
 import type { IHistoryEntry } from "@/utils/games/history";
 import type { IInvitationResponse } from "@/utils/mongodb/InvitationData";
+import type { IReactionSummary } from "@/utils/reactions";
 
 export type uuidString = `${string}-${string}-${string}-${string}-${string}`;
 
@@ -18,17 +19,17 @@ export type uuidString = `${string}-${string}-${string}-${string}-${string}`;
 export type GameEndReason = 'win' | 'ended' | 'abandoned' | 'teamwin' | 'teamloss';
 
 // One line of match history as sent to a client: the game-agnostic entry plus
-// the reaction (if any) dropped on the action it records — attached by
-// withHistoryReactions, the same { gameId, commandId } join the recap route
-// makes by { gameId, eventId } (IRecapEventResponse). A reaction is public
-// information about a public history line, so it's sent to every player, not
-// scoped to a viewer the way a hand or a hidden card would be.
+// the reactions (if any) dropped on the action it records — one per player who
+// reacted — attached by withHistoryReactions, the same { gameId, commandId }
+// join the recap route makes by { gameId, eventId } (IRecapEventResponse). A
+// reaction is public information about a public history line, so it's sent to
+// every player, not scoped to a viewer the way a hand or a hidden card would be.
 export interface IHistoryEntryResponse extends IHistoryEntry {
     // Optional only so publicGameState's pre-attachment output (which doesn't
     // know about reactions at all) still type-checks as this shape — every
     // route that actually sends IGameDataResponse to a client fills it in via
     // attachHistoryReactions/attachHistoryReactionsToEach before responding.
-    reaction?: string | null;
+    reactions?: IReactionSummary[];
 }
 
 

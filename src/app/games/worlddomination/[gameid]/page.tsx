@@ -23,6 +23,7 @@ import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useGameGuide } from "@/utils/hooks/useGameGuide";
+import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { playerColourForId } from "@/utils/ui/playerColours";
@@ -44,6 +45,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
     const gameId = gameid;
 
     const { gameData, setGameData, getGameData } = useGameData<IWorldDominationGameDataResponse>(gameId);
+    const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
 
     const { submitCommand, submitting, pendingTarget } = useSubmitCommand<IWorldDominationGameDataResponse>(gameId, user, setGameData, getGameData);
 
@@ -55,7 +57,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
         history: gameData?.gameState?.history ?? [],
     };
     const nav = useTurnNavigation<IWorldDominationSpecificGameStateResponse>(gameId, live);
-    const recap = useTurnRecap(gameId);
+    const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
     const { endGame } = useEndGame(gameId);
 
     // The "how to play" popup: shown automatically the first time this account
@@ -270,13 +272,14 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
                 recap={recap.recap!}
                 cta="Take your turn →"
                 onDismiss={recap.dismiss}
+                viewerId={user?.id}
                 onReact={recap.react}
             />
         );
     }
 
     return (
-        <GameShell title="World Domination" subtitle={subtitle} options={gs ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true }} chat={{ gameId, userIdList, usernameList }}>
+        <GameShell title="World Domination" subtitle={subtitle} options={gs ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }}>
             <FcmTokenComp />
 
             {gameGuide.open && <GameGuideModal guide={worldDominationGuide} onClose={gameGuide.closeGuide} />}

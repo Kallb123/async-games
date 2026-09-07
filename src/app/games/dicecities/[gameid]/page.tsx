@@ -22,6 +22,7 @@ import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
+import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useGameGuide } from "@/utils/hooks/useGameGuide";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { LANDMARKS, landmarkCount } from "@/games/DiceCities/ui";
@@ -43,6 +44,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
     const gameId = gameid;
 
     const { gameData, setGameData, getGameData } = useGameData<IDiceCitiesGameDataResponse>(gameId);
+    const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
 
     const { submitCommand, submitting, pendingTarget } = useSubmitCommand<IDiceCitiesGameDataResponse>(gameId, user, setGameData, getGameData);
 
@@ -57,7 +59,7 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
 
     // "Since you were last here": on open, if turns elapsed since our last move,
     // show the recap intro before the board. Dismissing (or the CTA) reveals it.
-    const recap = useTurnRecap(gameId);
+    const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
     const { endGame } = useEndGame(gameId);
 
     // The "how to play" popup: shown automatically the first time this account
@@ -187,13 +189,14 @@ export default function GameDiceCities({ params }: { params: Promise<{ gameid: u
                 recap={recap.recap!}
                 cta="Roll the dice →"
                 onDismiss={recap.dismiss}
+                viewerId={user?.id}
                 onReact={recap.react}
             />
         );
     }
 
     return (
-        <GameShell title="Dice Cities" subtitle={subtitle} options={displayed ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList }} chat={{ gameId, userIdList, usernameList }}>
+        <GameShell title="Dice Cities" subtitle={subtitle} options={displayed ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }}>
             <FcmTokenComp />
 
             {gameGuide.open && <GameGuideModal guide={buildDiceCitiesGuide(theme)} onClose={gameGuide.closeGuide} />}

@@ -4,10 +4,11 @@ import Link from 'next/link';
 import BackArrow from '@/components/ui/BackArrow';
 import { formatRelativeTime } from '@/utils/ui/time';
 import { useNowToTheMinute } from '@/utils/hooks/useNow';
-import ReactionPicker from '@/components/ui/ReactionPicker';
+import ReactionRow from '@/components/ui/ReactionRow';
 import RecapTimeline from '@/components/ui/RecapTimeline';
 import { nameList } from '@/utils/ui/players';
 import { pluralize } from '@/utils/ui/text';
+import { IReactionSummary } from '@/utils/reactions';
 
 export interface TurnRecapEvent {
     id: string;
@@ -18,8 +19,8 @@ export interface TurnRecapEvent {
      *  relative "3m ago" on every row would just repeat itself. */
     timestamp?: string;
     dotColour: string;
-    /** The reaction already sent for this action (there's only ever the viewer's), or null. */
-    reaction?: string | null;
+    /** Every player's reaction on this action, if any — reactions are public. */
+    reactions?: IReactionSummary[];
 }
 
 interface TurnRecapProps {
@@ -37,7 +38,11 @@ interface TurnRecapProps {
     cta: { label: string; onClick: () => void };
     /** Where the header's back control goes. Defaults to the home dashboard. */
     backHref?: string;
-    /** Called when the player reacts to one action in the timeline. Omit to hide reactions entirely. */
+    /** The signed-in viewer's userId — gives their own reaction the
+     *  interactive slot in ReactionRow. Required alongside `onReact` to react
+     *  from here. */
+    viewerId?: string;
+    /** Called when the player reacts to one action in the timeline. Omit to hide the picker trigger — every reaction already sent still shows. */
     onReact?: (eventId: string, reaction: string) => void;
 }
 
@@ -49,7 +54,7 @@ const ACCENT_CLASSES = new Set(['terracotta', 'green', 'gold', 'purple']);
 // welcome-back headline, a player-coloured timeline of what happened while you
 // were away, an optional strategic tip, and a call-to-action into the board.
 // One component, every game — driven entirely by props.
-export default function TurnRecap({ header, since = "Since your last turn", summary, events, chat, tip, cta, backHref = '/', onReact }: TurnRecapProps) {
+export default function TurnRecap({ header, since = "Since your last turn", summary, events, chat, tip, cta, backHref = '/', viewerId, onReact }: TurnRecapProps) {
     const now = useNowToTheMinute();
     const accentClass = ACCENT_CLASSES.has(header.accent) ? `ag-accent-${header.accent}` : undefined;
     const accentStyle = accentClass ? undefined : { background: header.accent };
@@ -87,12 +92,13 @@ export default function TurnRecap({ header, since = "Since your last turn", summ
                         dotColour: event.dotColour,
                         title: `${event.title}${event.glyph ? ` ${event.glyph}` : ''}`,
                         detail: [event.detail, event.timestamp ? formatRelativeTime(event.timestamp, now) : null].filter(Boolean).join(' · '),
-                        trailing: onReact ? (
-                            <ReactionPicker
-                                reacted={event.reaction}
-                                onReact={(reaction) => onReact(event.id, reaction)}
+                        trailing: (
+                            <ReactionRow
+                                reactions={event.reactions}
+                                viewerId={viewerId}
+                                onReact={onReact ? (reaction) => onReact(event.id, reaction) : undefined}
                             />
-                        ) : undefined,
+                        ),
                     }))}
                 />
 

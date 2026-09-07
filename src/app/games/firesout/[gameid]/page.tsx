@@ -21,6 +21,7 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useGameGuide } from "@/utils/hooks/useGameGuide";
+import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
@@ -58,6 +59,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     const gameId = gameid;
 
     const { gameData, setGameData, getGameData } = useGameData<IFiresOutGameDataResponse>(gameId);
+    const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
     const { submitCommand, submitting, pendingTarget } = useSubmitCommand<IFiresOutGameDataResponse>(gameId, user, setGameData, getGameData);
     const { endGame } = useEndGame(gameId);
 
@@ -79,7 +81,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     // "Since you were last here": the fire advanced once per crewmate since
     // you last looked (§7, §17.6 step 11) — shown before the board whenever
     // it's our turn and something happened while we were away.
-    const recap = useTurnRecap(gameId);
+    const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
 
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
@@ -296,6 +298,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
                 recap={recap.recap!}
                 cta="See the fire →"
                 onDismiss={recap.dismiss}
+                viewerId={user?.id}
                 onReact={recap.react}
             />
         );
@@ -307,7 +310,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
             subtitle={subtitle}
             options={gameData ? menuOptions : undefined}
             syncing={submitting}
-            log={{ entries: nav.displayedHistory, userIdList }}
+            log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }}
             chat={{ gameId, userIdList, usernameList }}
             className="ag-game--firesout"
         >

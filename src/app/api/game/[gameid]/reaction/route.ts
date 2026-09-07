@@ -6,7 +6,7 @@ import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { ReactionModel, IReactionDataDocument } from '@/utils/mongodb/ReactionData';
 import { userIdListToUserIdNameMap, usersById } from '@/utils/users/clerk';
-import { buildEventFeed } from '@/utils/games/recap';
+import { buildAllEvents, buildEventFeed } from '@/utils/games/recap';
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildReactionNotification } from '@/utils/firebase/notificationContent';
 import { isValidReaction } from '@/utils/reactions';
@@ -17,11 +17,20 @@ export interface IGetReactionParams {
     gameid: string;
 }
 
-// Drops a reaction on one action from the signed-in player's "since you were
-// last here" recap. The target is re-derived server-side from the same
-// recap feed the client was shown (rather than trusted from the request) so
-// the reaction can only land on an action the viewer was actually shown, and
-// so the recipient (the action's original actor) can't be spoofed.
+// Drops a reaction on one action, from either the signed-in player's "since
+// you were last here" recap (`eventId`) or the always-visible match-history
+// log (`commandId`) — a line in one is a line in the other, so both target
+// the same underlying event and land in the same store. Either way the
+// target is re-derived server-side (rather than trusted from the request):
+// `eventId` is checked against the recap feed the client was actually shown,
+// while `commandId` is looked up in the game's full, unwindowed event list
+// (match history has no "since last here" window — any past line, on a
+// finished game included, is fair game). Both paths mean the recipient (the
+// action's original actor) can't be spoofed.
+//
+// Each player gets their own reaction per action — one reacting first doesn't
+// use up the others' turn to react — so "already reacted" is scoped to the
+// signed-in player, not the action as a whole.
 export async function POST(request: NextRequest, { params }: { params: Promise<IGetReactionParams> }) {
     console.log(`POST ${request.nextUrl.pathname}`);
 
@@ -34,9 +43,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
         return NextResponse.json({}, { status: 400, statusText: "Not signed in" });
     }
 
-    const { eventId, reaction } = await readJsonBody(request);
-    if (!eventId || typeof eventId !== 'string') {
-        return NextResponse.json({}, { status: 400, statusText: "Missing eventId" });
+    const { eventId, commandId, reaction } = await readJsonBody(request);
+    if ((!eventId || typeof eventId !== 'string') && (!commandId || typeof commandId !== 'string')) {
+        return NextResponse.json({}, { status: 400, statusText: "Missing eventId or commandId" });
     }
     if (!reaction || typeof reaction !== 'string' || !isValidReaction(reaction)) {
         return NextResponse.json({}, { status: 400, statusText: "Invalid reaction" });
@@ -56,13 +65,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
 
     const userIdNameMap = await userIdListToUserIdNameMap(gameData.userIdList);
 
-    const feed = await buildEventFeed(gameData, userIdNameMap, userId);
-    const event = feed.events.find((e) => e.id === eventId);
+    const event = eventId && typeof eventId === 'string'
+        ? (await buildEventFeed(gameData, userIdNameMap, userId)).events.find((e) => e.id === eventId)
+        : (await buildAllEvents(gameData, userIdNameMap)).find((e) => e.commandId === commandId);
     if (!event) {
         return NextResponse.json({}, { status: 404, statusText: "Action not found" });
     }
 
-    const existing = await ReactionModel.findOne({ gameId: gameid, eventId });
+    const existing = await ReactionModel.findOne({ gameId: gameid, eventId: event.id, actorId: userId });
     if (existing) {
         return NextResponse.json({}, { status: 409, statusText: "Already reacted to this action" });
     }
@@ -70,7 +80,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
     const reactionDoc: IReactionDataDocument = new ReactionModel({
         reactionId: randomUUID(),
         gameId: gameid,
-        eventId,
+        eventId: event.id,
         commandId: event.commandId,
         actorId: userId,
         // The name is frozen onto the reaction here — it is pushed to the
@@ -94,26 +104,33 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
     try {
         await reactionDoc.save();
     } catch (err) {
-        // Two taps landed together and both got past the lookup above; the
-        // unique { gameId, eventId } index caught the second. One reaction per
-        // action either way, so this is the same answer the lookup gives.
+        // Two taps from the same player landed together and both got past the
+        // lookup above; the unique { gameId, eventId, actorId } index caught
+        // the second. One reaction per player per action either way, so this
+        // is the same answer the lookup gives.
         if (!isDuplicateKeyError(err)) {
             throw err;
         }
         return NextResponse.json({}, { status: 409, statusText: "Already reacted to this action" });
     }
 
-    const userList = await usersById([event.actorId]);
-    const recipient = userList.find(u => u.id === event.actorId);
-    if (recipient) {
-        await sendPushToUsers([recipient], {
-            event: 'PlayerReaction',
-            gameId: gameid,
-            eventId,
-            link: gameNotificationLink(gameData.gameType.url, gameid)
-        }, buildReactionNotification(reactionDoc.actorUsername, reaction, event.title), {
-            channel: 'playerReaction'
-        });
+    // Match history makes a player's own past moves reachable to react to
+    // (recap never did — it only ever showed events since the viewer's last
+    // turn, which excludes their own), so this can now be a self-reaction.
+    // Nobody needs a push telling them they reacted to themselves.
+    if (event.actorId !== userId) {
+        const userList = await usersById([event.actorId]);
+        const recipient = userList.find(u => u.id === event.actorId);
+        if (recipient) {
+            await sendPushToUsers([recipient], {
+                event: 'PlayerReaction',
+                gameId: gameid,
+                eventId: event.id,
+                link: gameNotificationLink(gameData.gameType.url, gameid)
+            }, buildReactionNotification(reactionDoc.actorUsername, reaction, event.title), {
+                channel: 'playerReaction'
+            });
+        }
     }
 
     return NextResponse.json({ success: true, reaction });

@@ -52,7 +52,7 @@ type StoredChatReadMarker = { gameId: string, userId: string, readAt: string };
 let signedInUserId: string | null = null;
 let clerkUsers: User[] = [];
 /** A stored reaction, as the Reaction collection would hold it. */
-type StoredReaction = { gameId: string, commandId?: string, eventId?: string, reaction: string };
+type StoredReaction = { gameId: string, commandId?: string, eventId?: string, reaction: string, actorId?: string, actorUsername?: string };
 
 const games = new Map<string, StoredGame>();
 const chatMessages: StoredChatMessage[] = [];
@@ -626,7 +626,7 @@ function findOneAndUpdateChatReadFromStore(
 
 /** Puts a reaction in the store, as if it had been sent earlier. */
 export function seedReaction(reaction: StoredReaction) {
-    reactions.push(reaction);
+    reactions.push({ actorId: 'user_reactor', actorUsername: 'Reactor', ...reaction });
 }
 
 // The one read reactionMapBy makes, however it's called: find({ gameId,

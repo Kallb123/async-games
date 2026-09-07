@@ -25,6 +25,7 @@ import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useGameGuide } from "@/utils/hooks/useGameGuide";
+import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useSubmitCommand, type SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
@@ -63,6 +64,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     const gameId = gameid;
 
     const { gameData, setGameData, getGameData } = useGameData<ISACGameDataResponse>(gameId);
+    const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
 
     const { submitCommand: sendCommand, submitting, pendingTarget } = useSubmitCommand<ISACGameDataResponse>(gameId, user, setGameData, getGameData);
     const submitCommand: SubmitCommand = (command, callback, target) =>
@@ -86,7 +88,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
 
     // "Since you were last here": on open, if opponents moved since our last turn,
     // show the recap intro before the board. Dismissing (or the CTA) reveals it.
-    const recap = useTurnRecap(gameId);
+    const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
     const { endGame } = useEndGame(gameId);
 
     // The "how to play" popup: shown automatically the first time this account
@@ -319,13 +321,14 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                 recap={recap.recap!}
                 cta="Take your turn →"
                 onDismiss={recap.dismiss}
+                viewerId={user?.id}
                 onReact={recap.react}
             />
         );
     }
 
     return (
-        <GameShell title="Settlements & Cities" subtitle={subtitle} options={gs ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true }} chat={{ gameId, userIdList, usernameList }}>
+        <GameShell title="Settlements & Cities" subtitle={subtitle} options={gs ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }}>
             <FcmTokenComp />
 
             {gameGuide.open && <GameGuideModal guide={settlementsAndCitiesGuide} onClose={gameGuide.closeGuide} />}

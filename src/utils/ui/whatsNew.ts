@@ -63,7 +63,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "Reactions now show up in the turn history log",
-                detail: "A reaction used to only ever reach the one player it was sent to, as a push notification. It now sits right on that move in the turn history log too, so anyone flipping back through what happened can see what landed and on which line.",
+                detail: "A reaction used to only ever reach the one player it was sent to, as a push notification. It now sits right on that move in the turn history log too, so anyone flipping back through what happened can see what landed and on which line — and a move used to take one reaction total, whichever opponent got there first, but now every player has their own to give, so a big roll can pick up an 😱 from one opponent and a Nice! from another, all shown together wherever that move appears, recap screen included. You can drop yours straight from the turn history log too, not just from the recap screen — its 💬 trigger is now a plain grey smiley, and the chat and turn history panels both say which end is newest.",
             },
             {
                 title: "Play Dice Cities in the wasteland",
