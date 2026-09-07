@@ -421,6 +421,14 @@ export const MAX_SOLO_CREW = MAX_PLAYERS;
 /** What the setup screen offers first: enough of a crew to cover the building without six figures' worth of bookkeeping on a first solo game. */
 export const DEFAULT_SOLO_CREW = 4;
 
+// The two rematch query params a finished solo game carries back to its setup
+// screen, so "play that again" returns to the solo form with the same crew
+// rather than to an empty crew form nobody can submit. Named here rather than
+// spelled out at both ends — Snakes & Ladders' SL_REROLL_PARAM precedent —
+// because a typo in either would silently drop the pre-fill.
+export const FO_SOLO_PARAM = 'solo';
+export const FO_CREW_PARAM = 'crew';
+
 /**
  * §17.6 step 12: how many figures a board holds, given how many seats
  * accepted and what was claimed for it.

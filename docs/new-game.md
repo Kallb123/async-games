@@ -333,9 +333,12 @@ so the sweep banks a missed turn against `MAX_CONSECUTIVE_MISSED_TURNS`
 instead of playing the turn for a board only its owner can move. Fires Out's
 solitaire mode is the one game that does — see
 [`docs/games/fires-out-gdd.md`](./games/fires-out-gdd.md) §17.6 step 12 for
-the argument and for the wrinkle it accepts (a solo turn never hands over, so
-`lastTurnTimestamp` never moves and an active player still sees one
-turn-expiring nudge per timer).
+the argument. It also has the gotcha that comes with the choice: the command
+route restarts the turn timer on `turnOver`, which a game whose turn belongs
+to something smaller than a player never reports, so such a game's clock
+never moves and the sweep finds it expired forever. Return
+`timerRestarts: true` from the command that ends one of those smaller turns
+(`ICommandOutcome`) and the timer measures something true again.
 
 **Isomorphic rules modules save you from duplicating validation logic.**
 If the client needs to compute "what are my legal moves right now" (a

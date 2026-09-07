@@ -5,7 +5,7 @@ import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { FiresOutAction, IFiresOutEndTurnOutcome } from "@/utils/apiModels/GameLogic";
 import type { IFiresOutGameDataResponse, IFiresOutSpecificGameStateResponse } from "@/games/FiresOut/apiModels";
-import FiresOutBoard, { figureIdentity } from "@/games/FiresOut/components/FiresOutBoard";
+import FiresOutBoard from "@/games/FiresOut/components/FiresOutBoard";
 import FiresOutActions, { FiresOutBoardMode } from "@/games/FiresOut/components/FiresOutActions";
 import FiresOutAdvanceFireResult, { AdvanceFireDisplay, buildAdvanceFireDisplay } from "@/games/FiresOut/components/FiresOutAdvanceFireResult";
 import GameShell from "@/components/ui/GameShell";
@@ -27,8 +27,9 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { guide as firesOutGuide } from "@/games/FiresOut/guide";
+import { figureIdentity, isSoloCrew } from "@/games/FiresOut/figures";
 import { rematchFlag } from "@/utils/ui/rematch";
-import { VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN } from "@/games/FiresOut/board";
+import { FO_CREW_PARAM, FO_SOLO_PARAM, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN } from "@/games/FiresOut/board";
 import {
     canCrewChange,
     canDisposeHazmatOnSite,
@@ -45,7 +46,7 @@ import {
     totalDamage,
     VehicleId,
 } from "@/games/FiresOut/rules";
-import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
+import { abandonedGameStatus, isPlayersTurn, nameForUserId, reorderAllByIds, scoreboardSeatOrder } from "@/utils/ui/players";
 
 // fires-out-gdd.md §17.6 step 5 (board), step 11 (turn recap). The crew
 // planner is still a later step (13) — useTurnNavigation is wired with
@@ -91,11 +92,12 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     const myUserId = user?.id ?? '';
     const isMyTurn = isPlayersTurn(nav.isLive, user, displayedCurrentTurn) && !complete;
     const activeFf = gs?.firefighters[gs.activeFirefighter];
-    // §1's solitaire mode (§17.6 step 12): one seat holding the whole crew.
-    // Told from the roster rather than from a flag on the state — a board
-    // with one player is a solo board by construction — and used only for
-    // presentation, since every rule already works per figure.
-    const solo = userIdList.length === 1;
+    // §1's solitaire mode (§17.6 step 12): one player holding the whole crew.
+    // Presentation only — every rule already works per figure.
+    const solo = isSoloCrew(gs?.firefighters ?? []);
+    // What one figure is called and coloured, wherever this screen shows one:
+    // a pawn, a scoreboard pill, a knockdown line, the "directing…" label.
+    const identityFor = (index: number) => figureIdentity(index, gs?.firefighters ?? [], userIdList, myUserId);
 
     // What the board is targeting right now, if anything — reset whenever the
     // active figure changes so a stale pick from the previous turn (or the
@@ -237,12 +239,10 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
                 // knocked-down pawns are all the same player, so naming them
                 // by owner read "You, You". The roster is fixed for the life
                 // of a game (buildInitialFiresOutState builds it once and
-                // nothing reorders it), so reading it off the board we were
-                // looking at when the turn ended names the same figures the
-                // fire caught.
-                const roster = gs?.firefighters ?? [];
+                // nothing reorders it), so the board we were looking at when
+                // the turn ended names the same figures the fire caught.
                 setAdvanceFireResult(buildAdvanceFireDisplay(command.id, advance,
-                    index => figureIdentity(index, roster[index], userIdList, myUserId).name));
+                    index => identityFor(index).name));
             }
         }, 'endTurn');
     }
@@ -251,22 +251,18 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
         victim: '🧍 carrying', hazmat: '☣️ carrying', escort: '🚶 escorting',
     };
     // §17.6 step 5: the crew roster is one pill per *figure*, so a solitaire
-    // crew gets one each rather than one for the lot. Ordered by seat with the
-    // viewer's own first (scoreboardSeatOrder) and, within a seat, in board
-    // order — a sort rather than players.ts's reorderByIds, which keys by id
-    // and would collapse a whole solo crew into a single pill. Array#sort is
-    // stable, so figures behind one seat keep the order firefighters holds
-    // them in, which is the order their turns come round in.
-    const seatOrder = scoreboardSeatOrder(gameData, myUserId);
-    const seatIndexOf = (ownerId: string) => {
-        const seat = seatOrder.indexOf(ownerId);
-        return seat < 0 ? seatOrder.length : seat;
-    };
-    const scoreEntries: ScoreEntry[] = (gs?.firefighters ?? [])
-        .map((ff, index) => ({ ff, index }))
-        .sort((a, b) => seatIndexOf(a.ff.ownerId) - seatIndexOf(b.ff.ownerId))
+    // crew gets one each rather than one for the lot — which is why this goes
+    // through reorderAllByIds rather than reorderByIds, whose one-item-per-id
+    // Map would collapse the whole crew into a single pill. Seats are still
+    // ordered with the viewer's own first (scoreboardSeatOrder), and figures
+    // behind one seat keep the order their turns come round in.
+    const scoreEntries: ScoreEntry[] = reorderAllByIds(
+        (gs?.firefighters ?? []).map((ff, index) => ({ ff, index })),
+        scoreboardSeatOrder(gameData, myUserId),
+        entry => entry.ff.ownerId,
+    )
         .map(({ ff, index }) => {
-            const { name, colour } = figureIdentity(index, ff, userIdList, myUserId);
+            const { name, colour } = identityFor(index);
             return {
                 id: `ff-${index}`,
                 name,
@@ -396,9 +392,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
                                 endTurnPending={pendingTarget === 'endTurn'}
                                 experienced={experienced}
                                 specialist={activeFf?.specialist ?? 'generalist'}
-                                directingName={directing !== null && gs?.firefighters[directing]
-                                    ? figureIdentity(directing, gs.firefighters[directing], userIdList, myUserId).name
-                                    : null}
+                                directingName={directing !== null ? identityFor(directing).name : null}
                                 showTreat={showTreat}
                                 onTreat={handleTreat}
                                 treatPending={pendingTarget === 'treat'}
@@ -427,7 +421,9 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
                             // plain rematch link landed on the crew form with
                             // nobody named and its button dead. Carry the
                             // mode and the crew size instead (§17.6 step 12).
-                            extraParams={solo ? { ...rematchFlag('solo', true), crew: String(gs.firefighters.length) } : undefined}
+                            extraParams={solo
+                                ? { ...rematchFlag(FO_SOLO_PARAM, true), [FO_CREW_PARAM]: String(gs.firefighters.length) }
+                                : undefined}
                         />
                     )}
 

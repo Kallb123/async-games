@@ -23,7 +23,10 @@ export interface GameMeta {
     players: string;
     // Numeric bounds a lobby's seats must satisfy to start, backing
     // PartySizeHint on setup screens. `players` above stays the free-form
-    // display copy ("2–6 players"); these are the machine-checkable version.
+    // display copy, and for a game with a mode that skips the invite flow
+    // the two deliberately differ (Fires Out reads "1–6 players" and invites
+    // 2-6), so anything phrasing a party-size rule uses `partySizeRange`
+    // below rather than `players`.
     minPlayers: number;
     maxPlayers: number;
     tagline: string;
@@ -39,6 +42,7 @@ export interface GameMeta {
     available: boolean;
 }
 
+import { pluralize } from "@/utils/ui/text";
 import { meta as diceCitiesMeta } from "@/games/DiceCities/meta";
 import { meta as smartthinkMeta } from "@/games/Smartthink/meta";
 import { meta as settlementsAndCitiesMeta } from "@/games/SettlementsAndCities/meta";
@@ -77,9 +81,28 @@ export type PartySizeMeta = Pick<GameMeta, "name" | "players" | "minPlayers" | "
  * when called ("Attempted to call partySizeErrorMessage() from the server"),
  * not the function.
  */
+/**
+ * The party sizes a game's *invite flow* accepts, phrased for a player.
+ *
+ * Composed from `minPlayers`/`maxPlayers` rather than read off `players`,
+ * because the two stopped meaning the same thing the moment a game gained a
+ * mode that doesn't go through the invite flow at all: Fires Out says "1–6
+ * players" (true — you can play it alone) while its crew game is 2-6, so
+ * quoting `players` in a rejection told a host that a party of one was
+ * supported while the button refusing them said otherwise. `players` is the
+ * free-form library copy; this is what the checks below speak.
+ *
+ * For every other game the two are the same string, so nothing else changes.
+ */
+export function partySizeRange(meta: PartySizeMeta): string {
+    return meta.minPlayers === meta.maxPlayers
+        ? pluralize(meta.minPlayers, "player")
+        : `${meta.minPlayers}–${meta.maxPlayers} players`;
+}
+
 export function partySizeErrorMessage(meta: PartySizeMeta, total: number): string | null {
     return total < meta.minPlayers || total > meta.maxPlayers
-        ? `${meta.name} supports ${meta.players}`
+        ? `${meta.name} supports ${partySizeRange(meta)}`
         : null;
 }
 

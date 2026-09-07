@@ -6,8 +6,7 @@ import UserInviteList from "@/components/UserInviteList";
 import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
 import PartySizeHint from "@/components/ui/PartySizeHint";
-import OptionToggleRow from "@/components/ui/OptionToggleRow";
-import OptionSection from "@/components/ui/OptionSection";
+import OptionChoiceSection from "@/components/ui/OptionChoiceSection";
 import SeatCountSelect from "@/components/ui/SeatCountSelect";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
@@ -57,22 +56,15 @@ function NewGameOutbreakForm() {
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
       <PartySizeHint meta={gameMeta} total={partySize} />
 
-      {/* No mutually-exclusive picker exists in components/ui/ yet — every
-          other OptionToggleRow use is an independent flag. Three rows whose
-          onToggle re-asserts "I'm the chosen one" is a stopgap; worth an
-          OptionRadioRow primitive if a second setup screen needs this shape. */}
-      <OptionSection label="Difficulty" footer={<p className="ag-hint">Sets the number of epidemic cards shuffled into the deck.</p>}>
-        {DIFFICULTIES.map(d => (
-          <OptionToggleRow
-            key={d.id}
-            title={d.label}
-            description={d.description}
-            on={difficulty === d.id}
-            onToggle={() => setDifficulty(d.id)}
-            ariaLabel={`Set difficulty to ${d.label}`}
-          />
-        ))}
-      </OptionSection>
+      {/* The pick-one primitive this screen's own comment used to ask for.
+          DIFFICULTIES is already {id, label, description}. */}
+      <OptionChoiceSection
+        label="Difficulty"
+        footer={<p className="ag-hint">Sets the number of epidemic cards shuffled into the deck.</p>}
+        value={difficulty}
+        onChange={setDifficulty}
+        choices={DIFFICULTIES}
+      />
 
       <FcmTokenComp />
     </GameSetupLayout>

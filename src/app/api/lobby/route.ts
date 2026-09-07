@@ -77,10 +77,26 @@ export async function POST(request: NextRequest) {
     // Via usersByUsername, so an open-seat-only lobby (nobody named) looks up
     // nobody rather than having Clerk hand back its entire user list and fail
     // the resolved-every-name check below.
-    const invitedUsers = await usersByUsername(usernames);
-    if (invitedUsers.length !== usernames.length) {
+    const resolvedUsers = await usersByUsername(usernames);
+    if (resolvedUsers.length !== usernames.length) {
         return NextResponse.json({}, { status: 404, statusText: "User not found" });
     }
+
+    // The host is `senderId`, never one of the seats, and
+    // `startGameFromInvitation` builds the roster as `userIdList.concat(
+    // senderId)` — so a body naming the host themselves (or the same friend
+    // twice) put one id in `turnOrder` twice, which the five
+    // `turnOrder.findIndex(to => to === currentTurn)` sites in the repo all
+    // resolve to the first occurrence of. Dropped rather than rejected, so
+    // the party-size check below counts the real players; the same dedupe
+    // `readGameSetupRequest` applies to the invite-only routes. The friends
+    // list can't offer you yourself, so this only ever fires on a crafted
+    // body — but a Fires Out lobby is the one where it also deals a
+    // two-figure board that never went through the solitaire mode's own
+    // bounds (docs/games/fires-out-gdd.md §17.2 gap 3).
+    const invitedUsers = [...new Map(
+        resolvedUsers.filter(user => user.id !== userId).map(user => [user.id, user]),
+    ).values()];
 
     // The host isn't a userIdList entry (they're senderId), so the party is
     // the named invitees, plus the open seats, plus the host themselves.

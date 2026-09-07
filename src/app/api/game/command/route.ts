@@ -187,7 +187,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(response, {status: 200});
   }
 
-  if (commandOutcome.turnOver) {
+  // A hand-off to somebody else, or a deadline boundary inside one player's
+  // own turn (`timerRestarts` — Fires Out's solitaire crew, where each
+  // figure's turn is its own deadline and `turnOver` never comes). Both
+  // restart the clock; only the first has anybody new to tell, which is why
+  // the push below stays on `turnOver` alone.
+  if (commandOutcome.turnOver || commandOutcome.timerRestarts) {
     gameData.lastTurnTimestamp = new Date().toISOString();
     gameData.timerWarningNotificationSent = false;
   }

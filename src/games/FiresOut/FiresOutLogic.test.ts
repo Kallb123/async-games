@@ -884,6 +884,53 @@ describe("a solo crew", () => {
         expect(game.currentTurn).toBe("u1");
     });
 
+    it("refills each figure's AP as its turn comes round, lap after lap", async () => {
+        // The refill used to live in CheckEndTurn, which returns early unless
+        // turnOver — and on a solo board turnOver is never true, so every
+        // figure was handed AP_PER_TURN once at setup and opened every later
+        // turn on banked AP alone. Two full laps, spending as we go, is what
+        // catches that: it is only from the second lap on that the difference
+        // between "refilled per figure" and "refilled once" shows up.
+        const state = baseState(["u1", "u1", "u1"]);
+        const game = makeGame(state, ["u1"]);
+
+        for (let lap = 0; lap < 2; lap++) {
+            for (let figure = 0; figure < 3; figure++) {
+                expect(state.activeFirefighter, `lap ${lap}, figure ${figure}`).toBe(figure);
+                // A fresh figure's turn opens on the full allowance, with
+                // nothing banked from its own previous turn (it spent the lot).
+                expect(state.firefighters[figure].apLeft, `lap ${lap}, figure ${figure}`).toBe(AP_PER_TURN);
+                // Spend it all, so nothing is banked into the next lap and a
+                // figure that never refilled would show up as 0 AP above.
+                await cmd("u1", { kind: 'move', target: spaceIndex(3, 3) }).Execute(game);
+                await cmd("u1", { kind: 'move', target: spaceIndex(3, 2) }).Execute(game);
+                await cmd("u1", { kind: 'move', target: spaceIndex(3, 3) }).Execute(game);
+                await cmd("u1", { kind: 'move', target: spaceIndex(3, 2) }).Execute(game);
+                expect(state.firefighters[figure].apLeft).toBe(0);
+                await cmd("u1", { kind: 'endTurn' }).Execute(game);
+            }
+        }
+    });
+
+    it("banks a figure's unspent AP into its own next turn rather than the next figure's", async () => {
+        const state = baseState(["u1", "u1"]);
+        const game = makeGame(state, ["u1"]);
+
+        // Figure 0 spends 1 of its 4 and passes; the 3 left bank to itself.
+        await cmd("u1", { kind: 'move', target: spaceIndex(3, 3) }).Execute(game);
+        await cmd("u1", { kind: 'endTurn' }).Execute(game);
+        expect(state.firefighters[0].bankedAp).toBe(3);
+        // Figure 1 opens on its own flat allowance, untouched by that.
+        expect(state.firefighters[1].apLeft).toBe(AP_PER_TURN);
+
+        await cmd("u1", { kind: 'endTurn' }).Execute(game);
+        // Back to figure 0, which now gets the allowance plus what it banked
+        // (§8's MAX_BANKED_AP cap applies to the bank, not to this total).
+        expect(state.activeFirefighter).toBe(0);
+        expect(state.firefighters[0].apLeft).toBe(AP_PER_TURN + 3);
+        expect(state.firefighters[0].bankedAp).toBe(0);
+    });
+
     it("advances the fire once per figure's turn, the same as a crew of three would", async () => {
         const state = baseState(["u1", "u1", "u1"]);
         const game = makeGame(state, ["u1"]);

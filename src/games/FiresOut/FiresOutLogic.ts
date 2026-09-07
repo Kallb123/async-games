@@ -75,18 +75,22 @@ export class FiresOutGameType implements IGameType {
     // §17.2 gap 3: the engine's turn belongs to a *player* (currentTurn), but
     // this game's belongs to a *figure* (activeFirefighter). FiresOutAction's
     // 'endTurn' kind has already advanced activeFirefighter and decided
-    // turnOver itself (true only when the next figure has a different owner
-    // — always true today, since every firefighter has a distinct owner
-    // until a later step allows multiple pawns per player); this just syncs
-    // currentTurn to match, and refills the AP the new figure's turn opens
-    // with — their specialist's full allowance (§11, §17.6 step 10) or the
-    // flat rate in the Family game, plus whatever they banked last time (§8).
+    // turnOver itself (true only when the next figure has a different owner);
+    // this just syncs currentTurn to match.
+    //
+    // The new figure's AP is deliberately *not* refilled here. A turn ending
+    // and a *figure's* turn ending are different events on a board where one
+    // player holds several (§1's solitaire play, §17.6 step 12) — turnOver is
+    // false for every one of those hand-offs, and this method returns on the
+    // line below before doing anything — so the refill belongs where the
+    // figure actually changes, which is applyEndTurn. It lived here while
+    // every seat held exactly one figure and the two events coincided; on a
+    // solo board it meant a figure was handed 4 AP once at setup and opened
+    // every turn after its first on banked AP alone.
     CheckEndTurn(gameData: IGameData, commandOutcome: ICommandOutcome): void {
         if (!commandOutcome.turnOver) return;
         const gs = (gameData as IFiresOutGameData).specificGameState;
-        const next = gs.firefighters[gs.activeFirefighter];
-        gameData.currentTurn = next.ownerId;
-        refillFirefighterAp(next, gs.ruleset);
+        gameData.currentTurn = gs.firefighters[gs.activeFirefighter].ownerId;
     }
 
     CheckGameOver(gameData: IGameData): boolean {
@@ -529,7 +533,14 @@ function applyEndTurn(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff:
     ff.bankedAp = Math.min(MAX_BANKED_AP, ff.bankedAp + ff.apLeft);
     ff.apLeft = 0;
     gs.activeFirefighter = (gs.activeFirefighter + 1) % gs.firefighters.length;
-    const nextOwner = gs.firefighters[gs.activeFirefighter].ownerId;
+    const next = gs.firefighters[gs.activeFirefighter];
+    const nextOwner = next.ownerId;
+    // The AP the figure now up opens its turn with: its specialist's full
+    // allowance (§11, §17.6 step 10) or the Family game's flat rate, plus
+    // whatever it banked last time round (§8). Here rather than in
+    // CheckEndTurn because this is where a *figure's* turn changes hands, and
+    // on a solo board that is the only place it ever does — see CheckEndTurn.
+    refillFirefighterAp(next, gs.ruleset);
 
     fo.gameState.history.unshift(playerHistory(action.senderId, `ended their turn${ff.bankedAp > 0 ? ` with ${ff.bankedAp} AP banked` : ''}`));
 
@@ -555,7 +566,15 @@ function applyEndTurn(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff:
             const delivered = deliverCarried(gs, knocked);
             const carriedNote = delivered === 'victim' ? ', delivering the victim they were carrying!'
                 : delivered === 'hazmat' ? ', disposing of the hazmat they were carrying' : '';
-            fo.gameState.history.unshift(playerHistory(knocked.ownerId, `was knocked down and carried outside${carriedNote}`));
+            // §1's solitaire crew shares one owner id, so naming only the
+            // owner gave a fire that caught three of their figures three
+            // identical log lines. The figure's number is the only thing that
+            // tells them apart (§17.2 gap 3) — added only when its owner holds
+            // more than one, so a crew game's log is unchanged.
+            const figureNote = gs.firefighters.filter(f => f.ownerId === knocked.ownerId).length > 1
+                ? ` (firefighter ${index + 1})`
+                : '';
+            fo.gameState.history.unshift(playerHistory(knocked.ownerId, `was knocked down and carried outside${figureNote}${carriedNote}`));
         }
         knockedDownIndices.push(...step.consequences.knockedDownIndices);
         victimsLost += step.consequences.victimsLost;
@@ -588,6 +607,11 @@ function applyEndTurn(fo: IFiresOutGameData, gs: IFiresOutSpecificGameState, ff:
     return {
         validMove: true,
         turnOver: nextOwner !== previousOwner,
+        // Every endTurn ends a *figure's* turn, which is what this game's turn
+        // timer measures (§17.2 gap 3) — so the clock restarts even when the
+        // turn hasn't left the player, which on a solitaire board is always.
+        // Redundant alongside `turnOver` in a crew game and harmless there.
+        timerRestarts: true,
         advanceFire: {
             rolls: advance.rolls,
             target: advance.target,

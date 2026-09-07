@@ -7,9 +7,8 @@ import TurnTimerSelect from "@/components/ui/TurnTimerSelect";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
 import PartySizeHint from "@/components/ui/PartySizeHint";
 import SeatCountSelect from "@/components/ui/SeatCountSelect";
-import Section from "@/components/ui/Section";
-import OptionSection from "@/components/ui/OptionSection";
-import OptionToggleRow from "@/components/ui/OptionToggleRow";
+import CountSelect from "@/components/ui/CountSelect";
+import OptionChoiceSection from "@/components/ui/OptionChoiceSection";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
 import { useCreateLobbyOrInvite } from "@/utils/hooks/useCreateLobbyOrInvite";
@@ -18,7 +17,7 @@ import { GAME_META } from "@/utils/ui/games";
 import { pluralize } from "@/utils/ui/text";
 import { readRematchFlag, readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { IFiresOutInvitationRequest } from "@/games/FiresOut/FiresOutModels";
-import { crewSizeFor, DEFAULT_SOLO_CREW, DIFFICULTY_TIERS, DifficultyId, MAX_PLAYERS, MAX_SOLO_CREW, MIN_PLAYERS, MIN_SOLO_CREW, RulesetId } from "@/games/FiresOut/board";
+import { crewSizeFor, DEFAULT_SOLO_CREW, DIFFICULTY_TIERS, DifficultyId, FO_CREW_PARAM, FO_SOLO_PARAM, MAX_PLAYERS, MAX_SOLO_CREW, MIN_PLAYERS, MIN_SOLO_CREW, RulesetId } from "@/games/FiresOut/board";
 
 const INVITE_PATH = '/api/newgame/firesout';
 
@@ -42,17 +41,11 @@ function NewGameFiresOutForm() {
   // solo game returns to the solo form with the same crew rather than to an
   // empty crew form nobody can submit. The crew size goes through the same
   // clamp CreateGame uses, since it arrives off the query string.
-  const [solo, setSolo] = useState(() => readRematchFlag(searchParams, 'solo'));
-  const [crewSize, setCrewSize] = useState(() => crewSizeFor(1, searchParams.get('crew') ?? DEFAULT_SOLO_CREW));
+  const [solo, setSolo] = useState(() => readRematchFlag(searchParams, FO_SOLO_PARAM));
+  const [crewSize, setCrewSize] = useState(() => crewSizeFor(1, searchParams.get(FO_CREW_PARAM) ?? DEFAULT_SOLO_CREW));
   const gameMeta = GAME_META.firesout;
-  // GAME_META now says "1–6 players", because solo is one of the two modes —
-  // but the invite flow this hint and this hook police is the crew one, whose
-  // floor is MIN_PLAYERS. Passing the game's own meta here would tell a host
-  // with nobody invited that a party of one is supported while the button
-  // stayed dead.
-  const crewMeta = { ...gameMeta, minPlayers: MIN_PLAYERS, players: `${MIN_PLAYERS}–${MAX_PLAYERS} players` };
   const { seatCount, setSeatCount, maxSeats, partySize, canSubmit, actionLabel, footnote, submit } = useCreateLobbyOrInvite({
-    meta: crewMeta,
+    meta: gameMeta,
     gameType: 'FiresOut',
     invitePath: INVITE_PATH,
     invitedCount: players.length,
@@ -95,45 +88,38 @@ function NewGameFiresOutForm() {
       actionDisabled={solo ? starting : !canSubmit}
       footnote={solo ? 'You take every firefighter in the crew, one turn at a time' : footnote}
     >
-      {/* A mutually-exclusive picker via re-asserting OptionToggleRow — the
-          same stopgap the Ruleset picker below uses until an OptionRadioRow
-          primitive exists. */}
-      <OptionSection label="Mode">
-        <OptionToggleRow
-          title="Crew"
-          description={`Play with ${MIN_PLAYERS}–${MAX_PLAYERS} people, one firefighter each.`}
-          on={!solo}
-          onToggle={() => setSolo(false)}
-          disabled={starting}
-          ariaLabel="Play with a crew of other people"
-        />
-        <OptionToggleRow
-          title="Solo"
-          description="Play on your own, running the whole crew yourself."
-          on={solo}
-          onToggle={() => setSolo(true)}
-          disabled={starting}
-          ariaLabel="Play solo, running the whole crew"
-        />
-      </OptionSection>
+      <OptionChoiceSection
+        label="Mode"
+        value={solo ? 'solo' : 'crew'}
+        onChange={(mode) => setSolo(mode === 'solo')}
+        disabled={starting}
+        choices={[
+          {
+            id: 'crew',
+            label: 'Crew',
+            description: `Play with ${MIN_PLAYERS}–${MAX_PLAYERS} people, one firefighter each.`,
+            ariaLabel: 'Play with a crew of other people',
+          },
+          {
+            id: 'solo',
+            label: 'Solo',
+            description: 'Play on your own, running the whole crew yourself.',
+            ariaLabel: 'Play solo, running the whole crew',
+          },
+        ]}
+      />
 
       {solo ? (
-        <Section label="Crew size">
-          <select
-            className="ag-select"
-            value={crewSize}
-            onChange={(e) => setCrewSize(Number(e.target.value))}
-            disabled={starting}
-          >
-            {Array.from({ length: MAX_SOLO_CREW - MIN_SOLO_CREW + 1 }, (_, i) => MIN_SOLO_CREW + i).map(size => (
-              <option key={size} value={size}>{pluralize(size, 'firefighter')}</option>
-            ))}
-          </select>
-          <p className="ag-hint">
-            Every firefighter gets their own turn and their own 4 AP — and the fire advances after each
-            one, so a bigger crew is more to spend and more to survive.
-          </p>
-        </Section>
+        <CountSelect
+          label="Crew size"
+          value={crewSize}
+          onChange={setCrewSize}
+          min={MIN_SOLO_CREW}
+          max={MAX_SOLO_CREW}
+          optionLabel={(size) => pluralize(size, 'firefighter')}
+          hint="Every firefighter gets their own turn and their own 4 AP — and the fire advances after each one, so a bigger crew is more to spend and more to survive."
+          disabled={starting}
+        />
       ) : (
         <>
           <UserInviteList userList={userList} setItem={setItem} />
@@ -142,41 +128,23 @@ function NewGameFiresOutForm() {
       )}
 
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
-      {!solo && <PartySizeHint meta={crewMeta} total={partySize} />}
+      {!solo && <PartySizeHint meta={gameMeta} total={partySize} />}
 
-      {/* §17.6 step 8 — a mutually-exclusive picker via re-asserting
-          OptionToggleRow, the same stopgap Outbreak's difficulty picker uses
-          until an OptionRadioRow primitive exists. */}
-      <OptionSection label="Ruleset" footer={<p className="ag-hint">Experienced adds a rolled, already-compromised building, hazmats and hot spots.</p>}>
-        <OptionToggleRow
-          title="Family"
-          description="The printed starting fire and setup — quicker to learn."
-          on={ruleset === 'family'}
-          onToggle={() => setRuleset('family')}
-          ariaLabel="Play the Family game"
-        />
-        <OptionToggleRow
-          title="Experienced"
-          description="A rolled, randomised setup — harder, and different every game."
-          on={ruleset === 'experienced'}
-          onToggle={() => setRuleset('experienced')}
-          ariaLabel="Play the Experienced game"
-        />
-      </OptionSection>
+      {/* §17.6 step 8 */}
+      <OptionChoiceSection
+        label="Ruleset"
+        footer={<p className="ag-hint">Experienced adds a rolled, already-compromised building, hazmats and hot spots.</p>}
+        value={ruleset}
+        onChange={setRuleset}
+        choices={[
+          { id: 'family', label: 'Family', description: 'The printed starting fire and setup — quicker to learn.', ariaLabel: 'Play the Family game' },
+          { id: 'experienced', label: 'Experienced', description: 'A rolled, randomised setup — harder, and different every game.', ariaLabel: 'Play the Experienced game' },
+        ]}
+      />
 
       {ruleset === 'experienced' && (
-        <OptionSection label="Difficulty">
-          {DIFFICULTY_TIERS.map(d => (
-            <OptionToggleRow
-              key={d.id}
-              title={d.label}
-              description={d.description}
-              on={difficulty === d.id}
-              onToggle={() => setDifficulty(d.id)}
-              ariaLabel={`Set difficulty to ${d.label}`}
-            />
-          ))}
-        </OptionSection>
+        // DIFFICULTY_TIERS is already {id, label, description}.
+        <OptionChoiceSection label="Difficulty" value={difficulty} onChange={setDifficulty} choices={DIFFICULTY_TIERS} />
       )}
 
       <FcmTokenComp />

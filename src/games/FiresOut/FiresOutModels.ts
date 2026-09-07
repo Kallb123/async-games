@@ -80,7 +80,7 @@ function setupPlacementLine(
 var FiresOutInvitationSchema = new Schema<IFiresOutInvitationDataDocument>({
     ruleset: String,
     difficulty: String,
-    crewSize: { type: Number, default: undefined },
+    crewSize: Number,
 }, { discriminatorKey: 'kind' });
 FiresOutInvitationSchema.methods.CreateGame = async function(
     invite: IFiresOutInvitationData,

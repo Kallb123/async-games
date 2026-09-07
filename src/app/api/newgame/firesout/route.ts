@@ -18,25 +18,36 @@ export async function POST(request: NextRequest) {
   }
   const { userId, host, invitees, turnTimer, body } = setup;
 
-  // fires-out-gdd.md §1 offers two modes and this route serves both, told
-  // apart by whether anybody was invited. The crew game (§17.3) is 2-6
-  // players, one figure each, through the ordinary invite flow; §1's
-  // solitaire play (§17.6 step 12) is one player holding a whole crew, which
-  // is an invitation with nobody in its `userIdList` at all — Solitaire's
-  // shape exactly (docs/new-game.md's solo gotcha: /api/invite/accept's "has
-  // everyone accepted?" is vacuously true for an empty list, so the setup
-  // page accepts its own invitation and the game starts on the first call).
-  const solo = invitees.length === 0;
+  // fires-out-gdd.md §1 offers two modes and this route serves both. The crew
+  // game (§17.3) is 2-6 players, one figure each, through the ordinary invite
+  // flow; §1's solitaire play (§17.6 step 12) is one player holding a whole
+  // crew, which is an invitation with nobody in its `userIdList` at all —
+  // Solitaire's shape exactly (docs/new-game.md's solo gotcha:
+  // /api/invite/accept's "has everyone accepted?" is vacuously true for an
+  // empty list, so the setup page accepts its own invitation and the game
+  // starts on the first call).
+  //
+  // Told apart by whether the request named a crew size, which only the solo
+  // form does — not by an empty invitee list, so a crew request that names
+  // nobody playable is refused as the party of one it is rather than being
+  // quietly reclassified as a solo game and then failing the crew-size check
+  // with a message about firefighters.
+  const { crewSize } = body;
+  const solo = crewSize !== undefined;
 
   if (solo) {
+    if (invitees.length > 0) {
+      return NextResponse.json({}, { status: 400, statusText: "A solo game has nobody to invite" });
+    }
     // The one setting the solo mode takes, checked rather than trusted — it
-    // came off the request body and decides how many figures CreateGame deals
-    // (which clamps it again, since a lobby invitation can carry one too).
-    const { crewSize } = body;
-    if (!Number.isInteger(crewSize) || crewSize! < MIN_SOLO_CREW || crewSize! > MAX_SOLO_CREW) {
+    // decides how many figures CreateGame deals (which clamps it again, since
+    // a lobby invitation can carry one too).
+    if (!Number.isInteger(crewSize) || crewSize < MIN_SOLO_CREW || crewSize > MAX_SOLO_CREW) {
       return NextResponse.json({}, { status: 400, statusText: `A solo crew is ${MIN_SOLO_CREW}-${MAX_SOLO_CREW} firefighters` });
     }
   } else {
+    // invitees excludes the host and holds no duplicates
+    // (readGameSetupRequest), so this is the real number of players.
     const playerCount = invitees.length + 1;
     if (playerCount < MIN_PLAYERS || playerCount > MAX_PLAYERS) {
       return NextResponse.json({}, { status: 400, statusText: `Fires Out! supports ${MIN_PLAYERS}-${MAX_PLAYERS} players in a crew` });
@@ -63,7 +74,7 @@ export async function POST(request: NextRequest) {
     // size: CreateGame only consults it for a one-seat game, and a stored
     // duplicate of something it can already count is a second source of truth
     // for how many figures the board holds.
-    crewSize: solo ? body.crewSize : undefined,
+    crewSize: solo ? crewSize : undefined,
     timestamp: (new Date()).toISOString(),
     gameType: 'FiresOut',
     gameFriendlyName: 'Fires Out!'

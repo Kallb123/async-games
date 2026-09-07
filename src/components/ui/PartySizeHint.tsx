@@ -1,6 +1,6 @@
 'use client'
 import React from 'react';
-import { partySizeErrorMessage, PartySizeMeta } from '@/utils/ui/games';
+import { partySizeErrorMessage, partySizeRange, PartySizeMeta } from '@/utils/ui/games';
 
 interface PartySizeHintProps {
     meta: PartySizeMeta;
@@ -19,7 +19,7 @@ export default function PartySizeHint({ meta, total }: PartySizeHintProps) {
         <p className="ag-hint" style={error ? { color: "var(--ag-terracotta)", fontWeight: 700 } : undefined}>
             {error
                 ? `⚠ Party size ${total} · ${error}.`
-                : `Party size ${total} · supports ${meta.players}.`}
+                : `Party size ${total} · supports ${partySizeRange(meta)}.`}
         </p>
     );
 }

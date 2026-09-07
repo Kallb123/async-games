@@ -9,10 +9,13 @@ export const meta: GameMeta = {
     // crew is the same cooperative game with nobody to talk to.
     categories: ["Strategy", "Co-op", "Solo"],
     players: "1–6 players",
-    // The crew game's bounds, which is what every consumer of these two is
-    // about: the invite flow's party-size check and the hint above it. Solo
-    // has its own bounds (MIN_SOLO_CREW/MAX_SOLO_CREW) and its own branch of
-    // the setup screen, and never goes through either.
+    // The crew game's bounds. `players` above is the library's display copy
+    // and covers both modes; these two are the machine-checkable version of
+    // the *invite flow*, which only the crew game goes through — so every
+    // check and every rejection phrases itself with `partySizeRange`
+    // (utils/ui/games.ts) rather than quoting `players`. Solo has its own
+    // bounds, MIN_SOLO_CREW/MAX_SOLO_CREW, and its own branch of the setup
+    // screen.
     minPlayers: MIN_PLAYERS,
     maxPlayers: MAX_PLAYERS,
     tagline: "A crew of firefighters races to pull everyone out before the building comes down.",

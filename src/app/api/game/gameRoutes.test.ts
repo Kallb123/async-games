@@ -26,9 +26,10 @@ vi.mock('@/utils/games/DiceRoll', () => ({ DiceRoll: () => 3 }));
 
 import { runAfterCallbacks } from '@/utils/testing/afterStub';
 import {
-    ANN, BOB, jsonPost, rawPost, resetApiRouteStubs, seedReaction, seedSnakesAndLadders, sentPushes, signIn,
+    ANN, BOB, jsonPost, rawPost, resetApiRouteStubs, seedGame, seedReaction, seedSnakesAndLadders, sentPushes, signIn,
     signInUnresolvable, SQUARES, storedGame, stubClerkUsers
 } from '@/utils/testing/apiRoute';
+import { baseState } from '@/games/FiresOut/testFixtures';
 import { POST as command } from './command/route';
 import { POST as end } from './end/route';
 import { POST as takeTurn } from './taketurn/route';
@@ -175,6 +176,62 @@ describe('POST /api/game/command', () => {
         expect(positions(saved)[ANN.id].position).toBe(13);
         expect(commandHistory(saved)).toHaveLength(1);
         expect(saved.currentTurn).toBe(BOB.id);
+    });
+
+    it("restarts the turn timer when a figure's turn ends inside one player's own turn", async () => {
+        // docs/games/fires-out-gdd.md §17.6 step 12: a Fires Out solitaire
+        // board is one player holding every figure, so `turnOver` is false for
+        // every hand-off between them. The clock used to move only on
+        // `turnOver`, which left a game being played every day permanently
+        // expired: the sweep reached it twice a timer period forever, banked
+        // missed turns against a player who was right there, and pushed them a
+        // "take your turn now or it passes to the next player" warning that
+        // was false in both halves. `timerRestarts` is the boundary that isn't
+        // a hand-off.
+        signIn(ANN);
+        const stale = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        seedGame({
+            gameId: 'game_1',
+            gameType: {
+                gameId: 'gametype_1', gameType: 'FiresOut', friendlyName: 'Fires Out!',
+                icon: '', url: 'firesout', className: 'FiresOutGameType'
+            },
+            kind: 'FiresOutGameData',
+            userIdList: [ANN.id],
+            turnTimer: '10m',
+            currentTurn: ANN.id,
+            lastTurnTimestamp: stale,
+            timerWarningNotificationSent: true,
+            gameState: { turnOrder: [ANN.id], history: [], commandHistory: [] },
+            complete: false,
+            winner: '',
+            specificGameState: baseState([ANN.id, ANN.id]),
+        });
+
+        const response = await command(jsonPost('/api/game/command', {
+            id: '00000000-0000-0000-0000-00000000000f',
+            timestamp: '2026-01-01T00:00:00.000Z',
+            gameId: 'game_1',
+            senderId: ANN.id,
+            senderUsername: 'ann',
+            className: 'FiresOutAction',
+            kind: 'endTurn',
+        }));
+
+        expect(response.status).toBe(200);
+        const outcome = (await response.json()).outcome;
+        // The turn did *not* pass — there is nobody to pass it to.
+        expect(outcome).toMatchObject({ validMove: true, turnOver: false, timerRestarts: true });
+
+        const saved = storedGame('game_1')!;
+        expect(saved.currentTurn).toBe(ANN.id);
+        expect(saved.lastTurnTimestamp).not.toBe(stale);
+        expect(saved.timerWarningNotificationSent).toBe(false);
+
+        // ...and nobody is told it's their move, least of all the player who
+        // just moved.
+        await runAfterCallbacks();
+        expect(sentPushes).toEqual([]);
     });
 
     it('shows a reaction already dropped on an earlier move, not just at game end', async () => {

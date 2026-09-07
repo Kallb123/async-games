@@ -48,8 +48,8 @@ export type GameSetupRequest<T> =
         body: Partial<T>,
         userId: string,
         host: User,
-        /** The invitees, resolved and confirmed to all exist. Never includes
-         *  the host, who is the invitation's `senderId`. */
+        /** The invitees, resolved and confirmed to all exist, deduplicated, and
+         *  never including the host — who is the invitation's `senderId`. */
         invitees: User[],
         /** Validated against the turn-timer ladder, so it is safe to store. */
         turnTimer: string,
@@ -86,10 +86,29 @@ export async function readGameSetupRequest<T extends IInvitationRequest>(
 
     // Via usersByUsername, so a game invited nobody looks up nobody rather
     // than having Clerk hand back its entire user list.
-    const invitees = await usersByUsername(usernames);
-    if (invitees.length !== usernames.length) {
+    const resolved = await usersByUsername(usernames);
+    if (resolved.length !== usernames.length) {
         return { error: NextResponse.json({}, { status: 404, statusText: "User not found" }) };
     }
+
+    // The host is the invitation's `senderId`, never one of its seats, and
+    // `startGameFromInvitation` builds the roster as `userIdList.concat(
+    // senderId)` — so a host who typed their own username into the invite
+    // list put themselves in that roster twice, and every game's `turnOrder`
+    // then held one id twice. Five places in the repo advance a turn with
+    // `turnOrder.findIndex(to => to === currentTurn)` and every one of them
+    // finds the first occurrence, so such a game could deal the same player
+    // two seats and skip past the other; Fires Out would also deal them two
+    // figures without ever going through its solitaire mode's own bounds
+    // (docs/games/fires-out-gdd.md §17.2 gap 3 is explicit that a duplicate
+    // here must never exist). Dropped rather than rejected: the party-size
+    // rule each route applies below then sees the real number of players, so
+    // "invite only yourself" fails as the party of one it is.
+    //
+    // The same dedupe covers the same username typed twice, which produced
+    // the identical duplicate.
+    const byId = new Map(resolved.filter(user => user.id !== host.userId).map(user => [user.id, user]));
+    const invitees = [...byId.values()];
 
     // A turn timer the app can't count is a game that expires on the timer
     // cron's first pass — see isValidTurnTimer.
