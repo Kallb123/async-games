@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import type { IRecapResponse } from "@/app/api/game/[gameid]/recap/route";
 import { fetchWithSessionRetry } from "./fetchWithSessionRetry";
-import type { IReactionSummary } from "@/utils/reactions";
+import { patchHistoryReaction } from "./useHistoryReactions";
+import { addReaction } from "@/utils/reactions";
+import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
 
 // A stable signature of a recap's contents, so we can tell whether a refetch
 // surfaced something new. Two recaps with the same events are "the same" and a
@@ -20,11 +23,18 @@ function recapSignature(recap: IRecapResponse | null): string {
 // when opponents may have moved, so we refetch and — if the recap now covers new
 // turns the player hasn't seen — surface it again.
 //
-// `viewerId` is the signed-in player's userId, needed only for `react()`'s
-// optimistic update (see below) — an options object rather than a second
-// positional parameter because `enabled` sits beside it and two unrelated
-// optional values in a row invites a caller to get the order wrong.
-export function useTurnRecap(gameId: string, { viewerId, enabled = true }: { viewerId?: string; enabled?: boolean } = {}) {
+// `viewerId` is the signed-in player's userId, needed for `react()`'s
+// optimistic update (see below); `setGameData`/`getGameData` are the same
+// pair a page already holds from `useGameData`, needed so that update also
+// reaches the live game's history — see `react()`. An options object rather
+// than positional parameters because `enabled` sits beside them and this many
+// unrelated optional values in a row invites a caller to get the order wrong.
+export function useTurnRecap<T extends IGameDataResponse>(gameId: string, { viewerId, setGameData, getGameData, enabled = true }: {
+    viewerId?: string;
+    setGameData?: Dispatch<SetStateAction<T | null>>;
+    getGameData?: () => void | Promise<void>;
+    enabled?: boolean;
+} = {}) {
     const [recap, setRecap] = useState<IRecapResponse | null>(null);
     // The game whose recap we've finished fetching. Comparing it against the
     // current gameId gives us `loading` without storing it, which keeps the
@@ -97,23 +107,36 @@ export function useTurnRecap(gameId: string, { viewerId, enabled = true }: { vie
     // it's been dismissed this visit.
     const reshow = useCallback(() => setDismissed(false), []);
 
-    // Sends a reaction for one recap event. Applied optimistically (the picker
-    // in TurnRecap immediately swaps to the sent-reaction pill, alongside
-    // whichever other players' reactions are already on that event); on
-    // failure — most likely a race where this player already reacted from
-    // another tab — we just refetch to pick up the server's actual state.
+    // Sends a reaction for one recap event. Applied optimistically to this
+    // screen's own events (the picker in TurnRecap immediately swaps to the
+    // sent-reaction pill, alongside whichever other players' reactions are
+    // already on that event) — and, by the same `commandId` every event
+    // carries, to the *live* game's history too, via patchHistoryReaction.
+    // Recap and the turn-history log read from two different pieces of state
+    // (this hook's own `recap`, and the page's `gameData`), so a reaction sent
+    // from here would otherwise show on the recap screen but stay missing
+    // from the log until something unrelated refetched `gameData` — the same
+    // gap useHistoryReactions closes for reactions sent from the log itself.
+    // On failure — most likely a race where this player already reacted from
+    // another tab — both are reconciled with the server's actual state.
     const react = useCallback((eventId: string, reaction: string) => {
         if (!viewerId) return;
+        const commandId = recap?.events?.find((event) => event.id === eventId)?.commandId;
+
         setRecap((prev) => {
             if (!prev?.events) return prev;
             return {
                 ...prev,
-                events: prev.events.map((event): typeof event => event.id === eventId
-                    ? { ...event, reactions: [...(event.reactions ?? []), { reaction, actorId: viewerId, actorUsername: "" } satisfies IReactionSummary] }
+                events: prev.events.map((event) => event.id === eventId
+                    ? { ...event, reactions: addReaction(event.reactions, viewerId, reaction) }
                     : event
                 ),
             };
         });
+        if (commandId && setGameData) {
+            patchHistoryReaction(setGameData, commandId, viewerId, reaction);
+        }
+
         fetch(`/api/game/${gameId}/reaction`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -121,9 +144,13 @@ export function useTurnRecap(gameId: string, { viewerId, enabled = true }: { vie
         })
             .then((res) => {
                 if (!res.ok) fetchRecap();
+                getGameData?.();
             })
-            .catch(() => fetchRecap());
-    }, [gameId, viewerId, fetchRecap]);
+            .catch(() => {
+                fetchRecap();
+                getGameData?.();
+            });
+    }, [gameId, viewerId, recap, setGameData, getGameData, fetchRecap]);
 
     // A recap is only showable once the whole payload the screen renders is
     // there, so every game can hand it straight to TurnRecapScreen rather than

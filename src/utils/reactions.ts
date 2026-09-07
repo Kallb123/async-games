@@ -31,3 +31,17 @@ export interface IReactionSummary {
 export function viewerReaction(reactions: IReactionSummary[] | undefined, viewerId: string): string | null {
     return reactions?.find((r) => r.actorId === viewerId)?.reaction ?? null;
 }
+
+/**
+ * Appends one reaction to a line's existing list — the optimistic-update half
+ * of sending one, shared by every place that applies it to local state before
+ * the server confirms it (the recap screen's own events, the live game's
+ * history, both from the same tap — see useTurnRecap and useHistoryReactions).
+ * `actorUsername` is left blank: the only pill this can ever affect before a
+ * real refetch is the actor's own, which renders from `reacted` alone and
+ * never reads the name (see ReactionRow / ReactionPicker's "You reacted…"
+ * default).
+ */
+export function addReaction(reactions: IReactionSummary[] | undefined, actorId: string, reaction: string): IReactionSummary[] {
+    return [...(reactions ?? []), { reaction, actorId, actorUsername: "" }];
+}

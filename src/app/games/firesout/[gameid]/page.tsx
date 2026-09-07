@@ -81,7 +81,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     // "Since you were last here": the fire advanced once per crewmate since
     // you last looked (§7, §17.6 step 11) — shown before the board whenever
     // it's our turn and something happened while we were away.
-    const recap = useTurnRecap(gameId, { viewerId: user?.id });
+    const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
 
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;

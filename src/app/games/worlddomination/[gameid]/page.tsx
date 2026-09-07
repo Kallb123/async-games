@@ -57,7 +57,7 @@ export default function GameWorldDomination({ params }: { params: Promise<{ game
         history: gameData?.gameState?.history ?? [],
     };
     const nav = useTurnNavigation<IWorldDominationSpecificGameStateResponse>(gameId, live);
-    const recap = useTurnRecap(gameId, { viewerId: user?.id });
+    const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
     const { endGame } = useEndGame(gameId);
 
     // The "how to play" popup: shown automatically the first time this account

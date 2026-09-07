@@ -96,7 +96,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     // getting worse (docs/games/outbreak-gdd.md §3, §21.6 step 12) — shown
     // before the board whenever it's our turn and something happened while
     // we were away.
-    const recap = useTurnRecap(gameId, { viewerId: user?.id });
+    const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
 
     // The "how to play" popup: shown automatically the first time this
     // account opens an Outbreak match, and on demand from the game-options

@@ -61,7 +61,7 @@ export default function GameSnakesAndLadders({ params }: { params: Promise<{ gam
 
     // "Since you were last here": on open, if turns elapsed since our last move,
     // show the recap intro before the board. Dismissing (or the CTA) reveals it.
-    const recap = useTurnRecap(gameId, { viewerId: user?.id });
+    const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
     const { endGame } = useEndGame(gameId);
 
     // Planning submit: instead of persisting a move, add it as a hypothetical

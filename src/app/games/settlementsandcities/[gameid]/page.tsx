@@ -88,7 +88,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
 
     // "Since you were last here": on open, if opponents moved since our last turn,
     // show the recap intro before the board. Dismissing (or the CTA) reveals it.
-    const recap = useTurnRecap(gameId, { viewerId: user?.id });
+    const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
     const { endGame } = useEndGame(gameId);
 
     // The "how to play" popup: shown automatically the first time this account

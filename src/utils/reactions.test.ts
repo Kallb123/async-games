@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { viewerReaction } from "./reactions";
+import { addReaction, viewerReaction } from "./reactions";
 
 describe("viewerReaction", () => {
     it("picks the viewer's own reaction out of everyone's", () => {
@@ -24,5 +24,23 @@ describe("viewerReaction", () => {
     it("returns null when nobody reacted or the event carries no reactions at all", () => {
         expect(viewerReaction([], "user_a")).toBeNull();
         expect(viewerReaction(undefined, "user_a")).toBeNull();
+    });
+});
+
+describe("addReaction", () => {
+    it("appends to an existing list without disturbing the others", () => {
+        const existing = [{ reaction: "😱", actorId: "user_a", actorUsername: "Alice" }];
+
+        expect(addReaction(existing, "user_b", "Nice!")).toEqual([
+            { reaction: "😱", actorId: "user_a", actorUsername: "Alice" },
+            { reaction: "Nice!", actorId: "user_b", actorUsername: "" },
+        ]);
+        // The original array is untouched — callers hand this straight to a
+        // setState updater, which must never mutate the previous state.
+        expect(existing).toHaveLength(1);
+    });
+
+    it("starts a fresh list when the line had no reactions yet", () => {
+        expect(addReaction(undefined, "user_a", "🤔")).toEqual([{ reaction: "🤔", actorId: "user_a", actorUsername: "" }]);
     });
 });
