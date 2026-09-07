@@ -12,10 +12,10 @@ describe("viewerReaction", () => {
         expect(viewerReaction(reactions, "user_b")).toBe("Nice!");
     });
 
-    it("never returns another player's reaction — this is a recap screen's only redaction", () => {
+    it("never returns another player's reaction as the viewer's own", () => {
         // The regression this guards: swapping the lookup for `[0]`, or any
-        // change that stops filtering by actorId, would leak an opponent's
-        // reaction onto the viewer's own recap row.
+        // change that stops filtering by actorId, would give ReactionRow
+        // someone else's reaction to render as the viewer's interactive slot.
         const reactions = [{ reaction: "🤔", actorId: "user_a", actorUsername: "Alice" }];
 
         expect(viewerReaction(reactions, "user_c")).toBeNull();

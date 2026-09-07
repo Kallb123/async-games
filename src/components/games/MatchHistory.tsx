@@ -1,5 +1,5 @@
 import RecapTimeline from "@/components/ui/RecapTimeline";
-import ReactionPicker from "@/components/ui/ReactionPicker";
+import ReactionRow from "@/components/ui/ReactionRow";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { IHistoryEntryResponse } from "@/utils/apiModels/GameDataApi";
 
@@ -39,13 +39,12 @@ interface MatchHistoryComponentProps extends MatchHistoryProps {
 // and "DaveT", settled by seat order), and lost the colour entirely once a
 // player renamed and the frozen line no longer matched anybody.
 //
-// Every other player's reaction on a line (if any) renders as a read-only
-// pill — ReactionPicker with no onReact. The viewer's own slot is the same
-// pill once they've reacted, or — when `onReact` is wired up — the picker
-// trigger so they can add one right here instead of only from the recap
-// screen. Without `onReact` (reviewing a past or hypothetical turn, which
-// isn't a real stored line to react to) the viewer's own reaction, if any,
-// just joins the read-only row like anyone else's.
+// A line's reactions (every player's — reactions are public) render via
+// ReactionRow, which also gives the viewer's own slot the picker trigger
+// when `onReact` is wired up, so they can add one right here instead of only
+// from the recap screen. Without `onReact` (reviewing a past or hypothetical
+// turn, which isn't a real stored line to react to) it falls back to a
+// fully read-only row.
 export default function MatchHistory({ entries, userIdList = [], oldestFirst = false, viewerId, onReact, onClose }: MatchHistoryComponentProps) {
     const lines = oldestFirst ? entries.slice().reverse() : entries;
 
@@ -60,34 +59,18 @@ export default function MatchHistory({ entries, userIdList = [], oldestFirst = f
             ) : (
                 <RecapTimeline
                     compact
-                    events={lines.map((entry, i) => {
-                        const canReact = !!(onReact && viewerId && entry.commandId);
-                        const mine = canReact ? entry.reactions?.find((r) => r.actorId === viewerId) : undefined;
-                        const others = mine ? (entry.reactions ?? []).filter((r) => r !== mine) : (entry.reactions ?? []);
-
-                        return {
-                            id: String(i),
-                            dotColour: playerColourForId(entry.actorId, userIdList),
-                            title: entry.text,
-                            trailing: (others.length || canReact) ? (
-                                <div className="ag-chips ag-recap-reactions">
-                                    {others.map((r) => (
-                                        <ReactionPicker
-                                            key={r.actorId}
-                                            reacted={r.reaction}
-                                            reactedLabel={`${r.actorUsername} reacted ${r.reaction}`}
-                                        />
-                                    ))}
-                                    {canReact && (
-                                        <ReactionPicker
-                                            reacted={mine?.reaction ?? null}
-                                            onReact={(reaction) => onReact!(entry.commandId!, reaction)}
-                                        />
-                                    )}
-                                </div>
-                            ) : undefined,
-                        };
-                    })}
+                    events={lines.map((entry, i) => ({
+                        id: String(i),
+                        dotColour: playerColourForId(entry.actorId, userIdList),
+                        title: entry.text,
+                        trailing: (
+                            <ReactionRow
+                                reactions={entry.reactions}
+                                viewerId={viewerId}
+                                onReact={onReact && entry.commandId ? (reaction) => onReact(entry.commandId!, reaction) : undefined}
+                            />
+                        ),
+                    }))}
                 />
             )}
         </div>

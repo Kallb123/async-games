@@ -8,6 +8,9 @@ interface TurnRecapScreenProps {
     /** The button back into the board — the one line each game words itself. */
     cta: string;
     onDismiss: () => void;
+    /** The signed-in viewer's userId — gives their own reaction the
+     *  interactive slot; every reaction, including opponents', still shows. */
+    viewerId?: string;
     onReact: (eventId: string, reaction: string) => void;
 }
 
@@ -16,7 +19,7 @@ interface TurnRecapScreenProps {
 // the call-to-action, so that's the only prop a page passes beyond the recap.
 // The payload is guaranteed by the hook's `show` — a game must not render this
 // on its own guess.
-export default function TurnRecapScreen({ recap, cta, onDismiss, onReact }: TurnRecapScreenProps) {
+export default function TurnRecapScreen({ recap, cta, onDismiss, viewerId, onReact }: TurnRecapScreenProps) {
     return (
         <TurnRecap
             header={recap.header!}
@@ -28,11 +31,12 @@ export default function TurnRecapScreen({ recap, cta, onDismiss, onReact }: Turn
                 detail: event.detail,
                 timestamp: event.timestamp,
                 dotColour: event.dotColour,
-                reaction: event.reaction,
+                reactions: event.reactions,
             }))}
             chat={recap.chat}
             tip={recap.tip}
             cta={{ label: cta, onClick: onDismiss }}
+            viewerId={viewerId}
             onReact={onReact}
         />
     );

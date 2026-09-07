@@ -23,11 +23,10 @@ export interface IReactionSummary {
 }
 
 /**
- * Picks one viewer's own reaction out of everyone's, for a screen like the
- * recap timeline that only ever shows *your* reaction on an event (never an
- * opponent's — see IRecapEventResponse). A small pure function rather than an
- * inline `.find` at the call site so the one line responsible for that
- * per-viewer redaction has a test of its own, not just the route around it.
+ * Picks one viewer's own reaction out of everyone's — what ReactionRow needs
+ * to know whether *their* slot is the picker trigger or their sent pill.
+ * Every other player's reaction is public and rendered as-is; this is only
+ * ever used to find the one that gets the interactive treatment.
  */
 export function viewerReaction(reactions: IReactionSummary[] | undefined, viewerId: string): string | null {
     return reactions?.find((r) => r.actorId === viewerId)?.reaction ?? null;

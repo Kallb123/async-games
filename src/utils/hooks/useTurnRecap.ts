@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { IRecapResponse } from "@/app/api/game/[gameid]/recap/route";
 import { fetchWithSessionRetry } from "./fetchWithSessionRetry";
+import type { IReactionSummary } from "@/utils/reactions";
 
 // A stable signature of a recap's contents, so we can tell whether a refetch
 // surfaced something new. Two recaps with the same events are "the same" and a
@@ -18,7 +19,12 @@ function recapSignature(recap: IRecapResponse | null): string {
 // (a visibility change to visible). Coming back to a backgrounded tab is exactly
 // when opponents may have moved, so we refetch and — if the recap now covers new
 // turns the player hasn't seen — surface it again.
-export function useTurnRecap(gameId: string, enabled: boolean = true) {
+//
+// `viewerId` is the signed-in player's userId, needed only for `react()`'s
+// optimistic update (see below) — an options object rather than a second
+// positional parameter because `enabled` sits beside it and two unrelated
+// optional values in a row invites a caller to get the order wrong.
+export function useTurnRecap(gameId: string, { viewerId, enabled = true }: { viewerId?: string; enabled?: boolean } = {}) {
     const [recap, setRecap] = useState<IRecapResponse | null>(null);
     // The game whose recap we've finished fetching. Comparing it against the
     // current gameId gives us `loading` without storing it, which keeps the
@@ -92,16 +98,19 @@ export function useTurnRecap(gameId: string, enabled: boolean = true) {
     const reshow = useCallback(() => setDismissed(false), []);
 
     // Sends a reaction for one recap event. Applied optimistically (the picker
-    // in TurnRecap immediately swaps to the sent-reaction pill); on failure —
-    // most likely a race where the same action already got a reaction — we
-    // just refetch to pick up the server's actual state.
+    // in TurnRecap immediately swaps to the sent-reaction pill, alongside
+    // whichever other players' reactions are already on that event); on
+    // failure — most likely a race where this player already reacted from
+    // another tab — we just refetch to pick up the server's actual state.
     const react = useCallback((eventId: string, reaction: string) => {
+        if (!viewerId) return;
         setRecap((prev) => {
             if (!prev?.events) return prev;
             return {
                 ...prev,
-                events: prev.events.map((event) =>
-                    event.id === eventId ? { ...event, reaction } : event
+                events: prev.events.map((event): typeof event => event.id === eventId
+                    ? { ...event, reactions: [...(event.reactions ?? []), { reaction, actorId: viewerId, actorUsername: "" } satisfies IReactionSummary] }
+                    : event
                 ),
             };
         });
@@ -114,7 +123,7 @@ export function useTurnRecap(gameId: string, enabled: boolean = true) {
                 if (!res.ok) fetchRecap();
             })
             .catch(() => fetchRecap());
-    }, [gameId, fetchRecap]);
+    }, [gameId, viewerId, fetchRecap]);
 
     // A recap is only showable once the whole payload the screen renders is
     // there, so every game can hand it straight to TurnRecapScreen rather than
