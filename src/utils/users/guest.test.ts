@@ -11,7 +11,7 @@ vi.mock('@clerk/nextjs/server', () => ({
 }));
 
 // Safe as a plain import: vitest hoists the vi.mock above it.
-import { createGuest, deleteGuest, isGuestPlaceholderEmail, unclaimedGuestsOf } from './guest';
+import { createGuest, deleteGuest, guestNamesOf, isGuestPlaceholderEmail } from './guest';
 import { isGuestPlaceholderUsername } from '@/utils/ui/players';
 
 describe('createGuest', () => {
@@ -110,22 +110,19 @@ describe('isGuestPlaceholderEmail', () => {
     });
 });
 
-describe('unclaimedGuestsOf', () => {
-    it('picks out only the players flagged as guests', () => {
+describe('guestNamesOf', () => {
+    it('names only the players flagged as guests', () => {
         const users = [
             { id: 'user_real', username: 'dave', firstName: null, publicMetadata: {} },
             { id: 'user_guest_1', username: 'guest_abc123', firstName: 'Dave', publicMetadata: { guest: true } },
         ] as any;
 
-        const { unclaimedPlayerIds, guestNames } = unclaimedGuestsOf(users);
-
-        expect(unclaimedPlayerIds).toEqual(['user_guest_1']);
-        expect(guestNames).toEqual(new Map([['user_guest_1', 'Dave']]));
+        expect(guestNamesOf(users)).toEqual(new Map([['user_guest_1', 'Dave']]));
     });
 
     it('is empty for a roster with no guests', () => {
         const users = [{ id: 'user_real', username: 'dave', publicMetadata: {} }] as any;
 
-        expect(unclaimedGuestsOf(users)).toEqual({ unclaimedPlayerIds: [], guestNames: new Map() });
+        expect(guestNamesOf(users)).toEqual(new Map());
     });
 });

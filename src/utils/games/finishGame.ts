@@ -2,7 +2,7 @@ import { User } from '@clerk/nextjs/server';
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildGameLostNotification, buildGameWonNotification, buildTeamResultNotification } from '@/utils/firebase/notificationContent';
 import { userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
-import { unclaimedGuestsOf } from '@/utils/users/guest';
+import { guestNamesOf } from '@/utils/users/guest';
 import { IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
 import { recordGameResult } from '@/utils/mongodb/GameResultData';
 import { GameEndReason } from '@/utils/apiModels/GameDataApi';
@@ -87,25 +87,34 @@ export async function finishGame(gameData: IGameDataDocument, ending: GameEnding
  * cost is a stats record or a notification — never the ending itself.
  */
 async function announceGameOver(gameData: IGameDataDocument): Promise<void> {
-    let userList: User[];
+    // The roster names the guests on the record and addresses the pushes below.
+    // Null when Clerk couldn't be reached — and the result is still written in
+    // that case, because there is no second chance at it: the game is already
+    // saved complete, so `requireLiveGame` refuses it, the turn-timer sweep
+    // skips it, and nothing ever re-enters this path. Losing a guest's name off
+    // one finished game is a poor trade for losing the whole record, which is
+    // every player's Finished list, recent form, per-game tally and result page
+    // for that match — the very absence this path exists to prevent.
+    let userList: User[] | null = null;
     try {
         userList = await usersById(gameData.userIdList);
     } catch (error) {
-        // Without the roster there is no way to tell a guest's exhibition match
-        // from a counted one, and nobody to address a push to, so a Clerk
-        // outage costs both halves. The game itself is saved either way.
         console.error(`Couldn't resolve the roster to finish game ${gameData.gameId}`, error);
-        return;
     }
 
     // Its own try: a wobble on the read-model write must not swallow the pushes
     // as well, or the table would be left waiting on a turn that is never
     // coming — which is the thing this whole path exists to prevent.
     try {
-        const { unclaimedPlayerIds, guestNames } = unclaimedGuestsOf(userList);
-        await recordGameResult(gameData, unclaimedPlayerIds, guestNames);
+        await recordGameResult(gameData, guestNamesOf(userList ?? []));
     } catch (error) {
         console.error(`Couldn't record the result of game ${gameData.gameId}`, error);
+    }
+
+    // The pushes are the half a missing roster really does cost: there is
+    // nobody to address them to. The table finds the game over on its next look.
+    if (!userList) {
+        return;
     }
 
     // sendPushToUsers reports a failed send rather than throwing (see its own

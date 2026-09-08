@@ -1,6 +1,6 @@
 import { clerkClient, User } from "@clerk/nextjs/server";
 import { randomUUID } from "crypto";
-import { readableName } from "@/utils/ui/players";
+import { isGuest, readableName } from "@/utils/ui/players";
 
 // A ticket is minted and handed to the client to consume immediately
 // (`signIn.create({ strategy: 'ticket', ticket })`), not stored anywhere —
@@ -131,23 +131,13 @@ export async function deleteGuest(userId: string): Promise<void> {
     await client.users.deleteUser(userId);
 }
 
-export interface UnclaimedGuests {
-    unclaimedPlayerIds: string[];
-    guestNames: Map<string, string>;
-}
-
-// A finished game's still-unclaimed guests, and the display name each should
-// be remembered by (docs/account-less-play.md §13): a guest's Clerk user is
-// swept a week after their last game (step 17), which makes their id
-// unresolvable, so their name has to be copied onto the GameResult record
-// while it's still known. recordGameResult stays Clerk-free on the
-// per-command path, so this is the one derivation every caller runs on the
-// roster it already resolved for its own pushes, rather than each
-// re-deriving "is this player a guest" itself.
-export function unclaimedGuestsOf(users: User[]): UnclaimedGuests {
-    const guests = users.filter(user => user.publicMetadata.guest === true);
-    return {
-        unclaimedPlayerIds: guests.map(user => user.id),
-        guestNames: new Map(guests.map(user => [user.id, readableName(user)])),
-    };
+// The display name each guest at a finished game should be remembered by
+// (docs/account-less-play.md step 13): a guest's Clerk user is swept a week
+// after their last game (step 17), which makes their id unresolvable, so their
+// name has to be copied onto the GameResult record while it's still known.
+// recordGameResult stays Clerk-free on the per-command path, so this is the
+// one derivation its caller runs on the roster it already resolved for its own
+// pushes, rather than re-deriving "is this player a guest" itself.
+export function guestNamesOf(users: User[]): Map<string, string> {
+    return new Map(users.filter(isGuest).map(user => [user.id, readableName(user)]));
 }

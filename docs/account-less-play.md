@@ -513,7 +513,7 @@ the doc alone is internal and does not earn a line.
 | Guest push + notification permission | S | Med | The feature's whole value — but the offer banners and permission hook already exist; this is wiring, not building |
 | Claim-your-account prompt | S | Low | Trivial under A, a migration under B |
 | "Start now" button | S | Low | Deletes unclaimed seats, then the existing start path; plus an atomic seat claim on `Invitation` |
-| `unclaimedPlayerIds` on `GameResult` + claim `$pull` | S | Low | One filter on stats reads, one indexed update on claim |
+| ~~`unclaimedPlayerIds` on `GameResult` + claim `$pull`~~ | S | Low | **Withdrawn** — §8's exhibition match was decided the other way; `guestNames` is all a result copies off a guest now |
 | Guest sweeper cron | S | Low | Model it on `cron/staledevices`; reads the existing `{ playerIds: 1, endedAt: -1 }` index |
 
 **The shape of the order** — codes for signed-in players first (a real feature
@@ -527,18 +527,41 @@ commits.
 
 These were open; they are now settled. What each one still costs is noted.
 
-**A game counts once every player is a registered account.** A game with an
-unclaimed guest in it is an exhibition match — it does not feed anyone's
-head-to-head record or win rate — and it starts counting if and when the guest
-claims their account.
+**~~A game counts once every player is a registered account.~~ A game counts
+for everyone who played it.** This used to read the other way: a game with an
+unclaimed guest in it was an exhibition match, fed nobody's head-to-head record
+or win rate, and started counting only if and when the guest claimed their
+account. The mechanism was an `unclaimedPlayerIds: string[]` stored alongside
+`playerIds` at write time, an is-empty filter on the stats reads, and a `$pull`
+on claim.
 
-The cheap mechanism, given `GameResult` is append-only and written once: store
-an `unclaimedPlayerIds: string[]` alongside `playerIds` at write time. A result
-counts when that array is empty, so stats queries add one filter and never have
-to ask Clerk whether a player is a guest. Claiming an account is then a single
-indexed update — `$pull` the id from every result carrying it — with no
-recomputation and nothing to backfill. Under Option A the ids never change, so
-the record the guest played under is the record they inherit.
+**That has since been decided the other way**, on the evidence of playing it:
+a guest is someone the host handed a join code to (the same reasoning the moderation note
+below came round to for chat), and a match against one is a real
+match. The rule cost the *registered* player a game they had just finished —
+it sat in "Finished" on their dashboard, openable, with its result page and
+its stats, and was silently absent from their own recent form and per-game
+record with nothing on screen to say why. A guest who never claims made that
+permanent, since step 17 then deletes the only account that could have
+un-flagged it.
+
+So there is no exhibition match and no filter: `getPlayerStats` counts every
+result carrying the player's id, and `GameResult` copies only `guestNames` off
+the roster (below). Claiming needs no `$pull` — under Option A the ids never
+change, so the games a guest played already count under the id they are
+claiming.
+
+**What that filter was incidentally holding up**, since it is worth having on
+the record rather than rediscovering: it was the only thing making self-play
+worthless. A host can mint a free opponent by opening their own join link
+signed out — a guest passes `isUnlockedUser`, so it needs none of the unlock a
+second registered account would — lose to themselves on purpose, and have the
+win counted. The stake is the farmer's own vanity numbers and a Clerk MAU:
+nobody else's record moves, the join route's 20-per-10-minutes-per-IP limit
+applies, and every farmed game has to be played out to the end. Accepted at
+that price. If a leaderboard ever makes it worth more, the answer is a rule
+about who you played, not a filter that hides a match from the player who
+played it.
 
 **The abandonment fuse stays exactly as it is.** A guest who goes quiet is
 handled by the same `missedTurnCounts` counter and the same
@@ -795,14 +818,19 @@ predicate and is still bounced to `/unlockaccess`.
 > where the plan forks to Option B (§3) — and steps 1–11 have already shipped a
 > working feature regardless.
 
-**13 — A guest's game doesn't count yet.** `unclaimedPlayerIds: string[]` on
-`GameResultData`, plus each guest's display name, and an is-empty filter added
-to the stats reads. Both values are **passed in by the caller**, not looked up
-inside `recordGameResult` — it takes only `gameData` today and is deliberately
-Clerk-free on the per-command path, and all three callers already hold the
-resolved roster for their own pushes. Lands *before* any guest can play, so
-there is never a window in which a guest game is recorded as counting, and the
-name is on the record before step 17 can delete the user behind it.
+**13 — A guest's name outlives their account.** Each guest's display name on
+`GameResultData` as `guestNames`, **passed in by the caller** rather than
+looked up inside `recordGameResult` — it takes only `gameData` today and is
+deliberately Clerk-free on the per-command path, while its one caller,
+`finishGame` (every ending funnels through it), already holds the resolved
+roster for its own pushes. The derivation itself is `guestNamesOf` in
+`guest.ts`. Lands *before* any guest can play, so the name is on the record
+before step 17 can delete the user behind it.
+
+This step also shipped `unclaimedPlayerIds` and the is-empty filter on the
+stats reads, for the exhibition match §8 has since dropped. Both are gone; a
+result recorded while that field existed simply carries one field nothing
+reads.
 
 **14 — Guests can join.** *(Done.)* `/api/lobby/join` accepts `{ joinCode, name }` from a
 signed-out visitor: validate the name (length and character set — input
@@ -903,8 +931,8 @@ play.
 **16 — Claiming an account.** *(Done.)* After the guest's first turn, offer to
 keep it: adding an email and password to the Clerk user they already are. The
 id never changes, so games, results and turn history carry over with no
-migration — the only writes are dropping `guest` from their metadata and
-`$pull`-ing their id out of every `GameResult.unclaimedPlayerIds`.
+migration — every write is Clerk's, and the results they already played need
+no touching at all (§8: they counted under this id all along).
 
 `createGuest` (`src/utils/users/guest.ts`) gives every guest a throwaway
 `<username>@guests.asyncgames.com` address, because this Clerk instance
@@ -916,8 +944,7 @@ in the same call (moving primary status off the placeholder immediately,
 never a moment with two or with none), then deletes the placeholder
 (`isGuestPlaceholderEmail`, exported from `guest.ts` so the route doesn't
 re-derive the domain), then sets the password. Only once all three succeed
-does it clear `publicMetadata.guest` and `$pull` the guest's id out of every
-`GameResult.unclaimedPlayerIds` — a Clerk rejection (taken email, weak
+does it clear `publicMetadata.guest` — a Clerk rejection (taken email, weak
 password) leaves the guest account untouched rather than partially claimed.
 
 "After the first turn" is `useGuestMoved` (`src/utils/hooks/useGuestMoved.ts`):
@@ -1017,10 +1044,12 @@ placeholder rather than misaligning the list.
   bounds in `GameMeta` so a seat count has one source, and an `acceptSeat`
   extraction so the join route, the start route and the accept route share one
   body. Each is the extract-and-port shape #241 already proved.
-- **The scope is settled** (§8): a game counts only once every player is a
-  real account, the abandonment fuse is unchanged, every lobby has a
-  registered host, unclaimed guests are swept a week after their last game
-  ends, and spectating and moderation are both out.
+- **The scope is settled** (§8): a game counts for everyone who played it,
+  the abandonment fuse is unchanged, every lobby has a registered host,
+  unclaimed guests are swept a week after their last game ends, and spectating
+  is out. Two of those were later decided the other way and §8 says so where
+  it says them: the counting rule (it used to exclude a table with an
+  unclaimed guest at it) and moderation (guests chat like anyone else).
 - **Fix `userIdListToUsernameList` first** regardless — it drops unresolvable
   ids and misaligns the index-based name lookup in `CreateResponse` and in all
   seven games' `gameStateToModel`.

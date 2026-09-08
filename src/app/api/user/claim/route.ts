@@ -1,7 +1,5 @@
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
-import { dbConnect } from '@/utils/mongodb/mongodb';
-import { GameResultModel } from '@/utils/mongodb/GameResultData';
 import { isGuestPlaceholderEmail } from '@/utils/users/guest';
 import { availableUsernameFrom } from '@/utils/users/clerk';
 import { readableName } from '@/utils/ui/players';
@@ -25,11 +23,10 @@ interface IClaimRequest {
 // Claiming a guest account (docs/account-less-play.md step 16): after their
 // first turn, a guest can add the email and password that make the Clerk
 // user they already are keepable. The id never changes, so every game,
-// result and turn history they're in carries over with no migration — the
-// only writes are Clerk's (the real email in, the guest placeholder out, the
+// result and turn history they're in carries over with no migration, and every
+// write here is Clerk's: the real email in, the guest placeholder out, the
 // password, a real username derived from their display name, and dropping
-// publicMetadata.guest) and one indexed $pull on GameResult.unclaimedPlayerIds
-// so their finished games start counting.
+// publicMetadata.guest.
 export async function POST(request: NextRequest) {
     console.log(`POST ${request.nextUrl.pathname}`);
 
@@ -100,15 +97,6 @@ export async function POST(request: NextRequest) {
     // so every existing `publicMetadata.guest === true` check stays correct
     // with no second value to also check for.
     await client.users.updateUserMetadata(userId, { publicMetadata: { guest: null } });
-
-    await dbConnect();
-    // A game counts once every player is a registered account
-    // (docs/account-less-play.md §8) — one indexed update, no recomputation,
-    // nothing to backfill.
-    await GameResultModel.updateMany(
-        { unclaimedPlayerIds: userId },
-        { $pull: { unclaimedPlayerIds: userId } },
-    ).exec();
 
     return NextResponse.json({ success: true });
 }

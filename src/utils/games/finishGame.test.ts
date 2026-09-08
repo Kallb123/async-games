@@ -14,9 +14,16 @@ vi.mock('@clerk/nextjs/server', async () => (await import('@/utils/testing/apiRo
 vi.mock('@/utils/mongodb/mongodb', async () => (await import('@/utils/testing/apiRoute')).mongodbStub());
 vi.mock('@/utils/firebase/pushNotification', async () => (await import('@/utils/testing/apiRoute')).pushNotificationStub());
 vi.mock('@/utils/mongodb/GameResultData', () => ({ recordGameResult }));
+// Real, except that a test can make the one Clerk round trip this path takes
+// fail — the case the result record must survive (see the test below).
+vi.mock('@/utils/users/clerk', async () => {
+    const actual = await vi.importActual<typeof import('@/utils/users/clerk')>('@/utils/users/clerk');
+    return { ...actual, usersById: vi.fn(actual.usersById) };
+});
 
 import { ANN, BOB, resetApiRouteStubs, seedSnakesAndLadders, sentPushes, storedGame, stubClerkUsers } from '@/utils/testing/apiRoute';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
+import { usersById } from '@/utils/users/clerk';
 import { finishGame } from './finishGame';
 
 /** The game as a route would hold it: a fresh document out of the store. */
@@ -47,6 +54,43 @@ describe('finishGame', () => {
         await finished.announce();
         expect(recordGameResult).toHaveBeenCalledTimes(1);
         expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id], [BOB.id]]);
+    });
+
+    it('remembers a guest by name, and takes nothing else off the roster', async () => {
+        const GUEST = { id: 'user_guest', publicMetadata: { guest: true, displayName: 'Dave' } };
+        stubClerkUsers(GUEST);
+        seedSnakesAndLadders(
+            {
+                userIdList: [ANN.id, GUEST.id],
+                gameState: { turnOrder: [ANN.id, GUEST.id], history: [], commandHistory: [] },
+            },
+            { [ANN.id]: 10, [GUEST.id]: 20 },
+        );
+
+        const finished = await finishGame(await liveGame(), { winner: GUEST.id, endReason: 'win' });
+        await finished.announce();
+
+        // Step 17 deletes a guest's Clerk user a week after their last game, so
+        // the name they played under is copied onto the result while it is
+        // still known. The name is all a guest contributes — there is no second
+        // argument saying the table doesn't count (docs/account-less-play.md §8).
+        expect(recordGameResult).toHaveBeenCalledTimes(1);
+        expect(recordGameResult).toHaveBeenCalledWith(expect.anything(), new Map([[GUEST.id, 'Dave']]));
+    });
+
+    it('still records the result when Clerk cannot say who was playing', async () => {
+        vi.mocked(usersById).mockRejectedValueOnce(new Error('Clerk is having a moment'));
+
+        const finished = await finishGame(await liveGame(), { winner: ANN.id, endReason: 'win' });
+        await finished.announce();
+
+        // There is no second chance at this record: the game is already saved
+        // complete, so nothing re-enters announceGameOver. Dropping it would
+        // take the match out of both players' Finished list, recent form,
+        // per-game tally and result page — the absence this path exists to
+        // prevent. The roster only costs the pushes, and the guest names.
+        expect(recordGameResult).toHaveBeenCalledWith(expect.anything(), new Map());
+        expect(sentPushes).toEqual([]);
     });
 
     it('tells a co-op table it won, all of it, with no winner recorded', async () => {

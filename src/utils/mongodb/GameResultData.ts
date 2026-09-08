@@ -111,15 +111,10 @@ export interface IGameResultData {
     // game (Solitaire) that has no turns. Read it back with the matching unit
     // via lengthUnit(playerIds.length) — see utils/games/turnCount.ts.
     totalTurns: number,
-    // A guest still in this game's roster (docs/account-less-play.md §8): a
-    // non-empty list means the game is an exhibition match that doesn't count
-    // toward anyone's stats yet. Emptied by $pull when a guest claims their
-    // account (step 16).
-    unclaimedPlayerIds: string[],
-    // Each unclaimed guest's display name, keyed by id — copied here because
-    // the sweeper (step 17) deletes the Clerk user behind that id, which would
-    // otherwise leave every other player's finished game with an
-    // unresolvable name.
+    // Each guest's display name, keyed by id — copied here because the guest
+    // sweeper (docs/account-less-play.md step 17) deletes the Clerk user
+    // behind that id, which would otherwise leave every other player's
+    // finished game with an unresolvable name.
     guestNames: Map<string, string>,
 }
 
@@ -148,25 +143,12 @@ export var GameResultSchema = new Schema<IGameResultDataDocument>({
     forfeitedBy: String,
     endedAt: String,
     totalTurns: Number,
-    unclaimedPlayerIds: { type: [String], default: () => [] },
     guestNames: { type: Schema.Types.Map, of: String, default: () => new Map() },
 }, { discriminatorKey: 'kind' });
 // Per-player match history / stats, most recent first.
 GameResultSchema.index({ playerIds: 1, endedAt: -1 });
 // Per-player, per-game stats (and head-to-head via playerIds $all).
 GameResultSchema.index({ playerIds: 1, gameType: 1 });
-
-// A game counts once every player is a registered account
-// (docs/account-less-play.md §8). Matches both an explicitly empty array and
-// a pre-guest record that predates this field entirely — `$size` alone would
-// exclude every result recorded before this field existed, since it has no
-// array there to measure.
-export const RESULT_COUNTS_FILTER = {
-    $or: [
-        { unclaimedPlayerIds: { $exists: false } },
-        { unclaimedPlayerIds: { $size: 0 } },
-    ],
-};
 
 export var GameResultModel = models.GameResult || model<IGameResultDataDocument, IGameResultDataModel>('GameResult', GameResultSchema);
 
@@ -486,7 +468,7 @@ const SOMEBODY_ELSE = 'somebody else';
 // profile); each match reports whether the viewer also played in it.
 export async function getPlayerStats(userId: string, viewerId: string): Promise<IPlayerStats> {
     const recentResults = await GameResultModel
-        .find({ playerIds: userId, ...RESULT_COUNTS_FILTER })
+        .find({ playerIds: userId })
         .sort({ endedAt: -1 })
         .limit(10)
         .exec();
@@ -511,7 +493,7 @@ export async function getPlayerStats(userId: string, viewerId: string): Promise<
     // by games × endings however long they have been playing — and means no
     // other player's id leaves the database for a tally that never shows one.
     const byEndingAgg: { _id: IMatchResult & { url: string }, total: number }[] = await GameResultModel.aggregate([
-        { $match: { playerIds: userId, ...RESULT_COUNTS_FILTER } },
+        { $match: { playerIds: userId } },
         { $group: {
             _id: {
                 url: '$url',
@@ -552,13 +534,12 @@ export async function getPlayerStats(userId: string, viewerId: string): Promise<
 // once gameData.complete/winner are set (win via CheckGameOver, or a forced
 // end). Idempotent on gameId in case it's ever invoked twice for the same game.
 //
-// unclaimedPlayerIds/guestNames (docs/account-less-play.md §13, see
-// unclaimedGuestsOf) are passed in rather than looked up here: this stays the
-// one place on the per-command path with no Clerk round trip, and every
-// caller already resolves the roster for its own push notifications.
+// guestNames (docs/account-less-play.md step 13, see guestNamesOf) is passed
+// in rather than looked up here: this stays the one place on the per-command
+// path with no Clerk round trip, and its one caller — finishGame — already
+// resolves the roster for its own push notifications.
 export async function recordGameResult(
     gameData: IGameData,
-    unclaimedPlayerIds: string[],
     guestNames: Map<string, string>,
 ): Promise<void> {
     const base = {
@@ -575,7 +556,6 @@ export async function recordGameResult(
         // which has no turns to count — read back with the matching unit via
         // lengthUnit(playerIds.length). See utils/games/turnCount.ts.
         totalTurns: gameLength(gameData.gameState.commandHistory, gameData.userIdList.length).count,
-        unclaimedPlayerIds,
         guestNames,
     };
     const specific = GAME_RESULT_STATS[gameData.gameType.gameType];
