@@ -4,6 +4,7 @@ import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameResultModel, formatGameResultStats, formatGameResultCharts } from '@/utils/mongodb/GameResultData';
 import { areFriends } from '@/utils/mongodb/FriendshipData';
 import { userIdListToUsernameMap } from '@/utils/users/clerk';
+import { UNKNOWN_PLAYER_NAME } from '@/utils/ui/players';
 import type { GameEndReason, GameResultStatGroup, GameResultChart } from '@/utils/apiModels/GameDataApi';
 
 export interface IGameResultResponse {
@@ -54,6 +55,23 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const usernameById = await userIdListToUsernameMap(playerIds);
+
+    // A guest's Clerk user is deleted a week after their last game
+    // (docs/account-less-play.md step 17), so there is nothing left for the
+    // lookup above to resolve their id to. The name they played under was
+    // copied onto this record for exactly this moment (guestNames, step 13) —
+    // read only where the live lookup came back empty, so a player who is
+    // still around is named by today's name, the way the reactions feed falls
+    // back on its own stored name. Without it every guest who ever sat at a
+    // table becomes "Unknown player" on the result page, in its stat groups
+    // and on every per-round chart line — including on matches that now show
+    // in the other players' recent form (§8).
+    for (const [playerId, name] of usernameById) {
+        const remembered = name === UNKNOWN_PLAYER_NAME && result.guestNames?.get(playerId);
+        if (remembered) {
+            usernameById.set(playerId, remembered);
+        }
+    }
 
     const response: IGameResultResponse = {
         gameId: result.gameId,

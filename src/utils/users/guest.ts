@@ -1,6 +1,6 @@
 import { clerkClient, User } from "@clerk/nextjs/server";
 import { randomUUID } from "crypto";
-import { readableName } from "@/utils/ui/players";
+import { isGuest, readableName } from "@/utils/ui/players";
 
 // A ticket is minted and handed to the client to consume immediately
 // (`signIn.create({ strategy: 'ticket', ticket })`), not stored anywhere —
@@ -132,19 +132,12 @@ export async function deleteGuest(userId: string): Promise<void> {
 }
 
 // The display name each guest at a finished game should be remembered by
-// (docs/account-less-play.md §13): a guest's Clerk user is swept a week after
-// their last game (step 17), which makes their id unresolvable, so their name
-// has to be copied onto the GameResult record while it's still known.
+// (docs/account-less-play.md step 13): a guest's Clerk user is swept a week
+// after their last game (step 17), which makes their id unresolvable, so their
+// name has to be copied onto the GameResult record while it's still known.
 // recordGameResult stays Clerk-free on the per-command path, so this is the
-// one derivation every caller runs on the roster it already resolved for its
-// own pushes, rather than each re-deriving "is this player a guest" itself.
-//
-// Names only: the ids used to be copied across too, as the roster of players
-// whose presence stopped a game counting for anybody (§8's exhibition match).
-// That rule is gone — a game counts for everyone who played it — so all a
-// result needs from a guest now is what to call them.
+// one derivation its caller runs on the roster it already resolved for its own
+// pushes, rather than re-deriving "is this player a guest" itself.
 export function guestNamesOf(users: User[]): Map<string, string> {
-    return new Map(users
-        .filter(user => user.publicMetadata.guest === true)
-        .map(user => [user.id, readableName(user)]));
+    return new Map(users.filter(isGuest).map(user => [user.id, readableName(user)]));
 }

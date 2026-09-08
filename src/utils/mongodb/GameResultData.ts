@@ -534,10 +534,10 @@ export async function getPlayerStats(userId: string, viewerId: string): Promise<
 // once gameData.complete/winner are set (win via CheckGameOver, or a forced
 // end). Idempotent on gameId in case it's ever invoked twice for the same game.
 //
-// guestNames (docs/account-less-play.md §13, see guestNamesOf) is passed in
-// rather than looked up here: this stays the one place on the per-command path
-// with no Clerk round trip, and every caller already resolves the roster for
-// its own push notifications.
+// guestNames (docs/account-less-play.md step 13, see guestNamesOf) is passed
+// in rather than looked up here: this stays the one place on the per-command
+// path with no Clerk round trip, and its one caller — finishGame — already
+// resolves the roster for its own push notifications.
 export async function recordGameResult(
     gameData: IGameData,
     guestNames: Map<string, string>,

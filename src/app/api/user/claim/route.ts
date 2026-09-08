@@ -23,12 +23,10 @@ interface IClaimRequest {
 // Claiming a guest account (docs/account-less-play.md step 16): after their
 // first turn, a guest can add the email and password that make the Clerk
 // user they already are keepable. The id never changes, so every game,
-// result and turn history they're in carries over with no migration — and
-// every write here is Clerk's (the real email in, the guest placeholder out,
-// the password, a real username derived from their display name, and dropping
-// publicMetadata.guest). Their finished games needed no touching even before
-// §8's exhibition match was dropped: they already counted under the id they
-// were played on, which is the id being claimed.
+// result and turn history they're in carries over with no migration, and every
+// write here is Clerk's: the real email in, the guest placeholder out, the
+// password, a real username derived from their display name, and dropping
+// publicMetadata.guest.
 export async function POST(request: NextRequest) {
     console.log(`POST ${request.nextUrl.pathname}`);
 

@@ -536,8 +536,8 @@ account. The mechanism was an `unclaimedPlayerIds: string[]` stored alongside
 on claim.
 
 **That has since been decided the other way**, on the evidence of playing it:
-a guest is someone the host handed a join code to (the same reasoning §8's
-moderation note came round to for chat), and a match against one is a real
+a guest is someone the host handed a join code to (the same reasoning the moderation note
+below came round to for chat), and a match against one is a real
 match. The rule cost the *registered* player a game they had just finished —
 it sat in "Finished" on their dashboard, openable, with its result page and
 its stats, and was silently absent from their own recent form and per-game
@@ -550,6 +550,18 @@ result carrying the player's id, and `GameResult` copies only `guestNames` off
 the roster (below). Claiming needs no `$pull` — under Option A the ids never
 change, so the games a guest played already count under the id they are
 claiming.
+
+**What that filter was incidentally holding up**, since it is worth having on
+the record rather than rediscovering: it was the only thing making self-play
+worthless. A host can mint a free opponent by opening their own join link
+signed out — a guest passes `isUnlockedUser`, so it needs none of the unlock a
+second registered account would — lose to themselves on purpose, and have the
+win counted. The stake is the farmer's own vanity numbers and a Clerk MAU:
+nobody else's record moves, the join route's 20-per-10-minutes-per-IP limit
+applies, and every farmed game has to be played out to the end. Accepted at
+that price. If a leaderboard ever makes it worth more, the answer is a rule
+about who you played, not a filter that hides a match from the player who
+played it.
 
 **The abandonment fuse stays exactly as it is.** A guest who goes quiet is
 handled by the same `missedTurnCounts` counter and the same
@@ -809,10 +821,11 @@ predicate and is still bounced to `/unlockaccess`.
 **13 — A guest's name outlives their account.** Each guest's display name on
 `GameResultData` as `guestNames`, **passed in by the caller** rather than
 looked up inside `recordGameResult` — it takes only `gameData` today and is
-deliberately Clerk-free on the per-command path, and all three callers already
-hold the resolved roster for their own pushes (`guestNamesOf`, `guest.ts`).
-Lands *before* any guest can play, so the name is on the record before step 17
-can delete the user behind it.
+deliberately Clerk-free on the per-command path, while its one caller,
+`finishGame` (every ending funnels through it), already holds the resolved
+roster for its own pushes. The derivation itself is `guestNamesOf` in
+`guest.ts`. Lands *before* any guest can play, so the name is on the record
+before step 17 can delete the user behind it.
 
 This step also shipped `unclaimedPlayerIds` and the is-empty filter on the
 stats reads, for the exhibition match §8 has since dropped. Both are gone; a
@@ -1031,10 +1044,12 @@ placeholder rather than misaligning the list.
   bounds in `GameMeta` so a seat count has one source, and an `acceptSeat`
   extraction so the join route, the start route and the accept route share one
   body. Each is the extract-and-port shape #241 already proved.
-- **The scope is settled** (§8): a game counts only once every player is a
-  real account, the abandonment fuse is unchanged, every lobby has a
-  registered host, unclaimed guests are swept a week after their last game
-  ends, and spectating and moderation are both out.
+- **The scope is settled** (§8): a game counts for everyone who played it,
+  the abandonment fuse is unchanged, every lobby has a registered host,
+  unclaimed guests are swept a week after their last game ends, and spectating
+  is out. Two of those were later decided the other way and §8 says so where
+  it says them: the counting rule (it used to exclude a table with an
+  unclaimed guest at it) and moderation (guests chat like anyone else).
 - **Fix `userIdListToUsernameList` first** regardless — it drops unresolvable
   ids and misaligns the index-based name lookup in `CreateResponse` and in all
   seven games' `gameStateToModel`.

@@ -81,7 +81,7 @@ and correct; the fourth is the subject of §4:
 | Snapshot | Where | Behaviour under a rename |
 |---|---|---|
 | `IGameCommand.senderUsername` | written `api/game/command/route.ts:135` | **Self-healing.** `replay.ts:301` prefers today's resolved name; rewritten next turn. |
-| `GameResult.guestNames` | `guest.ts:119` → `finishGame.ts:106` | **Correct as-is.** Snapshots guests whose Clerk user gets swept after `GUEST_SWEEP_DAYS`. Migrating it would be wrong. |
+| `GameResult.guestNames` | `guestNamesOf` (`guest.ts`) → `finishGame.ts` | **Correct as-is.** Snapshots guests whose Clerk user gets swept after `GUEST_SWEEP_DAYS`. Migrating it would be wrong. |
 | `Invitation.senderName` | written `api/lobby/route.ts:111`, read `lobbyPreview.ts:58` | **Goes stale** for the lobby's remaining TTL. Already documented as such on the field. Acceptable — a lobby is short-lived, and `lobbyPreview.ts:58` already falls back to a live Clerk read when the field is absent. |
 | `gameState.history[]` | 89 `unshift`/`push` sites across 8 game folders | **Frozen forever** — except in the 2 games that already resolve ids at render (`replaceHistoryUserIds`). The inconsistency, and the fix, are §4. |
 
