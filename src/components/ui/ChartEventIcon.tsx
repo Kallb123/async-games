@@ -30,15 +30,12 @@ const ICON_ART: Record<GameResultEventIcon, ReactNode> = {
     ),
     // A rescue: the medical cross an ambulance wears.
     rescue: <path d="M6.2 1.6h3.6v4.6h4.6v3.6H9.8v4.6H6.2V9.8H1.6V6.2h4.6z" />,
-    // An epidemic: the biohazard mark's three lobes. Just the lobes — a core
-    // between them merges into one blob at the size the chart draws these at,
-    // where three separate discs still read as a cluster.
+    // An epidemic: a germ — a round body with eight knob-tipped spikes, the
+    // microbe Outbreak's own meta glyph wears. One path rather than a shape
+    // per part, so the outline .ag-chart-event-icon draws follows the whole
+    // silhouette instead of seaming every spike onto the body.
     epidemic: (
-        <>
-            <circle cx={8} cy={3} r={3.3} />
-            <circle cx={12.3} cy={10.5} r={3.3} />
-            <circle cx={3.7} cy={10.5} r={3.3} />
-        </>
+        <path d="M3.7 8a4.3 4.3 0 1 0 8.6 0a4.3 4.3 0 1 0-8.6 0 M10.7 10.4 13.9 11.1 14.3 9.9 11.6 8.2z M13.35 10.7a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0 M8.2 11.6 9.9 14.3 11.1 13.9 10.4 10.7z M9.55 14.5a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0 M5.6 10.7 4.9 13.9 6.1 14.3 7.8 11.6z M4.15 14.5a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0 M4.4 8.2 1.7 9.9 2.1 11.1 5.3 10.4z M0.35 10.7a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0 M5.3 5.6 2.1 4.9 1.7 6.1 4.4 7.8z M0.35 5.3a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0 M7.8 4.4 6.1 1.7 4.9 2.1 5.6 5.3z M4.15 1.5a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0 M10.4 5.3 11.1 2.1 9.9 1.7 8.2 4.4z M9.55 1.5a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0 M11.6 7.8 14.3 6.1 13.9 4.9 10.7 5.6z M13.35 5.3a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0" />
     ),
 };
 
