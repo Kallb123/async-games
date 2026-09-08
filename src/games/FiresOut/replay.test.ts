@@ -145,7 +145,7 @@ describe("Fires Out replay", () => {
 
     it("computes result stats off the final state", async () => {
         const game = await playPassiveGame();
-        const stats = computeFiresOutResultStats(game);
+        const stats = computeFiresOutResultStats(game, []);
 
         // Every command in this passive game is an endTurn, so the count is exact.
         expect(stats.turnsLasted).toBe(game.gameState.commandHistory.length);

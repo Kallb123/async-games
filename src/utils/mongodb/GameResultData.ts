@@ -84,7 +84,10 @@ import {
     computeFiresOutResultStats,
     firesOutGameResultStatsSchemaDef,
     formatFiresOutResultStats,
+    formatFiresOutCharts,
 } from "@/games/FiresOut/FiresOutModels";
+import type { IFiresOutSpecificGameStateResponse } from "@/games/FiresOut/apiModels";
+import { totalDamage } from "@/games/FiresOut/rules";
 
 export interface IGameResultData {
     gameId: uuidString,
@@ -369,8 +372,20 @@ const GAME_RESULT_STATS: Record<string, {
     },
     FiresOut: {
         model: FiresOutGameResultModel,
-        compute: (gameData) => computeFiresOutResultStats(gameData as IFiresOutGameData),
+        compute: async (gameData) => {
+            const firesOutGameData = gameData as IFiresOutGameData;
+            // Board-wide, not per-player — a single 'damage' key rather than
+            // one per userId, the same way Outbreak keys cubesLeftPerTurn by
+            // disease colour instead of by player.
+            const damagePerTurn = await computePerTurnStat<IFiresOutSpecificGameStateResponse>(
+                firesOutGameData,
+                (state) => totalDamage(state.edges),
+                ['damage'],
+            );
+            return computeFiresOutResultStats(firesOutGameData, damagePerTurn);
+        },
         format: formatFiresOutResultStats,
+        charts: formatFiresOutCharts,
     },
 };
 
