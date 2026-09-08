@@ -2,6 +2,7 @@ import { IGameData } from "../mongodb/GameData";
 import { UNKNOWN_PLAYER_NAME } from "../ui/players";
 import { IHistoryEntry, resolveHistory } from "./history";
 import { IGameCommand, IGameType, ICommandOutcome } from "../apiModels/GameLogic";
+import type { GameResultEvent } from "../apiModels/GameDataApi";
 import { deserializeJSON } from "../apiModels/Serialisable";
 import { runCommand } from "./commandPipeline";
 import { createAdapterRegistry } from "./adapterRegistry";
@@ -383,23 +384,59 @@ export async function buildTimeline(
     return { currentIndex, snapshots, resolvedPlannedCommands };
 }
 
-// Replays a game via buildTimeline, recording a cumulative per-player stat at
-// the end of each turn - the series a per-turn line chart plots (e.g. Dice
-// Cities' coins/turn, Settlements & Cities' resources/turn - see each game's
-// GAME_RESULT_STATS entry in GameResultData.ts for the actual field being
-// tracked). A turn ends when the sender changes, not whenever a command
-// reports `turnOver`: a bonus like Dice Cities' roll-doubles-go-again keeps
-// the same player acting across several `turnOver: true` commands (their
-// CheckEndTurn holds the seat instead of advancing it), so snapshotting on
-// every `turnOver` would chart action-by-action progress rather than
-// turn-by-turn - the same maximal-run-of-one-sender boundary countTurns()
-// (turnCount.ts) uses for the result page's "N turns" line, so the chart and
-// that summary agree on how long the game ran. Usernames aren't resolved yet
-// at game-end (recordGameResult only has userIds), matching the
-// compute-by-userId / format-by-username split every other game's result
-// stats already use, so an arbitrary (identity) userIdNameMap is enough -
-// extractValue is expected to look players up by their `.userId` field
-// regardless of how the map keyed them.
+// Replays a game via buildTimeline, calling `onStep` for every applied
+// command together with the 0-based index of the turn it belongs to and
+// whether it's the first step of that turn — the shared bookkeeping
+// computePerTurnStat and computePerTurnEvents both need: a turn ends when the
+// sender changes, not whenever a command reports `turnOver` (a bonus like
+// Dice Cities' roll-doubles-go-again keeps the same player acting across
+// several `turnOver: true` commands, since their CheckEndTurn holds the seat
+// instead of advancing it), the same maximal-run-of-one-sender boundary
+// countTurns() (turnCount.ts) uses for the result page's "N turns" line, so
+// every per-turn chart and that summary agree on how long the game ran.
+// Usernames aren't resolved yet at game-end (recordGameResult only has
+// userIds), matching the compute-by-userId / format-by-username split every
+// other game's result stats already use, so an arbitrary (identity)
+// userIdNameMap is enough here for either caller.
+//
+// Returns false (having already warned) if the replay itself throws, rather
+// than letting the error propagate: a snapshot-replay game created before its
+// snapshot existed can't be replayed at all (see
+// docs/turn-recap-and-planning.md), and both callers run on the last move of
+// a game, inside recordGameResult, so throwing here would cost a player their
+// final turn to lose a chart nobody has seen yet. Downgrading instead is the
+// same graceful no-op recap already makes for those games — but it's worth a
+// warning, since the other way to land here is a genuinely broken adapter.
+async function replayTurnByTurn(
+    gameData: IGameData,
+    onStep: (step: IReplayStep, turnIndex: number, isFirstStepOfTurn: boolean) => void,
+    what: string,
+): Promise<boolean> {
+    const identityMap = Object.fromEntries(gameData.userIdList.map(userId => [userId, userId]));
+    let turnIndex = 0;
+    let previousSenderId: string | undefined;
+    try {
+        await buildTimeline(gameData, identityMap, [], (step) => {
+            const isFirstStepOfTurn = previousSenderId !== undefined && step.command.senderId !== previousSenderId;
+            if (isFirstStepOfTurn) {
+                turnIndex++;
+            }
+            onStep(step, turnIndex, isFirstStepOfTurn);
+            previousSenderId = step.command.senderId;
+        });
+        return true;
+    } catch (error) {
+        console.warn(`No ${what} for game ${gameData.gameId}: ${error}`);
+        return false;
+    }
+}
+
+// Records a cumulative per-player stat at the end of each turn - the series a
+// per-turn line chart plots (e.g. Dice Cities' coins/turn, Settlements &
+// Cities' resources/turn - see each game's GAME_RESULT_STATS entry in
+// GameResultData.ts for the actual field being tracked). extractValue is
+// expected to look players up by their `.userId` field regardless of how the
+// map keyed them.
 // `keys` are the roster unless a game says otherwise — pass its own keys
 // (Outbreak's four disease colours) for a series whose lines aren't players,
 // and each turn's Map comes back keyed by those instead, ready for
@@ -409,7 +446,6 @@ export async function computePerTurnStat<TState>(
     extractValue: (state: TState, key: string) => number | undefined,
     keys: string[] = gameData.userIdList,
 ): Promise<Map<string, number>[]> {
-    const identityMap = Object.fromEntries(gameData.userIdList.map(userId => [userId, userId]));
     const perTurn: Map<string, number>[] = [];
     const pushEntry = (responseState: TState) => {
         const entry = new Map<string, number>();
@@ -418,29 +454,35 @@ export async function computePerTurnStat<TState>(
         }
         perTurn.push(entry);
     };
-    let previousSenderId: string | undefined;
     let latestState: TState | undefined;
-    try {
-        await buildTimeline(gameData, identityMap, [], (step) => {
-            if (previousSenderId !== undefined && step.command.senderId !== previousSenderId && latestState) {
-                pushEntry(latestState);
-            }
-            latestState = step.next.specificGameState as TState;
-            previousSenderId = step.command.senderId;
-        });
-        if (latestState) {
+    const ok = await replayTurnByTurn(gameData, (step, _turnIndex, isFirstStepOfTurn) => {
+        if (isFirstStepOfTurn && latestState) {
             pushEntry(latestState);
         }
-    } catch (error) {
-        // A snapshot-replay game created before its snapshot existed can't be
-        // replayed at all (see docs/turn-recap-and-planning.md). This runs on
-        // the last move of a game, inside recordGameResult, so throwing here
-        // would cost the player their final turn to lose a chart nobody has
-        // seen yet. Downgrade to no series — the same graceful no-op recap
-        // already makes for those games — but say so, since the other way to
-        // land here is a genuinely broken adapter.
-        console.warn(`No per-turn stat for game ${gameData.gameId}: ${error}`);
-        return [];
+        latestState = step.next.specificGameState as TState;
+    }, "per-turn stat");
+    if (!ok) return [];
+    if (latestState) {
+        pushEntry(latestState);
     }
     return perTurn;
+}
+
+// Replays a game via buildTimeline, calling `detect` once per applied command
+// and recording any events it returns against the turn they happened in — the
+// same sender-changes turn boundary computePerTurnStat groups by, so an event
+// computed from the same replay lands on the same round as a per-turn stat
+// next to it (see GameResultEvent, GameDataApi.ts). A single turn can produce
+// more than one event (Outbreak's double epidemic).
+export async function computePerTurnEvents(
+    gameData: IGameData,
+    detect: (step: IReplayStep) => Omit<GameResultEvent, 'turnIndex'>[] | undefined,
+): Promise<GameResultEvent[]> {
+    const events: GameResultEvent[] = [];
+    const ok = await replayTurnByTurn(gameData, (step, turnIndex) => {
+        for (const event of detect(step) ?? []) {
+            events.push({ ...event, turnIndex });
+        }
+    }, "per-turn events");
+    return ok ? events : [];
 }

@@ -67,6 +67,25 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
     const yAt = (v: number) => PAD_TOP + PLOT_HEIGHT - (v / top) * PLOT_HEIGHT;
     const gridValues = [0, top / 2, top];
 
+    // Event markers (epidemics, landmark buys, explosions — see
+    // GameResultEvent): pinned to the round they happened in and, when the
+    // event names a line (seriesKey), to that line's value there. An event
+    // with no line of its own (Outbreak's epidemic touches the whole board,
+    // not one disease colour) floats above the plot instead. Stacked when two
+    // land on the same round so neither is hidden behind the other.
+    const roundOccupancy = new Map<number, number>();
+    const eventMarkers = (chart.events ?? []).map(event => {
+        const stackIndex = roundOccupancy.get(event.round) ?? 0;
+        roundOccupancy.set(event.round, stackIndex + 1);
+        const line = event.seriesKey ? series.find(s => s.key === event.seriesKey) : undefined;
+        const baseY = line ? yAt(line.values[event.round]) : PAD_TOP;
+        return {
+            ...event,
+            x: xAt(event.round),
+            y: Math.max(PAD_TOP + 6, baseY - 8 - stackIndex * 11),
+        };
+    });
+
     // End-of-line value labels, nudged apart vertically when two players'
     // final values are close enough that the labels would collide.
     const endLabels = series
@@ -150,6 +169,13 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
                             ))}
                         </>
                     )}
+
+                    {eventMarkers.map((m, i) => (
+                        <text key={`event-${i}`} className="ag-chart-event-icon" x={m.x} y={m.y} textAnchor="middle" dominantBaseline="middle">
+                            {m.title && <title>{m.title}</title>}
+                            {m.glyph}
+                        </text>
+                    ))}
                 </svg>
 
                 {endLabels.map(l => (

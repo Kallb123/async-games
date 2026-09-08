@@ -10,13 +10,14 @@ import {
     IDiceCitiesGameData,
     IDiceCitiesGameResultStats,
     computeDiceCitiesResultStats,
+    detectLandmarkEvent,
     diceCitiesGameResultStatsSchemaDef,
     formatDiceCitiesResultStats,
     formatDiceCitiesCharts,
     playerByUserId as diceCitiesPlayerByUserId,
 } from "@/games/DiceCities/DiceCitiesModels";
 import type { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
-import { computePerTurnStat } from "@/utils/games/replay";
+import { computePerTurnStat, computePerTurnEvents } from "@/utils/games/replay";
 import { gameLength } from "@/utils/games/turnCount";
 import {
     ISmartthinkGameData,
@@ -72,6 +73,7 @@ import {
     IOutbreakGameData,
     IOutbreakGameResultStats,
     computeOutbreakResultStats,
+    detectEpidemicEvents,
     outbreakGameResultStatsSchemaDef,
     formatOutbreakResultStats,
     formatOutbreakCharts,
@@ -82,6 +84,8 @@ import {
     IFiresOutGameData,
     IFiresOutGameResultStats,
     computeFiresOutResultStats,
+    detectExplosionEvent,
+    detectRescueEvent,
     firesOutGameResultStatsSchemaDef,
     formatFiresOutResultStats,
     formatFiresOutCharts,
@@ -279,7 +283,8 @@ const GAME_RESULT_STATS: Record<string, {
                 dcGameData,
                 (state, userId) => diceCitiesPlayerByUserId(state, userId)?.cards.reduce((sum, c) => sum + c.amount, 0),
             );
-            return computeDiceCitiesResultStats(dcGameData, coinsPerTurn, buildingsPerTurn);
+            const landmarkEvents = await computePerTurnEvents(dcGameData, detectLandmarkEvent);
+            return computeDiceCitiesResultStats(dcGameData, coinsPerTurn, buildingsPerTurn, landmarkEvents);
         },
         format: formatDiceCitiesResultStats,
         charts: formatDiceCitiesCharts,
@@ -365,7 +370,8 @@ const GAME_RESULT_STATS: Record<string, {
                 (state, color) => state.cubesLeft?.[color as OutbreakDiseaseColor],
                 DISEASE_COLORS,
             );
-            return computeOutbreakResultStats(outbreakGameData, cubesTreatedPerTurn, timesTravelledPerTurn, cubesLeftPerTurn);
+            const epidemicEvents = await computePerTurnEvents(outbreakGameData, detectEpidemicEvents);
+            return computeOutbreakResultStats(outbreakGameData, cubesTreatedPerTurn, timesTravelledPerTurn, cubesLeftPerTurn, epidemicEvents);
         },
         format: formatOutbreakResultStats,
         charts: formatOutbreakCharts,
@@ -382,7 +388,9 @@ const GAME_RESULT_STATS: Record<string, {
                 (state) => totalDamage(state.edges),
                 ['damage'],
             );
-            return computeFiresOutResultStats(firesOutGameData, damagePerTurn);
+            const explosionEvents = await computePerTurnEvents(firesOutGameData, detectExplosionEvent);
+            const rescueEvents = await computePerTurnEvents(firesOutGameData, detectRescueEvent);
+            return computeFiresOutResultStats(firesOutGameData, damagePerTurn, explosionEvents, rescueEvents);
         },
         format: formatFiresOutResultStats,
         charts: formatFiresOutCharts,

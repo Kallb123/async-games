@@ -5,14 +5,18 @@ import { v4 as uuidv4 } from 'uuid';
 import {
     GameResultChart,
     GameResultChartSeries,
+    GameResultEvent,
     GameResultStatGroup,
     compactCharts,
     formatPerTurnChart,
+    gameResultEventSchemaDef,
     uuidString,
 } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { OutbreakGameType } from "@/utils/apiModels/GameLogic";
+import type { IOutbreakInfectionPhaseOutcome } from "./OutbreakLogic";
+import type { IReplayStep } from "@/utils/games/replay";
 import { shuffle } from "@/utils/games/shuffle";
 import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
 import { userToken } from "@/utils/games/history";
@@ -497,6 +501,12 @@ export interface IOutbreakGameResultStats {
     // the three ways the table loses (§4.2), so how fast each supply drained
     // is the story of the game — see formatOutbreakCharts.
     cubesLeftPerTurn: Map<string, number>[];
+    // Every epidemic card drawn. An epidemic raises the infection rate for
+    // the whole board rather than moving any one disease colour's supply, so
+    // unlike the per-turn series above these carry no seriesKey — the chart
+    // places them above the plot instead of on a line. Computed by
+    // computePerTurnEvents from the same replay pass as cubesLeftPerTurn.
+    epidemicEvents: GameResultEvent[];
 }
 
 export const outbreakGameResultStatsSchemaDef = {
@@ -507,13 +517,28 @@ export const outbreakGameResultStatsSchemaDef = {
     cubesTreatedPerTurn: [{ type: Schema.Types.Map, of: Number }],
     timesTravelledPerTurn: [{ type: Schema.Types.Map, of: Number }],
     cubesLeftPerTurn: [{ type: Schema.Types.Map, of: Number }],
+    epidemicEvents: [gameResultEventSchemaDef],
 };
+
+// A computePerTurnEvents detector (see replay.ts): every epidemic card drawn
+// this step, from the infection log a turn's outcome already carries (the
+// same log recap.ts reads for its own "Epidemic!" event). A double-epidemic
+// turn (two epidemic cards drawn on one hand-limit-forced draw) reports one
+// event per card, matching recap's own "Twice —" count. Exported so it can be
+// unit-tested and wired straight into GAME_RESULT_STATS.Outbreak.compute
+// (GameResultData.ts).
+export function detectEpidemicEvents(step: IReplayStep): Omit<GameResultEvent, 'turnIndex'>[] | undefined {
+    const count = (step.outcome as IOutbreakInfectionPhaseOutcome).infectionLog
+        ?.filter(entry => entry.kind === 'epidemic').length ?? 0;
+    return count > 0 ? Array.from({ length: count }, () => ({ glyph: "☣️", title: "Epidemic card drawn" })) : undefined;
+}
 
 export function computeOutbreakResultStats(
     gameData: IOutbreakGameData,
     cubesTreatedPerTurn: Map<string, number>[],
     timesTravelledPerTurn: Map<string, number>[],
     cubesLeftPerTurn: Map<string, number>[],
+    epidemicEvents: GameResultEvent[],
 ): IOutbreakGameResultStats {
     const gs = gameData.specificGameState;
     return {
@@ -527,6 +552,7 @@ export function computeOutbreakResultStats(
         cubesTreatedPerTurn,
         timesTravelledPerTurn,
         cubesLeftPerTurn,
+        epidemicEvents,
     };
 }
 
@@ -554,7 +580,7 @@ export function formatOutbreakCharts(
     return compactCharts(
         formatPerTurnChart(stats.cubesTreatedPerTurn, "Cubes treated per round", "Cubes", usernameById.size),
         formatPerTurnChart(stats.timesTravelledPerTurn, "Times travelled per round", "Moves", usernameById.size),
-        formatPerTurnChart(stats.cubesLeftPerTurn, "Cubes left in supply", "Cubes", usernameById.size, CUBE_SUPPLY_SERIES),
+        formatPerTurnChart(stats.cubesLeftPerTurn, "Cubes left in supply", "Cubes", usernameById.size, CUBE_SUPPLY_SERIES, stats.epidemicEvents),
     );
 }
 

@@ -62,6 +62,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Result charts mark the moments that mattered",
+                detail: "The charts on the result page now drop a small icon right on the turn something big happened: a biohazard mark where Outbreak drew an epidemic card, a building where a Dice Cities player bought a landmark, and an explosion or an ambulance wherever Fires Out's fire blew or a victim made it out — so you can see exactly how it lines up with the swings in the line around it.",
+            },
+            {
                 title: "Play Fires Out! on your own",
                 detail: "Fires Out! now has a solo mode. Pick Solo when you set a game up, choose how big a crew you want, and every firefighter on the board is yours to run — each one takes their own turn with their own action points, and the fire still advances after each of them, so a bigger crew is more to spend and more to keep alive. There's nobody to invite and nothing to wait for, though you can still set a turn timer if you want the pressure: it runs per firefighter's turn, and going quiet for long enough ends the game the same way walking away from any other does. Playing the Experienced game solo, a Fire Captain can now spend their command points directing any other firefighter in your crew. Carrying a victim is easier to find in every game too: once you're standing on one, the \"Carry the victim here\" switch sits right under the Move action instead of hiding until you'd already tapped Move.",
                 game: "firesout",
@@ -102,11 +106,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "What's new goes back further",
                 detail: "These notes used to show only the last handful of changes in each group, and everything older simply vanished. Each group now keeps the three newest in full and lists the ones before them underneath by name alone, so you can see everything that has landed since you last played without scrolling through paragraphs you have already read.",
-            },
-            {
-                title: "Dice Cities cards you can actually read",
-                detail: "The card art in your city, on the landmark track and in the market was too small to make out. Every card is now drawn as large as the space it sits in allows — the market fits another column and gives each card the full width of its slot — so most of them can be read where they are, and tapping any card opens it bigger still: the number it pays on, the cost and what it does, all legible at last. It works while you are waiting for your turn too, so you can plan your next build.",
-                game: "dicecities",
             },
         ],
     },

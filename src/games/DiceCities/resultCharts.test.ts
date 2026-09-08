@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { buildTimeline, computePerTurnStat } from "@/utils/games/replay";
+import { buildTimeline, computePerTurnEvents, computePerTurnStat } from "@/utils/games/replay";
 import { countTurns } from "@/utils/games/turnCount";
 import { DiceCitiesRequestUnlockAmusementPark, DiceCitiesRequestUnlockTrainStation } from "./DiceCitiesLogic";
-import { playerByUserId } from "./DiceCitiesModels";
+import { detectLandmarkEvent, playerByUserId } from "./DiceCitiesModels";
 import { DiceCitiesCardIds, DiceCitiesCards } from "./cards";
 import { passCommand, replayableGame, rollCommand, saveUpTo, sentBy } from "./testHarness";
 import type { IDiceCitiesGameStateResponse } from "./apiModels";
 import type { IGameCommand } from "@/utils/apiModels/GameLogic";
+import type { IReplayStep } from "@/utils/games/replay";
 
 // Proves the result-page chart fix against real Dice Cities play, not just the
 // generic engine test in utils/games/replay.test.ts: the Amusement Park's
@@ -65,5 +66,33 @@ describe("Dice Cities result charts, replayed from a real command log", () => {
         // actually changing hands, so before the fix this game charted one
         // more point than it had turns.
         expect(turnOverCount).toBe(realTurns + 1);
+    });
+
+    it("marks both landmark unlocks against u1's own line", async () => {
+        const trainStationCost = DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION].cost;
+        const amusementParkCost = DiceCitiesCards[DiceCitiesCardIds.AMUSEMENT_PARK].cost;
+
+        const commandHistory: IGameCommand[] = [
+            ...saveUpTo(trainStationCost + amusementParkCost + 9, "u1", "u2"),
+            rollCommand(1, "u1"), sentBy(new DiceCitiesRequestUnlockTrainStation(), "u1"),
+            rollCommand(1, "u2"), passCommand("u2"),
+            rollCommand(1, "u1"), sentBy(new DiceCitiesRequestUnlockAmusementPark(), "u1"),
+            rollCommand(1, "u2"), passCommand("u2"),
+        ];
+
+        const game = replayableGame(commandHistory);
+        const landmarkEvents = await computePerTurnEvents(game, detectLandmarkEvent);
+
+        expect(landmarkEvents).toHaveLength(2);
+        expect(landmarkEvents.every(e => e.glyph === "🏛️" && e.seriesKey === "u1")).toBe(true);
+        // The two unlocks land on u1's two separate turns, not the same one.
+        expect(landmarkEvents[0].turnIndex).toBeLessThan(landmarkEvents[1].turnIndex);
+    });
+});
+
+describe("detectLandmarkEvent", () => {
+    it("reports nothing for a command that isn't a landmark unlock", () => {
+        const step = { command: { className: "DiceCitiesRequestCardPurchase", senderId: "u1", senderUsername: "Alice" } } as unknown as IReplayStep;
+        expect(detectLandmarkEvent(step)).toBeUndefined();
     });
 });

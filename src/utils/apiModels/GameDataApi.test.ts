@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collapseToRounds, formatPerTurnChart } from "./GameDataApi";
+import { collapseToRounds, formatPerTurnChart, mapEventsToRounds } from "./GameDataApi";
 
 describe("collapseToRounds", () => {
     it("keeps the state at the end of every complete round", () => {
@@ -47,5 +47,63 @@ describe("formatPerTurnChart", () => {
     it("returns undefined for an empty or missing series", () => {
         expect(formatPerTurnChart([], "Coins per round", "Coins", 2)).toBeUndefined();
         expect(formatPerTurnChart(undefined, "Coins per round", "Coins", 2)).toBeUndefined();
+    });
+
+    it("places events on the round the turn they happened in collapses to", () => {
+        const perTurn = [
+            new Map([["u1", 1], ["u2", 0]]),
+            new Map([["u1", 1], ["u2", 2]]),
+            new Map([["u1", 4], ["u2", 2]]),
+        ];
+        const events = [{ turnIndex: 0, glyph: "🏛️" }, { turnIndex: 2, glyph: "💥", seriesKey: "u1" }];
+
+        const chart = formatPerTurnChart(perTurn, "Coins per round", "Coins", 2, undefined, events);
+
+        // Turns 0-1 collapse to round 0, turn 2 is the trailing partial round.
+        expect(chart?.events).toEqual([
+            { round: 0, glyph: "🏛️" },
+            { round: 1, glyph: "💥", seriesKey: "u1" },
+        ]);
+    });
+
+    it("carries no events field when none are given", () => {
+        const perTurn = [new Map([["u1", 1]])];
+        expect(formatPerTurnChart(perTurn, "Coins per round", "Coins", 1)?.events).toBeUndefined();
+        expect(formatPerTurnChart(perTurn, "Coins per round", "Coins", 1, undefined, [])?.events).toBeUndefined();
+    });
+});
+
+describe("mapEventsToRounds", () => {
+    it("maps each event's turn onto the round it falls in", () => {
+        // Two players, three turns: collapseToRounds groups turns 0-1 into
+        // round 0 and the trailing turn 2 into round 1 - the same grouping
+        // formatPerTurnChart applies to the per-turn series alongside it.
+        const events = [
+            { turnIndex: 0, glyph: "🏛️" },
+            { turnIndex: 1, glyph: "🏛️" },
+            { turnIndex: 2, glyph: "💥" },
+        ];
+
+        expect(mapEventsToRounds(events, 2, 2)).toEqual([
+            { round: 0, glyph: "🏛️" },
+            { round: 0, glyph: "🏛️" },
+            { round: 1, glyph: "💥" },
+        ]);
+    });
+
+    it("keeps title and seriesKey when present, and drops them when not", () => {
+        const events = [
+            { turnIndex: 0, glyph: "🏛️", title: "Built a landmark", seriesKey: "u1" },
+            { turnIndex: 0, glyph: "☣️" },
+        ];
+
+        expect(mapEventsToRounds(events, 1, 1)).toEqual([
+            { round: 0, glyph: "🏛️", title: "Built a landmark", seriesKey: "u1" },
+            { round: 0, glyph: "☣️" },
+        ]);
+    });
+
+    it("clamps to the last round rather than overrunning it", () => {
+        expect(mapEventsToRounds([{ turnIndex: 5, glyph: "💥" }], 2, 1)).toEqual([{ round: 0, glyph: "💥" }]);
     });
 });

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildInitialOutbreakState, formatOutbreakCharts, type IOutbreakGameResultStats } from "./OutbreakModels";
+import { buildInitialOutbreakState, detectEpidemicEvents, formatOutbreakCharts, type IOutbreakGameResultStats } from "./OutbreakModels";
 import { CITY_COUNT, DIFFICULTIES, DISEASE_COLOR_DEFS, EPIDEMIC_CARD_ID, EVENT_CARD_IDS, epidemicCountFor, isCityCardId, isEventCardId } from "./board";
 import { startingHandSize } from "./rules";
+import type { IOutbreakInfectionPhaseOutcome } from "./OutbreakLogic";
+import type { IReplayStep } from "@/utils/games/replay";
 
 const CARD_COUNT = CITY_COUNT + EVENT_CARD_IDS.length; // 53 (§5, §6 step 6)
 
@@ -66,6 +68,7 @@ describe("Outbreak result charts", () => {
             new Map([["blue", 20], ["yellow", 19], ["black", 21], ["red", 22]]),
             new Map([["blue", 18], ["yellow", 19], ["black", 17], ["red", 22]]),
         ],
+        epidemicEvents: [],
         ...overrides,
     });
 
@@ -107,5 +110,37 @@ describe("Outbreak result charts", () => {
             const charts = formatOutbreakCharts(stats({ cubesLeftPerTurn }), NAMES);
             expect(charts.map(c => c.title)).toEqual(["Cubes treated per round", "Times travelled per round"]);
         }
+    });
+});
+
+describe("detectEpidemicEvents", () => {
+    function stepWithLog(infectionLog: IOutbreakInfectionPhaseOutcome['infectionLog']): IReplayStep {
+        const outcome: IOutbreakInfectionPhaseOutcome = { validMove: true, turnOver: false, infectionLog };
+        return { outcome } as unknown as IReplayStep;
+    }
+
+    it("reports one event for a single epidemic", () => {
+        expect(detectEpidemicEvents(stepWithLog([{ kind: 'epidemic', rateAfter: 2 }]))).toEqual([
+            { glyph: "☣️", title: "Epidemic card drawn" },
+        ]);
+    });
+
+    it("reports one event per card on a double-epidemic turn", () => {
+        const log: IOutbreakInfectionPhaseOutcome['infectionLog'] = [
+            { kind: 'epidemic', rateAfter: 2 },
+            { kind: 'epidemic', rateAfter: 3 },
+        ];
+        expect(detectEpidemicEvents(stepWithLog(log))).toEqual([
+            { glyph: "☣️", title: "Epidemic card drawn" },
+            { glyph: "☣️", title: "Epidemic card drawn" },
+        ]);
+    });
+
+    it("reports nothing for an ordinary infect-only turn", () => {
+        expect(detectEpidemicEvents(stepWithLog([{ kind: 'infect', cityId: 0, color: 'blue', outcome: 'placed' }]))).toBeUndefined();
+    });
+
+    it("reports nothing for a command whose outcome carries no infection log", () => {
+        expect(detectEpidemicEvents({ outcome: { validMove: true, turnOver: false } } as unknown as IReplayStep)).toBeUndefined();
     });
 });

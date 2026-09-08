@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildInitialFiresOutState, buildInitialFiresOutStateFromGameData, cloneFiresOutState, FiresOutGameDataModel, gameStateToModel, IFiresOutGameData } from "./FiresOutModels";
+import { buildInitialFiresOutState, buildInitialFiresOutStateFromGameData, cloneFiresOutState, detectExplosionEvent, detectRescueEvent, FiresOutGameDataModel, gameStateToModel, IFiresOutGameData } from "./FiresOutModels";
 import { INTERIOR_SPACE_COUNT, MAX_SOLO_CREW } from "./board";
+import type { IFiresOutEndTurnOutcome } from "./FiresOutLogic";
+import type { IReplayStep } from "@/utils/games/replay";
 
 // Regression test for a classic Mongoose footgun (see WorldDominationModels.test.ts
 // for the sibling one this game hit): a bare nested object schema path —
@@ -194,5 +196,54 @@ describe("buildInitialFiresOutState for a solo crew", () => {
         const response = gameStateToModel(doc.specificGameState, { u1: "Alice" }, "u1");
         expect(response.firefighters).toHaveLength(MAX_SOLO_CREW);
         expect(response.firefighters.every(ff => ff.ownerId === "u1")).toBe(true);
+    });
+});
+
+describe("detectExplosionEvent", () => {
+    function stepWithResolution(resolution?: 'smoke' | 'fire' | 'explosion'): IReplayStep {
+        const outcome = resolution
+            ? { validMove: true, turnOver: true, advanceFire: { resolution } } as unknown as IFiresOutEndTurnOutcome
+            : { validMove: true, turnOver: true };
+        return { outcome } as unknown as IReplayStep;
+    }
+
+    it("marks the damage line when Advance Fire resolves as an explosion", () => {
+        expect(detectExplosionEvent(stepWithResolution('explosion'))).toEqual([
+            { glyph: "💥", title: "Explosion!", seriesKey: "damage" },
+        ]);
+    });
+
+    it("reports nothing for smoke or fire", () => {
+        expect(detectExplosionEvent(stepWithResolution('smoke'))).toBeUndefined();
+        expect(detectExplosionEvent(stepWithResolution('fire'))).toBeUndefined();
+    });
+
+    it("reports nothing for a command with no Advance Fire at all", () => {
+        expect(detectExplosionEvent(stepWithResolution(undefined))).toBeUndefined();
+    });
+});
+
+describe("detectRescueEvent", () => {
+    function stepWithRescuedDelta(prevRescued: number, nextRescued: number): IReplayStep {
+        return {
+            prev: { specificGameState: { rescued: prevRescued } },
+            next: { specificGameState: { rescued: nextRescued } },
+        } as unknown as IReplayStep;
+    }
+
+    it("marks the damage line when a victim makes it out", () => {
+        expect(detectRescueEvent(stepWithRescuedDelta(0, 1))).toEqual([
+            { glyph: "🚑", title: "A victim was rescued! (1/7)", seriesKey: "damage" },
+        ]);
+    });
+
+    it("reports one event naming every victim when more than one leaves at once", () => {
+        expect(detectRescueEvent(stepWithRescuedDelta(1, 3))).toEqual([
+            { glyph: "🚑", title: "2 victims got out! (3/7)", seriesKey: "damage" },
+        ]);
+    });
+
+    it("reports nothing when rescued hasn't changed", () => {
+        expect(detectRescueEvent(stepWithRescuedDelta(2, 2))).toBeUndefined();
     });
 });

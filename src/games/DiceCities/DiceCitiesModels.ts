@@ -3,7 +3,8 @@ import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationR
 import { Model, Schema, models } from "mongoose";
 import { BANK_TOTAL_COINS, bankTotalCoins, DiceCitiesCardIds, DOCKS_ESTABLISHMENT_IDS, STARTING_PLAYER_COINS } from "./cards";
 import { IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "./apiModels";
-import { uuidString, GameResultStatGroup, GameResultChart, formatPerTurnChart, compactCharts, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
+import { uuidString, GameResultStatGroup, GameResultChart, GameResultEvent, gameResultEventSchemaDef, formatPerTurnChart, compactCharts, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
+import type { IReplayStep } from "@/utils/games/replay";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
@@ -393,6 +394,11 @@ export interface IDiceCitiesGameResultStats {
     // buildings/turn chart, letting players compare building early to
     // snowball against saving up. Computed the same way as coinsPerTurn.
     buildingsPerTurn: Map<string, number>[];
+    // Every landmark unlock (the four win-condition ones plus the Docks-only
+    // Harbour), keyed to the buyer's own line on the buildings/turn chart —
+    // see LANDMARK_UNLOCK_COMMANDS and formatDiceCitiesCharts. Computed by
+    // computePerTurnEvents from the same replay pass as buildingsPerTurn.
+    landmarkEvents: GameResultEvent[];
 }
 
 export const diceCitiesGameResultStatsSchemaDef = {
@@ -400,13 +406,41 @@ export const diceCitiesGameResultStatsSchemaDef = {
     coinsEarned: { type: Schema.Types.Map, of: Number },
     landmarksUnlocked: { type: Schema.Types.Map, of: [String] },
     coinsPerTurn: [{ type: Schema.Types.Map, of: Number }],
-    buildingsPerTurn: [{ type: Schema.Types.Map, of: Number }]
+    buildingsPerTurn: [{ type: Schema.Types.Map, of: Number }],
+    landmarkEvents: [gameResultEventSchemaDef],
 };
+
+// The five commands that unlock a landmark — the four win-condition ones plus
+// the Docks-only Harbour — so a result chart can mark every landmark bought,
+// not just the ones that count toward the win. Recap's own
+// LANDMARK_BY_COMMAND (DiceCities/recap.ts) keeps Harbour separate because its
+// recap copy differs from the other four; a chart marker doesn't need that
+// distinction.
+export const LANDMARK_UNLOCK_COMMANDS = new Set([
+    "DiceCitiesRequestUnlockTrainStation",
+    "DiceCitiesRequestUnlockShoppingMall",
+    "DiceCitiesRequestUnlockAmusementPark",
+    "DiceCitiesRequestUnlockRadioTower",
+    "DiceCitiesRequestUnlockHarbour",
+]);
+
+// A computePerTurnEvents detector (see replay.ts): marks the buyer's own line
+// on the buildings/turn chart wherever a landmark unlock lands, so the result
+// page can show a building icon at the round it happened. Exported so it can
+// be unit-tested and wired straight into GAME_RESULT_STATS.DiceCities.compute
+// (GameResultData.ts) without GameResultData.ts having to know the command
+// names itself.
+export function detectLandmarkEvent(step: IReplayStep): Omit<GameResultEvent, 'turnIndex'>[] | undefined {
+    return LANDMARK_UNLOCK_COMMANDS.has(step.command.className)
+        ? [{ glyph: "🏛️", title: `${step.command.senderUsername} built a landmark`, seriesKey: step.command.senderId }]
+        : undefined;
+}
 
 export function computeDiceCitiesResultStats(
     gameData: IDiceCitiesGameData,
     coinsPerTurn: Map<string, number>[],
-    buildingsPerTurn: Map<string, number>[]
+    buildingsPerTurn: Map<string, number>[],
+    landmarkEvents: GameResultEvent[],
 ): IDiceCitiesGameResultStats {
     const coins = new Map<string, number>();
     const coinsEarned = new Map<string, number>();
@@ -416,7 +450,7 @@ export function computeDiceCitiesResultStats(
         coinsEarned.set(userId, playerState.totalCoinsEarned);
         landmarksUnlocked.set(userId, LANDMARKS.filter(l => playerState[l.flag]).map(l => l.cardId));
     }
-    return { coins, coinsEarned, landmarksUnlocked, coinsPerTurn, buildingsPerTurn };
+    return { coins, coinsEarned, landmarksUnlocked, coinsPerTurn, buildingsPerTurn, landmarkEvents };
 }
 
 // Renders IDiceCitiesGameResultStats as one stat group per player, for the
@@ -441,6 +475,6 @@ export function formatDiceCitiesResultStats(stats: IDiceCitiesGameResultStats, u
 export function formatDiceCitiesCharts(stats: IDiceCitiesGameResultStats, usernameById: Map<string, string>): GameResultChart[] {
     return compactCharts(
         formatPerTurnChart(stats.coinsPerTurn, "Coins per round", "Coins", usernameById.size),
-        formatPerTurnChart(stats.buildingsPerTurn, "Buildings per round", "Buildings", usernameById.size),
+        formatPerTurnChart(stats.buildingsPerTurn, "Buildings per round", "Buildings", usernameById.size, undefined, stats.landmarkEvents),
     );
 }
