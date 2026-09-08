@@ -659,6 +659,23 @@ reached and offers a retry, and `NotificationTestButton` proves the whole path
 by sending a real push to the caller's own devices via
 `/api/notificationtest` — the production-safe counterpart of the dev-only,
 any-user `/api/notifyuser`.
+**Saying so when it won't work.** Push is how an async game reaches a player at
+all, so a device that cannot receive one has a broken app rather than a
+preference it has expressed. `useNotificationHealth` (`src/utils/hooks/`) folds
+the permission and the registration state into one answer — a
+`NotificationBlocker` of `unsupported` / `unasked` / `blocked` /
+`unregistered`, or `null` when a push can land — and two surfaces render it.
+`NotificationFooter`, mounted once inside the app column by the root layout,
+puts a standing warning at the foot of every screen except the in-game ones
+(`isGameScreen`) and Settings, which says all of it at length already; unlike
+the bottom banner's offer it cannot be dismissed. `NotificationDeclinedPopup`,
+mounted by `Providers`, catches the other case the browser gives no event for:
+a player who pressed Enable and then Block. `requestNotificationPermission`
+records that refusal in the permission store (`useNotificationDeclined`), and
+the popup explains what it costs once per refusal. Both read their copy from
+`src/utils/ui/notifications.ts`, which `NotificationOffer` shares — the way out
+of a blocked browser is described in one place.
+
 Each stored token (`TimedToken`) keeps the time it was first registered
 (`timestamp`), the last time that device re-registered (`lastSeen`), and a
 `device` summary parsed from the request's user-agent header by

@@ -31,6 +31,23 @@ function notify() {
     listeners.forEach((listener) => listener());
 }
 
+// Set when a request we made came back 'denied'. A player who presses Enable
+// and then Block has, as far as the browser is concerned, simply not granted
+// permission — there is no event, and the offer card just quietly loses its
+// button — so the one moment we know they turned turn alerts down is here, on
+// the way out of our own request. Remembered in the store rather than in the
+// component that asked, because the request can be made from the bottom
+// banner or from Settings and the popup that explains the cost is the same
+// either way.
+let declined = false;
+
+// One place that resolves a finished request: re-read the real permission,
+// note a refusal, and wake every consumer on the same tick.
+function settle() {
+    declined = getSnapshot() === 'denied';
+    notify();
+}
+
 // The native shell's answer, once it has arrived. `null` means "not asked yet",
 // which is what makes the snapshot below 'checking' rather than a guess.
 let nativePermission: NotificationPermissionState | null = null;
@@ -78,6 +95,11 @@ function getSnapshot(): NotificationPermissionState {
 // post-hydration snapshot, the same bargain `useInstallPrompt` makes.
 const getServerSnapshot = (): NotificationPermissionState => 'checking';
 
+// Module-level rather than inline so the hook below hands `useSyncExternalStore`
+// the same functions on every render.
+const getDeclinedSnapshot = (): boolean => declined;
+const getDeclinedServerSnapshot = (): boolean => false;
+
 /**
  * Asks for notification permission. Call this only from a real user gesture —
  * an unprompted request is the pattern browsers penalise an origin for, so the
@@ -91,7 +113,7 @@ export async function requestNotificationPermission(): Promise<void> {
         } catch (error) {
             console.error('Failed to request the native notification permission', error);
         }
-        notify();
+        settle();
         return;
     }
     if (!pushSupported()) {
@@ -101,8 +123,25 @@ export async function requestNotificationPermission(): Promise<void> {
         await Notification.requestPermission();
     } catch {
         // Older Safari rejects rather than resolving 'denied'. Either way the
-        // notify below re-reads the real permission, so there is nothing to do.
+        // settle below re-reads the real permission, so there is nothing to do.
     }
+    settle();
+}
+
+/**
+ * Whether the app asked for permission and was told no, and hasn't yet
+ * explained what that costs. `NotificationDeclinedPopup` is the one reader.
+ */
+export function useNotificationDeclined(): boolean {
+    return useSyncExternalStore(subscribe, getDeclinedSnapshot, getDeclinedServerSnapshot);
+}
+
+/** The popup has been read and dismissed; stop offering it. */
+export function acknowledgeNotificationDecline(): void {
+    if (!declined) {
+        return;
+    }
+    declined = false;
     notify();
 }
 

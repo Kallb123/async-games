@@ -1146,6 +1146,16 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-legal-links { margin-top: 8px; }
 /* A stacked action row in a footer, e.g. the dev-only tools. */
 .ag-footer-action { margin-top: 8px; }
+/* A callout carried by a footer — the notification warning. The footer centres
+   its meta text, which is right for "v1.2 · built today" and wrong for two
+   sentences of explanation, so the notice reads left and sizes like body copy
+   rather than like a footnote. */
+.ag-footer-notice {
+    text-align: left;
+    font-size: 12.5px;
+    --ag-stack-gap: 6px;
+}
+.ag-footer-notice-title { font-weight: 800; }
 
 .ag-divider { height: 1px; background: var(--ag-line); margin: 22px 20px 0; border: none; }
 

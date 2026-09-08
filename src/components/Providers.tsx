@@ -3,6 +3,7 @@
 import { ReactNode } from 'react';
 import { ToastProvider } from './ToastContext';
 import BottomBanner from './BottomBanner';
+import NotificationDeclinedPopup from './NotificationDeclinedPopup';
 import { useServiceWorker } from '@/utils/hooks/useServiceWorker';
 import { useCapacitorBackButton } from '@/utils/hooks/useCapacitorBackButton';
 import { useCapacitorSplashScreen } from '@/utils/hooks/useCapacitorSplashScreen';
@@ -31,6 +32,9 @@ export default function Providers({ children }: { children: ReactNode }) {
         <ToastProvider>
             {children}
             <BottomBanner />
+            {/* Catches a permission prompt the player answered with Block,
+                wherever they started it from — see the component. */}
+            <NotificationDeclinedPopup />
         </ToastProvider>
     );
 }
