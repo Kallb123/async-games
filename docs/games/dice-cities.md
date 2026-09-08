@@ -14,10 +14,12 @@
 
 Dice Cities is a light, upbeat economic game set in a bustling region of rival towns. Every player begins with a single Wheat Field and a Bakery and the ambition to grow their sleepy hamlet into a thriving metropolis. Fortunes are decided by the roll of the dice: a lucky number sends money flowing into wheat farms, cafes, and factories, while a shrewd mayor arranges their establishments so that almost every roll pays out. The tone is friendly and competitive rather than confrontational — you build your own city, but you can occasionally reach into a neighbour's coin purse.
 
-The rules carry no dependency on that dressing. For a worked example of
-re-skinning the whole game — every base, Docks and Billionaires Row card — to a
-post-nuclear wasteland paid for in bottlecaps, see
-[§12 Alternative Theme](#12-appendix-alternative-theme--rust--bottlecaps).
+The rules carry no dependency on that dressing. Two appendices re-skin the
+whole game — every base, Docks and Billionaires Row card — to prove it:
+[§12](#12-appendix-alternative-theme--rust--bottlecaps) is a post-nuclear
+wasteland paid for in bottlecaps, and is the one that shipped;
+[§13](#13-appendix-alternative-theme--outer-rim) is a galactic civil war paid
+for in credits, and is on paper only.
 
 ---
 
@@ -665,3 +667,249 @@ off other survivors rather than off the land.
 
 A "closed" holding in this theme is **boarded up** — raiders have been through
 it — and its owner **reopens** it by working that type again on a later run.
+
+---
+
+## 13. Appendix: Alternative Theme — "Outer Rim"
+
+A second worked re-skin, this time to a galactic civil war: the board is one
+contested frontier world, far enough out that the Empire only garrisons it and
+the Rebellion only hides on it, and near enough to a trade lane that everybody
+there is trying to make a living regardless. Money is **credits**.
+
+Like §12 this is a naming reference only. **No cost, activation number,
+colour, icon group, per-player limit, bank total or win condition changes** —
+a Spice Mine is a Mine with a different picture on it.
+
+**This one is on paper only.** Nothing in the app offers it yet; §13.7 is what
+building it would take.
+
+### 13.1 The three-column tables
+
+Every card table below gives **three candidate names** — an **Empire** one, a
+**Rebellion** one and a **Neutral** one — because the same building means
+three different things depending on who is running it. A mess hall is a
+garrison canteen, a safehouse kitchen or a spaceport diner, and all three are
+the Family Restaurant.
+
+A shipped theme still needs exactly **one** name per card (a card has one
+title), so each row marks a suggested pick with a **★**. The picks are
+deliberately mixed rather than all-Neutral: the everyday economy — farms,
+mines, diners, markets — runs Neutral, because the frontier does not care who
+is winning, while the cards that reach into another player's pocket lean
+Imperial or Rebel, because those are the ones where the war shows up at your
+door. An **Imperial Inspection** shutting your operations down and a **Rebel
+Cell Command** paying the player who is behind both read as what they
+mechanically are.
+
+The alternative is to ship **three themes off one card list** — "Outer Rim
+(Imperial)", "(Rebellion)", "(Neutral)" — which the theme system supports at no
+extra cost, since a theme is just a name table. It is not the recommendation:
+a theme is table-wide, so it would make the host pick a side for everyone, and
+none of the three columns alone fills a whole board convincingly. Take it as a
+free option, not a plan.
+
+**Name the effect, not the building.** Three cards in this game are all
+"somewhere you trade" if you go by the picture — the Business Center, the
+Shopping Mall and the Fruit and Vegetable Market — and the base theme only
+keeps them apart because the art is an office tower, a mall and a produce
+stall. A theme has no art to lean on while its faces are placeholders, so a
+re-skin that names all three after commerce collapses them into one card the
+player cannot tell apart on the board or in the turn log. Name each after
+**what it does** instead, and they separate on their own:
+
+| Card | What it actually does | So it is called |
+| --- | --- | --- |
+| **Business Center** | Forces a one-for-one swap of a built card. Nobody is buying anything. | **Claims Office** — the frontier registry where a title changes hands, willing owner or not. |
+| **Shopping Mall** | Pays +1 to every Supply and Cantina you already own. It is footfall, not a shop. | **Way Station** — the lane stop whose passing traffic fills your stalls and diners. |
+| **Fruit and Vegetable Market** | Pays per Cropland you own. It is your farms' outlet. | **Growers' Co-op** — the thing the farms sell into. |
+
+The same test caught two quieter collisions: three ★ picks originally opened
+with "Spaceport", and the theme's supply pile is already **the Trade Ring**,
+so a "Trade Concourse" landmark beside it read as the same place.
+
+**On names.** The columns lean on the recognisable vocabulary of the setting;
+anything actually shipped in the app should prefer the descriptive coinages
+(Moisture Farm, Spice Mine, Sensor Array) over trademarked proper nouns, which
+is why the ★ picks are almost all in that register.
+
+### 13.2 Vocabulary
+
+| Base theme | Outer Rim theme | Notes |
+| --- | --- | --- |
+| **Coin** | **Credit** | Denominations of 1, 5 and 10, plus the Docks' 20s. Still public information. |
+| **The bank** | **The Exchange** | The Trade Guild's credit pool that payouts come out of and purchases go back into. Total unchanged (262, or 502 with the Docks). |
+| **Mayor** | **Governor** | "The first Governor to finish all four Installations wins." |
+| **City / tableau** | **Outpost** | |
+| **Establishment** | **Operation** | |
+| **Landmark** | **Installation** | |
+| **The market / supply** | **The Trade Ring** | The lane traffic that will sell anyone anything, both sides included. |
+| **Dice roll** | **Supply run** | The number rolled is "what the run brought in". Flavour only — as in §12, the app's own "turn" and "roll" wording is shared with every other game and stays as it is. |
+| **Blue (Primary Industry)** | **Frontier** | Pays on anyone's run. |
+| **Green (Secondary Industry)** | **Industry** | Pays on your own run only. |
+| **Red (Restaurants)** | **Cantinas** | Charges the pilot who came back with the number. |
+| **Purple (Major Establishments)** | **Power Brokers** | One each; big swings on your own run. |
+
+### 13.3 Operation types (icon groups)
+
+| Base type | Outer Rim type | Members |
+| --- | --- | --- |
+| `farm` (grain icon) | **Cropland** | Moisture Farm, Orchard Terraces, Glowbloom Field |
+| `pasture` (cow icon) | **Herd** | Grazer Pens |
+| `production` (gear icon) | **Extraction** | Timber Camp, Spice Mine |
+| `store` (bread icon) | **Supply** | Portion-Bread Stall, Outfitter's Post, Bacta Apothecary |
+| `dining` (cup icon) | **Cantina** | Safehouse Cantina, Spaceport Diner, Void-Crab Grill |
+| `factory` | **Works** | Creamery Works, Parts Foundry, Provisions Warehouse |
+| `market` | **Co-op** | Growers' Co-op |
+| `boat` | **Freighter** | Ore Hauler, Bulk Freighter |
+| `landmark` | **Installation** | The five Installations and the three Power Brokers |
+
+### 13.4 Base game
+
+Each Governor still starts with the two cheapest operations — here a
+**Moisture Farm** and a **Portion-Bread Stall**, which is about as frontier
+homestead as a starting hand gets — and **3 credits**.
+
+**Candidate names** (★ = suggested pick):
+
+| Base name | Empire | Rebellion | Neutral |
+| --- | --- | --- | --- |
+| **Wheat Field** | Agri-Corps Plot | Ration Plot | ★ **Moisture Farm** |
+| **Ranch** | Garrison Herd Pens | Hidden Pasture | ★ **Grazer Pens** |
+| **Bakery** | Commissary Kitchen | Field Mess | ★ **Portion-Bread Stall** |
+| **Cafe** | Officers' Club | ★ **Safehouse Cantina** | Dust-Road Cantina |
+| **Convenience Store** | Garrison Supply Depot | Smuggled Goods Drop | ★ **Outfitter's Post** |
+| **Forest** | Timber Levy Camp | Sheltered Woods | ★ **Timber Camp** |
+| **Stadium** | Tribute Rally | Recruitment Rally | ★ **Grav-Ball Arena** |
+| **TV Station** | Propaganda Broadcast | Pirate Holonet Feed | ★ **Holovid Studio** |
+| **Business Center** | Requisition Order | Prisoner Exchange | ★ **Claims Office** |
+| **Cheese Factory** | Rations Plant | Field Creamery | ★ **Creamery Works** |
+| **Furniture Factory** | Fleet Parts Foundry | Scrapyard Workshop | ★ **Parts Foundry** |
+| **Mine** | Penal Ore Mine | Unlicensed Shaft | ★ **Spice Mine** |
+| **Family Restaurant** | Garrison Mess Hall | Rebel Safehouse Kitchen | ★ **Spaceport Diner** |
+| **Apple Orchard** | Fruit Levy Grove | Sheltered Grove | ★ **Orchard Terraces** |
+| **Fruit and Vegetable Market** | Harvest Levy | Black-Market Run | ★ **Growers' Co-op** |
+
+**The picks, with the numbers they do not change:**
+
+| Base name | Outer Rim name | Colour | Activates | Cost | Unchanged effect |
+| --- | --- | --- | --- | --- | --- |
+| **Wheat Field** | **Moisture Farm** | Blue | 1 | 1 | Get 1 credit from the Exchange. |
+| **Ranch** | **Grazer Pens** | Blue | 2 | 1 | Get 1 credit from the Exchange. |
+| **Bakery** | **Portion-Bread Stall** | Green | 2–3 | 1 | Get 1 credit from the Exchange, on your run only. |
+| **Cafe** | **Safehouse Cantina** | Red | 3 | 2 | Take 1 credit from the pilot. |
+| **Convenience Store** | **Outfitter's Post** | Green | 4 | 2 | Get 3 credits from the Exchange, on your run only. |
+| **Forest** | **Timber Camp** | Blue | 5 | 3 | Get 1 credit from the Exchange. |
+| **Stadium** | **Grav-Ball Arena** | Purple | 6 | 6 | Take 2 credits from every other Governor. |
+| **TV Station** | **Holovid Studio** | Purple | 6 | 7 | Take 5 credits from any one Governor. |
+| **Business Center** | **Claims Office** | Purple | 6 | 8 | Trade one non-Installation operation with another Governor. |
+| **Cheese Factory** | **Creamery Works** | Green | 7 | 5 | Get 3 credits per **Herd** operation you own. |
+| **Furniture Factory** | **Parts Foundry** | Green | 8 | 3 | Get 3 credits per **Extraction** operation you own. |
+| **Mine** | **Spice Mine** | Blue | 9 | 6 | Get 5 credits from the Exchange. |
+| **Family Restaurant** | **Spaceport Diner** | Red | 9–10 | 3 | Take 2 credits from the pilot. |
+| **Apple Orchard** | **Orchard Terraces** | Blue | 10 | 3 | Get 3 credits from the Exchange. |
+| **Fruit and Vegetable Market** | **Growers' Co-op** | Green | 11–12 | 2 | Get 2 credits per **Cropland** operation you own. |
+
+### 13.5 Installations (the win engine)
+
+Still four to build, still in this order of cost, and finishing the fourth
+still ends the game on the spot.
+
+| Base name | Empire | Rebellion | Neutral |
+| --- | --- | --- | --- |
+| **Train Station** | Imperial Landing Platform | Hidden Airstrip | ★ **Docking Bay** |
+| **Shopping Mall** | Garrison Commissary | Smugglers' Layover | ★ **Way Station** |
+| **Amusement Park** | Parade Grounds | Victory Bonfire | ★ **Speeder Circuit** |
+| **Radio Tower** | Imperial Comm Tower | Encrypted Relay | ★ **Sensor Array** |
+| **Harbour** (Docks, 5th) | Orbital Garrison Ring | Asteroid Rendezvous | ★ **Orbital Dock** |
+
+| Base name | Outer Rim name | Cost | Unchanged effect |
+| --- | --- | --- | --- |
+| **Train Station** | **Docking Bay** | 4 | Roll 1 or 2 dice on each run, your choice. |
+| **Shopping Mall** | **Way Station** | 10 | Each of your **Supply** and **Cantina** operations earns +1 credit when it activates. |
+| **Amusement Park** | **Speeder Circuit** | 16 | Matching dice grant another run after this one. |
+| **Radio Tower** | **Sensor Array** | 22 | Once per run, sweep the lane again (re-roll your dice). |
+
+The first and last Installations are two halves of the same derelict
+spaceport the outpost grew up beside: a Governor's first job is clearing the
+**Docking Bay** so anything can land, and their last is getting the old
+**Sensor Array** turning again so they can see what is coming.
+
+As in §12.4, the top Installation is deliberately not a second transmitter —
+the theme already has a **Holovid Studio** (§13.4), and a sensor sweep is a
+thing you *re-run*, which is exactly what the re-roll is.
+
+### 13.6 The expansions
+
+**The Docks → "The Skylanes."** The coastal district goes up rather than out:
+the water is orbit, the boats are freighters, and the pier is the ring that
+lets anything dock at all. The Orbital Dock gates the Freighter cards exactly
+as the Harbour gates the boats.
+
+| Base name | Empire | Rebellion | Neutral |
+| --- | --- | --- | --- |
+| **Sushi Bar** | Orbital Officers' Mess | Smugglers' Galley | ★ **Void-Crab Grill** |
+| **Flower Orchard** | Bacta Herb Plot | Medicinal Bloom Plot | ★ **Glowbloom Field** |
+| **Flower Shop** | Imperial Apothecary | Field Medic's Bench | ★ **Bacta Apothecary** |
+| **Mackerel Boat** | Customs Skiff | Blockade Runner | ★ **Ore Hauler** |
+| **Food Warehouse** | Fleet Ration Depot | Hidden Supply Cache | ★ **Provisions Warehouse** |
+| **Tuna Boat** | Fleet Supply Contract | Convoy Raid | ★ **Bulk Freighter** |
+
+| Base name | Outer Rim name | Colour | Activates | Cost | Unchanged effect |
+| --- | --- | --- | --- | --- | --- |
+| **Harbour** (5th landmark) | **Orbital Dock** | — | — | 2 | A run of 10 or more may be nudged +2. Optional; never needed to win. |
+| **Sushi Bar** | **Void-Crab Grill** | Red | 1 | 2 | With the Dock, take 3 credits from the pilot. |
+| **Flower Orchard** | **Glowbloom Field** | Blue | 4 | 2 | Get 1 credit from the Exchange. Feeds the Apothecary. |
+| **Flower Shop** | **Bacta Apothecary** | Green | 6 | 1 | Get 1 credit per **Glowbloom Field** you own, on your run only. |
+| **Mackerel Boat** | **Ore Hauler** | Blue | 8 | 2 | With the Dock, get 3 credits from the Exchange. |
+| **Food Warehouse** | **Provisions Warehouse** | Green | 12–13 | 2 | Get 2 credits per **Cantina** operation you own, on your run only. |
+| **Tuna Boat** | **Bulk Freighter** | Blue | 12–14 | 5 | With the Dock, a shared 2d6 haul pays every Freighter owner that many credits. |
+
+**Billionaires Row → "Cartel Row."** The premium tier is where the war and the
+money finally admit they are the same thing: the people getting rich off the
+occupation, the resistance to it, or both at once.
+
+| Base name | Empire | Rebellion | Neutral |
+| --- | --- | --- | --- |
+| **Loan Office** | Imperial Credit Line | Sympathiser's Loan | ★ **Cartel Loan Broker** |
+| **Publisher** | Ministry of Information | Underground Newsfeed | ★ **Holonet Newsfeed** |
+| **Renovation Company** | ★ **Imperial Inspection** | Sabotage Cell | Demolition Crew |
+| **Tax Office** | ★ **Imperial Tithe Office** | War-Effort Levy | Protection Racket |
+| **Corporate HQ** | Sector Governor's Grant | ★ **Rebel Cell Command** | Traders' Guild Hall |
+| **Exhibition Hall** | Trophy Hall | Salvaged Wreck Display | ★ **Antiquities Gallery** |
+
+| Base name | Outer Rim name | Colour | Activates | Cost | Unchanged effect |
+| --- | --- | --- | --- | --- | --- |
+| **Loan Office** | **Cartel Loan Broker** | Green | 5–6 | (gain 5 now) | 5 credits up front on purchase, then 2 credits every time it activates. |
+| **Publisher** | **Holonet Newsfeed** | Purple | 7 | 5 | Take 1 credit from every Governor per **Supply + Cantina** icon they own. |
+| **Renovation Company** | **Imperial Inspection** | Purple | 8 | 4 | Impound all operations of one chosen type across every opponent; collect a fee per operation impounded. |
+| **Tax Office** | **Imperial Tithe Office** | Purple | 8–9 | 4 | Take half (rounded down) the credits of any Governor holding 10 or more. |
+| **Corporate HQ** | **Rebel Cell Command** | Green | 11–12 | 4 | Get 8 credits from the Exchange if you are not leading on Installations. |
+| **Exhibition Hall** | **Antiquities Gallery** | Purple | 11–12 | 3 | Impound one opponent operation worth 6+ and collect its value; its owner clears the seal on their run. |
+
+A "closed" operation in this theme is **impounded** — there is an Imperial
+seal across the door — and its owner **clears the seal** by working that type
+again on a later run.
+
+### 13.7 What it would take to ship
+
+Nothing here is built. Per [`docs/game-themes.md`](../game-themes.md), the work
+is the same shape as the wasteland's was:
+
+1. A third entry in `src/games/DiceCities/themes.ts` — the `words` block from
+   §13.2 and the ★ names and rules text from §13.4–13.6.
+2. One line in `GAME_THEMES` in `src/utils/ui/gameThemes.ts` (id, name,
+   description, glyph, and the "art is placeholder" note while it is).
+3. `public/art/dicecities/outerrim/`, starting as a copy of the default
+   theme's folder so every card is drawable from day one, then redrawn one
+   file at a time under the names it already has.
+4. Nothing else: `themes.test.ts` already walks every card of every theme and
+   fails the build if a name table changed a cost, a colour or an activation
+   number, and `themeIdFor` already resolves an unknown id to the default, so
+   adding a theme cannot break a game in progress.
+
+Two things stay as they are, exactly as they do for the wasteland: app-level
+vocabulary ("Your turn", "End turn", the turn timer) belongs to Async Games
+rather than to this game, so "supply run" is flavour only; and the share card
+(`public/icons/og-game-dicecities.png`) is drawn from the game's `meta`, not
+from a theme, so it does not change.
