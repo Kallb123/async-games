@@ -79,6 +79,33 @@ export interface GameResultChartSeries {
     color: string;
 }
 
+// One in-game moment worth calling out on a GameResultChart — Outbreak's
+// epidemic draws, Dice Cities' landmark buys, Fires Out's explosions.
+// `turnIndex` is 0-based in the same per-turn indexing computePerTurnStat's
+// perTurn arrays use (see computePerTurnEvents in replay.ts), so
+// mapEventsToRounds can place it on the same round axis as a per-turn series
+// computed from the same replay pass. `seriesKey` pins the marker to one
+// chart line (a buyer's own userId on a per-player chart); absent for an
+// event that isn't any one line's story (Outbreak's epidemic touches the
+// whole board, not one disease colour), which the renderer places above the
+// plot instead. A plain emoji, not an image — the same convention
+// IGameEvent.glyph (utils/games/recap.ts) already uses.
+export interface GameResultEvent {
+    turnIndex: number;
+    glyph: string;
+    title?: string;
+    seriesKey?: string;
+}
+
+// A GameResultEvent once mapEventsToRounds has placed it on a chart's round
+// axis.
+export interface GameResultChartEvent {
+    round: number;
+    glyph: string;
+    title?: string;
+    seriesKey?: string;
+}
+
 // A round-by-round line chart for the GameResult page: round number on the
 // x-axis, one line per series (typically per player). What's plotted varies
 // by game (coins, score, territory...), so this shape only fixes the
@@ -94,6 +121,9 @@ export interface GameResultChart {
     // are something else entirely (Outbreak's four cube supplies), naming each
     // one instead — same component, same shape, no second chart to maintain.
     series?: GameResultChartSeries[];
+    // Markers for in-game moments worth calling out on this chart — see
+    // mapEventsToRounds. Absent on a chart with nothing to mark.
+    events?: GameResultChartEvent[];
 }
 
 // Collapses a per-turn series (one entry per real turn - see countTurns() in
@@ -127,30 +157,55 @@ export function collapseToRounds<T>(perTurn: readonly T[], playerCount: number):
 // per-turn Map, keyed by something the game names itself (see
 // GameResultChartSeries) — so a non-player chart reuses this rather than
 // growing its own formatter.
+//
+// `events` are this chart's turn-indexed GameResultEvents (computed by
+// computePerTurnEvents alongside `perTurn`, from the same replay pass) —
+// mapped onto the round axis this call is already building, so an event and
+// the point it marks always agree on which round they're in.
 export function formatPerTurnChart(
     perTurn: Map<string, number>[] | undefined,
     title: string,
     yLabel: string,
     playerCount: number,
     series?: GameResultChartSeries[],
+    events?: GameResultEvent[],
 ): GameResultChart | undefined {
     // Undefined as well as empty: a series added to a game's stats after some
     // results were already recorded reads back missing on those records, and a
     // chart of nothing is worse than no chart. Tolerated here so no game has
     // to remember a `?? []` of its own.
     if (!perTurn?.length) return undefined;
+    const rounds = collapseToRounds(perTurn, playerCount).map(turn => {
+        const entry: Record<string, number> = {};
+        for (const [key, value] of turn) {
+            entry[key] = value;
+        }
+        return entry;
+    });
     return {
         title,
         yLabel,
-        rounds: collapseToRounds(perTurn, playerCount).map(turn => {
-            const entry: Record<string, number> = {};
-            for (const [key, value] of turn) {
-                entry[key] = value;
-            }
-            return entry;
-        }),
+        rounds,
         ...(series ? { series } : {}),
+        ...(events?.length ? { events: mapEventsToRounds(events, playerCount, rounds.length) } : {}),
     };
+}
+
+// Locates each GameResultEvent on the round axis a chart's `rounds` uses, via
+// the identical collapseToRounds grouping applied to the per-turn series next
+// to it, so an event and the point it marks always agree on which round
+// they're in.
+export function mapEventsToRounds(
+    events: GameResultEvent[],
+    playerCount: number,
+    roundCount: number,
+): GameResultChartEvent[] {
+    return events.map(({ turnIndex, glyph, title, seriesKey }) => ({
+        round: Math.min(Math.floor(turnIndex / playerCount), roundCount - 1),
+        glyph,
+        ...(title ? { title } : {}),
+        ...(seriesKey ? { seriesKey } : {}),
+    }));
 }
 
 // Compacts one or more formatPerTurnChart() results (each undefined when its

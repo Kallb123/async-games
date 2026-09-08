@@ -2093,6 +2093,9 @@ a.ag-list-row, a.ag-list-row-main {
     stroke-dasharray: 2 2;
     vector-effect: non-scaling-stroke;
 }
+.ag-chart-event-icon {
+    font-size: 11px;
+}
 .ag-chart-endlabel {
     position: absolute;
     transform: translate(4px, -50%);

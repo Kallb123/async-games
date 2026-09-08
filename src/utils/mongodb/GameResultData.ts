@@ -9,6 +9,7 @@ import { isDuplicateKeyError } from "./duplicateKey";
 import {
     IDiceCitiesGameData,
     IDiceCitiesGameResultStats,
+    LANDMARK_UNLOCK_COMMANDS,
     computeDiceCitiesResultStats,
     diceCitiesGameResultStatsSchemaDef,
     formatDiceCitiesResultStats,
@@ -16,7 +17,7 @@ import {
     playerByUserId as diceCitiesPlayerByUserId,
 } from "@/games/DiceCities/DiceCitiesModels";
 import type { IDiceCitiesGameStateResponse } from "@/games/DiceCities/apiModels";
-import { computePerTurnStat } from "@/utils/games/replay";
+import { computePerTurnStat, computePerTurnEvents } from "@/utils/games/replay";
 import { gameLength } from "@/utils/games/turnCount";
 import {
     ISmartthinkGameData,
@@ -78,6 +79,7 @@ import {
 } from "@/games/Outbreak/OutbreakModels";
 import type { IOutbreakSpecificGameStateResponse } from "@/games/Outbreak/apiModels";
 import { DISEASE_COLORS, OutbreakDiseaseColor } from "@/games/Outbreak/board";
+import type { IOutbreakInfectionPhaseOutcome } from "@/games/Outbreak/OutbreakLogic";
 import {
     IFiresOutGameData,
     IFiresOutGameResultStats,
@@ -88,6 +90,7 @@ import {
 } from "@/games/FiresOut/FiresOutModels";
 import type { IFiresOutSpecificGameStateResponse } from "@/games/FiresOut/apiModels";
 import { totalDamage } from "@/games/FiresOut/rules";
+import type { IFiresOutEndTurnOutcome } from "@/games/FiresOut/FiresOutLogic";
 
 export interface IGameResultData {
     gameId: uuidString,
@@ -279,7 +282,12 @@ const GAME_RESULT_STATS: Record<string, {
                 dcGameData,
                 (state, userId) => diceCitiesPlayerByUserId(state, userId)?.cards.reduce((sum, c) => sum + c.amount, 0),
             );
-            return computeDiceCitiesResultStats(dcGameData, coinsPerTurn, buildingsPerTurn);
+            const landmarkEvents = await computePerTurnEvents(dcGameData, (step) =>
+                LANDMARK_UNLOCK_COMMANDS.has(step.command.className)
+                    ? [{ glyph: "🏛️", title: `${step.command.senderUsername} built a landmark`, seriesKey: step.command.senderId }]
+                    : undefined,
+            );
+            return computeDiceCitiesResultStats(dcGameData, coinsPerTurn, buildingsPerTurn, landmarkEvents);
         },
         format: formatDiceCitiesResultStats,
         charts: formatDiceCitiesCharts,
@@ -365,7 +373,16 @@ const GAME_RESULT_STATS: Record<string, {
                 (state, color) => state.cubesLeft?.[color as OutbreakDiseaseColor],
                 DISEASE_COLORS,
             );
-            return computeOutbreakResultStats(outbreakGameData, cubesTreatedPerTurn, timesTravelledPerTurn, cubesLeftPerTurn);
+            const epidemicEvents = await computePerTurnEvents(outbreakGameData, (step) => {
+                const count = (step.outcome as IOutbreakInfectionPhaseOutcome).infectionLog
+                    ?.filter(entry => entry.kind === 'epidemic').length ?? 0;
+                if (count === 0) return undefined;
+                // A double-epidemic turn (two epidemic cards drawn on one
+                // hand-limit-forced draw) gets one marker per card, same as
+                // recap's own "Twice —" count.
+                return Array.from({ length: count }, () => ({ glyph: "☣️", title: "Epidemic card drawn" }));
+            });
+            return computeOutbreakResultStats(outbreakGameData, cubesTreatedPerTurn, timesTravelledPerTurn, cubesLeftPerTurn, epidemicEvents);
         },
         format: formatOutbreakResultStats,
         charts: formatOutbreakCharts,
@@ -382,7 +399,13 @@ const GAME_RESULT_STATS: Record<string, {
                 (state) => totalDamage(state.edges),
                 ['damage'],
             );
-            return computeFiresOutResultStats(firesOutGameData, damagePerTurn);
+            const explosionEvents = await computePerTurnEvents(firesOutGameData, (step) => {
+                const advance = (step.outcome as IFiresOutEndTurnOutcome).advanceFire;
+                return advance?.resolution === 'explosion'
+                    ? [{ glyph: "💥", title: "Explosion!", seriesKey: "damage" }]
+                    : undefined;
+            });
+            return computeFiresOutResultStats(firesOutGameData, damagePerTurn, explosionEvents);
         },
         format: formatFiresOutResultStats,
         charts: formatFiresOutCharts,

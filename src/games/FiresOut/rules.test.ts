@@ -1189,7 +1189,7 @@ describe("an unrecognised ruleset/difficulty never throws (§6.2, the /api/lobby
         const groups = formatFiresOutResultStats({
             rescued: 2, lost: 1, damage: 5, turnsLasted: 9,
             ruleset: 'experienced', difficulty: 'nightmare' as DifficultyId,
-            damagePerTurn: [],
+            damagePerTurn: [], explosionEvents: [],
         });
         expect(groups.flatMap(g => g.lines).join(' ')).toContain(DIFFICULTY_TIERS[0].label);
     });

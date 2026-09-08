@@ -2,7 +2,7 @@ import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { v4 as uuidv4 } from 'uuid';
-import { GameResultChart, GameResultChartSeries, GameResultStatGroup, compactCharts, formatPerTurnChart, uuidString } from "@/utils/apiModels/GameDataApi";
+import { GameResultChart, GameResultChartSeries, GameResultEvent, GameResultStatGroup, compactCharts, formatPerTurnChart, uuidString } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { userToken } from "@/utils/games/history";
 import { shuffle } from "@/utils/games/shuffle";
@@ -540,6 +540,13 @@ export interface IFiresOutGameResultStats {
     // Board-wide, not per-player — see DAMAGE_SERIES below and Outbreak's
     // cubesLeftPerTurn, which keys its own board-wide series the same way.
     damagePerTurn: Map<string, number>[];
+    // Every Advance Fire that resolved as an explosion (the primary
+    // resolution only — a chained flare-up's own resolution isn't separately
+    // exposed on the outcome, same as recap's RESOLUTION_GLYPH). Keyed to the
+    // single 'damage' line via seriesKey, since there's only ever the one.
+    // Computed by computePerTurnEvents from the same replay pass as
+    // damagePerTurn.
+    explosionEvents: GameResultEvent[];
 }
 
 export const firesOutGameResultStatsSchemaDef = {
@@ -550,11 +557,13 @@ export const firesOutGameResultStatsSchemaDef = {
     ruleset: String,
     difficulty: String,
     damagePerTurn: [{ type: Schema.Types.Map, of: Number }],
+    explosionEvents: [{ turnIndex: Number, glyph: String, title: String, seriesKey: String }],
 };
 
 export function computeFiresOutResultStats(
     gameData: IFiresOutGameData,
     damagePerTurn: Map<string, number>[],
+    explosionEvents: GameResultEvent[],
 ): IFiresOutGameResultStats {
     const gs = gameData.specificGameState;
     return {
@@ -569,6 +578,7 @@ export function computeFiresOutResultStats(
         ruleset: gs.ruleset,
         difficulty: gs.difficulty,
         damagePerTurn,
+        explosionEvents,
     };
 }
 
@@ -588,7 +598,7 @@ export function formatFiresOutCharts(
     usernameById: Map<string, string>,
 ): GameResultChart[] {
     return compactCharts(
-        formatPerTurnChart(stats.damagePerTurn, "Damage per turn", "Damage", usernameById.size, DAMAGE_SERIES),
+        formatPerTurnChart(stats.damagePerTurn, "Damage per turn", "Damage", usernameById.size, DAMAGE_SERIES, stats.explosionEvents),
     );
 }
 

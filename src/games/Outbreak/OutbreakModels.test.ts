@@ -66,6 +66,7 @@ describe("Outbreak result charts", () => {
             new Map([["blue", 20], ["yellow", 19], ["black", 21], ["red", 22]]),
             new Map([["blue", 18], ["yellow", 19], ["black", 17], ["red", 22]]),
         ],
+        epidemicEvents: [],
         ...overrides,
     });
 

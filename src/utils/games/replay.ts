@@ -2,6 +2,7 @@ import { IGameData } from "../mongodb/GameData";
 import { UNKNOWN_PLAYER_NAME } from "../ui/players";
 import { IHistoryEntry, resolveHistory } from "./history";
 import { IGameCommand, IGameType, ICommandOutcome } from "../apiModels/GameLogic";
+import type { GameResultEvent } from "../apiModels/GameDataApi";
 import { deserializeJSON } from "../apiModels/Serialisable";
 import { runCommand } from "./commandPipeline";
 import { createAdapterRegistry } from "./adapterRegistry";
@@ -443,4 +444,38 @@ export async function computePerTurnStat<TState>(
         return [];
     }
     return perTurn;
+}
+
+// Replays a game via buildTimeline, calling `detect` once per applied command
+// and recording any events it returns against the turn they happened in — the
+// same sender-changes turn boundary computePerTurnStat groups by, so an event
+// computed from the same replay lands on the same round as a per-turn stat
+// next to it (see GameResultEvent, GameDataApi.ts). A single turn can produce
+// more than one event (Outbreak's double epidemic).
+export async function computePerTurnEvents(
+    gameData: IGameData,
+    detect: (step: IReplayStep) => Omit<GameResultEvent, 'turnIndex'>[] | undefined,
+): Promise<GameResultEvent[]> {
+    const identityMap = Object.fromEntries(gameData.userIdList.map(userId => [userId, userId]));
+    const events: GameResultEvent[] = [];
+    let turnIndex = 0;
+    let previousSenderId: string | undefined;
+    try {
+        await buildTimeline(gameData, identityMap, [], (step) => {
+            if (previousSenderId !== undefined && step.command.senderId !== previousSenderId) {
+                turnIndex++;
+            }
+            previousSenderId = step.command.senderId;
+            for (const event of detect(step) ?? []) {
+                events.push({ ...event, turnIndex });
+            }
+        });
+    } catch (error) {
+        // Same graceful downgrade as computePerTurnStat, for the same reason:
+        // this runs on the last move of a game, inside recordGameResult, and a
+        // broken replay adapter shouldn't cost a player their final turn.
+        console.warn(`No per-turn events for game ${gameData.gameId}: ${error}`);
+        return [];
+    }
+    return events;
 }

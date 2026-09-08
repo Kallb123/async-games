@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import {
     GameResultChart,
     GameResultChartSeries,
+    GameResultEvent,
     GameResultStatGroup,
     compactCharts,
     formatPerTurnChart,
@@ -497,6 +498,12 @@ export interface IOutbreakGameResultStats {
     // the three ways the table loses (§4.2), so how fast each supply drained
     // is the story of the game — see formatOutbreakCharts.
     cubesLeftPerTurn: Map<string, number>[];
+    // Every epidemic card drawn. An epidemic raises the infection rate for
+    // the whole board rather than moving any one disease colour's supply, so
+    // unlike the per-turn series above these carry no seriesKey — the chart
+    // places them above the plot instead of on a line. Computed by
+    // computePerTurnEvents from the same replay pass as cubesLeftPerTurn.
+    epidemicEvents: GameResultEvent[];
 }
 
 export const outbreakGameResultStatsSchemaDef = {
@@ -507,6 +514,7 @@ export const outbreakGameResultStatsSchemaDef = {
     cubesTreatedPerTurn: [{ type: Schema.Types.Map, of: Number }],
     timesTravelledPerTurn: [{ type: Schema.Types.Map, of: Number }],
     cubesLeftPerTurn: [{ type: Schema.Types.Map, of: Number }],
+    epidemicEvents: [{ turnIndex: Number, glyph: String, title: String, seriesKey: String }],
 };
 
 export function computeOutbreakResultStats(
@@ -514,6 +522,7 @@ export function computeOutbreakResultStats(
     cubesTreatedPerTurn: Map<string, number>[],
     timesTravelledPerTurn: Map<string, number>[],
     cubesLeftPerTurn: Map<string, number>[],
+    epidemicEvents: GameResultEvent[],
 ): IOutbreakGameResultStats {
     const gs = gameData.specificGameState;
     return {
@@ -527,6 +536,7 @@ export function computeOutbreakResultStats(
         cubesTreatedPerTurn,
         timesTravelledPerTurn,
         cubesLeftPerTurn,
+        epidemicEvents,
     };
 }
 
@@ -554,7 +564,7 @@ export function formatOutbreakCharts(
     return compactCharts(
         formatPerTurnChart(stats.cubesTreatedPerTurn, "Cubes treated per round", "Cubes", usernameById.size),
         formatPerTurnChart(stats.timesTravelledPerTurn, "Times travelled per round", "Moves", usernameById.size),
-        formatPerTurnChart(stats.cubesLeftPerTurn, "Cubes left in supply", "Cubes", usernameById.size, CUBE_SUPPLY_SERIES),
+        formatPerTurnChart(stats.cubesLeftPerTurn, "Cubes left in supply", "Cubes", usernameById.size, CUBE_SUPPLY_SERIES, stats.epidemicEvents),
     );
 }
 
