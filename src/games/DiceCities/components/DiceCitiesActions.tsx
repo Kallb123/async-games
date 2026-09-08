@@ -358,6 +358,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
                     cards={mine.map((cc) => cards[cc.card])}
                     disabled={busy}
                     isPending={(cardId) => pendingTarget === `give:${cardId}`}
+                    subtitle={(card) => `You have ×${mine.find((cc) => cc.card === card.cardId)?.amount ?? 0}`}
                     onPick={(cardId) => {
                         const command = new DiceCitiesRequestBusinessCenterOwnSelection();
                         command.selectedCard = cardId;
@@ -388,6 +389,11 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
                                 cards={theirs.map((cc) => cards[cc.card])}
                                 disabled={busy}
                                 isPending={(cardId) => pendingTarget === `take:${op.userId}:${cardId}`}
+                                subtitle={(card) => {
+                                    const mineAmount = myState.cards.find((cc) => cc.card === card.cardId)?.amount ?? 0;
+                                    const theirAmount = theirs.find((cc) => cc.card === card.cardId)?.amount ?? 0;
+                                    return <>You have ×{mineAmount}<br />They have ×{theirAmount}</>;
+                                }}
                                 onPick={(cardId) => {
                                     const command = new DiceCitiesRequestBusinessCenterOpponentSelection();
                                     command.selectedUser = op.userId;
@@ -580,13 +586,15 @@ function SelectionHead({ icon, title, sub }: { icon: string; title: string; sub:
     );
 }
 
-function CardPickGrid({ cards, disabled, isPending, onPick }: {
+function CardPickGrid({ cards, disabled, isPending, onPick, subtitle }: {
     /** The themed cards to offer — already named and illustrated. */
     cards: IDiceCitiesCard[];
     disabled: boolean;
     /** True for the card whose command is in flight — it wears the pending skin. */
     isPending: (cardId: uuidString) => boolean;
     onPick: (cardId: uuidString) => void;
+    /** How many of this card each side holds, e.g. "You have ×3" — shown under the name. */
+    subtitle?: (card: IDiceCitiesCard) => ReactNode;
 }) {
     return (
         <div className="ag-dc-pick-grid ag-pending-group">
@@ -603,7 +611,10 @@ function CardPickGrid({ cards, disabled, isPending, onPick }: {
                         <CardArt card={card} className="ag-dc-pick-card-icon" />
                         {pending
                             ? <PendingTag label="Sending" />
-                            : <span className="ag-dc-pick-card-name">{card.title}</span>}
+                            : <>
+                                <span className="ag-dc-pick-card-name">{card.title}</span>
+                                {subtitle && <span className="ag-dc-pick-card-sub">{subtitle(card)}</span>}
+                            </>}
                     </button>
                 );
             })}
