@@ -2,7 +2,7 @@ import { User } from '@clerk/nextjs/server';
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
 import { buildGameLostNotification, buildGameWonNotification, buildTeamResultNotification } from '@/utils/firebase/notificationContent';
 import { userListToUserIdNameMap, usersById } from '@/utils/users/clerk';
-import { unclaimedGuestsOf } from '@/utils/users/guest';
+import { guestNamesOf } from '@/utils/users/guest';
 import { IGameDataDocument, trySave } from '@/utils/mongodb/GameData';
 import { recordGameResult } from '@/utils/mongodb/GameResultData';
 import { GameEndReason } from '@/utils/apiModels/GameDataApi';
@@ -91,9 +91,9 @@ async function announceGameOver(gameData: IGameDataDocument): Promise<void> {
     try {
         userList = await usersById(gameData.userIdList);
     } catch (error) {
-        // Without the roster there is no way to tell a guest's exhibition match
-        // from a counted one, and nobody to address a push to, so a Clerk
-        // outage costs both halves. The game itself is saved either way.
+        // Without the roster there is no guest name to remember, and nobody to
+        // address a push to, so a Clerk outage costs both halves. The game
+        // itself is saved either way.
         console.error(`Couldn't resolve the roster to finish game ${gameData.gameId}`, error);
         return;
     }
@@ -102,8 +102,7 @@ async function announceGameOver(gameData: IGameDataDocument): Promise<void> {
     // as well, or the table would be left waiting on a turn that is never
     // coming — which is the thing this whole path exists to prevent.
     try {
-        const { unclaimedPlayerIds, guestNames } = unclaimedGuestsOf(userList);
-        await recordGameResult(gameData, unclaimedPlayerIds, guestNames);
+        await recordGameResult(gameData, guestNamesOf(userList));
     } catch (error) {
         console.error(`Couldn't record the result of game ${gameData.gameId}`, error);
     }

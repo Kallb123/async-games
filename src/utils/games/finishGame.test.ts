@@ -49,6 +49,29 @@ describe('finishGame', () => {
         expect(sentPushes.map(push => push.userIds)).toEqual([[ANN.id], [BOB.id]]);
     });
 
+    it('counts a table with a guest at it like any other, remembering only their name', async () => {
+        const GUEST = { id: 'user_guest', publicMetadata: { guest: true, displayName: 'Dave' } };
+        stubClerkUsers(GUEST);
+        seedSnakesAndLadders(
+            {
+                userIdList: [ANN.id, GUEST.id],
+                gameState: { turnOrder: [ANN.id, GUEST.id], history: [], commandHistory: [] },
+            },
+            { [ANN.id]: 10, [GUEST.id]: 20 },
+        );
+
+        const finished = await finishGame(await liveGame(), { winner: GUEST.id, endReason: 'win' });
+        await finished.announce();
+
+        // Step 17 deletes a guest's Clerk user a week after their last game, so
+        // the name they played under is copied onto the result while it is
+        // still known. That is the *only* thing being a guest changes: the
+        // match counts for everyone who sat at the table, Ann included
+        // (docs/account-less-play.md §8 — there is no exhibition match).
+        expect(recordGameResult).toHaveBeenCalledTimes(1);
+        expect(recordGameResult.mock.calls[0].slice(1)).toEqual([new Map([[GUEST.id, 'Dave']])]);
+    });
+
     it('tells a co-op table it won, all of it, with no winner recorded', async () => {
         const finished = await finishGame(await liveGame(), { endReason: 'teamwin' });
         await finished.announce();

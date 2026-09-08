@@ -212,7 +212,7 @@ export function stubClerkUsers(...users: (Partial<User> & { id: string })[]) {
     for (const user of users) {
         if (!clerkUsers.some(known => known.id === user.id)) {
             // A real Clerk user always has publicMetadata, and the gates read
-            // it without checking (isUnlockedUser, unclaimedGuestsOf) — so a
+            // it without checking (isUnlockedUser, guestNamesOf) — so a
             // stub without one fails where a real user wouldn't.
             clerkUsers.push({ publicMetadata: {}, ...user } as User);
         }
