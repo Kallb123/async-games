@@ -148,22 +148,12 @@ export default function FiresOutActions({
                                     tag={disabled ? 'No targets' : `${count} ${count === 1 ? 'space' : 'spaces'}`}
                                     tagMuted={disabled}
                                 />
-                                {/* Picking something up is a rider on Move rather than an
-                                    action of its own, because §8 prices carrying per space
-                                    instead of as a one-off. That only works if a player
-                                    standing on a victim can *see* it, so the toggle sits
-                                    directly beneath the Move row and shows whenever there
-                                    is something here to collect.
-
-                                    It used to render at the foot of the sheet and only
-                                    once Move was armed, which hid the whole mechanic from
-                                    anyone who hadn't thought to tap Move first — the one
-                                    clue being the small print on the Move row. Being
-                                    independent of the armed mode also makes it
-                                    recoverable: carrying can't cross fire (§10.2), so
-                                    switching it on for a victim ringed by flame takes the
-                                    Move row above to "No targets", and the toggle has to
-                                    still be there to switch back off. */}
+                                {/* Carrying is a rider on Move, not an action of its own —
+                                    §8 prices it per space. Shown whenever something is
+                                    here to collect, rather than only once Move is armed:
+                                    carrying can't cross fire (§10.2), so switching it on
+                                    can take the Move row above to "No targets", and the
+                                    toggle has to still be there to switch back off. */}
                                 {def.mode === 'move' && carryToggleKind && (
                                     <div className="ag-card ag-option-card">
                                         <OptionToggleRow
