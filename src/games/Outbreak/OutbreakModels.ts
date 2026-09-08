@@ -9,11 +9,14 @@ import {
     GameResultStatGroup,
     compactCharts,
     formatPerTurnChart,
+    gameResultEventSchemaDef,
     uuidString,
 } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { OutbreakGameType } from "@/utils/apiModels/GameLogic";
+import type { IOutbreakInfectionPhaseOutcome } from "./OutbreakLogic";
+import type { IReplayStep } from "@/utils/games/replay";
 import { shuffle } from "@/utils/games/shuffle";
 import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
 import { userToken } from "@/utils/games/history";
@@ -514,8 +517,21 @@ export const outbreakGameResultStatsSchemaDef = {
     cubesTreatedPerTurn: [{ type: Schema.Types.Map, of: Number }],
     timesTravelledPerTurn: [{ type: Schema.Types.Map, of: Number }],
     cubesLeftPerTurn: [{ type: Schema.Types.Map, of: Number }],
-    epidemicEvents: [{ turnIndex: Number, glyph: String, title: String, seriesKey: String }],
+    epidemicEvents: [gameResultEventSchemaDef],
 };
+
+// A computePerTurnEvents detector (see replay.ts): every epidemic card drawn
+// this step, from the infection log a turn's outcome already carries (the
+// same log recap.ts reads for its own "Epidemic!" event). A double-epidemic
+// turn (two epidemic cards drawn on one hand-limit-forced draw) reports one
+// event per card, matching recap's own "Twice —" count. Exported so it can be
+// unit-tested and wired straight into GAME_RESULT_STATS.Outbreak.compute
+// (GameResultData.ts).
+export function detectEpidemicEvents(step: IReplayStep): Omit<GameResultEvent, 'turnIndex'>[] | undefined {
+    const count = (step.outcome as IOutbreakInfectionPhaseOutcome).infectionLog
+        ?.filter(entry => entry.kind === 'epidemic').length ?? 0;
+    return count > 0 ? Array.from({ length: count }, () => ({ glyph: "☣️", title: "Epidemic card drawn" })) : undefined;
+}
 
 export function computeOutbreakResultStats(
     gameData: IOutbreakGameData,

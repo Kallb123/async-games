@@ -106,6 +106,11 @@ export interface GameResultChartEvent {
     seriesKey?: string;
 }
 
+// The Mongoose sub-schema for a stored GameResultEvent — shared so every
+// game's *GameResultStatsSchemaDef writes the same field list instead of
+// three copies drifting apart the first time one of them gains a field.
+export const gameResultEventSchemaDef = { turnIndex: Number, glyph: String, title: String, seriesKey: String };
+
 // A round-by-round line chart for the GameResult page: round number on the
 // x-axis, one line per series (typically per player). What's plotted varies
 // by game (coins, score, territory...), so this shape only fixes the

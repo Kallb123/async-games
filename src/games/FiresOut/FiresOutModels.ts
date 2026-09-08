@@ -2,12 +2,14 @@ import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { v4 as uuidv4 } from 'uuid';
-import { GameResultChart, GameResultChartSeries, GameResultEvent, GameResultStatGroup, compactCharts, formatPerTurnChart, uuidString } from "@/utils/apiModels/GameDataApi";
+import { GameResultChart, GameResultChartSeries, GameResultEvent, GameResultStatGroup, compactCharts, formatPerTurnChart, gameResultEventSchemaDef, uuidString } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { userToken } from "@/utils/games/history";
 import { shuffle } from "@/utils/games/shuffle";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { FiresOutGameType } from "@/utils/apiModels/GameLogic";
+import type { IFiresOutEndTurnOutcome } from "./FiresOutLogic";
+import type { IReplayStep } from "@/utils/games/replay";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { AMBULANCE_START, DAMAGE_TO_COLLAPSE, DifficultyId, ENGINE_START, RulesetId, START_SPACE, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN, asRulesetId, crewSizeFor, difficultyTier, spacePhrase } from "./board";
 import { meta } from "./meta";
@@ -557,8 +559,18 @@ export const firesOutGameResultStatsSchemaDef = {
     ruleset: String,
     difficulty: String,
     damagePerTurn: [{ type: Schema.Types.Map, of: Number }],
-    explosionEvents: [{ turnIndex: Number, glyph: String, title: String, seriesKey: String }],
+    explosionEvents: [gameResultEventSchemaDef],
 };
+
+// A computePerTurnEvents detector (see replay.ts): marks the single 'damage'
+// line wherever an Advance Fire resolved as an explosion — the same
+// `advance.resolution === 'explosion'` check recap.ts's RESOLUTION_TYPE/
+// RESOLUTION_GLYPH lookup makes. Exported so it can be unit-tested and wired
+// straight into GAME_RESULT_STATS.FiresOut.compute (GameResultData.ts).
+export function detectExplosionEvent(step: IReplayStep): Omit<GameResultEvent, 'turnIndex'>[] | undefined {
+    const advance = (step.outcome as IFiresOutEndTurnOutcome).advanceFire;
+    return advance?.resolution === 'explosion' ? [{ glyph: "💥", title: "Explosion!", seriesKey: "damage" }] : undefined;
+}
 
 export function computeFiresOutResultStats(
     gameData: IFiresOutGameData,

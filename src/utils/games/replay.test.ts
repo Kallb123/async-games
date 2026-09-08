@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computePerTurnStat, registerReplayAdapter } from "./replay";
+import { computePerTurnEvents, computePerTurnStat, registerReplayAdapter } from "./replay";
 import { countTurns } from "./turnCount";
 import { serializable } from "../apiModels/Serialisable";
 import type { ICommandOutcome, IGameCommand, IGameType } from "../apiModels/gameCommand";
@@ -157,5 +157,48 @@ describe("computePerTurnStat", () => {
         );
 
         expect(perTurn).toEqual([]);
+    });
+});
+
+describe("computePerTurnEvents", () => {
+    it("tags an event with the turn it happened in, not the command", async () => {
+        // Same four-command history as computePerTurnStat's test above: only
+        // the first command triggers the bonus, and it's part of u1's first
+        // turn (turn 0) even though that turn spans two commands.
+        const commandHistory = [
+            action("u1", true),  // bonus: turn stays with u1
+            action("u1", false), // ends u1's (first) turn for real
+            action("u2", false), // ends u2's turn
+            action("u1", false), // u1's next turn
+        ];
+
+        const events = await computePerTurnEvents(game(commandHistory), (step) =>
+            (step.command as TestBonusAction).triggerBonus ? [{ glyph: "🎁" }] : undefined,
+        );
+
+        expect(events).toEqual([{ turnIndex: 0, glyph: "🎁" }]);
+    });
+
+    it("records more than one event for the same turn", async () => {
+        // u1's bonus keeps both commands on turn 0; u2's is turn 1. Every
+        // command reports an event here, so turn 0 should carry two.
+        const commandHistory = [
+            action("u1", true),
+            action("u1", false),
+            action("u2", false),
+        ];
+
+        const events = await computePerTurnEvents(game(commandHistory), () => [{ glyph: "*" }]);
+
+        expect(events).toEqual([
+            { turnIndex: 0, glyph: "*" },
+            { turnIndex: 0, glyph: "*" },
+            { turnIndex: 1, glyph: "*" },
+        ]);
+    });
+
+    it("records nothing when detect finds nothing", async () => {
+        const events = await computePerTurnEvents(game([action("u1", false)]), () => undefined);
+        expect(events).toEqual([]);
     });
 });

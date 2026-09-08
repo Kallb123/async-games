@@ -3,7 +3,8 @@ import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationR
 import { Model, Schema, models } from "mongoose";
 import { BANK_TOTAL_COINS, bankTotalCoins, DiceCitiesCardIds, DOCKS_ESTABLISHMENT_IDS, STARTING_PLAYER_COINS } from "./cards";
 import { IDiceCitiesGameDataResponse, IDiceCitiesGameStateResponse, IDiceCitiesPlayerStateResponse } from "./apiModels";
-import { uuidString, GameResultStatGroup, GameResultChart, GameResultEvent, formatPerTurnChart, compactCharts, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
+import { uuidString, GameResultStatGroup, GameResultChart, GameResultEvent, gameResultEventSchemaDef, formatPerTurnChart, compactCharts, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
+import type { IReplayStep } from "@/utils/games/replay";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
@@ -406,7 +407,7 @@ export const diceCitiesGameResultStatsSchemaDef = {
     landmarksUnlocked: { type: Schema.Types.Map, of: [String] },
     coinsPerTurn: [{ type: Schema.Types.Map, of: Number }],
     buildingsPerTurn: [{ type: Schema.Types.Map, of: Number }],
-    landmarkEvents: [{ turnIndex: Number, glyph: String, title: String, seriesKey: String }],
+    landmarkEvents: [gameResultEventSchemaDef],
 };
 
 // The five commands that unlock a landmark — the four win-condition ones plus
@@ -422,6 +423,18 @@ export const LANDMARK_UNLOCK_COMMANDS = new Set([
     "DiceCitiesRequestUnlockRadioTower",
     "DiceCitiesRequestUnlockHarbour",
 ]);
+
+// A computePerTurnEvents detector (see replay.ts): marks the buyer's own line
+// on the buildings/turn chart wherever a landmark unlock lands, so the result
+// page can show a building icon at the round it happened. Exported so it can
+// be unit-tested and wired straight into GAME_RESULT_STATS.DiceCities.compute
+// (GameResultData.ts) without GameResultData.ts having to know the command
+// names itself.
+export function detectLandmarkEvent(step: IReplayStep): Omit<GameResultEvent, 'turnIndex'>[] | undefined {
+    return LANDMARK_UNLOCK_COMMANDS.has(step.command.className)
+        ? [{ glyph: "🏛️", title: `${step.command.senderUsername} built a landmark`, seriesKey: step.command.senderId }]
+        : undefined;
+}
 
 export function computeDiceCitiesResultStats(
     gameData: IDiceCitiesGameData,
