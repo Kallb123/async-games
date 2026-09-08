@@ -658,7 +658,16 @@ used to fail into a console log. `NotificationStatus` says which step a device
 reached and offers a retry, and `NotificationTestButton` proves the whole path
 by sending a real push to the caller's own devices via
 `/api/notificationtest` — the production-safe counterpart of the dev-only,
-any-user `/api/notifyuser`.
+any-user `/api/notifyuser`. The attempt and its outcome are module-level state
+rather than per-mount: several screens mount two readers (their own
+`FcmTokenComp` and something showing the result), and one page load should mean
+one `getToken` and one POST, not one per component.
+
+Each stored token (`TimedToken`) keeps the time it was first registered
+(`timestamp`), the last time that device re-registered (`lastSeen`), and a
+`device` summary parsed from the request's user-agent header by
+`src/utils/firebase/deviceInfo.ts`.
+
 **Saying so when it won't work.** Push is how an async game reaches a player at
 all, so a device that cannot receive one has a broken app rather than a
 preference it has expressed. `useNotificationHealth` (`src/utils/hooks/`) folds
@@ -672,14 +681,11 @@ the bottom banner's offer it cannot be dismissed. `NotificationDeclinedPopup`,
 mounted by `Providers`, catches the other case the browser gives no event for:
 a player who pressed Enable and then Block. `requestNotificationPermission`
 records that refusal in the permission store (`useNotificationDeclined`), and
-the popup explains what it costs once per refusal. Both read their copy from
-`src/utils/ui/notifications.ts`, which `NotificationOffer` shares — the way out
-of a blocked browser is described in one place.
-
-Each stored token (`TimedToken`) keeps the time it was first registered
-(`timestamp`), the last time that device re-registered (`lastSeen`), and a
-`device` summary parsed from the request's user-agent header by
-`src/utils/firebase/deviceInfo.ts`.
+the popup explains what it costs once per refusal. The decision itself is
+`notificationBlocker`, pure and unit-tested, and the words are
+`notificationBlockerLine` — both in `src/utils/ui/notifications.ts`, which
+`NotificationOffer`, `NotificationStatus` and the Settings screen also read, so
+the way out of a blocked browser is described in exactly one place.
 
 **Device management.** The same route also serves `GET` (list the user's
 devices — id, name, type and timestamps, never the raw token) and `DELETE`

@@ -18,6 +18,7 @@ import NotificationTestButton from "@/components/ui/NotificationTestButton";
 import ClaimAccountForm from "@/components/ClaimAccountForm";
 import { isGuest } from "@/utils/ui/players";
 import { NotificationChannel, NOTIFICATION_CHANNELS } from "@/utils/firebase/notificationPreferences";
+import { notificationBlockerLine } from "@/utils/ui/notifications";
 import { requestNotificationPermission, useNotificationPermission } from "@/utils/hooks/useNotificationPermission";
 import useFcmToken from "@/utils/hooks/useFcmToken";
 import { useInstallPrompt } from "@/utils/hooks/useInstallPrompt";
@@ -158,12 +159,14 @@ export default function Settings() {
                 {/* Said out loud rather than left blank: this section used to
                     render nothing at all here, so a player whose browser can't
                     do push saw an empty "Notifications" heading and no reason
-                    for it. */}
+                    for it. The sentence is `notificationBlockerLine`'s, shared
+                    with the footer and the declined popup — it also names
+                    Android's settings rather than a browser's inside the native
+                    shell, which this screen's own copy never did. */}
                 {permission === 'unsupported' && (
                     <div className="ag-callout">
-                        This browser can&apos;t receive notifications. Open Async Games in
-                        Chrome, Edge or Safari — or install it to your home screen — and
-                        the settings will appear here.
+                        {notificationBlockerLine('unsupported')} The switches will appear
+                        here once it can.
                     </div>
                 )}
 

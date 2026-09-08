@@ -2,7 +2,7 @@
 import { useIsAuthorised } from './useAuthGuard';
 import { useNotificationPermission } from './useNotificationPermission';
 import useFcmToken from './useFcmToken';
-import type { NotificationBlocker } from '@/utils/ui/notifications';
+import { notificationBlocker, type NotificationBlocker } from '@/utils/ui/notifications';
 
 /**
  * Whether this device is actually going to be told it's the player's turn, and
@@ -16,34 +16,13 @@ import type { NotificationBlocker } from '@/utils/ui/notifications';
  * anything that wants to say "notifications aren't working" asks here rather
  * than picking one of the two and hoping.
  *
- * Gated on being signed in, like the bottom banner's offer: someone with no
- * account has no turns to miss, and telling a visitor the app can't notify
- * them is a warning about a problem they don't have yet.
+ * All this hook does is read the live values; `notificationBlocker` is the
+ * decision, kept pure so it can be tested without a browser.
  */
 export function useNotificationHealth(): NotificationBlocker | null {
     const { isAuthorised } = useIsAuthorised();
     const permission = useNotificationPermission();
     const { registration } = useFcmToken();
 
-    if (!isAuthorised) {
-        return null;
-    }
-
-    switch (permission) {
-        // Nothing known yet — the native shell answers over the Capacitor
-        // bridge, and this is also what the server renders, so saying anything
-        // here would flash a warning at a device that is about to say it's fine.
-        case 'checking':
-            return null;
-        case 'unsupported':
-            return 'unsupported';
-        case 'default':
-            return 'unasked';
-        case 'denied':
-            return 'blocked';
-        case 'granted':
-            // 'registering' is not a failure yet, and 'idle' can't happen with
-            // permission granted and the viewer authorised.
-            return registration === 'no-token' || registration === 'not-saved' ? 'unregistered' : null;
-    }
+    return notificationBlocker(isAuthorised, permission, registration);
 }

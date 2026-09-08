@@ -52,7 +52,10 @@ function NotificationFooterNotice() {
                 <div className="ag-footer-notice-title">Turn alerts can’t reach this device</div>
                 <div>{NOTIFICATION_MISS_LINE}</div>
                 <div>{notificationBlockerLine(blocker)}</div>
-                <Link href="/settings">Notification settings</Link>
+                {/* Not prefetched: this sits on every screen, and Settings
+                    is a heavy authenticated page nobody on most of those
+                    screens is about to open. */}
+                <Link href="/settings" prefetch={false}>Notification settings</Link>
             </div>
         </div>
     );

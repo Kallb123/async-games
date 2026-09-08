@@ -6,6 +6,8 @@
 // preference — and all three places have to say so in the same words.
 
 import { isNativeShell } from '@/utils/native';
+import type { NotificationPermissionState } from '@/utils/hooks/useNotificationPermission';
+import type { PushRegistrationState } from '@/utils/hooks/useFcmToken';
 
 /**
  * Why this device will not receive a push, in the order the three
@@ -51,5 +53,42 @@ export function notificationBlockerLine(blocker: NotificationBlocker): string {
                 : 'Notifications are blocked for this site. Allow them in your browser’s site settings to hear about invites and turns.';
         case 'unregistered':
             return "Notifications are allowed here, but this device couldn't register for them.";
+    }
+}
+
+/**
+ * The three preconditions, read as one answer: which one is missing, or `null`
+ * when a push can actually land on this device.
+ *
+ * Pure, and tested, because it is the only real decision in this corner of the
+ * app — `useNotificationHealth` is the hook that feeds it the live values.
+ *
+ * `authorised` gates the lot: someone with no account has no turns to miss, and
+ * warning a visitor about a problem they don't have yet is noise. `'checking'`
+ * is the same `null`, deliberately — it is what the server renders and what the
+ * native shell reports until the Capacitor bridge answers, so anything else
+ * would flash a warning at a device that is about to say it's fine.
+ */
+export function notificationBlocker(
+    authorised: boolean,
+    permission: NotificationPermissionState,
+    registration: PushRegistrationState,
+): NotificationBlocker | null {
+    if (!authorised) {
+        return null;
+    }
+    switch (permission) {
+        case 'checking':
+            return null;
+        case 'unsupported':
+            return 'unsupported';
+        case 'default':
+            return 'unasked';
+        case 'denied':
+            return 'blocked';
+        case 'granted':
+            // 'registering' is not a failure yet, and 'idle' cannot happen with
+            // permission granted and the viewer authorised.
+            return registration === 'no-token' || registration === 'not-saved' ? 'unregistered' : null;
     }
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import type { PushRegistrationState } from '@/utils/hooks/useFcmToken';
+import { notificationBlockerLine } from '@/utils/ui/notifications';
 
 interface NotificationStatusProps {
     registration: PushRegistrationState;
@@ -12,10 +13,21 @@ interface NotificationStatusProps {
 // the phone refusing to issue a push token (Play Services, a blocked push
 // service, a service worker that never started), the other is us failing to
 // store the token it did issue.
-const FAILURES: Partial<Record<PushRegistrationState, string>> = {
-    'no-token': "Notifications are allowed on this device, but it couldn't register for them — so nothing will arrive here yet.",
-    'not-saved': "This device registered for notifications, but we couldn't save it to your account — so nothing will arrive here yet.",
-};
+//
+// The first is the `unregistered` blocker the footer and the declined popup
+// warn about, so it borrows their sentence rather than wording it a second way
+// — `NotificationBlocker` folds both failures into that one blocker, and only
+// this screen, which owns the retry, has any use for the difference.
+function failureLine(registration: PushRegistrationState): string | undefined {
+    switch (registration) {
+        case 'no-token':
+            return `${notificationBlockerLine('unregistered')} Nothing will arrive here yet.`;
+        case 'not-saved':
+            return "This device registered for notifications, but we couldn't save it to your account — so nothing will arrive here yet.";
+        default:
+            return undefined;
+    }
+}
 
 /**
  * Whether *this* device will actually receive a push, said out loud.
@@ -31,7 +43,7 @@ const FAILURES: Partial<Record<PushRegistrationState, string>> = {
  * on the first attempt is not congratulated at length for it.
  */
 export default function NotificationStatus({ registration, onRetry }: NotificationStatusProps) {
-    const failure = FAILURES[registration];
+    const failure = failureLine(registration);
 
     if (failure) {
         return (
