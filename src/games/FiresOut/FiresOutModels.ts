@@ -10,6 +10,7 @@ import { userIdListToNamesAndMap } from "@/utils/users/clerk";
 import { FiresOutGameType } from "@/utils/apiModels/GameLogic";
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { AMBULANCE_START, DAMAGE_TO_COLLAPSE, DifficultyId, ENGINE_START, RulesetId, START_SPACE, VICTIMS_LOST_TO_LOSE, VICTIMS_TO_WIN, asRulesetId, crewSizeFor, difficultyTier, spacePhrase } from "./board";
+import { meta } from "./meta";
 import {
     IFiresOutEdgeState,
     IFiresOutFirefighterState,
@@ -576,7 +577,7 @@ export function computeFiresOutResultStats(
 // accent (meta.ts) since it's the one number every crew is racing against
 // DAMAGE_TO_COLLAPSE.
 const DAMAGE_SERIES: GameResultChartSeries[] = [
-    { key: 'damage', name: 'Damage', color: '#d2432c' },
+    { key: 'damage', name: 'Damage', color: meta.accent },
 ];
 
 // Mirrors Outbreak's formatOutbreakCharts — the crew's own results page
