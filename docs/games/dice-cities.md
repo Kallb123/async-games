@@ -709,6 +709,25 @@ a theme is table-wide, so it would make the host pick a side for everyone, and
 none of the three columns alone fills a whole board convincingly. Take it as a
 free option, not a plan.
 
+**Name the effect, not the building.** Three cards in this game are all
+"somewhere you trade" if you go by the picture — the Business Center, the
+Shopping Mall and the Fruit and Vegetable Market — and the base theme only
+keeps them apart because the art is an office tower, a mall and a produce
+stall. A theme has no art to lean on while its faces are placeholders, so a
+re-skin that names all three after commerce collapses them into one card the
+player cannot tell apart on the board or in the turn log. Name each after
+**what it does** instead, and they separate on their own:
+
+| Card | What it actually does | So it is called |
+| --- | --- | --- |
+| **Business Center** | Forces a one-for-one swap of a built card. Nobody is buying anything. | **Claims Office** — the frontier registry where a title changes hands, willing owner or not. |
+| **Shopping Mall** | Pays +1 to every Supply and Cantina you already own. It is footfall, not a shop. | **Way Station** — the lane stop whose passing traffic fills your stalls and diners. |
+| **Fruit and Vegetable Market** | Pays per Cropland you own. It is your farms' outlet. | **Growers' Co-op** — the thing the farms sell into. |
+
+The same test caught two quieter collisions: three ★ picks originally opened
+with "Spaceport", and the theme's supply pile is already **the Trade Ring**,
+so a "Trade Concourse" landmark beside it read as the same place.
+
 **On names.** The columns lean on the recognisable vocabulary of the setting;
 anything actually shipped in the app should prefer the descriptive coinages
 (Moisture Farm, Spice Mine, Sensor Array) over trademarked proper nouns, which
@@ -738,10 +757,10 @@ is why the ★ picks are almost all in that register.
 | `farm` (grain icon) | **Cropland** | Moisture Farm, Orchard Terraces, Glowbloom Field |
 | `pasture` (cow icon) | **Herd** | Grazer Pens |
 | `production` (gear icon) | **Extraction** | Timber Camp, Spice Mine |
-| `store` (bread icon) | **Supply** | Portion-Bread Stall, Spaceport Sundries, Bacta Apothecary |
+| `store` (bread icon) | **Supply** | Portion-Bread Stall, Outfitter's Post, Bacta Apothecary |
 | `dining` (cup icon) | **Cantina** | Safehouse Cantina, Spaceport Diner, Void-Crab Grill |
-| `factory` | **Works** | Creamery Works, Parts Foundry, Cargo Warehouse |
-| `market` | **Trade Post** | Spaceport Market Row |
+| `factory` | **Works** | Creamery Works, Parts Foundry, Provisions Warehouse |
+| `market` | **Co-op** | Growers' Co-op |
 | `boat` | **Freighter** | Ore Hauler, Bulk Freighter |
 | `landmark` | **Installation** | The five Installations and the three Power Brokers |
 
@@ -759,17 +778,17 @@ homestead as a starting hand gets — and **3 credits**.
 | **Ranch** | Garrison Herd Pens | Hidden Pasture | ★ **Grazer Pens** |
 | **Bakery** | Commissary Kitchen | Field Mess | ★ **Portion-Bread Stall** |
 | **Cafe** | Officers' Club | ★ **Safehouse Cantina** | Dust-Road Cantina |
-| **Convenience Store** | Garrison Supply Depot | Smuggled Goods Drop | ★ **Spaceport Sundries** |
+| **Convenience Store** | Garrison Supply Depot | Smuggled Goods Drop | ★ **Outfitter's Post** |
 | **Forest** | Timber Levy Camp | Sheltered Woods | ★ **Timber Camp** |
 | **Stadium** | Tribute Rally | Recruitment Rally | ★ **Grav-Ball Arena** |
 | **TV Station** | Propaganda Broadcast | Pirate Holonet Feed | ★ **Holovid Studio** |
-| **Business Center** | Requisition Order | Prisoner Exchange | ★ **Barter House** |
+| **Business Center** | Requisition Order | Prisoner Exchange | ★ **Claims Office** |
 | **Cheese Factory** | Rations Plant | Field Creamery | ★ **Creamery Works** |
 | **Furniture Factory** | Fleet Parts Foundry | Scrapyard Workshop | ★ **Parts Foundry** |
-| **Mine** | Penal Ore Mine | Claim-Jumped Shaft | ★ **Spice Mine** |
+| **Mine** | Penal Ore Mine | Unlicensed Shaft | ★ **Spice Mine** |
 | **Family Restaurant** | Garrison Mess Hall | Rebel Safehouse Kitchen | ★ **Spaceport Diner** |
 | **Apple Orchard** | Fruit Levy Grove | Sheltered Grove | ★ **Orchard Terraces** |
-| **Fruit and Vegetable Market** | Requisition Market | Black-Market Stall | ★ **Spaceport Market Row** |
+| **Fruit and Vegetable Market** | Harvest Levy | Black-Market Run | ★ **Growers' Co-op** |
 
 **The picks, with the numbers they do not change:**
 
@@ -779,17 +798,17 @@ homestead as a starting hand gets — and **3 credits**.
 | **Ranch** | **Grazer Pens** | Blue | 2 | 1 | Get 1 credit from the Exchange. |
 | **Bakery** | **Portion-Bread Stall** | Green | 2–3 | 1 | Get 1 credit from the Exchange, on your run only. |
 | **Cafe** | **Safehouse Cantina** | Red | 3 | 2 | Take 1 credit from the pilot. |
-| **Convenience Store** | **Spaceport Sundries** | Green | 4 | 2 | Get 3 credits from the Exchange, on your run only. |
+| **Convenience Store** | **Outfitter's Post** | Green | 4 | 2 | Get 3 credits from the Exchange, on your run only. |
 | **Forest** | **Timber Camp** | Blue | 5 | 3 | Get 1 credit from the Exchange. |
 | **Stadium** | **Grav-Ball Arena** | Purple | 6 | 6 | Take 2 credits from every other Governor. |
 | **TV Station** | **Holovid Studio** | Purple | 6 | 7 | Take 5 credits from any one Governor. |
-| **Business Center** | **Barter House** | Purple | 6 | 8 | Trade one non-Installation operation with another Governor. |
+| **Business Center** | **Claims Office** | Purple | 6 | 8 | Trade one non-Installation operation with another Governor. |
 | **Cheese Factory** | **Creamery Works** | Green | 7 | 5 | Get 3 credits per **Herd** operation you own. |
 | **Furniture Factory** | **Parts Foundry** | Green | 8 | 3 | Get 3 credits per **Extraction** operation you own. |
 | **Mine** | **Spice Mine** | Blue | 9 | 6 | Get 5 credits from the Exchange. |
 | **Family Restaurant** | **Spaceport Diner** | Red | 9–10 | 3 | Take 2 credits from the pilot. |
 | **Apple Orchard** | **Orchard Terraces** | Blue | 10 | 3 | Get 3 credits from the Exchange. |
-| **Fruit and Vegetable Market** | **Spaceport Market Row** | Green | 11–12 | 2 | Get 2 credits per **Cropland** operation you own. |
+| **Fruit and Vegetable Market** | **Growers' Co-op** | Green | 11–12 | 2 | Get 2 credits per **Cropland** operation you own. |
 
 ### 13.5 Installations (the win engine)
 
@@ -799,7 +818,7 @@ still ends the game on the spot.
 | Base name | Empire | Rebellion | Neutral |
 | --- | --- | --- | --- |
 | **Train Station** | Imperial Landing Platform | Hidden Airstrip | ★ **Docking Bay** |
-| **Shopping Mall** | Garrison Commissary | Supply Cache | ★ **Trade Concourse** |
+| **Shopping Mall** | Garrison Commissary | Smugglers' Layover | ★ **Way Station** |
 | **Amusement Park** | Parade Grounds | Victory Bonfire | ★ **Speeder Circuit** |
 | **Radio Tower** | Imperial Comm Tower | Encrypted Relay | ★ **Sensor Array** |
 | **Harbour** (Docks, 5th) | Orbital Garrison Ring | Asteroid Rendezvous | ★ **Orbital Dock** |
@@ -807,7 +826,7 @@ still ends the game on the spot.
 | Base name | Outer Rim name | Cost | Unchanged effect |
 | --- | --- | --- | --- |
 | **Train Station** | **Docking Bay** | 4 | Roll 1 or 2 dice on each run, your choice. |
-| **Shopping Mall** | **Trade Concourse** | 10 | Each of your **Supply** and **Cantina** operations earns +1 credit when it activates. |
+| **Shopping Mall** | **Way Station** | 10 | Each of your **Supply** and **Cantina** operations earns +1 credit when it activates. |
 | **Amusement Park** | **Speeder Circuit** | 16 | Matching dice grant another run after this one. |
 | **Radio Tower** | **Sensor Array** | 22 | Once per run, sweep the lane again (re-roll your dice). |
 
@@ -833,7 +852,7 @@ as the Harbour gates the boats.
 | **Flower Orchard** | Bacta Herb Plot | Medicinal Bloom Plot | ★ **Glowbloom Field** |
 | **Flower Shop** | Imperial Apothecary | Field Medic's Bench | ★ **Bacta Apothecary** |
 | **Mackerel Boat** | Customs Skiff | Blockade Runner | ★ **Ore Hauler** |
-| **Food Warehouse** | Fleet Ration Depot | Hidden Supply Cache | ★ **Cargo Warehouse** |
+| **Food Warehouse** | Fleet Ration Depot | Hidden Supply Cache | ★ **Provisions Warehouse** |
 | **Tuna Boat** | Fleet Supply Contract | Convoy Raid | ★ **Bulk Freighter** |
 
 | Base name | Outer Rim name | Colour | Activates | Cost | Unchanged effect |
@@ -843,7 +862,7 @@ as the Harbour gates the boats.
 | **Flower Orchard** | **Glowbloom Field** | Blue | 4 | 2 | Get 1 credit from the Exchange. Feeds the Apothecary. |
 | **Flower Shop** | **Bacta Apothecary** | Green | 6 | 1 | Get 1 credit per **Glowbloom Field** you own, on your run only. |
 | **Mackerel Boat** | **Ore Hauler** | Blue | 8 | 2 | With the Dock, get 3 credits from the Exchange. |
-| **Food Warehouse** | **Cargo Warehouse** | Green | 12–13 | 2 | Get 2 credits per **Cantina** operation you own, on your run only. |
+| **Food Warehouse** | **Provisions Warehouse** | Green | 12–13 | 2 | Get 2 credits per **Cantina** operation you own, on your run only. |
 | **Tuna Boat** | **Bulk Freighter** | Blue | 12–14 | 5 | With the Dock, a shared 2d6 haul pays every Freighter owner that many credits. |
 
 **Billionaires Row → "Cartel Row."** The premium tier is where the war and the
