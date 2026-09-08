@@ -2,7 +2,7 @@ import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { v4 as uuidv4 } from 'uuid';
-import { GameResultStatGroup, uuidString } from "@/utils/apiModels/GameDataApi";
+import { GameResultChart, GameResultChartSeries, GameResultStatGroup, compactCharts, formatPerTurnChart, uuidString } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { userToken } from "@/utils/games/history";
 import { shuffle } from "@/utils/games/shuffle";
@@ -536,6 +536,9 @@ export interface IFiresOutGameResultStats {
     turnsLasted: number;
     ruleset: RulesetId;
     difficulty: DifficultyId;
+    // Board-wide, not per-player — see DAMAGE_SERIES below and Outbreak's
+    // cubesLeftPerTurn, which keys its own board-wide series the same way.
+    damagePerTurn: Map<string, number>[];
 }
 
 export const firesOutGameResultStatsSchemaDef = {
@@ -545,9 +548,13 @@ export const firesOutGameResultStatsSchemaDef = {
     turnsLasted: Number,
     ruleset: String,
     difficulty: String,
+    damagePerTurn: [{ type: Schema.Types.Map, of: Number }],
 };
 
-export function computeFiresOutResultStats(gameData: IFiresOutGameData): IFiresOutGameResultStats {
+export function computeFiresOutResultStats(
+    gameData: IFiresOutGameData,
+    damagePerTurn: Map<string, number>[],
+): IFiresOutGameResultStats {
     const gs = gameData.specificGameState;
     return {
         rescued: gs.rescued,
@@ -560,7 +567,28 @@ export function computeFiresOutResultStats(gameData: IFiresOutGameData): IFiresO
         turnsLasted: gameData.gameState.commandHistory.filter(c => (c as unknown as { kind?: string }).kind === 'endTurn').length,
         ruleset: gs.ruleset,
         difficulty: gs.difficulty,
+        damagePerTurn,
     };
+}
+
+// The single damage line belongs to the building, not to a player — same
+// treatment as Outbreak's CUBE_SUPPLY_SERIES — drawn in the game's own
+// accent (meta.ts) since it's the one number every crew is racing against
+// DAMAGE_TO_COLLAPSE.
+const DAMAGE_SERIES: GameResultChartSeries[] = [
+    { key: 'damage', name: 'Damage', color: '#d2432c' },
+];
+
+// Mirrors Outbreak's formatOutbreakCharts — the crew's own results page
+// (no per-player breakdown), so the only chart is the building's damage
+// climbing over the course of the game.
+export function formatFiresOutCharts(
+    stats: IFiresOutGameResultStats,
+    usernameById: Map<string, string>,
+): GameResultChart[] {
+    return compactCharts(
+        formatPerTurnChart(stats.damagePerTurn, "Damage per turn", "Damage", usernameById.size, DAMAGE_SERIES),
+    );
 }
 
 export function formatFiresOutResultStats(stats: IFiresOutGameResultStats): GameResultStatGroup[] {
