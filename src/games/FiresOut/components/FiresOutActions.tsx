@@ -137,17 +137,45 @@ export default function FiresOutActions({
                         const count = targetCounts[def.mode];
                         const disabled = count === 0;
                         return (
-                            <BuildRow
-                                key={def.mode}
-                                icon={def.icon}
-                                name={def.name}
-                                cost={def.hint(specialist)}
-                                disabled={disabled || submitting}
-                                active={mode === def.mode}
-                                onClick={() => onModeChange(mode === def.mode ? null : def.mode)}
-                                tag={disabled ? 'No targets' : `${count} ${count === 1 ? 'space' : 'spaces'}`}
-                                tagMuted={disabled}
-                            />
+                            <React.Fragment key={def.mode}>
+                                <BuildRow
+                                    icon={def.icon}
+                                    name={def.name}
+                                    cost={def.hint(specialist)}
+                                    disabled={disabled || submitting}
+                                    active={mode === def.mode}
+                                    onClick={() => onModeChange(mode === def.mode ? null : def.mode)}
+                                    tag={disabled ? 'No targets' : `${count} ${count === 1 ? 'space' : 'spaces'}`}
+                                    tagMuted={disabled}
+                                />
+                                {/* Picking something up is a rider on Move rather than an
+                                    action of its own, because §8 prices carrying per space
+                                    instead of as a one-off. That only works if a player
+                                    standing on a victim can *see* it, so the toggle sits
+                                    directly beneath the Move row and shows whenever there
+                                    is something here to collect.
+
+                                    It used to render at the foot of the sheet and only
+                                    once Move was armed, which hid the whole mechanic from
+                                    anyone who hadn't thought to tap Move first — the one
+                                    clue being the small print on the Move row. Being
+                                    independent of the armed mode also makes it
+                                    recoverable: carrying can't cross fire (§10.2), so
+                                    switching it on for a victim ringed by flame takes the
+                                    Move row above to "No targets", and the toggle has to
+                                    still be there to switch back off. */}
+                                {def.mode === 'move' && carryToggleKind && (
+                                    <div className="ag-card ag-option-card">
+                                        <OptionToggleRow
+                                            title={carryToggleKind === 'victim' ? 'Carry the victim here' : 'Carry the hazmat here'}
+                                            description={`Leave it, or bring it along at ${AP_COSTS.carryPerSpace} AP a space`}
+                                            on={carryOnMove}
+                                            onToggle={() => onCarryOnMoveChange(!carryOnMove)}
+                                            disabled={submitting}
+                                        />
+                                    </div>
+                                )}
+                            </React.Fragment>
                         );
                     })}
 
@@ -163,15 +191,6 @@ export default function FiresOutActions({
                     />
                 ))}
             </div>
-
-            {carryToggleKind && mode === 'move' && (
-                <OptionToggleRow
-                    title={carryToggleKind === 'victim' ? 'Carry the victim here' : 'Carry the hazmat here'}
-                    description="Leave it, or bring it along at 2 AP a space"
-                    on={carryOnMove}
-                    onToggle={() => onCarryOnMoveChange(!carryOnMove)}
-                />
-            )}
 
             {showCrewChange && (
                 <>

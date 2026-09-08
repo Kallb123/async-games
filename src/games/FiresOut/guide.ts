@@ -24,7 +24,7 @@ export const guide: GameGuide = {
         },
         {
             heading: "Victims",
-            body: "The \"?\" markers are 10 victims mixed with 5 false alarms, and only reaching one tells you which. Carrying costs 2 points a space and you can't cross fire while doing it. In the Family game anywhere outside counts as the rescue — so fire catching you carries you both out and saves them. In the Experienced game only the ambulance will do.",
+            body: "The \"?\" markers are 10 victims mixed with 5 false alarms, and only reaching one tells you which. To bring one out, stand on them and switch on \"Carry the victim here\" under Move, then pick where to go. Carrying costs 2 points a space and you can't cross fire while doing it. In the Family game anywhere outside counts as the rescue — so fire catching you carries you both out and saves them. In the Experienced game only the ambulance will do.",
         },
         {
             heading: "The Experienced game",
