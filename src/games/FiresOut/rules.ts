@@ -144,12 +144,20 @@ export function specialistDef(id: SpecialistId): ISpecialistDef {
     return SPECIALISTS.find(s => s.id === id)!;
 }
 
-/** §6.2 step 7: each firefighter takes one specialist at random — mirrors Outbreak's dealRoles (rules.ts:361-366) exactly, including its "more roles than seats" slack (8 specialists, MAX_PLAYERS 6). */
-export function dealSpecialists(turnOrder: string[]): Map<string, SpecialistId> {
-    const shuffled = shuffle(SPECIALISTS.map(s => s.id));
-    const assignment = new Map<string, SpecialistId>();
-    turnOrder.forEach((userId, i) => assignment.set(userId, shuffled[i]));
-    return assignment;
+/**
+ * §6.2 step 7: each firefighter takes one specialist at random — mirrors
+ * Outbreak's dealRoles (rules.ts:361-366) exactly, including its "more roles
+ * than seats" slack (8 specialists, MAX_SOLO_CREW 6).
+ *
+ * Dealt per *figure* rather than per player (§17.2 gap 3): §1's solitaire crew
+ * is several figures under one owner id, so a Map keyed by user would have
+ * given all six of them the same specialist — or rather, one entry's worth of
+ * specialist and five `undefined`s. The index into the returned array is the
+ * index into `firefighters`, which is the only thing that tells one of a solo
+ * crew's figures from another.
+ */
+export function dealSpecialists(crewSize: number): SpecialistId[] {
+    return shuffle(SPECIALISTS.map(s => s.id)).slice(0, crewSize);
 }
 
 /**

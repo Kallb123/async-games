@@ -107,15 +107,18 @@ registerTurnTimeoutAdapter({
         // turnOver never comes and the cap below becomes the exit rather than
         // the backstop — a tick's worth of real Advance Fires either thrown
         // away with 'stuck' or, worse, saved as a teamloss the fire only
-        // caused because the cron rolled it twenty times. Unreachable while
-        // every seat holds exactly one figure, which is every game that can be
-        // created today (MIN_PLAYERS is 2, and buildInitialFiresOutState makes
-        // one figure per seat); §1's solitaire play, plan step 12, is what will
-        // make it ordinary. Declining is the whole answer, and 'declined' is
+        // caused because the cron rolled it twenty times. This is now the
+        // ordinary shape of a Fires Out solitaire game (§1, plan step 12): one
+        // seat, a whole crew of figures, and — because step 12 offers a real
+        // turn timer rather than hardcoding an unlimited one — a board the
+        // sweep does reach. Declining is the whole answer, and 'declined' is
         // the answer the caller wants: it banks the missed turn against
         // MAX_CONSECUTIVE_MISSED_TURNS and ends the game on the third one, the
         // same as any other game its player walked away from — so a turn only
         // its owner can take is left for its owner to take, but not forever.
+        // (An owner who is *playing* clears their own count on every accepted
+        // command — see the command route — so the ladder only ever climbs for
+        // somebody who really has stopped turning up.)
         if (gs.firefighters.every(ff => ff.ownerId === userId)) return null;
 
         const action = new FiresOutAction();

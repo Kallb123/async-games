@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { clearGames, clerkUserId, dismissGuideIfShown, gameGuideResponse, logBrowserErrors, reloadAndSettle } from '../helpers';
+import { endTurn, endTurnButton } from '../firesout';
 
 // fires-out-gdd.md §17.6 step 11: prove the game is actually playable end to
 // end, now that meta.available is true — inviting a named player, each side
@@ -19,10 +20,6 @@ test.afterAll(async ({ request }) => {
   await clearGames(request);
 });
 
-function endTurnButton(page: Page) {
-  return page.getByRole('button', { name: /End turn/ });
-}
-
 // Turn order is drawn at random at setup (FiresOutModels.ts's CreateGame), so
 // either player can go first.
 async function findCurrentPlayer(pageA: Page, pageB: Page): Promise<{ current: Page; waiting: Page }> {
@@ -33,24 +30,6 @@ async function findCurrentPlayer(pageA: Page, pageB: Page): Promise<{ current: P
   return (await pageA.getByText('Your turn').isVisible())
     ? { current: pageA, waiting: pageB }
     : { current: pageB, waiting: pageA };
-}
-
-// Ends the active firefighter's turn (banking whatever AP is left — no board
-// action is needed to make endTurn legal) and dismisses the Advance Fire
-// payoff screen it always triggers (§17.6 step 7): the dice tumble for ~1s
-// before the "Continue" button enables, so this waits for the roll to settle
-// rather than racing it.
-async function endTurn(page: Page): Promise<void> {
-  const commandResponse = page.waitForResponse((res) => res.url().includes('/api/game/command'), { timeout: 60_000 });
-  await endTurnButton(page).click();
-  const response = await commandResponse;
-  if (!response.ok()) {
-    throw new Error(`End turn command rejected: ${response.status()} ${await response.text()}`);
-  }
-
-  const continueButton = page.getByRole('button', { name: 'Continue' });
-  await expect(continueButton).toBeEnabled({ timeout: 5_000 });
-  await continueButton.click();
 }
 
 test('invite a player, start a game, and take a turn each', async ({ browser }) => {

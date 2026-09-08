@@ -137,17 +137,35 @@ export default function FiresOutActions({
                         const count = targetCounts[def.mode];
                         const disabled = count === 0;
                         return (
-                            <BuildRow
-                                key={def.mode}
-                                icon={def.icon}
-                                name={def.name}
-                                cost={def.hint(specialist)}
-                                disabled={disabled || submitting}
-                                active={mode === def.mode}
-                                onClick={() => onModeChange(mode === def.mode ? null : def.mode)}
-                                tag={disabled ? 'No targets' : `${count} ${count === 1 ? 'space' : 'spaces'}`}
-                                tagMuted={disabled}
-                            />
+                            <React.Fragment key={def.mode}>
+                                <BuildRow
+                                    icon={def.icon}
+                                    name={def.name}
+                                    cost={def.hint(specialist)}
+                                    disabled={disabled || submitting}
+                                    active={mode === def.mode}
+                                    onClick={() => onModeChange(mode === def.mode ? null : def.mode)}
+                                    tag={disabled ? 'No targets' : `${count} ${count === 1 ? 'space' : 'spaces'}`}
+                                    tagMuted={disabled}
+                                />
+                                {/* Carrying is a rider on Move, not an action of its own —
+                                    §8 prices it per space. Shown whenever something is
+                                    here to collect, rather than only once Move is armed:
+                                    carrying can't cross fire (§10.2), so switching it on
+                                    can take the Move row above to "No targets", and the
+                                    toggle has to still be there to switch back off. */}
+                                {def.mode === 'move' && carryToggleKind && (
+                                    <div className="ag-card ag-option-card">
+                                        <OptionToggleRow
+                                            title={carryToggleKind === 'victim' ? 'Carry the victim here' : 'Carry the hazmat here'}
+                                            description={`Leave it, or bring it along at ${AP_COSTS.carryPerSpace} AP a space`}
+                                            on={carryOnMove}
+                                            onToggle={() => onCarryOnMoveChange(!carryOnMove)}
+                                            disabled={submitting}
+                                        />
+                                    </div>
+                                )}
+                            </React.Fragment>
                         );
                     })}
 
@@ -163,15 +181,6 @@ export default function FiresOutActions({
                     />
                 ))}
             </div>
-
-            {carryToggleKind && mode === 'move' && (
-                <OptionToggleRow
-                    title={carryToggleKind === 'victim' ? 'Carry the victim here' : 'Carry the hazmat here'}
-                    description="Leave it, or bring it along at 2 AP a space"
-                    on={carryOnMove}
-                    onToggle={() => onCarryOnMoveChange(!carryOnMove)}
-                />
-            )}
 
             {showCrewChange && (
                 <>

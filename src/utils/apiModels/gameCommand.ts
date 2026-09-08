@@ -3,7 +3,28 @@ import type { IGameData } from "../mongodb/GameData";
 
 export interface ICommandOutcome {
     validMove: boolean,
-    turnOver: boolean
+    /** The turn passed to a different player: `CheckEndTurn` moves `currentTurn`, the timer restarts, and the new player is told it's their move. */
+    turnOver: boolean,
+    /**
+     * A deadline boundary that is *not* a hand-off: the player who acted is
+     * still `currentTurn` afterwards, but the turn timer should start again
+     * because the thing it measures has finished.
+     *
+     * Only a game whose turn belongs to something smaller than a player needs
+     * this. Fires Out's solitaire crew is that game (docs/games/fires-out-gdd.md
+     * §17.2 gap 3, §17.6 step 12): one player holds every figure, so `turnOver`
+     * is false for every hand-off between them, and a timer that only restarts
+     * on `turnOver` never moved at all — leaving a game that was being played
+     * every day permanently expired, swept twice a period forever, and pushed a
+     * "take your turn now or it passes to the next player" warning that was
+     * false in both halves. Each figure's turn *is* a real deadline, so it
+     * restarts the timer while leaving `currentTurn` and the "your move" push
+     * alone.
+     *
+     * Deliberately not "any accepted command": in a crew game that would let
+     * one player hold the table indefinitely by nudging one action a period.
+     */
+    timerRestarts?: boolean
 }
 
 export interface IGameCommand {

@@ -62,6 +62,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Play Fires Out! on your own",
+                detail: "Fires Out! now has a solo mode. Pick Solo when you set a game up, choose how big a crew you want, and every firefighter on the board is yours to run — each one takes their own turn with their own action points, and the fire still advances after each of them, so a bigger crew is more to spend and more to keep alive. There's nobody to invite and nothing to wait for, though you can still set a turn timer if you want the pressure: it runs per firefighter's turn, and going quiet for long enough ends the game the same way walking away from any other does. Playing the Experienced game solo, a Fire Captain can now spend their command points directing any other firefighter in your crew. Carrying a victim is easier to find in every game too: once you're standing on one, the \"Carry the victim here\" switch sits right under the Move action instead of hiding until you'd already tapped Move.",
+                game: "firesout",
+            },
+            {
                 title: "Reactions now show up in the turn history log",
                 detail: "A reaction used to only ever reach the one player it was sent to, as a push notification. It now sits right on that move in the turn history log too, so anyone flipping back through what happened can see what landed and on which line — and a move used to take one reaction total, whichever opponent got there first, but now every player has their own to give, so a big roll can pick up an 😱 from one opponent and a Nice! from another, all shown together wherever that move appears, recap screen included. You can drop yours straight from the turn history log too, not just from the recap screen — its 💬 trigger is now a plain grey smiley, and the chat and turn history panels both say which end is newest.",
             },
@@ -102,10 +107,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Dice Cities cards you can actually read",
                 detail: "The card art in your city, on the landmark track and in the market was too small to make out. Every card is now drawn as large as the space it sits in allows — the market fits another column and gives each card the full width of its slot — so most of them can be read where they are, and tapping any card opens it bigger still: the number it pays on, the cost and what it does, all legible at last. It works while you are waiting for your turn too, so you can plan your next build.",
                 game: "dicecities",
-            },
-            {
-                title: "Turn history behaves like chat now",
-                detail: "Tapping 📜 on the board now scrolls straight to the turn history panel, the way 💬 already does for chat, and it has its own ✕ to close it instead of only the ⋮ menu.",
             },
         ],
     },

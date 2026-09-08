@@ -149,14 +149,19 @@ function toEvents(
             title: `${advanceFireLine(advance.rolls, advance.resolution, advance.target, 'past')}${flareNote}`,
         });
 
-        if (advance.knockedDownOwnerIds.length > 0) {
+        if (advance.knockedDownFirefighters.length > 0) {
             events.push({
                 ...base,
                 id: `${command.id}:knockdown`,
                 type: FO_KNOCKDOWN,
                 glyph: '🤕',
-                title: `${pluralize(advance.knockedDownOwnerIds.length, 'firefighter')} knocked down and carried outside`,
-                affectedIds: advance.knockedDownOwnerIds,
+                title: `${pluralize(advance.knockedDownFirefighters.length, 'firefighter')} knocked down and carried outside`,
+                // The recap's `affectedIds` are the *people* a row is about
+                // (they become avatars), so the figure indices the outcome
+                // reports are resolved back to their owners here — deduped,
+                // since one player can lose two of their own figures to the
+                // same fire.
+                affectedIds: [...new Set(advance.knockedDownFirefighters.map(i => nextState.firefighters[i]?.ownerId).filter((id): id is string => !!id))],
             });
         }
 

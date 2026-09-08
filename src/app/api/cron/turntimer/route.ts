@@ -104,10 +104,10 @@ async function passTurnOn(gameData: IGameDataDocument, timedOutPlayerId: string)
         // adapter can never resolve was swept forever —
         // MAX_CONSECUTIVE_MISSED_TURNS never got past its first rung, the game
         // was neither played on nor abandoned, and it cost a full document
-        // read every tick for as long as it lived. Fires Out will have exactly
-        // such a turn once §1's solitaire play lands (plan step 12): a board
-        // where every figure is the stalled player's, which no number of
-        // endTurns can hand to anybody else.
+        // read every tick for as long as it lived. A Fires Out solitaire game
+        // (§1, plan step 12) has exactly such a turn: a board where every
+        // figure is the stalled player's, which no number of endTurns can hand
+        // to anybody else.
         console.error(`Turn-timeout adapter for game ${gameData.gameId} declined ${timedOutPlayerId}'s stalled turn; banking the missed turn and restarting their timer`);
     }
 

@@ -47,9 +47,10 @@ const STALE = new Date(Date.now() - 60 * 60 * 1000).toISOString();
  * figures on the board are Ann's, so `buildTimeoutCommand` has nobody to hand
  * the turn to and `resolveStalledTurn` reports 'declined'.
  *
- * Seeded rather than created, because no route makes this game yet — every
- * seat holds one figure until §1's solitaire play lands (fires-out-gdd.md
- * §17.6 step 12), which is the shape this is standing in for. Outbreak's own
+ * Seeded rather than created: §1's solitaire play (fires-out-gdd.md §17.6
+ * step 12) is the shape this stands in for, and POST /api/newgame/firesout
+ * does now create it — but this test is about what the sweep does with such a
+ * board, not about how one comes into existence. Outbreak's own
  * adapter declines for real today, on a currentTurn missing from its player
  * map, but a Fires Out board says what a declined turn *is* far more clearly.
  */

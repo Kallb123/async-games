@@ -16,15 +16,15 @@ export const guide: GameGuide = {
         },
         {
             heading: "Your turn",
-            body: "Spend 4 action points: 1 to step to the next space (2 to push into fire), 1 to work a door, 1 to knock fire down to smoke (2 to clear it), and 2 to chop a wall — twice over to open a way through. Your own chopping counts towards the same 24 damage, so the quickest route to a victim is also the quickest route to losing. Unspent points bank up to 4.",
+            body: "Spend 4 action points: 1 to step to the next space (2 to push into fire), 1 to work a door, 1 to knock fire down to smoke (2 to clear it), and 2 to chop a wall — twice over to open a way through. Your own chopping counts towards the same 24 damage, so the quickest route to a victim is also the quickest route to losing. Unspent points bank up to 4. Playing solo, the whole crew is yours: you take each firefighter's turn in turn, and each of them gets their own 4 points.",
         },
         {
             heading: "How the fire spreads",
-            body: "It advances when you end your turn — after every player, not once a round. Two dice pick a space: an empty one gains smoke, or fire if a fire already adjoins it; smoke flips to fire; and fire explodes outward in all four directions, wrecking walls and doors as it goes. Then all smoke touching fire catches too, so a smoky corridor can go up at once.",
+            body: "It advances when you end your turn — after every firefighter, not once a round. Two dice pick a space: an empty one gains smoke, or fire if a fire already adjoins it; smoke flips to fire; and fire explodes outward in all four directions, wrecking walls and doors as it goes. Then all smoke touching fire catches too, so a smoky corridor can go up at once.",
         },
         {
             heading: "Victims",
-            body: "The \"?\" markers are 10 victims mixed with 5 false alarms, and only reaching one tells you which. Carrying costs 2 points a space and you can't cross fire while doing it. In the Family game anywhere outside counts as the rescue — so fire catching you carries you both out and saves them. In the Experienced game only the ambulance will do.",
+            body: "The \"?\" markers are 10 victims mixed with 5 false alarms, and only reaching one tells you which. To bring one out, stand on them and switch on \"Carry the victim here\" under Move, then pick where to go. Carrying costs 2 points a space and you can't cross fire while doing it. In the Family game anywhere outside counts as the rescue — so fire catching you carries you both out and saves them. In the Experienced game only the ambulance will do.",
         },
         {
             heading: "The Experienced game",

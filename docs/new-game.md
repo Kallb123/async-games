@@ -318,11 +318,27 @@ the existing, unmodified `POST /api/invite/accept`, which completes on that
 very first call. This reuses 100% of the existing engine — no special-casing
 of the shared accept route at all (Solitaire's `SolitaireModels.ts` /
 `src/app/api/newgame/solitaire/route.ts` /
-`src/app/newgame/solitaire/page.tsx` are the reference implementation). Also
-hardcode `turnTimer` to `UNLIMITED_TURN_TIMER` (from
-`src/utils/games/TurnTimer.ts`) for a solo game and skip `TurnTimerSelect` in
-setup — there's no opponent to time out against, and the cron job already
-treats `unlimited` as never-expiring.
+`src/app/newgame/solitaire/page.tsx` are the reference implementation). The
+three requests that sequence is — create the empty invitation, accept it,
+open the board — are `useStartSoloGame` (`src/utils/hooks/`); call that rather
+than writing them again.
+
+Usually you then hardcode `turnTimer` to `UNLIMITED_TURN_TIMER` (from
+`src/utils/games/TurnTimer.ts`) and skip `TurnTimerSelect` in setup — there's
+no opponent to time out against, and the cron job already treats `unlimited`
+as never-expiring. Offering the timer anyway is a real choice, not an
+oversight, but only for a game that has answered what a timed-out solo turn
+*means*: register a turn-timeout adapter that declines it (`turnTimeout.ts`),
+so the sweep banks a missed turn against `MAX_CONSECUTIVE_MISSED_TURNS`
+instead of playing the turn for a board only its owner can move. Fires Out's
+solitaire mode is the one game that does — see
+[`docs/games/fires-out-gdd.md`](./games/fires-out-gdd.md) §17.6 step 12 for
+the argument. It also has the gotcha that comes with the choice: the command
+route restarts the turn timer on `turnOver`, which a game whose turn belongs
+to something smaller than a player never reports, so such a game's clock
+never moves and the sweep finds it expired forever. Return
+`timerRestarts: true` from the command that ends one of those smaller turns
+(`ICommandOutcome`) and the timer measures something true again.
 
 **Isomorphic rules modules save you from duplicating validation logic.**
 If the client needs to compute "what are my legal moves right now" (a

@@ -14,6 +14,7 @@ import {
     INTERIOR_SPACE_COUNT,
     SPACE_COUNT,
     MAX_PLAYERS,
+    MAX_SOLO_CREW,
     quadrantOf,
     TOTAL_HOTSPOT_MARKERS,
     perimeterNeighbours,
@@ -950,23 +951,32 @@ describe("deck gun (§12.3, §17.6 step 9)", () => {
 });
 
 describe("Specialists (§11, §17.6 step 10)", () => {
-    it("has exactly 8 distinct specialists — at least MAX_PLAYERS, so dealSpecialists never runs short", () => {
+    it("has exactly 8 distinct specialists — at least MAX_SOLO_CREW, so dealSpecialists never runs short", () => {
         expect(SPECIALISTS).toHaveLength(8);
         expect(new Set(SPECIALISTS.map(s => s.id)).size).toBe(8);
         expect(SPECIALISTS.length).toBeGreaterThanOrEqual(MAX_PLAYERS);
+        // §17.6 step 12: a solitaire crew is as many figures as a full table
+        // is players, and every figure takes a card of its own.
+        expect(SPECIALISTS.length).toBeGreaterThanOrEqual(MAX_SOLO_CREW);
     });
 
     it("specialistDef looks up a specialist's own table row", () => {
         expect(specialistDef('cafsFirefighter')).toEqual(SPECIALISTS.find(s => s.id === 'cafsFirefighter'));
     });
 
-    it("dealSpecialists gives every seat a distinct specialist", () => {
-        const turnOrder = ["u1", "u2", "u3", "u4"];
-        const dealt = dealSpecialists(turnOrder);
-        expect(dealt.size).toBe(4);
-        const ids = turnOrder.map(u => dealt.get(u));
-        expect(new Set(ids).size).toBe(4);
-        for (const id of ids) expect(SPECIALISTS.some(s => s.id === id)).toBe(true);
+    it("dealSpecialists gives every figure a distinct specialist", () => {
+        // Per figure, not per player (§17.2 gap 3): a solitaire crew of four
+        // is one owner id and four cards, so a deal keyed by user would have
+        // handed the same card to all of them.
+        const dealt = dealSpecialists(4);
+        expect(dealt).toHaveLength(4);
+        expect(new Set(dealt).size).toBe(4);
+        for (const id of dealt) expect(SPECIALISTS.some(s => s.id === id)).toBe(true);
+    });
+
+    it("dealSpecialists deals a full crew of MAX_SOLO_CREW without repeating a card", () => {
+        const dealt = dealSpecialists(MAX_SOLO_CREW);
+        expect(new Set(dealt).size).toBe(MAX_SOLO_CREW);
     });
 
     describe("refillFirefighterAp", () => {

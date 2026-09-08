@@ -2,7 +2,7 @@
 import React from 'react';
 import { DISPLAY_COLS, DISPLAY_ROWS, edgeBetween, isInteriorSpace, spaceAtDisplayCell, spaceName } from '@/games/FiresOut/board';
 import type { IFiresOutEdgeResponse, IFiresOutFirefighterResponse, IFiresOutSpaceResponse } from '@/games/FiresOut/apiModels';
-import { playerColourForId } from '@/utils/ui/playerColours';
+import { figureIdentity } from '@/games/FiresOut/figures';
 
 // The 6×8 interior grid inside its exterior perimeter, rendered as the one
 // (ROWS + 2) × (COLS + 2) display grid board.ts lays the two out on — every
@@ -45,9 +45,12 @@ interface FiresOutBoardProps {
 }
 
 export default function FiresOutBoard({ spaces, edges, firefighters, userIdList, activeFirefighter, validSpaces, onSpaceClick, engine, ambulance }: FiresOutBoardProps) {
-    const pawnsBySpace = new Map<number, IFiresOutFirefighterResponse[]>();
-    firefighters.forEach(ff => pawnsBySpace.set(ff.space, [...(pawnsBySpace.get(ff.space) ?? []), ff]));
-    const activeOwnerId = firefighters[activeFirefighter]?.ownerId;
+    // Keyed by figure index, not by owner: a solitaire crew stacks several of
+    // one player's figures on a space (they all start on START_SPACE), and the
+    // index is what tells them apart — for the pawn's own React key as much as
+    // for which one of them is up.
+    const pawnsBySpace = new Map<number, number[]>();
+    firefighters.forEach((ff, index) => pawnsBySpace.set(ff.space, [...(pawnsBySpace.get(ff.space) ?? []), index]));
 
     const cells: React.ReactNode[] = [];
     for (let displayRow = 0; displayRow < DISPLAY_ROWS; displayRow++) {
@@ -119,14 +122,17 @@ export default function FiresOutBoard({ spaces, edges, firefighters, userIdList,
                     )}
                     {pawns.length > 0 && (
                         <span className="ag-fo-pawns">
-                            {pawns.map(ff => (
-                                <span
-                                    key={ff.ownerId}
-                                    className={`ag-fo-pawn${ff.ownerId === activeOwnerId ? ' ag-fo-pawn--active' : ''}`}
-                                    style={{ background: playerColourForId(ff.ownerId, userIdList) }}
-                                    title={ff.username}
-                                />
-                            ))}
+                            {pawns.map(index => {
+                                const { name, colour } = figureIdentity(index, firefighters, userIdList);
+                                return (
+                                    <span
+                                        key={index}
+                                        className={`ag-fo-pawn${index === activeFirefighter ? ' ag-fo-pawn--active' : ''}`}
+                                        style={{ background: colour }}
+                                        title={name}
+                                    />
+                                );
+                            })}
                         </span>
                     )}
                 </button>,

@@ -531,7 +531,7 @@ describe("FiresOutAction 'endTurn' and FiresOutGameType", () => {
         expect(advance.rolls).toEqual({ d6: 2, d8: 2 });
         expect(advance.target).toBe(spaceIndex(1, 1));
         expect(advance.resolution).toBe('smoke');
-        expect(advance.knockedDownOwnerIds).toEqual(["u2"]);
+        expect(advance.knockedDownFirefighters).toEqual([1]);
         expect(advance.victimsLost).toBe(1);
         expect(advance.poiPlaced).toBe(0);
     });
@@ -858,5 +858,143 @@ describe("malformed command targets (every kind, no 500s)", () => {
                 await expect(action.Execute(game)).resolves.toEqual({ validMove: false, turnOver: false });
             }
         }
+    });
+});
+
+// ─── §1's solitaire play (§17.6 step 12) ────────────────────────────────────
+// One seat in `turnOrder`, a whole crew in `firefighters`. Nothing about the
+// rules changes: §17.2 gap 3's `activeFirefighter` already made the turn a
+// figure's rather than a player's, so these are the consequences of that
+// holding when every figure has the same owner.
+describe("a solo crew", () => {
+    it("hands the turn from figure to figure without ever ending the player's turn", async () => {
+        const state = baseState(["u1", "u1", "u1"]);
+        const game = makeGame(state, ["u1"]);
+
+        for (const nextFigure of [1, 2, 0]) {
+            const outcome = await cmd("u1", { kind: 'endTurn' }).Execute(game);
+            expect(outcome.validMove).toBe(true);
+            // §17.4: turnOver only when the next figure has a different owner,
+            // and on a solo board it never does — which is what keeps
+            // `currentTurn` where it is and stops the engine pushing the
+            // player a "your turn" for the turn they just took.
+            expect(outcome.turnOver).toBe(false);
+            expect(state.activeFirefighter).toBe(nextFigure);
+        }
+        expect(game.currentTurn).toBe("u1");
+    });
+
+    it("refills each figure's AP as its turn comes round, lap after lap", async () => {
+        // The refill used to live in CheckEndTurn, which returns early unless
+        // turnOver — and on a solo board turnOver is never true, so every
+        // figure was handed AP_PER_TURN once at setup and opened every later
+        // turn on banked AP alone. Two full laps, spending as we go, is what
+        // catches that: it is only from the second lap on that the difference
+        // between "refilled per figure" and "refilled once" shows up.
+        const state = baseState(["u1", "u1", "u1"]);
+        const game = makeGame(state, ["u1"]);
+
+        for (let lap = 0; lap < 2; lap++) {
+            for (let figure = 0; figure < 3; figure++) {
+                expect(state.activeFirefighter, `lap ${lap}, figure ${figure}`).toBe(figure);
+                // A fresh figure's turn opens on the full allowance, with
+                // nothing banked from its own previous turn (it spent the lot).
+                expect(state.firefighters[figure].apLeft, `lap ${lap}, figure ${figure}`).toBe(AP_PER_TURN);
+                // Spend it all, so nothing is banked into the next lap and a
+                // figure that never refilled would show up as 0 AP above.
+                await cmd("u1", { kind: 'move', target: spaceIndex(3, 3) }).Execute(game);
+                await cmd("u1", { kind: 'move', target: spaceIndex(3, 2) }).Execute(game);
+                await cmd("u1", { kind: 'move', target: spaceIndex(3, 3) }).Execute(game);
+                await cmd("u1", { kind: 'move', target: spaceIndex(3, 2) }).Execute(game);
+                expect(state.firefighters[figure].apLeft).toBe(0);
+                await cmd("u1", { kind: 'endTurn' }).Execute(game);
+            }
+        }
+    });
+
+    it("banks a figure's unspent AP into its own next turn rather than the next figure's", async () => {
+        const state = baseState(["u1", "u1"]);
+        const game = makeGame(state, ["u1"]);
+
+        // Figure 0 spends 1 of its 4 and passes; the 3 left bank to itself.
+        await cmd("u1", { kind: 'move', target: spaceIndex(3, 3) }).Execute(game);
+        await cmd("u1", { kind: 'endTurn' }).Execute(game);
+        expect(state.firefighters[0].bankedAp).toBe(3);
+        // Figure 1 opens on its own flat allowance, untouched by that.
+        expect(state.firefighters[1].apLeft).toBe(AP_PER_TURN);
+
+        await cmd("u1", { kind: 'endTurn' }).Execute(game);
+        // Back to figure 0, which now gets the allowance plus what it banked
+        // (§8's MAX_BANKED_AP cap applies to the bank, not to this total).
+        expect(state.activeFirefighter).toBe(0);
+        expect(state.firefighters[0].apLeft).toBe(AP_PER_TURN + 3);
+        expect(state.firefighters[0].bankedAp).toBe(0);
+    });
+
+    it("advances the fire once per figure's turn, the same as a crew of three would", async () => {
+        const state = baseState(["u1", "u1", "u1"]);
+        const game = makeGame(state, ["u1"]);
+
+        for (let i = 0; i < 3; i++) await cmd("u1", { kind: 'endTurn' }).Execute(game);
+
+        // §7's design note: the per-figure advance is what stops a big crew
+        // being a proportionally easier game, and a solo crew is a crew.
+        expect(game.gameState.history.filter(h => h.text.includes('Advance Fire'))).toHaveLength(3);
+    });
+
+    it("refuses a figure whose owner isn't the sender, even when the board is somebody's whole crew", async () => {
+        const state = baseState(["u1", "u1"]);
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await cmd("u2", { kind: 'endTurn' }).Execute(game);
+        expect(outcome.validMove).toBe(false);
+        expect(state.activeFirefighter).toBe(0);
+    });
+
+    it("lets a solo Fire Captain spend command AP directing another of their own figures", async () => {
+        // The whole reason a direction is named by index (resolveMover): every
+        // figure here shares one owner id, so directing by owner could only
+        // ever resolve to the active figure — and applyMove only bills the
+        // command pool when the mover isn't the actor, so a solo Fire
+        // Captain's +2 command AP was unspendable.
+        const state = experiencedState(["u1", "u1"]);
+        const captain = state.firefighters[0];
+        captain.specialist = 'fireCaptain';
+        captain.restrictedAp = { kind: 'command', left: 2 };
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await cmd("u1", { kind: 'move', target: spaceIndex(3, 3), targetFirefighter: 1 }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(state.firefighters[1].space).toBe(spaceIndex(3, 3)); // the directed figure moved
+        expect(captain.space).toBe(spaceIndex(3, 2)); // the Fire Captain stayed put
+        expect(captain.restrictedAp).toEqual({ kind: 'command', left: 1 });
+        expect(captain.apLeft).toBe(AP_PER_TURN); // paid entirely out of the command pool
+    });
+
+    it("treats a direction naming the active figure as no direction at all", async () => {
+        const state = experiencedState(["u1", "u1"]);
+        const ff = state.firefighters[0];
+        const game = makeGame(state, ["u1"]);
+
+        const outcome = await cmd("u1", { kind: 'move', target: spaceIndex(3, 3), targetFirefighter: 0 }).Execute(game);
+
+        expect(outcome.validMove).toBe(true);
+        expect(ff.space).toBe(spaceIndex(3, 3));
+        expect(ff.apLeft).toBe(AP_PER_TURN - 1); // their own pool, not a Fire Captain's
+        expect(game.gameState.history.some(h => h.text.includes('directing'))).toBe(false);
+    });
+
+    it("refuses a forged figure index rather than moving somebody unnamed", async () => {
+        const state = experiencedState(["u1", "u1"]);
+        state.firefighters[0].specialist = 'fireCaptain';
+        state.firefighters[0].restrictedAp = { kind: 'command', left: 2 };
+        const game = makeGame(state, ["u1"]);
+
+        for (const targetFirefighter of [2, -1, 0.5, 1.5]) {
+            const outcome = await cmd("u1", { kind: 'move', target: spaceIndex(3, 3), targetFirefighter }).Execute(game);
+            expect(outcome.validMove, `targetFirefighter ${targetFirefighter}`).toBe(false);
+        }
+        expect(state.firefighters.map(ff => ff.space)).toEqual([spaceIndex(3, 2), spaceIndex(3, 2)]);
     });
 });

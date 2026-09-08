@@ -221,7 +221,15 @@ describe("Settlements & Cities' response", () => {
 // three games above, redaction here doesn't key on the viewer at all, so
 // there's only one wire shape to check rather than "mine" vs. "theirs".
 
-function firesOutState(): IFiresOutSpecificGameState {
+/**
+ * `owners` is a list of *figure* owners rather than the game's turn order
+ * (fires-out-gdd.md §17.2 gap 3), so one player may appear more than once —
+ * which is what §1's solitaire crew is (§17.6 step 12). The default is the
+ * crew shape; the solo shape is the one the redaction guard below has to see
+ * too, since a multi-figure roster is the new wire shape and any future
+ * per-figure secret would land in it.
+ */
+function firesOutState(owners: string[] = ["u1"]): IFiresOutSpecificGameState {
     const spaces = buildEmptySpaces();
     spaces[spaceIndex(0, 0)].poi = { id: 0, revealed: false, victim: true };
     spaces[spaceIndex(0, 1)].poi = { id: 1, revealed: true, victim: false };
@@ -234,7 +242,7 @@ function firesOutState(): IFiresOutSpecificGameState {
         nextPoiId: 2,
         rescued: 0,
         lost: 0,
-        firefighters: [newFirefighter("u1")],
+        firefighters: owners.map(owner => newFirefighter(owner)),
         activeFirefighter: 0,
         hotspotReserve: 0,
         engine: ENGINE_START,
@@ -272,6 +280,25 @@ describe("Fires Out's response", () => {
         const response = firesOutStateToModel(firesOutState(), NAMES, "u1");
         expect((response as unknown as { poiPool?: unknown }).poiPool).toBeUndefined();
         expect(response.poiPoolCount).toBe(3);
+    });
+
+    it("redacts a whole solitaire crew's board the same way, for its owner and for anyone else", () => {
+        // §1's solitaire mode puts every figure in one player's hands, so the
+        // roster on the wire is several entries under one owner id. Nothing
+        // about that is secret — §17.3 requires every figure's AP, specialist
+        // and position to be visible on every screen — but the guard that
+        // keeps POI identity off the wire only ever ran against a one-figure
+        // crew game, so a per-figure secret added later would have had nothing
+        // asserting it.
+        const state = firesOutState(["u1", "u1", "u1", "u1"]);
+        const asOwner = JSON.stringify(firesOutStateToModel(state, NAMES, "u1"));
+        const asStranger = JSON.stringify(firesOutStateToModel(state, NAMES, "u2"));
+
+        expect(asOwner).not.toContain('"victim":true');
+        expect(JSON.parse(asOwner).poiPool).toBeUndefined();
+        expect(JSON.parse(asOwner).spaces[spaceIndex(0, 0)].poi).toEqual({ id: 0, revealed: false });
+        expect(JSON.parse(asOwner).firefighters).toHaveLength(4);
+        expect(asStranger).toEqual(asOwner);
     });
 
     // A game saved before the exterior became a full perimeter ring has

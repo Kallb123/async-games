@@ -1,59 +1,25 @@
 'use client'
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import GameSetupLayout from "@/components/ui/GameSetupLayout";
 import OptionToggleRow from "@/components/ui/OptionToggleRow";
-import { GAME_META, gamePath } from "@/utils/ui/games";
+import { GAME_META } from "@/utils/ui/games";
 import { SolitaireDrawMode, SolitaireInvitationRequest } from "@/games/Solitaire/SolitaireModels";
-import { useToast } from "@/components/ToastContext";
+import { useStartSoloGame } from "@/utils/hooks/useStartSoloGame";
 
 export default function NewGameSolitaire() {
   const pathName = usePathname();
   console.log(`GET ${pathName}`);
   useAuthGuard();
   const [drawMode, setDrawMode] = useState<SolitaireDrawMode>('DRAW_1');
-  const [starting, setStarting] = useState(false);
-  const router = useRouter();
-  const { showToast } = useToast();
+  const { starting, start } = useStartSoloGame('/api/newgame/solitaire');
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (starting) return;
-    setStarting(true);
-
-    try {
-      const data: SolitaireInvitationRequest = { drawMode };
-      const createResponse = await fetch('/api/newgame/solitaire', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      if (!createResponse.ok) {
-        throw new Error('Failed to start game');
-      }
-      const { inviteId } = await createResponse.json();
-
-      // Solo game: nobody else to accept, so this completes immediately.
-      const acceptResponse = await fetch('/api/invite/accept', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inviteId })
-      });
-      if (!acceptResponse.ok) {
-        throw new Error('Failed to deal the game');
-      }
-      const { gameStarted, gameId, gameUrl } = await acceptResponse.json();
-      if (!gameStarted) {
-        throw new Error('Game did not start');
-      }
-      router.push(gamePath(gameUrl, gameId));
-    } catch (error) {
-      console.error(error);
-      showToast('Failed to start the game. Please try again.', 'danger');
-      setStarting(false);
-    }
+    const data: SolitaireInvitationRequest = { drawMode };
+    await start(data);
   }
 
   return (

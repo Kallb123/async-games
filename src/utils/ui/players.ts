@@ -329,3 +329,18 @@ export function reorderByIds<T>(items: T[], order: string[], idOf: (item: T) => 
         return item ? [item] : [];
     });
 }
+
+/**
+ * `reorderByIds` for a game where one id owns more than one item — Fires Out's
+ * solitaire crew, where several figures sit behind one seat
+ * (docs/games/fires-out-gdd.md §17.6 step 12).
+ *
+ * The sibling above keys a `Map` by id, so it keeps exactly one item per id and
+ * would collapse a whole crew into a single scoreboard pill. This keeps all of
+ * them, in the order `items` already holds them — which for a game whose
+ * figures are built once in turn order is the order their turns come round in.
+ * Items whose id isn't in `order` are dropped, the same as above.
+ */
+export function reorderAllByIds<T>(items: T[], order: string[], idOf: (item: T) => string): T[] {
+    return order.flatMap(id => items.filter(item => idOf(item) === id));
+}
