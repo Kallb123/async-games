@@ -2103,8 +2103,18 @@ a.ag-list-row, a.ag-list-row-main {
     stroke-dasharray: 2 2;
     vector-effect: non-scaling-stroke;
 }
+/* An event marker (ChartEventIcon): drawn shapes rather than an emoji, so
+   `color` — set per marker to the colour of the line it belongs to — paints
+   it. The surface-coloured outline keeps it readable where it sits on top of
+   its own line. */
 .ag-chart-event-icon {
-    font-size: 11px;
+    color: var(--ag-ink-soft);
+    fill: currentColor;
+    stroke: var(--ag-surface);
+    stroke-width: 0.9;
+    stroke-linejoin: round;
+    paint-order: stroke;
+    vector-effect: non-scaling-stroke;
 }
 .ag-chart-endlabel {
     position: absolute;

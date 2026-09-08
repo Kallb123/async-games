@@ -79,20 +79,29 @@ export interface GameResultChartSeries {
     color: string;
 }
 
+// The icon a GameResultEvent is marked with on a chart. Named rather than
+// carried as an emoji character (the convention IGameEvent.glyph in
+// utils/games/recap.ts still uses, for a recap row where the marker is text
+// in a list) because a chart marker has to be drawn in the colour of the line
+// it belongs to: an emoji arrives with its own colours baked in and ignores
+// `fill`, so a landmark bought by the blue player looked identical to one
+// bought by the red player. Each name is drawn as a monochrome SVG shape by
+// ChartEventIcon (components/ui), which paints it in the series colour.
+export type GameResultEventIcon = 'landmark' | 'explosion' | 'rescue' | 'epidemic';
+
 // One in-game moment worth calling out on a GameResultChart — Outbreak's
 // epidemic draws, Dice Cities' landmark buys, Fires Out's explosions.
 // `turnIndex` is 0-based in the same per-turn indexing computePerTurnStat's
 // perTurn arrays use (see computePerTurnEvents in replay.ts), so
 // mapEventsToRounds can place it on the same round axis as a per-turn series
 // computed from the same replay pass. `seriesKey` pins the marker to one
-// chart line (a buyer's own userId on a per-player chart); absent for an
-// event that isn't any one line's story (Outbreak's epidemic touches the
-// whole board, not one disease colour), which the renderer places above the
-// plot instead. A plain emoji, not an image — the same convention
-// IGameEvent.glyph (utils/games/recap.ts) already uses.
+// chart line (a buyer's own userId on a per-player chart) and gives it that
+// line's colour; absent for an event that isn't any one line's story
+// (Outbreak's epidemic touches the whole board, not one disease colour),
+// which the renderer places above the plot in the page's ink instead.
 export interface GameResultEvent {
     turnIndex: number;
-    glyph: string;
+    icon: GameResultEventIcon;
     title?: string;
     seriesKey?: string;
 }
@@ -101,15 +110,33 @@ export interface GameResultEvent {
 // axis.
 export interface GameResultChartEvent {
     round: number;
-    glyph: string;
+    icon: GameResultEventIcon;
     title?: string;
     seriesKey?: string;
 }
 
+// A stored GameResultEvent as it reads back: results recorded before the
+// markers were drawn (they shipped as emoji) carry `glyph` and no `icon`, so
+// mapEventsToRounds — the one choke point every stored event passes through
+// on its way to a chart — takes the wider shape and translates them.
+export type StoredGameResultEvent =
+    Omit<GameResultEvent, 'icon'> & { icon?: GameResultEventIcon; glyph?: string };
+
+// The emoji those first results were recorded with, and the icon each one
+// became. Kept (with `glyph` on the schema below) so an old result page keeps
+// the markers it has always shown rather than reading back blank.
+const LEGACY_GLYPH_ICONS: Record<string, GameResultEventIcon> = {
+    "🏛️": 'landmark',
+    "💥": 'explosion',
+    "🚑": 'rescue',
+    "☣️": 'epidemic',
+};
+
 // The Mongoose sub-schema for a stored GameResultEvent — shared so every
 // game's *GameResultStatsSchemaDef writes the same field list instead of
 // three copies drifting apart the first time one of them gains a field.
-export const gameResultEventSchemaDef = { turnIndex: Number, glyph: String, title: String, seriesKey: String };
+// `glyph` is only ever read: see LEGACY_GLYPH_ICONS.
+export const gameResultEventSchemaDef = { turnIndex: Number, icon: String, glyph: String, title: String, seriesKey: String };
 
 // A round-by-round line chart for the GameResult page: round number on the
 // x-axis, one line per series (typically per player). What's plotted varies
@@ -173,7 +200,7 @@ export function formatPerTurnChart(
     yLabel: string,
     playerCount: number,
     series?: GameResultChartSeries[],
-    events?: GameResultEvent[],
+    events?: StoredGameResultEvent[],
 ): GameResultChart | undefined {
     // Undefined as well as empty: a series added to a game's stats after some
     // results were already recorded reads back missing on those records, and a
@@ -201,16 +228,24 @@ export function formatPerTurnChart(
 // to it, so an event and the point it marks always agree on which round
 // they're in.
 export function mapEventsToRounds(
-    events: GameResultEvent[],
+    events: StoredGameResultEvent[],
     playerCount: number,
     roundCount: number,
 ): GameResultChartEvent[] {
-    return events.map(({ turnIndex, glyph, title, seriesKey }) => ({
-        round: Math.min(Math.floor(turnIndex / playerCount), roundCount - 1),
-        glyph,
-        ...(title ? { title } : {}),
-        ...(seriesKey ? { seriesKey } : {}),
-    }));
+    return events.flatMap(({ turnIndex, icon, glyph, title, seriesKey }) => {
+        // An event with no icon this build can draw is dropped rather than
+        // passed on: the renderer stacks markers that share a round, so one
+        // that draws nothing would still push its neighbours up off their
+        // line.
+        const drawn = icon ?? (glyph ? LEGACY_GLYPH_ICONS[glyph] : undefined);
+        if (!drawn) return [];
+        return [{
+            round: Math.min(Math.floor(turnIndex / playerCount), roundCount - 1),
+            icon: drawn,
+            ...(title ? { title } : {}),
+            ...(seriesKey ? { seriesKey } : {}),
+        }];
+    });
 }
 
 // Compacts one or more formatPerTurnChart() results (each undefined when its

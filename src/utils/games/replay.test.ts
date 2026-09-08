@@ -173,10 +173,10 @@ describe("computePerTurnEvents", () => {
         ];
 
         const events = await computePerTurnEvents(game(commandHistory), (step) =>
-            (step.command as TestBonusAction).triggerBonus ? [{ glyph: "🎁" }] : undefined,
+            (step.command as TestBonusAction).triggerBonus ? [{ icon: "landmark" }] : undefined,
         );
 
-        expect(events).toEqual([{ turnIndex: 0, glyph: "🎁" }]);
+        expect(events).toEqual([{ turnIndex: 0, icon: "landmark" }]);
     });
 
     it("records more than one event for the same turn", async () => {
@@ -188,12 +188,12 @@ describe("computePerTurnEvents", () => {
             action("u2", false),
         ];
 
-        const events = await computePerTurnEvents(game(commandHistory), () => [{ glyph: "*" }]);
+        const events = await computePerTurnEvents(game(commandHistory), () => [{ icon: "landmark" }]);
 
         expect(events).toEqual([
-            { turnIndex: 0, glyph: "*" },
-            { turnIndex: 0, glyph: "*" },
-            { turnIndex: 1, glyph: "*" },
+            { turnIndex: 0, icon: "landmark" },
+            { turnIndex: 0, icon: "landmark" },
+            { turnIndex: 1, icon: "landmark" },
         ]);
     });
 

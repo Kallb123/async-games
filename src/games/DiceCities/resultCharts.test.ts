@@ -84,7 +84,7 @@ describe("Dice Cities result charts, replayed from a real command log", () => {
         const landmarkEvents = await computePerTurnEvents(game, detectLandmarkEvent);
 
         expect(landmarkEvents).toHaveLength(2);
-        expect(landmarkEvents.every(e => e.glyph === "🏛️" && e.seriesKey === "u1")).toBe(true);
+        expect(landmarkEvents.every(e => e.icon === "landmark" && e.seriesKey === "u1")).toBe(true);
         // The two unlocks land on u1's two separate turns, not the same one.
         expect(landmarkEvents[0].turnIndex).toBeLessThan(landmarkEvents[1].turnIndex);
     });
