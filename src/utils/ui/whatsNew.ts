@@ -63,7 +63,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "Result charts mark the moments that mattered",
-                detail: "The charts on the result page now drop a small icon right on the turn something big happened: a biohazard mark where Outbreak drew an epidemic card, a building where a Dice Cities player bought a landmark, and an explosion wherever Fires Out's fire blew — so you can see exactly how it lines up with the swings in the line around it.",
+                detail: "The charts on the result page now drop a small icon right on the turn something big happened: a biohazard mark where Outbreak drew an epidemic card, a building where a Dice Cities player bought a landmark, and an explosion or an ambulance wherever Fires Out's fire blew or a victim made it out — so you can see exactly how it lines up with the swings in the line around it.",
             },
             {
                 title: "Play Fires Out! on your own",

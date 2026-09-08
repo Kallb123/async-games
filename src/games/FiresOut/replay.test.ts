@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildTimeline } from "@/utils/games/replay";
+import { buildTimeline, computePerTurnEvents } from "@/utils/games/replay";
 import { buildAllEvents, buildEventFeed } from "@/utils/games/recap";
 import type { IGameCommand } from "@/utils/apiModels/gameCommand";
 import { FiresOutAction, FiresOutGameType } from "./FiresOutLogic";
@@ -9,6 +9,7 @@ import {
     buildInitialFiresOutState,
     cloneFiresOutState,
     computeFiresOutResultStats,
+    detectRescueEvent,
     gameStateToModel,
 } from "./FiresOutModels";
 
@@ -143,9 +144,36 @@ describe("Fires Out replay", () => {
         expect(events.map(event => event.title)).toContain("Alice rescued a victim! (1/7)");
     });
 
+    it("marks the result chart wherever a delivery (not just a walk-out) raises rescued", async () => {
+        // Same Ambulance-delivers-a-carried-victim setup as the recap test
+        // above: the rescue point is reached by a 'drive' command, not a
+        // 'move', so this proves detectRescueEvent reads the rescued delta
+        // rather than assuming a particular command kind did it.
+        const game = makeGame();
+        const gs = game.specificGameState;
+        gs.ruleset = 'experienced';
+        const spot = perimeterNeighbours(gs.ambulance).find(space => space !== gs.engine)!;
+        const carrier = gs.firefighters[1];
+        carrier.space = spot;
+        carrier.carrying = 'victim';
+        gs.firefighters[0].space = gs.ambulance;
+        game.initialSpecificGameState = cloneFiresOutState(gs);
+
+        const drive = new FiresOutAction();
+        drive.kind = 'drive';
+        drive.vehicle = 'ambulance';
+        drive.target = spot;
+        await play(game, drive, gs.firefighters[0].ownerId);
+
+        const rescueEvents = await computePerTurnEvents(game, detectRescueEvent);
+        expect(rescueEvents).toEqual([
+            { turnIndex: 0, glyph: "🚑", title: "A victim was rescued! (1/7)", seriesKey: "damage" },
+        ]);
+    });
+
     it("computes result stats off the final state", async () => {
         const game = await playPassiveGame();
-        const stats = computeFiresOutResultStats(game, [], []);
+        const stats = computeFiresOutResultStats(game, [], [], []);
 
         // Every command in this passive game is an endTurn, so the count is exact.
         expect(stats.turnsLasted).toBe(game.gameState.commandHistory.length);

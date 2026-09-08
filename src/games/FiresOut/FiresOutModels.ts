@@ -549,6 +549,13 @@ export interface IFiresOutGameResultStats {
     // Computed by computePerTurnEvents from the same replay pass as
     // damagePerTurn.
     explosionEvents: GameResultEvent[];
+    // Every victim who made it out of the building — a walk to an exterior
+    // space or the Ambulance, or the fire knocking their carrier out
+    // (deliverCarried, same as recap's own rescue row). One event per
+    // command that raised `rescued`, even when more than one victim left at
+    // once. Also keyed to the 'damage' line, for the same reason as
+    // explosionEvents.
+    rescueEvents: GameResultEvent[];
 }
 
 export const firesOutGameResultStatsSchemaDef = {
@@ -560,6 +567,7 @@ export const firesOutGameResultStatsSchemaDef = {
     difficulty: String,
     damagePerTurn: [{ type: Schema.Types.Map, of: Number }],
     explosionEvents: [gameResultEventSchemaDef],
+    rescueEvents: [gameResultEventSchemaDef],
 };
 
 // A computePerTurnEvents detector (see replay.ts): marks the single 'damage'
@@ -572,10 +580,29 @@ export function detectExplosionEvent(step: IReplayStep): Omit<GameResultEvent, '
     return advance?.resolution === 'explosion' ? [{ glyph: "💥", title: "Explosion!", seriesKey: "damage" }] : undefined;
 }
 
+// A computePerTurnEvents detector (see replay.ts): a victim leaving the
+// building raises `rescued` on specificGameState, however they got out — a
+// walk to an exterior space or the Ambulance, or the fire knocking their
+// carrier out (deliverCarried) — so, like recap.ts's own FO_RESCUE row, this
+// reads the delta between the step's two snapshots rather than any one
+// command's outcome. Exported so it can be unit-tested and wired straight
+// into GAME_RESULT_STATS.FiresOut.compute (GameResultData.ts).
+export function detectRescueEvent(step: IReplayStep): Omit<GameResultEvent, 'turnIndex'>[] | undefined {
+    const prevRescued = (step.prev.specificGameState as IFiresOutSpecificGameStateResponse).rescued;
+    const nextRescued = (step.next.specificGameState as IFiresOutSpecificGameStateResponse).rescued;
+    const rescued = nextRescued - prevRescued;
+    if (rescued <= 0) return undefined;
+    const title = rescued > 1
+        ? `${pluralize(rescued, 'victim')} got out! (${nextRescued}/${VICTIMS_TO_WIN})`
+        : `A victim was rescued! (${nextRescued}/${VICTIMS_TO_WIN})`;
+    return [{ glyph: "🚑", title, seriesKey: "damage" }];
+}
+
 export function computeFiresOutResultStats(
     gameData: IFiresOutGameData,
     damagePerTurn: Map<string, number>[],
     explosionEvents: GameResultEvent[],
+    rescueEvents: GameResultEvent[],
 ): IFiresOutGameResultStats {
     const gs = gameData.specificGameState;
     return {
@@ -591,6 +618,7 @@ export function computeFiresOutResultStats(
         difficulty: gs.difficulty,
         damagePerTurn,
         explosionEvents,
+        rescueEvents,
     };
 }
 
@@ -610,7 +638,10 @@ export function formatFiresOutCharts(
     usernameById: Map<string, string>,
 ): GameResultChart[] {
     return compactCharts(
-        formatPerTurnChart(stats.damagePerTurn, "Damage per turn", "Damage", usernameById.size, DAMAGE_SERIES, stats.explosionEvents),
+        formatPerTurnChart(
+            stats.damagePerTurn, "Damage per turn", "Damage", usernameById.size, DAMAGE_SERIES,
+            [...stats.explosionEvents, ...stats.rescueEvents],
+        ),
     );
 }
 

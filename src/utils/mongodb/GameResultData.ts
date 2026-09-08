@@ -85,6 +85,7 @@ import {
     IFiresOutGameResultStats,
     computeFiresOutResultStats,
     detectExplosionEvent,
+    detectRescueEvent,
     firesOutGameResultStatsSchemaDef,
     formatFiresOutResultStats,
     formatFiresOutCharts,
@@ -388,7 +389,8 @@ const GAME_RESULT_STATS: Record<string, {
                 ['damage'],
             );
             const explosionEvents = await computePerTurnEvents(firesOutGameData, detectExplosionEvent);
-            return computeFiresOutResultStats(firesOutGameData, damagePerTurn, explosionEvents);
+            const rescueEvents = await computePerTurnEvents(firesOutGameData, detectRescueEvent);
+            return computeFiresOutResultStats(firesOutGameData, damagePerTurn, explosionEvents, rescueEvents);
         },
         format: formatFiresOutResultStats,
         charts: formatFiresOutCharts,

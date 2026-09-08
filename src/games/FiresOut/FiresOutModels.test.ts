@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildInitialFiresOutState, buildInitialFiresOutStateFromGameData, cloneFiresOutState, detectExplosionEvent, FiresOutGameDataModel, gameStateToModel, IFiresOutGameData } from "./FiresOutModels";
+import { buildInitialFiresOutState, buildInitialFiresOutStateFromGameData, cloneFiresOutState, detectExplosionEvent, detectRescueEvent, FiresOutGameDataModel, gameStateToModel, IFiresOutGameData } from "./FiresOutModels";
 import { INTERIOR_SPACE_COUNT, MAX_SOLO_CREW } from "./board";
 import type { IFiresOutEndTurnOutcome } from "./FiresOutLogic";
 import type { IReplayStep } from "@/utils/games/replay";
@@ -220,5 +220,30 @@ describe("detectExplosionEvent", () => {
 
     it("reports nothing for a command with no Advance Fire at all", () => {
         expect(detectExplosionEvent(stepWithResolution(undefined))).toBeUndefined();
+    });
+});
+
+describe("detectRescueEvent", () => {
+    function stepWithRescuedDelta(prevRescued: number, nextRescued: number): IReplayStep {
+        return {
+            prev: { specificGameState: { rescued: prevRescued } },
+            next: { specificGameState: { rescued: nextRescued } },
+        } as unknown as IReplayStep;
+    }
+
+    it("marks the damage line when a victim makes it out", () => {
+        expect(detectRescueEvent(stepWithRescuedDelta(0, 1))).toEqual([
+            { glyph: "🚑", title: "A victim was rescued! (1/7)", seriesKey: "damage" },
+        ]);
+    });
+
+    it("reports one event naming every victim when more than one leaves at once", () => {
+        expect(detectRescueEvent(stepWithRescuedDelta(1, 3))).toEqual([
+            { glyph: "🚑", title: "2 victims got out! (3/7)", seriesKey: "damage" },
+        ]);
+    });
+
+    it("reports nothing when rescued hasn't changed", () => {
+        expect(detectRescueEvent(stepWithRescuedDelta(2, 2))).toBeUndefined();
     });
 });
