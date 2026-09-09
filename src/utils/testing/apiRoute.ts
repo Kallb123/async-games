@@ -65,6 +65,8 @@ const games = new Map<string, StoredGame>();
 const chatMessages: StoredChatMessage[] = [];
 const chatReadMarkers: StoredChatReadMarker[] = [];
 const gifCatalogue: StoredGifCatalogueItem[] = [];
+/** Set by `failNextGifCatalogueWrite`; thrown by the next bulk upsert. */
+let gifCatalogueWriteError: unknown = null;
 const reactions: StoredReaction[] = [];
 
 /** Every push a request sent, in the order it sent them. */
@@ -98,6 +100,7 @@ export async function resetApiRouteStubs() {
     chatMessages.length = 0;
     chatReadMarkers.length = 0;
     gifCatalogue.length = 0;
+    gifCatalogueWriteError = null;
     reactions.length = 0;
     clearAfterCallbacks();
     sentPushes.length = 0;
@@ -119,6 +122,7 @@ export async function resetApiRouteStubs() {
     vi.spyOn(chatReadData.ChatReadModel, 'findOneAndUpdate').mockImplementation(findOneAndUpdateChatReadFromStore as typeof chatReadData.ChatReadModel.findOneAndUpdate);
     vi.spyOn(gifCatalogueData.GifCatalogueModel, 'findOne').mockImplementation(findOneGifCatalogueFromStore as typeof gifCatalogueData.GifCatalogueModel.findOne);
     vi.spyOn(gifCatalogueData.GifCatalogueModel, 'findOneAndUpdate').mockImplementation(findOneAndUpdateGifCatalogueFromStore as typeof gifCatalogueData.GifCatalogueModel.findOneAndUpdate);
+    vi.spyOn(gifCatalogueData.GifCatalogueModel, 'bulkWrite').mockImplementation(bulkWriteGifCatalogueToStore as unknown as typeof gifCatalogueData.GifCatalogueModel.bulkWrite);
     vi.spyOn(reactionData.ReactionModel, 'find').mockImplementation(findReactionsFromStore as typeof reactionData.ReactionModel.find);
 }
 
@@ -583,6 +587,25 @@ export function seedGifCatalogueItem(item: StoredGifCatalogueItem) {
     gifCatalogue.push({ ...item });
 }
 
+/**
+ * Make the next catalogue bulk upsert throw `error`.
+ *
+ * The search route's write is deferred bookkeeping wrapped in a `catch` that
+ * decides, from the error's shape, whether anything went wrong worth logging —
+ * two searches racing on the same id is what the unique index is *for*, and the
+ * loser's E11000 is the constraint working. That decision is the subtlest code
+ * in the route and a store that can only succeed never reaches it.
+ */
+export function failNextGifCatalogueWrite(error: unknown) {
+    gifCatalogueWriteError = error;
+}
+
+/** Everything the catalogue holds, in the order it was written — for the search
+ *  route, whose whole job is to put rows here (docs/chat-gifs.md §4c). */
+export function storedGifCatalogue(): StoredGifCatalogueItem[] {
+    return gifCatalogue.map(item => ({ ...item }));
+}
+
 /** One catalogued GIF's expiry, so a test can assert the resolve touched it. */
 export function storedGifCatalogueExpiry(provider: string, mediaId: string): Date | undefined {
     return gifCatalogue.find(item => item.provider === provider && item.mediaId === mediaId)?.expiresAt;
@@ -618,6 +641,39 @@ function findOneAndUpdateGifCatalogueFromStore(filter: Record<string, unknown>, 
         match.expiresAt = set.expiresAt;
     }
     return { exec: async () => match ? gifCatalogueData.GifCatalogueModel.hydrate(match) : null };
+}
+
+// The search route's catalogue write: one unordered bulkWrite of upserts, each
+// keyed by the same unique { provider, mediaId } the resolve reads back
+// (docs/chat-gifs.md §5a). Interprets that one shape rather than being a general
+// bulk engine, the same trade the stores above already make.
+function bulkWriteGifCatalogueToStore(operations: unknown[]) {
+    if (gifCatalogueWriteError !== null) {
+        const failure = gifCatalogueWriteError;
+        gifCatalogueWriteError = null;
+        // Rejected, not thrown: the driver's is an async failure, and a caller
+        // that only wrapped its `await` would pass a synchronous throw.
+        return Promise.reject(failure);
+    }
+    for (const operation of operations) {
+        const one = (operation as { updateOne?: { filter?: Record<string, unknown>, update?: Record<string, unknown>, upsert?: boolean } }).updateOne;
+        if (!one?.upsert) {
+            throw new Error(`The test GIF catalogue only bulk-upserts, not ${JSON.stringify(operation)}`);
+        }
+        const set = one.update?.$set as StoredGifCatalogueItem | undefined;
+        if (!set || Object.keys(one.update ?? {}).length !== 1) {
+            throw new Error(`The test GIF catalogue only $sets a whole row, not ${JSON.stringify(one.update)}`);
+        }
+        const existing = matchGifCatalogueFilter(one.filter ?? {});
+        if (existing) {
+            Object.assign(existing, set);
+        } else {
+            gifCatalogue.push({ ...set });
+        }
+    }
+    // The driver answers with counts; nothing in the app reads them, so this is
+    // shaped enough to be awaited and no more.
+    return Promise.resolve({ upsertedCount: operations.length });
 }
 
 // ---------------------------------------------------------------- Chat read markers
