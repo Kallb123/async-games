@@ -5,6 +5,7 @@ import "./globals.css";
 import "./ag-theme.css";
 import { ClerkProvider } from '@clerk/nextjs'
 import Providers from "@/components/Providers";
+import NotificationFooter from "@/components/NotificationFooter";
 import { clerkAppearance } from "@/utils/ui/clerkAppearance";
 import { isDevDeployment } from "@/utils/devEnvironment";
 import { APP_BASE_URL, APP_DESCRIPTION, APP_NAME, APP_TAGLINE, DEV_TITLE_PREFIX, OG_IMAGE, shareImage } from "@/utils/app";
@@ -96,6 +97,10 @@ export default function RootLayout({
           <Providers>
             <div className="ag-app">
               {children}
+              {/* Inside the column, after whatever the screen ends with: the
+                  standing "we can't tell you it's your turn" warning. It picks
+                  the screens it belongs on itself, so no page wires it up. */}
+              <NotificationFooter />
             </div>
           </Providers>
         </body>

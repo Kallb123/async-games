@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GAME_META, partySizeErrorMessage, partySizeRange } from './games';
+import { GAME_META, gamePath, isGameScreen, partySizeErrorMessage, partySizeRange } from './games';
 
 describe('partySizeErrorMessage', () => {
     const meta = { name: 'Dice Cities', players: '2–6 players', minPlayers: 2, maxPlayers: 6 };
@@ -42,5 +42,24 @@ describe('partySizeRange', () => {
             if (slug === 'firesout') continue; // the one game the two deliberately differ for
             expect(partySizeRange(meta), slug).toBe(meta.players.replace('-', '–'));
         }
+    });
+});
+
+describe('isGameScreen', () => {
+    it('recognises a board and the result screen that follows it', () => {
+        expect(isGameScreen(gamePath('dicecities', 'abc123'))).toBe(true);
+        expect(isGameScreen('/games/worlddomination/abc123')).toBe(true);
+        expect(isGameScreen('/games/result/abc123')).toBe(true);
+    });
+
+    it('does not count the lists and lobbies around a game as one', () => {
+        // `/games/completed` is the one `/games/...` path that is a list rather
+        // than a game, and it is exactly the screen a player who is missing
+        // their turns should be warned on.
+        expect(isGameScreen('/games/completed')).toBe(false);
+        expect(isGameScreen('/')).toBe(false);
+        expect(isGameScreen('/newgame/dicecities')).toBe(false);
+        expect(isGameScreen('/lobby/abc123')).toBe(false);
+        expect(isGameScreen('/settings')).toBe(false);
     });
 });

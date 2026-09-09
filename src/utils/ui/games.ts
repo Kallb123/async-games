@@ -156,3 +156,16 @@ export function gameShareCard(gameUrl: string): string {
 export function gamePath(gameUrl: string, gameId: string): string {
     return `/games/${gameUrl}/${gameId}`;
 }
+
+/**
+ * Whether a path is one of the in-game screens — a board (`gamePath` above) or
+ * the result screen that follows it. Both are `/games/<something>/<id>`, and
+ * both are a player concentrating on one game, which is why anything the app
+ * shows across every *other* screen (the notification footer) checks here
+ * rather than listing the game slugs itself.
+ *
+ * `/games/completed` is not one: it is a list of games, not a game.
+ */
+export function isGameScreen(path: string): boolean {
+    return /^\/games\/[^/]+\/[^/]+/.test(path);
+}
