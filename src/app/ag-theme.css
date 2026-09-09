@@ -43,12 +43,19 @@
     --ag-app-width: 480px;
 
     /* How much room the fixed bottom banner is taking up, or 0px when no offer
-       is showing. `useBannerHeight` measures the banner and writes this onto
+       is showing. `useHeightVar` measures the banner and writes this onto
        the document root; everything that ends at the bottom of the screen —
        the app column, the in-game shell, the sticky setup action — leaves this
        much clear so the banner floats over empty space rather than over
        content. */
     --ag-banner-height: 0px;
+
+    /* How much room the pinned match-review dock is taking up, or 0px when the
+       player is on the live game. `useHeightVar` measures the dock and writes
+       this onto the document root, so the in-game shell can keep that much
+       board clear of it — the whole point of pinning the transport is being
+       able to watch the board change while you scrub. */
+    --ag-review-dock-height: 0px;
 
     --ag-font: var(--ag-font-bricolage), system-ui, -apple-system, sans-serif;
     /* The warm tint the shadows below are mixed from. Kept as a colour of its
@@ -60,6 +67,12 @@
     /* Highlight band swept across content that is being refreshed in the
        background — translucent so the rows underneath stay readable. */
     --ag-shimmer: rgba(255, 255, 255, 0.55);
+
+    /* The ground under anything parked at the bottom of the screen — the setup
+       screen's sticky action, the pinned match-review dock. Opaque under the
+       controls and fading out at the top, so the page looks like it runs on
+       under the band rather than stopping dead at a hard edge. */
+    --ag-fade-to-bg: linear-gradient(to top, var(--ag-bg) 68%, transparent);
 
     /* The surface a `.ag-recap-timeline` is standing on. Its dots are haloed in
        this so they punch through the rail; anywhere the timeline is reused on a
@@ -931,7 +944,7 @@ a.ag-list-row, a.ag-list-row-main {
     position: sticky;
     bottom: var(--ag-banner-height);
     padding: 16px 20px 22px;
-    background: linear-gradient(to top, var(--ag-bg) 68%, transparent);
+    background: var(--ag-fade-to-bg);
 }
 
 /* ---- Empty states ---- */
@@ -1313,6 +1326,10 @@ a.ag-list-row, a.ag-list-row-main {
     display: flex;
     flex-direction: column;
     min-height: calc(100vh - var(--ag-banner-height));
+    /* Room for the pinned match-review dock, so the board, the log and the chat
+       can all be scrolled clear of it. 0px whenever the player is on the live
+       game and no dock is mounted. */
+    padding-bottom: var(--ag-review-dock-height);
     background-color: var(--ag-bg);
     background-image: radial-gradient(circle at 50% 0%, var(--ag-surface), var(--ag-bg) 62%);
     background-repeat: no-repeat;
@@ -1974,6 +1991,31 @@ a.ag-list-row, a.ag-list-row-main {
    The scrubber the player steps back through the match with. It's the war-room
    dock from the design: dark panel, brass transport, and a turn track so the
    position in the match reads at a glance. */
+
+/* Pinned to the bottom of the viewport while a review is open, above the
+   bottom banner rather than under it. The board is what the player is stepping
+   through, so the transport has to stay in view while they do — at the end of
+   a tall page it would be off screen exactly when it is being used. Beneath
+   the top bar (z-index 20) is deliberate: the title and back arrow stay
+   reachable. `--ag-review-dock-height` is what holds the board clear of it. */
+.ag-review-dock {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: var(--ag-banner-height);
+    z-index: 19;
+    /* Only as much safe-area inset as isn't already cleared for us: with an
+       offer showing, `.ag-banner` has paid the inset and `--ag-banner-height`
+       includes it, so repeating it here would float the dock on a strip of
+       bare background. With no banner the dock is the thing resting on the
+       screen edge and pays the whole inset itself. */
+    padding-bottom: max(0px, calc(env(safe-area-inset-bottom) - var(--ag-banner-height)));
+    background: var(--ag-fade-to-bg);
+    /* A long action summary on a short screen scrolls inside the dock instead
+       of pushing the transport off the top of it. */
+    max-height: 70svh;
+    overflow-y: auto;
+}
 .ag-review {
     margin: 12px 16px;
     background: var(--ag-dark);
@@ -2035,8 +2077,14 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-review-now-when { opacity: 0.6; }
 .ag-review-delta { flex: none; font: 800 10.5px var(--ag-font); color: var(--ag-gold); }
 
-/* The buttons around the dock ride in the shell's usual `.ag-actionsheet` band;
-   only this hint needs a rule of its own. */
+/* The buttons around the dock ride in the shell's usual `.ag-actionsheet` band.
+   Pinned, though, the dock is board space the player doesn't get back, so its
+   own copy of that band wears tighter margins than one mid-page and drops the
+   tail meant to clear the content below it. */
+.ag-review-dock .ag-review { margin: 10px 16px 0; }
+.ag-review-dock .ag-actionsheet { padding: 8px 16px 10px; }
+
+/* Only this hint needs a rule of its own. */
 .ag-review-hint { font: 500 11.5px/1.4 var(--ag-font); color: var(--ag-ink-soft); padding: 0 16px; margin-bottom: 8px; }
 .ag-review-error { font: 600 12px var(--ag-font); color: var(--ag-danger); margin-top: 8px; }
 .ag-review .ag-review-error { color: oklch(0.78 0.13 30); }

@@ -1,5 +1,6 @@
 'use client'
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
+import { useHeightVar } from "@/utils/hooks/useHeightVar";
 import { useNowToTheMinute } from "@/utils/hooks/useNow";
 import { formatRelativeTime } from "@/utils/ui/time";
 import { playerColourForId } from "@/utils/ui/playerColours";
@@ -25,8 +26,17 @@ interface TurnNavControlsProps {
 // build, build, end) shows as four steps — so the labels below say "action",
 // not "turn". Themed like the rest of the shell — the panel is the app's dark
 // ink, the key control its brass, never stock Bootstrap.
+//
+// Once a review is open, that dock is pinned to the bottom of the screen.
+// Stepping through the match is only worth anything if you can watch the board
+// change while you do it, and at the end of a tall page the transport would be
+// off screen exactly when it is in use — leaving the player scrubbing blind.
 export default function TurnNavControls({ nav, planningActions, canPlan = true, userIdList = [] }: TurnNavControlsProps) {
     const now = useNowToTheMinute();
+    // The pinned dock is out of the flow, so the shell has to be told how much
+    // room to keep clear beneath the board. Its height is not fixed — the action
+    // line wraps, and the safe-area inset varies — so it is measured.
+    const measureDock = useHeightVar("--ag-review-dock-height");
 
     if (nav.isLive) {
         return (
@@ -75,44 +85,6 @@ export default function TurnNavControls({ nav, planningActions, canPlan = true, 
 
     return (
         <>
-            <div className="ag-review">
-                <div className="ag-review-head">
-                    <div className="ag-review-title">{nav.mode === "planning" ? "🧭 Planning ahead" : "🕐 Match review"}</div>
-                    <div className="ag-review-rule" />
-                    <div className="ag-review-pos">{positionLabel}</div>
-                </div>
-
-                <div className="ag-review-transport">
-                    <button type="button" className="ag-review-btn" onClick={nav.jumpToStart} disabled={!nav.canBack} aria-label="Jump to start of game" title="Jump to start of game">⏮</button>
-                    <button type="button" className="ag-review-btn" onClick={nav.stepBack} disabled={!nav.canBack} aria-label="Previous action" title="Previous action">◀</button>
-                    <button type="button" className="ag-review-btn ag-review-btn--key" onClick={nav.stepForward} disabled={!nav.canForward} aria-label="Next action" title="Next action">▶</button>
-                    <button type="button" className="ag-review-btn" onClick={nav.jumpToCurrent} disabled={!nav.canForward} aria-label="Jump to current position" title="Jump to current position">⏭</button>
-                </div>
-
-                <div className="ag-review-track" aria-hidden="true">
-                    {ticks.map((state, i) => (
-                        <span key={i} className={`ag-review-tick${state === "ahead" ? "" : ` ag-review-tick--${state}`}`} />
-                    ))}
-                </div>
-
-                <div className="ag-review-now">
-                    <span className="ag-review-swatch" style={{ background: swatch }} />
-                    <div className="ag-review-now-text">
-                        {command ? (
-                            <>
-                                <b>{command.senderUsername}</b> · {command.summary}
-                                {when && <span className="ag-review-now-when"> · {when}</span>}
-                            </>
-                        ) : (
-                            "Initial position"
-                        )}
-                    </div>
-                    <div className="ag-review-delta">{relativeLabel}</div>
-                </div>
-
-                {nav.error && <div className="ag-review-error">{nav.error}</div>}
-            </div>
-
             {nav.mode === "planning" && (
                 <>
                     {nav.atCurrent && !nav.isPlannedView && (
@@ -131,10 +103,54 @@ export default function TurnNavControls({ nav, planningActions, canPlan = true, 
                 </>
             )}
 
-            <div className="ag-actionsheet">
-                <button type="button" className="ag-btn ag-btn--primary ag-btn--block" onClick={nav.returnToLive} title="Leave this view and resume the live game">
-                    Back to live game →
-                </button>
+            {/* Everything below is pinned to the bottom of the screen — the
+                transport and the way out of the review. The planning sheet above
+                stays in the flow: it is as tall as the game's own action panel,
+                and pinning that would cover the board it is meant to plan on. */}
+            <div className="ag-review-dock" ref={measureDock}>
+                <div className="ag-review">
+                    <div className="ag-review-head">
+                        <div className="ag-review-title">{nav.mode === "planning" ? "🧭 Planning ahead" : "🕐 Match review"}</div>
+                        <div className="ag-review-rule" />
+                        <div className="ag-review-pos">{positionLabel}</div>
+                    </div>
+
+                    <div className="ag-review-transport">
+                        <button type="button" className="ag-review-btn" onClick={nav.jumpToStart} disabled={!nav.canBack} aria-label="Jump to start of game" title="Jump to start of game">⏮</button>
+                        <button type="button" className="ag-review-btn" onClick={nav.stepBack} disabled={!nav.canBack} aria-label="Previous action" title="Previous action">◀</button>
+                        <button type="button" className="ag-review-btn ag-review-btn--key" onClick={nav.stepForward} disabled={!nav.canForward} aria-label="Next action" title="Next action">▶</button>
+                        <button type="button" className="ag-review-btn" onClick={nav.jumpToCurrent} disabled={!nav.canForward} aria-label="Jump to current position" title="Jump to current position">⏭</button>
+                    </div>
+
+                    <div className="ag-review-track" aria-hidden="true">
+                        {ticks.map((state, i) => (
+                            <span key={i} className={`ag-review-tick${state === "ahead" ? "" : ` ag-review-tick--${state}`}`} />
+                        ))}
+                    </div>
+
+                    <div className="ag-review-now">
+                        <span className="ag-review-swatch" style={{ background: swatch }} />
+                        <div className="ag-review-now-text">
+                            {command ? (
+                                <>
+                                    <b>{command.senderUsername}</b> · {command.summary}
+                                    {when && <span className="ag-review-now-when"> · {when}</span>}
+                                </>
+                            ) : (
+                                "Initial position"
+                            )}
+                        </div>
+                        <div className="ag-review-delta">{relativeLabel}</div>
+                    </div>
+
+                    {nav.error && <div className="ag-review-error">{nav.error}</div>}
+                </div>
+
+                <div className="ag-actionsheet">
+                    <button type="button" className="ag-btn ag-btn--primary ag-btn--block" onClick={nav.returnToLive} title="Leave this view and resume the live game">
+                        Back to live game →
+                    </button>
+                </div>
             </div>
         </>
     );

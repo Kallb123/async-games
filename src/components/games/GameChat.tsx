@@ -67,7 +67,7 @@ export default function GameChat({ messages, isLoading, isRefreshing, sending, s
         }
     }, []);
     // React 19 detaches by running the returned cleanup rather than calling this
-    // again with null (see useBannerHeight, which does the same for a native
+    // again with null (see useHeightVar, which does the same for a native
     // observer) — so the listener is scoped to the node that was actually
     // passed in, not whatever `listRef.current` happens to hold by then.
     const attachListRef = useCallback((node: HTMLOListElement | null) => {
