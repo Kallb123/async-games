@@ -2004,7 +2004,12 @@ a.ag-list-row, a.ag-list-row-main {
     right: 0;
     bottom: var(--ag-banner-height);
     z-index: 19;
-    padding-bottom: env(safe-area-inset-bottom);
+    /* Only as much safe-area inset as isn't already cleared for us: with an
+       offer showing, `.ag-banner` has paid the inset and `--ag-banner-height`
+       includes it, so repeating it here would float the dock on a strip of
+       bare background. With no banner the dock is the thing resting on the
+       screen edge and pays the whole inset itself. */
+    padding-bottom: max(0px, calc(env(safe-area-inset-bottom) - var(--ag-banner-height)));
     background: var(--ag-fade-to-bg);
     /* A long action summary on a short screen scrolls inside the dock instead
        of pushing the transport off the top of it. */

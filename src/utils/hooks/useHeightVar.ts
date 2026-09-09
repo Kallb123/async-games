@@ -18,7 +18,11 @@ import { useCallback } from 'react';
  * back to the live game — which drops the variable and gives the space straight
  * back.
  */
-export function useHeightVar(cssVar: string) {
+/** The height tokens `ag-theme.css` declares for this. Named rather than left
+ *  as `string` so a typo is a type error, not a variable nothing reads. */
+type HeightVar = '--ag-banner-height' | '--ag-review-dock-height';
+
+export function useHeightVar(cssVar: HeightVar) {
     return useCallback((node: HTMLElement | null) => {
         // React 19 detaches by running the cleanup below rather than by calling
         // this again with null, but the ref type still allows it.
