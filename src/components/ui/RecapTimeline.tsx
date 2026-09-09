@@ -1,21 +1,14 @@
 import React from 'react';
 
 /** The side of a `marker` badge, in px — pass it as the `Avatar` `size`. The
- *  `--markers` rail and divider offsets in `ag-theme.css` are `calc`'d from
- *  `--ag-recap-marker-size`, which this has to match: change one, change both. */
+ *  source of truth for the badge's size: the list publishes it to CSS as
+ *  `--ag-recap-marker-size` below, and the `--markers` rail and divider offsets
+ *  in `ag-theme.css` are `calc`'d from that, so nothing has to be kept in step
+ *  by hand. */
 export const RECAP_MARKER_SIZE = 26;
 
-export interface RecapTimelineEvent {
+interface RecapTimelineEventBase {
     id: string;
-    /** The dot beside the entry — normally the acting player's colour. Ignored
-     *  when `marker` is given. */
-    dotColour?: string;
-    /** Stands in the plain dot's place when a colour alone isn't enough to say
-     *  whose entry this is — the chat thread's sender avatar, ringed in their
-     *  seat colour. All or nothing per list: one marker widens the whole
-     *  timeline's marker column (see `--markers` below), so a dot row mixed in
-     *  among marker rows would sit off the rail. */
-    marker?: React.ReactNode;
     title: React.ReactNode;
     detail?: React.ReactNode;
     /** Rendered on the right of the title row, e.g. a reaction picker. */
@@ -25,6 +18,22 @@ export interface RecapTimelineEvent {
      *  message that arrived since the panel was last opened. */
     dividerBefore?: React.ReactNode;
 }
+
+/**
+ * One entry, marked either way but never neither — `tsc` refuses an entry
+ * carrying both or nothing, which would otherwise render an invisible dot.
+ *
+ * - `dotColour`: the plain dot, normally the acting player's colour.
+ * - `marker`: something richer standing in the dot's place — the chat thread's
+ *   sender avatar, ringed in their seat colour. All or nothing *per list*: one
+ *   marker widens the whole timeline's marker column (`--markers`), so a dot
+ *   row mixed in among marker rows would sit off the rail. That part is prose,
+ *   not types; every list today is one or the other.
+ */
+export type RecapTimelineEvent = RecapTimelineEventBase & (
+    | { dotColour: string; marker?: never }
+    | { marker: React.ReactNode; dotColour?: never }
+);
 
 interface RecapTimelineProps {
     events: RecapTimelineEvent[];
@@ -49,8 +58,14 @@ const RecapTimeline = React.forwardRef<HTMLOListElement, RecapTimelineProps>(
     function RecapTimeline({ events, compact = false }, ref) {
         const hasMarkers = events.some(event => event.marker);
         const className = `ag-recap-timeline${compact ? ' ag-recap-timeline--compact' : ''}${hasMarkers ? ' ag-recap-timeline--markers' : ''}`;
+        // The badge size travels to the CSS that positions the rail and the
+        // divider around it, so `RECAP_MARKER_SIZE` is the only place it is
+        // written down (the stylesheet's own value is a fallback).
+        const markerSize = hasMarkers
+            ? { '--ag-recap-marker-size': `${RECAP_MARKER_SIZE}px` } as React.CSSProperties
+            : undefined;
         return (
-            <ol ref={ref} className={className}>
+            <ol ref={ref} className={className} style={markerSize}>
                 {events.map((event) => (
                     <React.Fragment key={event.id}>
                         {event.dividerBefore && (

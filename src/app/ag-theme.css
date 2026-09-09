@@ -3157,12 +3157,13 @@ a.ag-list-row, a.ag-list-row-main {
    A conversation says whose line it is with the sender's own badge rather than
    a colour swatch, ringed in their seat colour (`RecapTimeline`'s `marker`), so
    the rail and the unread divider shift over to clear the wider badge and the
-   rail meets its centre. Both offsets are derived from the badge's own size —
-   `RECAP_MARKER_SIZE` in `RecapTimeline.tsx`, which this token must match —
-   rather than restated as numbers that drift when it changes; the divider
-   clears the badge plus the compact list's own 11px gap, landing it on the card
-   column. Same specificity as the compact rules above, and after them, so the
-   geometry wins wherever both apply. */
+   rail meets its centre. Both offsets are derived from the badge's own size
+   rather than restated as numbers that drift when it changes: the list itself
+   publishes that size as `--ag-recap-marker-size` from `RECAP_MARKER_SIZE`
+   (`RecapTimeline.tsx`), so the value below is only the fallback for a list
+   rendered without it. The divider clears the badge plus the compact list's own
+   11px gap, landing it on the card column. Same specificity as the compact
+   rules above, and after them, so the geometry wins wherever both apply. */
 .ag-recap-timeline--markers {
     --ag-recap-marker-size: 26px;
 }

@@ -267,9 +267,13 @@ same picture as a match history:
   badge is the initials one: the GET carries no image URL, and resolving one
   would turn the app's most-polled endpoint into its chattiest Clerk caller
   (§5) — the trade this originally shipped with no avatar at all to avoid. The
-  two rules it needs (`.ag-recap-timeline--markers`: the rail through the
-  badge's centre, and the unread divider clear of the wider column) live beside
-  the compact ones in `ag-theme.css`;
+  geometry it needs sits beside the compact rules in `ag-theme.css`, under
+  `.ag-recap-timeline--markers`: the marker column's own layout, the rail moved
+  to the badge's centre and the unread divider moved clear of the wider column.
+  Both offsets are `calc`'d from one number, the badge's size — `RECAP_MARKER_SIZE`
+  in `RecapTimeline.tsx`, which the list publishes to CSS as
+  `--ag-recap-marker-size`, so resizing the badge moves the rail with it and
+  there is nothing to keep in step by hand;
 - the composer: an `.ag-input` and an `.ag-btn ag-btn--primary`, disabled while
   empty, over-length or sending;
 - `Skeleton` on first load, `Refreshable` around the rows on a refetch — the
