@@ -233,6 +233,18 @@ describe('other push copy', () => {
         expect(push.body).toBe('good game, well played');
     });
 
+    it('says a GIF was sent when the message has no text of its own', () => {
+        // An empty text can only be a GIF with no caption — normaliseMessageBody
+        // refuses a message that is neither (docs/chat-gifs.md §8).
+        const push = buildChatNotification('Priya', game(), '');
+        expect(push.title).toBe('Priya in Snakes and Ladders');
+        expect(push.body).toBe('Sent a GIF');
+    });
+
+    it('pushes the caption, not "Sent a GIF", when a GIF has one', () => {
+        expect(buildChatNotification('Priya', game(), 'this is you').body).toBe('this is you');
+    });
+
     it('truncates a long message the way every game push does', () => {
         const push = buildChatNotification('Priya', game(), 'x'.repeat(200));
         // Bounded by MAX_BODY_LENGTH (140) via the shared truncate — a runaway

@@ -24,6 +24,7 @@ import type { NextRequest } from 'next/server';
 import type { User } from '@clerk/nextjs/server';
 import type { PushNotification, SendPushOptions } from '@/utils/firebase/pushNotification';
 import type { IGameDataDocument } from '@/utils/mongodb/GameData';
+import type { IChatAttachment } from '@/utils/chat';
 import type { ActionableTurnBranch } from '@/utils/games/TurnTimer';
 import { clearAfterCallbacks } from '@/utils/testing/afterStub';
 
@@ -37,6 +38,7 @@ let mongo: typeof import('@/utils/mongodb/mongodb');
 let gameData: GameData;
 let chatMessageData: typeof import('@/utils/mongodb/ChatMessageData');
 let chatReadData: typeof import('@/utils/mongodb/ChatReadData');
+let gifCatalogueData: typeof import('@/utils/mongodb/GifCatalogueData');
 let reactionData: typeof import('@/utils/mongodb/ReactionData');
 let nextServer: typeof import('next/server');
 
@@ -44,7 +46,12 @@ let nextServer: typeof import('next/server');
 type StoredGame = Record<string, unknown> & { gameId: string, __v: number };
 
 /** A stored chat message, as the ChatMessage collection would hold it. */
-type StoredChatMessage = { messageId: string, gameId: string, senderId: string, text: string, timestamp: string };
+type StoredChatMessage = { messageId: string, gameId: string, senderId: string, text: string, timestamp: string, attachment?: IChatAttachment };
+
+/** A stored GIF, as the GifCatalogue collection would hold it — the row the
+ *  search route writes and the chat POST resolves against. `expiresAt` is the
+ *  TTL index's business and no route reads it, so tests may leave it off. */
+type StoredGifCatalogueItem = IChatAttachment & { expiresAt?: Date };
 
 /** A stored read marker, as the ChatRead collection would hold it. */
 type StoredChatReadMarker = { gameId: string, userId: string, readAt: string };
@@ -57,6 +64,7 @@ type StoredReaction = { gameId: string, commandId?: string, eventId?: string, re
 const games = new Map<string, StoredGame>();
 const chatMessages: StoredChatMessage[] = [];
 const chatReadMarkers: StoredChatReadMarker[] = [];
+const gifCatalogue: StoredGifCatalogueItem[] = [];
 const reactions: StoredReaction[] = [];
 
 /** Every push a request sent, in the order it sent them. */
@@ -78,6 +86,7 @@ export async function resetApiRouteStubs() {
     gameData = await import('@/utils/mongodb/GameData');
     chatMessageData = await import('@/utils/mongodb/ChatMessageData');
     chatReadData = await import('@/utils/mongodb/ChatReadData');
+    gifCatalogueData = await import('@/utils/mongodb/GifCatalogueData');
     reactionData = await import('@/utils/mongodb/ReactionData');
     nextServer = await import('next/server');
 
@@ -88,6 +97,7 @@ export async function resetApiRouteStubs() {
     games.clear();
     chatMessages.length = 0;
     chatReadMarkers.length = 0;
+    gifCatalogue.length = 0;
     reactions.length = 0;
     clearAfterCallbacks();
     sentPushes.length = 0;
@@ -107,6 +117,7 @@ export async function resetApiRouteStubs() {
     vi.spyOn(chatReadData.ChatReadModel, 'findOne').mockImplementation(findOneChatReadFromStore as typeof chatReadData.ChatReadModel.findOne);
     vi.spyOn(chatReadData.ChatReadModel, 'find').mockImplementation(findManyChatReadFromStore as typeof chatReadData.ChatReadModel.find);
     vi.spyOn(chatReadData.ChatReadModel, 'findOneAndUpdate').mockImplementation(findOneAndUpdateChatReadFromStore as typeof chatReadData.ChatReadModel.findOneAndUpdate);
+    vi.spyOn(gifCatalogueData.GifCatalogueModel, 'findOne').mockImplementation(findOneGifCatalogueFromStore as typeof gifCatalogueData.GifCatalogueModel.findOne);
     vi.spyOn(reactionData.ReactionModel, 'find').mockImplementation(findReactionsFromStore as typeof reactionData.ReactionModel.find);
 }
 
@@ -550,9 +561,40 @@ function saveChatToStore(this: import('@/utils/mongodb/ChatMessageData').IChatMe
         gameId: this.gameId,
         senderId: this.senderId,
         text: this.text,
+        // Flattened field by field, like the rest: the schema stores a
+        // subdocument, and a test wants a plain object to assert on.
+        attachment: this.attachment ? {
+            provider: this.attachment.provider,
+            mediaId: this.attachment.mediaId,
+            url: this.attachment.url,
+            stillUrl: this.attachment.stillUrl,
+            width: this.attachment.width,
+            height: this.attachment.height,
+            alt: this.attachment.alt,
+        } : undefined,
         timestamp: this.timestamp,
     });
     return Promise.resolve(this);
+}
+
+// ---------------------------------------------------------------- GIF catalogue
+
+/** Puts a GIF in the catalogue, as if our search route had already served it —
+ *  which is the only way a real one gets there (docs/chat-gifs.md §4c). */
+export function seedGifCatalogueItem(item: StoredGifCatalogueItem) {
+    gifCatalogue.push(item);
+}
+
+// The one read the chat POST makes: resolve one (provider, mediaId) — the
+// unique index. The ref is passed straight through as the filter, so this
+// checks it really was just those two fields and nothing else.
+function findOneGifCatalogueFromStore(filter: Record<string, unknown>) {
+    const { provider, mediaId } = filter ?? {};
+    if (typeof provider !== 'string' || typeof mediaId !== 'string' || Object.keys(filter).length !== 2) {
+        throw new Error(`The test GIF catalogue only resolves one provider + mediaId, not ${JSON.stringify(filter)}`);
+    }
+    const match = gifCatalogue.find(item => item.provider === provider && item.mediaId === mediaId);
+    return { exec: async () => match ? gifCatalogueData.GifCatalogueModel.hydrate(match) : null };
 }
 
 // ---------------------------------------------------------------- Chat read markers

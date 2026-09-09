@@ -6,7 +6,8 @@ import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { ChatMessageModel, IChatMessageDataDocument } from '@/utils/mongodb/ChatMessageData';
 import { ChatReadModel } from '@/utils/mongodb/ChatReadData';
-import { normaliseMessage, normaliseReadAt } from '@/utils/chat';
+import { GifCatalogueModel } from '@/utils/mongodb/GifCatalogueData';
+import { IChatAttachment, IChatGifRef, normaliseAttachment, normaliseMessageBody, normaliseReadAt } from '@/utils/chat';
 import { consumeRateLimit } from '@/utils/rateLimit';
 import { usersById } from '@/utils/users/clerk';
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
@@ -35,6 +36,10 @@ export interface IChatMessageResponse {
     messageId: string;
     senderId: string;
     text: string;
+    /** The message's GIF, if it has one — resolved server-side, never from
+     *  anything the sender supplied (docs/chat-gifs.md §4). Absent on a plain
+     *  message, and on one whose stored attachment no longer validates. */
+    attachment?: IChatAttachment;
     timestamp: string;
 }
 
@@ -49,12 +54,26 @@ export interface IChatResponse {
 }
 
 function toResponse(message: IChatMessageDataDocument): IChatMessageResponse {
+    // normaliseAttachment does two jobs here, which is why it is worth the URL
+    // parse per GIF rather than spreading the subdocument: it reduces a
+    // Mongoose subdocument to exactly the seven fields that belong on the wire,
+    // *and* it re-checks them. So a stored attachment that no longer passes —
+    // because the host list has since been narrowed, or because it was written
+    // by an older version of the search route — degrades to a message without
+    // one instead of putting a URL we would no longer accept into an <img src>.
+    // A message left with neither text nor attachment renders as the
+    // "GIF unavailable" caption (docs/chat-gifs.md §7).
+    const attachment = message.attachment ? normaliseAttachment(message.attachment) : null;
+    if (message.attachment && attachment === null) {
+        console.error(`Chat message ${String(message.messageId)} has a stored attachment that no longer validates`);
+    }
     return {
         // messageId is a UUID field; String() gives its canonical form whether
         // the driver hands it back as a UUID object or already as a string.
         messageId: String(message.messageId),
         senderId: message.senderId,
         text: message.text,
+        ...(attachment ? { attachment } : {}),
         timestamp: message.timestamp,
     };
 }
@@ -154,8 +173,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IC
 }
 
 // Post a message to a game's thread. Access control is the same membership gate
-// as the GET; on top of it, a bad body is a 400 (normaliseMessage), and a flood
-// is a 429. Deliberately *not* requireLiveGame: "gg" after the last turn is the
+// as the GET; on top of it, a bad body is a 400 (normaliseMessageBody), an
+// unresolvable GIF is a 400 (see below), and a flood is a 429. Deliberately *not* requireLiveGame: "gg" after the last turn is the
 // most obvious message in an async game, and a finished game's document is not
 // deleted (docs/in-game-chat.md §5). Once stored, the message pushes to the
 // other players — throttled per recipient, and never able to undo the write it
@@ -170,9 +189,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
         return NextResponse.json({}, { status: 401, statusText: "Not signed in" });
     }
 
-    const { text } = await readJsonBody<{ text: string }>(request);
-    const message = normaliseMessage(text);
-    if (message === null) {
+    // Text, a GIF reference, or both — but never neither, and never a GIF the
+    // caller described themselves. `gif` is read as `unknown` on purpose: the
+    // only two fields of it that survive are the provider and the id, and
+    // normaliseGifRef builds them into a fresh object rather than filtering the
+    // one that arrived, so a body sending a `url` or a `width` next to the id
+    // cannot influence what gets stored (docs/chat-gifs.md §4).
+    const body = await readJsonBody<{ text: string, gif: unknown }>(request);
+    const messageBody = normaliseMessageBody(body);
+    if (messageBody === null) {
         return NextResponse.json({}, { status: 400, statusText: "Invalid message" });
     }
 
@@ -198,11 +223,51 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
         return NextResponse.json({}, { status: 429, statusText: "Too many messages" });
     }
 
+    // Resolve the GIF, if there is one, from the catalogue our own search route
+    // populated — the whole point of the client sending an id rather than a URL
+    // (docs/chat-gifs.md §4c). Three properties fall out of it: the stored
+    // fields are ones a provider gave us, the item is one our *filtered* search
+    // actually served (not merely a real Tenor id, which a player could name
+    // from a query the filter would have blocked), and the send touches no third
+    // party, so posting a GIF doesn't depend on Tenor being up.
+    //
+    // Deliberately after the rate limit rather than before it: a 400 costing the
+    // sender a token is the right way round, because the alternative is an
+    // unlimited "is this id in your cache?" oracle for any signed-in member.
+    //
+    // A miss is a 400 and nothing more clever (§5a). It is unreachable from the
+    // picker, which resolved the row seconds earlier, so the interesting caller
+    // is somebody sending ids by hand.
+    let attachment: IChatAttachment | undefined;
+    if (messageBody.gif) {
+        // The ref *is* the filter: two fields, both already checked to be
+        // strings from a restricted charset, so there is no shape here for a
+        // query operator to arrive in.
+        const filter: IChatGifRef = messageBody.gif;
+        const row = await GifCatalogueModel.findOne(filter).exec();
+        attachment = row ? normaliseAttachment(row) ?? undefined : undefined;
+        if (!attachment) {
+            // Worth telling apart in the log: an id we have never served is a
+            // client doing something odd, whereas a row that fails its own
+            // validator is our data being wrong.
+            if (row) {
+                console.error(`Chat GIF ${filter.provider}:${filter.mediaId} is in the catalogue but does not validate`);
+            } else {
+                console.warn(`POST ${request.nextUrl.pathname} 400: GIF ${filter.provider}:${filter.mediaId} is not in the catalogue`);
+            }
+            return NextResponse.json({}, { status: 400, statusText: "Unknown GIF" });
+        }
+    }
+
     const messageDoc: IChatMessageDataDocument = new ChatMessageModel({
         messageId: randomUUID(),
         gameId: gameid,
         senderId: userId,
-        text: message,
+        text: messageBody.text,
+        // Denormalised, not referenced: the chat GET stays one indexed read
+        // with no join, and a catalogue row expiring later can't break a GIF
+        // that has already been sent.
+        attachment,
         timestamp: (new Date()).toISOString(),
     });
     await messageDoc.save();
@@ -238,7 +303,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
                     event: 'ChatMessage',
                     gameId: gameid,
                     link: gameNotificationLink(gameData.gameType.url, gameid),
-                }, buildChatNotification(senderName, gameData, message), { channel: 'chat' });
+                }, buildChatNotification(senderName, gameData, messageBody.text), { channel: 'chat' });
             }
         } catch (error) {
             console.error(`Failed to send chat push for game ${gameid}`, error);
