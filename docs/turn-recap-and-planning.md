@@ -48,7 +48,7 @@ commands after it. Same engine, two inputs.
 | Replay engine | `src/utils/games/replay.ts` | `buildTimeline(gameData, userIdNameMap, plannedCommands?, onStep?, viewerId?)` reconstructs the timeline; per-game `IReplayAdapter`s provide the initial state + response conversion |
 | Timeline API | `src/app/api/game/[gameid]/timeline/route.ts` | `POST` returns the snapshots (recap history + optional planned actions) |
 | Navigation hook | `src/utils/hooks/useTurnNavigation.ts` | Owns view index / mode, fetches the timeline, exposes step/return/plan actions |
-| Controls | `src/components/games/TurnNavControls.tsx` | Game-agnostic ⏮ ◀ ▶ / "Back to live game" / (planning) controls |
+| Controls | `src/components/games/TurnNavControls.tsx` | Game-agnostic ⏮ ◀ ▶ / "Back to live game" / (planning) controls. While a review is open the transport and the way out ride in `.ag-review-dock`, pinned to the bottom of the viewport so the board stays visible while you step through it; `useHeightVar` publishes the dock's height as `--ag-review-dock-height` and `.ag-game` reserves that much room. The planning sheet stays in the flow above it |
 | Recap engine | `src/utils/games/recap.ts` | `buildEventFeed(gameData, userIdNameMap, forUserId)` replays the timeline through a per-game `IRecapAdapter` and windows the events to "since your last turn" |
 | Recap API | `src/app/api/game/[gameid]/recap/route.ts` | `POST` returns the viewer's event feed, summary, tip and player colours |
 | Recap hook + card | `src/utils/hooks/useTurnRecap.ts`, `src/components/games/TurnRecapScreen.tsx`, `src/components/games/TurnRecap.tsx` | Fetch-on-load, then the shared screen every game renders — a page passes its recap and its own call-to-action wording, nothing else |

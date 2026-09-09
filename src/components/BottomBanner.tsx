@@ -3,7 +3,7 @@ import { ReactNode } from 'react';
 import InstallOffer from '@/components/ui/InstallOffer';
 import NotificationOffer from '@/components/ui/NotificationOffer';
 import ClaimAccountOffer from '@/components/ui/ClaimAccountOffer';
-import { useBannerHeight } from '@/utils/hooks/useBannerHeight';
+import { useHeightVar } from '@/utils/hooks/useHeightVar';
 import { useDismissibleBanner } from '@/utils/hooks/useDismissibleBanner';
 import { useInstallPrompt } from '@/utils/hooks/useInstallPrompt';
 import { useIsAuthorised } from '@/utils/hooks/useAuthGuard';
@@ -53,7 +53,7 @@ export default function BottomBanner() {
     const notifications = useDismissibleBanner(NOTIFICATIONS_DISMISSED_KEY);
     const install = useDismissibleBanner(INSTALL_DISMISSED_KEY);
     const claim = useDismissibleBanner(CLAIM_DISMISSED_KEY);
-    const measure = useBannerHeight();
+    const measure = useHeightVar('--ag-banner-height');
 
     // `permission` and `installMethod` are both inert on the server and through
     // hydration (see their hooks), so nothing renders until the browser has
