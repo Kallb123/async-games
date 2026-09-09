@@ -57,8 +57,9 @@ before the switch goes back.
 - A 💬 button in the in-game top bar, on every multiplayer game. A dot on it
   when there are messages the player hasn't seen.
 - Tapping it opens the thread below the board, where the match-history log
-  opens: messages oldest-first, each dotted in its sender's seat colour, with
-  the sender's name and a relative timestamp, and a composer at the bottom.
+  opens: messages oldest-first, each marked with its sender's avatar ringed
+  in their seat colour, with the sender's name and a relative timestamp, and a
+  composer at the bottom.
 - Sending pushes a notification to the other players — "Ann in Train Time",
   body: the message — throttled per recipient so a conversation doesn't buzz a
   phone once per line (§5).
@@ -253,15 +254,26 @@ same picture as a match history:
   when there is nothing yet — the same wrapper `MatchHistory` uses;
 - the rows are **`RecapTimeline`** (`compact`), whose own comment says the
   recap list and the match history "are the same picture at two sizes, so they
-  are the same component". A chat thread is the third size: `dotColour` from
-  `playerColourForId(senderId, userIdList)` — so a player is one colour on the
-  board, the scoreboard, the log and the thread — `title` the message text, and
-  `detail` the sender's name (`nameForUserId`-style lookup across the
+  are the same component". A chat thread is the third size: `title` the message
+  text, and `detail` the sender's name (`nameForUserId`-style lookup across the
   `userIdList` / `usernameList` pair the panel is handed, since the response
   carries no name — §5) and `formatRelativeTime(timestamp, useNowToTheMinute())`,
   which is precisely the call `TurnRecap` already makes.
-  No `Avatar`: the GET carries no image URL, so every badge would fall back to
-  initials, and the coloured dot is already how this app says whose line it is;
+  Where the recap and the log put a plain colour dot, the thread puts the
+  sender's **`Avatar`** — the timeline's `marker` slot, which stands in the
+  dot's place — ringed (`ring`) in `playerColourForId(senderId, userIdList)`, so
+  a player is one colour on the board, the scoreboard, the log and the thread,
+  and a conversation is marked with the people in it rather than a swatch. That
+  badge is the initials one: the GET carries no image URL, and resolving one
+  would turn the app's most-polled endpoint into its chattiest Clerk caller
+  (§5) — the trade this originally shipped with no avatar at all to avoid. The
+  geometry it needs sits beside the compact rules in `ag-theme.css`, under
+  `.ag-recap-timeline--markers`: the marker column's own layout, the rail moved
+  to the badge's centre and the unread divider moved clear of the wider column.
+  Both offsets are `calc`'d from one number, the badge's size — `RECAP_MARKER_SIZE`
+  in `RecapTimeline.tsx`, which the list publishes to CSS as
+  `--ag-recap-marker-size`, so resizing the badge moves the rail with it and
+  there is nothing to keep in step by hand;
 - the composer: an `.ag-input` and an `.ag-btn ag-btn--primary`, disabled while
   empty, over-length or sending;
 - `Skeleton` on first load, `Refreshable` around the rows on a refetch — the

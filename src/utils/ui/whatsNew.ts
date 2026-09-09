@@ -62,6 +62,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Chat says who's talking with their avatar",
+                detail: "Every message in a game's chat now leads with the sender's avatar, ringed in the colour they're playing as, instead of the small colour dot that used to sit beside it — so a glance down the thread tells you who said what.",
+            },
+            {
                 title: "Result charts mark the moments that mattered",
                 detail: "The charts on the result page now drop a small icon right on the turn something big happened: a biohazard mark where Outbreak drew an epidemic card, a building where a Dice Cities player bought a landmark, and an explosion or an ambulance wherever Fires Out's fire blew or a victim made it out — so you can see exactly how it lines up with the swings in the line around it.",
             },
@@ -102,10 +106,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Outbreak tells you how you lost",
                 detail: "\"The team lost\" was all you got, whether a colour's cube supply had run dry, the outbreak marker had maxed out, or you had simply run out of player cards. The finish banner, the result page and the notification now all name which of the three it was — and the result page adds a chart of every colour's remaining cubes, turn by turn, so you can see which supply was draining while you were curing something else.",
                 game: "outbreak",
-            },
-            {
-                title: "What's new goes back further",
-                detail: "These notes used to show only the last handful of changes in each group, and everything older simply vanished. Each group now keeps the three newest in full and lists the ones before them underneath by name alone, so you can see everything that has landed since you last played without scrolling through paragraphs you have already read.",
             },
         ],
     },
