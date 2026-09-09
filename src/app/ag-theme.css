@@ -3153,6 +3153,29 @@ a.ag-list-row, a.ag-list-row-main {
 }
 .ag-recap-timeline--compact .ag-recap-event-title { font: 700 12.5px/1.35 var(--ag-font); }
 
+/* ---- Avatar markers (the in-game chat thread) ----
+   A conversation says whose line it is with the sender's own badge rather than
+   a colour swatch, ringed in their seat colour (`RecapTimeline`'s `marker`), so
+   the rail and the unread divider shift over to clear the wider badge and the
+   rail meets its centre. Both offsets are derived from the badge's own size —
+   `RECAP_MARKER_SIZE` in `RecapTimeline.tsx`, which this token must match —
+   rather than restated as numbers that drift when it changes; the divider
+   clears the badge plus the compact list's own 11px gap, landing it on the card
+   column. Same specificity as the compact rules above, and after them, so the
+   geometry wins wherever both apply. */
+.ag-recap-timeline--markers {
+    --ag-recap-marker-size: 26px;
+}
+.ag-recap-timeline--markers .ag-recap-event::before {
+    left: calc(var(--ag-recap-marker-size) / 2 - 1px);
+    top: calc(var(--ag-recap-marker-size) + 5px);
+}
+.ag-recap-timeline--markers .ag-recap-divider { padding-left: calc(var(--ag-recap-marker-size) + 11px); }
+.ag-recap-marker { flex: 0 0 auto; position: relative; z-index: 1; display: flex; }
+/* The halo the dot wears, so the rail stops at the badge rather than running
+   under its ring. */
+.ag-recap-marker .ag-avatar { box-shadow: 0 0 0 2px var(--ag-recap-ground); }
+
 /* ---- Unread divider (in-game chat thread) ----
    Marks where messages new since the panel was last opened begin. Sits in the
    card column, clear of the dot rail, so the rail's connecting line simply

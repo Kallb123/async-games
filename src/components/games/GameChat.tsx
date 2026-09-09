@@ -1,6 +1,7 @@
 'use client'
 import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import RecapTimeline from '@/components/ui/RecapTimeline';
+import Avatar from '@/components/ui/Avatar';
+import RecapTimeline, { RECAP_MARKER_SIZE } from '@/components/ui/RecapTimeline';
 import Refreshable from '@/components/ui/Refreshable';
 import Skeleton from '@/components/ui/Skeleton';
 import { playerColourForId } from '@/utils/ui/playerColours';
@@ -38,9 +39,17 @@ interface GameChatProps {
 // The in-game chat thread: the match-history timeline plus a composer, because a
 // chat thread is the same picture as a match history at a third size. It reuses
 // the `.ag-log` wrapper and `RecapTimeline` (compact) rather than growing new
-// markup — a line is dotted in its sender's seat colour, titled with the message
-// and detailed with the sender's name and a relative time, exactly as `TurnRecap`
-// does. Presentational only: the fetch, the poll and the unread dot live in
+// markup — a line is marked with its sender's `Avatar`, ringed in their seat
+// colour, titled with the message and detailed with the sender's name and a
+// relative time, exactly as `TurnRecap` does. The avatar sits where the
+// timeline's plain colour dot does elsewhere (`marker`, not `dotColour`): a
+// conversation is between people, so a face says whose line it is better than a
+// swatch, and the ring keeps the seat colour a player is known by on the board.
+// The badge is the initials one — the chat GET carries no image URL, and adding
+// one would make the app's most-polled endpoint its chattiest Clerk caller
+// (docs/in-game-chat.md §5).
+//
+// Presentational only: the fetch, the poll and the unread dot live in
 // `GameShell`'s `useGameChat` (docs/in-game-chat.md §6).
 //
 // Message text is rendered as text — React escapes it; nothing here goes near
@@ -140,19 +149,28 @@ export default function GameChat({ messages, isLoading, isRefreshing, sending, s
                     <RecapTimeline
                         ref={attachListRef}
                         compact
-                        events={messages.map((message, index) => ({
-                            id: message.messageId,
-                            dotColour: playerColourForId(message.senderId, userIdList),
-                            title: message.text,
-                            detail: [
-                                nameForUserId({ userIdList, usernameList }, message.senderId),
-                                formatRelativeTime(message.timestamp, now),
-                            ].filter(Boolean).join(' · '),
-                            // Marks where the messages new since this panel was last
-                            // opened begin — only on the first of them, so a run of
-                            // several unread lines gets one divider, not one each.
-                            dividerBefore: message.unread && !messages[index - 1]?.unread ? 'New messages' : undefined,
-                        }))}
+                        events={messages.map((message, index) => {
+                            const senderName = nameForUserId({ userIdList, usernameList }, message.senderId);
+                            return {
+                                id: message.messageId,
+                                marker: (
+                                    <Avatar
+                                        name={senderName}
+                                        size={RECAP_MARKER_SIZE}
+                                        ring={playerColourForId(message.senderId, userIdList)}
+                                    />
+                                ),
+                                title: message.text,
+                                detail: [
+                                    senderName,
+                                    formatRelativeTime(message.timestamp, now),
+                                ].filter(Boolean).join(' · '),
+                                // Marks where the messages new since this panel was last
+                                // opened begin — only on the first of them, so a run of
+                                // several unread lines gets one divider, not one each.
+                                dividerBefore: message.unread && !messages[index - 1]?.unread ? 'New messages' : undefined,
+                            };
+                        })}
                     />
                 </Refreshable>
             )}
