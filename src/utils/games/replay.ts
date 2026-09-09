@@ -1,6 +1,6 @@
 import { IGameData } from "../mongodb/GameData";
 import { UNKNOWN_PLAYER_NAME } from "../ui/players";
-import { IHistoryEntry, resolveHistory } from "./history";
+import { IHistoryEntry, resolveHistory, resolveTokens } from "./history";
 import { IGameCommand, IGameType, ICommandOutcome } from "../apiModels/GameLogic";
 import type { GameResultEvent } from "../apiModels/GameDataApi";
 import { deserializeJSON } from "../apiModels/Serialisable";
@@ -306,12 +306,16 @@ export async function buildTimeline(
             complete: state.complete,
             winner: state.winner,
             history: resolveHistory(state.gameState.history, historyNames),
+            // Tokenised the same way a history line is (see userToken /
+            // resolveTokens, utils/games/history.ts), so a command's
+            // myString() can name a player without needing a userIdNameMap
+            // of its own.
             command: command
                 ? {
                       senderId: command.senderId,
                       senderUsername: command.senderUsername,
                       timestamp: command.timestamp,
-                      summary: command.myString(),
+                      summary: resolveTokens(command.myString(), historyNames),
                   }
                 : null,
             planned,

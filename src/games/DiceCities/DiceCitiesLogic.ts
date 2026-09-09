@@ -9,7 +9,7 @@ import { DiceRoll } from "@/utils/games/DiceRoll";
 import { mongoMap } from "@/utils/games/mongoMaps";
 import { seatOrderFrom } from "@/utils/ui/players";
 import { DiceCitiesCardIds, DiceCitiesCards, HARBOUR_BONUS, HARBOUR_MIN_ROLL, TUNA_DICE, TUNA_DIE_SIDES } from "@/games/DiceCities/cards";
-import type { DiceCitiesBuildFlag } from "@/games/DiceCities/ui";
+import { coinChangeParts, type DiceCitiesBuildFlag } from "@/games/DiceCities/ui";
 import { diceCitiesTheme, type DiceCitiesTheme } from "@/games/DiceCities/themes";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
@@ -122,7 +122,10 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
     readonly className = "DiceCitiesRequestDiceRoll";
 
     myString() {
-        return `DiceRoll! Double? ${this.doubleDice ? "True" : "False"}`;
+        if (this.recordedRoll1 === undefined) {
+            return this.doubleDice ? "rolled two dice" : "rolled the dice";
+        }
+        return `rolled a ${formatRoll(this.recordedRoll1, this.recordedRoll2)} — ${moneyChangeSummary(this.moneyChanges)}`;
     }
 
     async Execute (gameData: IGameData) {
@@ -162,11 +165,9 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
         this.moneyChanges = outcome.moneyChanges;
         this.coinsEarnedChanges = outcome.coinsEarnedChanges;
         this.bankChange = outcome.bankChange;
-        let totalRoll = this.doubleDice && outcome.roll2 ? outcome.roll1 + outcome.roll2 : outcome.roll1;
-
         currentPlayerState!.lastDiceSelection = this.doubleDice ? 2 : 1;
 
-        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `rolled a ${totalRoll}${outcome.roll2 ? ` (${outcome.roll1} and ${outcome.roll2})` : ""}`));
+        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `rolled a ${formatRoll(outcome.roll1, outcome.roll2)}`));
 
         return outcome;
     }
@@ -189,7 +190,7 @@ export class DiceCitiesRequestCardPurchase implements IGameCommand {
     readonly className = "DiceCitiesRequestCardPurchase";
 
     myString() {
-        return `CardPurchase! Card? ${this.cardId}`;
+        return `bought a ${cardTitle(this.cardId)}`;
     }
 
     async Execute(gameData: IGameData) {
@@ -271,7 +272,7 @@ export class DiceCitiesRequestPassTurn implements IGameCommand {
     readonly className = "DiceCitiesRequestPassTurn";
 
     myString() {
-        return `PassTurn!`;
+        return `passed their turn`;
     }
 
     async Execute(gameData: IGameData) {
@@ -306,7 +307,7 @@ export class DiceCitiesRequestUnlockTrainStation implements IGameCommand {
     readonly className = "DiceCitiesRequestUnlockTrainStation";
 
     myString() {
-        return `Train Station!`;
+        return `bought a ${DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION].title}`;
     }
 
     async Execute(gameData: IGameData) {
@@ -329,7 +330,7 @@ export class DiceCitiesRequestUnlockShoppingMall implements IGameCommand {
     readonly className = "DiceCitiesRequestUnlockShoppingMall";
 
     myString() {
-        return `Shopping Mall!`;
+        return `bought a ${DiceCitiesCards[DiceCitiesCardIds.SHOPPING_MALL].title}`;
     }
 
     async Execute(gameData: IGameData) {
@@ -352,7 +353,7 @@ export class DiceCitiesRequestUnlockAmusementPark implements IGameCommand {
     readonly className = "DiceCitiesRequestUnlockAmusementPark";
 
     myString() {
-        return `Amusement Park!`;
+        return `bought a ${DiceCitiesCards[DiceCitiesCardIds.AMUSEMENT_PARK].title}`;
     }
 
     async Execute(gameData: IGameData) {
@@ -375,7 +376,7 @@ export class DiceCitiesRequestUnlockRadioTower implements IGameCommand {
     readonly className = "DiceCitiesRequestUnlockRadioTower";
 
     myString() {
-        return `Radio Tower!`;
+        return `bought a ${DiceCitiesCards[DiceCitiesCardIds.RADIO_TOWER].title}`;
     }
 
     async Execute(gameData: IGameData) {
@@ -400,7 +401,7 @@ export class DiceCitiesRequestUnlockHarbour implements IGameCommand {
     readonly className = "DiceCitiesRequestUnlockHarbour";
 
     myString() {
-        return `Harbour!`;
+        return `bought a ${DiceCitiesCards[DiceCitiesCardIds.HARBOUR].title}`;
     }
 
     async Execute(gameData: IGameData) {
@@ -438,7 +439,7 @@ export class DiceCitiesRequestHarbourBonus implements IGameCommand {
     readonly className = "DiceCitiesRequestHarbourBonus";
 
     myString() {
-        return `Harbour bonus! Take it? ${this.addBonus ? "True" : "False"}`;
+        return this.addBonus ? "took the Harbour bonus" : "passed on the Harbour bonus";
     }
 
     async Execute(gameData: IGameData) {
@@ -498,7 +499,7 @@ export class DiceCitiesRequestTvStationSelection implements IGameCommand {
     readonly className = "DiceCitiesRequestTvStationSelection";
 
     myString() {
-        return `TV Station Selection: ${this.selectedUserName || this.selectedUser}!`;
+        return `used the TV Station on ${this.selectedUserName || this.selectedUser}`;
     }
 
     async Execute(gameData: IGameData) {
@@ -575,7 +576,7 @@ export class DiceCitiesRequestBusinessCenterOwnSelection implements IGameCommand
     readonly className = "DiceCitiesRequestBusinessCenterOwnSelection";
 
     myString() {
-        return `Business Center Own Selection: ${this.selectedCard}!`;
+        return `offered their ${cardTitle(this.selectedCard)} for the Business Center swap`;
     }
 
     async Execute(gameData: IGameData) {
@@ -679,7 +680,7 @@ export class DiceCitiesRequestBusinessCenterOpponentSelection implements IGameCo
     readonly className = "DiceCitiesRequestBusinessCenterOpponentSelection";
 
     myString() {
-        return `Business Center Opponent Selection: ${this.selectedUser} ${this.selectedCard}!`;
+        return `asked to trade for a ${cardTitle(this.selectedCard)}`;
     }
 
     async Execute(gameData: IGameData) {
@@ -780,6 +781,10 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
     gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
     senderUsername: string = "Unknown";
+    // The re-roll's own payout, recorded (like DiceCitiesRequestDiceRoll's)
+    // purely for myString() to read back - the re-roll doesn't need it for
+    // its own Undo, which is unimplemented.
+    moneyChanges: Map<string, number> = new Map;
     // Recorded RNG outcomes for the re-roll, so it can be deterministically replayed.
     recordedRoll1?: number;
     recordedRoll2?: number | null;
@@ -787,7 +792,10 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
     readonly className = "DiceCitiesRequestRadioTowerReroll";
 
     myString() {
-        return `Reroll with Radio Tower!`;
+        if (this.recordedRoll1 === undefined) {
+            return "used the Radio Tower to reroll";
+        }
+        return `used the Radio Tower to reroll a ${formatRoll(this.recordedRoll1, this.recordedRoll2)} — ${moneyChangeSummary(this.moneyChanges)}`;
     }
 
     async Execute(gameData: IGameData) {
@@ -846,9 +854,8 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
         this.recordedRoll1 = outcome.roll1;
         this.recordedRoll2 = outcome.roll2;
         this.recordedTunaRoll = outcome.tunaRoll ?? null;
-        let totalRoll = doubleDice && outcome.roll2 ? outcome.roll1 + outcome.roll2 : outcome.roll1;
-
-        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `re-rolled for a ${totalRoll}${outcome.roll2 ? ` (${outcome.roll1} and ${outcome.roll2})` : ""}`));
+        this.moneyChanges = outcome.moneyChanges;
+        dcGameData.gameState.history.unshift(playerHistory(this.senderId, `re-rolled for a ${formatRoll(outcome.roll1, outcome.roll2)}`));
         return outcome;
     }
 
@@ -955,6 +962,33 @@ function rollTunaHaul(): number {
 // Bundles recorded dice values for replay, or returns undefined for a fresh roll.
 function recordedRolls(roll1?: number, roll2?: number | null, tunaRoll?: number | null): IRecordedRolls | undefined {
     return roll1 === undefined ? undefined : { roll1, roll2: roll2 ?? null, tunaRoll: tunaRoll ?? null };
+}
+
+// "7 (3 and 4)" for a doubled roll, or just "7" for a single die - the shape
+// both the history log and myString() name a settled roll in. roll2's
+// presence already says whether the roll was doubled, so there's no need to
+// also pass doubleDice: doDiceRoll only ever sets it when the roll was.
+function formatRoll(roll1: number, roll2?: number | null): string {
+    return `${roll2 ? roll1 + roll2 : roll1}${roll2 ? ` (${roll1} and ${roll2})` : ""}`;
+}
+
+// The un-themed title myString() names a card by - themed history lines look
+// the card up via logNames(dcGameData) instead, since myString() has no
+// gameData to read the played theme from.
+function cardTitle(cardId: uuidString): string {
+    return DiceCitiesCards[cardId]?.title ?? "card";
+}
+
+// "{{u1}} +3🪙, {{u2}} -1🪙" (or "no coins changed hands") for a settled
+// roll's payout - the same coin-by-coin breakdown coinChangeParts (ui.ts)
+// already gives the recap and the live board, named by token rather than a
+// resolved name since myString() has no userIdNameMap of its own. The replay
+// engine resolves the tokens the same way it resolves history lines (see
+// resolveTokens, utils/games/history.ts). mongoMap covers a moneyChanges that
+// came back as a plain object rather than a live Map.
+function moneyChangeSummary(changes: Map<string, number> | Record<string, number>): string {
+    const parts = coinChangeParts(mongoMap(changes), userToken);
+    return parts.length ? parts.join(", ") : "no coins changed hands";
 }
 
 // True for the commands that can pay a roll out - so a Radio Tower re-roll can

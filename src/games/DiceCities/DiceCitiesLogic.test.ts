@@ -1123,6 +1123,44 @@ describe("Dice Cities: replaying a Docks game", () => {
     });
 });
 
+// The match-review scrubber (TurnNavControls) shows a snapshot's
+// command.summary next to the sender's name, so it has to read as English -
+// and name who a roll's payout actually touched, the way the recap and the
+// live board's own roll readout already do.
+describe("Dice Cities: match review summaries", () => {
+    it("names a roll's payout, with player names rather than raw id tokens", async () => {
+        // Both players start with a Wheat Field, which pays every owner a
+        // coin on any roll of 1, whoever rolled it.
+        const gameData = replayableGame([rollCommand(1)]);
+
+        const timeline = await buildTimeline(gameData, { u1: "u1", u2: "u2" });
+        const rollSnapshot = timeline.snapshots[1];
+
+        expect(rollSnapshot.command?.summary).toBe("rolled a 1 — u1 +1🪙, u2 +1🪙");
+        expect(rollSnapshot.command?.summary).not.toContain("{{");
+    });
+
+    it("names a Radio Tower reroll's payout the same way", async () => {
+        // Rerolling to a 6 hits neither starting card (Wheat Field on 1,
+        // Bakery on 2-3), so the payout is the "nobody touched" case.
+        const gameData = replayableGame([
+            rollCommand(1),
+            (() => {
+                const reroll = new DiceCitiesRequestRadioTowerReroll();
+                reroll.senderId = "u1";
+                reroll.senderUsername = "u1";
+                reroll.recordedRoll1 = 6;
+                return reroll;
+            })(),
+        ]);
+
+        const timeline = await buildTimeline(gameData, { u1: "u1", u2: "u2" });
+        const reroll = timeline.snapshots[timeline.snapshots.length - 1];
+
+        expect(reroll.command?.summary).toBe("used the Radio Tower to reroll a 6 — no coins changed hands");
+    });
+});
+
 describe("Dice Cities themes", () => {
     // The rules never read a theme - but the history log does, and unlike a
     // screen string a log line is written into the game and kept. These play a

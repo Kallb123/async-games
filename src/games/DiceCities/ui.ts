@@ -116,10 +116,13 @@ export function landmarkCount(playerState: IDiceCitiesPlayerStateResponse): numb
  * A roll's payout, per player: every steal or bank payout it moved, named
  * rather than netted — a roll that robs one opponent to pay another reads as
  * `["Bob +2🪙", "Alice -2🪙"]`, not just whatever the roller's own line came
- * to. Empty when nothing moved. `nameFor` is left to the caller because the
- * two callers need different names for the same userId: the live board says
- * "You" for the viewer, and the turn recap — built once and read by every
- * player — never can.
+ * to. Empty when nothing moved. `nameFor` is left to the caller because
+ * callers need different names for the same userId: the live board says
+ * "You" for the viewer, the turn recap — built once and read by every
+ * player — never can, and a command's myString() (DiceCitiesLogic.ts) has no
+ * name to give at all yet, so it hands back a `{{userId}}` token for the
+ * replay engine to resolve later (see userToken/resolveTokens,
+ * utils/games/history.ts).
  */
 export function coinChangeParts(changes: Map<string, number>, nameFor: (userId: string) => string): string[] {
     return [...changes.entries()]
