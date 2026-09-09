@@ -6,11 +6,29 @@ const buildTime = new Date().toISOString();
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  swcMinify: false,
   env: {
     NEXT_PUBLIC_BUILD_TIME: buildTime,
   },
-  productionBrowserSourceMaps: true,
+  // Source maps are off in every flavour, because we were paying for them by
+  // the deployment rather than by the bug. They are build output, so Vercel
+  // stores a fresh copy of the lot for every deployment it retains, and at ten
+  // merges a day that is the single biggest line in the storage bill: the
+  // browser maps alone came to 13MB against 2.7MB of the JS they describe, the
+  // server maps to another 35MB, and turning all three off takes a build from
+  // 75MB to 25MB. Nothing a player downloads changes either way — a browser
+  // only fetches a `.map` with devtools already open, and nothing ever fetches
+  // the server ones.
+  //
+  // The cost is unsymbolised stack traces: a runtime error in the Vercel log or
+  // the browser console names a minified chunk rather than a file and line. To
+  // read one, flip the relevant flag back on locally (or on a preview) and
+  // reproduce it there rather than leaving them on in production.
+  productionBrowserSourceMaps: false,
+  experimental: {
+    // Emits `.next/server/**/*.map`, and defaults to on.
+    turbopackSourceMaps: false,
+    serverSourceMaps: false,
+  },
   images: {
     // Profile pictures Clerk holds for a user (today: the avatar their SSO
     // provider supplied). Anything else fails the optimiser and Avatar falls
