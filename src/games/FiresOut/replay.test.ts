@@ -167,7 +167,7 @@ describe("Fires Out replay", () => {
 
         const rescueEvents = await computePerTurnEvents(game, detectRescueEvent);
         expect(rescueEvents).toEqual([
-            { turnIndex: 0, glyph: "🚑", title: "A victim was rescued! (1/7)", seriesKey: "damage" },
+            { turnIndex: 0, icon: "rescue", title: "A victim was rescued! (1/7)", seriesKey: "damage" },
         ]);
     });
 

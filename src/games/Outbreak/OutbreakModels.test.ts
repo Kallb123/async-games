@@ -121,7 +121,7 @@ describe("detectEpidemicEvents", () => {
 
     it("reports one event for a single epidemic", () => {
         expect(detectEpidemicEvents(stepWithLog([{ kind: 'epidemic', rateAfter: 2 }]))).toEqual([
-            { glyph: "☣️", title: "Epidemic card drawn" },
+            { icon: "epidemic", title: "Epidemic card drawn" },
         ]);
     });
 
@@ -131,8 +131,8 @@ describe("detectEpidemicEvents", () => {
             { kind: 'epidemic', rateAfter: 3 },
         ];
         expect(detectEpidemicEvents(stepWithLog(log))).toEqual([
-            { glyph: "☣️", title: "Epidemic card drawn" },
-            { glyph: "☣️", title: "Epidemic card drawn" },
+            { icon: "epidemic", title: "Epidemic card drawn" },
+            { icon: "epidemic", title: "Epidemic card drawn" },
         ]);
     });
 

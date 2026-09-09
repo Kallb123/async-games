@@ -530,7 +530,7 @@ export const outbreakGameResultStatsSchemaDef = {
 export function detectEpidemicEvents(step: IReplayStep): Omit<GameResultEvent, 'turnIndex'>[] | undefined {
     const count = (step.outcome as IOutbreakInfectionPhaseOutcome).infectionLog
         ?.filter(entry => entry.kind === 'epidemic').length ?? 0;
-    return count > 0 ? Array.from({ length: count }, () => ({ glyph: "☣️", title: "Epidemic card drawn" })) : undefined;
+    return count > 0 ? Array.from({ length: count }, () => ({ icon: 'epidemic', title: "Epidemic card drawn" })) : undefined;
 }
 
 export function computeOutbreakResultStats(

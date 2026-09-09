@@ -577,7 +577,7 @@ export const firesOutGameResultStatsSchemaDef = {
 // straight into GAME_RESULT_STATS.FiresOut.compute (GameResultData.ts).
 export function detectExplosionEvent(step: IReplayStep): Omit<GameResultEvent, 'turnIndex'>[] | undefined {
     const advance = (step.outcome as IFiresOutEndTurnOutcome).advanceFire;
-    return advance?.resolution === 'explosion' ? [{ glyph: "💥", title: "Explosion!", seriesKey: "damage" }] : undefined;
+    return advance?.resolution === 'explosion' ? [{ icon: 'explosion', title: "Explosion!", seriesKey: "damage" }] : undefined;
 }
 
 // A computePerTurnEvents detector (see replay.ts): a victim leaving the
@@ -595,7 +595,7 @@ export function detectRescueEvent(step: IReplayStep): Omit<GameResultEvent, 'tur
     const title = rescued > 1
         ? `${pluralize(rescued, 'victim')} got out! (${nextRescued}/${VICTIMS_TO_WIN})`
         : `A victim was rescued! (${nextRescued}/${VICTIMS_TO_WIN})`;
-    return [{ glyph: "🚑", title, seriesKey: "damage" }];
+    return [{ icon: 'rescue', title, seriesKey: "damage" }];
 }
 
 export function computeFiresOutResultStats(

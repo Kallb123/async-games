@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { GameResultChart, GameResultChartSeries } from "@/utils/apiModels/GameDataApi";
 import { playerColour } from "@/utils/ui/playerColours";
+import ChartEventIcon, { CHART_EVENT_ICON_SIZE } from "./ChartEventIcon";
 
 interface LineChartProps {
     chart: GameResultChart;
@@ -69,10 +70,12 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
 
     // Event markers (epidemics, landmark buys, explosions — see
     // GameResultEvent): pinned to the round they happened in and, when the
-    // event names a line (seriesKey), to that line's value there. An event
-    // with no line of its own (Outbreak's epidemic touches the whole board,
-    // not one disease colour) floats above the plot instead. Stacked when two
-    // land on the same round so neither is hidden behind the other.
+    // event names a line (seriesKey), to that line's value there and to that
+    // line's colour, so a landmark reads as this player's landmark at a
+    // glance. An event with no line of its own (Outbreak's epidemic touches
+    // the whole board, not one disease colour) floats above the plot in the
+    // page's own ink instead. Stacked when two land on the same round so
+    // neither is hidden behind the other.
     const roundOccupancy = new Map<number, number>();
     const eventMarkers = (chart.events ?? []).map(event => {
         const stackIndex = roundOccupancy.get(event.round) ?? 0;
@@ -81,8 +84,9 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
         const baseY = line ? yAt(line.values[event.round]) : PAD_TOP;
         return {
             ...event,
+            color: line?.color,
             x: xAt(event.round),
-            y: Math.max(PAD_TOP + 6, baseY - 8 - stackIndex * 11),
+            y: Math.max(PAD_TOP + 6, baseY - 8 - stackIndex * CHART_EVENT_ICON_SIZE),
         };
     });
 
@@ -171,10 +175,7 @@ export default function LineChart({ chart, players, playerIds }: LineChartProps)
                     )}
 
                     {eventMarkers.map((m, i) => (
-                        <text key={`event-${i}`} className="ag-chart-event-icon" x={m.x} y={m.y} textAnchor="middle" dominantBaseline="middle">
-                            {m.title && <title>{m.title}</title>}
-                            {m.glyph}
-                        </text>
+                        <ChartEventIcon key={`event-${i}`} icon={m.icon} x={m.x} y={m.y} color={m.color} title={m.title} />
                     ))}
                 </svg>
 

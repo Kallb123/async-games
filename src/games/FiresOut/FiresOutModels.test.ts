@@ -209,7 +209,7 @@ describe("detectExplosionEvent", () => {
 
     it("marks the damage line when Advance Fire resolves as an explosion", () => {
         expect(detectExplosionEvent(stepWithResolution('explosion'))).toEqual([
-            { glyph: "💥", title: "Explosion!", seriesKey: "damage" },
+            { icon: "explosion", title: "Explosion!", seriesKey: "damage" },
         ]);
     });
 
@@ -233,13 +233,13 @@ describe("detectRescueEvent", () => {
 
     it("marks the damage line when a victim makes it out", () => {
         expect(detectRescueEvent(stepWithRescuedDelta(0, 1))).toEqual([
-            { glyph: "🚑", title: "A victim was rescued! (1/7)", seriesKey: "damage" },
+            { icon: "rescue", title: "A victim was rescued! (1/7)", seriesKey: "damage" },
         ]);
     });
 
     it("reports one event naming every victim when more than one leaves at once", () => {
         expect(detectRescueEvent(stepWithRescuedDelta(1, 3))).toEqual([
-            { glyph: "🚑", title: "2 victims got out! (3/7)", seriesKey: "damage" },
+            { icon: "rescue", title: "2 victims got out! (3/7)", seriesKey: "damage" },
         ]);
     });
 

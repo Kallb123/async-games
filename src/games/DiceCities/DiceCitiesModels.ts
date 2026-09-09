@@ -432,7 +432,7 @@ export const LANDMARK_UNLOCK_COMMANDS = new Set([
 // names itself.
 export function detectLandmarkEvent(step: IReplayStep): Omit<GameResultEvent, 'turnIndex'>[] | undefined {
     return LANDMARK_UNLOCK_COMMANDS.has(step.command.className)
-        ? [{ glyph: "🏛️", title: `${step.command.senderUsername} built a landmark`, seriesKey: step.command.senderId }]
+        ? [{ icon: 'landmark', title: `${step.command.senderUsername} built a landmark`, seriesKey: step.command.senderId }]
         : undefined;
 }
 
