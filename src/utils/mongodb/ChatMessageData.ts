@@ -41,7 +41,13 @@ export interface IChatMessageDataModel extends Model<IChatMessageDataDocument> {
 // A real nested Schema, not Schema.Types.Mixed: Mixed stores whatever it is
 // handed, which is the one property you do not want on the field a GIF arrives
 // through. `_id: false` because a subdocument nobody addresses doesn't need one.
-const ChatAttachmentSchema = new Schema<IChatAttachment>({
+//
+// Exported because GifCatalogueData builds its own schema by adding this one:
+// the whole design rests on a catalogue row and a message's attachment being
+// the same object, so a field added to one and forgotten on the other would
+// silently store `undefined`. One definition makes that impossible rather than
+// merely unlikely.
+export const ChatAttachmentSchema = new Schema<IChatAttachment>({
     provider: String,
     mediaId: String,
     url: String,

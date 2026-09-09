@@ -347,11 +347,12 @@ per-game social record kept **beside** the game rather than as a field on
 
 ```ts
 interface IChatMessageData {
-    messageId: uuidString; // v4 — a stable React key and an idempotency handle
+    messageId: uuidString;         // v4 — a stable React key and an idempotency handle
     gameId: string;
-    senderId: string;      // Clerk userId
-    text: string;          // as typed, trimmed; rendered as text, never HTML
-    timestamp: string;     // ISO
+    senderId: string;              // Clerk userId
+    text: string;                  // as typed, trimmed; rendered as text, never HTML. '' when `attachment` carries the message
+    attachment?: IChatAttachment;  // an optional GIF (see GifCatalogue below); absent on a plain message
+    timestamp: string;             // ISO
 }
 ```
 
@@ -374,6 +375,45 @@ Key properties:
   `gameId`s *before* deleting their games and then
   `ChatMessageModel.deleteMany({ gameId: { $in: gameIds } })` — keyed by *game*,
   so it takes every message in those games, not just the departing player's.
+
+### GIF catalogue (`GifCatalogue`)
+
+`src/utils/mongodb/GifCatalogueData.ts` defines a third flat collection beside
+`ChatMessage`, one row per GIF our own search route has served
+(`docs/chat-gifs.md`). It is what lets a message carry a GIF without the client
+ever sending a URL: the client sends `{ provider, mediaId }` and the chat POST
+copies every other field from here.
+
+```ts
+interface IGifCatalogueData extends IChatAttachment {  // IChatAttachment lives in src/utils/chat.ts
+    provider: 'tenor';
+    mediaId: string;   // the provider's own id — the only field a client chooses
+    url: string;       // the animated file, on an allow-listed host
+    stillUrl: string;  // its first frame
+    width: number;     // intrinsic size, so a thread can reserve a row's box before the image loads
+    height: number;
+    alt: string;
+    expiresAt: Date;   // TTL; nothing but the reaper reads it
+}
+```
+
+Key properties:
+
+- **A row can only be written by our own filtered search**, so a message can
+  only reference a GIF that search served — not merely a real provider id, which
+  a player could name from a query the content filter would have blocked.
+- **The fields are denormalised onto the message, not referenced into it.** The
+  chat GET stays the single indexed read with no per-message join, and a row
+  being reaped can never break a GIF that has already been sent.
+- **A cache, not a ledger.** `{ expiresAt: 1 }, { expireAfterSeconds: 0 }`
+  reaps a row nobody has used lately, like `RateLimit` and `Invitation`;
+  resolving a GIF pushes its expiry out, so the collection holds what is in use.
+- **The index is the read.** `{ provider: 1, mediaId: 1 }`, unique — an exact
+  match on the whole key, and the constraint that keeps two concurrent searches
+  from leaving two rows.
+- **Nothing to clean up on account deletion.** A row holds no `userId` and no
+  `gameId`, so unlike `ChatMessage` this collection is absent from
+  `POST /api/user/delete`; a player's *copy* of a GIF goes with their messages.
 
 ### Chat read markers (`ChatRead`)
 

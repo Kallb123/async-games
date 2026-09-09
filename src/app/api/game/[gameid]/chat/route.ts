@@ -6,7 +6,7 @@ import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { ChatMessageModel, IChatMessageDataDocument } from '@/utils/mongodb/ChatMessageData';
 import { ChatReadModel } from '@/utils/mongodb/ChatReadData';
-import { GifCatalogueModel } from '@/utils/mongodb/GifCatalogueData';
+import { GIF_CATALOGUE_TTL_MS, GifCatalogueModel } from '@/utils/mongodb/GifCatalogueData';
 import { IChatAttachment, IChatGifRef, normaliseAttachment, normaliseMessageBody, normaliseReadAt } from '@/utils/chat';
 import { consumeRateLimit } from '@/utils/rateLimit';
 import { usersById } from '@/utils/users/clerk';
@@ -63,10 +63,14 @@ function toResponse(message: IChatMessageDataDocument): IChatMessageResponse {
     // one instead of putting a URL we would no longer accept into an <img src>.
     // A message left with neither text nor attachment renders as the
     // "GIF unavailable" caption (docs/chat-gifs.md §7).
+    //
+    // Deliberately not logged. The condition is a property of a stored row, not
+    // an event, so it would re-fire for the same message on every poll of an
+    // open panel — forever, since nothing repairs the row — and a handful of
+    // them in a busy thread would bury the real errors. What it costs is two
+    // URL parses per GIF per poll, which is nothing beside the two Mongo round
+    // trips in the same handler.
     const attachment = message.attachment ? normaliseAttachment(message.attachment) : null;
-    if (message.attachment && attachment === null) {
-        console.error(`Chat message ${String(message.messageId)} has a stored attachment that no longer validates`);
-    }
     return {
         // messageId is a UUID field; String() gives its canonical form whether
         // the driver hands it back as a UUID object or already as a string.
@@ -213,38 +217,52 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
         return NextResponse.json({}, { status: 403, statusText: "Not a player in this game" });
     }
 
-    // Twenty messages per five minutes, per player per game — far above
-    // conversation, far below a flood. Keyed by game and sender so one chatty
-    // table can't starve another, and gated after membership so a non-player
-    // can't even probe the counter. The fixed window is the same approximation
-    // the nudge limit already accepts.
-    const allowed = await consumeRateLimit('chat', `${gameid}:${userId}`, 20, 5 * 60_000);
-    if (!allowed) {
-        return NextResponse.json({}, { status: 429, statusText: "Too many messages" });
-    }
-
     // Resolve the GIF, if there is one, from the catalogue our own search route
     // populated — the whole point of the client sending an id rather than a URL
     // (docs/chat-gifs.md §4c). Three properties fall out of it: the stored
-    // fields are ones a provider gave us, the item is one our *filtered* search
-    // actually served (not merely a real Tenor id, which a player could name
-    // from a query the filter would have blocked), and the send touches no third
-    // party, so posting a GIF doesn't depend on Tenor being up.
+    // fields are ones a provider gave us, the item is one our own *filtered*
+    // search served to somebody (not merely a real Tenor id, which a player
+    // could name from a query the filter would have blocked — note "somebody":
+    // the catalogue is app-global, so this is not narrowed to what *this*
+    // player's own search returned), and the send touches no third party, so
+    // posting a GIF doesn't depend on Tenor being up.
     //
-    // Deliberately after the rate limit rather than before it: a 400 costing the
-    // sender a token is the right way round, because the alternative is an
-    // unlimited "is this id in your cache?" oracle for any signed-in member.
+    // Its own limiter, spent before the message limiter below, and keyed on the
+    // player rather than the game. Both halves matter:
     //
-    // A miss is a 400 and nothing more clever (§5a). It is unreachable from the
-    // picker, which resolved the row seconds earlier, so the interesting caller
-    // is somebody sending ids by hand.
+    // - Keyed on the player, because games are free to create and the message
+    //   limiter is per game — so a per-game bound on "is this id in your
+    //   cache?" multiplies without limit, while a per-player one doesn't.
+    // - Spent first, so a GIF that won't resolve doesn't eat the budget "gg"
+    //   needs. Every way a send legitimately misses is our fault, not the
+    //   sender's (an empty catalogue after a deploy, a search-route upsert
+    //   that's failing, a row reaped between browsing and tapping), and none of
+    //   them should end with their next plain message getting a 429.
+    //
+    // A miss is still a 400 and nothing more clever (§5a).
     let attachment: IChatAttachment | undefined;
     if (messageBody.gif) {
+        if (!await consumeRateLimit('chatGif', userId, 30, 5 * 60_000)) {
+            return NextResponse.json({}, { status: 429, statusText: "Too many GIFs" });
+        }
+
         // The ref *is* the filter: two fields, both already checked to be
         // strings from a restricted charset, so there is no shape here for a
         // query operator to arrive in.
         const filter: IChatGifRef = messageBody.gif;
-        const row = await GifCatalogueModel.findOne(filter).exec();
+        // findOneAndUpdate, not findOne, so using a GIF pushes its expiry out.
+        // The TTL runs from when the row was *written*, and a search response
+        // served from the CDN never re-runs the route that would rewrite it —
+        // so without this touch a GIF that has been in the picker's results for
+        // thirty days resolves to nothing, the tap 400s, and the player has no
+        // way to understand why. One small write, on a path that is about to
+        // write a message anyway. It also means the catalogue holds what is
+        // actually in use rather than what was once searched for.
+        const row = await GifCatalogueModel.findOneAndUpdate(
+            filter,
+            { $set: { expiresAt: new Date(Date.now() + GIF_CATALOGUE_TTL_MS) } },
+            { new: true }
+        ).exec();
         attachment = row ? normaliseAttachment(row) ?? undefined : undefined;
         if (!attachment) {
             // Worth telling apart in the log: an id we have never served is a
@@ -257,6 +275,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
             }
             return NextResponse.json({}, { status: 400, statusText: "Unknown GIF" });
         }
+    }
+
+    // Twenty messages per five minutes, per player per game — far above
+    // conversation, far below a flood. Keyed by game and sender so one chatty
+    // table can't starve another, and gated after membership so a non-player
+    // can't even probe the counter. The fixed window is the same approximation
+    // the nudge limit already accepts.
+    const allowed = await consumeRateLimit('chat', `${gameid}:${userId}`, 20, 5 * 60_000);
+    if (!allowed) {
+        return NextResponse.json({}, { status: 429, statusText: "Too many messages" });
     }
 
     const messageDoc: IChatMessageDataDocument = new ChatMessageModel({

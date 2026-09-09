@@ -3,8 +3,12 @@
 How a player could send a GIF in a game's chat thread, what that costs, and
 which parts of it work on which platform.
 
-This is a **design document, not an implementation plan** — nothing here has
-shipped. Read [`docs/in-game-chat.md`](./in-game-chat.md) first: chat's model,
+**Status: §11's commits 1 and 2 have shipped** — the model, the validators, and
+a chat POST/GET that carries a GIF (plus §8's push copy, which came early with
+commit 2). Nothing is player-visible yet: no client sends one and the thread
+renders none until commit 3. Everything from commit 3 on is still design.
+
+Read [`docs/in-game-chat.md`](./in-game-chat.md) first: chat's model,
 routes, panel and push channel all exist, and everything below hangs off them.
 [`AGENTS.md`](../AGENTS.md)'s component-reuse rule shapes most of §6.
 
@@ -265,14 +269,29 @@ so their limits can't drift — gains:
 - a relaxed `normaliseMessage`, so an empty `text` is legal *when an attachment
   is present*. The POST's check becomes "a valid message, or a valid gif ref,
   or 400".
-- `describeMessage(message)` (§8), so the push copy and any future preview
-  cannot word a GIF-only message differently.
+- (Not yet: `describeMessage(message)`, for §8's push copy. With exactly one
+  caller, `text || "Sent a GIF"` inside `buildChatNotification` is the smaller
+  answer, and the copy stays in the one module copy lives in. Extract it when
+  something else needs to describe a message.)
 
 The fields copied off the catalogue row still get the cheap sanity checks
 before they are written onto a message — positive integer dimensions under a
-cap, a trimmed and length-capped `alt` — because a row written by an earlier
-version of the search route is not the same trust level as one written by this
-one. `alt` is stored as text and rendered through React's escaping; nothing in
+cap, a trimmed and length-capped `alt`, and the §4d host assertion — because a
+row written by an earlier version of the search route is not the same trust
+level as one written by this one. The URLs are stored in their **parsed**
+canonical form, not as the strings that arrived: what was checked was the
+parsed URL, and storing anything else means storing a value that merely
+*parses to* what was approved.
+
+The same function runs again on the way **out**, when a stored attachment is put
+on the wire. That is a second gate this section didn't originally ask for, and
+it is deliberate: it is the only thing that makes narrowing the host list
+retroactive, so a row stored before a host was dropped degrades to a message
+without a picture rather than putting a URL we would now refuse into every
+opponent's `<img src>`. It costs two URL parses per GIF per poll, which is
+nothing beside the two Mongo round trips in the same handler. It is not logged —
+the condition is a property of a stored row rather than an event, so logging it
+would re-fire on every poll, forever, for a row nothing repairs. `alt` is stored as text and rendered through React's escaping; nothing in
 chat goes near `dangerouslySetInnerHTML`.
 
 `next.config.mjs`'s `images.remotePatterns` does **not** need the provider
@@ -502,17 +521,26 @@ on the phone.
 3. **The thread renders one.** `ChatGif`, the reserved box and its `ag-*`
    classes, the `onError` caption fallback, reduced-motion, and `GameChat`
    passing a node into the title it already accepts. Verify §7's scroll
-   behaviour with a tall GIF, which is the thing most likely to be wrong.
+   behaviour with a tall GIF, which is the thing most likely to be wrong. This
+   commit also owns the row with *neither* text nor attachment — the shape §4e's
+   read-side check can produce — which must render the "GIF unavailable"
+   caption rather than an empty line.
 4. **The search route.** `/api/gif/search`, auth + rate limit + timeout +
    mapped response + pinned content filter + cache header + the `after()`
    catalogue upsert, and a route test for the unauthenticated, over-limit and
    upstream-failed cases.
 5. **The picker.** `GifPicker` in the composer, debounced, degrading to
    "GIFs unavailable", plus the `registershare` ping inside the POST's
-   existing `after()`.
-6. **Push copy and docs.** `describeMessage`, the `buildChatNotification`
-   branch and its test; amend `docs/in-game-chat.md` to point here; **one**
-   "What's new" line under enhancements, for the branch as a whole.
+   existing `after()`. This is the commit that makes GIFs player-visible, so
+   it carries the **one** "What's new" line under enhancements, for the branch
+   as a whole — not commit 6. A branch cut or merged between the two would
+   otherwise ship GIFs with no note, which is the exact failure the
+   release-note rule exists to prevent.
+6. **Docs.** Update this file's status line, and re-check
+   `ARCHITECTURE.md`'s data-model tour — `attachment` and the `GifCatalogue`
+   section landed there with commit 2, so this is upkeep rather than new
+   writing, but it is where the next contributor looks for what chat owns.
+   Extract `describeMessage` if a second caller has appeared by then.
 
 Reviewers, by what each commit touches: `locksmith` and `gremlin` on 2 and 4,
 `caveman` on 3 and 5, `rulebook` on 6. `croupier` has nothing to do here —

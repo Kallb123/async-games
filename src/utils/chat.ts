@@ -180,7 +180,28 @@ export function isAllowedGifMediaUrl(value: unknown, provider: GifProvider): val
     }
     return url.protocol === 'https:'
         && url.username === '' && url.password === '' && url.port === ''
-        && GIF_MEDIA_HOSTS[provider].includes(url.hostname);
+        // `?? []` so a provider from outside the union refuses rather than
+        // throwing. Unreachable from here today — every caller passes a
+        // normaliseGifRef'd provider — but the search route is where a provider
+        // string will arrive from config or a query, and a TypeError there
+        // would be a 500 where a refusal is wanted.
+        && (GIF_MEDIA_HOSTS[provider] ?? []).includes(url.hostname);
+}
+
+/**
+ * The canonical form of an allowed media URL, or `null`.
+ *
+ * Store what you checked: `isAllowedGifMediaUrl` validates the *parsed* URL, so
+ * returning the raw string would store something that merely parses to what was
+ * approved — `" https://media.tenor.com/a.gif "` with the spaces still on it,
+ * or a backslash where a slash was meant. Nothing today can be exploited by
+ * that, because a browser runs the same parser and reaches the same host; it
+ * goes wrong the first time a second consumer treats the field as a string
+ * rather than a URL (a CSP `img-src` comparison, a server-side fetch, or §5's
+ * share ping built by concatenation).
+ */
+function canonicalGifMediaUrl(value: unknown, provider: GifProvider): string | null {
+    return isAllowedGifMediaUrl(value, provider) ? new URL(value).href : null;
 }
 
 /**
@@ -227,13 +248,17 @@ export function normaliseAttachment(value: unknown): IChatAttachment | null {
     }
 
     const row = value as Partial<IChatAttachment>;
-    const ref = normaliseGifRef({ provider: row.provider, mediaId: row.mediaId });
+    // normaliseGifRef reads only `provider` and `mediaId` and builds a fresh
+    // object from them, so the row can go straight in — no need to pick the two
+    // fields out first, and no second copy of the charset rules.
+    const ref = normaliseGifRef(row);
     if (ref === null) {
         return null;
     }
 
-    const { url, stillUrl } = row;
-    if (!isAllowedGifMediaUrl(url, ref.provider) || !isAllowedGifMediaUrl(stillUrl, ref.provider)) {
+    const url = canonicalGifMediaUrl(row.url, ref.provider);
+    const stillUrl = canonicalGifMediaUrl(row.stillUrl, ref.provider);
+    if (url === null || stillUrl === null) {
         return null;
     }
 
@@ -284,18 +309,17 @@ export function normaliseMessageBody(body: { text?: unknown, gif?: unknown }): I
         }
     }
 
-    let text = '';
-    if (body.text !== undefined && body.text !== null) {
-        if (typeof body.text !== 'string') {
-            return null;
-        }
-        if (body.text.trim().length > 0) {
-            const normalised = normaliseMessage(body.text);
-            if (normalised === null) {
-                return null;
-            }
-            text = normalised;
-        }
+    // Absent or null is "no caption"; blank is the same thing. Anything else
+    // has to pass normaliseMessage, so an over-long caption is a 400 rather
+    // than a silently dropped one — and a non-string is a 400 rather than a
+    // caption of "42".
+    const raw = body.text ?? '';
+    if (typeof raw !== 'string') {
+        return null;
+    }
+    const text = raw.trim() === '' ? '' : normaliseMessage(raw);
+    if (text === null) {
+        return null;
     }
 
     // Neither a line nor a picture is not a message.

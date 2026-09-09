@@ -32,7 +32,7 @@ import { runAfterCallbacks } from '@/utils/testing/afterStub';
 import {
     ANN, BOB, get, jsonPost, rawPost, resetApiRouteStubs, seedChatMessage, seedChatReadMarker,
     seedGifCatalogueItem, seedSnakesAndLadders,
-    sentPushes, signIn, storedChatMessages, storedChatReadMarker, stubClerkUsers
+    sentPushes, signIn, storedChatMessages, storedChatReadMarker, storedGifCatalogueExpiry, stubClerkUsers
 } from '@/utils/testing/apiRoute';
 import { GET as readChat, POST as postChat } from './[gameid]/chat/route';
 import { POST as postChatRead } from './[gameid]/chat/read/route';
@@ -667,6 +667,61 @@ describe('POST /api/game/[gameid]/chat', () => {
             await runAfterCallbacks();
 
             expect(sentPushes[0].notification.body).toBe('this is you');
+        });
+
+        it('pushes the row\'s expiry out when a GIF is used', async () => {
+            // The TTL runs from when the row was written, and a CDN-cached
+            // search response never re-runs the route that would rewrite it —
+            // so without this touch a GIF that has sat in the picker's results
+            // for thirty days resolves to nothing and the tap 400s for reasons
+            // the player can't see (docs/chat-gifs.md §4c).
+            signIn(ANN);
+            seedSnakesAndLadders();
+            const nearlyReaped = new Date(Date.now() + 60_000);
+            seedGifCatalogueItem({ ...CATALOGUED_GIF, expiresAt: nearlyReaped });
+
+            await postChatTo('game_1', { gif: { provider: 'tenor', mediaId: 'abc123' } });
+
+            const expiry = storedGifCatalogueExpiry('tenor', 'abc123');
+            expect(expiry!.getTime()).toBeGreaterThan(nearlyReaped.getTime());
+        });
+
+        it('spends its own limiter, not the one plain messages use', async () => {
+            // Keyed on the player, not the game: the message limiter is per
+            // game and games are free to create, so a per-game bound on "is
+            // this id in your cache?" multiplies without limit.
+            signIn(ANN);
+            seedSnakesAndLadders();
+            seedGifCatalogueItem(CATALOGUED_GIF);
+
+            await postChatTo('game_1', { gif: { provider: 'tenor', mediaId: 'abc123' } });
+
+            expect(vi.mocked(consumeRateLimit)).toHaveBeenCalledWith('chatGif', ANN.id, 30, 5 * 60_000);
+        });
+
+        it('refuses once the GIF limiter is spent, without touching the message limiter', async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+            seedGifCatalogueItem(CATALOGUED_GIF);
+            vi.mocked(consumeRateLimit).mockImplementation(async (action) => action !== 'chatGif');
+
+            const response = await postChatTo('game_1', { gif: { provider: 'tenor', mediaId: 'abc123' } });
+
+            expect(response.status).toBe(429);
+            expect(storedChatMessages('game_1')).toHaveLength(0);
+            expect(vi.mocked(consumeRateLimit)).not.toHaveBeenCalledWith('chat', expect.anything(), expect.anything(), expect.anything());
+        });
+
+        it("leaves the conversation's budget alone when a GIF won't resolve", async () => {
+            // Every way a send legitimately misses is our fault, not the
+            // sender's — so their next plain message must not be a 429.
+            signIn(ANN);
+            seedSnakesAndLadders();
+
+            const response = await postChatTo('game_1', { gif: { provider: 'tenor', mediaId: 'neverserved' } });
+
+            expect(response.status).toBe(400);
+            expect(vi.mocked(consumeRateLimit)).not.toHaveBeenCalledWith('chat', expect.anything(), expect.anything(), expect.anything());
         });
 
         it('carries a stored GIF on the GET, and no attachment key on a plain message', async () => {

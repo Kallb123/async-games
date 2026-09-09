@@ -118,6 +118,7 @@ export async function resetApiRouteStubs() {
     vi.spyOn(chatReadData.ChatReadModel, 'find').mockImplementation(findManyChatReadFromStore as typeof chatReadData.ChatReadModel.find);
     vi.spyOn(chatReadData.ChatReadModel, 'findOneAndUpdate').mockImplementation(findOneAndUpdateChatReadFromStore as typeof chatReadData.ChatReadModel.findOneAndUpdate);
     vi.spyOn(gifCatalogueData.GifCatalogueModel, 'findOne').mockImplementation(findOneGifCatalogueFromStore as typeof gifCatalogueData.GifCatalogueModel.findOne);
+    vi.spyOn(gifCatalogueData.GifCatalogueModel, 'findOneAndUpdate').mockImplementation(findOneAndUpdateGifCatalogueFromStore as typeof gifCatalogueData.GifCatalogueModel.findOneAndUpdate);
     vi.spyOn(reactionData.ReactionModel, 'find').mockImplementation(findReactionsFromStore as typeof reactionData.ReactionModel.find);
 }
 
@@ -561,17 +562,11 @@ function saveChatToStore(this: import('@/utils/mongodb/ChatMessageData').IChatMe
         gameId: this.gameId,
         senderId: this.senderId,
         text: this.text,
-        // Flattened field by field, like the rest: the schema stores a
-        // subdocument, and a test wants a plain object to assert on.
-        attachment: this.attachment ? {
-            provider: this.attachment.provider,
-            mediaId: this.attachment.mediaId,
-            url: this.attachment.url,
-            stillUrl: this.attachment.stillUrl,
-            width: this.attachment.width,
-            height: this.attachment.height,
-            alt: this.attachment.alt,
-        } : undefined,
+        // Off the whole document's toObject, like insertIntoStore and the game
+        // store's save: a test wants a plain object to assert on, and naming
+        // the seven fields here would be a third copy of a list that already
+        // has one home (ChatAttachmentSchema).
+        attachment: this.toObject().attachment,
         timestamp: this.timestamp,
     });
     return Promise.resolve(this);
@@ -582,18 +577,46 @@ function saveChatToStore(this: import('@/utils/mongodb/ChatMessageData').IChatMe
 /** Puts a GIF in the catalogue, as if our search route had already served it —
  *  which is the only way a real one gets there (docs/chat-gifs.md §4c). */
 export function seedGifCatalogueItem(item: StoredGifCatalogueItem) {
-    gifCatalogue.push(item);
+    // Copied, like seedGame's asStored: the resolve touches a row's `expiresAt`
+    // in place, and a test that seeds a shared fixture object shouldn't find it
+    // mutated afterwards.
+    gifCatalogue.push({ ...item });
 }
 
-// The one read the chat POST makes: resolve one (provider, mediaId) — the
-// unique index. The ref is passed straight through as the filter, so this
-// checks it really was just those two fields and nothing else.
-function findOneGifCatalogueFromStore(filter: Record<string, unknown>) {
+/** One catalogued GIF's expiry, so a test can assert the resolve touched it. */
+export function storedGifCatalogueExpiry(provider: string, mediaId: string): Date | undefined {
+    return gifCatalogue.find(item => item.provider === provider && item.mediaId === mediaId)?.expiresAt;
+}
+
+/** The one row the chat POST addresses: an exact match on the unique key. The
+ *  ref is handed to Mongo as the filter verbatim, so this insists it really was
+ *  those two fields and nothing else. */
+function matchGifCatalogueFilter(filter: Record<string, unknown>) {
     const { provider, mediaId } = filter ?? {};
     if (typeof provider !== 'string' || typeof mediaId !== 'string' || Object.keys(filter).length !== 2) {
         throw new Error(`The test GIF catalogue only resolves one provider + mediaId, not ${JSON.stringify(filter)}`);
     }
-    const match = gifCatalogue.find(item => item.provider === provider && item.mediaId === mediaId);
+    return gifCatalogue.find(item => item.provider === provider && item.mediaId === mediaId);
+}
+
+function findOneGifCatalogueFromStore(filter: Record<string, unknown>) {
+    const match = matchGifCatalogueFilter(filter);
+    return { exec: async () => match ? gifCatalogueData.GifCatalogueModel.hydrate(match) : null };
+}
+
+// The chat POST's resolve: the same lookup, plus a $set that pushes the row's
+// expiry out so using a GIF keeps it (docs/chat-gifs.md §4c). Interprets that
+// one update shape rather than a general engine, the same trade the chat store
+// above already makes.
+function findOneAndUpdateGifCatalogueFromStore(filter: Record<string, unknown>, update: Record<string, unknown>) {
+    const match = matchGifCatalogueFilter(filter);
+    const set = update?.$set as { expiresAt?: Date } | undefined;
+    if (!set || !(set.expiresAt instanceof Date) || Object.keys(update).length !== 1 || Object.keys(set).length !== 1) {
+        throw new Error(`The test GIF catalogue only touches expiresAt, not ${JSON.stringify(update)}`);
+    }
+    if (match) {
+        match.expiresAt = set.expiresAt;
+    }
     return { exec: async () => match ? gifCatalogueData.GifCatalogueModel.hydrate(match) : null };
 }
 
