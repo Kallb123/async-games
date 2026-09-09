@@ -1,6 +1,7 @@
 'use client'
 import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import Avatar from '@/components/ui/Avatar';
+import ChatGif from '@/components/ui/ChatGif';
 import RecapTimeline, { RECAP_MARKER_SIZE } from '@/components/ui/RecapTimeline';
 import Refreshable from '@/components/ui/Refreshable';
 import Skeleton from '@/components/ui/Skeleton';
@@ -57,6 +58,31 @@ interface GameChatProps {
 // Slack that still counts as "at the bottom" — a player doesn't have to be
 // pixel-perfect for new messages to keep following them.
 const SCROLL_BOTTOM_SLACK = 32;
+
+/**
+ * What goes in the timeline entry's `title` — which is already a
+ * `React.ReactNode`, so a GIF row needs nothing from `RecapTimeline` and there
+ * is no second thread component (docs/chat-gifs.md §6).
+ *
+ * Three shapes, and the third is the one worth naming: a message with neither
+ * text nor an attachment. That isn't a message anybody can send — the POST
+ * refuses it — but it is what the GET produces when a stored attachment no
+ * longer validates and the sender wrote no caption (§4e), and it has to read as
+ * "GIF unavailable" rather than as a blank line. `ChatGif` owns that caption for
+ * both it and an image that fails to load, so the string and its class have one
+ * home.
+ */
+function messageTitle(message: GameChatMessage): React.ReactNode {
+    if (!message.attachment && message.text) {
+        return message.text;
+    }
+    return (
+        <>
+            <ChatGif attachment={message.attachment} />
+            {message.text && <div className="ag-chat-gif-caption">{message.text}</div>}
+        </>
+    );
+}
 
 export default function GameChat({ messages, isLoading, isRefreshing, sending, send, hasMoreEarlier, loadingEarlier, loadEarlier, onClose, userIdList, usernameList }: GameChatProps) {
     const now = useNowToTheMinute();
@@ -160,7 +186,7 @@ export default function GameChat({ messages, isLoading, isRefreshing, sending, s
                                         ring={playerColourForId(message.senderId, userIdList)}
                                     />
                                 ),
-                                title: message.text,
+                                title: messageTitle(message),
                                 detail: [
                                     senderName,
                                     formatRelativeTime(message.timestamp, now),

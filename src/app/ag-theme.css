@@ -1922,6 +1922,57 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-chat-composer .ag-btn { flex: none; }
 .ag-chat-skeleton { display: flex; flex-direction: column; gap: 12px; padding: 4px 2px; }
 
+/* A GIF in a thread row (ChatGif) — and, later, the same box in the picker's
+   result grid. The box is *reserved* from the message's stored dimensions
+   before the image loads: an unsized <img> measures zero at that moment, so the
+   panel's follow-the-thread layout effect would scroll to the bottom of a
+   thread short by the GIF's height, and the arriving bytes would then push the
+   newest message back off the bottom (docs/chat-gifs.md §7). The width is set
+   inline from the stored dimensions and `aspect-ratio` derives the height, so
+   the row's height is known at layout time rather than at load time.
+
+   `max-width: 100%` is what keeps a wide GIF inside the row; the height follows
+   it down on its own, because the ratio is doing the work. The tall case is
+   capped in ChatGif instead, by narrowing the box — a `max-height` here would
+   shrink the height without the width, which is a squashed GIF. */
+.ag-chat-gif {
+    display: block;
+    position: relative;
+    max-width: 100%;
+    padding: 0;
+    border: 1px solid var(--ag-line);
+    border-radius: 10px;
+    overflow: hidden;
+    /* Fills the reserved box until the image arrives, so the row reads as a
+       picture loading rather than as a hole in the thread — the same
+       placeholder surface `.ag-skeleton` uses while the thread itself loads. */
+    background: var(--ag-surface-2);
+}
+.ag-chat-gif img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* The still-frame form under `prefers-reduced-motion`, which is a button. */
+button.ag-chat-gif { cursor: pointer; }
+.ag-chat-gif-play {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 99px;
+    background: rgba(0, 0, 0, 0.55);
+    color: var(--ag-on-dark);
+    font-size: 11px;
+    line-height: 1;
+}
+/* A message whose GIF didn't survive — refused on the way out, or a URL that
+   404s in the browser. A degraded message, never a broken row, and never an
+   empty one (docs/chat-gifs.md §7). */
+.ag-chat-gif-missing { font: 600 12.5px var(--ag-font); color: var(--ag-ink-soft); font-style: italic; }
+/* The line of text under a GIF, when the sender wrote one too. */
+.ag-chat-gif-caption { margin-top: 6px; }
+
 /* "Load earlier" sits above the first row, sized down from a full .ag-btn (full
    width already comes from .ag-btn--block) — a thread's own paging control, not
    a page-level action. */
@@ -3133,7 +3184,12 @@ a.ag-list-row, a.ag-list-row-main {
     padding: 12px 15px;
     box-shadow: var(--ag-shadow);
 }
-.ag-recap-event-title { font: 800 15px/1.25 var(--ag-font); color: var(--ag-ink); }
+/* `min-width: 0` because this is a flex item (of `.ag-recap-event-row`), and a
+   flex item's default `min-width: auto` refuses to shrink below its content's
+   min-content width. Text wraps, so that was never visible — but a chat GIF's
+   reserved box is a fixed width (ChatGif), and without this the row grows to
+   the GIF's own width and a wide one hangs out past the card. */
+.ag-recap-event-title { font: 800 15px/1.25 var(--ag-font); color: var(--ag-ink); min-width: 0; }
 .ag-recap-event-detail { font: 500 12.5px/1.4 var(--ag-font); color: var(--ag-ink-soft); margin-top: 3px; }
 
 .ag-recap-event-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
