@@ -9,7 +9,7 @@ import { DiceRoll } from "@/utils/games/DiceRoll";
 import { mongoMap } from "@/utils/games/mongoMaps";
 import { seatOrderFrom } from "@/utils/ui/players";
 import { DiceCitiesCardIds, DiceCitiesCards, HARBOUR_BONUS, HARBOUR_MIN_ROLL, TUNA_DICE, TUNA_DIE_SIDES } from "@/games/DiceCities/cards";
-import type { DiceCitiesBuildFlag } from "@/games/DiceCities/ui";
+import { coinChangeParts, type DiceCitiesBuildFlag } from "@/games/DiceCities/ui";
 import { diceCitiesTheme, type DiceCitiesTheme } from "@/games/DiceCities/themes";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
@@ -125,7 +125,7 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
         if (this.recordedRoll1 === undefined) {
             return this.doubleDice ? "rolled two dice" : "rolled the dice";
         }
-        return `rolled a ${formatRoll(this.recordedRoll1, this.recordedRoll2)}`;
+        return `rolled a ${formatRoll(this.recordedRoll1, this.recordedRoll2)} — ${moneyChangeSummary(this.moneyChanges)}`;
     }
 
     async Execute (gameData: IGameData) {
@@ -781,6 +781,10 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
     gameId: uuidString = NIL_UUID as uuidString;
     senderId: string = "Unknown";
     senderUsername: string = "Unknown";
+    // The re-roll's own payout, recorded (like DiceCitiesRequestDiceRoll's)
+    // purely for myString() to read back - the re-roll doesn't need it for
+    // its own Undo, which is unimplemented.
+    moneyChanges: Map<string, number> = new Map;
     // Recorded RNG outcomes for the re-roll, so it can be deterministically replayed.
     recordedRoll1?: number;
     recordedRoll2?: number | null;
@@ -791,7 +795,7 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
         if (this.recordedRoll1 === undefined) {
             return "used the Radio Tower to reroll";
         }
-        return `used the Radio Tower to reroll a ${formatRoll(this.recordedRoll1, this.recordedRoll2)}`;
+        return `used the Radio Tower to reroll a ${formatRoll(this.recordedRoll1, this.recordedRoll2)} — ${moneyChangeSummary(this.moneyChanges)}`;
     }
 
     async Execute(gameData: IGameData) {
@@ -850,6 +854,7 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
         this.recordedRoll1 = outcome.roll1;
         this.recordedRoll2 = outcome.roll2;
         this.recordedTunaRoll = outcome.tunaRoll ?? null;
+        this.moneyChanges = outcome.moneyChanges;
         dcGameData.gameState.history.unshift(playerHistory(this.senderId, `re-rolled for a ${formatRoll(outcome.roll1, outcome.roll2)}`));
         return outcome;
     }
@@ -972,6 +977,18 @@ function formatRoll(roll1: number, roll2?: number | null): string {
 // gameData to read the played theme from.
 function cardTitle(cardId: uuidString): string {
     return DiceCitiesCards[cardId]?.title ?? "card";
+}
+
+// "{{u1}} +3🪙, {{u2}} -1🪙" (or "no coins changed hands") for a settled
+// roll's payout - the same coin-by-coin breakdown coinChangeParts (ui.ts)
+// already gives the recap and the live board, named by token rather than a
+// resolved name since myString() has no userIdNameMap of its own. The replay
+// engine resolves the tokens the same way it resolves history lines (see
+// resolveTokens, utils/games/history.ts). mongoMap covers a moneyChanges that
+// came back as a plain object rather than a live Map.
+function moneyChangeSummary(changes: Map<string, number> | Record<string, number>): string {
+    const parts = coinChangeParts(mongoMap(changes), userToken);
+    return parts.length ? parts.join(", ") : "no coins changed hands";
 }
 
 // True for the commands that can pay a roll out - so a Radio Tower re-roll can

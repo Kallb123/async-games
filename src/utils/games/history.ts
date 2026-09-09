@@ -57,19 +57,27 @@ export function playerHistory(userId: string, rest: string): IHistoryEntry {
 const USER_TOKEN = /\{\{([^{}\n]*)\}\}/g;
 
 /**
- * Swaps every `{{userId}}` token for that player's name, ready to render.
+ * Swaps every `{{userId}}` token in one string for that player's name, ready
+ * to render. One pass: a name is never rescanned, so a player called
+ * "{{u1}}" can't have their own name substituted a second time. An id the map
+ * doesn't know falls back to UNKNOWN_PLAYER_NAME rather than leaking the raw
+ * id — a guest swept seven days after their last game is exactly that case.
  *
- * One pass per line: a name is never rescanned, so a player called "{{u1}}"
- * can't have their own name substituted a second time. An id the map doesn't
- * know falls back to UNKNOWN_PLAYER_NAME rather than leaking the raw id — a
- * guest swept seven days after their last game is exactly that case.
+ * Shared by resolveHistory below and by the replay engine's command summary
+ * (buildTimeline, replay.ts), so a command's myString() can name a player the
+ * same tokenised way a history line does — see userToken().
  */
+export function resolveTokens(text: string, userIdNameMap: { [key: string]: string }): string {
+    return text.replace(USER_TOKEN, (_match, userId: string) => userIdNameMap[userId] || UNKNOWN_PLAYER_NAME);
+}
+
+/** Swaps every `{{userId}}` token across a whole history log for that player's name. */
 export function resolveHistory(
     history: IHistoryEntry[],
     userIdNameMap: { [key: string]: string },
 ): IHistoryEntry[] {
     return history.map(entry => {
-        const text = entry.text.replace(USER_TOKEN, (_match, userId: string) => userIdNameMap[userId] || UNKNOWN_PLAYER_NAME);
+        const text = resolveTokens(entry.text, userIdNameMap);
         // Field by field, never `{ ...entry }`. These entries come off a live
         // Mongoose document, and spreading a subdocument copies its internals
         // rather than its fields — including `$__parent`, the whole game

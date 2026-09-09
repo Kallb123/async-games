@@ -115,7 +115,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "Dice Cities' match review speaks plain English",
-                detail: "Stepping back through a Dice Cities game's actions used to show raw internal labels like \"CardPurchase! Card? <id>\" instead of what actually happened. Every action in the rewind scrubber now reads the way the turn history does — \"rolled a 7 (3 and 4)\", \"bought a Wheat Field\", \"used the TV Station on Priya\".",
+                detail: "Stepping back through a Dice Cities game's actions used to show raw internal labels like \"CardPurchase! Card? <id>\" instead of what actually happened. Every action in the rewind scrubber now reads the way the turn history does — \"rolled a 7 (3 and 4)\", \"bought a Wheat Field\", \"used the TV Station on Priya\" — and a roll names who it paid, same as the recap: \"rolled a 4 — Bob +1🪙, Alice -1🪙\".",
                 game: "dicecities",
             },
             {
