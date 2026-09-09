@@ -1,0 +1,27 @@
+# What Vercel does not need to receive to build the site.
+#
+# Everything committed here is uploaded to Vercel on every deployment and
+# counts against Deployment Storage, so anything that is not a build input is
+# worth naming. `.dockerignore` covers the same ground for the container build
+# but Vercel does not read it, which is how ~59MB of art masters ended up
+# travelling with every one of the ~10 deployments a day this repo makes.
+#
+# Only add a path here that `next build` genuinely never reads.
+
+# The untouched original of every picture the app draws — ~59MB, and by design
+# nothing serves or builds from them. See art-masters/README.md.
+art-masters
+
+# The native Android shell. Built by .github/workflows/android-release.yml,
+# which wraps the already-deployed site rather than bundling one, so none of
+# this is a web build input. `www` is the Capacitor webDir it fills in.
+android
+www
+
+# Playwright specs and their fixtures: run by .github/workflows/e2e.yml against
+# a deployment, never during one. `playwright.config.ts` names ./e2e as a
+# string rather than importing it, so it stays type-checkable without them.
+e2e
+
+# Design docs and game design documents — read by people, not by the build.
+docs
