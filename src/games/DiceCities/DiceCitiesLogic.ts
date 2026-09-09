@@ -122,7 +122,11 @@ export class DiceCitiesRequestDiceRoll implements IGameCommand {
     readonly className = "DiceCitiesRequestDiceRoll";
 
     myString() {
-        return `DiceRoll! Double? ${this.doubleDice ? "True" : "False"}`;
+        if (this.recordedRoll1 === undefined) {
+            return this.doubleDice ? "rolled two dice" : "rolled the dice";
+        }
+        const total = this.doubleDice && this.recordedRoll2 ? this.recordedRoll1 + this.recordedRoll2 : this.recordedRoll1;
+        return `rolled a ${total}${this.recordedRoll2 ? ` (${this.recordedRoll1} and ${this.recordedRoll2})` : ""}`;
     }
 
     async Execute (gameData: IGameData) {
@@ -189,7 +193,7 @@ export class DiceCitiesRequestCardPurchase implements IGameCommand {
     readonly className = "DiceCitiesRequestCardPurchase";
 
     myString() {
-        return `CardPurchase! Card? ${this.cardId}`;
+        return `bought a ${DiceCitiesCards[this.cardId]?.title ?? "card"}`;
     }
 
     async Execute(gameData: IGameData) {
@@ -271,7 +275,7 @@ export class DiceCitiesRequestPassTurn implements IGameCommand {
     readonly className = "DiceCitiesRequestPassTurn";
 
     myString() {
-        return `PassTurn!`;
+        return `passed their turn`;
     }
 
     async Execute(gameData: IGameData) {
@@ -306,7 +310,7 @@ export class DiceCitiesRequestUnlockTrainStation implements IGameCommand {
     readonly className = "DiceCitiesRequestUnlockTrainStation";
 
     myString() {
-        return `Train Station!`;
+        return `bought a ${DiceCitiesCards[DiceCitiesCardIds.TRAIN_STATION].title}`;
     }
 
     async Execute(gameData: IGameData) {
@@ -329,7 +333,7 @@ export class DiceCitiesRequestUnlockShoppingMall implements IGameCommand {
     readonly className = "DiceCitiesRequestUnlockShoppingMall";
 
     myString() {
-        return `Shopping Mall!`;
+        return `bought a ${DiceCitiesCards[DiceCitiesCardIds.SHOPPING_MALL].title}`;
     }
 
     async Execute(gameData: IGameData) {
@@ -352,7 +356,7 @@ export class DiceCitiesRequestUnlockAmusementPark implements IGameCommand {
     readonly className = "DiceCitiesRequestUnlockAmusementPark";
 
     myString() {
-        return `Amusement Park!`;
+        return `bought a ${DiceCitiesCards[DiceCitiesCardIds.AMUSEMENT_PARK].title}`;
     }
 
     async Execute(gameData: IGameData) {
@@ -375,7 +379,7 @@ export class DiceCitiesRequestUnlockRadioTower implements IGameCommand {
     readonly className = "DiceCitiesRequestUnlockRadioTower";
 
     myString() {
-        return `Radio Tower!`;
+        return `bought a ${DiceCitiesCards[DiceCitiesCardIds.RADIO_TOWER].title}`;
     }
 
     async Execute(gameData: IGameData) {
@@ -400,7 +404,7 @@ export class DiceCitiesRequestUnlockHarbour implements IGameCommand {
     readonly className = "DiceCitiesRequestUnlockHarbour";
 
     myString() {
-        return `Harbour!`;
+        return `bought a ${DiceCitiesCards[DiceCitiesCardIds.HARBOUR].title}`;
     }
 
     async Execute(gameData: IGameData) {
@@ -438,7 +442,7 @@ export class DiceCitiesRequestHarbourBonus implements IGameCommand {
     readonly className = "DiceCitiesRequestHarbourBonus";
 
     myString() {
-        return `Harbour bonus! Take it? ${this.addBonus ? "True" : "False"}`;
+        return this.addBonus ? "took the Harbour bonus" : "passed on the Harbour bonus";
     }
 
     async Execute(gameData: IGameData) {
@@ -498,7 +502,7 @@ export class DiceCitiesRequestTvStationSelection implements IGameCommand {
     readonly className = "DiceCitiesRequestTvStationSelection";
 
     myString() {
-        return `TV Station Selection: ${this.selectedUserName || this.selectedUser}!`;
+        return `used the TV Station on ${this.selectedUserName || this.selectedUser}`;
     }
 
     async Execute(gameData: IGameData) {
@@ -575,7 +579,7 @@ export class DiceCitiesRequestBusinessCenterOwnSelection implements IGameCommand
     readonly className = "DiceCitiesRequestBusinessCenterOwnSelection";
 
     myString() {
-        return `Business Center Own Selection: ${this.selectedCard}!`;
+        return `offered their ${DiceCitiesCards[this.selectedCard]?.title ?? "card"} for the Business Center swap`;
     }
 
     async Execute(gameData: IGameData) {
@@ -679,7 +683,7 @@ export class DiceCitiesRequestBusinessCenterOpponentSelection implements IGameCo
     readonly className = "DiceCitiesRequestBusinessCenterOpponentSelection";
 
     myString() {
-        return `Business Center Opponent Selection: ${this.selectedUser} ${this.selectedCard}!`;
+        return `asked to trade for a ${DiceCitiesCards[this.selectedCard]?.title ?? "card"}`;
     }
 
     async Execute(gameData: IGameData) {
@@ -787,7 +791,11 @@ export class DiceCitiesRequestRadioTowerReroll implements IGameCommand {
     readonly className = "DiceCitiesRequestRadioTowerReroll";
 
     myString() {
-        return `Reroll with Radio Tower!`;
+        if (this.recordedRoll1 === undefined) {
+            return "used the Radio Tower to reroll";
+        }
+        const total = this.recordedRoll2 ? this.recordedRoll1 + this.recordedRoll2 : this.recordedRoll1;
+        return `used the Radio Tower to reroll a ${total}${this.recordedRoll2 ? ` (${this.recordedRoll1} and ${this.recordedRoll2})` : ""}`;
     }
 
     async Execute(gameData: IGameData) {
