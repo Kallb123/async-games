@@ -1,7 +1,8 @@
-# Admin tools — guest account recovery
+# Admin tools
 
-Support tooling for whoever runs the app, at `/admin`. One job today:
-getting a guest back into their game when the link they were given is gone.
+Support tooling for whoever runs the app, at `/admin`. Two jobs today:
+getting a guest back into their game when the link they were given is gone,
+and a look at what platforms players are actually on.
 
 ## The problem it solves
 
@@ -95,6 +96,32 @@ Four things hold it in place:
   has.
 - **No editing.** Nothing on this screen writes to a game, a lobby or a
   player's metadata. It reads, and it mints a link.
+
+## User analytics
+
+`/admin` → `AdminUserAnalytics`: a snapshot of the registered push devices
+across every account — how many, and a breakdown by desktop vs. mobile vs.
+tablet, operating system, and browser — from `GET /api/admin/analytics`.
+
+- **Built from Clerk, not Mongo.** A registration lives in each user's private
+  metadata (`getDeviceTokens`, `src/utils/firebase/deviceTokens.ts`), the same
+  place the player's own "Your devices" list in Settings reads from. This
+  screen just walks every account (`forEachClerkUser`) and tallies what
+  `parseUserAgent` (`src/utils/firebase/deviceInfo.ts`) already recorded about
+  each one — nothing new is parsed or stored for it.
+- **Generated when asked, not kept in sync.** This is a screen an admin opens
+  rarely, so it is cheaper to walk the instance fresh on every request
+  (`buildDeviceAnalytics`, `src/utils/users/adminAnalytics.ts`) than to keep a
+  second copy of the same counts up to date somewhere. The rate limit (30
+  requests per 10 minutes, the same window the guest list's uses) exists for
+  the same reason the guest list's does: to bound how often that walk runs,
+  not because the numbers themselves are sensitive.
+- **Counts devices, not people.** One player signed in on a phone and a laptop
+  is two rows in every breakdown. `usersWithDevices`/`scannedUsers` are the
+  only per-account figures, there to show how much of the instance the device
+  counts actually cover.
+- **Read-only**, same as the guest list: nothing here writes to a game, a
+  lobby, or an account's metadata.
 
 ## Adding another admin tool
 
