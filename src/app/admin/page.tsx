@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import AdminGuestRecovery from '@/components/AdminGuestRecovery';
+import AdminUserAnalytics from '@/components/AdminUserAnalytics';
 import BackLink from '@/components/ui/BackLink';
 import ErrorScreen from '@/components/ui/ErrorScreen';
 import { useAuthGuard } from '@/utils/hooks/useAuthGuard';
@@ -48,6 +49,7 @@ export default function Admin() {
             </div>
 
             <AdminGuestRecovery />
+            <AdminUserAnalytics />
         </main>
     );
 }
