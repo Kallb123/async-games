@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef } from 'react';
+import { prefersReducedMotion } from './usePrefersReducedMotion';
 
 /**
  * Brings a panel into view (its top, so a later height change as content
@@ -16,8 +17,7 @@ export function useScrollIntoViewOnOpen(open: boolean) {
         if (!open) {
             return;
         }
-        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        ref.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+        ref.current?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
     }, [open]);
 
     return ref;

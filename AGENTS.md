@@ -51,7 +51,14 @@ out. A second copy is the signal to extract the first one.
   the public landing page). Every heading-and-body block on a page is a
   `Section`; `CollapsingSection` adds the animation for one that comes and
   goes, and `ListSection` adds the `ag-list`, its skeletons and its empty
-  message. Never hand-roll an `ag-section-head` again. The node-and-edge map
+  message. Never hand-roll an `ag-section-head` again. A dismissible panel
+  (the chat thread, the turn-history log, the GIF picker) opens with a
+  `PanelHead`: its title, its dim subtitle and its own ✕, so the next one can't
+  forget the label on that button. It carries no wrapper of its own — the
+  thread and the log are `.ag-log`, the picker deliberately isn't. `ChatGif` is one GIF
+  attachment drawn — the chat thread's row and the GIF picker's result grid both
+  go through it, and it owns the degraded "GIF unavailable" caption for one that
+  can't be shown, so that string has one home. The node-and-edge map
   boards (World Domination, Outbreak) share `BoardZoom`, `ClickableMapNode`,
   `MapLabel` and `MapEdges` (the adjacency layer, which draws cross-map edges
   as labelled stubs off each edge rather than a line across the whole board).

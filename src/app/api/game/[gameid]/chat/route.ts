@@ -6,7 +6,9 @@ import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameDataModel, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { ChatMessageModel, IChatMessageDataDocument } from '@/utils/mongodb/ChatMessageData';
 import { ChatReadModel } from '@/utils/mongodb/ChatReadData';
-import { normaliseMessage, normaliseReadAt } from '@/utils/chat';
+import { GIF_CATALOGUE_TTL_MS, GifCatalogueModel } from '@/utils/mongodb/GifCatalogueData';
+import { IChatAttachment, IChatGifRef, normaliseAttachment, normaliseMessageBody, normaliseReadAt } from '@/utils/chat';
+import { registerGifShare } from '@/utils/gif/klipy';
 import { consumeRateLimit } from '@/utils/rateLimit';
 import { usersById } from '@/utils/users/clerk';
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
@@ -35,6 +37,10 @@ export interface IChatMessageResponse {
     messageId: string;
     senderId: string;
     text: string;
+    /** The message's GIF, if it has one — resolved server-side, never from
+     *  anything the sender supplied (docs/chat-gifs.md §4). Absent on a plain
+     *  message, and on one whose stored attachment no longer validates. */
+    attachment?: IChatAttachment;
     timestamp: string;
 }
 
@@ -49,12 +55,30 @@ export interface IChatResponse {
 }
 
 function toResponse(message: IChatMessageDataDocument): IChatMessageResponse {
+    // normaliseAttachment does two jobs here, which is why it is worth the URL
+    // parse per GIF rather than spreading the subdocument: it reduces a
+    // Mongoose subdocument to exactly the seven fields that belong on the wire,
+    // *and* it re-checks them. So a stored attachment that no longer passes —
+    // because the host list has since been narrowed, or because it was written
+    // by an older version of the search route — degrades to a message without
+    // one instead of putting a URL we would no longer accept into an <img src>.
+    // A message left with neither text nor attachment renders as the
+    // "GIF unavailable" caption (docs/chat-gifs.md §7).
+    //
+    // Deliberately not logged. The condition is a property of a stored row, not
+    // an event, so it would re-fire for the same message on every poll of an
+    // open panel — forever, since nothing repairs the row — and a handful of
+    // them in a busy thread would bury the real errors. What it costs is two
+    // URL parses per GIF per poll, which is nothing beside the two Mongo round
+    // trips in the same handler.
+    const attachment = message.attachment ? normaliseAttachment(message.attachment) : null;
     return {
         // messageId is a UUID field; String() gives its canonical form whether
         // the driver hands it back as a UUID object or already as a string.
         messageId: String(message.messageId),
         senderId: message.senderId,
         text: message.text,
+        ...(attachment ? { attachment } : {}),
         timestamp: message.timestamp,
     };
 }
@@ -154,8 +178,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<IC
 }
 
 // Post a message to a game's thread. Access control is the same membership gate
-// as the GET; on top of it, a bad body is a 400 (normaliseMessage), and a flood
-// is a 429. Deliberately *not* requireLiveGame: "gg" after the last turn is the
+// as the GET; on top of it, a bad body is a 400 (normaliseMessageBody), an
+// unresolvable GIF is a 400 (see below), and a flood is a 429. Deliberately *not* requireLiveGame: "gg" after the last turn is the
 // most obvious message in an async game, and a finished game's document is not
 // deleted (docs/in-game-chat.md §5). Once stored, the message pushes to the
 // other players — throttled per recipient, and never able to undo the write it
@@ -170,9 +194,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
         return NextResponse.json({}, { status: 401, statusText: "Not signed in" });
     }
 
-    const { text } = await readJsonBody<{ text: string }>(request);
-    const message = normaliseMessage(text);
-    if (message === null) {
+    // Text, a GIF reference, or both — but never neither, and never a GIF the
+    // caller described themselves. `gif` is read as `unknown` on purpose: the
+    // only two fields of it that survive are the provider and the id, and
+    // normaliseGifRef builds them into a fresh object rather than filtering the
+    // one that arrived, so a body sending a `url` or a `width` next to the id
+    // cannot influence what gets stored (docs/chat-gifs.md §4).
+    const body = await readJsonBody<{ text: string, gif: unknown }>(request);
+    const messageBody = normaliseMessageBody(body);
+    if (messageBody === null) {
         return NextResponse.json({}, { status: 400, statusText: "Invalid message" });
     }
 
@@ -186,6 +216,66 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
 
     if (!gameData.userIdList.includes(userId)) {
         return NextResponse.json({}, { status: 403, statusText: "Not a player in this game" });
+    }
+
+    // Resolve the GIF, if there is one, from the catalogue our own search route
+    // populated — the whole point of the client sending an id rather than a URL
+    // (docs/chat-gifs.md §4c). Three properties fall out of it: the stored
+    // fields are ones a provider gave us, the item is one our own *filtered*
+    // search served to somebody (not merely a real KLIPY slug, which a player
+    // could name from a query the filter would have blocked — note "somebody":
+    // the catalogue is app-global, so this is not narrowed to what *this*
+    // player's own search returned), and the send touches no third party, so
+    // posting a GIF doesn't depend on KLIPY being up.
+    //
+    // Its own limiter, spent before the message limiter below, and keyed on the
+    // player rather than the game. Both halves matter:
+    //
+    // - Keyed on the player, because games are free to create and the message
+    //   limiter is per game — so a per-game bound on "is this id in your
+    //   cache?" multiplies without limit, while a per-player one doesn't.
+    // - Spent first, so a GIF that won't resolve doesn't eat the budget "gg"
+    //   needs. Every way a send legitimately misses is our fault, not the
+    //   sender's (an empty catalogue after a deploy, a search-route upsert
+    //   that's failing, a row reaped between browsing and tapping), and none of
+    //   them should end with their next plain message getting a 429.
+    //
+    // A miss is still a 400 and nothing more clever (§5b).
+    let attachment: IChatAttachment | undefined;
+    if (messageBody.gif) {
+        if (!await consumeRateLimit('chatGif', userId, 30, 5 * 60_000)) {
+            return NextResponse.json({}, { status: 429, statusText: "Too many GIFs" });
+        }
+
+        // The ref *is* the filter: two fields, both already checked to be
+        // strings from a restricted charset, so there is no shape here for a
+        // query operator to arrive in.
+        const filter: IChatGifRef = messageBody.gif;
+        // findOneAndUpdate, not findOne, so using a GIF pushes its expiry out.
+        // The TTL runs from when the row was *written*, and a search response
+        // served from the CDN never re-runs the route that would rewrite it —
+        // so without this touch a GIF that has been in the picker's results for
+        // thirty days resolves to nothing, the tap 400s, and the player has no
+        // way to understand why. One small write, on a path that is about to
+        // write a message anyway. It also means the catalogue holds what is
+        // actually in use rather than what was once searched for.
+        const row = await GifCatalogueModel.findOneAndUpdate(
+            filter,
+            { $set: { expiresAt: new Date(Date.now() + GIF_CATALOGUE_TTL_MS) } },
+            { new: true }
+        ).exec();
+        attachment = row ? normaliseAttachment(row) ?? undefined : undefined;
+        if (!attachment) {
+            // Worth telling apart in the log: an id we have never served is a
+            // client doing something odd, whereas a row that fails its own
+            // validator is our data being wrong.
+            if (row) {
+                console.error(`Chat GIF ${filter.provider}:${filter.mediaId} is in the catalogue but does not validate`);
+            } else {
+                console.warn(`POST ${request.nextUrl.pathname} 400: GIF ${filter.provider}:${filter.mediaId} is not in the catalogue`);
+            }
+            return NextResponse.json({}, { status: 400, statusText: "Unknown GIF" });
+        }
     }
 
     // Twenty messages per five minutes, per player per game — far above
@@ -202,7 +292,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
         messageId: randomUUID(),
         gameId: gameid,
         senderId: userId,
-        text: message,
+        text: messageBody.text,
+        // Denormalised, not referenced: the chat GET stays one indexed read
+        // with no join, and a catalogue row expiring later can't break a GIF
+        // that has already been sent.
+        attachment,
         timestamp: (new Date()).toISOString(),
     });
     await messageDoc.save();
@@ -238,10 +332,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
                     event: 'ChatMessage',
                     gameId: gameid,
                     link: gameNotificationLink(gameData.gameType.url, gameid),
-                }, buildChatNotification(senderName, gameData, message), { channel: 'chat' });
+                }, buildChatNotification(senderName, gameData, messageBody.text), { channel: 'chat' });
             }
         } catch (error) {
             console.error(`Failed to send chat push for game ${gameid}`, error);
+        }
+
+        // KLIPY asks for a ping when one of its results is really sent, and it
+        // is the only thing we give back for a free API (docs/chat-gifs.md §5).
+        //
+        // Last, and outside the guard above rather than inside it, because both
+        // of those are deliberate: the buzz is what a player is waiting for, so
+        // an analytics round trip must not sit in front of it — and
+        // `registerGifShare` swallows its own failure, so it neither needs the
+        // try/catch nor is skipped when the push has already used it up.
+        if (attachment) {
+            await registerGifShare(attachment);
         }
     });
 

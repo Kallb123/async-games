@@ -219,7 +219,13 @@ export function buildTeamResultNotification(gameData: IGameData, won: boolean): 
  * `currentUser()`, never stored on the message (docs/in-game-chat.md §3, §7).
  */
 export function buildChatNotification(senderName: string, gameData: IGameData, text: string): PushNotification {
-    return gamePush(gameData, `${senderName} in ${gameData.gameType.friendlyName}`, text);
+    // An empty `text` means the message is a GIF with no caption: a message can
+    // be text, a GIF, or both, and never neither — normaliseMessageBody in
+    // utils/chat.ts is what guarantees that, so there is nothing else an empty
+    // one can be. A *captioned* GIF pushes its caption and doesn't mention the
+    // GIF: the notification tray is not where anybody looks at one, and the
+    // image slot stays the game's own art (docs/chat-gifs.md §8).
+    return gamePush(gameData, `${senderName} in ${gameData.gameType.friendlyName}`, text || "Sent a GIF");
 }
 
 /** Someone reacted to one of your moves in the recap feed. */

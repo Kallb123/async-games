@@ -40,6 +40,7 @@ Point two Clerk instances at one database and:
 | `CRON_SECRET` | its own secret | a different secret |
 | `APP_URL` | `https://asyncgames.com` | the preview or `localhost` origin |
 | Firebase Admin (`FIREBASE_*`) | one project is fine on both sides — device tokens live in Clerk private metadata, so they partition with the instance |
+| `KLIPY_API_KEY` | its own key, so the GIF picker's quota and analytics are production's | a different key, or unset — with none the picker reports "GIFs unavailable" and the rest of chat is unaffected. KLIPY issues a *test* key (a small hourly budget) from the same panel, which is what a preview or a `localhost` should hold |
 | `ANDROID_APP_FINGERPRINT` | the release keystore's SHA-256, so Android opens `asyncgames.com` links in the app | unset, unless you're verifying a debug-signed APK against a preview — then that keystore's SHA-256 |
 
 Nothing in `src/` is instance- or database-aware. `dbConnect()`

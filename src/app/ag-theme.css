@@ -780,6 +780,10 @@ a.ag-list-row, a.ag-list-row-main {
 /* A hint whose container already spaces what comes after it — a field inside
    an `.ag-form-card`, whose flex gap sits under the whole field. */
 .ag-hint--tight { margin-bottom: 0; }
+/* A hint that belongs to the panel rather than to one control under it — the
+   GIF picker's provider credit, which its API terms ask for and which should
+   sit out of the way of the grid above it. */
+.ag-hint--right { text-align: right; }
 
 .ag-disabled-hint {
     font: 500 11px/1.4 var(--ag-font);
@@ -1922,6 +1926,103 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-chat-composer .ag-btn { flex: none; }
 .ag-chat-skeleton { display: flex; flex-direction: column; gap: 12px; padding: 4px 2px; }
 
+/* A GIF in a thread row (ChatGif) — and, later, the same box in the picker's
+   result grid. The box is *reserved* from the message's stored dimensions
+   before the image loads: an unsized <img> measures zero at that moment, so the
+   panel's follow-the-thread layout effect would scroll to the bottom of a
+   thread short by the GIF's height, and the arriving bytes would then push the
+   newest message back off the bottom (docs/chat-gifs.md §7). The width is set
+   inline from the stored dimensions and `aspect-ratio` derives the height, so
+   the row's height is known at layout time rather than at load time.
+
+   `max-width: 100%` is what keeps a wide GIF inside the row; the height follows
+   it down on its own, because the ratio is doing the work. The tall case is
+   capped in ChatGif instead, by narrowing the box — a `max-height` here would
+   shrink the height without the width, which is a squashed GIF. */
+.ag-chat-gif {
+    display: block;
+    position: relative;
+    max-width: 100%;
+    padding: 0;
+    border: 1px solid var(--ag-line);
+    border-radius: 10px;
+    overflow: hidden;
+    /* Fills the reserved box until the image arrives, so the row reads as a
+       picture loading rather than as a hole in the thread — the same
+       placeholder surface `.ag-skeleton` uses while the thread itself loads. */
+    background: var(--ag-surface-2);
+}
+.ag-chat-gif img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* The still-frame form under `prefers-reduced-motion`, which is a button. */
+button.ag-chat-gif { cursor: pointer; }
+.ag-chat-gif-play {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 99px;
+    background: rgba(0, 0, 0, 0.55);
+    color: var(--ag-on-dark);
+    font-size: 11px;
+    line-height: 1;
+}
+/* A message whose GIF didn't survive — refused on the way out, or a URL that
+   404s in the browser. A degraded message, never a broken row, and never an
+   empty one (docs/chat-gifs.md §7). */
+.ag-chat-gif-missing { font: 600 12.5px var(--ag-font); color: var(--ag-ink-soft); font-style: italic; }
+/* The line of text under a GIF, when the sender wrote one too. */
+.ag-chat-gif-caption { margin-top: 6px; }
+
+/* The composer's GIF button, sized down from a full .ag-btn the way
+   "Load earlier" is — a composer control beside the field, not a page action.
+   Its own width so the label doesn't reflow between "GIF" and the pressed
+   state, and terracotta while the picker is open, the same way the options
+   menu marks the row whose panel is showing (`.ag-gom-item--active`). */
+.ag-chat-gif-toggle { padding: 8px 10px; font-size: 12px; letter-spacing: 0.04em; }
+.ag-chat-gif-toggle--active { border-color: var(--ag-terracotta); color: var(--ag-terracotta); }
+
+/* ---- The GIF picker (GifPicker) ----
+   A panel between the thread and the composer: the search field, then a grid of
+   results drawn by the same `ChatGif` the thread uses (docs/chat-gifs.md §6).
+   Inset rather than floating, so it reads as part of the composer it opened
+   from and can't cover the conversation. */
+.ag-gif-picker {
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--ag-surface-2);
+    border: 1px solid var(--ag-line);
+    border-radius: 14px;
+}
+.ag-gif-grid {
+    display: grid;
+    /* Cells as wide as they can be at 3-a-row on a phone, more on a wider
+       screen — `auto-fill` rather than a fixed count, so this needs no
+       breakpoint of its own. */
+    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+    /* Roughly two rows, so the picker never grows so tall that the composer
+       under it leaves the screen. */
+    max-height: 232px;
+    overflow-y: auto;
+}
+/* Every cell is the column's width (ChatGif sets that when it's selectable) and
+   the ratio derives its height, so a row of cells lines up. The cap is what
+   stops a portrait GIF making its whole row tall: it crops rather than
+   squashing, because the image covers its box. */
+.ag-gif-grid .ag-chat-gif { max-height: 116px; }
+/* While a send is in flight — dimmed and inert. The tap that actually can't
+   post twice is stopped in GameChat by a ref (this is CSS, and CSS doesn't stop
+   a focused button being activated from the keyboard); what this does is say so. */
+.ag-gif-grid--busy { opacity: 0.5; pointer-events: none; }
+/* The "no pictures just now" row, with the retry beside it — the one way out of
+   that state that doesn't require typing something. */
+.ag-gif-unavailable { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+
 /* "Load earlier" sits above the first row, sized down from a full .ag-btn (full
    width already comes from .ag-btn--block) — a thread's own paging control, not
    a page-level action. */
@@ -1930,11 +2031,13 @@ a.ag-list-row, a.ag-list-row-main {
 /* Title (plus an optional dim subtitle under it) and its own ✕ on one row,
    mirroring the top-bar 💬/📜 toggle so the panel can be dismissed from
    itself. The title carries the log's 9px margin, so the row takes it over
-   and the title inside sits flush. Shared by the chat thread and the
-   turn-history panel — both are dismissible `.ag-log` panels toggled from the
-   top bar, and both tell the player which end is newest since the two run in
-   opposite directions (chat always oldest-to-newest; the turn-history log
-   depends on the game — see MatchHistory's `oldestFirst`). */
+   and the title inside sits flush. Every panel that opens with one goes
+   through the `PanelHead` component (three do: the chat thread, the
+   turn-history log and the GIF picker) — sharing these classes without sharing
+   the markup is how the block got written out three times. The subtitle tells
+   the player which end is newest, since the lists run in opposite directions
+   (chat always oldest-to-newest; the turn-history log depends on the game —
+   see MatchHistory's `oldestFirst`). */
 .ag-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
 .ag-panel-head .ag-hand-title { margin-bottom: 0; }
 .ag-panel-subtitle { font: 600 10.5px var(--ag-font); color: var(--ag-ink-softer); margin-top: 2px; }
@@ -3133,7 +3236,12 @@ a.ag-list-row, a.ag-list-row-main {
     padding: 12px 15px;
     box-shadow: var(--ag-shadow);
 }
-.ag-recap-event-title { font: 800 15px/1.25 var(--ag-font); color: var(--ag-ink); }
+/* `min-width: 0` because this is a flex item (of `.ag-recap-event-row`), and a
+   flex item's default `min-width: auto` refuses to shrink below its content's
+   min-content width. Text wraps, so that was never visible — but a chat GIF's
+   reserved box is a fixed width (ChatGif), and without this the row grows to
+   the GIF's own width and a wide one hangs out past the card. */
+.ag-recap-event-title { font: 800 15px/1.25 var(--ag-font); color: var(--ag-ink); min-width: 0; }
 .ag-recap-event-detail { font: 500 12.5px/1.4 var(--ag-font); color: var(--ag-ink-soft); margin-top: 3px; }
 
 .ag-recap-event-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }

@@ -24,6 +24,7 @@ import type { NextRequest } from 'next/server';
 import type { User } from '@clerk/nextjs/server';
 import type { PushNotification, SendPushOptions } from '@/utils/firebase/pushNotification';
 import type { IGameDataDocument } from '@/utils/mongodb/GameData';
+import type { IChatAttachment } from '@/utils/chat';
 import type { ActionableTurnBranch } from '@/utils/games/TurnTimer';
 import { clearAfterCallbacks } from '@/utils/testing/afterStub';
 
@@ -37,6 +38,7 @@ let mongo: typeof import('@/utils/mongodb/mongodb');
 let gameData: GameData;
 let chatMessageData: typeof import('@/utils/mongodb/ChatMessageData');
 let chatReadData: typeof import('@/utils/mongodb/ChatReadData');
+let gifCatalogueData: typeof import('@/utils/mongodb/GifCatalogueData');
 let reactionData: typeof import('@/utils/mongodb/ReactionData');
 let nextServer: typeof import('next/server');
 
@@ -44,7 +46,12 @@ let nextServer: typeof import('next/server');
 type StoredGame = Record<string, unknown> & { gameId: string, __v: number };
 
 /** A stored chat message, as the ChatMessage collection would hold it. */
-type StoredChatMessage = { messageId: string, gameId: string, senderId: string, text: string, timestamp: string };
+type StoredChatMessage = { messageId: string, gameId: string, senderId: string, text: string, timestamp: string, attachment?: IChatAttachment };
+
+/** A stored GIF, as the GifCatalogue collection would hold it — the row the
+ *  search route writes and the chat POST resolves against. `expiresAt` is the
+ *  TTL index's business and no route reads it, so tests may leave it off. */
+type StoredGifCatalogueItem = IChatAttachment & { expiresAt?: Date };
 
 /** A stored read marker, as the ChatRead collection would hold it. */
 type StoredChatReadMarker = { gameId: string, userId: string, readAt: string };
@@ -57,6 +64,9 @@ type StoredReaction = { gameId: string, commandId?: string, eventId?: string, re
 const games = new Map<string, StoredGame>();
 const chatMessages: StoredChatMessage[] = [];
 const chatReadMarkers: StoredChatReadMarker[] = [];
+const gifCatalogue: StoredGifCatalogueItem[] = [];
+/** Set by `failNextGifCatalogueWrite`; thrown by the next bulk upsert. */
+let gifCatalogueWriteError: unknown = null;
 const reactions: StoredReaction[] = [];
 
 /** Every push a request sent, in the order it sent them. */
@@ -78,6 +88,7 @@ export async function resetApiRouteStubs() {
     gameData = await import('@/utils/mongodb/GameData');
     chatMessageData = await import('@/utils/mongodb/ChatMessageData');
     chatReadData = await import('@/utils/mongodb/ChatReadData');
+    gifCatalogueData = await import('@/utils/mongodb/GifCatalogueData');
     reactionData = await import('@/utils/mongodb/ReactionData');
     nextServer = await import('next/server');
 
@@ -88,6 +99,8 @@ export async function resetApiRouteStubs() {
     games.clear();
     chatMessages.length = 0;
     chatReadMarkers.length = 0;
+    gifCatalogue.length = 0;
+    gifCatalogueWriteError = null;
     reactions.length = 0;
     clearAfterCallbacks();
     sentPushes.length = 0;
@@ -107,6 +120,9 @@ export async function resetApiRouteStubs() {
     vi.spyOn(chatReadData.ChatReadModel, 'findOne').mockImplementation(findOneChatReadFromStore as typeof chatReadData.ChatReadModel.findOne);
     vi.spyOn(chatReadData.ChatReadModel, 'find').mockImplementation(findManyChatReadFromStore as typeof chatReadData.ChatReadModel.find);
     vi.spyOn(chatReadData.ChatReadModel, 'findOneAndUpdate').mockImplementation(findOneAndUpdateChatReadFromStore as typeof chatReadData.ChatReadModel.findOneAndUpdate);
+    vi.spyOn(gifCatalogueData.GifCatalogueModel, 'findOne').mockImplementation(findOneGifCatalogueFromStore as typeof gifCatalogueData.GifCatalogueModel.findOne);
+    vi.spyOn(gifCatalogueData.GifCatalogueModel, 'findOneAndUpdate').mockImplementation(findOneAndUpdateGifCatalogueFromStore as typeof gifCatalogueData.GifCatalogueModel.findOneAndUpdate);
+    vi.spyOn(gifCatalogueData.GifCatalogueModel, 'bulkWrite').mockImplementation(bulkWriteGifCatalogueToStore as unknown as typeof gifCatalogueData.GifCatalogueModel.bulkWrite);
     vi.spyOn(reactionData.ReactionModel, 'find').mockImplementation(findReactionsFromStore as typeof reactionData.ReactionModel.find);
 }
 
@@ -550,9 +566,114 @@ function saveChatToStore(this: import('@/utils/mongodb/ChatMessageData').IChatMe
         gameId: this.gameId,
         senderId: this.senderId,
         text: this.text,
+        // Off the whole document's toObject, like insertIntoStore and the game
+        // store's save: a test wants a plain object to assert on, and naming
+        // the seven fields here would be a third copy of a list that already
+        // has one home (ChatAttachmentSchema).
+        attachment: this.toObject().attachment,
         timestamp: this.timestamp,
     });
     return Promise.resolve(this);
+}
+
+// ---------------------------------------------------------------- GIF catalogue
+
+/** Puts a GIF in the catalogue, as if our search route had already served it —
+ *  which is the only way a real one gets there (docs/chat-gifs.md §4c). */
+export function seedGifCatalogueItem(item: StoredGifCatalogueItem) {
+    // Copied, like seedGame's asStored: the resolve touches a row's `expiresAt`
+    // in place, and a test that seeds a shared fixture object shouldn't find it
+    // mutated afterwards.
+    gifCatalogue.push({ ...item });
+}
+
+/**
+ * Make the next catalogue bulk upsert throw `error`.
+ *
+ * The search route's write is deferred bookkeeping wrapped in a `catch` that
+ * decides, from the error's shape, whether anything went wrong worth logging —
+ * two searches racing on the same id is what the unique index is *for*, and the
+ * loser's E11000 is the constraint working. That decision is the subtlest code
+ * in the route and a store that can only succeed never reaches it.
+ */
+export function failNextGifCatalogueWrite(error: unknown) {
+    gifCatalogueWriteError = error;
+}
+
+/** Everything the catalogue holds, in the order it was written — for the search
+ *  route, whose whole job is to put rows here (docs/chat-gifs.md §4c). */
+export function storedGifCatalogue(): StoredGifCatalogueItem[] {
+    return gifCatalogue.map(item => ({ ...item }));
+}
+
+/** One catalogued GIF's expiry, so a test can assert the resolve touched it. */
+export function storedGifCatalogueExpiry(provider: string, mediaId: string): Date | undefined {
+    return gifCatalogue.find(item => item.provider === provider && item.mediaId === mediaId)?.expiresAt;
+}
+
+/** The one row the chat POST addresses: an exact match on the unique key. The
+ *  ref is handed to Mongo as the filter verbatim, so this insists it really was
+ *  those two fields and nothing else. */
+function matchGifCatalogueFilter(filter: Record<string, unknown>) {
+    const { provider, mediaId } = filter ?? {};
+    if (typeof provider !== 'string' || typeof mediaId !== 'string' || Object.keys(filter).length !== 2) {
+        throw new Error(`The test GIF catalogue only resolves one provider + mediaId, not ${JSON.stringify(filter)}`);
+    }
+    return gifCatalogue.find(item => item.provider === provider && item.mediaId === mediaId);
+}
+
+function findOneGifCatalogueFromStore(filter: Record<string, unknown>) {
+    const match = matchGifCatalogueFilter(filter);
+    return { exec: async () => match ? gifCatalogueData.GifCatalogueModel.hydrate(match) : null };
+}
+
+// The chat POST's resolve: the same lookup, plus a $set that pushes the row's
+// expiry out so using a GIF keeps it (docs/chat-gifs.md §4c). Interprets that
+// one update shape rather than a general engine, the same trade the chat store
+// above already makes.
+function findOneAndUpdateGifCatalogueFromStore(filter: Record<string, unknown>, update: Record<string, unknown>) {
+    const match = matchGifCatalogueFilter(filter);
+    const set = update?.$set as { expiresAt?: Date } | undefined;
+    if (!set || !(set.expiresAt instanceof Date) || Object.keys(update).length !== 1 || Object.keys(set).length !== 1) {
+        throw new Error(`The test GIF catalogue only touches expiresAt, not ${JSON.stringify(update)}`);
+    }
+    if (match) {
+        match.expiresAt = set.expiresAt;
+    }
+    return { exec: async () => match ? gifCatalogueData.GifCatalogueModel.hydrate(match) : null };
+}
+
+// The search route's catalogue write: one unordered bulkWrite of upserts, each
+// keyed by the same unique { provider, mediaId } the resolve reads back
+// (docs/chat-gifs.md §5b). Interprets that one shape rather than being a general
+// bulk engine, the same trade the stores above already make.
+function bulkWriteGifCatalogueToStore(operations: unknown[]) {
+    if (gifCatalogueWriteError !== null) {
+        const failure = gifCatalogueWriteError;
+        gifCatalogueWriteError = null;
+        // Rejected, not thrown: the driver's is an async failure, and a caller
+        // that only wrapped its `await` would pass a synchronous throw.
+        return Promise.reject(failure);
+    }
+    for (const operation of operations) {
+        const one = (operation as { updateOne?: { filter?: Record<string, unknown>, update?: Record<string, unknown>, upsert?: boolean } }).updateOne;
+        if (!one?.upsert) {
+            throw new Error(`The test GIF catalogue only bulk-upserts, not ${JSON.stringify(operation)}`);
+        }
+        const set = one.update?.$set as StoredGifCatalogueItem | undefined;
+        if (!set || Object.keys(one.update ?? {}).length !== 1) {
+            throw new Error(`The test GIF catalogue only $sets a whole row, not ${JSON.stringify(one.update)}`);
+        }
+        const existing = matchGifCatalogueFilter(one.filter ?? {});
+        if (existing) {
+            Object.assign(existing, set);
+        } else {
+            gifCatalogue.push({ ...set });
+        }
+    }
+    // The driver answers with counts; nothing in the app reads them, so this is
+    // shaped enough to be awaited and no more.
+    return Promise.resolve({ upsertedCount: operations.length });
 }
 
 // ---------------------------------------------------------------- Chat read markers

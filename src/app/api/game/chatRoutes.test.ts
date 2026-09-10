@@ -30,8 +30,9 @@ import { consumeRateLimit } from '@/utils/rateLimit';
 import { sendPushToUsers } from '@/utils/firebase/pushNotification';
 import { runAfterCallbacks } from '@/utils/testing/afterStub';
 import {
-    ANN, BOB, get, jsonPost, rawPost, resetApiRouteStubs, seedChatMessage, seedChatReadMarker, seedSnakesAndLadders,
-    sentPushes, signIn, storedChatMessages, storedChatReadMarker, stubClerkUsers
+    ANN, BOB, get, jsonPost, rawPost, resetApiRouteStubs, seedChatMessage, seedChatReadMarker,
+    seedGifCatalogueItem, seedSnakesAndLadders,
+    sentPushes, signIn, storedChatMessages, storedChatReadMarker, storedGifCatalogueExpiry, stubClerkUsers
 } from '@/utils/testing/apiRoute';
 import { GET as readChat, POST as postChat } from './[gameid]/chat/route';
 import { POST as postChatRead } from './[gameid]/chat/read/route';
@@ -65,6 +66,18 @@ function postChatTo(gameid: string, body: unknown) {
     return postChat(jsonPost(`/api/game/${gameid}/chat`, body), { params: Promise.resolve({ gameid }) });
 }
 
+/** A GIF as the search route would have written it into the catalogue
+ *  (docs/chat-gifs.md §4c) — the only way one becomes attachable. */
+const CATALOGUED_GIF = {
+    provider: 'klipy' as const,
+    mediaId: 'abc123',
+    url: 'https://static.klipy.com/ii/abc123/cat.gif',
+    stillUrl: 'https://static.klipy.com/ii/abc123/cat.jpg',
+    width: 320,
+    height: 240,
+    alt: 'a cat falling off a table',
+};
+
 /** A POST to one game's read marker, JSON body and path param. */
 function postChatReadTo(gameid: string, body: unknown) {
     return postChatRead(jsonPost(`/api/game/${gameid}/chat/read`, body), { params: Promise.resolve({ gameid }) });
@@ -76,9 +89,24 @@ function postRawChatTo(gameid: string, body: string) {
 }
 
 beforeEach(async () => {
+    // Before `resetApiRouteStubs`, the way gifRoutes.test.ts does it and for the
+    // same reason: reset arms the collection spies, and restoring afterwards
+    // would tear them straight off again. What actually needs restoring is the
+    // `fetch` spy the share-ping tests install (below), which would otherwise
+    // stand for every test after them.
+    vi.restoreAllMocks();
     await resetApiRouteStubs();
-    // Default the limiter to "allowed"; the 429 test overrides it for one call.
-    vi.mocked(consumeRateLimit).mockClear();
+    // No provider key by default, so the share ping in the POST's `after()`
+    // short-circuits and no test but the ones about it can reach the network —
+    // explicitly, rather than by trusting that the environment running the
+    // suite happens not to have one set.
+    vi.stubEnv('KLIPY_API_KEY', '');
+    // Default the limiter back to "allowed"; the 429 and throttle tests each
+    // override it. mockReset, not mockClear: the stub is a `vi.fn(async () =>
+    // true)`, so reset restores that default, whereas clear only forgets the
+    // calls — which left a `mockImplementation` from the throttle test denying
+    // `chatPush` for every test that ran after it.
+    vi.mocked(consumeRateLimit).mockReset();
 });
 
 describe('GET /api/game/[gameid]/chat', () => {
@@ -502,6 +530,325 @@ describe('POST /api/game/[gameid]/chat', () => {
         await postChatTo('game_1', { text: 'probe' });
 
         expect(vi.mocked(consumeRateLimit)).not.toHaveBeenCalled();
+    });
+
+    // GIFs (docs/chat-gifs.md §4). The claim under test is that a sender picks
+    // *which* catalogued GIF, and nothing else about it: every field on the
+    // message comes from the catalogue row our own filtered search wrote, so a
+    // forged id, a forged URL, or a URL smuggled in alongside a real id all get
+    // the sender nowhere.
+    describe('with a GIF', () => {
+        it('stores a catalogued GIF and sends it back resolved', async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+            seedGifCatalogueItem(CATALOGUED_GIF);
+
+            const response = await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'abc123' } });
+
+            expect(response.status).toBe(200);
+            expect((await response.json()).message.attachment).toEqual(CATALOGUED_GIF);
+            // Text is empty, not absent: a GIF with no caption is a message.
+            expect(storedChatMessages('game_1')).toHaveLength(1);
+            expect(storedChatMessages('game_1')[0].text).toBe('');
+            expect(storedChatMessages('game_1')[0].attachment).toEqual(CATALOGUED_GIF);
+        });
+
+        it('keeps a caption alongside the GIF', async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+            seedGifCatalogueItem(CATALOGUED_GIF);
+
+            await postChatTo('game_1', { text: '  this is you  ', gif: { provider: 'klipy', mediaId: 'abc123' } });
+
+            const stored = storedChatMessages('game_1')[0];
+            expect(stored.text).toBe('this is you');
+            expect(stored.attachment).toEqual(CATALOGUED_GIF);
+        });
+
+        it('ignores everything the sender says about the GIF except which one it is', async () => {
+            // The whole design in one test: a sender who supplies their own url,
+            // dimensions and alt next to a real id gets the catalogue's copy of
+            // all three, not theirs.
+            signIn(ANN);
+            seedSnakesAndLadders();
+            seedGifCatalogueItem(CATALOGUED_GIF);
+
+            await postChatTo('game_1', {
+                gif: {
+                    provider: 'klipy',
+                    mediaId: 'abc123',
+                    url: 'https://evil.example/tracker.gif',
+                    stillUrl: 'https://evil.example/tracker.png',
+                    width: 9999,
+                    height: 9999,
+                    alt: 'click here',
+                },
+            });
+
+            expect(storedChatMessages('game_1')[0].attachment).toEqual(CATALOGUED_GIF);
+        });
+
+        it('refuses an id that is not in the catalogue, and stores nothing', async () => {
+            // Unreachable from the picker, which resolved the row seconds ago —
+            // so the caller worth thinking about is one sending ids by hand.
+            signIn(ANN);
+            seedSnakesAndLadders();
+            seedGifCatalogueItem(CATALOGUED_GIF);
+
+            const response = await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'neverserved' } });
+
+            expect(response.status).toBe(400);
+            expect(storedChatMessages('game_1')).toHaveLength(0);
+        });
+
+        it('refuses a catalogued id whose stored row no longer validates', async () => {
+            // A row written before the host list was narrowed. Ours, and still
+            // refused, rather than trusted for being ours.
+            signIn(ANN);
+            seedSnakesAndLadders();
+            seedGifCatalogueItem({ ...CATALOGUED_GIF, url: 'https://evil.example/x.gif' });
+
+            const response = await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'abc123' } });
+
+            expect(response.status).toBe(400);
+            expect(storedChatMessages('game_1')).toHaveLength(0);
+        });
+
+        it.each([
+            ['an unknown provider', { gif: { provider: 'giphy', mediaId: 'abc123' } }],
+            ['a bare URL instead of a reference', { gif: 'https://static.klipy.com/ii/abc123/cat.gif' }],
+            ['a reference with no id', { gif: { provider: 'klipy' } }],
+            ['an id outside the inert charset', { gif: { provider: 'klipy', mediaId: '../abc123' } }],
+            ['a query operator where the id goes', { gif: { provider: 'klipy', mediaId: { $ne: '' } } }],
+        ])('rejects %s with a 400 before it reaches the catalogue', async (_label, body) => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+            seedGifCatalogueItem(CATALOGUED_GIF);
+
+            expect((await postChatTo('game_1', body)).status).toBe(400);
+            expect(storedChatMessages('game_1')).toHaveLength(0);
+        });
+
+        it('rejects an invalid GIF rather than quietly posting just the caption', async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+
+            const response = await postChatTo('game_1', { text: 'look at this', gif: { provider: 'giphy', mediaId: 'x' } });
+
+            expect(response.status).toBe(400);
+            expect(storedChatMessages('game_1')).toHaveLength(0);
+        });
+
+        it('still gates on membership before resolving anything', async () => {
+            signIn({ id: 'user_carol', username: 'carol' });
+            seedSnakesAndLadders();
+            seedGifCatalogueItem(CATALOGUED_GIF);
+
+            const response = await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'abc123' } });
+
+            expect(response.status).toBe(403);
+            expect(storedChatMessages('game_1')).toHaveLength(0);
+        });
+
+        it('pushes "Sent a GIF" for a GIF with no caption', async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+            stubClerkUsers(BOB);
+            seedGifCatalogueItem(CATALOGUED_GIF);
+
+            await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'abc123' } });
+            await runAfterCallbacks();
+
+            expect(sentPushes).toHaveLength(1);
+            expect(sentPushes[0].notification.body).toBe('Sent a GIF');
+            // The image slot is the game's own art, never the GIF (§8) — this
+            // game happens to have none, so what matters is only that neither
+            // of the GIF's URLs got in.
+            expect(sentPushes[0].notification.imageUrl).not.toBe(CATALOGUED_GIF.url);
+            expect(sentPushes[0].notification.imageUrl).not.toBe(CATALOGUED_GIF.stillUrl);
+        });
+
+        it('pushes the caption when a GIF has one', async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+            stubClerkUsers(BOB);
+            seedGifCatalogueItem(CATALOGUED_GIF);
+
+            await postChatTo('game_1', { text: 'this is you', gif: { provider: 'klipy', mediaId: 'abc123' } });
+            await runAfterCallbacks();
+
+            expect(sentPushes[0].notification.body).toBe('this is you');
+        });
+
+        it('pushes the row\'s expiry out when a GIF is used', async () => {
+            // The TTL runs from when the row was written, and a CDN-cached
+            // search response never re-runs the route that would rewrite it —
+            // so without this touch a GIF that has sat in the picker's results
+            // for thirty days resolves to nothing and the tap 400s for reasons
+            // the player can't see (docs/chat-gifs.md §4c).
+            signIn(ANN);
+            seedSnakesAndLadders();
+            const nearlyReaped = new Date(Date.now() + 60_000);
+            seedGifCatalogueItem({ ...CATALOGUED_GIF, expiresAt: nearlyReaped });
+
+            await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'abc123' } });
+
+            const expiry = storedGifCatalogueExpiry('klipy', 'abc123');
+            expect(expiry!.getTime()).toBeGreaterThan(nearlyReaped.getTime());
+        });
+
+        it('spends its own limiter, not the one plain messages use', async () => {
+            // Keyed on the player, not the game: the message limiter is per
+            // game and games are free to create, so a per-game bound on "is
+            // this id in your cache?" multiplies without limit.
+            signIn(ANN);
+            seedSnakesAndLadders();
+            seedGifCatalogueItem(CATALOGUED_GIF);
+
+            await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'abc123' } });
+
+            expect(vi.mocked(consumeRateLimit)).toHaveBeenCalledWith('chatGif', ANN.id, 30, 5 * 60_000);
+        });
+
+        // The share ping (docs/chat-gifs.md §5). KLIPY asks for one when a
+        // result is really sent, and it is the only thing we give back for a
+        // free API — so what matters is that it happens, that it happens where
+        // nothing is waiting on it, and that it can neither delay the buzz nor
+        // undo a message that has already saved.
+        describe('the share ping', () => {
+            /** The upstream accepting the ping. Returns the spy, so a test can
+             *  read back the URL the route actually built. */
+            function upstreamAcceptsPing() {
+                return vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 200 }));
+            }
+
+            beforeEach(() => {
+                // A configured deployment — the default is no key at all (see
+                // the suite's own beforeEach), which is the "no ping" case.
+                vi.stubEnv('KLIPY_API_KEY', 'test-key');
+            });
+
+            it('tells the provider which item was sent, after the push', async () => {
+                signIn(ANN);
+                seedSnakesAndLadders();
+                stubClerkUsers(BOB);
+                seedGifCatalogueItem(CATALOGUED_GIF);
+                const fetchSpy = upstreamAcceptsPing();
+
+                await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'abc123' } });
+                // Nothing on the send path: it is deferred work, like the push.
+                expect(fetchSpy).not.toHaveBeenCalled();
+                await runAfterCallbacks();
+
+                // The key is a path segment for this provider, and the item is
+                // named by its slug — so the whole of the ping is in the path.
+                const url = new URL(String(fetchSpy.mock.calls[0][0]));
+                expect(url.origin + url.pathname).toBe('https://api.klipy.com/api/v1/test-key/gifs/share/abc123');
+                expect(fetchSpy.mock.calls[0][1]).toMatchObject({ method: 'POST' });
+                // The buzz is what a player is waiting for, so an analytics
+                // round trip must not sit in front of it.
+                expect(vi.mocked(sendPushToUsers).mock.invocationCallOrder[0])
+                    .toBeLessThan(fetchSpy.mock.invocationCallOrder[0]);
+            });
+
+            it('says nothing about a plain message', async () => {
+                signIn(ANN);
+                seedSnakesAndLadders();
+                stubClerkUsers(BOB);
+                const fetchSpy = upstreamAcceptsPing();
+
+                await postChatTo('game_1', { text: 'gg' });
+                await runAfterCallbacks();
+
+                expect(fetchSpy).not.toHaveBeenCalled();
+            });
+
+            it('keeps the message and the push when the ping fails', async () => {
+                signIn(ANN);
+                seedSnakesAndLadders();
+                stubClerkUsers(BOB);
+                seedGifCatalogueItem(CATALOGUED_GIF);
+                vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('klipy is down'));
+
+                await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'abc123' } });
+
+                // The deferred block itself must not reject: an unhandled
+                // rejection out of `after()` is a request that logs as failed
+                // long after it answered 200.
+                await expect(runAfterCallbacks()).resolves.toBeGreaterThan(0);
+                expect(storedChatMessages('game_1')[0].attachment).toEqual(CATALOGUED_GIF);
+                expect(sentPushes).toHaveLength(1);
+            });
+
+            it('stays quiet when the deployment has no provider key', async () => {
+                signIn(ANN);
+                seedSnakesAndLadders();
+                seedGifCatalogueItem(CATALOGUED_GIF);
+                vi.stubEnv('KLIPY_API_KEY', '');
+                const fetchSpy = upstreamAcceptsPing();
+
+                await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'abc123' } });
+                await runAfterCallbacks();
+
+                expect(fetchSpy).not.toHaveBeenCalled();
+            });
+        });
+
+        it('refuses once the GIF limiter is spent, without touching the message limiter', async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+            seedGifCatalogueItem(CATALOGUED_GIF);
+            vi.mocked(consumeRateLimit).mockImplementation(async (action) => action !== 'chatGif');
+
+            const response = await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'abc123' } });
+
+            expect(response.status).toBe(429);
+            expect(storedChatMessages('game_1')).toHaveLength(0);
+            expect(vi.mocked(consumeRateLimit)).not.toHaveBeenCalledWith('chat', expect.anything(), expect.anything(), expect.anything());
+        });
+
+        it("leaves the conversation's budget alone when a GIF won't resolve", async () => {
+            // Every way a send legitimately misses is our fault, not the
+            // sender's — so their next plain message must not be a 429.
+            signIn(ANN);
+            seedSnakesAndLadders();
+
+            const response = await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'neverserved' } });
+
+            expect(response.status).toBe(400);
+            expect(vi.mocked(consumeRateLimit)).not.toHaveBeenCalledWith('chat', expect.anything(), expect.anything(), expect.anything());
+        });
+
+        it('carries a stored GIF on the GET, and no attachment key on a plain message', async () => {
+            signIn(ANN);
+            seedSnakesAndLadders();
+            seedChatMessage({
+                messageId: 'm1', gameId: 'game_1', senderId: BOB.id, text: '', timestamp: '2026-01-01T00:00:00.000Z',
+                attachment: CATALOGUED_GIF,
+            });
+            seedChatMessage({ messageId: 'm2', gameId: 'game_1', senderId: ANN.id, text: 'ha', timestamp: '2026-01-02T00:00:00.000Z' });
+
+            const messages = (await (await readChatFor('game_1')).json()).messages;
+
+            expect(messages[0].attachment).toEqual(CATALOGUED_GIF);
+            expect(messages[1]).not.toHaveProperty('attachment');
+        });
+
+        it('drops a stored GIF from the GET once its row no longer validates', async () => {
+            // Degrades to a message without a picture rather than putting a URL
+            // we would no longer accept into an <img src> in every browser.
+            signIn(ANN);
+            seedSnakesAndLadders();
+            seedChatMessage({
+                messageId: 'm1', gameId: 'game_1', senderId: BOB.id, text: 'look', timestamp: '2026-01-01T00:00:00.000Z',
+                attachment: { ...CATALOGUED_GIF, url: 'https://evil.example/x.gif' },
+            });
+
+            const messages = (await (await readChatFor('game_1')).json()).messages;
+
+            expect(messages[0]).not.toHaveProperty('attachment');
+            expect(messages[0].text).toBe('look');
+        });
     });
 });
 
