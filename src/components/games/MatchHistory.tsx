@@ -1,10 +1,11 @@
 'use client'
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import PanelHead from "@/components/ui/PanelHead";
 import RecapTimeline from "@/components/ui/RecapTimeline";
 import ReactionRow from "@/components/ui/ReactionRow";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { IHistoryEntryResponse } from "@/utils/apiModels/GameDataApi";
+import { getRelativeTime } from "@/utils/ui/relativeTime";
 
 /** What a game hands `GameShell`'s `log` prop. */
 export interface MatchHistoryProps {
@@ -51,6 +52,7 @@ interface MatchHistoryComponentProps extends MatchHistoryProps {
 export default function MatchHistory({ entries, userIdList = [], oldestFirst = false, viewerId, onReact, onClose }: MatchHistoryComponentProps) {
     const lines = oldestFirst ? entries.slice().reverse() : entries;
     const timelineRef = useRef<HTMLOListElement | null>(null);
+    const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
     // Scroll to the latest entry when it changes: bottom when latest is at the
     // bottom, top when latest is at the top.
@@ -75,18 +77,38 @@ export default function MatchHistory({ entries, userIdList = [], oldestFirst = f
                 <RecapTimeline
                     ref={timelineRef}
                     compact
-                    events={lines.map((entry, i) => ({
-                        id: String(i),
-                        dotColour: playerColourForId(entry.actorId, userIdList),
-                        title: entry.text,
-                        trailing: (
-                            <ReactionRow
-                                reactions={entry.reactions}
-                                viewerId={viewerId}
-                                onReact={onReact && entry.commandId ? (reaction) => onReact(entry.commandId!, reaction) : undefined}
-                            />
-                        ),
-                    }))}
+                    events={lines.map((entry, i) => {
+                        const isExpanded = expandedIndex === i;
+                        const relativeTime = getRelativeTime(entry.createdAt);
+                        return {
+                            id: String(i),
+                            dotColour: playerColourForId(entry.actorId, userIdList),
+                            title: entry.text,
+                            onClick: () => setExpandedIndex(isExpanded ? null : i),
+                            trailing: (
+                                <div className="ag-history-entry-trail">
+                                    <ReactionRow
+                                        reactions={entry.reactions}
+                                        viewerId={viewerId}
+                                        onReact={onReact && entry.commandId ? (reaction) => onReact(entry.commandId!, reaction) : undefined}
+                                    />
+                                    {relativeTime && (
+                                        <div
+                                            className={`ag-history-timestamp ${isExpanded ? 'ag-expanded' : ''}`}
+                                            style={{
+                                                maxHeight: isExpanded ? '100px' : '0',
+                                                overflow: 'hidden',
+                                                transition: 'max-height 0.2s ease-out',
+                                                paddingTop: isExpanded ? '8px' : '0',
+                                            }}
+                                        >
+                                            {relativeTime}
+                                        </div>
+                                    )}
+                                </div>
+                            ),
+                        };
+                    })}
                 />
             )}
         </div>

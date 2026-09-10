@@ -121,7 +121,7 @@ export var GameDataSchema = new Schema<IGameDataDocument> ({
         turnOrder: [String],
         // _id: false — a log line is identified by its position, and giving
         // every one of them an ObjectId only pads the document.
-        history: [{ _id: false, text: String, actorId: String, commandId: String }],
+        history: [{ _id: false, text: String, actorId: String, commandId: String, createdAt: String }],
         commandHistory: [
             Schema.Types.Mixed
             // {

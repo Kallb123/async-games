@@ -39,8 +39,12 @@ export async function runCommand(
     // back to the line it landed on without every game threading its own
     // command id into every history write.
     const linesWritten = gameData.gameState.history.length - historyCountBefore;
+    const now = new Date().toISOString();
     for (let i = 0; i < linesWritten; i++) {
         gameData.gameState.history[i].commandId = command.id;
+        if (!gameData.gameState.history[i].createdAt) {
+            gameData.gameState.history[i].createdAt = now;
+        }
     }
 
     gameData.gameState.commandHistory.push(command);

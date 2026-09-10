@@ -17,6 +17,8 @@ interface RecapTimelineEventBase {
      *  rail — the in-game chat thread's "new messages" line above the first
      *  message that arrived since the panel was last opened. */
     dividerBefore?: React.ReactNode;
+    /** Callback when this entry is clicked. */
+    onClick?: () => void;
 }
 
 /**
@@ -73,7 +75,7 @@ const RecapTimeline = React.forwardRef<HTMLOListElement, RecapTimelineProps>(
                                 <span className="ag-recap-divider-label">{event.dividerBefore}</span>
                             </li>
                         )}
-                        <li className="ag-recap-event">
+                        <li className="ag-recap-event" onClick={event.onClick} style={event.onClick ? { cursor: 'pointer' } : undefined}>
                             {event.marker
                                 ? <span className="ag-recap-marker">{event.marker}</span>
                                 : <span className="ag-recap-dot" style={{ background: event.dotColour }} />}
