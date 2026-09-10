@@ -105,7 +105,7 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
 
   const meta = invite ? metaForGame({ friendlyName: invite.gameFriendlyName }) : undefined;
   const seats = invite?.userList ?? [];
-  const claimedSeats = seats.filter(name => name !== OPEN_SEAT_LABEL);
+  const claimedSeats = seats.filter(seat => seat.name !== OPEN_SEAT_LABEL);
 
   // A code that quietly stopped working is the one thing a host can't explain
   // to the friend still typing it in, so the deadline is on screen from the
@@ -212,8 +212,8 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
             title={invite.sender}
             sub="Host"
           />,
-          ...seats.map((name, i) => (
-            name === OPEN_SEAT_LABEL ? (
+          ...seats.map((seat, i) => (
+            seat.name === OPEN_SEAT_LABEL ? (
               <ListRow
                 key={`seat-${i}`}
                 icon="🪑"
@@ -228,8 +228,8 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
             ) : (
               <ListRow
                 key={`seat-${i}`}
-                icon={<Avatar name={name} size={34} />}
-                title={name}
+                icon={<Avatar name={seat.name} size={34} />}
+                title={seat.name}
               />
             )
           )),

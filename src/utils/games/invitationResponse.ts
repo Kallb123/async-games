@@ -26,9 +26,10 @@ export function invitationToResponse(
     // Zip the resolved names back onto their original positions so the open-seat
     // placeholders don't shift anyone else's name out of alignment (the same
     // hazard §5 of the design doc fixed for userIdListToUsernameList itself).
-    const userList = invite.userIdList.map(entry =>
-        isOpenSeat(entry) ? OPEN_SEAT_LABEL : directory.name(entry.userId)
-    );
+    const userList = invite.userIdList.map(entry => ({
+        name: isOpenSeat(entry) ? OPEN_SEAT_LABEL : directory.name(entry.userId),
+        accepted: entry.inviteAccepted === true
+    }));
 
     return {
         timestamp: invite.timestamp,
