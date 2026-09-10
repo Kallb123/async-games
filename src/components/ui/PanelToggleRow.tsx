@@ -17,7 +17,7 @@ interface PanelToggleRowProps {
  */
 export default function PanelToggleRow({ title, onOpen }: PanelToggleRowProps) {
     return (
-        <button type="button" className="ag-log ag-panel-toggle-row" onClick={onOpen}>
+        <button type="button" className="ag-log ag-panel-head ag-panel-toggle-row" onClick={onOpen}>
             <span className="ag-hand-title">{title}</span>
             <span className="ag-disclosure-chevron" aria-hidden="true">&rsaquo;</span>
         </button>

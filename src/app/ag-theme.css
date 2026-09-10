@@ -2058,12 +2058,10 @@ button.ag-chat-gif { cursor: pointer; }
 .ag-panel-close:hover { color: var(--ag-ink); background: rgba(0, 0, 0, 0.03); }
 
 /* The closed-state row (PanelToggleRow) that stands in for a panel's own
-   PanelHead until it's opened — same `.ag-log` box, same title, just a plain
-   button instead of a flex `<div>` so the whole row is one tap target. */
+   PanelHead until it's opened — same `.ag-log` box and `.ag-panel-head`
+   layout, just a `<button>` in place of a `<div>` so the whole row is one tap
+   target, with the button chrome it needs reset. */
 .ag-panel-toggle-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
     width: 100%;
     border: none;
     background: transparent;
