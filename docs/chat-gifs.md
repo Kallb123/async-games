@@ -794,6 +794,19 @@ its own button, verify its segment against KLIPY's docs directly rather than
 assuming the `gifs`/`stickers`/`clips` pattern — `static-memes` is the
 counter-example on record.
 
+**The file format is `png`, not `jpg`, either.** Fixing the 404 traded it for
+a quieter failure: the route asked for `format_filter=jpg` by analogy with
+the GIF category, KLIPY answered 200 with a full page of real items, and
+`pickFile` found no `jpg` key at any tier of any of them — so every item was
+dropped and the route logged "could not read any of the 24 results the
+provider sent" and showed "unavailable" with nothing wrong upstream at all.
+A meme's `file.<tier>` carries `png` and `webp`; there is no `gif` or `jpg`
+member the way the GIF category's does. `format_filter` is asked for `png`
+now. Both of this section's corrections came from a live response pasted
+back after deploying, not from KLIPY's docs matching this repo's guess on the
+first try — worth remembering next time a category's shape is inferred from
+a sibling's rather than read.
+
 The design question this raises is not "how do we fetch memes" — that part is
 identical to §5 — but **how much of §3–§7 is really about GIFs, versus about
 "a picture chosen from a filtered provider catalogue and sent as an

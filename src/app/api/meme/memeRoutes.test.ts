@@ -25,20 +25,28 @@ import { ANN, get, resetApiRouteStubs, signIn, storedGifCatalogue } from '@/util
 import { GET as searchMemes } from './search/route';
 import type { IMemeSearchResponse } from './search/route';
 
-/** One item in the shape KLIPY's `/static-memes/` category answers with,
- *  `format_filter`ed down to the one format the route asks for. */
+/** One item in the shape KLIPY's `/static-memes/` category answers with —
+ *  `png` and `webp` per tier, never `jpg` (the GIF category's still-frame
+ *  format), and `type: 'static-meme'` rather than `'gif'`. Both are real
+ *  differences confirmed against a live response, not guessed by analogy with
+ *  the GIF category (docs/chat-gifs.md §12). `format_filter`ed down to the one
+ *  format the route asks for — `webp` is included on the fixture's default
+ *  item so a test can prove the route reaches for `png` specifically, not
+ *  merely "whatever this tier has". */
 function klipyMeme(slug: string, overrides: Record<string, unknown> = {}) {
     return {
         id: 9001,
         slug,
         title: 'distracted boyfriend',
-        type: 'meme',
+        type: 'static-meme',
         file: {
             sm: {
-                jpg: { url: `https://static.klipy.com/mm/${slug}/meme.jpg`, width: 300, height: 300, size: 12000 },
+                png: { url: `https://static.klipy.com/mm/${slug}/meme.png`, width: 300, height: 300, size: 12000 },
+                webp: { url: `https://static.klipy.com/mm/${slug}/meme.webp`, width: 300, height: 300, size: 4000 },
             },
             hd: {
-                jpg: { url: `https://static.klipy.com/mm/${slug}/meme-hd.jpg`, width: 900, height: 900, size: 210000 },
+                png: { url: `https://static.klipy.com/mm/${slug}/meme-hd.png`, width: 900, height: 900, size: 210000 },
+                webp: { url: `https://static.klipy.com/mm/${slug}/meme-hd.webp`, width: 900, height: 900, size: 60000 },
             },
         },
         tags: ['relatable'],
@@ -88,9 +96,11 @@ describe('GET /api/meme/search', () => {
             provider: 'klipy-meme',
             mediaId: 'abc123',
             // A meme has no separate still frame — the same image serves both,
-            // unlike a GIF's animated file plus its jpg preview.
-            url: 'https://static.klipy.com/mm/abc123/meme.jpg',
-            stillUrl: 'https://static.klipy.com/mm/abc123/meme.jpg',
+            // unlike a GIF's animated file plus its jpg preview. `.png`, not
+            // `.webp`: the fixture's item carries both at this tier, and this
+            // proves the route reaches for the format it actually asked for.
+            url: 'https://static.klipy.com/mm/abc123/meme.png',
+            stillUrl: 'https://static.klipy.com/mm/abc123/meme.png',
             width: 300,
             height: 300,
             alt: 'distracted boyfriend',
@@ -107,7 +117,10 @@ describe('GET /api/meme/search', () => {
         // `static-memes`, not `memes` — verified against a live 404 rather
         // than assumed from the other categories' plural-of-the-noun naming.
         expect(url.origin + url.pathname).toBe('https://api.klipy.com/api/v1/test-key/static-memes/search');
-        expect(url.searchParams.get('format_filter')).toBe('jpg');
+        // `png`, not `jpg` — the GIF route's still-frame format, which the
+        // meme category doesn't carry at all (confirmed by a live response
+        // that silently dropped every result until this was fixed).
+        expect(url.searchParams.get('format_filter')).toBe('png');
         expect(url.searchParams.get('content_filter')).toBe('high');
     });
 
@@ -135,7 +148,21 @@ describe('GET /api/meme/search', () => {
         signIn(ANN);
         vi.spyOn(console, 'error').mockImplementation(() => undefined);
         upstreamServes(klipyMeme('huge', { file: {
-            hd: { jpg: { url: 'https://static.klipy.com/mm/huge/meme-hd.jpg', width: 1280, height: 1280 } },
+            hd: { png: { url: 'https://static.klipy.com/mm/huge/meme-hd.png', width: 1280, height: 1280 } },
+        } }));
+
+        const body = await bodyOf(await searchFor('cat'));
+
+        expect(body.results).toEqual([]);
+    });
+
+    it('drops an item that only carries webp, not the png format asked for', async () => {
+        signIn(ANN);
+        vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        // The exact failure mode this route shipped with: an item KLIPY
+        // genuinely answered with, in a format `pickFile` isn't looking for.
+        upstreamServes(klipyMeme('webp-only', { file: {
+            sm: { webp: { url: 'https://static.klipy.com/mm/webp-only/meme.webp', width: 300, height: 300 } },
         } }));
 
         const body = await bodyOf(await searchFor('cat'));

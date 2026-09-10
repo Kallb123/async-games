@@ -31,12 +31,20 @@ const MEME_SEARCH_WINDOW_MS = 5 * 60_000;
 /**
  * The formats we ask for, and the only one we render.
  *
+ * `png`, not `jpg` — the meme category's files come as `png`/`webp` per tier,
+ * unlike the GIF category's `gif`/`jpg` (confirmed against a live response
+ * after asking for `jpg` silently dropped every result: KLIPY answered, but
+ * every item's `file.<tier>` had no `jpg` key for `pickFile` to find, so
+ * `toAttachment` returned `null` for all of them). `webp` is the smaller file
+ * and is not asked for, matching the GIF route's own "no variant we don't
+ * render" rule — a static PNG is plenty small for a meme.
+ *
  * A meme is a static image — the "image button" beside the GIF one, not a
- * second animated picker — so only `jpg` is requested. There is no still
- * frame distinct from the full image the way an animated GIF has one; the
- * same file is used for both `url` and `stillUrl` below.
+ * second animated picker — so one format is enough. There is no still frame
+ * distinct from the full image the way an animated GIF has one; the same
+ * file is used for both `url` and `stillUrl` below.
  */
-const MEME_FORMATS = ['jpg'] as const;
+const MEME_FORMATS = ['png'] as const;
 
 /**
  * One of the provider's meme items as an attachment, or `null` if it isn't
@@ -48,7 +56,7 @@ const MEME_FORMATS = ['jpg'] as const;
  * `ChatGif` already treats "both frames the same size" as the ordinary case.
  */
 function toAttachment(item: KlipyItem): IChatAttachment | null {
-    const image = pickFile(item, 'jpg');
+    const image = pickFile(item, 'png');
     return normaliseAttachment({
         provider: 'klipy-meme',
         mediaId: item?.slug,
