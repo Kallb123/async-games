@@ -28,7 +28,8 @@ export function invitationToResponse(
     // hazard §5 of the design doc fixed for userIdListToUsernameList itself).
     const userList = invite.userIdList.map(entry => ({
         name: isOpenSeat(entry) ? OPEN_SEAT_LABEL : directory.name(entry.userId),
-        accepted: entry.inviteAccepted === true
+        accepted: entry.inviteAccepted === true,
+        userId: isOpenSeat(entry) ? undefined : entry.userId
     }));
 
     return {
