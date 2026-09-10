@@ -1,5 +1,6 @@
 'use client'
 
+import { useAuth } from "@clerk/nextjs";
 import { IInvitationResponse } from "@/utils/mongodb/InvitationData";
 import moment from 'moment';
 import { useToast } from "@/components/ToastContext";
@@ -17,6 +18,7 @@ interface IncomingInviteListProps extends RefreshableState {
 }
 
 export default function IncomingInviteList({ invites, isLoading, isRefreshing, onChanged }: IncomingInviteListProps) {
+    const { userId } = useAuth();
     const { showToast } = useToast();
     const enterStartedGame = useEnterStartedGame();
 
@@ -52,6 +54,9 @@ export default function IncomingInviteList({ invites, isLoading, isRefreshing, o
         >
             {invites.map((invite) => {
                 const meta = metaForGame({ friendlyName: invite.gameFriendlyName });
+                const currentUserInvite = userId ? invite.userList.find(user => user.userId === userId) : undefined;
+                const isAccepted = currentUserInvite?.accepted === true;
+
                 return (
                     <div key={invite.inviteId} className="ag-list-row">
                         <div className="ag-avatar-stack">
@@ -69,8 +74,9 @@ export default function IncomingInviteList({ invites, isLoading, isRefreshing, o
                             type="button"
                             className="ag-pill-action ag-pill-action--accept"
                             onClick={() => handleAccept(invite.inviteId)}
+                            disabled={isAccepted}
                         >
-                            Accept
+                            {isAccepted ? '✓' : 'Accept'}
                         </button>
                     </div>
                 );

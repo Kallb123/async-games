@@ -91,7 +91,7 @@ export interface IInvitationResponse {
     // lobby's seat list is drawn from the same field, so it goes on every
     // entry rather than as a side list that could drift out of alignment
     // with an open-seat placeholder.
-    userList: { name: string, accepted: boolean }[],
+    userList: { name: string, accepted: boolean, userId?: string }[],
     timestamp: string,
     gameFriendlyName: string,
     // Present only on an open, join-by-code lobby (see IInvitationData.joinCode).
