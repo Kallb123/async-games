@@ -940,6 +940,18 @@ a.ag-list-row, a.ag-list-row-main {
 }
 .ag-banner-dismiss:hover { opacity: 1; }
 
+/* ---- Toast notifications ---- */
+/* Fixed to the viewport rather than scrolling with the page. Positioned above
+   the bottom banner, accounting for its height. Bootstrap's toast container
+   defaults to position: absolute, so this overrides it to be fixed and stay put
+   while scrolling. z-index 1100 is above modals (1050) and the banner (1030). */
+.ag-toast-container {
+    position: fixed !important;
+    bottom: var(--ag-banner-height) !important;
+    right: 12px !important;
+    z-index: 1100 !important;
+}
+
 /* ---- Sticky action footer (setup) ---- */
 /* Sits above the bottom banner rather than under it — a sticky footer parks
    itself at the bottom of the viewport, which is exactly where the banner is
