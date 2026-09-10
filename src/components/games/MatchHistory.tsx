@@ -56,7 +56,7 @@ export default function MatchHistory({ entries, userIdList = [], oldestFirst = f
     // bottom, top when latest is at the top.
     useLayoutEffect(() => {
         if (timelineRef.current) {
-            const targetScrollTop = oldestFirst ? 0 : timelineRef.current.scrollHeight;
+            const targetScrollTop = oldestFirst ? timelineRef.current.scrollHeight : 0;
             timelineRef.current.scrollTop = targetScrollTop;
         }
     }, [entries, oldestFirst]);
