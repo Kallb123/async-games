@@ -88,19 +88,14 @@ export default function MatchHistory({ entries, userIdList = [], oldestFirst = f
                             title: entry.text,
                             onClick: () => setExpandedIndex(isExpanded ? null : i),
                             trailing: (
-                                <div className="ag-history-entry-trail">
-                                    <ReactionRow
-                                        reactions={entry.reactions}
-                                        viewerId={viewerId}
-                                        onReact={onReact && entry.commandId ? (reaction) => onReact(entry.commandId!, reaction) : undefined}
-                                    />
-                                    {relativeTime && (
-                                        <div className={`ag-history-timestamp ${isExpanded ? 'ag-history-timestamp--expanded' : ''}`}>
-                                            {relativeTime}
-                                        </div>
-                                    )}
-                                </div>
+                                <ReactionRow
+                                    reactions={entry.reactions}
+                                    viewerId={viewerId}
+                                    onReact={onReact && entry.commandId ? (reaction) => onReact(entry.commandId!, reaction) : undefined}
+                                />
                             ),
+                            timestamp: relativeTime,
+                            timestampExpanded: isExpanded,
                         };
                     })}
                 />

@@ -3274,20 +3274,19 @@ button.ag-chat-gif { cursor: pointer; }
 
 .ag-recap-event-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 
-.ag-history-entry-trail { display: flex; flex-direction: column; gap: 4px; }
-
-.ag-history-timestamp {
+.ag-recap-event-timestamp {
     font: 500 11px var(--ag-font);
     color: var(--ag-ink-soft);
     max-height: 0;
     overflow: hidden;
-    transition: max-height 0.2s ease-out, padding-top 0.2s ease-out;
-    padding-top: 0;
+    transition: max-height 0.2s ease-out, margin-top 0.2s ease-out;
+    margin-top: 0;
+    margin-left: 0;
 }
 
-.ag-history-timestamp--expanded {
-    max-height: 100px;
-    padding-top: 8px;
+.ag-recap-event-timestamp--expanded {
+    max-height: 50px;
+    margin-top: 6px;
 }
 
 /* Tighter scale for the in-game match history (`.ag-log`), where the timeline

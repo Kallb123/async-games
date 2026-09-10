@@ -19,6 +19,10 @@ interface RecapTimelineEventBase {
     dividerBefore?: React.ReactNode;
     /** Callback when this entry is clicked. */
     onClick?: () => void;
+    /** Optional expandable timestamp rendered below the entry on the left. */
+    timestamp?: React.ReactNode;
+    /** Whether the timestamp is expanded (for styling purposes). */
+    timestampExpanded?: boolean;
 }
 
 /**
@@ -79,12 +83,19 @@ const RecapTimeline = React.forwardRef<HTMLOListElement, RecapTimelineProps>(
                             {event.marker
                                 ? <span className="ag-recap-marker">{event.marker}</span>
                                 : <span className="ag-recap-dot" style={{ background: event.dotColour }} />}
-                            <div className="ag-recap-event-card">
-                                <div className="ag-recap-event-row">
-                                    <div className="ag-recap-event-title">{event.title}</div>
-                                    {event.trailing}
+                            <div>
+                                <div className="ag-recap-event-card">
+                                    <div className="ag-recap-event-row">
+                                        <div className="ag-recap-event-title">{event.title}</div>
+                                        {event.trailing}
+                                    </div>
+                                    {event.detail && <div className="ag-recap-event-detail">{event.detail}</div>}
                                 </div>
-                                {event.detail && <div className="ag-recap-event-detail">{event.detail}</div>}
+                                {event.timestamp && (
+                                    <div className={`ag-recap-event-timestamp ${event.timestampExpanded ? 'ag-recap-event-timestamp--expanded' : ''}`}>
+                                        {event.timestamp}
+                                    </div>
+                                )}
                             </div>
                         </li>
                     </React.Fragment>
