@@ -1,5 +1,6 @@
 'use client'
 import React from 'react';
+import BoardZoom from '@/components/ui/BoardZoom';
 import { BOARD_TOPOLOGY, HEX_POSITIONS } from '@/games/SettlementsAndCities/board';
 import type { SAC_Resource } from '@/games/SettlementsAndCities/board';
 import type { ISACHexResponse, ISACVertexResponse, ISACEdgeResponse, ISACHarborResponse } from '@/games/SettlementsAndCities/apiModels';
@@ -116,7 +117,8 @@ export default function SettlementsAndCitiesBoard({
                 {placementPrompt && (
                     <div className="ag-board-overlay"><div>{placementPrompt}</div></div>
                 )}
-                <svg viewBox={`0 0 ${SVG_W} ${SVG_H}`} width={SVG_W} height={SVG_H}>
+                <BoardZoom zoomWidth="240%">
+                    <svg viewBox={`0 0 ${SVG_W} ${SVG_H}`} width={SVG_W} height={SVG_H}>
                 {/* ── Hex tiles ── */}
                 {hexes.map((hex, hexId) => {
                 const [cx, cy] = hexCenterPx(hexId);
@@ -345,7 +347,8 @@ export default function SettlementsAndCitiesBoard({
 
                 return <g key={vertexId}>{parts}</g>;
             })}
-                </svg>
+                    </svg>
+                </BoardZoom>
             </div>
             <div className="ag-reslegend">
                 {RESOURCE_TYPES.map((resource) => (
