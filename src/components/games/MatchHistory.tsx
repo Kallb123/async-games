@@ -1,10 +1,12 @@
 'use client'
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import PanelHead from "@/components/ui/PanelHead";
 import RecapTimeline from "@/components/ui/RecapTimeline";
 import ReactionRow from "@/components/ui/ReactionRow";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { IHistoryEntryResponse } from "@/utils/apiModels/GameDataApi";
+import { formatRelativeTime } from "@/utils/ui/time";
+import { useNowToTheMinute } from "@/utils/hooks/useNow";
 
 /** What a game hands `GameShell`'s `log` prop. */
 export interface MatchHistoryProps {
@@ -51,6 +53,8 @@ interface MatchHistoryComponentProps extends MatchHistoryProps {
 export default function MatchHistory({ entries, userIdList = [], oldestFirst = false, viewerId, onReact, onClose }: MatchHistoryComponentProps) {
     const lines = oldestFirst ? entries.slice().reverse() : entries;
     const timelineRef = useRef<HTMLOListElement | null>(null);
+    const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+    const now = useNowToTheMinute();
 
     // Scroll to the latest entry when it changes: bottom when latest is at the
     // bottom, top when latest is at the top.
@@ -75,18 +79,25 @@ export default function MatchHistory({ entries, userIdList = [], oldestFirst = f
                 <RecapTimeline
                     ref={timelineRef}
                     compact
-                    events={lines.map((entry, i) => ({
-                        id: String(i),
-                        dotColour: playerColourForId(entry.actorId, userIdList),
-                        title: entry.text,
-                        trailing: (
-                            <ReactionRow
-                                reactions={entry.reactions}
-                                viewerId={viewerId}
-                                onReact={onReact && entry.commandId ? (reaction) => onReact(entry.commandId!, reaction) : undefined}
-                            />
-                        ),
-                    }))}
+                    events={lines.map((entry, i) => {
+                        const isExpanded = expandedIndex === i;
+                        const relativeTime = entry.createdAt ? formatRelativeTime(entry.createdAt, now) : null;
+                        return {
+                            id: String(i),
+                            dotColour: playerColourForId(entry.actorId, userIdList),
+                            title: entry.text,
+                            onClick: () => setExpandedIndex(isExpanded ? null : i),
+                            trailing: (
+                                <ReactionRow
+                                    reactions={entry.reactions}
+                                    viewerId={viewerId}
+                                    onReact={onReact && entry.commandId ? (reaction) => onReact(entry.commandId!, reaction) : undefined}
+                                />
+                            ),
+                            timestamp: relativeTime,
+                            timestampExpanded: isExpanded,
+                        };
+                    })}
                 />
             )}
         </div>

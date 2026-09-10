@@ -30,6 +30,11 @@ export interface IHistoryEntry {
      * the match history log knows which line to show one against.
      */
     commandId?: string;
+    /**
+     * When this line was added to the history. ISO 8601 string. Omit for
+     * entries from old games predating this field.
+     */
+    createdAt?: string;
 }
 
 /**
@@ -85,6 +90,7 @@ export function resolveHistory(
         const resolved: IHistoryEntry = { text };
         if (entry.actorId) resolved.actorId = entry.actorId;
         if (entry.commandId) resolved.commandId = entry.commandId;
+        if (entry.createdAt) resolved.createdAt = entry.createdAt;
         return resolved;
     });
 }
