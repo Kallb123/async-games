@@ -261,6 +261,15 @@ export default function GameChat({ messages, isLoading, isRefreshing, sending, s
             {openPicker && (
                 <div ref={pickerRef}>
                     <AttachmentPicker
+                        // Keyed on the kind, not just present because one is
+                        // open: without it, switching GIF -> meme (or back)
+                        // via the toggle buttons keeps the same component
+                        // instance mounted, so its search box, results and
+                        // "unavailable" state from the *other* kind would
+                        // show through until the next debounced fetch landed.
+                        // A fresh key forces the remount a close-then-reopen
+                        // already gets for free.
+                        key={openPicker}
                         kind={openPicker}
                         onSelect={sendAttachment}
                         onClose={() => setOpenPicker(null)}
@@ -275,7 +284,25 @@ export default function GameChat({ messages, isLoading, isRefreshing, sending, s
                         key={kind}
                         type="button"
                         className={`ag-btn ag-btn--ghost ag-chat-attach-toggle${openPicker === kind ? ' ag-chat-attach-toggle--active' : ''}`}
-                        onClick={() => setOpenPicker(open => open === kind ? null : kind)}
+                        // Disabled while a send is in flight, not just while
+                        // this button's own picker is showing: `sending` is
+                        // true for the whole of any send, text or attachment
+                        // (useGameChat), so this is what stops a tap on the
+                        // *other* button from swapping the panel out from
+                        // under an in-flight send — sendAttachment's own
+                        // completion handlers act on whichever picker happens
+                        // to be open when the promise settles, so the panel
+                        // must not be free to change underneath it.
+                        disabled={sending}
+                        onClick={() => {
+                            setOpenPicker(open => open === kind ? null : kind);
+                            // A failure banner from a previous send must not
+                            // outlive the picker it was about — otherwise
+                            // reopening (or switching kind) after any failed
+                            // send in the session shows a stale "Couldn't
+                            // send that…" before anything new has been tapped.
+                            setAttachSendFailed(false);
+                        }}
                         aria-expanded={openPicker === kind}
                         aria-label={openPicker === kind ? closeLabel : openLabel}
                     >

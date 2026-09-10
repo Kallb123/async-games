@@ -547,12 +547,14 @@ What's genuinely new is two pieces, and both earn it by having two callers:
   result is *selected* rather than played, so a reduced-motion player gets the
   still frame with no play button in the picker and the thread's own tap-to-play
   when they want to watch it.
-- **`src/components/games/GifPicker.tsx`** — the search field and result grid,
-  opened from a button in `ag-chat-composer`. Panel chrome comes from the
-  `ag-*` classes the composer and `ag-log` already use; the search field is
-  `ag-input`, the results a grid, the trigger an `ag-btn ag-btn--ghost`. New
-  `ag-theme.css` classes for the grid and the row's GIF box, using the existing
-  tokens — no inline hex.
+- **`src/components/games/AttachmentPicker.tsx`** — the search field and
+  result grid, opened from a button in `ag-chat-composer`. (Named for what it
+  is now that §12 gave it a `kind: 'gif' | 'meme'` prop rather than
+  `GifPicker`, its original name — the panel itself was never really about
+  GIFs specifically.) Panel chrome comes from the `ag-*` classes the composer
+  and `ag-log` already use; the search field is `ag-input`, the results a
+  grid, the trigger an `ag-btn ag-btn--ghost`. New `ag-theme.css` classes for
+  the grid and the row's box, using the existing tokens — no inline hex.
 
   Three things it deliberately doesn't have. It **fetches for itself** rather
   than taking its data from `GameShell`'s `useGameChat`: the reason the thread's
