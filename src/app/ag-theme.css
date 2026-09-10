@@ -2057,6 +2057,20 @@ button.ag-chat-gif { cursor: pointer; }
 }
 .ag-panel-close:hover { color: var(--ag-ink); background: rgba(0, 0, 0, 0.03); }
 
+/* The closed-state row (PanelToggleRow) that stands in for a panel's own
+   PanelHead until it's opened — same `.ag-log` box and `.ag-panel-head`
+   layout, just a `<button>` in place of a `<div>` so the whole row is one tap
+   target, with the button chrome it needs reset. */
+.ag-panel-toggle-row {
+    width: 100%;
+    border: none;
+    background: transparent;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.ag-panel-toggle-row:hover .ag-hand-title { color: var(--ag-ink); }
+
 /* The chat thread and turn-history panel both open at the bottom of the page
    and can be short, so it's easy to miss even once scrolled into view. A
    background pulse on open marks where it landed — a soft terracotta wash
