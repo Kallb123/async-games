@@ -56,11 +56,12 @@ export default function MatchHistory({ entries, userIdList = [], oldestFirst = f
         listRef.current = node;
     }, []);
 
-    // When displaying latest at bottom, scroll to the bottom when entries change.
+    // Scroll to the latest entry when it changes: bottom when latest is at the
+    // bottom, top when latest is at the top.
     useLayoutEffect(() => {
         const node = listRef.current;
-        if (node && !oldestFirst) {
-            node.scrollTop = node.scrollHeight;
+        if (node) {
+            node.scrollTop = oldestFirst ? 0 : node.scrollHeight;
         }
     }, [entries, oldestFirst]);
 
