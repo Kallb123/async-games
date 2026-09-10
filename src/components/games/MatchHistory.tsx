@@ -1,3 +1,5 @@
+'use client'
+import { useLayoutEffect, useRef } from 'react';
 import PanelHead from "@/components/ui/PanelHead";
 import RecapTimeline from "@/components/ui/RecapTimeline";
 import ReactionRow from "@/components/ui/ReactionRow";
@@ -48,6 +50,16 @@ interface MatchHistoryComponentProps extends MatchHistoryProps {
 // fully read-only row.
 export default function MatchHistory({ entries, userIdList = [], oldestFirst = false, viewerId, onReact, onClose }: MatchHistoryComponentProps) {
     const lines = oldestFirst ? entries.slice().reverse() : entries;
+    const timelineRef = useRef<HTMLOListElement | null>(null);
+
+    // Scroll to the latest entry when it changes: bottom when latest is at the
+    // bottom, top when latest is at the top.
+    useLayoutEffect(() => {
+        if (timelineRef.current) {
+            const targetScrollTop = oldestFirst ? timelineRef.current.scrollHeight : 0;
+            timelineRef.current.scrollTop = targetScrollTop;
+        }
+    }, [entries, oldestFirst]);
 
     return (
         <div className="ag-log ag-panel-open-pulse">
@@ -61,6 +73,7 @@ export default function MatchHistory({ entries, userIdList = [], oldestFirst = f
                 <div className="ag-log-empty">No moves yet.</div>
             ) : (
                 <RecapTimeline
+                    ref={timelineRef}
                     compact
                     events={lines.map((entry, i) => ({
                         id: String(i),
