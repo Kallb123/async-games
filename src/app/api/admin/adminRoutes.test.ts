@@ -1,7 +1,8 @@
-// The admin tooling's two routes (docs/admin-tools.md), and mostly the gate on
-// them: one hands out a list of accounts, the other hands out a way *into* one,
-// so who may call them and whose account may be minted for are the two things
-// worth holding down with tests.
+// The admin tooling's three routes (docs/admin-tools.md), and mostly the gate
+// on them: one hands out a list of accounts, another hands out a way *into*
+// one, and the third hands out an aggregate count of registered devices — so
+// who may call them, whose account may be minted for, and that the aggregate
+// never carries a user id are the things worth holding down with tests.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -12,6 +13,7 @@ vi.mock('@/utils/rateLimit', async () => (await import('@/utils/testing/apiRoute
 
 import { GET } from './guests/route';
 import { POST } from './guests/resume/route';
+import { GET as getAnalytics } from './analytics/route';
 import {
     ANN,
     BOB,
@@ -27,6 +29,7 @@ import { InvitationModel } from '@/utils/mongodb/InvitationData';
 import { OPEN_SEAT_ID } from '@/utils/games/lobby';
 import { GUEST_RESUME_TICKET_TTL_SECONDS } from '@/utils/users/guest';
 import type { IAdminGuestResumeResponse, IAdminGuestsResponse } from '@/utils/users/adminGuests';
+import type { IAdminAnalyticsResponse } from '@/utils/users/adminAnalytics';
 
 const ADMIN = { id: 'user_admin', username: 'admin', publicMetadata: { unlocked: true, admin: true } };
 const DAVE = {
@@ -187,5 +190,96 @@ describe('POST /api/admin/guests/resume', () => {
         expect(body.resumeUrl).toBe(`https://async.games/join?resume=ticket_${DAVE.id}_1`);
         expect(body.name).toBe('Dave');
         expect(Date.parse(body.expiresAt)).toBeGreaterThan(Date.now());
+    });
+});
+
+describe('GET /api/admin/analytics', () => {
+    const getDeviceAnalytics = async () => {
+        const response = await getAnalytics(get('/api/admin/analytics'));
+        return { status: response.status, body: await response.json() as IAdminAnalyticsResponse };
+    };
+
+    it('refuses a caller who is not signed in', async () => {
+        expect((await getDeviceAnalytics()).status).toBe(403);
+    });
+
+    it('refuses a signed-in player who is not an admin', async () => {
+        signIn({ ...ANN, publicMetadata: { unlocked: true } });
+
+        expect((await getDeviceAnalytics()).status).toBe(403);
+    });
+
+    it('tallies registered devices across every account, by type/OS/browser', async () => {
+        signIn(ADMIN);
+        stubClerkUsers(
+            // Two devices on one account, one on the other, and an account
+            // with none at all — which shouldn't count as a third "with
+            // devices" or contribute an "Unknown" row of its own.
+            {
+                ...DAVE,
+                privateMetadata: {
+                    notificationTokens: [
+                        { token: 'tok_1', timestamp: '2026-09-01T00:00:00.000Z', device: { type: 'mobile', os: 'iPhone', browser: 'Safari' } },
+                        { token: 'tok_2', timestamp: '2026-09-01T00:00:00.000Z', device: { type: 'desktop', os: 'Windows', browser: 'Chrome' } },
+                    ],
+                },
+            },
+            {
+                ...SAM,
+                privateMetadata: {
+                    notificationTokens: [
+                        { token: 'tok_3', timestamp: '2026-09-01T00:00:00.000Z', device: { type: 'mobile', os: 'iPhone', browser: 'Safari' } },
+                    ],
+                },
+            },
+            ANN,
+        );
+
+        const { status, body } = await getDeviceAnalytics();
+
+        expect(status).toBe(200);
+        // ADMIN is a Clerk user too (signIn stubs it in), so the walk counts
+        // four accounts even though only two of them have a device.
+        expect(body.scannedUsers).toBe(4);
+        expect(body.usersWithDevices).toBe(2);
+        expect(body.totalDevices).toBe(3);
+        expect(body.byType).toEqual([{ label: 'Mobile', count: 2 }, { label: 'Desktop', count: 1 }]);
+        expect(body.byOs).toEqual([{ label: 'iPhone', count: 2 }, { label: 'Windows', count: 1 }]);
+        expect(body.byBrowser).toEqual([{ label: 'Safari', count: 2 }, { label: 'Chrome', count: 1 }]);
+    });
+
+    it('folds a device with no recorded make into "Unknown" rather than dropping it', async () => {
+        // A registration stored before device tracking existed has no
+        // `device` field at all (see deviceInfo.ts) — it's still a device
+        // worth counting, just not one that can be typed or named.
+        signIn(ADMIN);
+        stubClerkUsers({
+            ...DAVE,
+            privateMetadata: { notificationTokens: [{ token: 'tok_1', timestamp: '2026-09-01T00:00:00.000Z' }] },
+        });
+
+        const { body } = await getDeviceAnalytics();
+
+        expect(body.totalDevices).toBe(1);
+        expect(body.byType).toEqual([{ label: 'Unknown', count: 1 }]);
+        expect(body.byOs).toEqual([{ label: 'Unknown', count: 1 }]);
+        expect(body.byBrowser).toEqual([{ label: 'Unknown', count: 1 }]);
+    });
+
+    it('carries no per-account identifier in the response', async () => {
+        // This is an aggregate, not a per-guest row like the guest list above —
+        // nothing in it should be enough to point back at one account.
+        signIn(ADMIN);
+        stubClerkUsers({
+            ...DAVE,
+            privateMetadata: {
+                notificationTokens: [{ token: 'tok_1', timestamp: '2026-09-01T00:00:00.000Z', device: { type: 'mobile', os: 'iPhone', browser: 'Safari' } }],
+            },
+        });
+
+        const { body } = await getDeviceAnalytics();
+
+        expect(JSON.stringify(body)).not.toContain(DAVE.id);
+        expect(JSON.stringify(body)).not.toContain('tok_1');
     });
 });

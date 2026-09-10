@@ -113,9 +113,9 @@ tablet, operating system, and browser — from `GET /api/admin/analytics`.
   rarely, so it is cheaper to walk the instance fresh on every request
   (`buildDeviceAnalytics`, `src/utils/users/adminAnalytics.ts`) than to keep a
   second copy of the same counts up to date somewhere. The rate limit (30
-  requests an hour, mirroring the guest list's) exists for the same reason the
-  guest list's does: to bound how often that walk runs, not because the
-  numbers themselves are sensitive.
+  requests per 10 minutes, the same window the guest list's uses) exists for
+  the same reason the guest list's does: to bound how often that walk runs,
+  not because the numbers themselves are sensitive.
 - **Counts devices, not people.** One player signed in on a phone and a laptop
   is two rows in every breakdown. `usersWithDevices`/`scannedUsers` are the
   only per-account figures, there to show how much of the instance the device

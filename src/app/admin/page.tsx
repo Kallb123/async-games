@@ -9,8 +9,9 @@ import { useAuthGuard } from '@/utils/hooks/useAuthGuard';
 import { isAdmin } from '@/utils/ui/players';
 
 /**
- * Support tooling for whoever runs the app (docs/admin-tools.md) — today one
- * job, recovering a guest account whose resume link is gone.
+ * Support tooling for whoever runs the app (docs/admin-tools.md): recovering
+ * a guest account whose resume link is gone, and a look at what platforms
+ * players are on.
  *
  * The gate here is only what the screen shows: `/api/admin/*` checks
  * `publicMetadata.admin` for itself on every request (`requireAdmin`), so

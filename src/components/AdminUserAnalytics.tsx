@@ -2,6 +2,7 @@
 
 import ListRow from '@/components/ui/ListRow';
 import ListSection from '@/components/ui/ListSection';
+import RefreshAction from '@/components/ui/RefreshAction';
 import Section from '@/components/ui/Section';
 import Stat from '@/components/ui/Stat';
 import { useRefreshableData } from '@/utils/hooks/useRefreshableData';
@@ -44,16 +45,22 @@ function Breakdown({ label, entries, totalDevices, isRefreshing }: {
  * sync anywhere, since this is a screen an admin opens rarely.
  */
 export default function AdminUserAnalytics() {
-    const { data, isLoading, isRefreshing, status, refresh } = useRefreshableData<IAdminAnalyticsResponse>('/api/admin/analytics');
+    const { data, isLoading, isRefreshing, refresh } = useRefreshableData<IAdminAnalyticsResponse>('/api/admin/analytics');
+    // `data` only ever updates on a successful response (see useRefreshableData),
+    // so once loading has settled with nothing in it, every attempt so far —
+    // the first load, and any refresh since — has failed. A later failed
+    // refresh over data that *did* load keeps showing it rather than flashing
+    // this instead, the same as the guest list does.
+    const failedToLoad = !isLoading && data === null;
 
     return (
         <>
             <Section
                 label="User analytics"
                 isLoading={isLoading}
-                action={<button type="button" className="ag-section-action" onClick={refresh}>Refresh</button>}
+                action={<RefreshAction onClick={refresh} />}
             >
-                {status !== null && status >= 400 ? (
+                {failedToLoad ? (
                     <div className="ag-empty">Couldn&apos;t load the analytics.</div>
                 ) : (
                     <>
@@ -70,7 +77,7 @@ export default function AdminUserAnalytics() {
                 )}
             </Section>
 
-            {data && status !== null && status < 400 && (
+            {data && (
                 <>
                     <Breakdown label="Desktop vs. mobile" entries={data.byType} totalDevices={data.totalDevices} isRefreshing={isRefreshing} />
                     <Breakdown label="Operating system" entries={data.byOs} totalDevices={data.totalDevices} isRefreshing={isRefreshing} />

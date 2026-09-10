@@ -5,6 +5,7 @@ import ActionButton from '@/components/ui/ActionButton';
 import Avatar from '@/components/ui/Avatar';
 import ListRow from '@/components/ui/ListRow';
 import ListSection from '@/components/ui/ListSection';
+import RefreshAction from '@/components/ui/RefreshAction';
 import { useToast } from '@/components/ToastContext';
 import { useRefreshableData } from '@/utils/hooks/useRefreshableData';
 import { useNowToTheMinute } from '@/utils/hooks/useNow';
@@ -69,7 +70,7 @@ export default function AdminGuestRecovery() {
     const [links, setLinks] = useState<Record<string, IAdminGuestResumeResponse>>({});
     const [minting, setMinting] = useState<string | null>(null);
 
-    const { data, isLoading, isRefreshing, status, refresh } = useRefreshableData<IAdminGuestsResponse>(
+    const { data, isLoading, isRefreshing, refresh } = useRefreshableData<IAdminGuestsResponse>(
         `/api/admin/guests?q=${encodeURIComponent(term)}`
     );
 
@@ -139,12 +140,14 @@ export default function AdminGuestRecovery() {
                 isLoading={isLoading}
                 isRefreshing={isRefreshing}
                 skeletonIcon="avatar"
-                action={
-                    <button type="button" className="ag-section-action" onClick={refresh}>Refresh</button>
-                }
+                action={<RefreshAction onClick={refresh} />}
                 empty={
                     <div className="ag-empty">
-                        {status !== null && status >= 400
+                        {/* `data` only turns non-null on a successful response (see
+                            useRefreshableData), so this also catches a network
+                            failure that never sets an HTTP status at all — not just
+                            a completed 4xx/5xx. */}
+                        {data === null
                             ? "Couldn't load the guest list."
                             : term
                                 ? `No guest matches “${term}”.`
