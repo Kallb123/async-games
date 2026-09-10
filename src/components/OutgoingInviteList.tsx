@@ -42,7 +42,17 @@ export default function OutgoingInviteList({ invites, isLoading, isRefreshing, o
                 const summary = (
                     <>
                         <div style={{ font: "600 13px/1.35 var(--ag-font)" }}>
-                            Invite to <strong style={{ fontWeight: 800 }}>{invite.userList.join(", ")}</strong>
+                            Invite to{" "}
+                            <strong style={{ fontWeight: 800 }}>
+                                {invite.userList.map((seat, i) => (
+                                    <span key={i}>
+                                        {i > 0 && ", "}
+                                        <span style={seat.accepted ? { color: "var(--ag-green)" } : undefined}>
+                                            {seat.name}
+                                        </span>
+                                    </span>
+                                ))}
+                            </strong>
                             <span style={{ color: "var(--ag-ink-soft)", fontWeight: 500 }}> · {invite.gameFriendlyName}</span>
                         </div>
                         <div className="ag-list-row-sub">

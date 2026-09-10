@@ -86,7 +86,12 @@ export interface IInvitationResponse {
     inviteId: `${string}-${string}-${string}-${string}-${string}`,
     sender: string,
     senderImageUrl: string | null,
-    userList: string[],
+    // Whether each seat has accepted travels with its name here — the
+    // "Awaiting response" row is what a host actually needs it for, but the
+    // lobby's seat list is drawn from the same field, so it goes on every
+    // entry rather than as a side list that could drift out of alignment
+    // with an open-seat placeholder.
+    userList: { name: string, accepted: boolean }[],
     timestamp: string,
     gameFriendlyName: string,
     // Present only on an open, join-by-code lobby (see IInvitationData.joinCode).
