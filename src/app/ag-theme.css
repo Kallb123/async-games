@@ -3274,6 +3274,14 @@ button.ag-chat-gif { cursor: pointer; }
 
 .ag-recap-event-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 
+.ag-history-entry-trail { display: flex; flex-direction: column; gap: 4px; }
+
+.ag-history-timestamp {
+    font: 500 11px var(--ag-font);
+    color: var(--ag-ink-soft);
+    transition: max-height 0.2s ease-out, padding-top 0.2s ease-out;
+}
+
 /* Tighter scale for the in-game match history (`.ag-log`), where the timeline
    is a reference strip rather than the whole screen. */
 .ag-recap-timeline--compact { gap: 10px; max-height: 280px; overflow-y: auto; }
