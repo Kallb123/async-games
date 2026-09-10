@@ -6,6 +6,7 @@ import GameOptionsMenu, { GameOption } from '@/components/ui/GameOptionsMenu';
 import DevGameMenu from '@/components/ui/DevGameMenu';
 import MatchHistory, { MatchHistoryProps } from '@/components/games/MatchHistory';
 import GameChat from '@/components/games/GameChat';
+import PanelToggleRow from '@/components/ui/PanelToggleRow';
 import { useGameChat } from '@/utils/hooks/useGameChat';
 import { useScrollIntoViewOnOpen } from '@/utils/hooks/useScrollIntoViewOnOpen';
 
@@ -68,6 +69,11 @@ interface GameShellProps {
  * fetch lives here, in `useGameChat`, and not in the panel, because the dot has
  * to know about messages while the panel is shut. A game with fewer than two
  * players passes no `chat`, or a roster too short to talk to, and gets neither.
+ *
+ * Closed, each panel leaves a `PanelToggleRow` in its place at the bottom of
+ * the page instead of nothing — the top-bar toggle still opens it, but a
+ * player scrolled past a tall board has a title to tap down there too, not
+ * just a control back at the top they've already scrolled away from.
  */
 export default function GameShell({ title, subtitle, backHref = '/', options, right, syncing = false, log, chat, className = '', children }: GameShellProps) {
     const [showLog, setShowLog] = useState(false);
@@ -127,12 +133,14 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
                 <DevGameMenu />
             </div>
             {children}
-            {log && showLog && (
+            {log && (showLog ? (
                 <div ref={logPanelRef}>
                     <MatchHistory {...log} onClose={() => setShowLog(false)} />
                 </div>
-            )}
-            {hasChat && showChat && chat && (
+            ) : (
+                <PanelToggleRow title="Match history" onOpen={() => setShowLog(true)} />
+            ))}
+            {hasChat && chat && (showChat ? (
                 <div ref={chatPanelRef}>
                     <GameChat
                         messages={chatState.messages}
@@ -148,7 +156,9 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
                         usernameList={chat.usernameList}
                     />
                 </div>
-            )}
+            ) : (
+                <PanelToggleRow title="Chat" onOpen={() => setShowChat(true)} />
+            ))}
         </div>
     );
 }
