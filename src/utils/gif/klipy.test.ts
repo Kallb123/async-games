@@ -35,10 +35,12 @@ describe('klipyRequest', () => {
 
     it('puts the category between the key and the endpoint, for the meme category too', () => {
         // The meme picker's category (docs/chat-gifs.md §12) — the same
-        // builder, the same key, a different segment.
-        const url = klipyRequest('memes', 'search', { q: 'distracted boyfriend' });
+        // builder, the same key, a different segment. `static-memes`, not
+        // `memes`: KLIPY's own docs name it that way, unlike the plural-of-
+        // the-noun `gifs`/`stickers`/`clips` naming the other categories use.
+        const url = klipyRequest('static-memes', 'search', { q: 'distracted boyfriend' });
 
-        expect(url?.pathname).toBe('/api/v1/test-key/memes/search');
+        expect(url?.pathname).toBe('/api/v1/test-key/static-memes/search');
         expect(url?.searchParams.get('q')).toBe('distracted boyfriend');
     });
 
@@ -106,13 +108,13 @@ describe('registerGifShare', () => {
         expect(url.pathname).toBe('/api/v1/test-key/gifs/share/abc123');
     });
 
-    it('pings the memes category for a klipy-meme ref', async () => {
+    it('pings the static-memes category for a klipy-meme ref', async () => {
         const fetchSpy = upstreamAcceptsPing();
 
         await registerGifShare({ provider: 'klipy-meme', mediaId: 'def456' });
 
         const url = new URL(String(fetchSpy.mock.calls[0][0]));
-        expect(url.pathname).toBe('/api/v1/test-key/memes/share/def456');
+        expect(url.pathname).toBe('/api/v1/test-key/static-memes/share/def456');
     });
 
     it('stays quiet with no key configured', async () => {

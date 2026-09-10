@@ -8,7 +8,7 @@ commits are in — the model and its validators, a chat POST/GET that carries a
 GIF, the thread's rendering of one, the proxied search route, and the picker
 in the composer. A player taps **GIF** beside the message box, searches, and
 taps a result to send it; a line typed first goes under it as a caption. §12
-adds a second button beside it, **IMG**, for KLIPY's `/memes/` category —
+adds a second button beside it, **IMG**, for KLIPY's `/static-memes/` category —
 static images rather than animated ones, through the same design end to end.
 
 The one thing that has moved since is the provider. This was designed and first
@@ -775,11 +775,24 @@ Before each commit: `npm run build`, `npx tsc --noEmit`, `npm run lint`
 ## 12. A second button: memes
 
 KLIPY's platform is more than one content category — `/gifs/` is the one this
-feature was built against, and `/memes/` sits beside it, same key, same
+feature was built against, and `/static-memes/` sits beside it, same key, same
 envelope, same `search`/`trending`/`share` endpoints, different path segment.
 An **IMG** button next to **GIF** proxies that category the same way, for
 static images rather than animated ones — a distracted-boyfriend macro, not a
 looping clip.
+
+**The category segment is `static-memes`, not `memes`.** KLIPY's other
+categories — `gifs`, `stickers`, `clips` — are all a plain plural of the
+noun, and their own public demo apps (`klipy-android-demo-app`,
+`klipy-ios-demo-app`) implement exactly those three as one shared interface
+differing only by that one path segment, with no fourth "meme" variant at
+all. That made `memes` a reasonable-looking guess and the wrong one: it 404s.
+The real segment is only in KLIPY's docs, not in anything this repo could
+verify by pattern-matching the other three categories' source, and it cost a
+live 404 in production to catch. If a future category (stickers, clips) gets
+its own button, verify its segment against KLIPY's docs directly rather than
+assuming the `gifs`/`stickers`/`clips` pattern — `static-memes` is the
+counter-example on record.
 
 The design question this raises is not "how do we fetch memes" — that part is
 identical to §5 — but **how much of §3–§7 is really about GIFs, versus about
@@ -826,9 +839,9 @@ attachment"**. It turns out to be almost none of it:
 
 One thing is genuinely new rather than reused: `registerGifShare`'s share ping
 now has two categories to choose between, so it maps a ref's provider to
-KLIPY's `gifs`/`memes` segment via `SHARE_CATEGORY` in `klipy.ts`, rather than
-refusing every provider but the first the way it did when there was only ever
-one.
+KLIPY's `gifs`/`static-memes` segment via `SHARE_CATEGORY` in `klipy.ts`,
+rather than refusing every provider but the first the way it did when there
+was only ever one.
 
 **Composer wiring.** The two buttons open the same panel shape in the same
 place, so `GameChat` holds one `openPicker: 'gif' | 'meme' | null` slot rather

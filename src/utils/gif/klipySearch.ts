@@ -97,7 +97,7 @@ export function pickFile(item: KlipyItem, format: string): KlipyFile | undefined
  *  in `runProviderSearch` is shared. */
 export interface ProviderSearchConfig {
     /** KLIPY's own category segment — `/api/v1/<key>/<category>/…`. */
-    category: 'gifs' | 'memes';
+    category: 'gifs' | 'static-memes';
     /** Rate-limit key prefix, kept distinct per surface (`gifSearch`,
      *  `memeSearch`, …) so a busy meme picker can't spend the GIF picker's
      *  budget, or the other way round. */

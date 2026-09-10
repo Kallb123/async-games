@@ -25,7 +25,7 @@ import { ANN, get, resetApiRouteStubs, signIn, storedGifCatalogue } from '@/util
 import { GET as searchMemes } from './search/route';
 import type { IMemeSearchResponse } from './search/route';
 
-/** One item in the shape KLIPY's `/memes/` category answers with,
+/** One item in the shape KLIPY's `/static-memes/` category answers with,
  *  `format_filter`ed down to the one format the route asks for. */
 function klipyMeme(slug: string, overrides: Record<string, unknown> = {}) {
     return {
@@ -97,14 +97,16 @@ describe('GET /api/meme/search', () => {
         }]);
     });
 
-    it('asks KLIPY\'s memes category, not the gifs one', async () => {
+    it('asks KLIPY\'s static-memes category, not the gifs one', async () => {
         signIn(ANN);
         const fetchSpy = upstreamServes();
 
         await searchFor('cat');
 
         const url = upstreamUrl(fetchSpy);
-        expect(url.origin + url.pathname).toBe('https://api.klipy.com/api/v1/test-key/memes/search');
+        // `static-memes`, not `memes` — verified against a live 404 rather
+        // than assumed from the other categories' plural-of-the-noun naming.
+        expect(url.origin + url.pathname).toBe('https://api.klipy.com/api/v1/test-key/static-memes/search');
         expect(url.searchParams.get('format_filter')).toBe('jpg');
         expect(url.searchParams.get('content_filter')).toBe('high');
     });
@@ -116,7 +118,7 @@ describe('GET /api/meme/search', () => {
         await searchFor();
 
         const url = upstreamUrl(fetchSpy);
-        expect(url.pathname).toBe('/api/v1/test-key/memes/trending');
+        expect(url.pathname).toBe('/api/v1/test-key/static-memes/trending');
     });
 
     it('drops the sponsored slots the provider interleaves into a page', async () => {

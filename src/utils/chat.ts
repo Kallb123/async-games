@@ -72,7 +72,7 @@ export function normaliseReadAt(value: unknown): string | null {
  * named on the wire, because a bare id means nothing without it. See
  * docs/chat-gifs.md §4.
  *
- * `klipy-meme` is not a second vendor: it is KLIPY's `/memes/` category,
+ * `klipy-meme` is not a second vendor: it is KLIPY's `/static-memes/` category,
  * proxied by its own search route the same way `/gifs/` is. It gets its own
  * provider value rather than a flag alongside `klipy` because a provider is
  * already the unit this app resolves a catalogue row and a host list by, and

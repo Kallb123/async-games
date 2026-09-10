@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { IChatAttachment, normaliseAttachment } from '@/utils/chat';
 import { IProviderSearchResponse, KlipyItem, pickFile, runProviderSearch } from '@/utils/gif/klipySearch';
 
-// The meme picker's data: a proxied search of KLIPY's `/memes/` category,
-// sitting beside `/api/gif/search` (docs/chat-gifs.md §12).
+// The meme picker's data: a proxied search of KLIPY's `/static-memes/`
+// category, sitting beside `/api/gif/search` (docs/chat-gifs.md §12).
 //
 // Everything §5 says about the GIF route applies here unchanged: this route
 // is the moderation boundary for memes exactly as the GIF one is for GIFs —
@@ -62,7 +62,7 @@ function toAttachment(item: KlipyItem): IChatAttachment | null {
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
     return runProviderSearch(request, {
-        category: 'memes',
+        category: 'static-memes',
         limiterPrefix: 'memeSearch',
         logLabel: 'Meme search',
         formats: MEME_FORMATS,

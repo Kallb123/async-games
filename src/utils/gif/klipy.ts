@@ -1,8 +1,9 @@
 // The provider's side of the GIF/meme feature: the one place its base URL, its
 // key and its "we shared this" ping are written.
 //
-// Two search routes talk to KLIPY, one per content category (`gifs`, `memes`
-// — docs/chat-gifs.md §12), and both want the same thing from it: an envelope
+// Two search routes talk to KLIPY, one per content category (`gifs`,
+// `static-memes` — docs/chat-gifs.md §12), and both want the same thing from
+// it: an envelope
 // built the same way, differing only in the category segment. The chat POST
 // talks to it too, to say a result was really sent (§5). What all of them
 // share is the request envelope rather than the request. Nothing here decides
@@ -45,12 +46,14 @@ export const KLIPY_TIMEOUT_MS = 5_000;
 
 /**
  * The content categories this app calls, each under its own `/<key>/<category>/`
- * segment — `gifs` for the animated picker, `memes` for the static-image one
- * beside it (docs/chat-gifs.md §12). A closed set for the same reason
- * `KlipyEndpoint` is: a category is a path segment carrying our key, not a
- * caller's choice.
+ * segment — `gifs` for the animated picker, `static-memes` for the
+ * static-image one beside it (docs/chat-gifs.md §12; KLIPY's own docs name it
+ * `static-memes` rather than the `memes` the other three categories'
+ * plural-of-the-noun naming would suggest — verified against a 404 before
+ * this landed, not assumed). A closed set for the same reason `KlipyEndpoint`
+ * is: a category is a path segment carrying our key, not a caller's choice.
  */
-type KlipyCategory = 'gifs' | 'memes';
+type KlipyCategory = 'gifs' | 'static-memes';
 
 /**
  * The endpoints this app calls, under `/<key>/<category>/`. A closed set of
@@ -140,7 +143,7 @@ export function klipyRequest(category: KlipyCategory, endpoint: KlipyEndpoint, p
  *  than a wider map. */
 const SHARE_CATEGORY: Record<GifProvider, KlipyCategory> = {
     klipy: 'gifs',
-    'klipy-meme': 'memes',
+    'klipy-meme': 'static-memes',
 };
 
 export async function registerGifShare(ref: IChatGifRef): Promise<void> {
