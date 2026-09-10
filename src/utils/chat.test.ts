@@ -107,10 +107,10 @@ describe('normaliseReadAt', () => {
 /** A well-formed row, as the search route would have written it. */
 function catalogueRow(overrides: Record<string, unknown> = {}) {
     return {
-        provider: 'tenor',
+        provider: 'klipy',
         mediaId: 'abc123',
-        url: 'https://media.tenor.com/abc123/cat.gif',
-        stillUrl: 'https://media.tenor.com/abc123/cat.png',
+        url: 'https://static.klipy.com/ii/abc123/cat.gif',
+        stillUrl: 'https://static.klipy.com/ii/abc123/cat.jpg',
         width: 320,
         height: 240,
         alt: 'a cat falling off a table',
@@ -120,27 +120,27 @@ function catalogueRow(overrides: Record<string, unknown> = {}) {
 
 describe('normaliseGifRef', () => {
     it('keeps a well-formed reference', () => {
-        expect(normaliseGifRef({ provider: 'tenor', mediaId: 'abc123' }))
-            .toEqual({ provider: 'tenor', mediaId: 'abc123' });
+        expect(normaliseGifRef({ provider: 'klipy', mediaId: 'abc123' }))
+            .toEqual({ provider: 'klipy', mediaId: 'abc123' });
     });
 
     it('drops anything else on the object — a ref is two fields, not a passthrough', () => {
         // The point of the whole design: a client that sends a URL alongside the
         // id doesn't get to influence what gets stored.
         expect(normaliseGifRef({
-            provider: 'tenor',
+            provider: 'klipy',
             mediaId: 'abc123',
             url: 'https://evil.example/tracker.gif',
             width: 99999,
-        })).toEqual({ provider: 'tenor', mediaId: 'abc123' });
+        })).toEqual({ provider: 'klipy', mediaId: 'abc123' });
     });
 
     it('rejects a non-object', () => {
         expect(normaliseGifRef(undefined)).toBeNull();
         expect(normaliseGifRef(null)).toBeNull();
-        expect(normaliseGifRef('tenor:abc123')).toBeNull();
+        expect(normaliseGifRef('klipy:abc123')).toBeNull();
         expect(normaliseGifRef(42)).toBeNull();
-        expect(normaliseGifRef([{ provider: 'tenor', mediaId: 'abc123' }])).toBeNull();
+        expect(normaliseGifRef([{ provider: 'klipy', mediaId: 'abc123' }])).toBeNull();
     });
 
     it('rejects an unknown provider', () => {
@@ -149,66 +149,76 @@ describe('normaliseGifRef', () => {
         expect(normaliseGifRef({ mediaId: 'abc123' })).toBeNull();
     });
 
+    it('keeps a hyphenated slug, which is the shape the provider\'s ids take', () => {
+        // KLIPY names an item with a slug rather than a number, so the id a
+        // player sends back looks like this one.
+        expect(normaliseGifRef({ provider: 'klipy', mediaId: 'cat-falling-off-a-table-gif-9RtN2v' }))
+            .toEqual({ provider: 'klipy', mediaId: 'cat-falling-off-a-table-gif-9RtN2v' });
+    });
+
     it('rejects a media id outside the inert charset', () => {
-        // An id travels into a Mongo key and an upstream query string; anything
-        // that could mean something in either is refused rather than escaped.
-        expect(normaliseGifRef({ provider: 'tenor', mediaId: 'abc/../123' })).toBeNull();
-        expect(normaliseGifRef({ provider: 'tenor', mediaId: 'abc 123' })).toBeNull();
-        expect(normaliseGifRef({ provider: 'tenor', mediaId: 'abc&q=1' })).toBeNull();
-        expect(normaliseGifRef({ provider: 'tenor', mediaId: '$ne' })).toBeNull();
+        // An id travels into a Mongo key, an upstream query string and — since
+        // the share ping is keyed by slug — an upstream URL path; anything that
+        // could mean something in any of them is refused rather than escaped.
+        expect(normaliseGifRef({ provider: 'klipy', mediaId: 'abc/../123' })).toBeNull();
+        expect(normaliseGifRef({ provider: 'klipy', mediaId: 'abc 123' })).toBeNull();
+        expect(normaliseGifRef({ provider: 'klipy', mediaId: 'abc&q=1' })).toBeNull();
+        expect(normaliseGifRef({ provider: 'klipy', mediaId: '$ne' })).toBeNull();
     });
 
     it('rejects an empty, over-long or non-string media id', () => {
-        expect(normaliseGifRef({ provider: 'tenor', mediaId: '' })).toBeNull();
-        expect(normaliseGifRef({ provider: 'tenor', mediaId: 'a'.repeat(65) })).toBeNull();
-        expect(normaliseGifRef({ provider: 'tenor', mediaId: 12345 })).toBeNull();
-        expect(normaliseGifRef({ provider: 'tenor', mediaId: { $gt: '' } })).toBeNull();
+        expect(normaliseGifRef({ provider: 'klipy', mediaId: '' })).toBeNull();
+        expect(normaliseGifRef({ provider: 'klipy', mediaId: 'a'.repeat(129) })).toBeNull();
+        expect(normaliseGifRef({ provider: 'klipy', mediaId: 12345 })).toBeNull();
+        expect(normaliseGifRef({ provider: 'klipy', mediaId: { $gt: '' } })).toBeNull();
     });
 });
 
 describe('isAllowedGifMediaUrl', () => {
     it('accepts the provider\'s media hosts', () => {
-        expect(isAllowedGifMediaUrl('https://media.tenor.com/x/cat.gif', 'tenor')).toBe(true);
-        expect(isAllowedGifMediaUrl('https://media3.tenor.com/x/cat.gif', 'tenor')).toBe(true);
+        expect(isAllowedGifMediaUrl('https://static.klipy.com/x/cat.gif', 'klipy')).toBe(true);
+        expect(isAllowedGifMediaUrl('https://static.klipy.com/ii/abc/de/f/cat.jpg', 'klipy')).toBe(true);
     });
 
     it('compares the whole host, not a suffix', () => {
-        // `endsWith('.tenor.com')` says yes to all three of these.
-        expect(isAllowedGifMediaUrl('https://media.tenor.com.example.com/x.gif', 'tenor')).toBe(false);
-        expect(isAllowedGifMediaUrl('https://evil-media.tenor.com.co/x.gif', 'tenor')).toBe(false);
-        expect(isAllowedGifMediaUrl('https://notmedia.tenor.com/x.gif', 'tenor')).toBe(false);
+        // `endsWith('.klipy.com')` says yes to all three of these.
+        expect(isAllowedGifMediaUrl('https://static.klipy.com.example.com/x.gif', 'klipy')).toBe(false);
+        expect(isAllowedGifMediaUrl('https://evil-static.klipy.com.co/x.gif', 'klipy')).toBe(false);
+        expect(isAllowedGifMediaUrl('https://notstatic.klipy.com/x.gif', 'klipy')).toBe(false);
+        // And the API host is not a media host: our key travels to that one.
+        expect(isAllowedGifMediaUrl('https://api.klipy.com/x.gif', 'klipy')).toBe(false);
     });
 
     it('rejects a host that only looks right to a naive parse', () => {
-        expect(isAllowedGifMediaUrl('https://evil.example/media.tenor.com/x.gif', 'tenor')).toBe(false);
-        expect(isAllowedGifMediaUrl('https://evil.example/#media.tenor.com', 'tenor')).toBe(false);
-        expect(isAllowedGifMediaUrl('https://evil.example/?host=media.tenor.com', 'tenor')).toBe(false);
+        expect(isAllowedGifMediaUrl('https://evil.example/static.klipy.com/x.gif', 'klipy')).toBe(false);
+        expect(isAllowedGifMediaUrl('https://evil.example/#static.klipy.com', 'klipy')).toBe(false);
+        expect(isAllowedGifMediaUrl('https://evil.example/?host=static.klipy.com', 'klipy')).toBe(false);
     });
 
     it('rejects a non-https scheme', () => {
-        expect(isAllowedGifMediaUrl('http://media.tenor.com/x/cat.gif', 'tenor')).toBe(false);
-        expect(isAllowedGifMediaUrl('data:image/gif;base64,R0lGOD', 'tenor')).toBe(false);
-        expect(isAllowedGifMediaUrl('javascript:alert(1)', 'tenor')).toBe(false);
-        expect(isAllowedGifMediaUrl('//media.tenor.com/x/cat.gif', 'tenor')).toBe(false);
+        expect(isAllowedGifMediaUrl('http://static.klipy.com/x/cat.gif', 'klipy')).toBe(false);
+        expect(isAllowedGifMediaUrl('data:image/gif;base64,R0lGOD', 'klipy')).toBe(false);
+        expect(isAllowedGifMediaUrl('javascript:alert(1)', 'klipy')).toBe(false);
+        expect(isAllowedGifMediaUrl('//static.klipy.com/x/cat.gif', 'klipy')).toBe(false);
     });
 
     it('rejects credentials in the authority, which no CDN handed us', () => {
-        // `https://media.tenor.com@evil.example/x.gif` has hostname
+        // `https://static.klipy.com@evil.example/x.gif` has hostname
         // evil.example — the classic misread this check exists to survive.
-        expect(isAllowedGifMediaUrl('https://media.tenor.com@evil.example/x.gif', 'tenor')).toBe(false);
-        expect(isAllowedGifMediaUrl('https://user:pw@media.tenor.com/x.gif', 'tenor')).toBe(false);
+        expect(isAllowedGifMediaUrl('https://static.klipy.com@evil.example/x.gif', 'klipy')).toBe(false);
+        expect(isAllowedGifMediaUrl('https://user:pw@static.klipy.com/x.gif', 'klipy')).toBe(false);
     });
 
     it('rejects an explicit port', () => {
-        expect(isAllowedGifMediaUrl('https://media.tenor.com:8443/x/cat.gif', 'tenor')).toBe(false);
+        expect(isAllowedGifMediaUrl('https://static.klipy.com:8443/x/cat.gif', 'klipy')).toBe(false);
     });
 
     it('answers false rather than throwing on something that is not a URL', () => {
-        expect(isAllowedGifMediaUrl('not a url', 'tenor')).toBe(false);
-        expect(isAllowedGifMediaUrl('', 'tenor')).toBe(false);
-        expect(isAllowedGifMediaUrl(undefined, 'tenor')).toBe(false);
-        expect(isAllowedGifMediaUrl(42, 'tenor')).toBe(false);
-        expect(isAllowedGifMediaUrl(`https://media.tenor.com/${'a'.repeat(3000)}.gif`, 'tenor')).toBe(false);
+        expect(isAllowedGifMediaUrl('not a url', 'klipy')).toBe(false);
+        expect(isAllowedGifMediaUrl('', 'klipy')).toBe(false);
+        expect(isAllowedGifMediaUrl(undefined, 'klipy')).toBe(false);
+        expect(isAllowedGifMediaUrl(42, 'klipy')).toBe(false);
+        expect(isAllowedGifMediaUrl(`https://static.klipy.com/${'a'.repeat(3000)}.gif`, 'klipy')).toBe(false);
     });
 });
 
@@ -264,7 +274,7 @@ describe('normaliseAttachment', () => {
 });
 
 describe('normaliseMessageBody', () => {
-    const gif = { provider: 'tenor', mediaId: 'abc123' };
+    const gif = { provider: 'klipy', mediaId: 'abc123' };
 
     it('keeps a plain text message, with no GIF', () => {
         expect(normaliseMessageBody({ text: '  gg wp  ' })).toEqual({ text: 'gg wp', gif: null });

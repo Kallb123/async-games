@@ -12,7 +12,7 @@ import { ChatAttachmentSchema } from "./ChatMessageData";
 // §4c):
 //
 // - A message can only reference an item our *own filtered search* actually
-//   served. Not "a real Tenor item" (which a player could name directly, from a
+//   served. Not "a real KLIPY item" (which a player could name directly, from a
 //   query our filter would have blocked — see §4b) but one we offered.
 // - The send path reads one indexed local row instead of calling the provider,
 //   so posting a GIF doesn't depend on a third party being up.

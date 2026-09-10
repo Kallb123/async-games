@@ -645,7 +645,7 @@ function findOneAndUpdateGifCatalogueFromStore(filter: Record<string, unknown>, 
 
 // The search route's catalogue write: one unordered bulkWrite of upserts, each
 // keyed by the same unique { provider, mediaId } the resolve reads back
-// (docs/chat-gifs.md §5a). Interprets that one shape rather than being a general
+// (docs/chat-gifs.md §5b). Interprets that one shape rather than being a general
 // bulk engine, the same trade the stores above already make.
 function bulkWriteGifCatalogueToStore(operations: unknown[]) {
     if (gifCatalogueWriteError !== null) {

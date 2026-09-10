@@ -21,6 +21,12 @@ const SEARCH_DEBOUNCE_MS = 400;
  *  height instead of growing under the composer a moment later. */
 const SKELETON_CELLS = 8;
 
+/** The catalogue's name, as a player reads it. One constant because it appears
+ *  twice — the search field and the credit under the grid — and the two saying
+ *  different things is how a screen reader ends up announcing a field nobody
+ *  else can see the label of. */
+const GIF_PROVIDER_NAME = 'KLIPY';
+
 interface GifPickerProps {
     /** A result was tapped — send it. */
     onSelect: (attachment: IChatAttachment) => void;
@@ -140,9 +146,9 @@ export default function GifPicker({ onSelect, onClose, sending, sendFailed }: Gi
                 className="ag-input"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search GIFs…"
+                placeholder={`Search ${GIF_PROVIDER_NAME}…`}
                 maxLength={MAX_GIF_QUERY_LENGTH}
-                aria-label="Search GIFs"
+                aria-label={`Search ${GIF_PROVIDER_NAME} for a GIF`}
             />
             {/* A failed send, said out loud. Above the grid rather than in place
                 of it, because the grid is still the thing to try again with. */}
@@ -176,6 +182,14 @@ export default function GifPicker({ onSelect, onClose, sending, sendFailed }: Gi
                     ))}
                 </div>
             )}
+            {/* Naming the catalogue is a condition of using it — KLIPY's API
+                terms ask for the mark in the search field and beside the
+                content, which is what the placeholder above and this line are.
+                Text rather than their logo: this app ships no third-party
+                brand art, and a wordmark in the app's own type is the version
+                that survives a theme change. `ag-hint` because that is what
+                the app's fine print already is, everywhere else. */}
+            <div className="ag-hint ag-hint--right">GIFs by {GIF_PROVIDER_NAME}</div>
         </div>
     );
 }

@@ -780,6 +780,10 @@ a.ag-list-row, a.ag-list-row-main {
 /* A hint whose container already spaces what comes after it — a field inside
    an `.ag-form-card`, whose flex gap sits under the whole field. */
 .ag-hint--tight { margin-bottom: 0; }
+/* A hint that belongs to the panel rather than to one control under it — the
+   GIF picker's provider credit, which its API terms ask for and which should
+   sit out of the way of the grid above it. */
+.ag-hint--right { text-align: right; }
 
 .ag-disabled-hint {
     font: 500 11px/1.4 var(--ag-font);

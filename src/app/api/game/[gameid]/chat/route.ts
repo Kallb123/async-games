@@ -8,7 +8,7 @@ import { ChatMessageModel, IChatMessageDataDocument } from '@/utils/mongodb/Chat
 import { ChatReadModel } from '@/utils/mongodb/ChatReadData';
 import { GIF_CATALOGUE_TTL_MS, GifCatalogueModel } from '@/utils/mongodb/GifCatalogueData';
 import { IChatAttachment, IChatGifRef, normaliseAttachment, normaliseMessageBody, normaliseReadAt } from '@/utils/chat';
-import { registerGifShare } from '@/utils/gif/tenor';
+import { registerGifShare } from '@/utils/gif/klipy';
 import { consumeRateLimit } from '@/utils/rateLimit';
 import { usersById } from '@/utils/users/clerk';
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
@@ -222,11 +222,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
     // populated — the whole point of the client sending an id rather than a URL
     // (docs/chat-gifs.md §4c). Three properties fall out of it: the stored
     // fields are ones a provider gave us, the item is one our own *filtered*
-    // search served to somebody (not merely a real Tenor id, which a player
+    // search served to somebody (not merely a real KLIPY slug, which a player
     // could name from a query the filter would have blocked — note "somebody":
     // the catalogue is app-global, so this is not narrowed to what *this*
     // player's own search returned), and the send touches no third party, so
-    // posting a GIF doesn't depend on Tenor being up.
+    // posting a GIF doesn't depend on KLIPY being up.
     //
     // Its own limiter, spent before the message limiter below, and keyed on the
     // player rather than the game. Both halves matter:
@@ -240,7 +240,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
     //   that's failing, a row reaped between browsing and tapping), and none of
     //   them should end with their next plain message getting a 429.
     //
-    // A miss is still a 400 and nothing more clever (§5a).
+    // A miss is still a 400 and nothing more clever (§5b).
     let attachment: IChatAttachment | undefined;
     if (messageBody.gif) {
         if (!await consumeRateLimit('chatGif', userId, 30, 5 * 60_000)) {
@@ -338,7 +338,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
             console.error(`Failed to send chat push for game ${gameid}`, error);
         }
 
-        // Tenor asks for a ping when one of its results is really sent, and it
+        // KLIPY asks for a ping when one of its results is really sent, and it
         // is the only thing we give back for a free API (docs/chat-gifs.md §5).
         //
         // Last, and outside the guard above rather than inside it, because both
