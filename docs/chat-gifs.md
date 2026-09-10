@@ -278,7 +278,11 @@ so their limits can't drift — gains:
   string checks.
 - a relaxed `normaliseMessage`, so an empty `text` is legal *when an attachment
   is present*. The POST's check becomes "a valid message, or a valid gif ref,
-  or 400".
+  or 400" — and it is `normaliseMessageBody` that answers it, for both the route
+  and the composer, because the rule that matters is a rule about the *pair*.
+- `MAX_GIF_QUERY_LENGTH` — the picker's `maxLength` and §5's search-route cap,
+  as one number. Here rather than in the route for the reason
+  `MAX_MESSAGE_LENGTH` is: two copies of a limit drift.
 - (Not yet: `describeMessage(message)`, for §8's push copy. With exactly one
   caller, `text || "Sent a GIF"` inside `buildChatNotification` is the smaller
   answer, and the copy stays in the one module copy lives in. Extract it when

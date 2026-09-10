@@ -16,8 +16,8 @@ model, the response-shaping contract and the push plumbing this leans on.
 
 **Out of scope, deliberately:** moderation, profanity filtering, blocking and
 reporting. Media in a message is out of scope too, and designed separately in
-[`docs/chat-gifs.md`](./chat-gifs.md) — a text message is all this plan
-builds. §9 records the two decisions the owner has settled — guests chat, and
+[`docs/chat-gifs.md`](./chat-gifs.md), which has since shipped — a text message
+is all *this* plan builds. §9 records the two decisions the owner has settled — guests chat, and
 Outbreak gets chat — each of which corrects something the repo's docs currently
 say. §11 breaks the whole build into commits.
 

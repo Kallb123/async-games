@@ -900,7 +900,9 @@ description or theme colour is exactly what those two files exist to prevent.
   `AGENTS.md`):
   - `src/components/ui/` — presentational primitives (`Brand`, `Avatar`,
     `GameThumb`, `TurnTimerSelect`, `GameSetupLayout`, `GameLibrary`, `ChatGif`
-    — one GIF attachment, drawn by both the chat thread and its picker), and the
+    — one GIF attachment, drawn by both the chat thread and its picker, and
+    `PanelHead`, the title/subtitle/✕ row every dismissible panel opens with),
+    and the
     section family every screen is laid out with: `Section` (the padded box and
     its heading), `CollapsingSection` (one that grows and shrinks) and
     `ListSection` (one holding an animated `ag-list`, its `SkeletonRow`
