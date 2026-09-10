@@ -1,12 +1,22 @@
 # GIFs in chat — design notes
 
-How a player could send a GIF in a game's chat thread, what that costs, and
-which parts of it work on which platform.
+How a player sends a GIF in a game's chat thread, what that costs, and which
+parts of it work on which platform.
 
-**Status: §11's commits 1 and 2 have shipped** — the model, the validators, and
-a chat POST/GET that carries a GIF (plus §8's push copy, which came early with
-commit 2). Nothing is player-visible yet: no client sends one and the thread
-renders none until commit 3. Everything from commit 3 on is still design.
+**Status: built.** All six of §11's commits are in — the model and its
+validators, a chat POST/GET that carries a GIF, the thread's rendering of one,
+the proxied search route, and the picker in the composer. A player taps **GIF**
+beside the message box, searches, and taps a result to send it; a line typed
+first goes under it as a caption.
+
+So everything below now describes code rather than a plan, and the design
+reasoning is kept because it is the reasoning the code is shaped by — where the
+two could drift, the sections most worth reading first are §4c (why the client
+sends an id and never a URL) and §7 (why the dimensions are stored). Two things
+are deliberately *not* built: §1's path B, a GIF arriving as image bytes from a
+keyboard, a paste or a drop, which needs a blob store this app does not have;
+and §9's blocking and reporting, which the catalogue makes more valuable and no
+more of a dependency than it was.
 
 Read [`docs/in-game-chat.md`](./in-game-chat.md) first: chat's model,
 routes, panel and push channel all exist, and everything below hangs off them.
@@ -268,11 +278,19 @@ so their limits can't drift — gains:
   string checks.
 - a relaxed `normaliseMessage`, so an empty `text` is legal *when an attachment
   is present*. The POST's check becomes "a valid message, or a valid gif ref,
-  or 400".
+  or 400" — and it is `normaliseMessageBody` that answers it, for both the route
+  and the composer, because the rule that matters is a rule about the *pair*.
+- `MAX_GIF_QUERY_LENGTH` — the picker's `maxLength` and §5's search-route cap,
+  as one number. Here rather than in the route for the reason
+  `MAX_MESSAGE_LENGTH` is: two copies of a limit drift.
 - (Not yet: `describeMessage(message)`, for §8's push copy. With exactly one
   caller, `text || "Sent a GIF"` inside `buildChatNotification` is the smaller
   answer, and the copy stays in the one module copy lives in. Extract it when
-  something else needs to describe a message.)
+  something else needs to describe a message. Re-checked with the picker built,
+  since §11's commit 6 asks: still one caller. The picker sends a message, the
+  thread renders one, and neither has any use for a sentence about one — so the
+  second caller this was waiting for is a *preview* somewhere (a dashboard card,
+  a notification centre), and none exists.)
 
 The fields copied off the catalogue row still get the cheap sanity checks
 before they are written onto a message — positive integer dimensions under a
@@ -355,17 +373,29 @@ searcher is waiting on. Two things keep the write amplification honest:
 - Only the items the picker will render are upserted, and the page size is
   ours to set.
 
-One decision is genuinely still open: **what a send does on a catalogue miss.**
-Either refuse with a 400 (strict — and it costs nothing real, since the picker
-served the row seconds ago), or fall back to §4b's Tenor resolution with the
-content check applied then (forgiving, at the price of reintroducing the
-third-party dependency on that one path). Recommendation: start strict, and
-only add the fallback if the refusal is ever actually seen.
+The one decision this section left open — **what a send does on a catalogue
+miss** — shipped strict: a 400, no fallback to §4b's Tenor resolution. It costs
+nothing real, since the picker served the row seconds earlier, and the forgiving
+version would have reintroduced the third-party dependency on the one path §4c
+exists to keep clear of it. Add the fallback only if the refusal is ever
+actually seen.
 
-Tenor also asks for a `registershare` ping when a result is really sent. That
-belongs in the POST route's existing `after()` block, next to the push fan-out
-and guarded the same way: it is analytics, and it must never be able to fail a
-message that already saved.
+What made strict safe is a small thing worth knowing about: resolving a GIF
+**touches its row's expiry** (`findOneAndUpdate`, not `findOne`). The TTL runs
+from when a row was written and a CDN-cached search response never re-runs the
+route that would rewrite it, so without the touch a GIF that had sat in the
+picker's results for a month would resolve to nothing and the tap would 400 for
+a reason no player could see. It also means the collection holds what is in use
+rather than what was once searched for.
+
+Tenor also asks for a `registershare` ping when a result is really sent, and it
+is the only thing we give back for a free API. It lives in
+`src/utils/gif/tenor.ts` — the one module that knows the provider's base URL and
+reads its key — and runs at the end of the POST's existing `after()`, *after*
+the push fan-out rather than before it: the buzz is what a player is waiting
+for, and analytics must not sit in front of it. It swallows its own failure, so
+it needs no guard of its own and can't be skipped by one the push has already
+used up. A message is never undone by a ping about it.
 
 ---
 
@@ -381,13 +411,61 @@ What's genuinely new is two pieces, and both earn it by having two callers:
 
 - **`src/components/ui/ChatGif.tsx`** — one attachment rendered. Used by the
   thread row *and* by the picker's own result grid, which is the second copy
-  AGENTS.md says to extract on.
+  AGENTS.md says to extract on. One prop tells the two apart: `onSelect` makes
+  the GIF a button that picks it, and both differences follow from that — a
+  thread row draws the GIF at its own size (capped, so a tall one can't take the
+  panel) while a grid cell takes the column's width and is cropped to it, and a
+  result is *selected* rather than played, so a reduced-motion player gets the
+  still frame with no play button in the picker and the thread's own tap-to-play
+  when they want to watch it.
 - **`src/components/games/GifPicker.tsx`** — the search field and result grid,
   opened from a button in `ag-chat-composer`. Panel chrome comes from the
   `ag-*` classes the composer and `ag-log` already use; the search field is
   `ag-input`, the results a grid, the trigger an `ag-btn ag-btn--ghost`. New
   `ag-theme.css` classes for the grid and the row's GIF box, using the existing
   tokens — no inline hex.
+
+  Three things it deliberately doesn't have. It **fetches for itself** rather
+  than taking its data from `GameShell`'s `useGameChat`: the reason the thread's
+  fetch lives up there is the unread dot, which has to know about messages while
+  the panel is *shut*, and nothing outside the picker has any use for a page of
+  search results. It keeps **no "attached GIF" state** — a tapped result sends
+  immediately, with whatever is in the message box as its caption, which is the
+  one-tap send a phone keyboard's GIF tab does and leaves nothing to preview,
+  remove, or reconcile with the draft. And it **never blanks the grid**: the
+  previous results stay on screen while the next search runs, so a grid doesn't
+  flicker for the whole time somebody is typing, which is also why the only
+  state written during the debounce effect is written in its callback (a write in
+  the effect body is what `react-hooks/set-state-in-effect` refuses).
+
+  The debounce and the request are one `useEffect` keyed on the trimmed query:
+  React tears the previous one down on every keystroke, which *is* the "cancel
+  the pending search", and a `cancelled` flag covers a request already in flight
+  when the player types again or closes the picker — the body read included,
+  which is the easy one to forget, since it can fail *after* a later search has
+  landed and would otherwise replace good results with an outage message. 400ms,
+  with the opening trending load exempt — it has no keystroke to wait for. That
+  is the client's half of §5's chattiness problem; the route's rate limit is the
+  half that holds.
+
+  Two things a player can always do from the panel, because otherwise they are
+  stuck looking at a state nothing clears. **"Try again"** sits beside the
+  "GIFs unavailable" line: without it the only way out of that state is a
+  keystroke, so a panel that opened during a five-second wobble would read
+  "unavailable" for as long as it stayed open. And a **failed send says so** —
+  the tap that works closes the picker, so a refused one (a row reaped between
+  browsing and tapping, the GIF limiter spent, a POST that timed out) would
+  otherwise leave nothing on screen but the grid it was tapped in, which is
+  indistinguishable from a dead tap. A retained draft is what tells a player a
+  *text* send failed; a tapped GIF has no equivalent.
+
+  The title row is a `PanelHead` — the picker was the *third* copy of a
+  title-plus-subtitle-plus-✕ block that had only ever been shared by CSS class
+  (the chat thread and the turn-history log are the other two), which is the
+  case AGENTS.md calls a defect rather than reuse. It does **not** wear
+  `ag-panel-open-pulse`: that animation drives `background-color`, so on a panel
+  with a surface of its own it reads as a hole rather than a flash, and the
+  picker already opens inside the chat panel's own pulse.
 
 Rendering rules, each of which is a real decision rather than a detail:
 
@@ -489,7 +567,7 @@ invited players.
 
 ---
 
-## 10. Where it works, once built
+## 10. Where it works
 
 | Platform | Picker (A) | Paste | Drag-and-drop | Keyboard insert |
 |---|---|---|---|---|
@@ -506,7 +584,7 @@ on the phone.
 
 ---
 
-## 11. If it gets built: the commits
+## 11. How it was built: the commits
 
 1. **Model + validation.** `IChatAttachment` on `ChatMessageData`, the
    `GifCatalogue` model and its TTL index, `normaliseGifRef` and the relaxed

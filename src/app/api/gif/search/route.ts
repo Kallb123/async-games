@@ -3,7 +3,8 @@ import { after, NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GIF_CATALOGUE_TTL_MS, GifCatalogueModel } from '@/utils/mongodb/GifCatalogueData';
 import { isDuplicateKeyError } from '@/utils/mongodb/duplicateKey';
-import { IChatAttachment, normaliseAttachment } from '@/utils/chat';
+import { IChatAttachment, MAX_GIF_QUERY_LENGTH, normaliseAttachment } from '@/utils/chat';
+import { TENOR_TIMEOUT_MS, tenorRequest } from '@/utils/gif/tenor';
 import { clientIp, consumeRateLimit } from '@/utils/rateLimit';
 
 // The picker's data: a proxied GIF search (docs/chat-gifs.md §5).
@@ -38,11 +39,6 @@ export interface IGifSearchResponse {
     unavailable: boolean;
 }
 
-/** The longest search term we'll pass upstream. A query is a word or two; this
- *  is generous for that and small enough that nobody is smuggling a payload
- *  through it. */
-const MAX_QUERY_LENGTH = 100;
-
 /** How many results a page of the picker holds. Ours, not the caller's — it is
  *  also how many catalogue rows one search writes (§5a), which is why it is
  *  applied to what comes *back* as well as to what we ask for. */
@@ -53,17 +49,6 @@ const GIF_SEARCH_PAGE_SIZE = 24;
  *  anybody's while to farm accounts for it. */
 const GIF_SEARCH_LIMIT = 60;
 const GIF_SEARCH_WINDOW_MS = 5 * 60_000;
-
-/** The provider's own limit on how long we'll wait. Short, because a player is
- *  watching a picker type-ahead, and a slow answer is worse than "unavailable"
- *  with a retry a keystroke away. */
-const UPSTREAM_TIMEOUT_MS = 5_000;
-
-const TENOR_API = 'https://tenor.googleapis.com/v2/';
-
-/** Tenor asks every integration to identify itself, so its analytics can tell
- *  one app's traffic from another's. Not a secret, and not the API key. */
-const TENOR_CLIENT_KEY = 'asyncgames';
 
 /**
  * The variants we ask for, and the only ones we render.
@@ -147,7 +132,7 @@ export async function GET(request: NextRequest) {
         return unavailable(429, "Too many searches");
     }
 
-    const query = (request.nextUrl.searchParams.get('q') ?? '').trim().slice(0, MAX_QUERY_LENGTH);
+    const query = (request.nextUrl.searchParams.get('q') ?? '').trim().slice(0, MAX_GIF_QUERY_LENGTH);
 
     const results = await fetchFromProvider(query);
     if (results === null) {
@@ -217,25 +202,18 @@ function unavailable(status = 200, statusText?: string) {
  * that answer is a working composer with no pictures in it.
  */
 async function fetchFromProvider(query: string): Promise<IChatAttachment[] | null> {
-    const key = process.env.TENOR_API_KEY?.trim();
-    if (!key) {
+    const url = tenorRequest(query ? 'search' : 'featured', {
+        limit: String(GIF_SEARCH_PAGE_SIZE),
+        media_filter: TENOR_MEDIA_FILTER,
+        contentfilter: TENOR_CONTENT_FILTER,
+        ...(query ? { q: query } : {}),
+    });
+    if (!url) {
         // A deployment with no key configured is a misconfiguration, not a
         // client error — and it is silent from the player's side either way, so
         // it has to be loud from ours.
         console.error('GIF search is not configured: TENOR_API_KEY is unset');
         return null;
-    }
-
-    // Built with URL/searchParams, never by hand: `q` is player-supplied, and a
-    // search term is exactly the sort of string that carries an `&`.
-    const url = new URL(query ? 'search' : 'featured', TENOR_API);
-    url.searchParams.set('key', key);
-    url.searchParams.set('client_key', TENOR_CLIENT_KEY);
-    url.searchParams.set('limit', String(GIF_SEARCH_PAGE_SIZE));
-    url.searchParams.set('media_filter', TENOR_MEDIA_FILTER);
-    url.searchParams.set('contentfilter', TENOR_CONTENT_FILTER);
-    if (query) {
-        url.searchParams.set('q', query);
     }
 
     let payload: { results?: unknown };
@@ -246,7 +224,7 @@ async function fetchFromProvider(query: string): Promise<IChatAttachment[] | nul
             // again here would hold a page of results past the point the
             // catalogue rows behind them expire.
             cache: 'no-store',
-            signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+            signal: AbortSignal.timeout(TENOR_TIMEOUT_MS),
         });
         if (!response.ok) {
             // The status, never the body: an upstream error page is not

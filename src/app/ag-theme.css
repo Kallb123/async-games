@@ -1973,6 +1973,52 @@ button.ag-chat-gif { cursor: pointer; }
 /* The line of text under a GIF, when the sender wrote one too. */
 .ag-chat-gif-caption { margin-top: 6px; }
 
+/* The composer's GIF button, sized down from a full .ag-btn the way
+   "Load earlier" is — a composer control beside the field, not a page action.
+   Its own width so the label doesn't reflow between "GIF" and the pressed
+   state, and terracotta while the picker is open, the same way the options
+   menu marks the row whose panel is showing (`.ag-gom-item--active`). */
+.ag-chat-gif-toggle { padding: 8px 10px; font-size: 12px; letter-spacing: 0.04em; }
+.ag-chat-gif-toggle--active { border-color: var(--ag-terracotta); color: var(--ag-terracotta); }
+
+/* ---- The GIF picker (GifPicker) ----
+   A panel between the thread and the composer: the search field, then a grid of
+   results drawn by the same `ChatGif` the thread uses (docs/chat-gifs.md §6).
+   Inset rather than floating, so it reads as part of the composer it opened
+   from and can't cover the conversation. */
+.ag-gif-picker {
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--ag-surface-2);
+    border: 1px solid var(--ag-line);
+    border-radius: 14px;
+}
+.ag-gif-grid {
+    display: grid;
+    /* Cells as wide as they can be at 3-a-row on a phone, more on a wider
+       screen — `auto-fill` rather than a fixed count, so this needs no
+       breakpoint of its own. */
+    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+    /* Roughly two rows, so the picker never grows so tall that the composer
+       under it leaves the screen. */
+    max-height: 232px;
+    overflow-y: auto;
+}
+/* Every cell is the column's width (ChatGif sets that when it's selectable) and
+   the ratio derives its height, so a row of cells lines up. The cap is what
+   stops a portrait GIF making its whole row tall: it crops rather than
+   squashing, because the image covers its box. */
+.ag-gif-grid .ag-chat-gif { max-height: 116px; }
+/* While a send is in flight — dimmed and inert. The tap that actually can't
+   post twice is stopped in GameChat by a ref (this is CSS, and CSS doesn't stop
+   a focused button being activated from the keyboard); what this does is say so. */
+.ag-gif-grid--busy { opacity: 0.5; pointer-events: none; }
+/* The "no pictures just now" row, with the retry beside it — the one way out of
+   that state that doesn't require typing something. */
+.ag-gif-unavailable { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+
 /* "Load earlier" sits above the first row, sized down from a full .ag-btn (full
    width already comes from .ag-btn--block) — a thread's own paging control, not
    a page-level action. */
@@ -1981,11 +2027,13 @@ button.ag-chat-gif { cursor: pointer; }
 /* Title (plus an optional dim subtitle under it) and its own ✕ on one row,
    mirroring the top-bar 💬/📜 toggle so the panel can be dismissed from
    itself. The title carries the log's 9px margin, so the row takes it over
-   and the title inside sits flush. Shared by the chat thread and the
-   turn-history panel — both are dismissible `.ag-log` panels toggled from the
-   top bar, and both tell the player which end is newest since the two run in
-   opposite directions (chat always oldest-to-newest; the turn-history log
-   depends on the game — see MatchHistory's `oldestFirst`). */
+   and the title inside sits flush. Every panel that opens with one goes
+   through the `PanelHead` component (three do: the chat thread, the
+   turn-history log and the GIF picker) — sharing these classes without sharing
+   the markup is how the block got written out three times. The subtitle tells
+   the player which end is newest, since the lists run in opposite directions
+   (chat always oldest-to-newest; the turn-history log depends on the game —
+   see MatchHistory's `oldestFirst`). */
 .ag-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
 .ag-panel-head .ag-hand-title { margin-bottom: 0; }
 .ag-panel-subtitle { font: 600 10.5px var(--ag-font); color: var(--ag-ink-softer); margin-top: 2px; }

@@ -119,6 +119,17 @@ const GIF_MEDIA_HOSTS: Record<GifProvider, readonly string[]> = {
 const MAX_GIF_MEDIA_ID_LENGTH = 64;
 
 /**
+ * The longest search term the picker will send and the search route will pass
+ * upstream. A query is a word or two; this is generous for that and small
+ * enough that nobody is smuggling a payload through it.
+ *
+ * Here rather than in the route for the reason MAX_MESSAGE_LENGTH is: the
+ * picker's `maxLength` and the route's cap are the same number, and two copies
+ * of it drift.
+ */
+export const MAX_GIF_QUERY_LENGTH = 100;
+
+/**
  * The charset a media id may use. Not an attempt to match Tenor's exact format
  * — theirs is numeric today and that is not a promise — but a restriction to
  * characters that are inert in the two places an id travels: a Mongo key, and

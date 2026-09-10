@@ -4,10 +4,12 @@ import {
     normaliseMessage, normaliseMessageBody, normaliseReadAt
 } from './chat';
 
-// normaliseMessage is the single gate the composer and the POST route share, so
-// it earns a direct test: everything it rejects, the route rejects, and
-// everything it reshapes is what actually gets stored. See docs/in-game-chat.md
-// §4 and §12 (the checklist that names these cases).
+// `normaliseMessageBody` is the gate the composer and the POST route share, and
+// `normaliseMessage` is the half of it that decides what a line of text becomes
+// — every caller now arrives through the former, but the text rules are what
+// actually get applied, so they earn a direct test: everything it rejects, the
+// route rejects, and everything it reshapes is what gets stored. See
+// docs/in-game-chat.md §4 and §12 (the checklist that names these cases).
 describe('normaliseMessage', () => {
     it('keeps a plain message, trimmed', () => {
         expect(normaliseMessage('  gg wp  ')).toBe('gg wp');

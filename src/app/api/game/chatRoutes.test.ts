@@ -89,7 +89,18 @@ function postRawChatTo(gameid: string, body: string) {
 }
 
 beforeEach(async () => {
+    // Before `resetApiRouteStubs`, the way gifRoutes.test.ts does it and for the
+    // same reason: reset arms the collection spies, and restoring afterwards
+    // would tear them straight off again. What actually needs restoring is the
+    // `fetch` spy the share-ping tests install (below), which would otherwise
+    // stand for every test after them.
+    vi.restoreAllMocks();
     await resetApiRouteStubs();
+    // No provider key by default, so the share ping in the POST's `after()`
+    // short-circuits and no test but the ones about it can reach the network —
+    // explicitly, rather than by trusting that the environment running the
+    // suite happens not to have one set.
+    vi.stubEnv('TENOR_API_KEY', '');
     // Default the limiter back to "allowed"; the 429 and throttle tests each
     // override it. mockReset, not mockClear: the stub is a `vi.fn(async () =>
     // true)`, so reset restores that default, whereas clear only forgets the
@@ -697,6 +708,89 @@ describe('POST /api/game/[gameid]/chat', () => {
             await postChatTo('game_1', { gif: { provider: 'tenor', mediaId: 'abc123' } });
 
             expect(vi.mocked(consumeRateLimit)).toHaveBeenCalledWith('chatGif', ANN.id, 30, 5 * 60_000);
+        });
+
+        // The share ping (docs/chat-gifs.md §5). Tenor asks for one when a
+        // result is really sent, and it is the only thing we give back for a
+        // free API — so what matters is that it happens, that it happens where
+        // nothing is waiting on it, and that it can neither delay the buzz nor
+        // undo a message that has already saved.
+        describe('the share ping', () => {
+            /** The upstream accepting the ping. Returns the spy, so a test can
+             *  read back the URL the route actually built. */
+            function upstreamAcceptsPing() {
+                return vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 200 }));
+            }
+
+            beforeEach(() => {
+                // A configured deployment — the default is no key at all (see
+                // the suite's own beforeEach), which is the "no ping" case.
+                vi.stubEnv('TENOR_API_KEY', 'test-key');
+            });
+
+            it('tells the provider which item was sent, after the push', async () => {
+                signIn(ANN);
+                seedSnakesAndLadders();
+                stubClerkUsers(BOB);
+                seedGifCatalogueItem(CATALOGUED_GIF);
+                const fetchSpy = upstreamAcceptsPing();
+
+                await postChatTo('game_1', { gif: { provider: 'tenor', mediaId: 'abc123' } });
+                // Nothing on the send path: it is deferred work, like the push.
+                expect(fetchSpy).not.toHaveBeenCalled();
+                await runAfterCallbacks();
+
+                const url = new URL(String(fetchSpy.mock.calls[0][0]));
+                expect(url.origin + url.pathname).toBe('https://tenor.googleapis.com/v2/registershare');
+                expect(url.searchParams.get('id')).toBe('abc123');
+                expect(url.searchParams.get('key')).toBe('test-key');
+                // The buzz is what a player is waiting for, so an analytics
+                // round trip must not sit in front of it.
+                expect(vi.mocked(sendPushToUsers).mock.invocationCallOrder[0])
+                    .toBeLessThan(fetchSpy.mock.invocationCallOrder[0]);
+            });
+
+            it('says nothing about a plain message', async () => {
+                signIn(ANN);
+                seedSnakesAndLadders();
+                stubClerkUsers(BOB);
+                const fetchSpy = upstreamAcceptsPing();
+
+                await postChatTo('game_1', { text: 'gg' });
+                await runAfterCallbacks();
+
+                expect(fetchSpy).not.toHaveBeenCalled();
+            });
+
+            it('keeps the message and the push when the ping fails', async () => {
+                signIn(ANN);
+                seedSnakesAndLadders();
+                stubClerkUsers(BOB);
+                seedGifCatalogueItem(CATALOGUED_GIF);
+                vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('tenor is down'));
+
+                await postChatTo('game_1', { gif: { provider: 'tenor', mediaId: 'abc123' } });
+
+                // The deferred block itself must not reject: an unhandled
+                // rejection out of `after()` is a request that logs as failed
+                // long after it answered 200.
+                await expect(runAfterCallbacks()).resolves.toBeGreaterThan(0);
+                expect(storedChatMessages('game_1')[0].attachment).toEqual(CATALOGUED_GIF);
+                expect(sentPushes).toHaveLength(1);
+            });
+
+            it('stays quiet when the deployment has no provider key', async () => {
+                signIn(ANN);
+                seedSnakesAndLadders();
+                seedGifCatalogueItem(CATALOGUED_GIF);
+                vi.stubEnv('TENOR_API_KEY', '');
+                const fetchSpy = upstreamAcceptsPing();
+
+                await postChatTo('game_1', { gif: { provider: 'tenor', mediaId: 'abc123' } });
+                await runAfterCallbacks();
+
+                expect(fetchSpy).not.toHaveBeenCalled();
+            });
         });
 
         it('refuses once the GIF limiter is spent, without touching the message limiter', async () => {

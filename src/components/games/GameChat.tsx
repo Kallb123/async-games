@@ -2,6 +2,8 @@
 import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import Avatar from '@/components/ui/Avatar';
 import ChatGif from '@/components/ui/ChatGif';
+import GifPicker from '@/components/games/GifPicker';
+import PanelHead from '@/components/ui/PanelHead';
 import RecapTimeline, { RECAP_MARKER_SIZE } from '@/components/ui/RecapTimeline';
 import Refreshable from '@/components/ui/Refreshable';
 import Skeleton from '@/components/ui/Skeleton';
@@ -9,7 +11,8 @@ import { playerColourForId } from '@/utils/ui/playerColours';
 import { nameForUserId } from '@/utils/ui/players';
 import { formatRelativeTime } from '@/utils/ui/time';
 import { useNowToTheMinute } from '@/utils/hooks/useNow';
-import { MAX_MESSAGE_LENGTH } from '@/utils/chat';
+import { useScrollIntoViewOnOpen } from '@/utils/hooks/useScrollIntoViewOnOpen';
+import { IChatAttachment, IChatGifRef, MAX_MESSAGE_LENGTH } from '@/utils/chat';
 import type { GameChatMessage } from '@/utils/hooks/useGameChat';
 
 interface GameChatProps {
@@ -18,9 +21,10 @@ interface GameChatProps {
     isRefreshing: boolean;
     /** True while a send is in flight — disables the composer. */
     sending: boolean;
-    /** POSTs the message; returns false if it was rejected or failed, so the
-     *  composer keeps what the player typed. */
-    send: (text: string) => Promise<boolean>;
+    /** POSTs the message — text, a GIF from the picker, or both; returns false
+     *  if it was rejected or failed, so the composer keeps what the player
+     *  typed. */
+    send: (text: string, gif?: IChatGifRef) => Promise<boolean>;
     /** There are messages older than the oldest one in `messages` — shows the
      *  "Load earlier" control above the first row. */
     hasMoreEarlier: boolean;
@@ -87,6 +91,20 @@ function messageTitle(message: GameChatMessage): React.ReactNode {
 export default function GameChat({ messages, isLoading, isRefreshing, sending, send, hasMoreEarlier, loadingEarlier, loadEarlier, onClose, userIdList, usernameList }: GameChatProps) {
     const now = useNowToTheMinute();
     const [draft, setDraft] = useState('');
+    const [pickingGif, setPickingGif] = useState(false);
+    const [gifSendFailed, setGifSendFailed] = useState(false);
+    // The in-flight guard for a tapped GIF is a ref, not the `sending` prop:
+    // `pointer-events: none` on the busy grid stops a second *tap*, but not a
+    // focused result being activated from the keyboard (key repeat on Enter),
+    // and a state read can lag the second event. `useSubmitCommand` guards its
+    // own POST the same way, for the same reason recorded as finding 18 in
+    // docs/robustness-review.md.
+    const sendingGifRef = useRef(false);
+    // The picker opens between the thread and the composer, so it pushes the
+    // composer down — on a phone, far enough that a player who has just tapped
+    // the button is looking at the wrong part of the page. The same hook brings
+    // this panel into view that brings the chat panel itself in (GameShell).
+    const pickerRef = useScrollIntoViewOnOpen(pickingGif);
 
     // Follows the thread to its newest message when the player is already
     // looking at the bottom of it, the way a chat app is expected to; leaves the
@@ -143,15 +161,40 @@ export default function GameChat({ messages, isLoading, isRefreshing, sending, s
         }
     };
 
+    // A tapped result sends straight away, with whatever is in the box as its
+    // caption — the same one-tap send a phone keyboard's GIF tab does, and the
+    // reason there is no "attached GIF" state to preview, remove or reconcile
+    // with the draft. It closes the picker only on success: a refusal leaves the
+    // grid up with a line saying so, because the useful next move may be another
+    // GIF rather than the same one (a 400 means this row is gone from the
+    // catalogue, and re-tapping it would 400 again).
+    const sendGif = async (attachment: IChatAttachment) => {
+        if (sendingGifRef.current) {
+            return;
+        }
+        sendingGifRef.current = true;
+        setGifSendFailed(false);
+        try {
+            if (await send(draft, { provider: attachment.provider, mediaId: attachment.mediaId })) {
+                setDraft('');
+                setPickingGif(false);
+            } else {
+                // Said out loud in the picker, because every way this
+                // legitimately fails leaves nothing else on screen to notice: a
+                // 400 for a row reaped between browsing and tapping, a 429 on
+                // the GIF limiter, a POST that timed out. A retained draft is
+                // what tells a player a *text* send failed; a tapped GIF has no
+                // equivalent.
+                setGifSendFailed(true);
+            }
+        } finally {
+            sendingGifRef.current = false;
+        }
+    };
+
     return (
         <div className="ag-log ag-panel-open-pulse">
-            <div className="ag-panel-head">
-                <div>
-                    <div className="ag-hand-title">Chat</div>
-                    <div className="ag-panel-subtitle">Latest at the bottom</div>
-                </div>
-                <button type="button" className="ag-panel-close" onClick={onClose} aria-label="Close chat">✕</button>
-            </div>
+            <PanelHead title="Chat" subtitle="Latest at the bottom" onClose={onClose} closeLabel="Close chat" />
             {isLoading ? (
                 <div className="ag-chat-skeleton" aria-hidden>
                     <Skeleton width="70%" height={14} />
@@ -200,7 +243,26 @@ export default function GameChat({ messages, isLoading, isRefreshing, sending, s
                     />
                 </Refreshable>
             )}
+            {pickingGif && (
+                <div ref={pickerRef}>
+                    <GifPicker
+                        onSelect={sendGif}
+                        onClose={() => setPickingGif(false)}
+                        sending={sending}
+                        sendFailed={gifSendFailed}
+                    />
+                </div>
+            )}
             <form className="ag-chat-composer" onSubmit={submit}>
+                <button
+                    type="button"
+                    className={`ag-btn ag-btn--ghost ag-chat-gif-toggle${pickingGif ? ' ag-chat-gif-toggle--active' : ''}`}
+                    onClick={() => setPickingGif(open => !open)}
+                    aria-expanded={pickingGif}
+                    aria-label={pickingGif ? 'Close GIF picker' : 'Send a GIF'}
+                >
+                    GIF
+                </button>
                 <input
                     className="ag-input"
                     value={draft}

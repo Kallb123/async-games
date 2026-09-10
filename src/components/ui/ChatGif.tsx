@@ -21,10 +21,22 @@ interface ChatGifProps {
      * of the caller growing a second copy of it.
      */
     attachment?: IChatAttachment;
+    /**
+     * Set by the picker's result grid: the GIF becomes a button that picks it.
+     *
+     * It is what tells the two callers apart, and both differences follow from
+     * it. A thread row draws the GIF at its own size, capped so a tall one
+     * can't take the panel; a grid cell is a thumbnail, so it takes the cell's
+     * width and the stylesheet crops it. And a result is *selected* rather than
+     * played — a reduced-motion player in the picker sees the still frame with
+     * no play button, because the tap is already spoken for; the thread's own
+     * tap-to-play is where they watch it.
+     */
+    onSelect?: () => void;
 }
 
 /**
- * One GIF, in the thread and (later) in the picker's result grid.
+ * One GIF, in the thread and in the picker's result grid.
  *
  * Three rules, each of which is a decision rather than a detail
  * (docs/chat-gifs.md §6):
@@ -39,7 +51,7 @@ interface ChatGifProps {
  * - **`prefers-reduced-motion` gets the still frame**, and a tap plays it. For
  *   animated content that is the accessibility requirement, not a nicety.
  */
-export default function ChatGif({ attachment }: ChatGifProps) {
+export default function ChatGif({ attachment, onSelect }: ChatGifProps) {
     // State, not a one-off read: the choice of frame drives what is rendered,
     // so a player who turns the setting on mid-thread gets the still frame
     // without reloading.
@@ -65,7 +77,13 @@ export default function ChatGif({ attachment }: ChatGifProps) {
     // row, which `max-width: 100%` handles (the height follows it down,
     // because the ratio is doing the work).
     const drawnWidth = Math.min(width, Math.round((width / height) * MAX_CHAT_GIF_HEIGHT));
-    const box: React.CSSProperties = { width: drawnWidth, aspectRatio: `${width} / ${height}` };
+    // A grid cell sets its own width, so the ratio derives the height from that
+    // instead and every cell in a row lines up; `.ag-gif-grid` caps how tall one
+    // may get, which crops rather than squashes because the image covers its box.
+    const box: React.CSSProperties = {
+        width: onSelect ? '100%' : drawnWidth,
+        aspectRatio: `${width} / ${height}`,
+    };
     // Both frames are the same size, so the still and the animation swap inside
     // the same reserved box and the row's height never moves.
     const frame = (
@@ -82,6 +100,14 @@ export default function ChatGif({ attachment }: ChatGifProps) {
             onError={() => setFailed(true)}
         />
     );
+
+    if (onSelect) {
+        return (
+            <button type="button" className="ag-chat-gif" style={box} onClick={onSelect} aria-label={`Send GIF: ${alt || 'GIF'}`}>
+                {frame}
+            </button>
+        );
+    }
 
     if (reduceMotion && !playing) {
         // A button, not a div with an onClick: playing an animation is an

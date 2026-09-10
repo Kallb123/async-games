@@ -4,7 +4,7 @@ import { useUser } from "@clerk/nextjs";
 import { useRefreshableData } from "./useRefreshableData";
 import { fetchWithSessionRetry, REQUEST_TIMEOUT_MS } from "./fetchWithSessionRetry";
 import { CHAT_EVENTS } from "./usePushEvents";
-import { normaliseMessage } from "@/utils/chat";
+import { IChatGifRef, normaliseMessageBody } from "@/utils/chat";
 import type { IChatResponse, IChatMessageResponse } from "@/app/api/game/[gameid]/chat/route";
 
 /** A thread message plus whether it's new since this viewing of the panel — see
@@ -22,9 +22,11 @@ export interface GameChat {
     /** A message from someone else has landed since this browser last opened the
      *  thread. Drives the 💬 button's dot. */
     hasUnread: boolean;
-    /** POSTs `text`, then refetches. Returns false on a rejected or failed send
-     *  so the composer can keep what the player typed. */
-    send: (text: string) => Promise<boolean>;
+    /** POSTs `text` — and a GIF from the picker, if there is one — then
+     *  refetches. Returns false on a rejected or failed send so the composer can
+     *  keep what the player typed. Text may be empty *when a GIF is given*;
+     *  never both empty (docs/chat-gifs.md §4e). */
+    send: (text: string, gif?: IChatGifRef) => Promise<boolean>;
     /** True when there are messages older than the oldest one in `messages` —
      *  drives the panel's "Load earlier" control. */
     hasMoreEarlier: boolean;
@@ -278,11 +280,15 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean): Ga
         (message) => message.senderId !== myId && (readAt === null || message.timestamp > readAt),
     );
 
-    const send = useCallback(async (text: string): Promise<boolean> => {
+    const send = useCallback(async (text: string, gif?: IChatGifRef): Promise<boolean> => {
         // The same gate the route applies, so the composer can't send something
         // the server will 400 — one validation module, no drift (utils/chat.ts).
-        const message = normaliseMessage(text);
-        if (message === null) {
+        // `normaliseMessageBody` rather than `normaliseMessage` because the rule
+        // that matters now is a rule about the pair: text, a GIF, or both, and
+        // never neither. What it returns is what goes on the wire, so a caption
+        // is trimmed and collapsed here exactly as the route would.
+        const body = normaliseMessageBody({ text, gif });
+        if (body === null) {
             return false;
         }
         setSending(true);
@@ -290,7 +296,7 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean): Ga
             const response = await fetch(`/api/game/${gameId}/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: message }),
+                body: JSON.stringify(body),
                 signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
             });
             if (!response.ok) {

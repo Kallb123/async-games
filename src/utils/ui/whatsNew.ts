@@ -62,6 +62,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Send a GIF in a game's chat",
+                detail: "There's a GIF button beside the message box now: tap it, search for what you're after, and tap a result to send it. Type a line first and it goes underneath as a caption. GIFs play in the thread, or sit still with a play button if you've asked your phone for less motion, and if they can't be reached you can still send a message as normal.",
+            },
+            {
                 title: "Chat says who's talking with their avatar",
                 detail: "Every message in a game's chat now leads with the sender's avatar, ringed in the colour they're playing as, instead of the small colour dot that used to sit beside it — so a glance down the thread tells you who said what.",
             },
@@ -101,11 +105,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "See every city in Dice Cities",
                 detail: "Everyone's cards are face up on the table, but you could only ever see your own — so there was no way to tell what a roll of 3 was about to pay an opponent, or who was one landmark from winning. The landmark track at the top now shows every player's progress at once, a dot each per landmark, and every opponent's city sits under yours to open and close as you like.",
                 game: "dicecities",
-            },
-            {
-                title: "Outbreak tells you how you lost",
-                detail: "\"The team lost\" was all you got, whether a colour's cube supply had run dry, the outbreak marker had maxed out, or you had simply run out of player cards. The finish banner, the result page and the notification now all name which of the three it was — and the result page adds a chart of every colour's remaining cubes, turn by turn, so you can see which supply was draining while you were curing something else.",
-                game: "outbreak",
             },
         ],
     },

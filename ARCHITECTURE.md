@@ -68,6 +68,8 @@ src/
 │       ├── newgame/<game>/     # create an invitation for a game
 │       ├── invite/             # accept / cancel invites
 │       ├── friends/            # friends system
+│       ├── gif/search/         # proxied GIF search: the chat picker's data, and
+│       │                       #   the only writer of the GifCatalogue (§5)
 │       ├── cron/turntimer/     # turn-timer enforcement (external cron target)
 │       ├── notifyuser/  notificationtoken/       # push plumbing
 │       ├── notificationtest/                     # "does push work?" self-test
@@ -97,6 +99,7 @@ src/
 │   ├── apiModels/games/serializableRegistry.test.ts  # asserts every @serializable class is wired
 │   ├── mongodb/                # base schemas: GameData, InvitationData, FriendshipData, connection
 │   ├── firebase/               # client app + admin SDK + push helper
+│   ├── gif/                    # the GIF provider: its base URL, its key, its share ping
 │   ├── games/                  # cross-game helpers: DiceRoll, TurnTimer, replay engine
 │   ├── hooks/                  # usePlayerList, useFcmToken, useTurnNavigation
 │   └── ui/                     # cross-game glue only: games.ts (aggregates each game's
@@ -772,8 +775,9 @@ the silent `GameStart` refresh.
 
 **In-game chat rides this same bus.** `POST /api/game/[gameid]/chat` (§5's
 `ChatMessage` collection) sends a `ChatMessage` push — copy from
-`buildChatNotification` (title `"<sender> in <game>"`, body the message) on the
-`chat` channel — to the other players, and its `link` opens the board so a tap
+`buildChatNotification` (title `"<sender> in <game>"`, body the message — or
+`"Sent a GIF"` for a GIF nobody captioned, never the GIF itself: the image slot
+stays the game's own art) on the `chat` channel — to the other players, and its `link` opens the board so a tap
 also fires the `ChatMessage` window event the open thread listens on. Two things
 about it are worth noting against the invariants above. First, it carries a real
 notification, so it is not one of the silent turn-path pushes WebKit revokes a
@@ -895,7 +899,10 @@ description or theme colour is exactly what those two files exist to prevent.
 - **Reusable pieces** (this is the most important contribution rule — see
   `AGENTS.md`):
   - `src/components/ui/` — presentational primitives (`Brand`, `Avatar`,
-    `GameThumb`, `TurnTimerSelect`, `GameSetupLayout`, `GameLibrary`), and the
+    `GameThumb`, `TurnTimerSelect`, `GameSetupLayout`, `GameLibrary`, `ChatGif`
+    — one GIF attachment, drawn by both the chat thread and its picker, and
+    `PanelHead`, the title/subtitle/✕ row every dismissible panel opens with),
+    and the
     section family every screen is laid out with: `Section` (the padded box and
     its heading), `CollapsingSection` (one that grows and shrinks) and
     `ListSection` (one holding an animated `ag-list`, its `SkeletonRow`
@@ -1164,6 +1171,8 @@ one-liner fails with a message naming the exact file and line to add.
 - [`docs/game-themes.md`](./docs/game-themes.md) — the cross-game theming system: how a game gets a second dressing (same rules, different names and art), where the chosen theme is stored, and how to add one.
 - [`docs/profile-pictures.md`](./docs/profile-pictures.md) — how a player's avatar is resolved, and the roadmap for uploads/unlockables.
 - [`docs/account-less-play.md`](./docs/account-less-play.md) — plan for Jackbox-style join-by-code lobbies and guest players: what the five identity choke points cost, and the commit-by-commit build order.
+- [`docs/in-game-chat.md`](./docs/in-game-chat.md) — the chat thread in depth: the collections, the routes, the unread marker and the push throttle.
+- [`docs/chat-gifs.md`](./docs/chat-gifs.md) — GIFs in chat: why the client sends a catalogue id and never a URL, and what the picker is and isn't.
 - [`docs/games/`](./docs/games/) — per-game rules notes (Smartthink, Settlements & Cities).
 - [`docs/admin-tools.md`](./docs/admin-tools.md) — the `/admin` support screen: who counts as an admin, and how a guest who lost their resume link is let back in.
 - [`docs/environments.md`](./docs/environments.md) — the dev/production split (Clerk instances, databases, env vars) and how to take Clerk to production.
@@ -1171,4 +1180,3 @@ one-liner fails with a message naming the exact file and line to add.
 - [`docs/email-theme.md`](./docs/email-theme.md) — the design system restated for email (hex palette, type, table-based components), for styling Clerk's transactional emails.
 - [`docs/deployment.png`](./docs/deployment.png) — deployment diagram.
 - [`README.md`](./README.md) — getting started, env vars, and cron setup.
-</content>

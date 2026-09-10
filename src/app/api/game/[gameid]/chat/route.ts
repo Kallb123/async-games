@@ -8,6 +8,7 @@ import { ChatMessageModel, IChatMessageDataDocument } from '@/utils/mongodb/Chat
 import { ChatReadModel } from '@/utils/mongodb/ChatReadData';
 import { GIF_CATALOGUE_TTL_MS, GifCatalogueModel } from '@/utils/mongodb/GifCatalogueData';
 import { IChatAttachment, IChatGifRef, normaliseAttachment, normaliseMessageBody, normaliseReadAt } from '@/utils/chat';
+import { registerGifShare } from '@/utils/gif/tenor';
 import { consumeRateLimit } from '@/utils/rateLimit';
 import { usersById } from '@/utils/users/clerk';
 import { sendPushToUsers, gameNotificationLink } from '@/utils/firebase/pushNotification';
@@ -335,6 +336,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<I
             }
         } catch (error) {
             console.error(`Failed to send chat push for game ${gameid}`, error);
+        }
+
+        // Tenor asks for a ping when one of its results is really sent, and it
+        // is the only thing we give back for a free API (docs/chat-gifs.md §5).
+        //
+        // Last, and outside the guard above rather than inside it, because both
+        // of those are deliberate: the buzz is what a player is waiting for, so
+        // an analytics round trip must not sit in front of it — and
+        // `registerGifShare` swallows its own failure, so it neither needs the
+        // try/catch nor is skipped when the push has already used it up.
+        if (attachment) {
+            await registerGifShare(attachment);
         }
     });
 
