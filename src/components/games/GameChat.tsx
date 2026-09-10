@@ -63,6 +63,16 @@ interface GameChatProps {
 // pixel-perfect for new messages to keep following them.
 const SCROLL_BOTTOM_SLACK = 32;
 
+/** The composer's two attachment toggles, one row apiece rather than one
+ *  pasted `<button>` apiece — a GIF button and an image button open the same
+ *  panel shape in the same place and differ only in these four strings
+ *  (docs/chat-gifs.md §12). `AttachmentPicker`'s own `KIND_COPY` is the same
+ *  move for the panel that opens underneath. */
+const ATTACH_TOGGLES: { kind: AttachmentKind, label: string, openLabel: string, closeLabel: string }[] = [
+    { kind: 'gif', label: 'GIF', openLabel: 'Send a GIF', closeLabel: 'Close GIF picker' },
+    { kind: 'meme', label: 'IMG', openLabel: 'Send a meme', closeLabel: 'Close meme picker' },
+];
+
 /**
  * What goes in the timeline entry's `title` — which is already a
  * `React.ReactNode`, so an attachment row (a GIF or a meme, §12) needs nothing
@@ -260,24 +270,18 @@ export default function GameChat({ messages, isLoading, isRefreshing, sending, s
                 </div>
             )}
             <form className="ag-chat-composer" onSubmit={submit}>
-                <button
-                    type="button"
-                    className={`ag-btn ag-btn--ghost ag-chat-attach-toggle${openPicker === 'gif' ? ' ag-chat-attach-toggle--active' : ''}`}
-                    onClick={() => setOpenPicker(open => open === 'gif' ? null : 'gif')}
-                    aria-expanded={openPicker === 'gif'}
-                    aria-label={openPicker === 'gif' ? 'Close GIF picker' : 'Send a GIF'}
-                >
-                    GIF
-                </button>
-                <button
-                    type="button"
-                    className={`ag-btn ag-btn--ghost ag-chat-attach-toggle${openPicker === 'meme' ? ' ag-chat-attach-toggle--active' : ''}`}
-                    onClick={() => setOpenPicker(open => open === 'meme' ? null : 'meme')}
-                    aria-expanded={openPicker === 'meme'}
-                    aria-label={openPicker === 'meme' ? 'Close meme picker' : 'Send a meme'}
-                >
-                    IMG
-                </button>
+                {ATTACH_TOGGLES.map(({ kind, label, openLabel, closeLabel }) => (
+                    <button
+                        key={kind}
+                        type="button"
+                        className={`ag-btn ag-btn--ghost ag-chat-attach-toggle${openPicker === kind ? ' ag-chat-attach-toggle--active' : ''}`}
+                        onClick={() => setOpenPicker(open => open === kind ? null : kind)}
+                        aria-expanded={openPicker === kind}
+                        aria-label={openPicker === kind ? closeLabel : openLabel}
+                    >
+                        {label}
+                    </button>
+                ))}
                 <input
                     className="ag-input"
                     value={draft}

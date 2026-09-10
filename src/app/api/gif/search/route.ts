@@ -24,8 +24,8 @@ import { IProviderSearchResponse, KlipyItem, pickFile, runProviderSearch } from 
 // `runProviderSearch`, shared with the meme route beside it (§12).
 
 /** What the picker renders, and exactly what a message stores. Re-exported
- *  from the shared module under this route's own name, so `GifPicker` keeps
- *  importing `IGifSearchResponse` from here. */
+ *  from the shared module under this route's own name, so `AttachmentPicker`
+ *  keeps importing `IGifSearchResponse` from here. */
 export type IGifSearchResponse = IProviderSearchResponse;
 
 /** How many results a page of the picker holds. Ours, not the caller's — it is
