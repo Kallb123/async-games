@@ -69,10 +69,10 @@ function postChatTo(gameid: string, body: unknown) {
 /** A GIF as the search route would have written it into the catalogue
  *  (docs/chat-gifs.md §4c) — the only way one becomes attachable. */
 const CATALOGUED_GIF = {
-    provider: 'tenor' as const,
+    provider: 'klipy' as const,
     mediaId: 'abc123',
-    url: 'https://media.tenor.com/abc123/cat.gif',
-    stillUrl: 'https://media.tenor.com/abc123/cat.png',
+    url: 'https://static.klipy.com/ii/abc123/cat.gif',
+    stillUrl: 'https://static.klipy.com/ii/abc123/cat.jpg',
     width: 320,
     height: 240,
     alt: 'a cat falling off a table',
@@ -100,7 +100,7 @@ beforeEach(async () => {
     // short-circuits and no test but the ones about it can reach the network —
     // explicitly, rather than by trusting that the environment running the
     // suite happens not to have one set.
-    vi.stubEnv('TENOR_API_KEY', '');
+    vi.stubEnv('KLIPY_API_KEY', '');
     // Default the limiter back to "allowed"; the 429 and throttle tests each
     // override it. mockReset, not mockClear: the stub is a `vi.fn(async () =>
     // true)`, so reset restores that default, whereas clear only forgets the
@@ -543,7 +543,7 @@ describe('POST /api/game/[gameid]/chat', () => {
             seedSnakesAndLadders();
             seedGifCatalogueItem(CATALOGUED_GIF);
 
-            const response = await postChatTo('game_1', { gif: { provider: 'tenor', mediaId: 'abc123' } });
+            const response = await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'abc123' } });
 
             expect(response.status).toBe(200);
             expect((await response.json()).message.attachment).toEqual(CATALOGUED_GIF);
@@ -558,7 +558,7 @@ describe('POST /api/game/[gameid]/chat', () => {
             seedSnakesAndLadders();
             seedGifCatalogueItem(CATALOGUED_GIF);
 
-            await postChatTo('game_1', { text: '  this is you  ', gif: { provider: 'tenor', mediaId: 'abc123' } });
+            await postChatTo('game_1', { text: '  this is you  ', gif: { provider: 'klipy', mediaId: 'abc123' } });
 
             const stored = storedChatMessages('game_1')[0];
             expect(stored.text).toBe('this is you');
@@ -575,7 +575,7 @@ describe('POST /api/game/[gameid]/chat', () => {
 
             await postChatTo('game_1', {
                 gif: {
-                    provider: 'tenor',
+                    provider: 'klipy',
                     mediaId: 'abc123',
                     url: 'https://evil.example/tracker.gif',
                     stillUrl: 'https://evil.example/tracker.png',
@@ -595,7 +595,7 @@ describe('POST /api/game/[gameid]/chat', () => {
             seedSnakesAndLadders();
             seedGifCatalogueItem(CATALOGUED_GIF);
 
-            const response = await postChatTo('game_1', { gif: { provider: 'tenor', mediaId: 'neverserved' } });
+            const response = await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'neverserved' } });
 
             expect(response.status).toBe(400);
             expect(storedChatMessages('game_1')).toHaveLength(0);
@@ -608,7 +608,7 @@ describe('POST /api/game/[gameid]/chat', () => {
             seedSnakesAndLadders();
             seedGifCatalogueItem({ ...CATALOGUED_GIF, url: 'https://evil.example/x.gif' });
 
-            const response = await postChatTo('game_1', { gif: { provider: 'tenor', mediaId: 'abc123' } });
+            const response = await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'abc123' } });
 
             expect(response.status).toBe(400);
             expect(storedChatMessages('game_1')).toHaveLength(0);
@@ -616,10 +616,10 @@ describe('POST /api/game/[gameid]/chat', () => {
 
         it.each([
             ['an unknown provider', { gif: { provider: 'giphy', mediaId: 'abc123' } }],
-            ['a bare URL instead of a reference', { gif: 'https://media.tenor.com/abc123/cat.gif' }],
-            ['a reference with no id', { gif: { provider: 'tenor' } }],
-            ['an id outside the inert charset', { gif: { provider: 'tenor', mediaId: '../abc123' } }],
-            ['a query operator where the id goes', { gif: { provider: 'tenor', mediaId: { $ne: '' } } }],
+            ['a bare URL instead of a reference', { gif: 'https://static.klipy.com/ii/abc123/cat.gif' }],
+            ['a reference with no id', { gif: { provider: 'klipy' } }],
+            ['an id outside the inert charset', { gif: { provider: 'klipy', mediaId: '../abc123' } }],
+            ['a query operator where the id goes', { gif: { provider: 'klipy', mediaId: { $ne: '' } } }],
         ])('rejects %s with a 400 before it reaches the catalogue', async (_label, body) => {
             signIn(ANN);
             seedSnakesAndLadders();
@@ -644,7 +644,7 @@ describe('POST /api/game/[gameid]/chat', () => {
             seedSnakesAndLadders();
             seedGifCatalogueItem(CATALOGUED_GIF);
 
-            const response = await postChatTo('game_1', { gif: { provider: 'tenor', mediaId: 'abc123' } });
+            const response = await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'abc123' } });
 
             expect(response.status).toBe(403);
             expect(storedChatMessages('game_1')).toHaveLength(0);
@@ -656,7 +656,7 @@ describe('POST /api/game/[gameid]/chat', () => {
             stubClerkUsers(BOB);
             seedGifCatalogueItem(CATALOGUED_GIF);
 
-            await postChatTo('game_1', { gif: { provider: 'tenor', mediaId: 'abc123' } });
+            await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'abc123' } });
             await runAfterCallbacks();
 
             expect(sentPushes).toHaveLength(1);
@@ -674,7 +674,7 @@ describe('POST /api/game/[gameid]/chat', () => {
             stubClerkUsers(BOB);
             seedGifCatalogueItem(CATALOGUED_GIF);
 
-            await postChatTo('game_1', { text: 'this is you', gif: { provider: 'tenor', mediaId: 'abc123' } });
+            await postChatTo('game_1', { text: 'this is you', gif: { provider: 'klipy', mediaId: 'abc123' } });
             await runAfterCallbacks();
 
             expect(sentPushes[0].notification.body).toBe('this is you');
@@ -691,9 +691,9 @@ describe('POST /api/game/[gameid]/chat', () => {
             const nearlyReaped = new Date(Date.now() + 60_000);
             seedGifCatalogueItem({ ...CATALOGUED_GIF, expiresAt: nearlyReaped });
 
-            await postChatTo('game_1', { gif: { provider: 'tenor', mediaId: 'abc123' } });
+            await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'abc123' } });
 
-            const expiry = storedGifCatalogueExpiry('tenor', 'abc123');
+            const expiry = storedGifCatalogueExpiry('klipy', 'abc123');
             expect(expiry!.getTime()).toBeGreaterThan(nearlyReaped.getTime());
         });
 
@@ -705,12 +705,12 @@ describe('POST /api/game/[gameid]/chat', () => {
             seedSnakesAndLadders();
             seedGifCatalogueItem(CATALOGUED_GIF);
 
-            await postChatTo('game_1', { gif: { provider: 'tenor', mediaId: 'abc123' } });
+            await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'abc123' } });
 
             expect(vi.mocked(consumeRateLimit)).toHaveBeenCalledWith('chatGif', ANN.id, 30, 5 * 60_000);
         });
 
-        // The share ping (docs/chat-gifs.md §5). Tenor asks for one when a
+        // The share ping (docs/chat-gifs.md §5). KLIPY asks for one when a
         // result is really sent, and it is the only thing we give back for a
         // free API — so what matters is that it happens, that it happens where
         // nothing is waiting on it, and that it can neither delay the buzz nor
@@ -725,7 +725,7 @@ describe('POST /api/game/[gameid]/chat', () => {
             beforeEach(() => {
                 // A configured deployment — the default is no key at all (see
                 // the suite's own beforeEach), which is the "no ping" case.
-                vi.stubEnv('TENOR_API_KEY', 'test-key');
+                vi.stubEnv('KLIPY_API_KEY', 'test-key');
             });
 
             it('tells the provider which item was sent, after the push', async () => {
@@ -735,15 +735,16 @@ describe('POST /api/game/[gameid]/chat', () => {
                 seedGifCatalogueItem(CATALOGUED_GIF);
                 const fetchSpy = upstreamAcceptsPing();
 
-                await postChatTo('game_1', { gif: { provider: 'tenor', mediaId: 'abc123' } });
+                await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'abc123' } });
                 // Nothing on the send path: it is deferred work, like the push.
                 expect(fetchSpy).not.toHaveBeenCalled();
                 await runAfterCallbacks();
 
+                // The key is a path segment for this provider, and the item is
+                // named by its slug — so the whole of the ping is in the path.
                 const url = new URL(String(fetchSpy.mock.calls[0][0]));
-                expect(url.origin + url.pathname).toBe('https://tenor.googleapis.com/v2/registershare');
-                expect(url.searchParams.get('id')).toBe('abc123');
-                expect(url.searchParams.get('key')).toBe('test-key');
+                expect(url.origin + url.pathname).toBe('https://api.klipy.com/api/v1/test-key/gifs/share/abc123');
+                expect(fetchSpy.mock.calls[0][1]).toMatchObject({ method: 'POST' });
                 // The buzz is what a player is waiting for, so an analytics
                 // round trip must not sit in front of it.
                 expect(vi.mocked(sendPushToUsers).mock.invocationCallOrder[0])
@@ -767,9 +768,9 @@ describe('POST /api/game/[gameid]/chat', () => {
                 seedSnakesAndLadders();
                 stubClerkUsers(BOB);
                 seedGifCatalogueItem(CATALOGUED_GIF);
-                vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('tenor is down'));
+                vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('klipy is down'));
 
-                await postChatTo('game_1', { gif: { provider: 'tenor', mediaId: 'abc123' } });
+                await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'abc123' } });
 
                 // The deferred block itself must not reject: an unhandled
                 // rejection out of `after()` is a request that logs as failed
@@ -783,10 +784,10 @@ describe('POST /api/game/[gameid]/chat', () => {
                 signIn(ANN);
                 seedSnakesAndLadders();
                 seedGifCatalogueItem(CATALOGUED_GIF);
-                vi.stubEnv('TENOR_API_KEY', '');
+                vi.stubEnv('KLIPY_API_KEY', '');
                 const fetchSpy = upstreamAcceptsPing();
 
-                await postChatTo('game_1', { gif: { provider: 'tenor', mediaId: 'abc123' } });
+                await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'abc123' } });
                 await runAfterCallbacks();
 
                 expect(fetchSpy).not.toHaveBeenCalled();
@@ -799,7 +800,7 @@ describe('POST /api/game/[gameid]/chat', () => {
             seedGifCatalogueItem(CATALOGUED_GIF);
             vi.mocked(consumeRateLimit).mockImplementation(async (action) => action !== 'chatGif');
 
-            const response = await postChatTo('game_1', { gif: { provider: 'tenor', mediaId: 'abc123' } });
+            const response = await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'abc123' } });
 
             expect(response.status).toBe(429);
             expect(storedChatMessages('game_1')).toHaveLength(0);
@@ -812,7 +813,7 @@ describe('POST /api/game/[gameid]/chat', () => {
             signIn(ANN);
             seedSnakesAndLadders();
 
-            const response = await postChatTo('game_1', { gif: { provider: 'tenor', mediaId: 'neverserved' } });
+            const response = await postChatTo('game_1', { gif: { provider: 'klipy', mediaId: 'neverserved' } });
 
             expect(response.status).toBe(400);
             expect(vi.mocked(consumeRateLimit)).not.toHaveBeenCalledWith('chat', expect.anything(), expect.anything(), expect.anything());

@@ -4,7 +4,7 @@ import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GIF_CATALOGUE_TTL_MS, GifCatalogueModel } from '@/utils/mongodb/GifCatalogueData';
 import { isDuplicateKeyError } from '@/utils/mongodb/duplicateKey';
 import { IChatAttachment, MAX_GIF_QUERY_LENGTH, normaliseAttachment } from '@/utils/chat';
-import { TENOR_TIMEOUT_MS, tenorRequest } from '@/utils/gif/tenor';
+import { KLIPY_TIMEOUT_MS, klipyRequest } from '@/utils/gif/klipy';
 import { clientIp, consumeRateLimit } from '@/utils/rateLimit';
 
 // The picker's data: a proxied GIF search (docs/chat-gifs.md §5).
@@ -14,7 +14,7 @@ import { clientIp, consumeRateLimit } from '@/utils/rateLimit';
 // other is that this route is the **moderation boundary** of the whole feature:
 // it is the only thing that writes the GifCatalogue, and the chat POST will
 // attach a GIF only if a row is there. So a player can send an item our own
-// filtered search served to somebody — not merely a real Tenor id, which they
+// filtered search served to somebody — not merely a real KLIPY slug, which they
 // could name directly from a query the filter would have blocked (§4b vs §4c).
 //
 // Everything that makes that true is pinned here rather than taken from the
@@ -35,12 +35,12 @@ export interface IGifSearchResponse {
     results: IChatAttachment[];
     /** True when the provider couldn't be reached, or answered with something
      *  we couldn't read. The picker shows "GIFs unavailable" and the composer
-     *  carries on — a wobble at Tenor must not break chat (§5). */
+     *  carries on — a wobble at KLIPY must not break chat (§5). */
     unavailable: boolean;
 }
 
 /** How many results a page of the picker holds. Ours, not the caller's — it is
- *  also how many catalogue rows one search writes (§5a), which is why it is
+ *  also how many catalogue rows one search writes (§5b), which is why it is
  *  applied to what comes *back* as well as to what we ask for. */
 const GIF_SEARCH_PAGE_SIZE = 24;
 
@@ -51,27 +51,56 @@ const GIF_SEARCH_LIMIT = 60;
 const GIF_SEARCH_WINDOW_MS = 5 * 60_000;
 
 /**
- * The variants we ask for, and the only ones we render.
+ * The formats we ask for, and the only ones we render.
  *
- * `tinygif` is the animated file at thread size — a chat row is ~250px wide, so
- * asking for the full-size GIF would be paying to shrink it in the browser.
- * `tinygifpreview` is its first frame, which is what `prefers-reduced-motion`
- * shows and what a tap plays from (§6).
+ * `gif` is the animated file and `jpg` its first frame — which is what
+ * `prefers-reduced-motion` shows and what a tap plays from (§6). KLIPY also
+ * offers `webp`, `mp4` and `webm`; none of them is asked for, because a
+ * variant we don't render is a variant we'd have to decide about later.
  *
- * Pinned here rather than accepted from the caller: `media_filter` decides what
- * URLs end up in the catalogue and therefore on a message, and `contentfilter`
- * is the guarantee §9 rests on. A filter a client can relax is not a filter.
+ * Pinned here rather than accepted from the caller: `format_filter` decides
+ * what URLs end up in the catalogue and therefore on a message, and
+ * `content_filter` is the guarantee §9 rests on. A filter a client can relax is
+ * not a filter.
  */
-const TENOR_MEDIA_FILTER = 'tinygif,tinygifpreview';
-const TENOR_CONTENT_FILTER = 'high';
+const KLIPY_FORMATS = ['gif', 'jpg'] as const;
+const KLIPY_CONTENT_FILTER = 'high';
 
-/** Tenor's answer, in the shape we read. Everything else it sends is dropped —
+/**
+ * The size tiers we will serve, in the order we'd rather have them.
+ *
+ * A chat row is ~250px wide and a picker cell narrower still, so `sm` first:
+ * asking for the full-size GIF would be paying to shrink it in the browser.
+ * `xs` and `md` are the fallback for an item that doesn't carry every tier, so
+ * one thin result is one thin result rather than a dropped one.
+ *
+ * **`hd` is deliberately not in the list**, and that is a cap rather than a
+ * preference. A URL that reaches the catalogue is one every player in the
+ * thread downloads on every thread open, forever, and an `hd` animated GIF runs
+ * to tens of megabytes — `normaliseAttachment`'s dimension cap bounds pixels,
+ * not bytes. An item carrying only `hd` is dropped instead, which costs that
+ * one result and nothing else.
+ */
+const KLIPY_QUALITY_ORDER = ['sm', 'xs', 'md'] as const;
+
+/** One file of one item, in the shape we read. */
+interface KlipyFile {
+    url?: unknown;
+    width?: unknown;
+    height?: unknown;
+}
+
+/** KLIPY's answer, in the shape we read. Everything else it sends is dropped —
  *  the response is mapped down rather than passed through, so nothing of the
  *  provider's schema reaches our client (§5). */
-interface TenorResult {
-    id?: unknown;
-    content_description?: unknown;
-    media_formats?: Record<string, { url?: unknown, dims?: unknown } | undefined>;
+interface KlipyItem {
+    slug?: unknown;
+    title?: unknown;
+    /** `'gif'` for a result, `'ad'` for a sponsored slot — see the filter in
+     *  `fetchFromProvider`. */
+    type?: unknown;
+    /** Tier (`sm`, `hd`, …) → format (`gif`, `jpg`, …) → the file. */
+    file?: Record<string, Record<string, KlipyFile | undefined> | undefined>;
 }
 
 /**
@@ -96,7 +125,7 @@ export async function GET(request: NextRequest) {
     // order of magnitude, so it debounces hard on the client — but the client is
     // not what holds. This is. There is no game to key it on and no membership
     // below it, so this pair is the whole of what stands between a signed-in
-    // stranger and our Tenor key as their own free GIF API — and, through the
+    // stranger and our KLIPY key as their own free GIF API — and, through the
     // catalogue write below, our own collection as their scratch space.
     //
     // Two limiters, the way /api/unlock and /api/user/displayname already do it,
@@ -140,7 +169,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Bookkeeping, and nothing the searcher is waiting on — so it runs after the
-    // response has flushed, the way the chat POST's push fan-out does (§5a).
+    // response has flushed, the way the chat POST's push fan-out does (§5b).
     if (results.length) {
         after(() => rememberResults(results));
     }
@@ -153,7 +182,7 @@ export async function GET(request: NextRequest) {
             // list to everybody, so a CDN hit is a hit for all of them. It is
             // also what keeps the catalogue's write amplification honest — a
             // cached response never re-runs this route, so a popular query pays
-            // for its upsert once (§5a).
+            // for its upsert once (§5b).
             //
             // Worth being clear about what `public` means on an auth-gated
             // route: a cached page can be served to a request that never
@@ -202,21 +231,22 @@ function unavailable(status = 200, statusText?: string) {
  * that answer is a working composer with no pictures in it.
  */
 async function fetchFromProvider(query: string): Promise<IChatAttachment[] | null> {
-    const url = tenorRequest(query ? 'search' : 'featured', {
-        limit: String(GIF_SEARCH_PAGE_SIZE),
-        media_filter: TENOR_MEDIA_FILTER,
-        contentfilter: TENOR_CONTENT_FILTER,
+    const url = klipyRequest(query ? 'search' : 'trending', {
+        page: '1',
+        per_page: String(GIF_SEARCH_PAGE_SIZE),
+        format_filter: KLIPY_FORMATS.join(','),
+        content_filter: KLIPY_CONTENT_FILTER,
         ...(query ? { q: query } : {}),
     });
     if (!url) {
         // A deployment with no key configured is a misconfiguration, not a
         // client error — and it is silent from the player's side either way, so
         // it has to be loud from ours.
-        console.error('GIF search is not configured: TENOR_API_KEY is unset');
+        console.error('GIF search is not configured: KLIPY_API_KEY is unset');
         return null;
     }
 
-    let payload: { results?: unknown };
+    let payload: { result?: unknown, data?: { data?: unknown } };
     try {
         const response = await fetch(url, {
             // Next caches `fetch` in a route handler by default; this response
@@ -224,7 +254,7 @@ async function fetchFromProvider(query: string): Promise<IChatAttachment[] | nul
             // again here would hold a page of results past the point the
             // catalogue rows behind them expire.
             cache: 'no-store',
-            signal: AbortSignal.timeout(TENOR_TIMEOUT_MS),
+            signal: AbortSignal.timeout(KLIPY_TIMEOUT_MS),
         });
         if (!response.ok) {
             // The status, never the body: an upstream error page is not
@@ -240,32 +270,59 @@ async function fetchFromProvider(query: string): Promise<IChatAttachment[] | nul
         return null;
     }
 
-    if (!Array.isArray(payload?.results)) {
+    // KLIPY wraps every answer in `{ result, data }` and reports a refusal —
+    // a bad app key, a quota — as `result: false`, sometimes *with* an ordinary
+    // status on it. So the envelope is read before the payload rather than the
+    // HTTP status being trusted to have said everything.
+    if (payload?.result === false) {
+        console.error('GIF search upstream refused the request');
+        return null;
+    }
+    if (!Array.isArray(payload?.data?.data)) {
         console.error('GIF search upstream answered something that is not a result list');
         return null;
     }
 
-    // Sliced, not just asked for: `limit` above is a request, and §4d's whole
+    // Sliced, not just asked for: `per_page` above is a request, and §4d's whole
     // posture is that a provider's answer is asserted on rather than trusted.
     // An upstream that ignored it — a different endpoint paging differently, a
     // future API change — would otherwise hand the picker a response of
     // unbounded size and this route's `after()` an unbounded `bulkWrite`, on a
     // path that has already answered the caller.
+    const page: KlipyItem[] = payload.data.data.slice(0, GIF_SEARCH_PAGE_SIZE);
+
+    // KLIPY interleaves sponsored slots into a page of results and marks them
+    // `type: 'ad'`. They are dropped here, before the counts below, because an
+    // ad is not a result we failed to read — it is one we were never going to
+    // render, and counting it as a failure would have a page of them look like
+    // the schema change the loud branch is for. (It also means an ad can never
+    // reach the catalogue, so nobody can send one as a message.)
     //
+    // Note which way round the test is: everything that is **not** an ad is
+    // considered, rather than only what says `type: 'gif'`. An allowlist reads
+    // safer and is worse here, because it silently swallows the failure the
+    // loud branch below exists to catch — a `type` that is renamed, dropped, or
+    // simply absent from the `trending` endpoint (a different endpoint from
+    // `search`, and the picker's opening screen) would leave `considered` empty,
+    // and an empty `considered` takes the cacheable "no GIFs match" path with
+    // no log line at all. The cost of the other way round is that renaming
+    // `'ad'` would let an ad through, which is a monetisation problem rather
+    // than a broken picker, and a visible one.
+    const considered = page.filter(item => item?.type !== 'ad');
+
     // `flatMap` over `filter(Boolean)` so the nulls narrow out of the type, and
     // a dropped item is a dropped item rather than a failed search — an
     // upstream that starts serving one odd result should cost that result and
     // nothing else (§5).
-    const considered: TenorResult[] = payload.results.slice(0, GIF_SEARCH_PAGE_SIZE);
-    const mapped = considered.flatMap((result: TenorResult) => {
-        const attachment = toAttachment(result);
+    const mapped = considered.flatMap((item: KlipyItem) => {
+        const attachment = toAttachment(item);
         return attachment ? [attachment] : [];
     });
 
     // Dropping *every* result the provider sent is not a search with no matches
-    // — it is a provider we can no longer read: a renamed variant, `dims` that
-    // stopped being a pair, a key that lost `media_filter`. Told apart because
-    // the two answers differ in every way that matters. "No matches" is
+    // — it is a provider we can no longer read: a renamed tier, a `file` that
+    // stopped being nested that way, a key that lost `format_filter`. Told apart
+    // because the two answers differ in every way that matters. "No matches" is
     // `unavailable: false` and cacheable, so a schema change would otherwise
     // show every player "no GIFs match" for every query, log nothing at all,
     // and be held at the edge for an hour fresh and a day stale — outliving the
@@ -284,7 +341,33 @@ async function fetchFromProvider(query: string): Promise<IChatAttachment[] | nul
 }
 
 /**
- * One of the provider's results as an attachment, or `null` if it isn't one we
+ * The first tier of `format` an item carries, or `undefined`.
+ *
+ * The animated file and its still frame are looked up independently rather than
+ * being pinned to one tier: an item missing `sm.jpg` but carrying `sm.gif` is
+ * still perfectly renderable with a still frame from the next tier down, and
+ * the two are drawn in the same box at the same aspect ratio either way.
+ *
+ * Only the tiers in `KLIPY_QUALITY_ORDER`, which is a cap as well as an order —
+ * see the note there about `hd`.
+ */
+function pickFile(item: KlipyItem, format: typeof KLIPY_FORMATS[number]): KlipyFile | undefined {
+    for (const tier of KLIPY_QUALITY_ORDER) {
+        const file = item?.file?.[tier]?.[format];
+        // A *usable* url, not merely a tier that exists: a placeholder
+        // `{ }`, a `{ url: null }` or a bare string where an object was
+        // expected would otherwise stop the walk at the preferred tier and
+        // drop an item that carries a perfectly good one below it — which is
+        // the opposite of what this fallback is for.
+        if (typeof file?.url === 'string' && file.url.length > 0) {
+            return file;
+        }
+    }
+    return undefined;
+}
+
+/**
+ * One of the provider's items as an attachment, or `null` if it isn't one we
  * will store.
  *
  * The checking is `normaliseAttachment`'s, not this function's: it is already
@@ -294,20 +377,22 @@ async function fetchFromProvider(query: string): Promise<IChatAttachment[] | nul
  * is what makes §4d's host assertion real — the point where a URL first crosses
  * from the provider into our data — and reusing it is why there is one host
  * list rather than one per gate.
+ *
+ * `mediaId` is the item's **slug** rather than its numeric `id`, because the
+ * slug is what KLIPY's own share, items and report endpoints are keyed by — so
+ * the thing we remember is the thing we can talk to them about later (§5, §9).
  */
-function toAttachment(result: TenorResult): IChatAttachment | null {
-    const formats = result?.media_formats ?? {};
-    const animated = formats.tinygif;
-    const still = formats.tinygifpreview;
-    const dims = Array.isArray(animated?.dims) ? animated.dims : [];
+function toAttachment(item: KlipyItem): IChatAttachment | null {
+    const animated = pickFile(item, 'gif');
+    const still = pickFile(item, 'jpg');
     return normaliseAttachment({
-        provider: 'tenor',
-        mediaId: result?.id,
+        provider: 'klipy',
+        mediaId: item?.slug,
         url: animated?.url,
         stillUrl: still?.url,
-        width: dims[0],
-        height: dims[1],
-        alt: result?.content_description,
+        width: animated?.width,
+        height: animated?.height,
+        alt: item?.title,
     });
 }
 

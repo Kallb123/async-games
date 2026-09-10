@@ -3,11 +3,20 @@
 How a player sends a GIF in a game's chat thread, what that costs, and which
 parts of it work on which platform.
 
-**Status: built.** All six of §11's commits are in — the model and its
-validators, a chat POST/GET that carries a GIF, the thread's rendering of one,
-the proxied search route, and the picker in the composer. A player taps **GIF**
-beside the message box, searches, and taps a result to send it; a line typed
-first goes under it as a caption.
+**Status: built, on KLIPY.** All seven of §11's commits are in — the model and
+its validators, a chat POST/GET that carries a GIF, the thread's rendering of
+one, the proxied search route, and the picker in the composer. A player taps
+**GIF** beside the message box, searches, and taps a result to send it; a line
+typed first goes under it as a caption.
+
+The one thing that has moved since is the provider. This was designed and first
+built against Tenor; Google stopped issuing Tenor API keys in January 2026 and
+shut the API off entirely on **30 June 2026**, so it is not a provider that can
+be called any more. §5a is the swap — what changed, and the four things about
+KLIPY that are genuinely different rather than renamed. Nothing in §3, §4, §6
+or §7 moved with it, which is the design working: §4c put the provider behind
+our own catalogue precisely so that "which catalogue" would be one module's
+business.
 
 So everything below now describes code rather than a plan, and the design
 reasoning is kept because it is the reasoning the code is shaped by — where the
@@ -51,9 +60,11 @@ purge, and our own answer to "what if it's a picture of something awful".
 Two more things follow from that table:
 
 - **B is not a shortcut to A.** A GIF a keyboard hands over arrives as pixels.
-  Even though GBoard's catalogue *is* Tenor's, there is no id or URL in what
-  `commitContent` delivers, so we cannot cheaply turn a keyboard GIF back into
-  a reference and take path A's costs. It is bytes or nothing.
+  However much the keyboard's catalogue overlaps ours, there is no id or URL in
+  what `commitContent` delivers, so we cannot cheaply turn a keyboard GIF back
+  into a reference and take path A's costs. It is bytes or nothing. (It is also
+  now a *different* catalogue: GBoard's is Tenor's, and Tenor is not who we
+  ask — see §5a.)
 - **A subsumes B on the phone.** A picker in the composer puts the same
   catalogue one tap away as the keyboard's GIF tab, on every platform, with a
   known-good rendering path — so B buys familiarity, not capability.
@@ -123,8 +134,8 @@ all untouched.
 
 ```ts
 export interface IChatAttachment {
-    provider: 'tenor',   // named, so a second catalogue is additive
-    mediaId: string,     // the provider's own id — for the share ping (§5) and for dedupe
+    provider: 'klipy',   // named, so a second catalogue is additive
+    mediaId: string,     // the provider's own slug — for the share ping (§5) and for dedupe
     url: string,         // the animated file, https, on an allow-listed host (§4)
     stillUrl: string,    // the first frame — reduced-motion, and tap-to-play (§6)
     width: number,       // intrinsic size, so the row can reserve its box (§7)
@@ -171,7 +182,7 @@ and an `<img src>` of their choosing in every opponent's browser, which hands
 that host each opponent's IP and user-agent, works as a read receipt, and can
 point at a decompression bomb instead of a GIF. A gate that important should
 not be a string comparison we have to get right — `endsWith` alone is defeated
-by `evil-media.tenor.com.example`, and that is the *easy* mistake to spot.
+by `evil-static.klipy.com.example`, and that is the *easy* mistake to spot.
 
 **So the client sends a catalogue id and the server resolves it.** The URL
 stored on the message is copied off the provider's own response, so there is no
@@ -197,24 +208,28 @@ It is also the one with server-side state, and the state is what spoils it:
 
 ### 4b. An id, re-resolved from the provider on send
 
-The client sends `{ provider, mediaId }` and the POST route asks Tenor for that
-id (v2's **Posts** endpoint, `/v2/posts?ids=` — v1's "GIF" endpoint renamed).
-No state, no index races, and the id is validated by the one party qualified to
-do it: if Tenor resolves it, it is real, and the URLs come back from Tenor
-rather than from the client.
+The client sends `{ provider, mediaId }` and the POST route asks the provider
+for that id — every GIF API has the endpoint for it (KLIPY's is
+`/gifs/items?slugs=`; Tenor's was `/v2/posts?ids=`). No state, no index races,
+and the id is validated by the one party qualified to do it: if the provider
+resolves it, it is real, and the URLs come back from the provider rather than
+from the client.
 
 Two costs, one of them subtle:
 
-- It proves "a real Tenor item". It does **not** prove "an item our content
-  filter approved" — a player can send any valid id, including one they found
-  under a query our filter would have blocked, or one from outside the picker
-  entirely. Tenor's `contentfilter` defaults to `off`, and whether it is
-  honoured on a by-id lookup at all is unconfirmed and should be verified
+- It proves "a real item in their catalogue". It does **not** prove "an item
+  our content filter approved" — a player can send any valid id, including one
+  they found under a query our filter would have blocked, or one from outside
+  the picker entirely. A by-id lookup takes no `content_filter`, and even where
+  one is accepted, whether it is honoured is unconfirmed and should be verified
   rather than assumed. A filter applied only at search time is not a filter.
 - It puts a third-party round trip on the **user-blocking** send path. The chat
   POST defers everything slow into `after()`, but this cannot be deferred —
-  the resolution *is* the message content. A Tenor wobble becomes a failed
-  send, where storing a reference would have succeeded.
+  the resolution *is* the message content. A provider wobble becomes a failed
+  send, where storing a reference would have succeeded. (Since writing that, a
+  provider went away *permanently*, which is the same argument with the volume
+  turned up: every design here that touches the provider on the send path is
+  one where a shutdown breaks sending, not merely searching.)
 
 ### 4c. An id, plus a durable catalogue — recommended
 
@@ -223,7 +238,7 @@ so it writes what it learned down. A new small collection, keyed by media id:
 
 ```ts
 export interface IGifCatalogueData {
-    provider: 'tenor',
+    provider: 'klipy',
     mediaId: string,     // unique with provider — the client's only input
     url: string,         // all four copied off the provider's response,
     stillUrl: string,    // never off a request body
@@ -243,7 +258,7 @@ its fields onto the message. Why this beats both of the above:
   index churn.
 - **The normal send touches no third party.** It is one indexed local read of a
   row our own search route wrote seconds earlier, so the send path is not
-  coupled to Tenor's uptime the way 4b's is.
+  coupled to the provider's uptime the way 4b's is.
 - **An unrecognised id is a plain 400** — a comprehensible refusal, not a
   mysterious one, and nothing a picker-driven send can hit.
 - The row is also the dedupe and analytics handle (§5) for free.
@@ -258,8 +273,8 @@ GIF that has already been sent.
 
 It does not disappear — it **demotes**, which is the whole point. It moves off
 client input and onto the provider's own response, inside the search route: ten
-lines asserting that the URLs Tenor handed us are `https:` on an expected host,
-with no credentials and a bounded length. That catches a config error pointing
+lines asserting that the URLs the provider handed us are `https:` on an expected
+host, with no credentials and a bounded length. That catches a config error pointing
 at the wrong base URL, or a spoofed or compromised upstream. Defence in depth,
 not the defence.
 
@@ -326,10 +341,12 @@ A new `GET /api/gif/search?q=…` (and `?trending`), because the provider's API
 key must not ship to the client — and, per §4c, because this route is now also
 what populates the catalogue.
 
-Tenor is the recommended provider: it is Google's, it is free at our volume,
-its content filter is server-side, and — pleasingly, given where this question
-started — **it is GBoard's own catalogue**, so the picker offers a phone player
-the same GIFs the keyboard would have.
+**The provider is KLIPY** (`api.klipy.com`), reached with a key this app holds
+server-side. §5a is how it got there and what is different about it; the short
+version is that the provider this was designed against no longer exists, and
+the requirements it was chosen for — free at our volume, a server-side content
+filter, a catalogue of the size a player expects — are the ones KLIPY was
+picked against too.
 
 The route is an ordinary member of `src/app/api/`, so it follows the gates the
 locksmith and gremlin passes will look for:
@@ -344,13 +361,14 @@ locksmith and gremlin passes will look for:
   actually holds.
 - `q` length-capped and passed as a query parameter, never interpolated into
   the upstream URL by hand.
-- `contentfilter=high` and `media_filter` set so the upstream returns only the
-  small variants we render — **pinned in the route, not chosen by the caller**,
+- `content_filter=high` and `format_filter` set so the upstream returns only
+  the variants we render — **pinned in the route, not chosen by the caller**,
   or the filter becomes a client-supplied field and §4c's guarantee evaporates.
+  `page` and `per_page` are pinned for the same reason.
 - `AbortSignal.timeout(…)` on the upstream fetch, and a provider failure
   answers with an empty list and a flag the picker shows as "GIFs
-  unavailable" — a wobble at Tenor must not break the composer, which is the
-  same "a push failure never undoes the message" instinct the chat POST
+  unavailable" — a wobble at the provider must not break the composer, which is
+  the same "a push failure never undoes the message" instinct the chat POST
   already has.
 - The response is **mapped down** to the fields the picker renders — never the
   provider's JSON passed through, which would leak whatever else it carries and
@@ -361,7 +379,115 @@ locksmith and gremlin passes will look for:
   `Cache-Control` with `s-maxage` — the one endpoint in the app where a shared
   cache is correct, precisely because it is not per-viewer.
 
-### 5a. Populating the catalogue without paying for it
+### 5a. The provider, and the move off Tenor
+
+This feature was designed and first built against **Tenor**, on the grounds
+that it was Google's, free at our volume, filtered server-side, and GBoard's
+own catalogue. Google then closed it: no new API keys from **13 January 2026**,
+and the API itself off on **30 June 2026**. That is not a wobble the §5 timeout
+covers — it is the provider ceasing to exist — so the picker had to move.
+
+It moved to **KLIPY** (`api.klipy.com`), which is where Tenor integrations were
+pointed and which keeps the properties Tenor was chosen for. Everything the
+move touched is in three files: `src/utils/gif/klipy.ts` (was `tenor.ts`), the
+search route's request and response mapping, and the host list in
+`src/utils/chat.ts`. Nothing in §3, §4, §6 or §7 changed, and no data migrated,
+because GIFs had never shipped — the branch that built them and the branch that
+moved them are the same unreleased feature.
+
+Four differences are real rather than renames, and each of them is a comment in
+the code as well as a line here:
+
+1. **The API key is a path segment**, not a query parameter:
+   `https://api.klipy.com/api/v1/<key>/gifs/search`. So the thing §4d's URL
+   discipline protects has changed shape — a path that could begin `//` now
+   resolves to another host *carrying our key*. Three things hold it, and it is
+   worth knowing which does what. `klipyRequest` builds one absolute string
+   from a literal origin rather than resolving a relative reference against a
+   base, which settles the **authority** whatever the arguments are. Its
+   endpoint argument is a union of literals, so the **path** is ours too. And
+   the one variable segment — the share ping's item id — is a separate argument
+   re-checked against `isInertGifMediaId` *inside* the function, because
+   `encodeURIComponent` is not what saves you there: it leaves `.` alone, so a
+   slug of `..` survives it and `new URL` then normalises the segment away, and
+   the charset is the only thing that refuses it. Asserting it in the builder
+   rather than trusting the caller is what keeps that true when §9's report
+   endpoint arrives keyed by the same slug. Nothing may **log** this URL: a
+   path segment is not redacted the way a query string sometimes is, so both
+   callers print statuses only.
+2. **An item is named by a slug**, not a number — and the slug is what KLIPY's
+   share, items and report endpoints are all keyed by, so it is what the
+   catalogue stores as `mediaId`. `MAX_GIF_MEDIA_ID_LENGTH` grew to match; the
+   inert-charset gate did not move, and now guards a URL *path* as well as a
+   Mongo key and a query string.
+3. **Results carry advertisements.** KLIPY monetises by interleaving
+   `type: 'ad'` items into a page. They are dropped in the search route before
+   anything else looks at the page, which matters twice: an ad must not be
+   renderable in the picker, and — because this route is the only writer of the
+   catalogue — an ad that reached a row would be an ad a player could *send*.
+   They are dropped before the "we could read none of these" alarm counts
+   anything, too, or a page that happened to be mostly ads would look like a
+   schema change.
+
+   Note which way round that test is, because the safer-*reading* version is
+   the wrong one. Everything that is **not** an ad is kept, rather than only
+   what says `type: 'gif'`. An allowlist on somebody else's discriminator fails
+   into silence: `type` renamed, dropped, or simply absent from the `trending`
+   endpoint — a different endpoint from `search`, and the picker's opening
+   screen — would empty the list, and an empty list is exactly the cacheable,
+   unlogged "no GIFs match" the alarm below exists to prevent. The cost the
+   other way round is that renaming `'ad'` would let an ad through: a
+   monetisation problem rather than a broken picker, and a visible one.
+4. **Failure can arrive inside a 200.** KLIPY reports a bad key or a spent
+   quota as `result: false` in the envelope. The route reads the envelope
+   before the payload rather than trusting the status line, and either way
+   lands on the same "GIFs unavailable".
+
+Two smaller notes. The variants are `file.<tier>.gif` and `file.<tier>.jpg`
+rather than Tenor's named `tinygif`/`tinygifpreview`, picked `sm` first and
+falling through `xs` and `md`, so a thin item is served rather than dropped —
+and a tier that merely *exists* is not enough, since a placeholder at the
+preferred tier would otherwise stop the walk in front of a good file below it.
+`hd` is deliberately outside that list, and it is a **cap** rather than a last
+resort: a URL that reaches the catalogue is one every player in the thread
+downloads on every open, forever, and an `hd` animated GIF runs to tens of
+megabytes — §4e's dimension check bounds pixels, not bytes. An item we could
+only serve at full size is dropped. And KLIPY takes an optional `customer_id`
+to personalise on: it is deliberately never sent, because handing a third party
+a per-player identifier to go with every search term is exactly what proxying
+this route was for.
+
+The one thing the move *adds* to the product is attribution: KLIPY's API terms
+ask for the mark in the search field and beside the content, which is the
+picker's "Search KLIPY…" placeholder and the "GIFs by KLIPY" credit under the
+grid. Text in the app's own type rather than their logo — this repo ships no
+third-party brand art, and a wordmark survives a theme change.
+
+**The one thing to verify before this ships**, and the only guarantee in this
+design that lives entirely outside our own code: that `content_filter=high` is
+a parameter KLIPY *honours*, on `/gifs/search` and on `/gifs/trending` alike.
+Silently ignoring an unknown query parameter is the ordinary default for an
+API, and the route can only prove it sends it. §9's first line rests on it, and
+the path if it is wrong is short — any signed-in player types an explicit term,
+the route catalogues what comes back, and the chat POST will then put it in
+front of everyone at the table, because nothing downstream asserts on a rating.
+So: a real key on a preview, a term that must be filtered, and eyes on the
+page. If KLIPY's items turn out to carry a safety or rating field, assert on it
+beside the ad filter, so the guarantee is read off the response rather than
+merely asked for in the URL.
+
+Two things this section deliberately does **not** do. A durable refusal
+(`result: false` for a bad key or a spent quota) is answered `no-store` and
+re-asked, the same as a five-second wobble, rather than being negatively
+cached — every failure landing on one answer is the property §5 wants, and the
+rate limiter is what bounds the re-asking. And `'tenor'` is gone from
+`GIF_PROVIDERS` rather than kept as a read-only legacy entry: a dev deployment
+may hold rows and messages naming it, and the honest cost of that is a handful
+of GIFs in a test thread degrading to their caption (the §4e read-side check
+doing exactly its job), which is cheaper than carrying a dead provider and nine
+dead hosts to protect throwaway data.
+
+### 5b. Populating the catalogue without paying for it
 
 The upsert of §4c's rows goes in the route's `after()`, as a single
 `bulkWrite` with `ordered: false`, guarded — it is bookkeeping, and nothing the
@@ -374,7 +500,7 @@ searcher is waiting on. Two things keep the write amplification honest:
   ours to set.
 
 The one decision this section left open — **what a send does on a catalogue
-miss** — shipped strict: a 400, no fallback to §4b's Tenor resolution. It costs
+miss** — shipped strict: a 400, no fallback to §4b's by-id resolution. It costs
 nothing real, since the picker served the row seconds earlier, and the forgiving
 version would have reintroduced the third-party dependency on the one path §4c
 exists to keep clear of it. Add the fallback only if the refusal is ever
@@ -388,9 +514,10 @@ picker's results for a month would resolve to nothing and the tap would 400 for
 a reason no player could see. It also means the collection holds what is in use
 rather than what was once searched for.
 
-Tenor also asks for a `registershare` ping when a result is really sent, and it
-is the only thing we give back for a free API. It lives in
-`src/utils/gif/tenor.ts` — the one module that knows the provider's base URL and
+The provider also asks for a **share trigger** — a `POST /gifs/share/<slug>`
+when a result is really sent (Tenor called the same thing `registershare`) —
+and it is the only thing we give back for a free API. It lives in
+`src/utils/gif/klipy.ts` — the one module that knows the provider's base URL and
 reads its key — and runs at the end of the POST's existing `after()`, *after*
 the push fan-out rather than before it: the buzz is what a player is waiting
 for, and analytics must not sit in front of it. It swallows its own failure, so
@@ -554,8 +681,12 @@ and they are all already in the design above rather than being extra work:
    directly. Arbitrary URLs would be the version of this feature that genuinely
    needs moderating; this is not, and that is a property of the mechanism
    rather than of a check we remembered to write.
-2. **`contentfilter=high` (§5)** does the bulk of it upstream, and is pinned in
-   the route where a client can't relax it. §4b is the variant where this
+2. **`content_filter=high` (§5)** does the bulk of it upstream, and is pinned
+   in the route where a client can't relax it — but it is the one guarantee
+   here we cannot check from inside this repo, so see the end of §5a for what
+   to verify and when. The same pinning is what keeps the provider's own
+   advertisements out of the catalogue (§5a) — they are dropped before a row
+   could ever be written for one. §4b is the variant where this
    guarantee would have leaked, and §4c is why it doesn't.
 3. **We store the `mediaId` (§3)**, so a reported message can be identified
    rather than just deleted — and, because the catalogue is keyed by the same
@@ -608,7 +739,7 @@ on the phone.
    catalogue upsert, and a route test for the unauthenticated, over-limit and
    upstream-failed cases.
 5. **The picker.** `GifPicker` in the composer, debounced, degrading to
-   "GIFs unavailable", plus the `registershare` ping inside the POST's
+   "GIFs unavailable", plus the share-trigger ping inside the POST's
    existing `after()`. This is the commit that makes GIFs player-visible, so
    it carries the **one** "What's new" line under enhancements, for the branch
    as a whole — not commit 6. A branch cut or merged between the two would
@@ -619,10 +750,18 @@ on the phone.
    section landed there with commit 2, so this is upkeep rather than new
    writing, but it is where the next contributor looks for what chat owns.
    Extract `describeMessage` if a second caller has appeared by then.
+7. **The provider.** Tenor off, KLIPY on, before any of this shipped: the
+   module rename, the search route's request and mapping, the host list, the
+   env var, the attribution, §5a, and every test that named the old provider.
+   One commit rather than six, because it is one substitution behind one
+   seam — and **no "What's new" line of its own**, because commit 5's line is
+   this branch's one line and players never saw a version of this feature that
+   called anybody else.
 
-Reviewers, by what each commit touches: `locksmith` and `gremlin` on 2 and 4,
-`caveman` on 3 and 5, `rulebook` on 6. `croupier` has nothing to do here —
-chat is public to the table by construction, and a GIF adds no hidden state.
+Reviewers, by what each commit touches: `locksmith` and `gremlin` on 2, 4 and
+7, `caveman` on 3 and 5, `rulebook` on 6 and 7. `croupier` has nothing to do
+here — chat is public to the table by construction, and a GIF adds no hidden
+state.
 
 Before each commit: `npm run build`, `npx tsc --noEmit`, `npm run lint`
 (`--max-warnings 0`), and `npm test` for 1 and 2.

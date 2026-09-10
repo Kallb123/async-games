@@ -98,18 +98,18 @@ describe("useGameChat", () => {
         it("sends a GIF as a provider and an id, and nothing else about it", async () => {
             const fetchSpy = stubOkPost();
 
-            expect(await renderOpenChat().send("", { provider: "tenor", mediaId: "abc123" })).toBe(true);
+            expect(await renderOpenChat().send("", { provider: "klipy", mediaId: "abc123" })).toBe(true);
 
             // Empty text is a message when a GIF carries it — and `gif` is the
             // ref, not an attachment: the server resolves every other field
             // from its own catalogue.
-            expect(postedBody(fetchSpy)).toEqual({ text: "", gif: { provider: "tenor", mediaId: "abc123" } });
+            expect(postedBody(fetchSpy)).toEqual({ text: "", gif: { provider: "klipy", mediaId: "abc123" } });
         });
 
         it("keeps a caption with the GIF, trimmed the way the route would", async () => {
             const fetchSpy = stubOkPost();
 
-            await renderOpenChat().send("  this is you  ", { provider: "tenor", mediaId: "abc123" });
+            await renderOpenChat().send("  this is you  ", { provider: "klipy", mediaId: "abc123" });
 
             expect(postedBody(fetchSpy).text).toBe("this is you");
         });

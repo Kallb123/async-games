@@ -389,8 +389,8 @@ copies every other field from here.
 
 ```ts
 interface IGifCatalogueData extends IChatAttachment {  // IChatAttachment lives in src/utils/chat.ts
-    provider: 'tenor';
-    mediaId: string;   // the provider's own id — the only field a client chooses
+    provider: 'klipy';
+    mediaId: string;   // the provider's own slug — the only field a client chooses
     url: string;       // the animated file, on an allow-listed host
     stillUrl: string;  // its first frame
     width: number;     // intrinsic size, so a thread can reserve a row's box before the image loads
