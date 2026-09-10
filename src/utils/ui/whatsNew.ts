@@ -111,6 +111,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Settlements & Cities shows what's happening on an opponent's turn",
+                detail: "The build/roll/trade panel used to disappear entirely while you waited for someone else's turn — including during setup, where it vanished right when you most wanted to see what was going on. It now stays on screen at all times, just greyed out and untappable until it's your move.",
+                game: "settlementsandcities",
+            },
+            {
                 title: "Match review controls stay on screen while you rewind",
                 detail: "Stepping back through a match, the transport buttons sat at the very bottom of the page — so on a tall board the part of the game you were rewinding was off the top of the screen, and you couldn't see anything change as you moved. The scrubber is now pinned to the bottom of the screen while you review, with the board scrolling clear above it.",
             },
@@ -148,10 +153,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Notifications no longer go missing when the app is open",
                 detail: "With Async Games open — on any screen, in any game — an arriving notification was quietly dropped instead of shown, so a turn could come round with nothing to tell you about it. They now appear whether you're in the app or not.",
-            },
-            {
-                title: "Going home keeps you signed in",
-                detail: "Coming back to the home page sometimes showed the sign-in page for visitors instead of your games — and pressing Sign in let you straight through, because you had never actually been signed out. Home now shows your games whenever you're signed in.",
             },
         ],
     },
