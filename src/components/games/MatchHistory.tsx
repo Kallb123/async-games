@@ -5,7 +5,8 @@ import RecapTimeline from "@/components/ui/RecapTimeline";
 import ReactionRow from "@/components/ui/ReactionRow";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { IHistoryEntryResponse } from "@/utils/apiModels/GameDataApi";
-import { getRelativeTime } from "@/utils/ui/relativeTime";
+import { formatRelativeTime } from "@/utils/ui/time";
+import { useNowToTheMinute } from "@/utils/hooks/useNow";
 
 /** What a game hands `GameShell`'s `log` prop. */
 export interface MatchHistoryProps {
@@ -53,6 +54,7 @@ export default function MatchHistory({ entries, userIdList = [], oldestFirst = f
     const lines = oldestFirst ? entries.slice().reverse() : entries;
     const timelineRef = useRef<HTMLOListElement | null>(null);
     const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+    const now = useNowToTheMinute();
 
     // Scroll to the latest entry when it changes: bottom when latest is at the
     // bottom, top when latest is at the top.
@@ -79,7 +81,7 @@ export default function MatchHistory({ entries, userIdList = [], oldestFirst = f
                     compact
                     events={lines.map((entry, i) => {
                         const isExpanded = expandedIndex === i;
-                        const relativeTime = getRelativeTime(entry.createdAt);
+                        const relativeTime = entry.createdAt ? formatRelativeTime(entry.createdAt, now) : null;
                         return {
                             id: String(i),
                             dotColour: playerColourForId(entry.actorId, userIdList),
@@ -93,15 +95,7 @@ export default function MatchHistory({ entries, userIdList = [], oldestFirst = f
                                         onReact={onReact && entry.commandId ? (reaction) => onReact(entry.commandId!, reaction) : undefined}
                                     />
                                     {relativeTime && (
-                                        <div
-                                            className={`ag-history-timestamp ${isExpanded ? 'ag-expanded' : ''}`}
-                                            style={{
-                                                maxHeight: isExpanded ? '100px' : '0',
-                                                overflow: 'hidden',
-                                                transition: 'max-height 0.2s ease-out',
-                                                paddingTop: isExpanded ? '8px' : '0',
-                                            }}
-                                        >
+                                        <div className={`ag-history-timestamp ${isExpanded ? 'ag-history-timestamp--expanded' : ''}`}>
                                             {relativeTime}
                                         </div>
                                     )}

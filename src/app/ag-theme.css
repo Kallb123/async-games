@@ -3279,7 +3279,15 @@ button.ag-chat-gif { cursor: pointer; }
 .ag-history-timestamp {
     font: 500 11px var(--ag-font);
     color: var(--ag-ink-soft);
+    max-height: 0;
+    overflow: hidden;
     transition: max-height 0.2s ease-out, padding-top 0.2s ease-out;
+    padding-top: 0;
+}
+
+.ag-history-timestamp--expanded {
+    max-height: 100px;
+    padding-top: 8px;
 }
 
 /* Tighter scale for the in-game match history (`.ag-log`), where the timeline
