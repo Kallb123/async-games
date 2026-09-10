@@ -62,6 +62,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Send a meme in a game's chat",
+                detail: "There's now an IMG button beside the GIF one: tap it to search KLIPY's meme collection and send a result the same way — tap to send, with whatever you've typed going underneath as a caption.",
+            },
+            {
                 title: "Send a GIF in a game's chat",
                 detail: "There's a GIF button beside the message box now: tap it, search for what you're after, and tap a result to send it. Type a line first and it goes underneath as a caption. GIFs play in the thread, or sit still with a play button if you've asked your phone for less motion, and if they can't be reached you can still send a message as normal.",
             },
@@ -99,11 +103,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Dice Cities rolls now show who got paid",
                 detail: "Every roll's payout now names who gained or lost coins and how many, right under the dice — no more working it out from the coin counts changing. And if it leaves you with nothing to spend and no free reroll left, your turn ends on its own instead of waiting for you to tap End turn.",
-                game: "dicecities",
-            },
-            {
-                title: "See every city in Dice Cities",
-                detail: "Everyone's cards are face up on the table, but you could only ever see your own — so there was no way to tell what a roll of 3 was about to pay an opponent, or who was one landmark from winning. The landmark track at the top now shows every player's progress at once, a dot each per landmark, and every opponent's city sits under yours to open and close as you like.",
                 game: "dicecities",
             },
         ],

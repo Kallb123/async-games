@@ -156,6 +156,11 @@ describe('normaliseGifRef', () => {
             .toEqual({ provider: 'klipy', mediaId: 'cat-falling-off-a-table-gif-9RtN2v' });
     });
 
+    it('keeps the meme catalogue as a provider of its own (docs/chat-gifs.md §12)', () => {
+        expect(normaliseGifRef({ provider: 'klipy-meme', mediaId: 'distracted-boyfriend-9RtN2v' }))
+            .toEqual({ provider: 'klipy-meme', mediaId: 'distracted-boyfriend-9RtN2v' });
+    });
+
     it('rejects a media id outside the inert charset', () => {
         // An id travels into a Mongo key, an upstream query string and — since
         // the share ping is keyed by slug — an upstream URL path; anything that
@@ -178,6 +183,10 @@ describe('isAllowedGifMediaUrl', () => {
     it('accepts the provider\'s media hosts', () => {
         expect(isAllowedGifMediaUrl('https://static.klipy.com/x/cat.gif', 'klipy')).toBe(true);
         expect(isAllowedGifMediaUrl('https://static.klipy.com/ii/abc/de/f/cat.jpg', 'klipy')).toBe(true);
+    });
+
+    it('accepts the meme category from the same CDN host', () => {
+        expect(isAllowedGifMediaUrl('https://static.klipy.com/mm/abc/meme.jpg', 'klipy-meme')).toBe(true);
     });
 
     it('compares the whole host, not a suffix', () => {

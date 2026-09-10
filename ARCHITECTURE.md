@@ -70,6 +70,8 @@ src/
 │       ├── friends/            # friends system
 │       ├── gif/search/         # proxied GIF search: the chat picker's data, and
 │       │                       #   the only writer of the GifCatalogue (§5)
+│       ├── meme/search/        # proxied KLIPY meme search, the sibling picker
+│       │                       #   beside gif/search/ (docs/chat-gifs.md §12)
 │       ├── cron/turntimer/     # turn-timer enforcement (external cron target)
 │       ├── notifyuser/  notificationtoken/       # push plumbing
 │       ├── notificationtest/                     # "does push work?" self-test
@@ -99,7 +101,9 @@ src/
 │   ├── apiModels/games/serializableRegistry.test.ts  # asserts every @serializable class is wired
 │   ├── mongodb/                # base schemas: GameData, InvitationData, FriendshipData, connection
 │   ├── firebase/               # client app + admin SDK + push helper
-│   ├── gif/                    # the GIF provider: its base URL, its key, its share ping
+│   ├── gif/                    # the KLIPY provider: its base URL, its key, its share
+│   │                           #   ping, and the proxy-search logic shared by the GIF
+│   │                           #   and meme categories (docs/chat-gifs.md §12)
 │   ├── games/                  # cross-game helpers: DiceRoll, TurnTimer, replay engine
 │   ├── hooks/                  # usePlayerList, useFcmToken, useTurnNavigation
 │   └── ui/                     # cross-game glue only: games.ts (aggregates each game's
@@ -382,17 +386,17 @@ Key properties:
 ### GIF catalogue (`GifCatalogue`)
 
 `src/utils/mongodb/GifCatalogueData.ts` defines a third flat collection beside
-`ChatMessage`, one row per GIF our own search route has served
-(`docs/chat-gifs.md`). It is what lets a message carry a GIF without the client
-ever sending a URL: the client sends `{ provider, mediaId }` and the chat POST
-copies every other field from here.
+`ChatMessage`, one row per GIF or meme one of our own search routes has served
+(`docs/chat-gifs.md`, §12 for the meme category). It is what lets a message
+carry one without the client ever sending a URL: the client sends
+`{ provider, mediaId }` and the chat POST copies every other field from here.
 
 ```ts
 interface IGifCatalogueData extends IChatAttachment {  // IChatAttachment lives in src/utils/chat.ts
-    provider: 'klipy';
+    provider: GifProvider;  // 'klipy' (animated) or 'klipy-meme' (static) — GIF_PROVIDERS in chat.ts
     mediaId: string;   // the provider's own slug — the only field a client chooses
-    url: string;       // the animated file, on an allow-listed host
-    stillUrl: string;  // its first frame
+    url: string;       // the animated file (or the static image, for a meme), on an allow-listed host
+    stillUrl: string;  // its first frame — the same file as `url` for a meme, which has no other
     width: number;     // intrinsic size, so a thread can reserve a row's box before the image loads
     height: number;
     alt: string;

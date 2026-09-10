@@ -60,12 +60,20 @@ export default function ChatGif({ attachment, onSelect }: ChatGifProps) {
     const [failed, setFailed] = useState(false);
     const play = useCallback(() => setPlaying(true), []);
 
-    // A message with no usable GIF degrades to a caption rather than an empty
-    // row — the same answer for an attachment the GET refused, and for one
-    // whose URL 404s in the browser (a provider expiring it, a host we no
-    // longer allow). `Avatar` falls back to its initials badge the same way.
+    // The word this attachment is called in its own captions — "GIF" or
+    // "meme" (docs/chat-gifs.md §12). Read off `provider` rather than passed
+    // in, because the two kinds share this one component and every caller
+    // already has the attachment in hand. Falls back to "GIF" when there is no
+    // attachment to ask — the common case for a degraded message, and the
+    // label this component always used before a second kind existed.
+    const label = attachment?.provider === 'klipy-meme' ? 'Meme' : 'GIF';
+
+    // A message with no usable attachment degrades to a caption rather than an
+    // empty row — the same answer for one the GET refused, and for one whose
+    // URL 404s in the browser (a provider expiring it, a host we no longer
+    // allow). `Avatar` falls back to its initials badge the same way.
     if (!attachment || failed) {
-        return <div className="ag-chat-gif-missing">GIF unavailable</div>;
+        return <div className="ag-chat-gif-missing">{label} unavailable</div>;
     }
 
     const { url, stillUrl, width, height, alt } = attachment;
@@ -93,9 +101,10 @@ export default function ChatGif({ attachment, onSelect }: ChatGifProps) {
            us to pass the same bytes through unchanged (docs/chat-gifs.md §6). */
         <img
             src={reduceMotion && !playing ? stillUrl : url}
-            alt={alt || 'GIF'}
-            // A page of history is fifty rows; fetching fifty GIFs the player
-            // hasn't scrolled to yet is the heaviest thing this app would do.
+            alt={alt || label}
+            // A page of history is fifty rows; fetching fifty of these the
+            // player hasn't scrolled to yet is the heaviest thing this app
+            // would do.
             loading="lazy"
             onError={() => setFailed(true)}
         />
@@ -103,7 +112,7 @@ export default function ChatGif({ attachment, onSelect }: ChatGifProps) {
 
     if (onSelect) {
         return (
-            <button type="button" className="ag-chat-gif" style={box} onClick={onSelect} aria-label={`Send GIF: ${alt || 'GIF'}`}>
+            <button type="button" className="ag-chat-gif" style={box} onClick={onSelect} aria-label={`Send ${label}: ${alt || label}`}>
                 {frame}
             </button>
         );
@@ -111,9 +120,13 @@ export default function ChatGif({ attachment, onSelect }: ChatGifProps) {
 
     if (reduceMotion && !playing) {
         // A button, not a div with an onClick: playing an animation is an
-        // action, and it has to be reachable from the keyboard.
+        // action, and it has to be reachable from the keyboard. A meme has no
+        // motion to withhold — `reduceMotion` is never true for one, since its
+        // `url` and `stillUrl` are the same static file — so this branch is
+        // reached by a GIF alone in practice, but the label still reads right
+        // if that ever changes.
         return (
-            <button type="button" className="ag-chat-gif" style={box} onClick={play} aria-label={`Play GIF: ${alt || 'GIF'}`}>
+            <button type="button" className="ag-chat-gif" style={box} onClick={play} aria-label={`Play ${label}: ${alt || label}`}>
                 {frame}
                 <span className="ag-chat-gif-play" aria-hidden>▶</span>
             </button>

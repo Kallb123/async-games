@@ -66,12 +66,19 @@ export function normaliseReadAt(value: unknown): string | null {
 // ---------------------------------------------------------------- GIFs
 
 /**
- * The catalogues a GIF can come from. A second one is additive — a new entry
- * here, a new host list below, and a branch in the search route — but the
- * provider is always named on the wire, because a bare id means nothing
- * without it. See docs/chat-gifs.md §4.
+ * The catalogues a GIF (or a meme — the same shape, see docs/chat-gifs.md
+ * §12) can come from. A second one is additive — a new entry here, a new host
+ * list below, and a branch in the search route — but the provider is always
+ * named on the wire, because a bare id means nothing without it. See
+ * docs/chat-gifs.md §4.
+ *
+ * `klipy-meme` is not a second vendor: it is KLIPY's `/static-memes/` category,
+ * proxied by its own search route the same way `/gifs/` is. It gets its own
+ * provider value rather than a flag alongside `klipy` because a provider is
+ * already the unit this app resolves a catalogue row and a host list by, and
+ * a meme's slug is drawn from a different KLIPY namespace than a GIF's.
  */
-export const GIF_PROVIDERS = ['klipy'] as const;
+export const GIF_PROVIDERS = ['klipy', 'klipy-meme'] as const;
 export type GifProvider = typeof GIF_PROVIDERS[number];
 
 /**
@@ -102,6 +109,10 @@ const GIF_MEDIA_HOSTS: Record<GifProvider, readonly string[]> = {
     // alike — from one CDN host, so this list is one entry rather than the
     // shard-per-number set the previous provider needed.
     klipy: [
+        'static.klipy.com',
+    ],
+    // The meme category is served from the same CDN as the GIF one.
+    'klipy-meme': [
         'static.klipy.com',
     ],
 };
