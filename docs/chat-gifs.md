@@ -3,11 +3,13 @@
 How a player sends a GIF in a game's chat thread, what that costs, and which
 parts of it work on which platform.
 
-**Status: built, on KLIPY.** All seven of §11's commits are in — the model and
-its validators, a chat POST/GET that carries a GIF, the thread's rendering of
-one, the proxied search route, and the picker in the composer. A player taps
-**GIF** beside the message box, searches, and taps a result to send it; a line
-typed first goes under it as a caption.
+**Status: built, on KLIPY, with a second category.** All seven of §11's
+commits are in — the model and its validators, a chat POST/GET that carries a
+GIF, the thread's rendering of one, the proxied search route, and the picker
+in the composer. A player taps **GIF** beside the message box, searches, and
+taps a result to send it; a line typed first goes under it as a caption. §12
+adds a second button beside it, **IMG**, for KLIPY's `/memes/` category —
+static images rather than animated ones, through the same design end to end.
 
 The one thing that has moved since is the provider. This was designed and first
 built against Tenor; Google stopped issuing Tenor API keys in January 2026 and
@@ -765,3 +767,73 @@ state.
 
 Before each commit: `npm run build`, `npx tsc --noEmit`, `npm run lint`
 (`--max-warnings 0`), and `npm test` for 1 and 2.
+
+---
+
+## 12. A second button: memes
+
+KLIPY's platform is more than one content category — `/gifs/` is the one this
+feature was built against, and `/memes/` sits beside it, same key, same
+envelope, same `search`/`trending`/`share` endpoints, different path segment.
+An **IMG** button next to **GIF** proxies that category the same way, for
+static images rather than animated ones — a distracted-boyfriend macro, not a
+looping clip.
+
+The design question this raises is not "how do we fetch memes" — that part is
+identical to §5 — but **how much of §3–§7 is really about GIFs, versus about
+"a picture chosen from a filtered provider catalogue and sent as an
+attachment"**. It turns out to be almost none of it:
+
+- **§3's data model doesn't change.** `IChatAttachment` is seven fields — a
+  provider, an id, two URLs, two dimensions, an alt — and none of them
+  presumes motion. A meme uses the same shape with `url` and `stillUrl` set to
+  the same file, because it has no separate still frame to fall back to; every
+  reader downstream (`ChatGif`, the chat GET's `normaliseAttachment` re-check,
+  the catalogue's TTL and unique index) already treats those two fields as
+  "whichever frame to draw right now" rather than "the animation and its
+  poster", so nothing there had to learn a new case.
+- **§4's client surface doesn't change.** A meme ref is still `{ provider,
+  mediaId }`, checked by the same `normaliseGifRef` — the only addition is a
+  second literal in `GIF_PROVIDERS`. This is the whole reason that union was a
+  documented extension point (§4's comment on it predates this section): a
+  second catalogue is a provider value, a host-list entry and a search-route
+  branch, not a new gate.
+- **§5's proxy design doesn't change**, so it moved into a shared function,
+  `runProviderSearch` (`src/utils/gif/klipySearch.ts`), rather than being
+  copied into a second route. The two route files (`src/app/api/gif/search`,
+  `src/app/api/meme/search`) now hold only what makes one category that
+  category: which KLIPY endpoint segment, which formats, which provider a
+  result is catalogued under, and its own rate-limit budget (`memeSearch-*`,
+  never `gifSearch-*` — a player switching pickers should not find one has
+  spent the other's quota). Everything else — auth, the two-limiter check, the
+  ad filter, the "we could read none of these" alarm, the catalogue upsert,
+  the cache headers — is one implementation, so a fix to it fixes both
+  categories at once and a divergence between them has to be deliberate.
+- **§6's rendering doesn't change.** `ChatGif` draws either kind — a meme has
+  no motion to reduce, so its `reduceMotion` branch is simply never the live
+  path for one, and the component's only accommodation is reading `provider`
+  to say "GIF" or "Meme" in a caption or an `aria-label`. The composer's
+  picker generalised the same way: `GifPicker` became `AttachmentPicker`,
+  taking a `kind: 'gif' | 'meme'` prop that picks the panel's four or five
+  words (title, placeholder noun, empty-state plural, attribution line) out of
+  one table, because the panel itself — the debounce, the skeleton, the retry,
+  the grid — was never about GIFs specifically.
+- **§9's moderation reasoning is unchanged**, because it never depended on
+  motion either: the catalogue is still the boundary regardless of which
+  category populated a row, and `content_filter=high` is still asked of both.
+
+One thing is genuinely new rather than reused: `registerGifShare`'s share ping
+now has two categories to choose between, so it maps a ref's provider to
+KLIPY's `gifs`/`memes` segment via `SHARE_CATEGORY` in `klipy.ts`, rather than
+refusing every provider but the first the way it did when there was only ever
+one.
+
+**Composer wiring.** The two buttons open the same panel shape in the same
+place, so `GameChat` holds one `openPicker: 'gif' | 'meme' | null` slot rather
+than two independent booleans — tapping one while the other's panel is open
+swaps it rather than stacking a second panel under the composer, which is the
+sane default for two buttons that both mean "open something here".
+
+**What's new.** One line, in Enhancements, for this branch — the same rule §11
+commit 5 already applies: the feature that makes something player-visible
+carries the note, not the refactor that happened to land beside it.

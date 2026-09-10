@@ -1977,17 +1977,19 @@ button.ag-chat-gif { cursor: pointer; }
 /* The line of text under a GIF, when the sender wrote one too. */
 .ag-chat-gif-caption { margin-top: 6px; }
 
-/* The composer's GIF button, sized down from a full .ag-btn the way
-   "Load earlier" is — a composer control beside the field, not a page action.
-   Its own width so the label doesn't reflow between "GIF" and the pressed
-   state, and terracotta while the picker is open, the same way the options
-   menu marks the row whose panel is showing (`.ag-gom-item--active`). */
-.ag-chat-gif-toggle { padding: 8px 10px; font-size: 12px; letter-spacing: 0.04em; }
-.ag-chat-gif-toggle--active { border-color: var(--ag-terracotta); color: var(--ag-terracotta); }
+/* The composer's GIF and image (meme) buttons, sized down from a full .ag-btn
+   the way "Load earlier" is — a composer control beside the field, not a page
+   action. Its own width so a label doesn't reflow between its two states, and
+   terracotta while its own picker is open, the same way the options menu
+   marks the row whose panel is showing (`.ag-gom-item--active`). Shared by
+   both buttons: they open the same panel shape in the same place, and only
+   ever one at a time (docs/chat-gifs.md §12). */
+.ag-chat-attach-toggle { padding: 8px 10px; font-size: 12px; letter-spacing: 0.04em; }
+.ag-chat-attach-toggle--active { border-color: var(--ag-terracotta); color: var(--ag-terracotta); }
 
-/* ---- The GIF picker (GifPicker) ----
+/* ---- The GIF/meme picker (AttachmentPicker) ----
    A panel between the thread and the composer: the search field, then a grid of
-   results drawn by the same `ChatGif` the thread uses (docs/chat-gifs.md §6).
+   results drawn by the same `ChatGif` the thread uses (docs/chat-gifs.md §6, §12).
    Inset rather than floating, so it reads as part of the composer it opened
    from and can't cover the conversation. */
 .ag-gif-picker {

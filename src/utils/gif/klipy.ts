@@ -1,12 +1,13 @@
-// The provider's side of the GIF feature: the one place its base URL, its key
-// and its "we shared this" ping are written.
+// The provider's side of the GIF/meme feature: the one place its base URL, its
+// key and its "we shared this" ping are written.
 //
-// Two routes talk to KLIPY and they want different things from it — the search
-// route asks for results, the chat POST tells it a result was really sent
-// (docs/chat-gifs.md §5) — so what they share is the request envelope rather
-// than the request. Nothing here decides what a URL is allowed to be; that is
-// `normaliseAttachment`'s job in src/utils/chat.ts, and it runs over whatever
-// comes back.
+// Two search routes talk to KLIPY, one per content category (`gifs`, `memes`
+// — docs/chat-gifs.md §12), and both want the same thing from it: an envelope
+// built the same way, differing only in the category segment. The chat POST
+// talks to it too, to say a result was really sent (§5). What all of them
+// share is the request envelope rather than the request. Nothing here decides
+// what a URL is allowed to be; that is `normaliseAttachment`'s job in
+// src/utils/chat.ts, and it runs over whatever comes back.
 //
 // Why KLIPY and not Tenor: Google shut the Tenor API down on 30 June 2026, and
 // stopped issuing keys in the January before it, so the provider this feature
@@ -18,16 +19,17 @@
 //
 // Server-only: it reads `process.env.KLIPY_API_KEY`, which must never reach a
 // browser. Nothing under src/components imports it, and the one hop that could
-// change that is worth naming because it is a one-word edit: `GifPicker`
-// imports `IGifSearchResponse` from the search route with `import type`, which
-// the compiler erases. Dropping the `type` from that line would pull the route —
-// and this module — into the client graph. (Next only inlines `NEXT_PUBLIC_*`,
-// so the key still wouldn't ship; the picker would simply stop working. The
+// change that is worth naming because it is a one-word edit: `AttachmentPicker`
+// imports each search route's response type (`IGifSearchResponse` /
+// `IMemeSearchResponse`) with `import type`, which the compiler erases.
+// Dropping the `type` from either line would pull that route — and this
+// module — into the client graph. (Next only inlines `NEXT_PUBLIC_*`, so the
+// key still wouldn't ship; the picker would simply stop working. The
 // framework's own `import 'server-only'` would make it a build error instead,
 // but it resolves to a module that throws outside a React Server component
 // condition, which is every test in this repo.)
 
-import { IChatGifRef, isInertGifMediaId } from '@/utils/chat';
+import { GifProvider, IChatGifRef, isInertGifMediaId } from '@/utils/chat';
 
 /** Note the trailing slash and note that the key goes *after* it: KLIPY takes
  *  its app key as a path segment (`/api/v1/<key>/gifs/…`) rather than as a
@@ -42,10 +44,19 @@ const KLIPY_API = 'https://api.klipy.com/api/v1/';
 export const KLIPY_TIMEOUT_MS = 5_000;
 
 /**
- * The endpoints this app calls, under `/<key>/gifs/`. A closed set of literals,
- * not a `string` and not a template type, because the key is part of the path
- * now: a path that could start with `//` would resolve to *another host*, on a
- * URL that carries our key.
+ * The content categories this app calls, each under its own `/<key>/<category>/`
+ * segment — `gifs` for the animated picker, `memes` for the static-image one
+ * beside it (docs/chat-gifs.md §12). A closed set for the same reason
+ * `KlipyEndpoint` is: a category is a path segment carrying our key, not a
+ * caller's choice.
+ */
+type KlipyCategory = 'gifs' | 'memes';
+
+/**
+ * The endpoints this app calls, under `/<key>/<category>/`. A closed set of
+ * literals, not a `string` and not a template type, because the key is part of
+ * the path now: a path that could start with `//` would resolve to *another
+ * host*, on a URL that carries our key.
  *
  * `share` is the one that also needs an item, and it takes it as a separate
  * argument for exactly this reason — a `` `share/${string}` `` member would
@@ -68,8 +79,8 @@ type KlipyEndpoint = 'search' | 'trending' | 'share';
  * to *that* host, and this URL carries the API key in its path. Starting from
  * the literal origin means nothing appended can move the authority, which is
  * the half of the guarantee that holds no matter what the arguments are;
- * `KlipyEndpoint`'s literals and the `slug` gate below are what keep the
- * *path* right too.
+ * `KlipyCategory` and `KlipyEndpoint`'s literals and the `slug` gate below are
+ * what keep the *path* right too.
  *
  * The parameters go on with `searchParams` and never by hand — one of them is a
  * player's search term, which is exactly the sort of string that carries an
@@ -77,9 +88,9 @@ type KlipyEndpoint = 'search' | 'trending' | 'share';
  *
  * **Never log this URL.** The key is a path segment, and path segments are not
  * redacted the way query strings sometimes are, so a `console.error(msg, url)`
- * here writes the key into the runtime log. Both callers print statuses only.
+ * here writes the key into the runtime log. Every caller prints statuses only.
  */
-export function klipyRequest(endpoint: KlipyEndpoint, params: Record<string, string> = {}, slug?: string): URL | null {
+export function klipyRequest(category: KlipyCategory, endpoint: KlipyEndpoint, params: Record<string, string> = {}, slug?: string): URL | null {
     const key = process.env.KLIPY_API_KEY?.trim();
     if (!key) {
         return null;
@@ -98,7 +109,7 @@ export function klipyRequest(endpoint: KlipyEndpoint, params: Record<string, str
     // and a path segment built from an environment variable is one a stray
     // `/` in a mis-pasted value would otherwise re-point.
     const path = slug === undefined ? endpoint : `${endpoint}/${encodeURIComponent(slug)}`;
-    const url = new URL(`${KLIPY_API}${encodeURIComponent(key)}/gifs/${path}`);
+    const url = new URL(`${KLIPY_API}${encodeURIComponent(key)}/${category}/${path}`);
     for (const [name, value] of Object.entries(params)) {
         url.searchParams.set(name, value);
     }
@@ -123,14 +134,16 @@ export function klipyRequest(endpoint: KlipyEndpoint, params: Record<string, str
  * thing keeping the instance alive: a fetch nobody waits for is a fetch that may
  * never leave.
  */
-export async function registerGifShare(ref: IChatGifRef): Promise<void> {
-    // One provider today, and the ping is provider-specific — a second
-    // catalogue would bring its own branch here rather than pretending this one
-    // generalises.
-    if (ref.provider !== 'klipy') {
-        return;
-    }
+/** Which KLIPY category's `/share` a provider's items are pinged through.
+ *  Every `GifProvider` is KLIPY today, so this is the whole of what tells them
+ *  apart here — a genuinely different vendor would need its own branch rather
+ *  than a wider map. */
+const SHARE_CATEGORY: Record<GifProvider, KlipyCategory> = {
+    klipy: 'gifs',
+    'klipy-meme': 'memes',
+};
 
+export async function registerGifShare(ref: IChatGifRef): Promise<void> {
     // No key, no ping. Silent on purpose: the search route already says so
     // loudly, and a message that saved is not the place to say it again on every
     // send.
@@ -146,7 +159,7 @@ export async function registerGifShare(ref: IChatGifRef): Promise<void> {
     // both a slug and a numeric `id`, and the slug is the one its own docs and
     // SDKs key this endpoint by. The catalogue only stores the slug, so
     // changing that is a search-route change too, not a one-liner here.
-    const url = klipyRequest('share', {}, ref.mediaId);
+    const url = klipyRequest(SHARE_CATEGORY[ref.provider], 'share', {}, ref.mediaId);
     if (!url) {
         return;
     }

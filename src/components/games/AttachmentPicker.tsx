@@ -5,7 +5,7 @@ import PanelHead from '@/components/ui/PanelHead';
 import Skeleton from '@/components/ui/Skeleton';
 import { fetchWithSessionRetry } from '@/utils/hooks/fetchWithSessionRetry';
 import { IChatAttachment, MAX_GIF_QUERY_LENGTH } from '@/utils/chat';
-import type { IGifSearchResponse } from '@/app/api/gif/search/route';
+import type { IProviderSearchResponse } from '@/utils/gif/klipySearch';
 
 /**
  * How long the box sits still before a search goes out.
@@ -27,13 +27,35 @@ const SKELETON_CELLS = 8;
  *  else can see the label of. */
 const GIF_PROVIDER_NAME = 'KLIPY';
 
-interface GifPickerProps {
+/** The two things this picker can be — a KLIPY category apiece
+ *  (docs/chat-gifs.md §12), the same shape of search behind both, but
+ *  different endpoint, different noun in every message and label. */
+export type AttachmentKind = 'gif' | 'meme';
+
+/** The strings that differ between the two kinds. Everything else about the
+ *  picker — the debounce, the skeleton, the retry, the grid — is identical, so
+ *  it lives once in this component rather than in a second copy of it. */
+const KIND_COPY: Record<AttachmentKind, {
+    searchPath: string;
+    title: string;
+    /** Singular, lower-case — "GIF" / "meme" — for a sentence built around it. */
+    noun: string;
+    /** Plural, matching the noun's own capitalisation — "GIFs" / "memes". */
+    plural: string;
+}> = {
+    gif: { searchPath: '/api/gif/search', title: 'GIFs', noun: 'GIF', plural: 'GIFs' },
+    meme: { searchPath: '/api/meme/search', title: 'Memes', noun: 'meme', plural: 'memes' },
+};
+
+interface AttachmentPickerProps {
+    /** Which KLIPY category this instance searches. */
+    kind: AttachmentKind;
     /** A result was tapped — send it. */
     onSelect: (attachment: IChatAttachment) => void;
-    /** Dismisses the picker; the composer's own GIF button toggles it too. */
+    /** Dismisses the picker; the composer's own toggle button does too. */
     onClose: () => void;
     /** True while a send is in flight, so the grid can say so and a second tap
-     *  can't queue a second GIF while the first is still going. */
+     *  can't queue a second send while the first is still going. */
     sending: boolean;
     /** The last tap was refused or failed. A tap that sends closes the picker,
      *  so the only thing left on screen after a failed one would otherwise be
@@ -48,8 +70,12 @@ interface GifPickerProps {
 type PickerState = 'loading' | 'ready' | 'unavailable';
 
 /**
- * The GIF picker: a search box and a grid of results, opened from the chat
- * composer (docs/chat-gifs.md §5, §6).
+ * A search box and a grid of results, opened from the chat composer
+ * (docs/chat-gifs.md §5, §6, §12) — for either KLIPY category the composer
+ * offers a button for. One component rather than two: a GIF result and a meme
+ * result are both an `IChatAttachment` drawn with `ChatGif`, and the picker
+ * around them differs only in which endpoint it polls and which words it uses,
+ * both captured in `KIND_COPY` above.
  *
  * It fetches for itself rather than taking its data from a hook in `GameShell`
  * the way the thread does. The reason the thread's fetch lives up there is the
@@ -59,10 +85,11 @@ type PickerState = 'loading' | 'ready' | 'unavailable';
  *
  * There is no failure state that stops a player chatting: a provider wobble, a
  * missing API key, a spent rate limit and a network error all land on the same
- * "GIFs unavailable" line, and the composer underneath carries on exactly as it
- * did before this feature existed.
+ * "<kind> unavailable" line, and the composer underneath carries on exactly as
+ * it did before this feature existed.
  */
-export default function GifPicker({ onSelect, onClose, sending, sendFailed }: GifPickerProps) {
+export default function AttachmentPicker({ kind, onSelect, onClose, sending, sendFailed }: AttachmentPickerProps) {
+    const copy = KIND_COPY[kind];
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<IChatAttachment[]>([]);
     const [state, setState] = useState<PickerState>('loading');
@@ -70,8 +97,8 @@ export default function GifPicker({ onSelect, onClose, sending, sendFailed }: Gi
     // Without it the only way out of `unavailable` is a keystroke: a panel that
     // opened during a five-second wobble at the provider — or while the
     // limiter's own Mongo write was failing, which the route deliberately
-    // degrades to the same answer — would read "GIFs unavailable" for as long as
-    // it stayed open, with nothing to press.
+    // degrades to the same answer — would read "<kind> unavailable" for as
+    // long as it stayed open, with nothing to press.
     const [attempt, setAttempt] = useState(0);
 
     // The term actually searched for, and what the effect is keyed on rather
@@ -79,33 +106,34 @@ export default function GifPicker({ onSelect, onClose, sending, sendFailed }: Gi
     // a typed-then-deleted one) doesn't spend a request from a budget of sixty.
     const term = query.trim().slice(0, MAX_GIF_QUERY_LENGTH);
 
-    // The debounce and the request in one effect, keyed on the term: React tears
-    // the previous one down on every keystroke, which is exactly the "cancel the
-    // pending search" the debounce needs, and the `cancelled` flag covers a
-    // request that was already in flight when the player typed again (or closed
-    // the picker). Nothing is set during the effect itself — a state write there
-    // is what `react-hooks/set-state-in-effect` refuses, and it isn't wanted
-    // anyway: the previous results stay put until the next ones land.
+    // The debounce and the request in one effect, keyed on the term and the
+    // kind: React tears the previous one down on every keystroke, which is
+    // exactly the "cancel the pending search" the debounce needs, and the
+    // `cancelled` flag covers a request that was already in flight when the
+    // player typed again (or closed the picker). Nothing is set during the
+    // effect itself — a state write there is what `react-hooks/set-state-in-effect`
+    // refuses, and it isn't wanted anyway: the previous results stay put until
+    // the next ones land.
     useEffect(() => {
         let cancelled = false;
         const timer = setTimeout(async () => {
             // Trending, not a search — `q` is left off entirely rather than sent
             // empty, so the route's own "no term means featured" branch is the
             // one thing deciding it.
-            const path = term ? `/api/gif/search?${new URLSearchParams({ q: term })}` : '/api/gif/search';
+            const path = term ? `${copy.searchPath}?${new URLSearchParams({ q: term })}` : copy.searchPath;
             const response = await fetchWithSessionRetry(path, () => cancelled);
             if (cancelled) {
                 return;
             }
             if (!response || !response.ok) {
                 // Includes the 429 a very fast typist can reach: the honest
-                // answer to a player is the same either way — no pictures just
+                // answer to a player is the same either way — nothing just
                 // now, and the thread is unaffected.
                 setState('unavailable');
                 return;
             }
             try {
-                const body = await response.json() as IGifSearchResponse;
+                const body = await response.json() as IProviderSearchResponse;
                 if (cancelled) {
                     return;
                 }
@@ -121,7 +149,7 @@ export default function GifPicker({ onSelect, onClose, sending, sendFailed }: Gi
                 if (cancelled) {
                     return;
                 }
-                console.error('Failed to read GIF search results', error);
+                console.error(`Failed to read ${copy.noun} search results`, error);
                 setState('unavailable');
             }
         }, term ? SEARCH_DEBOUNCE_MS : 0);
@@ -132,7 +160,7 @@ export default function GifPicker({ onSelect, onClose, sending, sendFailed }: Gi
             cancelled = true;
             clearTimeout(timer);
         };
-    }, [term, attempt]);
+    }, [term, attempt, copy.searchPath, copy.noun]);
 
     const retry = () => {
         setState('loading');
@@ -141,23 +169,23 @@ export default function GifPicker({ onSelect, onClose, sending, sendFailed }: Gi
 
     return (
         <div className="ag-gif-picker">
-            <PanelHead title="GIFs" subtitle="Tap one to send it" onClose={onClose} closeLabel="Close GIF picker" />
+            <PanelHead title={copy.title} subtitle="Tap one to send it" onClose={onClose} closeLabel={`Close ${copy.noun} picker`} />
             <input
                 className="ag-input"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={`Search ${GIF_PROVIDER_NAME}…`}
                 maxLength={MAX_GIF_QUERY_LENGTH}
-                aria-label={`Search ${GIF_PROVIDER_NAME} for a GIF`}
+                aria-label={`Search ${GIF_PROVIDER_NAME} for a ${copy.noun}`}
             />
             {/* A failed send, said out loud. Above the grid rather than in place
                 of it, because the grid is still the thing to try again with. */}
             {sendFailed && (
-                <div className="ag-log-empty" role="status">Couldn&apos;t send that GIF. Try again, or pick another.</div>
+                <div className="ag-log-empty" role="status">Couldn&apos;t send that {copy.noun}. Try again, or pick another.</div>
             )}
             {state === 'unavailable' ? (
                 <div className="ag-gif-unavailable">
-                    <div className="ag-log-empty">GIFs unavailable. You can still send a message.</div>
+                    <div className="ag-log-empty">{copy.plural} unavailable. You can still send a message.</div>
                     <button type="button" className="ag-pill-action" onClick={retry}>Try again</button>
                 </div>
             ) : state === 'loading' ? (
@@ -167,7 +195,7 @@ export default function GifPicker({ onSelect, onClose, sending, sendFailed }: Gi
                     ))}
                 </div>
             ) : results.length === 0 ? (
-                <div className="ag-log-empty">No GIFs match that.</div>
+                <div className="ag-log-empty">No {copy.plural} match that.</div>
             ) : (
                 <div className={`ag-gif-grid${sending ? ' ag-gif-grid--busy' : ''}`} aria-busy={sending}>
                     {results.map((result) => (
@@ -189,7 +217,7 @@ export default function GifPicker({ onSelect, onClose, sending, sendFailed }: Gi
                 brand art, and a wordmark in the app's own type is the version
                 that survives a theme change. `ag-hint` because that is what
                 the app's fine print already is, everywhere else. */}
-            <div className="ag-hint ag-hint--right">GIFs by {GIF_PROVIDER_NAME}</div>
+            <div className="ag-hint ag-hint--right">{copy.plural} by {GIF_PROVIDER_NAME}</div>
         </div>
     );
 }
