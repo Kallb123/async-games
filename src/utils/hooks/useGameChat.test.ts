@@ -78,4 +78,51 @@ describe("useGameChat", () => {
 
         expect(renderOpenChat().messages.map((m) => m.unread)).toEqual([false, true]);
     });
+
+    // What `send` puts on the wire. The route's own tests cover what it does
+    // with a body; these cover the half the picker depends on — that a GIF is
+    // sent as the two fields the server will resolve it from, and that a
+    // caption-less one is a message at all (docs/chat-gifs.md §4e).
+    describe("send", () => {
+        /** The POST the hook made, parsed. */
+        function postedBody(fetchSpy: ReturnType<typeof vi.spyOn>) {
+            return JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit).body));
+        }
+
+        function stubOkPost() {
+            return vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 200 }));
+        }
+
+        beforeEach(() => { vi.restoreAllMocks(); });
+
+        it("sends a GIF as a provider and an id, and nothing else about it", async () => {
+            const fetchSpy = stubOkPost();
+
+            expect(await renderOpenChat().send("", { provider: "tenor", mediaId: "abc123" })).toBe(true);
+
+            // Empty text is a message when a GIF carries it — and `gif` is the
+            // ref, not an attachment: the server resolves every other field
+            // from its own catalogue.
+            expect(postedBody(fetchSpy)).toEqual({ text: "", gif: { provider: "tenor", mediaId: "abc123" } });
+        });
+
+        it("keeps a caption with the GIF, trimmed the way the route would", async () => {
+            const fetchSpy = stubOkPost();
+
+            await renderOpenChat().send("  this is you  ", { provider: "tenor", mediaId: "abc123" });
+
+            expect(postedBody(fetchSpy).text).toBe("this is you");
+        });
+
+        it.each([
+            ["neither text nor a GIF", "", undefined],
+            ["a blank line and no GIF", "   ", undefined],
+        ])("refuses %s without asking the server", async (_label, text, gif) => {
+            const fetchSpy = stubOkPost();
+
+            expect(await renderOpenChat().send(text, gif)).toBe(false);
+
+            expect(fetchSpy).not.toHaveBeenCalled();
+        });
+    });
 });
