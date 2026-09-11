@@ -7,12 +7,16 @@ export const guide: GameGuide = {
     title: "How to play Settlements & Cities",
     sections: [
         {
+            heading: "Overview",
+            body: "Collect resources every turn by having Settlements or Cities built on hexes which match the dice roll. Use the resources to build!"
+        },
+        {
             heading: "Goal",
             body: "Be the first to reach the match's victory point target from settlements, cities, Longest Road, Largest Army and any development cards you've played.",
         },
         {
             heading: "Your turn",
-            body: "Roll the dice — everyone collects resources from hexes matching the roll — then trade, build settlements, roads and cities, or buy a development card before passing the turn on.",
+            body: "Roll the dice — everyone collects resources from hexes matching the roll which they have settlements/cities built on — then trade, build settlements, roads and cities, or buy a development card before passing the turn on.",
         },
         {
             heading: "The robber",
@@ -24,7 +28,11 @@ export const guide: GameGuide = {
         },
         {
             heading: "Development cards",
-            body: "Knights move the robber and count toward Largest Army, Road Building and Year of Plenty give you free roads or resources, and Monopoly forces everyone to hand over one resource type — a Victory Point card counts the moment you hold it, but stays hidden until you reveal it or win.",
+            body: "Knights move the robber and count toward Largest Army, Road Building and Year of Plenty give you free roads or resources, and Monopoly forces everyone to hand over one resource type — a Victory Point card counts the moment you hold it, but stays hidden until you have enough points to win.",
+        },
+        {
+            heading: "More",
+            body: "Having multiple Settlements or upgrading to a City will make a hex pay out multiple times.",
         },
     ],
 };
