@@ -15,6 +15,7 @@ const srcRoot = path.resolve(here, "../../..");
 // that adding a game without adding it here is a failure, not a silent pass.
 const RESPONSE_BUILDERS = [
     "utils/mongodb/GameData.ts",
+    "games/BannedIslet/BannedIsletModels.ts",
     "games/DiceCities/DiceCitiesModels.ts",
     "games/Outbreak/OutbreakModels.ts",
     "games/FiresOut/FiresOutModels.ts",
