@@ -18,7 +18,9 @@
       "doc": false,
       "doc/*": false,
       "docs": false,
-      "docs/*": false
+      "docs/*": false,
+      "art": false,
+      "art/*": false
     }
   }
 }
