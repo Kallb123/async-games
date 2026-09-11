@@ -4281,8 +4281,16 @@ button.ag-tt-ticket { cursor: pointer; }
 
 /* ---- Rail + content (≥ 900px) ---- */
 @media (min-width: 900px) {
-    /* `:has` rather than a class on the column, because the column is the root
-       layout's and the screen inside it is the one that knows it can go wide. */
+    /* The grid is the app column's, not the screen's, because one of the things
+       it has to place — the notification footer — is the root layout's and is a
+       sibling of the screen, not a child of it. `.ag-desk` dissolves so its
+       three regions and that footer are all items of the one grid; the `<main>`
+       keeps its meaning, it just stops being a box.
+
+       Rows, so the rail and the panel can span every one of them: the queue,
+       the release notes under it, the footer under those, and a last row that
+       takes up whatever slack is left — carrying the run-off the app column
+       used to pad, which the rail's dark ground now has to reach through. */
     .ag-app:has(.ag-desk) {
         /* Full bleed. The rail is chrome, and chrome belongs against the edge
            of the window: capping the column here instead centred it, which put
@@ -4290,46 +4298,44 @@ button.ag-tt-ticket { cursor: pointer; }
            past the cap. The queue below carries the cap now, so a very wide
            window still doesn't stretch a list row across the whole screen. */
         max-width: none;
-        /* The bottom run-off moves onto the columns, so the rail's dark ground
-           reaches the foot of the page instead of stopping 40px short. */
         padding-bottom: 0;
-    }
-
-    /* Two rows so the rail can span them both: the queue takes the first and
-       the panel-to-be sits under it in the second. Spelled out as line numbers
-       rather than `1 / -1`, which with no explicit rows names one row, not all
-       of them — and left the rail's dark ground stopping mid-page. */
-    .ag-desk {
         display: grid;
         grid-template-columns: var(--ag-rail-width) minmax(0, 1fr);
-        grid-template-rows: auto 1fr;
+        grid-template-rows: auto auto auto auto minmax(calc(40px + var(--ag-banner-height)), 1fr);
+        /* The breathing room between the rail and the content, as a gap rather
+           than padding on each column: everything in the centre track then
+           starts from the same edge, whether it brings `.ag-section`'s own
+           20px (the lists) or its own (the notification footer). Padding per
+           column had the footer sitting 8px wider than the lists above it. */
+        column-gap: 8px;
     }
+
+    .ag-desk { display: contents; }
 
     /* Wide enough that a laptop never reaches it, so the cap only bites on the
        screens where a turn card would otherwise stretch across a metre of desk.
        `width` and `justify-self` rather than `margin-inline: auto`, which in a
        grid drops the item off stretch and down to its fit-content size — which
        here is one turn card wide. */
-    .ag-desk-col {
+    .ag-desk-col,
+    .ag-app:has(.ag-desk) > .ag-footer {
         width: 100%;
         max-width: var(--ag-queue-width);
         justify-self: center;
-        padding-inline: 8px;
     }
-
-    /* The run-off under the page, on whichever column is last in flow — one
-       column at this width, both once the panel moves out beside the queue. */
-    .ag-desk-col--side { padding-bottom: calc(40px + var(--ag-banner-height)); }
 
     .ag-desk-col--main { grid-area: 1 / 2 / 2 / 3; }
 
     /* Still under the queue at this width — one column of content beside the
-       rail. The 1200px block below moves it out into a panel of its own. */
+       rail. The 1200px block below moves it out into a panel of its own, and
+       the notes and the footer close up behind it. */
     .ag-desk-col--side { grid-area: 2 / 2 / 3 / 3; }
+    .ag-desk-col--notes { grid-area: 3 / 2 / 4 / 3; }
+    .ag-app:has(.ag-desk) > .ag-footer { grid-area: 4 / 2 / 5 / 3; }
 
     /* ---- The rail ---- */
     .ag-rail {
-        grid-area: 1 / 1 / 3 / 2;
+        grid-area: 1 / 1 / -1 / 2;
         background: var(--ag-dark);
         color: var(--ag-on-dark);
         min-height: 100vh;
@@ -4540,22 +4546,20 @@ button.ag-tt-ticket { cursor: pointer; }
 
 /* ---- The right panel joins in (≥ 1200px) ---- */
 @media (min-width: 1200px) {
-    /* One row now, so all three columns stretch to the same height and the
-       panel's ground reaches the foot of the rail rather than stopping where
-       its own rows run out. */
-    .ag-desk {
+    /* A third track for the panel, and one row fewer in the middle now that the
+       panel has left it: queue, notes, footer, slack. */
+    .ag-app:has(.ag-desk) {
         grid-template-columns: var(--ag-rail-width) minmax(0, 1fr) var(--ag-side-width);
-        grid-template-rows: 1fr;
+        grid-template-rows: auto auto auto minmax(calc(40px + var(--ag-banner-height)), 1fr);
     }
 
-    .ag-rail { grid-area: 1 / 1 / 2 / 2; }
-
-    .ag-desk-col--main { padding-bottom: calc(40px + var(--ag-banner-height)); }
+    .ag-desk-col--notes { grid-area: 2 / 2 / 3 / 3; }
+    .ag-app:has(.ag-desk) > .ag-footer { grid-area: 3 / 2 / 4 / 3; }
 
     /* The panel is the column now, so it takes the whole fixed track rather
-       than the queue's cap. */
+       than the queue's cap, and spans every row the rail does. */
     .ag-desk-col--side {
-        grid-area: 1 / 3 / 2 / 4;
+        grid-area: 1 / 3 / -1 / 4;
         max-width: none;
         background: var(--ag-surface);
         border-left: 1.5px solid var(--ag-line);

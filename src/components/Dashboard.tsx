@@ -21,12 +21,17 @@ import Link from "next/link";
  * The guard stays for the locked-out account it sends to /unlockaccess; the
  * signed-out case is `HomeScreen`'s, so this never renders `Landing` itself.
  *
- * The three children of `.ag-desk` are the desktop layout (design §16a): the
- * platform rail, the column of things waiting on you, and the panel of things
- * that aren't. Below 900px the grid is a single column and they fall
- * back into the order the phone has always shown — which is why the split is
- * made where it is, with nothing needing to be reordered to get there. Keep
- * `app/loading.tsx` in step with this shape.
+ * The children of `.ag-desk` are the desktop layout (design §16a): the platform
+ * rail, the column of things waiting on you, the panel of things that aren't,
+ * and the release notes, which sit under the queue rather than in the panel.
+ * Below 900px the grid is a single column and they fall back into the order the
+ * phone has always shown — which is why the split is made where it is, with
+ * nothing needing to be reordered to get there.
+ *
+ * `.ag-desk` itself dissolves at that breakpoint (`display: contents`) so the
+ * grid can also place the notification footer, which the root layout renders
+ * beside this screen rather than inside it. Keep `app/loading.tsx` in step with
+ * this shape.
  */
 export default function Dashboard() {
     useAuthGuard({ allowSignedOut: true });
@@ -62,9 +67,16 @@ export default function Dashboard() {
                         </div>
                     </Link>
                 </div>
-
-                <WhatsNew />
             </aside>
+
+            {/* Last on a phone, exactly where it has always been — and on a
+                wide screen under the queue rather than in the panel, because
+                the panel is things to act on and this is reading matter. Its
+                own region so the grid can put it there without it having to
+                move in the running order a phone sees. */}
+            <div className="ag-desk-col ag-desk-col--notes">
+                <WhatsNew />
+            </div>
         </main>
     );
 }
