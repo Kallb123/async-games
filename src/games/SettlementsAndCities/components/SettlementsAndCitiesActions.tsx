@@ -61,6 +61,14 @@ interface SettlementsAndCitiesActionsProps {
     /** The `target` of the in-flight command, so the tapped control alone shows
      *  as processing. Null when nothing is in flight. */
     pendingTarget: string | null;
+    /**
+     * Off your turn, whichever phase-specific prompt the active player sees
+     * (roll the dice, place your setup settlement, move the robber, ...) is
+     * meaningless to a waiting player. Show the build/buy list instead — it's
+     * the one thing worth looking at off-turn, since it's where the resource
+     * costs live. `ReadOnlyPanel` makes it inert.
+     */
+    readOnly?: boolean;
 }
 
 export default function SettlementsAndCitiesActions({
@@ -70,6 +78,7 @@ export default function SettlementsAndCitiesActions({
     setBoardMode,
     submitCommand,
     pendingTarget,
+    readOnly = false,
 }: SettlementsAndCitiesActionsProps) {
     const [showYopModal, setShowYopModal] = useState(false);
     const [yopR1, setYopR1] = useState<SAC_Resource>('lumber');
@@ -456,6 +465,20 @@ export default function SettlementsAndCitiesActions({
             </Modal.Footer>
         </Modal>
     );
+
+    // ── Off your turn ────────────────────────────────────────────────────────
+    // Show the build/buy list and its costs no matter what phase the active
+    // player is actually in — the setup CTA, the robber prompt and the roll
+    // button are all instructions for them, not information for you.
+    if (readOnly) {
+        return (
+            <div className="ag-actionsheet">
+                {buildList}
+                {devCardSection && <div style={{ marginTop: 12 }}>{devCardSection}</div>}
+                {tradeModal}
+            </div>
+        );
+    }
 
     // ── Setup mode ────────────────────────────────────────────────────────────
     if (isSetup) {

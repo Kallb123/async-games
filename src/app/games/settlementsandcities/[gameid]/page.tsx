@@ -12,6 +12,7 @@ import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER, type SACSpotKind } from "@/games
 import SettlementsAndCitiesBoard from "@/games/SettlementsAndCities/components/SettlementsAndCitiesBoard";
 import SettlementsAndCitiesActions, { SACBoardMode } from "@/games/SettlementsAndCities/components/SettlementsAndCitiesActions";
 import GameShell from "@/components/ui/GameShell";
+import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
 import { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameGuideModal from "@/components/ui/GameGuideModal";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
@@ -416,15 +417,18 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                         </div>
                     )}
 
-                    {isMyTurn && !complete && (
-                        <SettlementsAndCitiesActions
-                            gs={gs}
-                            myUserId={myUserId}
-                            boardMode={boardMode}
-                            setBoardMode={setBoardMode}
-                            submitCommand={submitCommand}
-                            pendingTarget={pendingTarget}
-                        />
+                    {!complete && (
+                        <ReadOnlyPanel readOnly={!isMyTurn}>
+                            <SettlementsAndCitiesActions
+                                gs={gs}
+                                myUserId={myUserId}
+                                boardMode={boardMode}
+                                setBoardMode={setBoardMode}
+                                submitCommand={submitCommand}
+                                pendingTarget={pendingTarget}
+                                readOnly={!isMyTurn}
+                            />
+                        </ReadOnlyPanel>
                     )}
 
                     {recapAvailable && (
