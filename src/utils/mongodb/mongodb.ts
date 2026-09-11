@@ -9,14 +9,15 @@ import { WorldDominationGameDataModel, WorldDominationInvitationModel } from '@/
 import { SolitaireGameDataModel, SolitaireInvitationModel } from '@/games/Solitaire/SolitaireModels';
 import { TrainTimeGameDataModel, TrainTimeInvitationModel } from '@/games/TrainTime/TrainTimeModels';
 import { OutbreakGameDataModel, OutbreakInvitationModel } from '@/games/Outbreak/OutbreakModels';
+import { BannedIsletGameDataModel, BannedIsletInvitationModel } from '@/games/BannedIslet/BannedIsletModels';
 import { FiresOutGameDataModel, FiresOutInvitationModel } from '@/games/FiresOut/FiresOutModels';
 import { InvitationModel } from './InvitationData';
 
 // Add new game discriminator keys here whenever a new game is introduced.
 // TypeScript will produce a compile error if a key is listed but its model is
 // not present in GAME_DATA_MODELS / INVITATION_MODELS.
-type GameDataDiscriminatorKey = 'DiceCitiesGameData' | 'SnakesAndLaddersGameData' | 'SettlementsAndCitiesGameData' | 'SmartthinkGameData' | 'WorldDominationGameData' | 'SolitaireGameData' | 'TrainTimeGameData' | 'OutbreakGameData' | 'FiresOutGameData';
-type InvitationDiscriminatorKey = 'DiceCitiesInvitation' | 'SnakesAndLaddersInvitation' | 'SettlementsAndCitiesInvitation' | 'SmartthinkInvitation' | 'WorldDominationInvitation' | 'SolitaireInvitation' | 'TrainTimeInvitation' | 'OutbreakInvitation' | 'FiresOutInvitation';
+type GameDataDiscriminatorKey = 'DiceCitiesGameData' | 'SnakesAndLaddersGameData' | 'SettlementsAndCitiesGameData' | 'SmartthinkGameData' | 'WorldDominationGameData' | 'SolitaireGameData' | 'TrainTimeGameData' | 'OutbreakGameData' | 'FiresOutGameData' | 'BannedIsletGameData';
+type InvitationDiscriminatorKey = 'DiceCitiesInvitation' | 'SnakesAndLaddersInvitation' | 'SettlementsAndCitiesInvitation' | 'SmartthinkInvitation' | 'WorldDominationInvitation' | 'SolitaireInvitation' | 'TrainTimeInvitation' | 'OutbreakInvitation' | 'FiresOutInvitation' | 'BannedIsletInvitation';
 
 declare global {
   var mongoose: any; // This must be a `var` and not a `let / const`
@@ -73,6 +74,7 @@ const GAME_DATA_MODELS: Record<GameDataDiscriminatorKey, Model<IGameDataDocument
   SolitaireGameData: SolitaireGameDataModel,
   TrainTimeGameData: TrainTimeGameDataModel,
   OutbreakGameData: OutbreakGameDataModel,
+  BannedIsletGameData: BannedIsletGameDataModel,
   FiresOutGameData: FiresOutGameDataModel,
 };
 
@@ -97,6 +99,7 @@ const INVITATION_MODELS: Record<InvitationDiscriminatorKey, Model<IInvitationDat
   SolitaireInvitation: SolitaireInvitationModel,
   TrainTimeInvitation: TrainTimeInvitationModel,
   OutbreakInvitation: OutbreakInvitationModel,
+  BannedIsletInvitation: BannedIsletInvitationModel,
   FiresOutInvitation: FiresOutInvitationModel,
 };
 

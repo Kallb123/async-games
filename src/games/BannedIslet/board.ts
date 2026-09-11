@@ -164,6 +164,11 @@ export function tileOrder(tile: BannedIsletTileId): number {
     return TILE_ORDER.get(tile) ?? TILE_COUNT;
 }
 
+/** What to call a tile to a player. A grid position means nothing at the table, so nothing player-facing prints one. */
+export function tileName(tile: BannedIsletTileId): string {
+    return TILES.find(t => t.id === tile)?.name ?? 'Unknown tile';
+}
+
 /** §4.1: the escape point, and the tile whose sinking ends the game on the spot (§4.2). */
 export const PIER_TILE: BannedIsletTileId = 'beaconPier';
 
@@ -185,16 +190,29 @@ export const TREASURES: readonly IBannedIsletTreasureDef[] = [
     { id: 'rootStone', name: 'Root Stone', tiles: ['mossgrave', 'deepwoodSteps'] },
 ];
 
+export const TREASURE_IDS: readonly BannedIsletTreasureId[] = TREASURES.map(t => t.id);
+
 // ─── The treasure cards (§10) ───────────────────────────────────────────────
 // A card is identified by what it *is*, not by a serial number: the five Ember
 // Crown cards are interchangeable and a capture asks only for four of a kind
 // (§8), so a card id is the treasure's own id for a treasure card and a name
-// for each of §10's three specials. That vocabulary is all capture eligibility
-// needs; building, shuffling and drawing the 28-card deck is setup's job and
-// the draw phase's.
+// for each of §10's three specials.
 
 export type BannedIsletSpecialCardId = 'watersRise' | 'helicopterLift' | 'sandbags';
 export type BannedIsletCardId = BannedIsletTreasureId | BannedIsletSpecialCardId;
+
+export const TREASURE_CARDS_PER_TREASURE = 5;
+export const WATERS_RISE_CARD_COUNT = 3;
+export const HELICOPTER_LIFT_CARD_COUNT = 3;
+export const SANDBAGS_CARD_COUNT = 2;
+
+/** §10's 28 cards, unshuffled — 20 treasure cards, 3 Waters Rise!, 3 Helicopter Lift, 2 Sandbags. Setup shuffles it; nothing else should assume this order. */
+export const TREASURE_DECK_CARDS: readonly BannedIsletCardId[] = [
+    ...TREASURE_IDS.flatMap(id => new Array<BannedIsletCardId>(TREASURE_CARDS_PER_TREASURE).fill(id)),
+    ...new Array<BannedIsletCardId>(WATERS_RISE_CARD_COUNT).fill('watersRise'),
+    ...new Array<BannedIsletCardId>(HELICOPTER_LIFT_CARD_COUNT).fill('helicopterLift'),
+    ...new Array<BannedIsletCardId>(SANDBAGS_CARD_COUNT).fill('sandbags'),
+];
 
 // ─── The roles (§12) ────────────────────────────────────────────────────────
 // Static reference data only — dealt at setup and expressed as small pure
@@ -221,7 +239,14 @@ export const ROLES: readonly IBannedIsletRoleDef[] = [
     { id: 'navigator', name: 'Navigator', ability: 'For one action, move another player up to two tiles.', startTile: 'watchersRock' },
 ];
 
-// ─── The numbers (§7, §8, §10) ──────────────────────────────────────────
+export const ROLE_IDS: readonly BannedIsletRoleId[] = ROLES.map(r => r.id);
+
+/** Falls back to the Pilot rather than throwing on a role id that was never validated — a stored game is read long after the value was written. */
+export function roleDef(role: BannedIsletRoleId): IBannedIsletRoleDef {
+    return ROLES.find(r => r.id === role) ?? ROLES[0];
+}
+
+// ─── The numbers (§6, §7, §8, §10) ──────────────────────────────────────────
 
 /** §1: 2-4 adventurers, co-op. Six roles against a four-seat cap, so the role deal always has spares. */
 export const MIN_PLAYERS = 2;
@@ -235,6 +260,12 @@ export const HAND_LIMIT = 5;
 
 /** §8: four matching treasure cards buy one treasure. */
 export const CARDS_TO_CAPTURE = 4;
+
+/** §6 step 2: six tiles are already flooded before anybody has had a turn. */
+export const TILES_FLOODED_AT_SETUP = 6;
+
+/** §6 step 5: two cards each, dealt with the Waters Rise! cards set aside. */
+export const STARTING_HAND_SIZE = 2;
 
 // ─── The water meter (§11, §13) ─────────────────────────────────────────────
 

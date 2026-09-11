@@ -102,6 +102,12 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
     FiresOutGameType: [
         "FiresOutAction",
     ],
+    // docs/games/banned-islet.md §21.6: PR 2 adds BannedIsletGameType and a
+    // skeleton BannedIsletAction; PR 5 adds BannedIsletEndTurn and
+    // BannedIsletDiscard, and PR 8 BannedIsletPlayCard.
+    BannedIsletGameType: [
+        "BannedIsletAction",
+    ],
 };
 
 /** The game types this map knows, for the test that guards it. */
