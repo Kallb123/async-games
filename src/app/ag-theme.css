@@ -4248,13 +4248,17 @@ button.ag-tt-ticket { cursor: pointer; }
  *    the turn queue takes the middle, with the "your move" cards
  *      side by side instead of stacked — the whole board of
  *      obligations visible at once.
- *    everything that isn't waiting on you — invites you have
- *      sent, finished games, the actions and the release notes —
- *      moves into the right panel at 1200px. Below that it simply
- *      continues under the queue, which is also exactly where a
- *      phone has always shown it: the columns are a prefix and a
- *      suffix of the one running order, so nothing is reordered
- *      to get here and nothing is rendered twice.
+ *    what you could act on but nothing is waiting for — invites
+ *      you have sent, finished games, the two actions — moves
+ *      into the right panel at 1200px. Below that it continues
+ *      under the queue, which is also exactly where a phone has
+ *      always shown it, so nothing is reordered to get here and
+ *      nothing is rendered twice.
+ *    the release notes and the "turn alerts can't reach this
+ *      device" warning stay in the centre column at every width,
+ *      under the queue. Neither is something to act on, and the
+ *      warning is the root layout's rather than the screen's —
+ *      which is why the grid is the app column's, below.
  *
  *  Only `/` opts in, by wearing `.ag-desk`. Every other screen is
  *  still the centred column.
@@ -4287,10 +4291,16 @@ button.ag-tt-ticket { cursor: pointer; }
        three regions and that footer are all items of the one grid; the `<main>`
        keeps its meaning, it just stops being a box.
 
-       Rows, so the rail and the panel can span every one of them: the queue,
-       the release notes under it, the footer under those, and a last row that
-       takes up whatever slack is left — carrying the run-off the app column
-       used to pad, which the rail's dark ground now has to reach through. */
+       Named areas rather than line numbers: the rail and the panel span every
+       row, the row count itself changes at 1200px when the panel leaves the
+       centre track, and the footer's placement is a rule in this file about an
+       element another file renders. Numbering that meant every region's lines
+       had to be recounted whenever one was added — which is how the footer
+       ended up needing a hand-applied bump when the notes arrived. With names,
+       each region says where it goes once and only the template moves.
+
+       The last row is the slack: it carries the run-off the app column used to
+       pad, which the rail's dark ground now has to reach through. */
     .ag-app:has(.ag-desk) {
         /* Full bleed. The rail is chrome, and chrome belongs against the edge
            of the window: capping the column here instead centred it, which put
@@ -4302,6 +4312,12 @@ button.ag-tt-ticket { cursor: pointer; }
         display: grid;
         grid-template-columns: var(--ag-rail-width) minmax(0, 1fr);
         grid-template-rows: auto auto auto auto minmax(calc(40px + var(--ag-banner-height)), 1fr);
+        grid-template-areas:
+            "rail main"
+            "rail side"
+            "rail notes"
+            "rail footer"
+            "rail .";
         /* The breathing room between the rail and the content, as a gap rather
            than padding on each column: everything in the centre track then
            starts from the same edge, whether it brings `.ag-section`'s own
@@ -4324,18 +4340,21 @@ button.ag-tt-ticket { cursor: pointer; }
         justify-self: center;
     }
 
-    .ag-desk-col--main { grid-area: 1 / 2 / 2 / 3; }
-
+    .ag-desk-col--main { grid-area: main; }
     /* Still under the queue at this width — one column of content beside the
        rail. The 1200px block below moves it out into a panel of its own, and
        the notes and the footer close up behind it. */
-    .ag-desk-col--side { grid-area: 2 / 2 / 3 / 3; }
-    .ag-desk-col--notes { grid-area: 3 / 2 / 4 / 3; }
-    .ag-app:has(.ag-desk) > .ag-footer { grid-area: 4 / 2 / 5 / 3; }
+    .ag-desk-col--side { grid-area: side; }
+    .ag-desk-col--notes { grid-area: notes; }
+    /* The one rule here about an element this screen does not render: the
+       warning strip is the root layout's, mounted beside the screen rather than
+       inside it (see `layout.tsx`). It still decides for itself which screens
+       it belongs on — this only says where it sits once it is there. */
+    .ag-app:has(.ag-desk) > .ag-footer { grid-area: footer; }
 
     /* ---- The rail ---- */
     .ag-rail {
-        grid-area: 1 / 1 / -1 / 2;
+        grid-area: rail;
         background: var(--ag-dark);
         color: var(--ag-on-dark);
         min-height: 100vh;
@@ -4547,19 +4566,22 @@ button.ag-tt-ticket { cursor: pointer; }
 /* ---- The right panel joins in (≥ 1200px) ---- */
 @media (min-width: 1200px) {
     /* A third track for the panel, and one row fewer in the middle now that the
-       panel has left it: queue, notes, footer, slack. */
+       panel has left it: queue, notes, footer, slack. Every region keeps the
+       area name it was given above, so this is the whole move — nothing else
+       has to be re-placed. */
     .ag-app:has(.ag-desk) {
         grid-template-columns: var(--ag-rail-width) minmax(0, 1fr) var(--ag-side-width);
         grid-template-rows: auto auto auto minmax(calc(40px + var(--ag-banner-height)), 1fr);
+        grid-template-areas:
+            "rail main   side"
+            "rail notes  side"
+            "rail footer side"
+            "rail .      side";
     }
 
-    .ag-desk-col--notes { grid-area: 2 / 2 / 3 / 3; }
-    .ag-app:has(.ag-desk) > .ag-footer { grid-area: 3 / 2 / 4 / 3; }
-
     /* The panel is the column now, so it takes the whole fixed track rather
-       than the queue's cap, and spans every row the rail does. */
+       than the queue's cap. */
     .ag-desk-col--side {
-        grid-area: 1 / 3 / -1 / 4;
         max-width: none;
         background: var(--ag-surface);
         border-left: 1.5px solid var(--ag-line);

@@ -63,7 +63,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "The home screen fills a big screen",
-                detail: "On a laptop or a desktop, the dashboard stops being a phone-width strip: a rail down the left puts every game you have on the go one click away wherever you have scrolled to, the games waiting on you sit side by side across the middle, and invites you have sent, finished games and these notes move into a panel of their own on the right. On a phone it is exactly the screen it was.",
+                detail: "On a laptop or a desktop, the dashboard stops being a phone-width strip: a rail down the left puts every game you have on the go one click away wherever you have scrolled to, the games waiting on you sit side by side across the middle, and invites you have sent, finished games and the two big buttons move into a panel of their own on the right. On a phone it is exactly the screen it was.",
             },
             {
                 title: "See what a Settlements & Cities roll paid out",
