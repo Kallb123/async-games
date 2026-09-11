@@ -22,5 +22,5 @@ export * from "@/games/WorldDomination/WorldDominationLogic";
 export * from "@/games/Solitaire/SolitaireLogic";
 export * from "@/games/TrainTime/TrainTimeLogic";
 export * from "@/games/Outbreak/OutbreakLogic";
-export * from "@/games/BannedIslet/BannedIsletLogic";
 export * from "@/games/FiresOut/FiresOutLogic";
+export * from "@/games/BannedIslet/BannedIsletLogic";

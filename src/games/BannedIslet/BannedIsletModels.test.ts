@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildInitialBannedIsletState, cloneBannedIsletState, gameStateToModel } from "./BannedIsletModels";
+import type { BannedIsletDifficulty } from "./board";
 import {
     DIFFICULTIES,
     HELICOPTER_LIFT_CARD_COUNT,
@@ -99,6 +100,15 @@ describe("buildInitialBannedIsletState — the opening island (§6)", () => {
         const state = buildInitialBannedIsletState(TURN_ORDER, "normal");
         expect(state.treasures).toEqual({ emberCrown: false, stormIdol: false, tideChalice: false, rootStone: false });
         expect(state.phase).toBe("actions");
+    });
+
+    it("normalises a difficulty that was never validated rather than storing it", () => {
+        // POST /api/lobby spreads a host's per-game settings into the invitation
+        // unchecked, so anything at all can reach here. Storing it would echo it
+        // back to every player and into the setup log.
+        const state = buildInitialBannedIsletState(TURN_ORDER, "godmode" as BannedIsletDifficulty);
+        expect(state.difficulty).toBe(DIFFICULTIES[0].id);
+        expect(state.waterLevel).toBe(DIFFICULTIES[0].startWaterLevel);
     });
 
     it.each(DIFFICULTIES)("starts $label on water level $startWaterLevel (§13)", ({ id, startWaterLevel }) => {

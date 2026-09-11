@@ -9,8 +9,8 @@ import { WorldDominationGameDataModel, WorldDominationInvitationModel } from '@/
 import { SolitaireGameDataModel, SolitaireInvitationModel } from '@/games/Solitaire/SolitaireModels';
 import { TrainTimeGameDataModel, TrainTimeInvitationModel } from '@/games/TrainTime/TrainTimeModels';
 import { OutbreakGameDataModel, OutbreakInvitationModel } from '@/games/Outbreak/OutbreakModels';
-import { BannedIsletGameDataModel, BannedIsletInvitationModel } from '@/games/BannedIslet/BannedIsletModels';
 import { FiresOutGameDataModel, FiresOutInvitationModel } from '@/games/FiresOut/FiresOutModels';
+import { BannedIsletGameDataModel, BannedIsletInvitationModel } from '@/games/BannedIslet/BannedIsletModels';
 import { InvitationModel } from './InvitationData';
 
 // Add new game discriminator keys here whenever a new game is introduced.
@@ -74,8 +74,8 @@ const GAME_DATA_MODELS: Record<GameDataDiscriminatorKey, Model<IGameDataDocument
   SolitaireGameData: SolitaireGameDataModel,
   TrainTimeGameData: TrainTimeGameDataModel,
   OutbreakGameData: OutbreakGameDataModel,
-  BannedIsletGameData: BannedIsletGameDataModel,
   FiresOutGameData: FiresOutGameDataModel,
+  BannedIsletGameData: BannedIsletGameDataModel,
 };
 
 // The model that persists a game of `gameType` — one lookup in place of a
@@ -99,8 +99,8 @@ const INVITATION_MODELS: Record<InvitationDiscriminatorKey, Model<IInvitationDat
   SolitaireInvitation: SolitaireInvitationModel,
   TrainTimeInvitation: TrainTimeInvitationModel,
   OutbreakInvitation: OutbreakInvitationModel,
-  BannedIsletInvitation: BannedIsletInvitationModel,
   FiresOutInvitation: FiresOutInvitationModel,
+  BannedIsletInvitation: BannedIsletInvitationModel,
 };
 
 // The model that persists an invitation of `gameType` — the invitation-side

@@ -21,6 +21,7 @@ import {
     BannedIsletRoleId,
     BannedIsletTileId,
     BannedIsletTreasureId,
+    difficultyDef,
     ROLE_IDS,
     STARTING_HAND_SIZE,
     TILES_FLOODED_AT_SETUP,
@@ -92,7 +93,7 @@ BannedIsletInvitationSchema.methods.CreateGame = async function(
             turnOrder,
             history: [
                 { text: `Setup: running order is ${turnOrder.map(userToken).join(' → ')}` },
-                { text: `Setup: ${difficulty} difficulty — the water meter starts at level ${specificGameState.waterLevel}` },
+                { text: `Setup: ${specificGameState.difficulty} difficulty — the water meter starts at level ${specificGameState.waterLevel}` },
                 { text: `Setup: ${roleLine}` },
                 { text: `Setup: ${pluralize(specificGameState.floodDiscard.length, 'tile')} already flooded — ${specificGameState.floodDiscard.map(tileName).join(', ')}` },
                 { text: `Setup: each player dealt ${pluralize(STARTING_HAND_SIZE, 'card')}` },
@@ -198,6 +199,16 @@ export function buildInitialBannedIsletState(
     turnOrder: string[],
     difficulty: BannedIsletDifficulty,
 ): IBannedIsletSpecificGameState {
+    // Normalised rather than trusted: only POST /api/newgame/bannedislet
+    // validates `difficulty` against DIFFICULTIES, and a host who opens a seat
+    // posts to POST /api/lobby instead, which spreads its per-game settings
+    // into the invitation unchecked against a `difficulty: String` schema.
+    // Every *read* of it already falls back safely (difficultyDef), but storing
+    // the raw string would echo whatever was sent back to every player and into
+    // the setup log — so the game is never left holding a value the rest of the
+    // code has to paper over, the same call Fires Out's CreateGame makes.
+    const setting = difficultyDef(difficulty).id;
+
     // Step 1. The grid is fixed and the tiles are not: position i holds
     // whichever tile the shuffle dealt into it.
     const positions: IBannedIsletPosition[] = shuffle([...TILE_IDS]).map(tile => ({ tile, state: 'dry' as const }));
@@ -232,9 +243,9 @@ export function buildInitialBannedIsletState(
     });
 
     return {
-        difficulty,
+        difficulty: setting,
         positions,
-        waterLevel: startWaterLevelFor(difficulty),
+        waterLevel: startWaterLevelFor(setting),
         treasures: Object.fromEntries(TREASURE_IDS.map(id => [id, false])) as Record<BannedIsletTreasureId, boolean>,
         treasureDeck: shuffle([...dealable, ...watersRise]),
         treasureDiscard: [],
