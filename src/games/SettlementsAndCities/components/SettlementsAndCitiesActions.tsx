@@ -3,8 +3,8 @@ import React, { useState } from 'react';
 import { Button, Form, Modal } from 'react-bootstrap';
 import type { ISACSpecificGameStateResponse } from '@/games/SettlementsAndCities/apiModels';
 import type { SAC_Resource, SAC_DevCard } from '@/games/SettlementsAndCities/board';
-import { NO_RESOURCES } from '@/games/SettlementsAndCities/board';
-import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER } from '@/games/SettlementsAndCities/ui';
+import { NO_RESOURCES, SAC_RESOURCES } from '@/games/SettlementsAndCities/board';
+import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER, SAC_RESOURCE_EMOJI } from '@/games/SettlementsAndCities/ui';
 import { IGameCommand } from '@/utils/apiModels/GameLogic';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
 import ActionButton from '@/components/ui/ActionButton';
@@ -31,16 +31,11 @@ export type SACBoardMode =
     | 'placeCity'
     | 'moveRobber';
 
-const RESOURCES: SAC_Resource[] = ['lumber', 'wool', 'grain', 'brick', 'ore'];
-const RESOURCE_EMOJI: Record<SAC_Resource, string> = {
-    lumber: '🪵', wool: '🐑', grain: '🌾', brick: '🧱', ore: '⛏️',
-};
-
 type Cost = Partial<Record<SAC_Resource, number>>;
 
 function costText(cost: Cost): string {
     return (Object.keys(cost) as SAC_Resource[])
-        .map(r => `${RESOURCE_EMOJI[r]}${cost[r]}`)
+        .map(r => `${SAC_RESOURCE_EMOJI[r]}${cost[r]}`)
         .join(' ');
 }
 
@@ -48,7 +43,7 @@ function costText(cost: Cost): string {
 function shortfall(cost: Cost, res: Record<SAC_Resource, number>): string | null {
     const parts = (Object.keys(cost) as SAC_Resource[])
         .filter(r => (res[r] ?? 0) < (cost[r] ?? 0))
-        .map(r => `${(cost[r] ?? 0) - (res[r] ?? 0)} more ${RESOURCE_EMOJI[r]}`);
+        .map(r => `${(cost[r] ?? 0) - (res[r] ?? 0)} more ${SAC_RESOURCE_EMOJI[r]}`);
     return parts.length ? `need ${parts.join(', ')}` : null;
 }
 
@@ -223,23 +218,23 @@ export default function SettlementsAndCitiesActions({
 
     const offerRatio = tradeRatio(tradeOffer);
     const canTrade = tradeOffer !== tradeWant && canOffer(tradeOffer);
-    const anyTradeable = RESOURCES.some(canOffer);
+    const anyTradeable = SAC_RESOURCES.some(canOffer);
 
     // Open the modal with a sensible, fulfillable default selection so the player
     // isn't greeted by a disabled Trade button when their default offer is short.
     function openTradeModal() {
-        const firstAffordable = RESOURCES.find(canOffer);
+        const firstAffordable = SAC_RESOURCES.find(canOffer);
         if (firstAffordable) {
             setTradeOffer(firstAffordable);
             if (tradeWant === firstAffordable) {
-                setTradeWant(RESOURCES.find(r => r !== firstAffordable)!);
+                setTradeWant(SAC_RESOURCES.find(r => r !== firstAffordable)!);
             }
         }
         setShowTradeModal(true);
     }
     function pickOffer(r: SAC_Resource) {
         setTradeOffer(r);
-        if (tradeWant === r) setTradeWant(RESOURCES.find(x => x !== r)!);
+        if (tradeWant === r) setTradeWant(SAC_RESOURCES.find(x => x !== r)!);
     }
     function confirmTrade() {
         if (!canTrade) return;
@@ -250,7 +245,7 @@ export default function SettlementsAndCitiesActions({
             setBoardMode('idle');
             setShowTradeModal(false);
             showToast(
-                `Traded ${offerRatio} ${RESOURCE_EMOJI[tradeOffer]} for 1 ${RESOURCE_EMOJI[tradeWant]}`,
+                `Traded ${offerRatio} ${SAC_RESOURCE_EMOJI[tradeOffer]} for 1 ${SAC_RESOURCE_EMOJI[tradeWant]}`,
                 'success',
                 'Trade complete',
             );
@@ -268,7 +263,7 @@ export default function SettlementsAndCitiesActions({
                             <span>⚓ Your docks:</span>
                             {has3to1Dock && <span className="ag-trade-dock-pill">3:1 any</span>}
                             {dockResources.map(r => (
-                                <span key={r} className="ag-trade-dock-pill">2:1 {RESOURCE_EMOJI[r]}</span>
+                                <span key={r} className="ag-trade-dock-pill">2:1 {SAC_RESOURCE_EMOJI[r]}</span>
                             ))}
                         </>}
                 </div>
@@ -276,7 +271,7 @@ export default function SettlementsAndCitiesActions({
                 <div className="ag-trade-section">
                     <div className="ag-trade-label">You give</div>
                     <div className="ag-trade-grid">
-                        {RESOURCES.map(r => {
+                        {SAC_RESOURCES.map(r => {
                             const ratio = tradeRatio(r);
                             const affordable = canOffer(r);
                             const active = tradeOffer === r;
@@ -288,7 +283,7 @@ export default function SettlementsAndCitiesActions({
                                     disabled={!affordable}
                                     onClick={() => affordable && pickOffer(r)}
                                 >
-                                    <span className="ag-trade-opt-emoji">{RESOURCE_EMOJI[r]}</span>
+                                    <span className="ag-trade-opt-emoji">{SAC_RESOURCE_EMOJI[r]}</span>
                                     <span className="ag-trade-opt-ratio">{ratio}:1</span>
                                     <span className="ag-trade-opt-have">have {res[r] ?? 0}</span>
                                 </button>
@@ -300,7 +295,7 @@ export default function SettlementsAndCitiesActions({
                 <div className="ag-trade-section">
                     <div className="ag-trade-label">You get</div>
                     <div className="ag-trade-grid">
-                        {RESOURCES.map(r => {
+                        {SAC_RESOURCES.map(r => {
                             const active = tradeWant === r;
                             const isOffer = tradeOffer === r;
                             return (
@@ -311,7 +306,7 @@ export default function SettlementsAndCitiesActions({
                                     disabled={isOffer}
                                     onClick={() => !isOffer && setTradeWant(r)}
                                 >
-                                    <span className="ag-trade-opt-emoji">{RESOURCE_EMOJI[r]}</span>
+                                    <span className="ag-trade-opt-emoji">{SAC_RESOURCE_EMOJI[r]}</span>
                                     <span className="ag-trade-opt-have">{isOffer ? 'giving' : '+1'}</span>
                                 </button>
                             );
@@ -320,9 +315,9 @@ export default function SettlementsAndCitiesActions({
                 </div>
 
                 <div className="ag-trade-preview">
-                    <span>{offerRatio} {RESOURCE_EMOJI[tradeOffer]}</span>
+                    <span>{offerRatio} {SAC_RESOURCE_EMOJI[tradeOffer]}</span>
                     <span className="ag-trade-preview-arrow">→</span>
-                    <span>1 {RESOURCE_EMOJI[tradeWant]}</span>
+                    <span>1 {SAC_RESOURCE_EMOJI[tradeWant]}</span>
                 </div>
                 {!anyTradeable && (
                     <p className="ag-action-hint" style={{ marginTop: 6 }}>
@@ -339,7 +334,7 @@ export default function SettlementsAndCitiesActions({
                     pendingLabel="Trading…"
                     onClick={confirmTrade}
                 >
-                    {canTrade ? `Trade ${offerRatio}:1` : `Need ${offerRatio} ${RESOURCE_EMOJI[tradeOffer]}`}
+                    {canTrade ? `Trade ${offerRatio}:1` : `Need ${offerRatio} ${SAC_RESOURCE_EMOJI[tradeOffer]}`}
                 </ActionButton>
             </Modal.Footer>
         </Modal>
@@ -419,13 +414,13 @@ export default function SettlementsAndCitiesActions({
                 <Form.Group className="mb-2">
                     <Form.Label>First resource</Form.Label>
                     <Form.Select value={yopR1} onChange={e => setYopR1(e.target.value as SAC_Resource)}>
-                        {RESOURCES.map(r => <option key={r} value={r}>{RESOURCE_EMOJI[r]} {r}</option>)}
+                        {SAC_RESOURCES.map(r => <option key={r} value={r}>{SAC_RESOURCE_EMOJI[r]} {r}</option>)}
                     </Form.Select>
                 </Form.Group>
                 <Form.Group>
                     <Form.Label>Second resource</Form.Label>
                     <Form.Select value={yopR2} onChange={e => setYopR2(e.target.value as SAC_Resource)}>
-                        {RESOURCES.map(r => <option key={r} value={r}>{RESOURCE_EMOJI[r]} {r}</option>)}
+                        {SAC_RESOURCES.map(r => <option key={r} value={r}>{SAC_RESOURCE_EMOJI[r]} {r}</option>)}
                     </Form.Select>
                 </Form.Group>
             </Modal.Body>
@@ -450,7 +445,7 @@ export default function SettlementsAndCitiesActions({
                 <Form.Group>
                     <Form.Label>Choose a resource to monopolise</Form.Label>
                     <Form.Select value={monopolyR} onChange={e => setMonopolyR(e.target.value as SAC_Resource)}>
-                        {RESOURCES.map(r => <option key={r} value={r}>{RESOURCE_EMOJI[r]} {r}</option>)}
+                        {SAC_RESOURCES.map(r => <option key={r} value={r}>{SAC_RESOURCE_EMOJI[r]} {r}</option>)}
                     </Form.Select>
                 </Form.Group>
             </Modal.Body>

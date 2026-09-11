@@ -3,7 +3,7 @@ import { settlementsAndCitiesRecapAdapter } from "./recap";
 import type { ITurnSnapshot } from "@/utils/games/replay";
 import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic";
 import type { ISACSpecificGameStateResponse, ISACPlayerStateResponse } from "./apiModels";
-import type { SAC_Resource } from "./board";
+import type { ISACRollChange, SAC_Resource } from "./board";
 import { NO_RESOURCES } from "./board";
 
 function player(overrides: Partial<ISACPlayerStateResponse> & { userId: string; username: string }): ISACPlayerStateResponse {
@@ -40,6 +40,7 @@ function state(players: ISACPlayerStateResponse[], overrides: Partial<ISACSpecif
         lastRoll: null,
         lastRollDie1: null,
         lastRollDie2: null,
+        lastRollChanges: [],
         pendingRobber: false,
         longestRoadOwner: null,
         largestArmyOwner: null,
@@ -55,6 +56,11 @@ function state(players: ISACPlayerStateResponse[], overrides: Partial<ISACSpecif
         victoryTarget: 10,
         ...overrides,
     };
+}
+
+// One player's side of a roll, naming only the resources the roll paid them.
+function gain(userId: string, gained: Partial<Record<SAC_Resource, number>>): ISACRollChange {
+    return { userId, gained: { ...NO_RESOURCES, ...gained }, discarded: 0 };
 }
 
 function snap(gs: ISACSpecificGameStateResponse): ITurnSnapshot {
@@ -74,25 +80,52 @@ function cmd(overrides: Partial<IGameCommand> & { className: string }): IGameCom
 const OK = { validMove: true, turnOver: false } as ICommandOutcome;
 
 describe("Settlements & Cities recap adapter", () => {
-    it("flags who collected on a resource roll", () => {
+    it("names the resources a roll dealt out, per player", () => {
         const prev = state([player({ userId: "u1", username: "Alice" }), player({ userId: "u2", username: "Bob" })]);
         const next = state(
-            [player({ userId: "u1", username: "Alice", resources: { lumber: 2, wool: 0, grain: 0, brick: 0, ore: 0 } }), player({ userId: "u2", username: "Bob" })],
-            { lastRoll: 8 },
+            [player({ userId: "u1", username: "Alice", resources: { lumber: 2, wool: 0, grain: 1, brick: 0, ore: 0 } }), player({ userId: "u2", username: "Bob", resources: { lumber: 0, wool: 0, grain: 0, brick: 0, ore: 1 } })],
+            {
+                lastRoll: 8,
+                lastRollChanges: [
+                    gain("u1", { lumber: 2, grain: 1 }),
+                    gain("u2", { ore: 1 }),
+                ],
+            },
         );
         const events = settlementsAndCitiesRecapAdapter.toEvents(snap(prev), snap(next), cmd({ className: "SACRollDice" }), OK);
         expect(events).toHaveLength(1);
         expect(events[0].type).toBe("sac_roll");
         expect(events[0].title).toBe("Alice rolled a 8");
-        expect(events[0].affectedIds).toEqual(["u1"]);
+        // Named rather than netted, and nobody is "You" — every player reads the
+        // same recap.
+        expect(events[0].detail).toBe("Alice +2🪵 +1🌾, Bob +1⛏️");
+        expect(events[0].affectedIds).toEqual(["u1", "u2"]);
     });
 
-    it("marks discards on a 7 for players who lost cards", () => {
+    it("says a roll paid nobody when it paid nobody", () => {
+        const st = state([player({ userId: "u1", username: "Alice" })], { lastRoll: 8, lastRollChanges: [] });
+        const events = settlementsAndCitiesRecapAdapter.toEvents(snap(st), snap(st), cmd({ className: "SACRollDice" }), OK);
+        expect(events[0].detail).toBe("no one collected");
+        expect(events[0].affectedIds).toEqual([]);
+    });
+
+    it("leaves the payout line off a roll from a game older than the field", () => {
+        const st = state([player({ userId: "u1", username: "Alice" })], { lastRoll: 8, lastRollChanges: undefined });
+        const events = settlementsAndCitiesRecapAdapter.toEvents(snap(st), snap(st), cmd({ className: "SACRollDice" }), OK);
+        expect(events[0].title).toBe("Alice rolled a 8");
+        expect(events[0].detail).toBeUndefined();
+    });
+
+    it("counts the cards a 7 took off each player, never which ones", () => {
         const prev = state([player({ userId: "u1", username: "Alice" }), player({ userId: "u2", username: "Bob", resources: { lumber: 8, wool: 0, grain: 0, brick: 0, ore: 0 } })]);
-        const next = state([player({ userId: "u1", username: "Alice" }), player({ userId: "u2", username: "Bob", resources: { lumber: 4, wool: 0, grain: 0, brick: 0, ore: 0 } })], { lastRoll: 7 });
+        const next = state(
+            [player({ userId: "u1", username: "Alice" }), player({ userId: "u2", username: "Bob", resources: { lumber: 4, wool: 0, grain: 0, brick: 0, ore: 0 } })],
+            { lastRoll: 7, lastRollChanges: [{ userId: "u2", gained: NO_RESOURCES, discarded: 4 }] },
+        );
         const events = settlementsAndCitiesRecapAdapter.toEvents(snap(prev), snap(next), cmd({ className: "SACRollDice" }), OK);
         expect(events[0].type).toBe("sac_roll_seven");
         expect(events[0].title).toBe("Alice rolled a 7");
+        expect(events[0].detail).toBe("robber stirs · Bob −4 cards");
         expect(events[0].affectedIds).toEqual(["u2"]);
     });
 

@@ -201,6 +201,26 @@ describe("Settlements & Cities' response", () => {
         expect(wire.playerStates.u2.resources).toBeUndefined();
     });
 
+    it("sends a roll's payout to every viewer alike, with a 7's discards as a count", () => {
+        // A roll's production is derivable from the public board and its number
+        // tokens, so the payout goes out whole to every player. What a 7 *took*
+        // isn't — it would name cards out of a hidden hand — so the state records
+        // a count and that is all that can reach the wire.
+        const gs = sacState();
+        const payout = [
+            { userId: "u1", gained: { lumber: 2, wool: 0, grain: 0, brick: 0, ore: 0 }, discarded: 0 },
+            { userId: "u2", gained: { lumber: 0, wool: 0, grain: 0, brick: 0, ore: 0 }, discarded: 3 },
+        ];
+        gs.lastRollChanges = payout;
+
+        // All three viewers: the player it paid, the opponent it cost, and the
+        // viewerless snapshot a recap or result replay builds.
+        for (const viewerId of ["u1", "u2", null]) {
+            const wire = JSON.parse(JSON.stringify(sacStateToResponse(gs, NAMES, viewerId)));
+            expect(wire.lastRollChanges).toEqual(payout);
+        }
+    });
+
     it("shows nobody's hand when nobody in particular is asking", () => {
         const response = sacStateToResponse(sacState(), NAMES, null);
 

@@ -62,6 +62,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "See what a Settlements & Cities roll paid out",
+                detail: "The dice that used to sit in the corner of the board are now a panel under it, and it says who collected what: \"Rolled 8 — You +2🪵 +1🌾, Bob +1⛏️\". A 7 names the cards it cost each player instead. The same breakdown is in the turn history and in the recap you get when it's your move again, so a roll you weren't there for still tells you who got rich.",
+                game: "settlementsandcities",
+            },
+            {
                 title: "Open chat and turn history from the bottom of the page too",
                 detail: "Both panels used to only open from the 💬 and 📜 buttons up in the top bar — on a tall board that meant scrolling all the way back up just to open or close one. Their titles at the bottom of the page are now buttons of their own: tap either to open it, and tap it again to close, right where you already are.",
             },
@@ -98,11 +103,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Your own card leads the scoreboard",
                 detail: "The player strip at the top of every game now puts you first and seats everyone else in the order they actually play, instead of the order you all joined — so you're never hunting for your own card in the middle of the row. Your card carries a soft tint to say it's yours; a bold ring now marks whoever's turn it is instead.",
-            },
-            {
-                title: "See whether building early pays off in Dice Cities",
-                detail: "The result page now charts how many establishments each player owned at the end of every turn, alongside the coins chart — so you can see whether building up early snowballed into a win, or whether saving for the big cards paid off instead.",
-                game: "dicecities",
             },
         ],
     },

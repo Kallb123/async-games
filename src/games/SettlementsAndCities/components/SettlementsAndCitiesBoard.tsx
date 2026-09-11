@@ -1,11 +1,9 @@
 'use client'
 import React from 'react';
 import BoardZoom from '@/components/ui/BoardZoom';
-import { BOARD_TOPOLOGY, HEX_POSITIONS } from '@/games/SettlementsAndCities/board';
-import type { SAC_Resource } from '@/games/SettlementsAndCities/board';
+import { BOARD_TOPOLOGY, SAC_RESOURCES } from '@/games/SettlementsAndCities/board';
 import type { ISACHexResponse, ISACVertexResponse, ISACEdgeResponse, ISACHarborResponse } from '@/games/SettlementsAndCities/apiModels';
-import type { SACSpotKind } from '@/games/SettlementsAndCities/ui';
-import Dice from '@/components/ui/Dice';
+import { SAC_RESOURCE_EMOJI, type SACSpotKind } from '@/games/SettlementsAndCities/ui';
 
 const HEX_SIZE = 52;
 const SVG_W = 620;
@@ -14,7 +12,6 @@ const CX = SVG_W / 2;
 const CY = SVG_H / 2;
 const R3_2 = Math.sqrt(3) / 2;
 
-const PLAYER_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c'];
 const TERRAIN_COLORS: Record<string, string> = {
     forest: '#27ae60',
     pasture: '#a8e06c',
@@ -30,10 +27,6 @@ const HARBOR_COLORS: Record<string, string> = {
     grain: '#f4d03f',
     brick: '#e67e22',
     ore: '#95a5a6',
-};
-const RESOURCE_TYPES: SAC_Resource[] = ['lumber', 'wool', 'grain', 'brick', 'ore'];
-const RESOURCE_EMOJI: Record<string, string> = {
-    lumber: '🪵', wool: '🐑', grain: '🌾', brick: '🧱', ore: '⛏️',
 };
 
 function vertexPx(vertexId: number): [number, number] {
@@ -62,9 +55,6 @@ interface SettlementsAndCitiesBoardProps {
     validEdges?: Set<number>;
     validHexes?: Set<number>;
     // Chrome shown around the board within the shell
-    lastRoll?: number | null;
-    lastRollDie1?: number | null;
-    lastRollDie2?: number | null;
     /** When set, a translucent prompt is shown over the board (e.g. "Tap to place"). */
     placementPrompt?: string | null;
     /** The spot whose command is in flight: the piece is painted in optimistically
@@ -85,9 +75,6 @@ export default function SettlementsAndCitiesBoard({
     validVertices = new Set(),
     validEdges = new Set(),
     validHexes = new Set(),
-    lastRoll = null,
-    lastRollDie1 = null,
-    lastRollDie2 = null,
     placementPrompt = null,
     pendingSpot = null,
 }: SettlementsAndCitiesBoardProps) {
@@ -106,14 +93,6 @@ export default function SettlementsAndCitiesBoard({
     return (
         <>
             <div className="ag-board-frame">
-                {lastRoll !== null && (
-                    <div className="ag-board-tag ag-board-tag--dice">
-                        {lastRollDie1 !== null && lastRollDie2 !== null && (
-                            <Dice values={[lastRollDie1, lastRollDie2]} size={22} />
-                        )}
-                        <span>Last roll: {lastRoll}</span>
-                    </div>
-                )}
                 {placementPrompt && (
                     <div className="ag-board-overlay"><div>{placementPrompt}</div></div>
                 )}
@@ -179,7 +158,7 @@ export default function SettlementsAndCitiesBoard({
                 const [x2, y2] = vertexPx(v2);
                 const mx = (x1 + x2) / 2;
                 const my = (y1 + y2) / 2;
-                const label = harbor.type === '3to1' ? '3:1' : `2:1 ${RESOURCE_EMOJI[harbor.type] ?? harbor.type}`;
+                const label = harbor.type === '3to1' ? '3:1' : `2:1 ${SAC_RESOURCE_EMOJI[harbor.type]}`;
                 return (
                     <g key={i} style={{ pointerEvents: 'none' }}>
                         <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={HARBOR_COLORS[harbor.type]} strokeWidth={4} strokeDasharray="4 2" />
@@ -351,10 +330,10 @@ export default function SettlementsAndCitiesBoard({
                 </BoardZoom>
             </div>
             <div className="ag-reslegend">
-                {RESOURCE_TYPES.map((resource) => (
+                {SAC_RESOURCES.map((resource) => (
                     <div key={resource} className="ag-reslegend-pill">
                         <span className="ag-reslegend-dot" style={{ background: HARBOR_COLORS[resource] }} />
-                        <span>{RESOURCE_EMOJI[resource]} {resource}</span>
+                        <span>{SAC_RESOURCE_EMOJI[resource]} {resource}</span>
                     </div>
                 ))}
             </div>

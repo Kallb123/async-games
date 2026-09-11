@@ -4,6 +4,7 @@ import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic"
 import type { ISACSpecificGameStateResponse, ISACPlayerStateResponse } from "@/games/SettlementsAndCities/apiModels";
 import type { SAC_Resource } from "@/games/SettlementsAndCities/board";
 import { NO_RESOURCES } from "@/games/SettlementsAndCities/board";
+import { sacRollChangeLabel, sacRollChangeParts } from "@/games/SettlementsAndCities/ui";
 import { playerByUserId } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 
 type SACState = ISACSpecificGameStateResponse;
@@ -79,30 +80,35 @@ function toEvents(
     switch (command.className) {
         case "SACRollDice": {
             const roll = nextState.lastRoll ?? 0;
+            // The roll recorded what it moved, so the recap names it rather than
+            // inferring "somebody gained something" from hand sizes: every reader
+            // sees the same line, which is why nobody is "You" here — the board's
+            // version of this line is the one that says that.
+            const changes = nextState.lastRollChanges;
+            const parts = sacRollChangeParts(changes, (userId) =>
+                playerByUserId(nextState, userId)?.username
+                ?? playerByUserId(prevState, userId)?.username
+                ?? "someone");
+            const touched = (changes ?? []).filter((c) => sacRollChangeLabel(c) !== "").map((c) => c.userId);
             if (roll === 7) {
-                // A 7 sends the robber and forces discards; flag anyone who lost cards.
-                const losers = Object.values(nextState.playerStates)
-                    .filter((p) => resourceDelta(prevState, nextState, p.userId) < 0)
-                    .map((p) => p.userId);
                 events.push({
                     ...base,
                     type: "sac_roll_seven",
                     glyph: "🎲",
                     title: `${name} rolled a 7`,
-                    detail: losers.length ? "robber stirs · cards discarded" : "robber stirs",
-                    affectedIds: losers,
+                    detail: ["robber stirs", ...parts].join(" · "),
+                    affectedIds: touched,
                 });
             } else {
-                const gainers = Object.values(nextState.playerStates)
-                    .filter((p) => resourceDelta(prevState, nextState, p.userId) > 0)
-                    .map((p) => p.userId);
                 events.push({
                     ...base,
                     type: "sac_roll",
                     glyph: "🎲",
                     title: `${name} rolled a ${roll}`,
-                    detail: gainers.length ? "resources dealt out" : "no one collected",
-                    affectedIds: gainers,
+                    // A roll with nothing recorded against it (a game older than
+                    // the field) says nothing rather than claiming it paid nobody.
+                    detail: parts.length ? parts.join(", ") : changes ? "no one collected" : undefined,
+                    affectedIds: touched,
                 });
             }
             break;

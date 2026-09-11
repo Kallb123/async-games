@@ -66,6 +66,11 @@ out. A second copy is the signal to extract the first one.
   `MapLabel` per node: it lays every name out in one pass so none of them lands
   on another name, on a node, on a marker beside a node, or off the map — tell
   it the side each name prefers and what to keep off (Train Time uses it too).
+  A game that throws dice shows what came up with `Dice` (itself a row of
+  `DieFace`) and, where the throw also moved something, with `RollReadout` — the
+  dark card holding the dice, the total and a line naming what the roll paid out,
+  which Dice Cities puts over its market and Settlements & Cities under its
+  board. Don't hand-roll a second dice-and-total card beside it.
   `ReadOnlyPanel` is how a game screen shows a waiting player the panels they
   can look at but not act on — their hand, the face-up cards, the market — by
   making the turn sheet inert rather than growing a second read-only copy of it.

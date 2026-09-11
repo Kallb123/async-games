@@ -1568,7 +1568,6 @@ a.ag-list-row, a.ag-list-row-main {
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.19);
     white-space: nowrap;
 }
-.ag-board-tag--dice { display: flex; align-items: center; gap: 6px; padding: 4px 11px 4px 6px; }
 /* The same pill as a tappable control in the opposite corner (BoardZoom's
    zoom toggle), rather than a second dark-pill style. */
 .ag-board-tag--action { top: 12px; right: 12px; bottom: auto; left: auto; border: none; cursor: pointer; }
@@ -2557,6 +2556,27 @@ button.ag-chat-gif { cursor: pointer; }
     100% { transform: rotate(0) scale(1); }
 }
 
+/* ---- Roll readout (shared RollReadout: the dice, the total, what moved) ----
+   Dice Cities shows it over the market, Settlements & Cities under the board. It
+   carries no margins of its own, since where it sits differs per game - each
+   passes a layout class (`.ag-dc-roll`, `.ag-roll--spaced`) for that. */
+.ag-roll {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--ag-dark);
+    border-radius: 16px;
+    padding: 12px 14px;
+    color: var(--ag-on-dark);
+}
+/* Down the main column the card has something under it - Settlements & Cities
+   puts the hand and the action sheet there - so it needs a gap on both sides,
+   where in Dice Cities' sheet it is the last thing in its own column. */
+.ag-roll--spaced { margin: 10px 16px 12px; }
+.ag-roll-main { flex: 1; min-width: 0; }
+.ag-roll-total { font: 800 15px var(--ag-font); }
+.ag-roll-sub { font: 600 10px var(--ag-font); opacity: 0.8; margin-top: 2px; }
+
 /* The move / verdict / new-square reveal fades in once the die settles —
    shared by any game's post-roll payoff screen (Snakes & Ladders, Fires
    Out's Advance Fire) via its own `.ag-*-reveal` class, so the keyframes are
@@ -3050,25 +3070,16 @@ button.ag-chat-gif { cursor: pointer; }
 .ag-dc-dice-mini { font-size: 16px; line-height: 1; }
 
 /* ---- Post-roll: dice result + market ---- */
-.ag-dc-roll {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin: 8px 16px 0;
-    background: var(--ag-dark);
-    border-radius: 16px;
-    padding: 12px 14px;
-    color: var(--ag-on-dark);
-}
+/* The roll card itself (RollReadout) is shared with Settlements & Cities and
+   lives up with the rest of the design system - see `.ag-roll`. What's left here
+   is only where Dice Cities puts it. */
+.ag-dc-roll { margin: 8px 16px 0; }
 /* Inside a sheet the roll card leads and something else follows it - the
    pending selection's head, or the market on a turn that auto-passed. Neither
    carries a top margin, and the roll card's own margins are set for the
    post-roll view where it is the last thing in its column, so the gap belongs
    here rather than on either of them. */
 .ag-actionsheet .ag-dc-roll { margin-bottom: 12px; }
-.ag-dc-roll-main { flex: 1; min-width: 0; }
-.ag-dc-roll-total { font: 800 15px var(--ag-font); }
-.ag-dc-roll-sub { font: 600 10px var(--ag-font); opacity: 0.8; margin-top: 2px; }
 .ag-dc-callout { margin: 10px 16px 0; }
 
 .ag-dc-market { padding-top: 12px; }
