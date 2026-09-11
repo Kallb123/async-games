@@ -45,13 +45,13 @@
     /* The desktop expansion (design §16), at the foot of this file. The column
        above is still what a phone gets; past the breakpoints there (900px and
        1200px, written out because a media query can't read a custom property),
-       the home dashboard lays itself out as rail + turn queue + side panel
-       inside `--ag-desk-width`. The two fixed columns are tokens because the
-       rail and the panel each need to know their own width and the grid needs
-       both. */
+       the home dashboard fills the window as rail + turn queue + side panel.
+       The rail and the panel are fixed, so each needs its own width and the
+       grid needs both; the queue takes whatever is left, up to the cap that
+       keeps a turn card from stretching across a very wide screen. */
     --ag-rail-width: 232px;
     --ag-side-width: 320px;
-    --ag-desk-width: 1320px;
+    --ag-queue-width: 920px;
 
     /* How much room the fixed bottom banner is taking up, or 0px when no offer
        is showing. `useHeightVar` measures the banner and writes this onto
@@ -4284,7 +4284,12 @@ button.ag-tt-ticket { cursor: pointer; }
     /* `:has` rather than a class on the column, because the column is the root
        layout's and the screen inside it is the one that knows it can go wide. */
     .ag-app:has(.ag-desk) {
-        max-width: 980px;
+        /* Full bleed. The rail is chrome, and chrome belongs against the edge
+           of the window: capping the column here instead centred it, which put
+           a sliver of cream down the outside of the rail at every width just
+           past the cap. The queue below carries the cap now, so a very wide
+           window still doesn't stretch a list row across the whole screen. */
+        max-width: none;
         /* The bottom run-off moves onto the columns, so the rail's dark ground
            reaches the foot of the page instead of stopping 40px short. */
         padding-bottom: 0;
@@ -4300,21 +4305,27 @@ button.ag-tt-ticket { cursor: pointer; }
         grid-template-rows: auto 1fr;
     }
 
+    /* Wide enough that a laptop never reaches it, so the cap only bites on the
+       screens where a turn card would otherwise stretch across a metre of desk.
+       `width` and `justify-self` rather than `margin-inline: auto`, which in a
+       grid drops the item off stretch and down to its fit-content size — which
+       here is one turn card wide. */
+    .ag-desk-col {
+        width: 100%;
+        max-width: var(--ag-queue-width);
+        justify-self: center;
+        padding-inline: 8px;
+    }
+
     /* The run-off under the page, on whichever column is last in flow — one
        column at this width, both once the panel moves out beside the queue. */
     .ag-desk-col--side { padding-bottom: calc(40px + var(--ag-banner-height)); }
 
-    .ag-desk-col--main {
-        grid-area: 1 / 2 / 2 / 3;
-        padding-inline: 8px;
-    }
+    .ag-desk-col--main { grid-area: 1 / 2 / 2 / 3; }
 
     /* Still under the queue at this width — one column of content beside the
        rail. The 1200px block below moves it out into a panel of its own. */
-    .ag-desk-col--side {
-        grid-area: 2 / 2 / 3 / 3;
-        padding-inline: 8px;
-    }
+    .ag-desk-col--side { grid-area: 2 / 2 / 3 / 3; }
 
     /* ---- The rail ---- */
     .ag-rail {
@@ -4335,10 +4346,17 @@ button.ag-tt-ticket { cursor: pointer; }
 
     .ag-rail .ag-topbar { padding: 14px 4px 0; }
     /* A step down from the top bar's 22px: the full name has to fit the rail's
-       width on one line. */
+       width on one line. On a dev deployment the 🚧 badge rides in this group
+       too and there is no room for both, so the group wraps — the badge drops
+       under the lockup rather than breaking the name across two lines. */
+    .ag-rail .ag-topbar-title {
+        flex-wrap: wrap;
+        row-gap: 6px;
+    }
     .ag-rail .ag-wordmark {
         color: var(--ag-on-dark);
         font-size: 18px;
+        white-space: nowrap;
     }
     /* The circle and the avatar are the phone's way to reach a new game and
        your profile; up here the rail's own button and account row are. */
@@ -4522,8 +4540,6 @@ button.ag-tt-ticket { cursor: pointer; }
 
 /* ---- The right panel joins in (≥ 1200px) ---- */
 @media (min-width: 1200px) {
-    .ag-app:has(.ag-desk) { max-width: var(--ag-desk-width); }
-
     /* One row now, so all three columns stretch to the same height and the
        panel's ground reaches the foot of the rail rather than stopping where
        its own rows run out. */
@@ -4536,8 +4552,11 @@ button.ag-tt-ticket { cursor: pointer; }
 
     .ag-desk-col--main { padding-bottom: calc(40px + var(--ag-banner-height)); }
 
+    /* The panel is the column now, so it takes the whole fixed track rather
+       than the queue's cap. */
     .ag-desk-col--side {
         grid-area: 1 / 3 / 2 / 4;
+        max-width: none;
         background: var(--ag-surface);
         border-left: 1.5px solid var(--ag-line);
         padding-inline: 4px;
