@@ -38,12 +38,20 @@ export async function runCommand(
     // every command passes through — is what lets a reaction find its way
     // back to the line it landed on without every game threading its own
     // command id into every history write.
+    //
+    // Stamped from the command's own timestamp, not `Date.now()`: buildTimeline
+    // replays every command through this same pipeline into a fresh in-memory
+    // history each time a player opens the match review, so a wall-clock read
+    // here would restamp every line to the moment of the *replay* rather than
+    // the moment the move was played — the turn history's relative time would
+    // read "just now" for a turn played hours ago. The command's timestamp is
+    // set once, when it was actually submitted, and survives both a live run
+    // and every later replay of it.
     const linesWritten = gameData.gameState.history.length - historyCountBefore;
-    const now = new Date().toISOString();
     for (let i = 0; i < linesWritten; i++) {
         gameData.gameState.history[i].commandId = command.id;
         if (!gameData.gameState.history[i].createdAt) {
-            gameData.gameState.history[i].createdAt = now;
+            gameData.gameState.history[i].createdAt = command.timestamp;
         }
     }
 
