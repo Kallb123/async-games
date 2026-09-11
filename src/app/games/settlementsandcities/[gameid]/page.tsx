@@ -426,6 +426,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                                 setBoardMode={setBoardMode}
                                 submitCommand={submitCommand}
                                 pendingTarget={pendingTarget}
+                                readOnly={!isMyTurn}
                             />
                         </ReadOnlyPanel>
                     )}
