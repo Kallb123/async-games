@@ -5,6 +5,20 @@ import { shuffle as shuffleArray } from '@/utils/games/shuffle';
 
 export type SAC_Resource = 'lumber' | 'wool' | 'grain' | 'brick' | 'ore';
 
+/**
+ * The five resources, in one canonical order. Read by the rules and by every
+ * screen — five files were carrying their own copy of this literal before it
+ * landed here.
+ *
+ * **The order is load-bearing, so don't reorder it for looks.** The 7-discard
+ * and the robber's steal build their pool by walking this list and then shuffle
+ * it from a recorded draw log, so a different order deals a different card out
+ * of the same log — which would rewrite every replayed turn of every game ever
+ * played. It happens to be a sensible reading order for a hand too, which is why
+ * the screens share it rather than keeping a presentation copy that could drift.
+ */
+export const SAC_RESOURCES: SAC_Resource[] = ['lumber', 'wool', 'grain', 'brick', 'ore'];
+
 // An all-zero resource hand. The response only carries a player's `resources`
 // when they are the one asking (see apiModels), so viewer-side code reads it as
 // `ps.resources ?? NO_RESOURCES` rather than repeating this literal.
@@ -71,6 +85,31 @@ export interface ISACPlayerState {
     robberUses: number;
 }
 
+// ─── What a roll moved ────────────────────────────────────────────────────────
+
+/**
+ * One player's side of the last roll: what the terrain paid them, and how many
+ * cards a 7 took off them. Recorded on the state as the roll resolves, because
+ * it cannot be recomputed afterwards — a Knight played later in the same turn
+ * moves the robber, and a settlement built later sits on a hex that has already
+ * paid, so re-deriving the payout from the board would report a different one
+ * from the payout that actually happened.
+ *
+ * Public, and deliberately so: every number here is already derivable from the
+ * board, the number tokens and the public hand sizes, which is why the whole
+ * list goes to every player rather than only the roller. The one thing that is
+ * *not* derivable is which cards a 7 took, so discards are a count — the
+ * composition of a hand is hidden (see apiModels) and recording it here would
+ * put it on the wire.
+ */
+export interface ISACRollChange {
+    userId: string;
+    /** What the terrain produced for them. All zero on a 7, which pays nobody. */
+    gained: ISACResources;
+    /** How many cards the 7-discard took off them. 0 on every other roll. */
+    discarded: number;
+}
+
 // ─── Full specific game state ─────────────────────────────────────────────────
 
 export interface ISACSpecificGameState {
@@ -88,6 +127,12 @@ export interface ISACSpecificGameState {
     lastRoll: number | null;
     lastRollDie1: number | null;
     lastRollDie2: number | null;
+    // What that roll moved, per player, in turn order — only the players it
+    // touched. Cleared with the rest of the last-roll fields when the turn
+    // passes. Absent on a game whose last roll predates the field; readers
+    // answer that with `?? []` and simply show no payout, rather than claiming
+    // a roll paid nobody.
+    lastRollChanges?: ISACRollChange[];
     pendingRobber: boolean;
     longestRoadOwner: string | null;
     largestArmyOwner: string | null;

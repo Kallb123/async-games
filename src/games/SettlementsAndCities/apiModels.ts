@@ -1,5 +1,5 @@
 import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
-import type { SAC_Resource, SAC_DevCard, SAC_Terrain, SAC_Harbor } from "./board";
+import type { ISACRollChange, SAC_Resource, SAC_DevCard, SAC_Terrain, SAC_Harbor } from "./board";
 import type { SACExpansions } from "./expansions";
 
 export interface ISACHexResponse {
@@ -72,6 +72,13 @@ export interface ISACSpecificGameStateResponse {
     lastRoll: number | null;
     lastRollDie1: number | null;
     lastRollDie2: number | null;
+    // What that roll paid out, per player — sent to everyone, not just the
+    // roller. Every figure in it is already derivable from the public board and
+    // the public hand sizes, and the one thing that isn't (which cards a 7 took)
+    // is a count rather than a breakdown, so there is nothing here to redact and
+    // nothing to re-declare: the state's own shape goes straight out. Undefined
+    // for a game whose last roll predates the field.
+    lastRollChanges?: ISACRollChange[];
     pendingRobber: boolean;
     // Bonus holders, as stable Clerk userIds (resolve a name via playerStates).
     longestRoadOwner: string | null;

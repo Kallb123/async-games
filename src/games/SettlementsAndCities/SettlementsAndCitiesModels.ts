@@ -24,6 +24,7 @@ import {
     ISACPlayerState,
     ISACResources,
     ISACDevCards,
+    ISACRollChange,
     ISACSpecificGameState,
 } from "./board";
 import {
@@ -70,6 +71,18 @@ function cloneDevCards(d: ISACDevCards): ISACDevCards {
     };
 }
 
+// The last roll's payout, as plain objects. A game whose last roll predates the
+// field has none, and stays that way rather than being given an empty payout —
+// "nothing recorded" and "paid nobody" are different things to the screens that
+// read it.
+function cloneRollChanges(changes: ISACRollChange[] | undefined): ISACRollChange[] | undefined {
+    return changes?.map((change): ISACRollChange => ({
+        userId: change.userId,
+        gained: cloneResources(change.gained),
+        discarded: change.discarded,
+    }));
+}
+
 function clonePlayerState(ps: ISACPlayerState): ISACPlayerState {
     return {
         resources: cloneResources(ps.resources),
@@ -107,6 +120,7 @@ export function cloneSACState(
         lastRoll: gs.lastRoll,
         lastRollDie1: gs.lastRollDie1,
         lastRollDie2: gs.lastRollDie2,
+        lastRollChanges: cloneRollChanges(gs.lastRollChanges),
         pendingRobber: gs.pendingRobber,
         longestRoadOwner: gs.longestRoadOwner,
         largestArmyOwner: gs.largestArmyOwner,
@@ -206,6 +220,7 @@ SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
         lastRoll: null,
         lastRollDie1: null,
         lastRollDie2: null,
+        lastRollChanges: [],
         pendingRobber: false,
         longestRoadOwner: null,
         largestArmyOwner: null,
@@ -315,6 +330,13 @@ function makeSACStateSchemaDef() {
         lastRoll: { type: Number, default: null },
         lastRollDie1: { type: Number, default: null },
         lastRollDie2: { type: Number, default: null },
+        // `default: undefined` rather than Mongoose's automatic `[]`, so a game
+        // played before this field existed reads back as "no payout recorded"
+        // instead of as a roll that paid nobody — see cloneRollChanges.
+        lastRollChanges: {
+            type: [{ userId: String, gained: resourcesSubSchema, discarded: Number }],
+            default: undefined,
+        },
         pendingRobber: Boolean,
         longestRoadOwner: { type: String, default: null },
         largestArmyOwner: { type: String, default: null },
@@ -430,6 +452,10 @@ export function gameStateToResponse(
         lastRoll: gs.lastRoll,
         lastRollDie1: gs.lastRollDie1,
         lastRollDie2: gs.lastRollDie2,
+        // Field by field, the same as the board arrays above: these come off a
+        // live Mongoose document, and sending the subdocuments as they are would
+        // ship their internals (and an `_id` per row) along with them.
+        lastRollChanges: cloneRollChanges(gs.lastRollChanges),
         pendingRobber: gs.pendingRobber,
         longestRoadOwner,
         largestArmyOwner,

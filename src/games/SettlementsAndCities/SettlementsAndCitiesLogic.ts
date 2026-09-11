@@ -1,6 +1,7 @@
 import type { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
-import type { SAC_Resource, SAC_DevCard, ISACPlayerState } from "@/games/SettlementsAndCities/board";
-import { BOARD_TOPOLOGY, TERRAIN_TO_RESOURCE, calculateLongestRoad, calculateVisibleVP, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
+import type { SAC_Resource, SAC_DevCard, ISACPlayerState, ISACRollChange } from "@/games/SettlementsAndCities/board";
+import { BOARD_TOPOLOGY, NO_RESOURCES, SAC_RESOURCES, TERRAIN_TO_RESOURCE, calculateLongestRoad, calculateVisibleVP, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
+import { sacRollChangeParts } from "@/games/SettlementsAndCities/ui";
 import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
@@ -46,13 +47,15 @@ export class SACRandomLog {
     }
 }
 
-function sacDiscardHalf(ps: ISACPlayerState, rng: SACRandomLog): void {
+// Discards half a hand over the limit, and reports how many cards went — the
+// count is public (hand size always is) and the roll's payout records it, where
+// *which* cards went stays hidden.
+function sacDiscardHalf(ps: ISACPlayerState, rng: SACRandomLog): number {
     const total = sacTotalResources(ps);
-    if (total <= 7) return;
+    if (total <= 7) return 0;
     let toDiscard = Math.floor(total / 2);
     const pool: SAC_Resource[] = [];
-    const resourceKeys: SAC_Resource[] = ['lumber', 'wool', 'grain', 'brick', 'ore'];
-    for (const r of resourceKeys) {
+    for (const r of SAC_RESOURCES) {
         for (let i = 0; i < ps.resources[r]; i++) pool.push(r);
     }
     // Fisher-Yates shuffle the pool then take first `toDiscard`
@@ -63,6 +66,7 @@ function sacDiscardHalf(ps: ISACPlayerState, rng: SACRandomLog): void {
     for (let i = 0; i < toDiscard; i++) {
         ps.resources[pool[i]]--;
     }
+    return toDiscard;
 }
 
 function sacTotalResources(ps: ISACPlayerState): number {
@@ -163,6 +167,7 @@ function sacAdvanceMainTurn(sacData: ISettlementsAndCitiesGameData): void {
     gs.lastRoll = null;
     gs.lastRollDie1 = null;
     gs.lastRollDie2 = null;
+    gs.lastRollChanges = [];
     gs.pendingRobber = false;
     gs.pendingRoadBuilding = 0;
     gs.playedDevCard = false;
@@ -458,8 +463,22 @@ export class SACRollDice implements IGameCommand {
         gs.lastRollDie1 = die1;
         gs.lastRollDie2 = die2;
 
+        // What this roll moved, per player, built up as it resolves and then
+        // parked on the state: the board screen, the turn recap and the history
+        // line below all read the same payout rather than three of them guessing
+        // at it from hand sizes, and a Knight moving the robber later in the same
+        // turn can't rewrite what the dice already paid.
+        const changes = new Map<string, ISACRollChange>();
+        const changeFor = (userId: string): ISACRollChange => {
+            let change = changes.get(userId);
+            if (!change) {
+                change = { userId, gained: { ...NO_RESOURCES }, discarded: 0 };
+                changes.set(userId, change);
+            }
+            return change;
+        };
+
         if (roll === 7) {
-            sacData.gameState.history.unshift(playerHistory(this.senderId, `rolled a ${roll}`));
             const rollerPs = gs.playerStates.get(this.senderId);
             if (rollerPs) rollerPs.robberUses++;
             // Discard phase: auto-discard for all players with >7 cards. The
@@ -467,13 +486,13 @@ export class SACRollDice implements IGameCommand {
             // playerStates iteration order is stable (userIdList order), so the
             // recorded draws line up with the same players on replay.
             const rng = new SACRandomLog(this.recordedDiscards);
-            for (const [, ps] of gs.playerStates) {
-                sacDiscardHalf(ps, rng);
+            for (const [userId, ps] of gs.playerStates) {
+                const discarded = sacDiscardHalf(ps, rng);
+                if (discarded > 0) changeFor(userId).discarded = discarded;
             }
             this.recordedDiscards = rng.log;
             gs.pendingRobber = true;
         } else {
-            const resourceDistributions = new Map<string, Partial<Record<SAC_Resource, number>>>();
             // Distribute resources
             for (const [hexId, hex] of gs.hexes.entries()) {
                 if (hex.numberToken !== roll) continue;
@@ -489,22 +508,22 @@ export class SACRollDice implements IGameCommand {
                     const amount = vertex.building === 'city' ? 2 : 1;
                     ps.resources[resource] += amount;
                     ps.resourcesGathered += amount;
-
-                    const playerResources = resourceDistributions.get(vertex.owner) ?? {};
-                    playerResources[resource] = (playerResources[resource] ?? 0) + amount;
-                    resourceDistributions.set(vertex.owner, playerResources);
+                    changeFor(vertex.owner).gained[resource] += amount;
                 }
             }
-
-            const summary = Array.from(resourceDistributions.entries()).map(([userId, resources]) => {
-                const resourceList = Object.entries(resources)
-                    .map(([resource, amount]) => `${amount} ${resource}`)
-                    .join(', ');
-                return `${userToken(userId)} received ${resourceList}`;
-            }).join('; ');
-
-            sacData.gameState.history.unshift(playerHistory(this.senderId, `rolled a ${roll}${summary ? `: ${summary}` : ''}`));
         }
+
+        // Turn order, not the order the hexes happened to pay out in, so the
+        // payout reads down the table the same way the scoreboard does.
+        gs.lastRollChanges = [...gs.playerStates.keys()]
+            .map(userId => changes.get(userId))
+            .filter((change): change is ISACRollChange => change !== undefined);
+
+        const summary = sacRollChangeParts(gs.lastRollChanges, userToken).join(', ');
+        sacData.gameState.history.unshift(playerHistory(
+            this.senderId,
+            `rolled a ${roll}${summary ? ` — ${summary}` : roll === 7 ? '' : ' — nobody collected'}`,
+        ));
 
         gs.hasRolled = true;
         return { validMove: true, turnOver: false };
@@ -557,8 +576,7 @@ export class SACMoveRobber implements IGameCommand {
             // Steal one random resource
             const victim = gs.playerStates.get(this.stealFromUserId)!;
             const pool: SAC_Resource[] = [];
-            const resourceKeys: SAC_Resource[] = ['lumber', 'wool', 'grain', 'brick', 'ore'];
-            for (const r of resourceKeys) {
+            for (const r of SAC_RESOURCES) {
                 for (let i = 0; i < victim.resources[r]; i++) pool.push(r);
             }
             if (pool.length > 0) {

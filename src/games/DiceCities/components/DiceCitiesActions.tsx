@@ -24,7 +24,7 @@ import type { DiceCitiesTheme } from "@/games/DiceCities/themes";
 import CardArt from "@/games/DiceCities/components/CardArt";
 import ZoomableCardArt from "@/games/DiceCities/components/ZoomableCardArt";
 import type { SubmitCommand } from "@/utils/hooks/useSubmitCommand";
-import Dice from "@/components/ui/Dice";
+import RollReadout from "@/components/ui/RollReadout";
 import ActionButton from "@/components/ui/ActionButton";
 import PendingTag from "@/components/ui/PendingTag";
 import { capitalise } from "@/utils/ui/text";
@@ -257,6 +257,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
         const changes = coinChangeParts(roll.changes, (userId) => (userId === myState.userId ? "You" : (playerByUserId(gameState, userId)?.username ?? "Someone")));
         return (
             <RollReadout
+                className="ag-dc-roll"
                 values={roll.roll2 != null
                     ? [rolling ? face.a : roll.roll1, rolling ? face.b : roll.roll2]
                     : [rolling ? face.a : roll.roll1]}
@@ -288,7 +289,7 @@ export default function DiceCitiesActions({ gameState, myState, opponents, theme
         const rolled = dice.reduce((a, b) => a + b, 0);
         return (
             <PendingSheet
-                readout={<RollReadout values={dice} headline={`Total ${rolled}`} sub="nobody is paid until you decide" />}
+                readout={<RollReadout className="ag-dc-roll" values={dice} headline={`Total ${rolled}`} sub="nobody is paid until you decide" />}
                 head={<SelectionHead
                     icon="⚓"
                     title={harbourCard.title}
@@ -510,25 +511,6 @@ function CoinPill({ amount, label, pill }: { amount: number; label?: string; pil
             <span className="ag-dc-coins-num">{amount}</span>
             {label && <span className="ag-dc-coins-label">{label}</span>}
         </span>
-    );
-}
-
-// The dice a roll landed on with its headline underneath — shown once while the
-// Harbour decision is pending, and again over the market after payouts land.
-function RollReadout({ values, headline, sub, rolling }: {
-    values: number[];
-    headline: string;
-    sub: string;
-    rolling?: boolean;
-}) {
-    return (
-        <div className="ag-dc-roll">
-            <Dice values={values} size={40} rolling={rolling} />
-            <div className="ag-dc-roll-main">
-                <div className="ag-dc-roll-total">{headline}</div>
-                <div className="ag-dc-roll-sub">{sub}</div>
-            </div>
-        </div>
     );
 }
 

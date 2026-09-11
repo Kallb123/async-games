@@ -80,6 +80,28 @@ describe("Train Time's response", () => {
             .toEqual(state.playerStates.get("u1")!.pendingTickets);
     });
 
+    it("sends a roll's payout to everyone, with a 7's discards as a count", () => {
+        // A roll's production is derivable from the public board and its number
+        // tokens, so the payout goes out whole to every player. What a 7 *took*
+        // isn't — it would name cards out of a hidden hand — so the state records
+        // a count and that is all that can reach the wire.
+        const gs = sacState();
+        gs.lastRollChanges = [
+            { userId: "u1", gained: { lumber: 2, wool: 0, grain: 0, brick: 0, ore: 0 }, discarded: 0 },
+            { userId: "u2", gained: { lumber: 0, wool: 0, grain: 0, brick: 0, ore: 0 }, discarded: 3 },
+        ];
+        const wire = JSON.parse(JSON.stringify(sacStateToResponse(gs, NAMES, "u1")));
+
+        expect(wire.lastRollChanges).toEqual([
+            { userId: "u1", gained: { lumber: 2, wool: 0, grain: 0, brick: 0, ore: 0 }, discarded: 0 },
+            { userId: "u2", gained: { lumber: 0, wool: 0, grain: 0, brick: 0, ore: 0 }, discarded: 3 },
+        ]);
+        // Bob's opponent sees the same payout Bob does — and, either way, only a
+        // count of what the 7 cost him.
+        expect(JSON.stringify(sacStateToResponse(gs, NAMES, "u2").lastRollChanges))
+            .toBe(JSON.stringify(wire.lastRollChanges));
+    });
+
     it("shows nobody's hand when nobody in particular is asking", () => {
         // Recap and result replays build snapshots with no viewer; the counts
         // they narrate from still have to be right.

@@ -5,13 +5,13 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ISACGameDataResponse, ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
-import type { SAC_Resource } from "@/games/SettlementsAndCities/board";
-import { BOARD_TOPOLOGY, NO_RESOURCES, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
+import { BOARD_TOPOLOGY, NO_RESOURCES, SAC_RESOURCES, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
 import { SAC_EXPANSION_IDS, enabledExpansionNames, normaliseExpansions } from "@/games/SettlementsAndCities/expansions";
-import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER, type SACSpotKind } from "@/games/SettlementsAndCities/ui";
+import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER, SAC_RESOURCE_EMOJI, sacRollChangeParts, type SACSpotKind } from "@/games/SettlementsAndCities/ui";
 import SettlementsAndCitiesBoard from "@/games/SettlementsAndCities/components/SettlementsAndCitiesBoard";
 import SettlementsAndCitiesActions, { SACBoardMode } from "@/games/SettlementsAndCities/components/SettlementsAndCitiesActions";
 import GameShell from "@/components/ui/GameShell";
+import RollReadout from "@/components/ui/RollReadout";
 import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
 import { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameGuideModal from "@/components/ui/GameGuideModal";
@@ -38,11 +38,6 @@ import {
     SACBuildCity,
     SACMoveRobber,
 } from "@/utils/apiModels/GameLogic";
-
-const RESOURCE_ORDER: SAC_Resource[] = ['lumber', 'wool', 'grain', 'brick', 'ore'];
-const RESOURCE_EMOJI: Record<SAC_Resource, string> = {
-    lumber: '🪵', wool: '🐑', grain: '🌾', brick: '🧱', ore: '⛏️',
-};
 
 const PLACEMENT_PROMPT: Partial<Record<SACBoardMode, string>> = {
     placeSettlementSetup: 'Tap a spot to place your settlement →',
@@ -284,6 +279,22 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
         })
         : [];
 
+    // ── This turn's roll ─────────────────────────────────────────────────────
+    // The dice and what they paid, as a panel under the board. `lastRoll` is
+    // cleared when the turn passes (sacAdvanceMainTurn), so the panel is the
+    // current turn's roll — and it's read off the shared game state rather than
+    // the roller's own command response, so an opponent looking in sees the same
+    // dice and the same payout.
+    //
+    // The payout line is left off entirely when nothing is recorded against the
+    // roll: a game whose last roll predates `lastRollChanges` has none, and
+    // "Rolled 8" on its own is true where "nobody collected" would not be.
+    const rollParts = sacRollChangeParts(gs?.lastRollChanges, (userId) =>
+        userId === myUserId ? 'You' : playerName(userId));
+    const rollSubline = gs?.lastRoll === 7
+        ? ['the robber is on the move', ...rollParts].join(' · ')
+        : rollParts.join(', ');
+
     // ── Your hand ────────────────────────────────────────────────────────────
     const myState = gs?.playerStates?.[myUserId];
     const myDevCards = gs?.playerDevCards?.[myUserId];
@@ -367,13 +378,19 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                             validVertices={validVertices}
                             validEdges={validEdges}
                             validHexes={validHexes}
-                            lastRoll={gs.lastRoll}
-                            lastRollDie1={gs.lastRollDie1}
-                            lastRollDie2={gs.lastRollDie2}
                             placementPrompt={boardMode !== 'idle' && !submitting ? PLACEMENT_PROMPT[boardMode] ?? null : null}
                             pendingSpot={pendingSpot}
                         />
                     </div>
+
+                    {gs.lastRoll !== null && gs.lastRollDie1 !== null && gs.lastRollDie2 !== null && (
+                        <RollReadout
+                            className="ag-roll--spaced"
+                            values={[gs.lastRollDie1, gs.lastRollDie2]}
+                            headline={`Rolled ${gs.lastRoll}`}
+                            sub={rollSubline || undefined}
+                        />
+                    )}
 
                     {myState && !complete && (
                         <div className="ag-hand">
@@ -384,11 +401,11 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                                 )}
                             </div>
                             <div className="ag-hand-cards">
-                                {RESOURCE_ORDER.map(r => {
+                                {SAC_RESOURCES.map(r => {
                                     const n = (myState.resources ?? NO_RESOURCES)[r];
                                     return (
                                         <div key={r} className={`ag-hand-card${n === 0 ? ' ag-hand-card--empty' : ''}`}>
-                                            <div className="ag-hand-emoji">{RESOURCE_EMOJI[r]}</div>
+                                            <div className="ag-hand-emoji">{SAC_RESOURCE_EMOJI[r]}</div>
                                             <div className="ag-hand-count">{n}</div>
                                         </div>
                                     );

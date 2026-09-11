@@ -6,8 +6,11 @@ import {
     SACPlayRoadBuilding,
     SACPlayYearOfPlenty,
     SACPlayMonopoly,
+    SACRollDice,
+    SACEndTurn,
 } from "./SettlementsAndCitiesLogic";
 import { makeState, player } from "./testFixtures";
+import { BOARD_TOPOLOGY } from "./board";
 import type { ISACSpecificGameState, ISACPlayerState, SAC_DevCard } from "./board";
 import type { ISettlementsAndCitiesGameData } from "./SettlementsAndCitiesModels";
 import type { IGameData } from "@/utils/mongodb/GameData";
@@ -150,6 +153,106 @@ describe("Settlements & Cities — development cards", () => {
         expect(outcome.validMove).toBe(true);
         expect(gs.pendingRoadBuilding).toBe(2);
         expect(p.devCards.roadBuilding).toBe(0);
+    });
+});
+
+describe("Settlements & Cities — the dice roll", () => {
+    // One producing hex is enough: BOARD_TOPOLOGY is the real 19-hex topology, so
+    // hex 0's vertices are real vertex ids and a settlement on one of them
+    // collects exactly as it would on a full board. The robber is parked
+    // somewhere else so it isn't blocking the hex under test.
+    function boardWithOneForest(numberToken: number): ISACSpecificGameState {
+        const gs = makeState({
+            robberHexIndex: 18,
+            hexes: [{ terrain: "forest", numberToken }],
+            vertices: Array.from({ length: BOARD_TOPOLOGY.numVertices }, () => ({ building: null, owner: null })),
+            hasRolled: false,
+            lastRoll: null,
+        });
+        return gs;
+    }
+
+    function rollOf(die1: number, die2: number): SACRollDice {
+        const command = cmd(new SACRollDice());
+        command.recordedRoll1 = die1;
+        command.recordedRoll2 = die2;
+        return command;
+    }
+
+    it("records what each player collected, and says so in the history", async () => {
+        const gs = boardWithOneForest(8);
+        const [aliceVertex, bobVertex] = BOARD_TOPOLOGY.hexVertices[0];
+        gs.vertices[aliceVertex] = { building: "city", owner: "u1" };
+        gs.vertices[bobVertex] = { building: "settlement", owner: "u2" };
+        gs.playerStates.set("u1", player());
+        gs.playerStates.set("u2", player());
+        const game = makeGame(gs);
+
+        const outcome = await rollOf(5, 3).Execute(game as unknown as IGameData);
+        expect(outcome.validMove).toBe(true);
+        // A city pays two, a settlement one.
+        expect(gs.playerStates.get("u1")!.resources.lumber).toBe(2);
+        expect(gs.playerStates.get("u2")!.resources.lumber).toBe(1);
+        expect(gs.lastRollChanges).toEqual([
+            { userId: "u1", gained: { lumber: 2, wool: 0, grain: 0, brick: 0, ore: 0 }, discarded: 0 },
+            { userId: "u2", gained: { lumber: 1, wool: 0, grain: 0, brick: 0, ore: 0 }, discarded: 0 },
+        ]);
+        expect(game.gameState.history[0].text).toBe("{{u1}} rolled a 8 — {{u1}} +2🪵, {{u2}} +1🪵");
+    });
+
+    it("records a roll that paid nobody as exactly that", async () => {
+        const gs = boardWithOneForest(8);
+        gs.playerStates.set("u1", player());
+        const game = makeGame(gs);
+
+        await rollOf(5, 3).Execute(game as unknown as IGameData);
+        expect(gs.lastRollChanges).toEqual([]);
+        expect(game.gameState.history[0].text).toBe("{{u1}} rolled a 8 — nobody collected");
+    });
+
+    it("leaves a hex the robber is sitting on out of the payout", async () => {
+        const gs = boardWithOneForest(8);
+        gs.robberHexIndex = 0;
+        gs.vertices[BOARD_TOPOLOGY.hexVertices[0][0]] = { building: "settlement", owner: "u1" };
+        gs.playerStates.set("u1", player());
+        const game = makeGame(gs);
+
+        await rollOf(5, 3).Execute(game as unknown as IGameData);
+        expect(gs.playerStates.get("u1")!.resources.lumber).toBe(0);
+        expect(gs.lastRollChanges).toEqual([]);
+    });
+
+    it("counts the cards a 7 takes off each player, and never which ones", async () => {
+        const gs = boardWithOneForest(8);
+        gs.playerStates.set("u1", player({ resources: { lumber: 2 } }));
+        gs.playerStates.set("u2", player({ resources: { lumber: 5, wool: 5 } }));
+        const game = makeGame(gs);
+
+        await rollOf(3, 4).Execute(game as unknown as IGameData);
+        // Alice was under the limit; Bob's ten-card hand loses five. Which five is
+        // the shuffle's business and stays off the record.
+        expect(gs.lastRollChanges).toEqual([
+            { userId: "u2", gained: { lumber: 0, wool: 0, grain: 0, brick: 0, ore: 0 }, discarded: 5 },
+        ]);
+        expect(game.gameState.history[0].text).toBe("{{u1}} rolled a 7 — {{u2}} −5 cards");
+        expect(gs.pendingRobber).toBe(true);
+    });
+
+    it("clears the last roll and its payout when the turn passes", async () => {
+        const gs = boardWithOneForest(8);
+        gs.vertices[BOARD_TOPOLOGY.hexVertices[0][0]] = { building: "settlement", owner: "u1" };
+        gs.playerStates.set("u1", player());
+        gs.playerStates.set("u2", player());
+        const game = makeGame(gs);
+
+        await rollOf(5, 3).Execute(game as unknown as IGameData);
+        expect(gs.lastRollChanges).toHaveLength(1);
+
+        // Passing the dice on is CheckEndTurn's job, not the command's.
+        const endTurn = await cmd(new SACEndTurn()).Execute(game as unknown as IGameData);
+        new SettlementsAndCitiesGameType().CheckEndTurn(game as unknown as IGameData, endTurn);
+        expect(gs.lastRoll).toBeNull();
+        expect(gs.lastRollChanges).toEqual([]);
     });
 });
 
