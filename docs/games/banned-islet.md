@@ -596,13 +596,12 @@ everything the first two paid for.
 | **A game-specific turn timeout** | `registerTurnTimeoutAdapter` / `resolveStalledTurn` (`src/utils/games/turnTimeout.ts`) — likewise |
 | Running a command identically live, on replay and on timeout | `runCommand` (`src/utils/games/commandPipeline.ts`) |
 | A per-game registry | `createAdapterRegistry` (`src/utils/games/adapterRegistry.ts`) |
-| Symmetric adjacency from an edge list | `buildSymmetricAdjacency` / `isAdjacentIn` (`src/utils/games/adjacencyGraph.ts`) |
 | Shuffling anything | `shuffle()` in `src/utils/games/shuffle.ts` |
-| Six pawn and scoreboard colours | `playerColour()` in `src/utils/ui/playerColours.ts` — exactly six, which is the role cap |
+| Pawn and scoreboard colours | `playerColour()` in `src/utils/ui/playerColours.ts` — six of them against a four-player cap, so the palette is never the constraint |
 | "It's your turn" push, turn timers, surrender, rematch | The command pipeline, the turntimer cron, `/api/game/end`, `GameFinishBanner` |
 | Per-turn boards for the recap | `buildTimeline()`, given a replay adapter and recorded RNG |
 
-Two non-uses worth stating so nobody reaches for them:
+Three non-uses worth stating so nobody reaches for them:
 
 - **`src/utils/games/Cards.ts` is not on that list.** It is rank/suit playing-card
   logic written for Solitaire. Treasure cards share nothing with it but the word
@@ -614,6 +613,17 @@ Two non-uses worth stating so nobody reaches for them:
   in the shape of `FiresOutBoard.tsx`'s `.ag-fo-grid`, not an SVG node map.
   Drawing 40-odd invisible edges to reuse a component would be the expensive
   kind of reuse.
+- **`buildSymmetricAdjacency` is not the adjacency helper for this board.** It
+  is documented for boards that are "a fixed set of **named** nodes connected by
+  an edge list transcribed from a rulebook", and it keys on those names. Banned
+  Islet's positions have no fixed names — §5.1 shuffles the tiles *into* them —
+  so using it means inventing 24 synthetic names and hand-writing a 24-key edge
+  dictionary to get back an array that row/column arithmetic produces in four
+  lines. Adjacency here isn't static either: §19 counts a sunk tile as
+  non-adjacent and the Explorer adds diagonals, so a frozen `number[][]` would
+  be filtered on every call regardless. Fires Out, the other grid board, doesn't
+  use it either (`neighboursOf` in its own `board.ts`), and that is the
+  precedent to follow.
 
 ### 21.2 What the engine does not give us yet
 
@@ -634,10 +644,11 @@ added beside the others — **not** a game-local glyph, which
 `mapEventsToRounds` would drop rather than draw.
 
 **2. Cross-player planning is still clamped to the caller.** The timeline route
-sets `command.senderId = userId` on every planned command ("for v1 planning we
-only let a user plan their own moves"), so Outbreak's crew planner — and the
-route planner of 21.5 — still needs that opt-in built. Whoever builds it first
-pays for it; the second game registers. It is the last PR here, and optional.
+sets `command.senderId = userId` on every planned command, so the per-game
+opt-in that
+[`turn-recap-and-planning.md`](../turn-recap-and-planning.md#cross-player-planning)
+specifies is still unbuilt. Whoever builds it first pays for it; the second game
+registers. It is the last PR here, and optional.
 
 **The forced swim of §9.2 is deliberately not a third gap.** A tile only sinks
 during the active player's own Phase 3, so the pawn that swims is moved by a
@@ -674,11 +685,9 @@ document as it lands.
 * **The Navigator moves a teammate without consent** (§12), the same call
   Outbreak makes for Airlift: co-op means no adversarial use, and the moved
   player can see where they were put.
-* **Discussion is out of band.** §2's "shared table, shared brain" pillar rests
-  on players talking about routes. In-game chat exists (`docs/in-game-chat.md`)
-  but the design must not lean on it: open hands, a public flood discard and a
-  legible board are what carry the pillar, so a silent table plays as well as a
-  chatty one.
+* **Discussion is out of band**, with the reasoning `outbreak-gdd.md` §21.3
+  already gives for the identical pillar: open hands, a public flood discard and
+  a legible board carry §2, so a silent table plays as well as a chatty one.
 * **A player who drops out ends the game for everybody** — the cron's abandon
   path, reading as "the team lost", exactly as in the other two co-ops.
 
@@ -737,9 +746,17 @@ the only command in the game that touches a deck. The third action returns
 `turnOver: false` and the client follows it with `BannedIsletEndTurn`; if the
 draw leaves the player over the limit, `phase` becomes `'discard'` and the turn
 stays open until `BannedIsletDiscard` closes it. That split is what makes the
-turn-timeout adapter straightforward (PR 7) and the route planner possible at
+turn-timeout adapter straightforward (PR 6) and the route planner possible at
 all (21.5), and it is exactly Outbreak's shape — deliberately, so the third
 co-op does not invent a fourth turn structure.
+
+**`BannedIsletEndTurn` carries a flood log on its outcome** —
+`IBannedIsletFloodLogEntry[]`: which card came up, what it did to that tile, and
+any swim it forced. Outbreak's infection phase does the same
+(`IOutbreakInfectionPhaseOutcome`), and for the same two customers: the
+end-of-turn reveal the client animates (PR 5) and `recap.ts` (PR 9). Deciding it
+here rather than at PR 9 is the difference between a field and a reshaped
+command that has already shipped history.
 
 Do **not** trigger the draw from `CheckEndTurn`: it runs during replay too, so
 the deck would fire inside a plan with no command accounting for it.
@@ -789,11 +806,10 @@ Two things follow, and both are Outbreak's conclusions rather than new ones:
   gives under "the decoy deck, and why not" — plus one this game adds: a decoy
   draw that sinks a tile would show a *hole in the island* that may not exist, and
   a planned route around a phantom hole is worse than no plan.
-- **Cross-player planning needs the route opt-in of 21.2 gap 2.** Banned Islet
-  qualifies for it on the same grounds Outbreak does — §2 makes hands public, so
-  planning a teammate's turn discloses nothing the response didn't already carry
-  — but the flag is per-game and off by default, and a hidden-hand game must
-  never inherit it.
+- **Cross-player planning needs the route opt-in of 21.2 gap 2**, and Banned
+  Islet qualifies for it because §2 makes hands public. The rule, and why the
+  flag is per-game and off by default, is
+  [in the shared doc](../turn-recap-and-planning.md#cross-player-planning).
 
 **Say what it is in the UI.** A frozen plan shows an island that *cannot occur*:
 in the real game tiles sink between each player's turn. A route that works in the
@@ -815,10 +831,9 @@ can be clicked.
 - `src/games/BannedIslet/board.ts`: the 24 named tiles of §5.2, the 6 × 6 grid
   and its diamond mask, the treasures, the role table, `MIN_PLAYERS`/
   `MAX_PLAYERS`, `HAND_LIMIT`, `ACTIONS_PER_TURN`, `WATER_LEVEL_TRACK` and the
-  difficulty start levels. Grid adjacency is generated from positions and fed
-  through `buildSymmetricAdjacency` (`src/utils/games/adjacencyGraph.ts`)
-  rather than hand-written or re-derived — the same helper World Domination and
-  Outbreak use.
+  difficulty start levels. Adjacency is row/column arithmetic over the mask —
+  `orthogonalNeighbours(position)` — in the shape of Fires Out's `neighboursOf`,
+  for the reason §21.1's third non-use gives.
 - `rules.ts`: legal moves and shoring from a position, capture eligibility,
   the dry → flooded → sunk transition with its flood-card removal (§9.1),
   `resolveSwim()` (§21.3), `floodRateFor(waterLevel)`, and all four loss checks
@@ -837,19 +852,26 @@ and its opening island inspected in the API response.
   with the 21.4 redaction.
 - `apiModels.ts` and `meta.ts` (`available: false`, categories `["Strategy",
   "Co-op"]` — `Co-op` is already in `GAME_CATEGORIES`).
-- `POST /api/newgame/bannedislet` and the setup screen: `GameSetupLayout` +
-  `UserInviteList` (driven by `usePlayerList`) + `TurnTimerSelect` +
-  one `OptionChoiceSection` for the four difficulties — the same four components
-  `src/app/newgame/outbreak/page.tsx` composes, in the same order.
+- `POST /api/newgame/bannedislet` and the setup screen, composed exactly as
+  `src/app/newgame/outbreak/page.tsx` composes it: `GameSetupLayout` wrapping
+  `UserInviteList` (driven by `usePlayerList`), `TurnTimerSelect`,
+  `SeatCountSelect`, `PartySizeHint` and one `OptionChoiceSection` for the four
+  difficulties — with `useCreateLobbyOrInvite` owning seat count, `canSubmit`,
+  the action label, the footnote and the submit itself. All eight multiplayer
+  setup screens go through that hook; a ninth that doesn't is a hand-rolled
+  invite-versus-lobby path.
 - `BannedIsletLogic.ts` with `BannedIsletGameType` and a skeleton
   `BannedIsletAction`. This file has to exist by the end of this PR, not PR 3:
   `gameRegistry.test.ts` discovers games by the presence of `meta.ts` and then
   demands the barrel export.
 - The shared-file wiring of `docs/new-game.md` step 6 — `GameLogic.ts`,
-  `GAME_META`, `mongodb.ts` (four separate edits) and `gameCommands.ts`, whose
-  `registration` array takes a line per command class and so is revisited in
-  PRs 5 and 9. `gameRegistry.test.ts` and `serializableRegistry.test.ts` name
-  anything missed.
+  `GAME_META`, `mongodb.ts` (four separate edits) and one keyed entry in
+  `gameCommands.ts`'s `COMMANDS_BY_GAME_TYPE`, extended in PRs 5 and 8 as
+  command classes arrive — plus the new game's line in
+  `publicGameState.test.ts`'s explicit `RESPONSE_BUILDERS` list, which is
+  deliberately not globbed so that forgetting it fails rather than passes.
+  `gameRegistry.test.ts` and `serializableRegistry.test.ts` name anything
+  missed (including a command class listed twice).
 
 **PR 3 — The action phase.** The game becomes winnable and unloseable, which is
 the point of stopping here: the action economy is testable while nothing is
@@ -860,7 +882,7 @@ fighting back.
   capture eligibility a second time.
 - `CheckEndTurn` refilling `actionsLeft` for the next player; `CheckGameOver`
   returning the §4.1 win (all four treasures, everyone on the pier, a Helicopter
-  Lift played — the card arrives in PR 9, so until then the win is the first
+  Lift played — the card arrives in PR 8, so until then the win is the first
   three conditions).
 - `BannedIsletLogic.test.ts` on the in-memory harness `SolitaireLogic.test.ts`
   and both co-ops use.
@@ -874,39 +896,53 @@ every PR after this one is playtestable as it lands.
   tint alone (§17); pawns are coloured by `playerColour()`.
 - `components/BannedIsletActions.tsx` from the same
   `ag-actionsheet`/`ag-build-list`/`ag-build-row` primitives the other games'
-  action pickers use.
-- The chrome is the shared kit re-tinted under a `.ag-game--bannedislet` scope
-  and never rebuilt: `GameShell`, `GameScoreboard` (one row per player, `sub`
-  carrying the role, `score` the actions left), `Stat` for the water level and
-  tiles remaining, `GameOptionsMenu`, `GameFinishBanner`, `useGameData`,
-  `useSubmitCommand`, `usePushEvents`, `useEndGame`, and `ReadOnlyPanel` for the
-  hands a waiting player can read but not act on.
+  action pickers use, wrapped in `ReadOnlyPanel` so it goes inert off-turn.
+- **Hands are not wrapped in `ReadOnlyPanel`.** Every hand is public here as it
+  is in Outbreak, and AGENTS.md carves that case out explicitly: a panel nobody
+  can ever act on has nothing to take out of play. The hands are one `ag-hand`
+  per seat, looped — which is Outbreak's `OutbreakHands` exactly (viewer-first
+  ordering, now/next markers, `playerColourForId` dots), so this is the second
+  copy and therefore the moment to extract it. Promote the seat loop to
+  `src/components/ui/` with the card chip passed in, and port `OutbreakHands`
+  onto it in the same commit; if writing it proves the two are different
+  components wearing the same hat, keep them apart and say so in the commit
+  message.
+- The rest of the chrome is the shared kit re-tinted under a
+  `.ag-game--bannedislet` scope and never rebuilt: `GameShell`,
+  `GameScoreboard` (one row per player, `sub` carrying the role, `score` the
+  actions left), `Stat` for the water level and tiles remaining,
+  `GameOptionsMenu`, `GameFinishBanner`, `useGameData`, `useSubmitCommand`,
+  `usePushEvents`, `useEndGame`.
+- The board page itself, `src/app/games/bannedislet/[gameid]/page.tsx`, in the
+  shape of Outbreak's — including `useGameGuide` + `GameGuideModal` (the guide
+  lands in PR 10, the mount point is here) and `useTurnNavigation` +
+  `TurnNavControls` with `canPlan={false}` until PR 11.
 
 **PR 5 — The draw and flood phases.** The island starts fighting back; the game
-is playable start to finish, winnable and loseable, at a fixed flood rate.
+becomes playable start to finish, winnable and loseable, at every difficulty.
 
 - `BannedIsletEndTurn`: draw two, hand-limit check, flood at the current rate,
   sink, remove the sunk tiles' flood cards, and run `resolveSwim()` for every
-  pawn caught by a sinking.
+  pawn caught by a sinking — building the `IBannedIsletFloodLogEntry[]` of 21.4
+  as it goes.
 - `BannedIsletDiscard`, and the `phase: 'discard'` hand-off between them.
-- Three of the four losses (§4.2) — the pier, a lost treasure, a drowning — each
-  reporting through `finishGame`'s `'teamloss'` with the `endDetail` naming it.
-- The two board controls this makes necessary: an "End turn" prompt at zero
-  actions, and a discard picker reusing `ag-build-row` rather than a new
-  component.
+- The three-step Waters Rise! resolution of §11, the water-level track, the
+  flood-rate lookup and the PR 2 difficulty dial reaching the meter.
+- `recordedFloodShuffles` on `BannedIsletEndTurn`, covering both shuffles
+  (Waters Rise! and the empty-deck reshuffle of §11) in the PR that introduces
+  the command, not a later one — Train Time's §11 is the cautionary tale of
+  what retrofitting a `recorded…` field onto shipped history costs. Waters Rise!
+  is not a separable PR for exactly this reason: the deck it re-orders, the deck
+  that empties and the command that records both are one class.
+- All four losses of §4.2, each reporting through `finishGame`'s `'teamloss'`
+  with the `endDetail` naming it.
+- The end-of-turn reveal, which is the moment §1's pitch is actually delivered
+  and gets a real screen rather than a prompt: the flood log through
+  `TurnRecap`, as `OutbreakEndTurnScreen` does, or `PayoffScreen`, as Fires Out's
+  `FiresOutAdvanceFireResult` does — one of those two, not a third. Plus the
+  discard picker, reusing `ag-build-row` rather than a new component.
 
-**PR 6 — Waters Rise!, the meter and difficulty.** The difficulty curve, and the
-first PR whose win rate can be measured against §3.
-
-- The three-step Waters Rise! resolution of §11, the water-level track and
-  flood-rate lookup going live, the PR 2 difficulty dial reaching the meter, and
-  the fourth loss (level 10).
-- The empty-deck reshuffle of §11.
-- `recordedFloodShuffles` on `BannedIsletEndTurn`, recorded here in the PR that
-  introduces the shuffle rather than retrofitted — Train Time's §11 is the
-  cautionary tale of what retrofitting this costs.
-
-**PR 7 — Turn-timeout resolution.** One `ITurnTimeoutAdapter` registered in
+**PR 6 — Turn-timeout resolution.** One `ITurnTimeoutAdapter` registered in
 `turnTimeout.ts` alongside Outbreak's and Fires Out's: forfeit each remaining
 action with the same `pass` a live player bailing out would send, hand back
 `BannedIsletEndTurn` to run the draw and flood phases, then a
@@ -916,7 +952,7 @@ completion inside one cron tick. `turnTimeout.test.ts` covers a timeout at zero
 and non-zero `actionsLeft`, a forced draw landing in `discard`, and a forced
 flood that ends the game.
 
-**PR 8 — Roles.** All six at once, deliberately after the base rules are stable:
+**PR 7 — Roles.** All six at once, deliberately after the base rules are stable:
 every role bends a rule PRs 3 and 5 established, and building them alongside
 those rules doubles the surface being debugged.
 
@@ -928,21 +964,33 @@ those rules doubles the surface being debugged.
   Diver's and Explorer's widened `resolveSwim()` (§9.2), and the Navigator's
   two-step move of another player's pawn.
 
-**PR 9 — Special cards.** `BannedIsletPlayCard` for Helicopter Lift and
+**PR 8 — Special cards.** `BannedIsletPlayCard` for Helicopter Lift and
 Sandbags, neither costing an action, both playable in the action phase and in
 the player's own discard phase (§21.3). This is the PR that completes §4.1: the
 win check in `CheckGameOver` gains its fourth condition.
 
-**PR 10 — Replay, recap and the result page.**
+**PR 9 — Replay, recap and the result page.** The largest wiring PR, and the
+one whose shared-file list is easiest to under-read:
 
-- The replay adapter in `replay.ts` (`buildInitialSpecificGameState` +
-  `toResponseState`), with `plannableCommands: []` until PR 12.
-- `recap.ts` and its recap adapter, with the row selection of 21.5.
+- The replay adapter, registered inline in the shared
+  `src/utils/games/replay.ts` alongside the other nine — there is no per-game
+  `replay.ts` in this repo, only a per-game `replay.test.ts` —
+  with `plannableCommands: []` until PR 11.
+- `recap.ts` in the game folder with the row selection of 21.5, **plus the
+  `import "@/games/BannedIslet/recap";` line in `src/utils/games/recap.ts`**
+  without which the adapter never registers; `gameRegistry.test.ts` fails with
+  that exact instruction. The board page picks up `useTurnRecap` +
+  `TurnRecapScreen` in the same PR.
+- The result page: a `BannedIsletGameResultModel` discriminator and schema in
+  `GameResultData.ts`, its `GAME_RESULT_STATS` entry
+  (`model`/`compute`/`format`/`charts`), and the
+  `computeBannedIsletResultStats` / `formatBannedIsletResultStats` /
+  `formatBannedIsletCharts` trio in `BannedIsletModels.ts`.
 - Per-turn charts: tiles remaining and water level as series, sinkings and
   captures as events — which needs the new `GameResultEventIcon` name and its
   art in `ChartEventIcon.tsx` (21.2 gap 1), one line each.
 
-**PR 11 — Guide, art, share card and release.** The upkeep PR, and the one that
+**PR 10 — Guide, art, share card and release.** The upkeep PR, and the one that
 turns the game on.
 
 - `guide.ts` beside `meta.ts`, wired into `GAME_GUIDES` in
@@ -953,21 +1001,22 @@ turns the game on.
   in `public/art`, then `npm run optimise-art` and commit what it writes.
 - `npm run icons` for `public/icons/og-game-bannedislet.png`.
 - `meta.available: true`, **one** "What's new" line in the *New games* group of
-  `src/utils/ui/whatsNew.ts` (one per branch, not one per PR — and PRs 1–10 add
+  `src/utils/ui/whatsNew.ts` (one per branch, not one per PR — and PRs 1–9 add
   none, because until this one lands there is nothing a player can see), and the
   Banned Islet row in `turn-recap-and-planning.md`'s per-game table.
 
-**PR 12 — The route planner** *(optional, and the only PR that touches shared
+**PR 11 — The route planner** *(optional, and the only PR that touches shared
 routing).* Builds 21.2's gap 2 — the per-game cross-player planning opt-in on
-the timeline route — and turns `plannableCommands` on for
-`BannedIsletAction`. Whoever gets here first pays for the opt-in; Outbreak's
-crew planner is the second customer. Skippable: the game is complete without it.
+the timeline route — turns `plannableCommands` on for `BannedIsletAction` and
+`canPlan` on for the board. Whoever gets here first pays for the opt-in;
+Outbreak's crew planner is the second customer. Skippable: the game is complete
+without it.
 
 **Review passes.** By what each PR touches, rather than all five every time:
-`caveman` on PRs 1, 4 and 8 (the reuse-heavy ones); `croupier` on PR 2's
-`gameStateToModel` and again on PR 10's recap; `locksmith` and `gremlin` on
-PR 2's new route and PR 12's route change; `rulebook` on PRs 2 and 11, the
-wiring and the upkeep.
+`caveman` on PRs 1, 4 and 7 (the reuse-heavy ones, and PR 4 has an extraction
+call to make); `croupier` on PR 2's `gameStateToModel` and again on PR 9's
+recap and result page; `locksmith` and `gremlin` on PR 2's new route and PR 11's
+route change; `rulebook` on PRs 2, 9 and 10, the wiring and the upkeep.
 
 ### 21.7 Testing
 
@@ -988,9 +1037,11 @@ Mongo and no Clerk.
 * **Conservation.** 24 tiles and 24 flood cards; assert after every command that
   sunk tiles plus the flood deck plus the flood discard still accounts for all
   24, which is what catches a sunk tile's card not being removed.
-* **A full auto-played game per difficulty.** Play legal actions until a win or
-  a loss, asserting termination and no deadlock — and doubling as the only
-  practical way to sanity-check §13's tuning without a hundred playtests.
+* **A full auto-played game, `it.each` over the four difficulties.** Play legal
+  actions until a win or a loss, asserting termination and no deadlock — one
+  test with a four-row table, since §13's dial is a single number — and doubling
+  as the only practical way to sanity-check that tuning without a hundred
+  playtests.
 * **Replay equality.** Run a game, rebuild it through `buildTimeline()`, and
   assert the final state matches. With two decks and a mid-game shuffle, that
   single assertion is worth more than any individual rules test.
