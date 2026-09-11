@@ -16,7 +16,10 @@ import Skeleton, { SkeletonRow, SkeletonTurnCard } from "@/components/ui/Skeleto
  * `skeletonIcon` each list already shows itself while loading (`ListSection`'s
  * own `isLoading` skeleton), just rendered here a beat earlier. Still the right
  * first frame for `Landing`: skeletons and section labels, nothing a signed-out
- * visitor could mistake for real content.
+ * visitor could mistake for real content. The rail is the one live thing here
+ * — its links work before anyone has been identified — but it names no games
+ * and no player, and a visitor who follows one lands on /login, which is where
+ * they were going anyway.
  */
 export default function Loading() {
     return (

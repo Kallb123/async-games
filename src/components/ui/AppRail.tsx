@@ -33,7 +33,8 @@ const NAV = [
  *
  * One element, two shapes (design §16, rule one). On a phone it is the top bar
  * it has always been — the brand lockup, the "new game" circle and your avatar
- * — and everything below that is hidden. Past `--ag-desk-min` it stands up as
+ * — and everything below that is hidden. Past 900px (the breakpoint lives in
+ * `ag-theme.css`; a media query can't read a custom property) it stands up as
  * the dark left rail: the same lockup, then the navigation and the "in play"
  * switcher, which are only worth the room a wide window has. There is no second
  * copy of the top bar for small screens and no second copy of the rail for
@@ -123,7 +124,7 @@ export default function AppRail({ myTurn = [], theirTurn = [] }: AppRailProps) {
                 )}
 
                 <div className="ag-rail-foot">
-                    <Link href="/newgame" className="ag-rail-cta">＋ New game</Link>
+                    <Link href="/newgame" className="ag-btn ag-btn--primary ag-btn--roll ag-btn--block">＋ New game</Link>
                     <div className="ag-rail-user">
                         <Link href="/profile" className="ag-rail-user-main">
                             <Avatar name={displayName} imageUrl={profileImageUrl(user)} size={30} />

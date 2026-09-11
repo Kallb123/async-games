@@ -23,7 +23,7 @@ import Link from "next/link";
  *
  * The three children of `.ag-desk` are the desktop layout (design §16a): the
  * platform rail, the column of things waiting on you, and the panel of things
- * that aren't. Below `--ag-desk-min` the grid is a single column and they fall
+ * that aren't. Below 900px the grid is a single column and they fall
  * back into the order the phone has always shown — which is why the split is
  * made where it is, with nothing needing to be reordered to get there. Keep
  * `app/loading.tsx` in step with this shape.

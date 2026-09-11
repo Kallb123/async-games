@@ -44,6 +44,11 @@ out. A second copy is the signal to extract the first one.
   inline-styled variants.
 - `src/components/ui/` — presentational primitives:
   `Brand` (the mark + wordmark lockup every top bar that names the app uses),
+  `AppRail` (the platform chrome the home dashboard wears — one element in two
+  shapes: the phone's top bar, and the dark left rail it stands up into past
+  900px, carrying the navigation and a switcher for every game in play. A wide
+  screen never gets a second copy of the top bar, and a phone never gets a
+  second copy of the rail),
   `Avatar`, `GameThumb`, `TurnTimerSelect`, `ThemeSelect` (the pick-a-dressing
   block on a setup screen, which renders nothing for a game with no themes),
   `GameSetupLayout`, `GameLibrary`

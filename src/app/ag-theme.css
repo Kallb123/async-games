@@ -43,10 +43,12 @@
     --ag-app-width: 480px;
 
     /* The desktop expansion (design §16), at the foot of this file. The column
-       above is still what a phone gets; past the breakpoints there, the home
-       dashboard lays itself out as rail + turn queue + side panel inside
-       `--ag-desk-width`. The two fixed columns are tokens because the rail and
-       the panel each need to know their own width and the grid needs both. */
+       above is still what a phone gets; past the breakpoints there (900px and
+       1200px, written out because a media query can't read a custom property),
+       the home dashboard lays itself out as rail + turn queue + side panel
+       inside `--ag-desk-width`. The two fixed columns are tokens because the
+       rail and the panel each need to know their own width and the grid needs
+       both. */
     --ag-rail-width: 232px;
     --ag-side-width: 320px;
     --ag-desk-width: 1320px;
@@ -4462,16 +4464,6 @@ button.ag-tt-ticket { cursor: pointer; }
         gap: 12px;
         margin-top: auto;
         padding-top: 18px;
-    }
-
-    .ag-rail-cta {
-        background: var(--ag-terracotta);
-        color: var(--ag-on-dark);
-        border-radius: 14px;
-        text-align: center;
-        padding: 13px 0;
-        font: 800 14px var(--ag-font);
-        box-shadow: 0 3px 0 var(--ag-terracotta-deep);
     }
 
     .ag-rail-user {
