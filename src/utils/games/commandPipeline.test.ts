@@ -79,4 +79,16 @@ describe("runCommand", () => {
         expect(gameData.gameState.history[0].commandId).toBe("11111111-1111-1111-1111-111111111111");
         expect(gameData.gameState.history[1].commandId).toBe("earlier-command");
     });
+
+    it("stamps createdAt from the command's own timestamp, not the moment it runs", async () => {
+        // buildTimeline replays a game's commands into a fresh in-memory history
+        // every time a player opens match review, long after they were actually
+        // played. Stamping from wall-clock time here would make every line read
+        // "just now" on replay — see commandPipeline.ts.
+        const gameData = makeGameData();
+
+        await runCommand(gameData, gameType, makeCommand(1));
+
+        expect(gameData.gameState.history[0].createdAt).toBe("2026-01-01T00:00:00.000Z");
+    });
 });
