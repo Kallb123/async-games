@@ -163,6 +163,13 @@ resolution, and never touches the master.
   - **If one line genuinely can't cover the branch, widen the line rather than
     adding another** — and if the branch really is two player-visible changes,
     that is the signal it should have been two branches.
+- **Name a docs-only branch `docs/…`, not `claude/…`.** `vercel.json` turns
+  Git deployments off for `doc`/`docs` and anything under `doc/` and `docs/`,
+  so a branch that only changes Markdown — a GDD, a design note, this file —
+  skips a preview build it has no use for. Anything that touches `src/`,
+  `public/` or the build keeps the ordinary branch name and its preview: the
+  prefix is a statement that there is nothing to deploy, so a branch that
+  starts as docs and grows a code change needs renaming, not an exception.
 - Before committing UI changes, run `npm run build`, `npx tsc --noEmit` and
   `npm run lint`; all three must pass. If you touch the game engine
   (`src/utils/apiModels/`), also run `npm test` — the serializable-registry test

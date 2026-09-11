@@ -12,5 +12,13 @@
       "path": "/api/cron/staleguests",
       "schedule": "0 5 * * *"
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "doc": false,
+      "doc/*": false,
+      "docs": false,
+      "docs/*": false
+    }
+  }
 }
