@@ -1757,8 +1757,8 @@ a.ag-list-row, a.ag-list-row-main {
    rather than being remounted from scratch. `.ag-readonly-panel` undoes the
    browser's fieldset chrome unconditionally, so it never nudges layout even
    on your turn; `.ag-readonly` (added only while disabled) dims the block as
-   a whole so it reads as one thing that is off, not a screen of individually
-   greyed-out controls. */
+   a whole so it reads as one thing that is off, and takes the tap-me look off
+   the controls inside it (the rules below the panel). */
 .ag-readonly-panel {
     display: block;
     min-width: 0;
