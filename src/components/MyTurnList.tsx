@@ -73,7 +73,10 @@ export default function MyTurnList({ games, isLoading, isRefreshing }: MyTurnLis
         <>
             <div className="ag-hero">
                 <h1 className="ag-hero-title">
-                    {count > 0 ? <>It&apos;s your<br />move{count > 1 ? ` ×${count}` : ""}</> : "All caught up"}
+                    {/* The space before the break is what the heading reads
+                        as on a wide screen, where `ag-theme.css` hides the
+                        break and puts the line back together. */}
+                    {count > 0 ? <>It&apos;s your <br />move{count > 1 ? ` ×${count}` : ""}</> : "All caught up"}
                 </h1>
                 <p className="ag-hero-sub">
                     {count > 0

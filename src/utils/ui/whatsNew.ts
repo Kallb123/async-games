@@ -62,6 +62,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "The home screen fills a big screen",
+                detail: "On a laptop or a desktop, the dashboard stops being a phone-width strip: a rail down the left puts every game you have on the go one click away wherever you have scrolled to, the games waiting on you sit side by side across the middle, and invites you have sent, finished games and these notes move into a panel of their own on the right. On a phone it is exactly the screen it was.",
+            },
+            {
                 title: "See what a Settlements & Cities roll paid out",
                 detail: "The dice that used to sit in the corner of the board are now a panel under it, and it says who collected what: \"Rolled 8 — You +2🪵 +1🌾, Bob +1⛏️\". A 7 names the cards it cost each player instead. The same breakdown is in the turn history and in the recap you get when it's your move again, so a roll you weren't there for still tells you who got rich.",
                 game: "settlementsandcities",
@@ -99,10 +103,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Play Dice Cities in the wasteland",
                 detail: "Dice Cities now has themes: pick one when you set up a game and everyone plays in it. Alongside the original there's Rust & Bottlecaps — a post-nuclear wasteland where you're an Overseer rebuilding a settlement, the Wheat Field is a Hydroponic Plot, the Ranch is a Brahmin Pen, and everything is paid for in caps. Only the names and the look change: every cost, number and rule is identical, so it plays exactly the same. Its card art is still being drawn, so some cards still wear the original faces for now.",
                 game: "dicecities",
-            },
-            {
-                title: "Your own card leads the scoreboard",
-                detail: "The player strip at the top of every game now puts you first and seats everyone else in the order they actually play, instead of the order you all joined — so you're never hunting for your own card in the middle of the row. Your card carries a soft tint to say it's yours; a bold ring now marks whoever's turn it is instead.",
             },
         ],
     },
