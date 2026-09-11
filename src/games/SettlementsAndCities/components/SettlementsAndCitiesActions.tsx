@@ -470,6 +470,9 @@ export default function SettlementsAndCitiesActions({
             <div className="ag-actionsheet">
                 {buildList}
                 {devCardSection && <div style={{ marginTop: 12 }}>{devCardSection}</div>}
+                <p className="ag-action-hint">
+                    Costs to plan with — nothing here can be tapped until the turn comes round to you.
+                </p>
                 {tradeModal}
             </div>
         );

@@ -1757,8 +1757,8 @@ a.ag-list-row, a.ag-list-row-main {
    rather than being remounted from scratch. `.ag-readonly-panel` undoes the
    browser's fieldset chrome unconditionally, so it never nudges layout even
    on your turn; `.ag-readonly` (added only while disabled) dims the block as
-   a whole so it reads as one thing that is off, not a screen of individually
-   greyed-out controls. */
+   a whole so it reads as one thing that is off, and takes the tap-me look off
+   the controls inside it (the rules below the panel). */
 .ag-readonly-panel {
     display: block;
     min-width: 0;
@@ -1767,11 +1767,41 @@ a.ag-list-row, a.ag-list-row-main {
     border: 0;
 }
 .ag-readonly { opacity: 0.85; }
-/* Disabled here means "not your turn", not "this one is out of reach", so the
-   controls inside keep their own colour — a card you cannot read is no use to
-   the player waiting to plan their next move. The element selector outranks
-   every per-game :disabled rule, whatever order the file ends up in. */
-.ag-readonly button:disabled { opacity: 1; cursor: default; }
+/* Disabled here means "not your turn", not "this one is out of reach", so what
+   the panel is *showing* keeps its colour at full strength — the costs, the
+   counts, the card faces a waiting player reads to plan their next move. A
+   hand you cannot read is no use to them.
+   What has to change is every control's *affordance*. With the raised shadow,
+   the call-to-action fill and the pointer all left intact, an inert
+   "⚖️ Trade with the bank" looked exactly like the live "🕐 Review actions"
+   button sitting right under it. So nothing in here lifts, and nothing in here
+   takes a pointer. The element selector outranks every per-game :disabled
+   rule, whatever order the file ends up in. */
+.ag-readonly button:disabled {
+    opacity: 1;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+/* The two shared skins a turn sheet is built from — the design system's button
+   and its build row — then drop to one flat dashed ghost that nothing live in
+   the app wears, so the read-only sheet can't be mistaken for the live
+   controls under it. Scoped to those two rather than every button, because a
+   game's own control may be a picture of a card (Train Time's face-up market,
+   whose colour is the information) or already have a disabled skin of its own
+   (Dice Cities' build button). */
+.ag-readonly .ag-btn:disabled,
+.ag-readonly .ag-build-row:disabled {
+    background: var(--ag-surface-2);
+    border-color: var(--ag-line);
+    border-style: dashed;
+    color: var(--ag-ink-soft);
+}
+/* The tag at the end of a row — "Build", "Buy", "Play" — is the loudest tap-me
+   word on the sheet, so it goes soft with the row carrying it. The row's name
+   stays in full ink: that, and the costs beneath it, are what the panel is
+   there to show. */
+.ag-readonly .ag-build-tag { color: var(--ag-ink-softer); font-weight: 700; }
+.ag-readonly .ag-build-name { color: var(--ag-ink); }
 
 /* Highlighted inline notice (e.g. the Special Build Phase banner). */
 .ag-callout {

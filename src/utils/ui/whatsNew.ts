@@ -111,6 +111,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "The panel you wait on stops looking tappable",
+                detail: "Settlements & Cities keeps its build list on screen while you wait for your turn, but the rows and the Trade with the bank button looked exactly like the live buttons under them — the same white cards, the same terracotta \"Build\" — so tapping one did nothing and never said why. Everything in a waiting panel now reads as off: flat, dashed and soft-greyed, with the costs still there to plan with. Every game's waiting panel got the same treatment.",
+                game: "settlementsandcities",
+            },
+            {
                 title: "Settlements & Cities shows what's happening on an opponent's turn",
                 detail: "The build/roll/trade panel used to disappear entirely while you waited for someone else's turn — including during setup, where it vanished right when you most wanted to see what was going on. It now stays on screen at all times, just greyed out and untappable until it's your move.",
                 game: "settlementsandcities",
@@ -149,10 +154,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "City names on a map no longer sit on top of each other",
                 detail: "Outbreak, World Domination and Train Time all print their names straight onto the board, and where the map got busy they piled up — a city's name buried under its neighbour's, or under the disease cubes, pawns and stations crowding the dot next door. Every name on a board is now placed around the others: it keeps the side of its dot it has always used wherever there is room, steps round to a free side where there isn't, and turns inwards instead of running off the edge of the map.",
-            },
-            {
-                title: "Notifications no longer go missing when the app is open",
-                detail: "With Async Games open — on any screen, in any game — an arriving notification was quietly dropped instead of shown, so a turn could come round with nothing to tell you about it. They now appear whether you're in the app or not.",
             },
         ],
     },
