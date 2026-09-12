@@ -14,6 +14,7 @@ import {
     slipstreamOffered,
     trackProgress,
 } from "./rules";
+import { car, race } from "./testFixtures";
 
 // Ashcombe (§5.2), for reading the fixtures below against:
 //   0-9 straight (3) · 10-14 Hairpin (2, two stops) · 15-46 The Mile (3)
@@ -51,46 +52,6 @@ const TWO_CORNERS: RaceCarsTrack = {
 // of two lanes holds a full field, and its first corner starts past row 0.
 TRACKS[TWO_CORNERS.id] = TWO_CORNERS;
 afterAll(() => { delete TRACKS[TWO_CORNERS.id]; });
-
-function car(overrides: Partial<IRaceCarsPlayerState> = {}): IRaceCarsPlayerState {
-    return {
-        raceNumber: 1,
-        row: 0,
-        lane: 1,
-        lapsCompleted: 0,
-        gear: 3,
-        tyres: 5,
-        brakes: 4,
-        gearbox: 3,
-        cornerStops: 0,
-        skipNextTurn: false,
-        finishedPosition: null,
-        phase: 'move',
-        roll: null,
-        brakeSpent: 0,
-        ...overrides,
-    };
-}
-
-function race(
-    cars: Record<string, Partial<IRaceCarsPlayerState>>,
-    overrides: Partial<IRaceCarsSpecificGameState> = {},
-): IRaceCarsSpecificGameState {
-    const players = new Map(Object.entries(cars).map(([userId, seat], slot) =>
-        [userId, car({ raceNumber: slot + 1, ...seat })]));
-    return {
-        trackId: 'ashcombe',
-        laps: 1,
-        spec: 'balanced',
-        oilSpills: false,
-        round: 1,
-        roundOrder: [...players.keys()],
-        roundIndex: 0,
-        slicks: [],
-        players,
-        ...overrides,
-    };
-}
 
 /** Pick a destination, derive the path and resolve it — one driver's whole move. */
 function drive(
