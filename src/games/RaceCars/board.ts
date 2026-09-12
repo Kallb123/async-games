@@ -120,6 +120,18 @@ export function gearDef(gear: RaceCarsGear): RaceCarsGearDef {
     return GEARS[gear] ?? GEARS[0];
 }
 
+/**
+ * A gear as a driver says it — "3rd", and "neutral" for the gear 0 of the grid
+ * and a spun car (§8.1). Beside `GEARS` rather than in the command that logs
+ * it, because the gear picker and the roll card of PR 4 name gears too and a
+ * second spelling of "5th" is a second spelling to keep in step.
+ */
+const GEAR_NAMES = ['neutral', '1st', '2nd', '3rd', '4th', '5th', '6th'];
+
+export function gearName(gear: RaceCarsGear): string {
+    return GEAR_NAMES[gear] ?? GEAR_NAMES[0];
+}
+
 // ─── Shifting (§8.2) ────────────────────────────────────────────────────────
 
 /**
