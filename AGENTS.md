@@ -84,7 +84,11 @@ out. A second copy is the signal to extract the first one.
   needs no wrapper.) `PlayerHands` is that stack of hands — one `ag-hand` panel
   per seat, ordered from the viewer outwards, carrying the colour dot and the
   now/next markers. A game passes its seats and its own card chip; it never
-  loops the seats itself.
+  loops the seats itself. Inside a turn sheet, every choice a player taps is a
+  `BuildRow` — the icon, the name over what it costs, and the trailing tag —
+  whether the row arms the board for a tap, fires a command outright, or picks
+  one card out of a list. Wrap a run of them in `.ag-build-list` yourself, and
+  don't hand-write that markup again.
 - `src/utils/ui/` — pure presentation helpers: `games.ts` (per-game metadata:
   name, art, accent, players), `gameThemes.ts` (the themes each game can be
   played in — see [`docs/game-themes.md`](./docs/game-themes.md)),

@@ -1,6 +1,7 @@
 'use client'
 import React from 'react';
 import ActionButton from '@/components/ui/ActionButton';
+import BuildRow from '@/components/ui/BuildRow';
 import OptionToggleRow from '@/components/ui/OptionToggleRow';
 import { AP_COSTS, chopApCost, deckGunApCost, extinguishApCost, SPECIALISTS, SpecialistId } from '@/games/FiresOut/rules';
 
@@ -29,39 +30,12 @@ const MODE_DEFS: ModeDef[] = [
     { mode: 'reveal', icon: '📡', name: 'Reveal a POI remotely', hint: () => `${AP_COSTS.reveal} AP — anywhere on the board`, experiencedOnly: true, specialistOnly: 'imagingTechnician' },
 ];
 
-// The one row shape every action in this sheet renders as — an icon, a
-// name/cost pair, and a trailing tag — whether it arms the board for a tap
-// (MODE_DEFS), fires immediately (a §11 quick action below), or swaps a
-// Specialist card (the crew-change list). Factored once rather than copied
-// per call site, the caveman review's own note on this file.
-interface BuildRowProps {
-    icon?: string;
-    name: string;
-    cost: string;
-    tag: React.ReactNode;
-    tagMuted?: boolean;
-    disabled?: boolean;
-    active?: boolean;
-    onClick: () => void;
-}
-
-function BuildRow({ icon, name, cost, tag, tagMuted, disabled, active, onClick }: BuildRowProps) {
-    return (
-        <button
-            type="button"
-            className={`ag-build-row${disabled ? ' ag-build-row--disabled' : ''}${active ? ' ag-build-row--active' : ''}`}
-            disabled={disabled}
-            onClick={onClick}
-        >
-            {icon && <span className="ag-icon-box">{icon}</span>}
-            <span className="ag-build-main">
-                <span className="ag-build-name">{name}</span>
-                <span className="ag-build-cost">{cost}</span>
-            </span>
-            <span className={`ag-build-tag${tagMuted ? ' ag-build-tag--muted' : ''}`}>{tag}</span>
-        </button>
-    );
-}
+// Every action in this sheet is a `BuildRow` — an icon, a name/cost pair and a
+// trailing tag — whether it arms the board for a tap (MODE_DEFS), fires
+// immediately (a §11 quick action below), or swaps a Specialist card (the
+// crew-change list). The row used to be factored locally here after a caveman
+// review; it moved to src/components/ui/ when Banned Islet's sheet wanted the
+// same shape.
 
 interface FiresOutActionsProps {
     apLeft: number;
