@@ -104,6 +104,14 @@ function DiscardPicker({ hand, submitCommand, pendingTarget, submitting }: Disca
 interface BannedIsletActionsProps {
     gs: IBannedIsletSpecificGameStateResponse;
     myUserId: string;
+    /**
+     * Whether the viewer is the one actually playing. The sheet is shown
+     * off-turn too, made inert by `ReadOnlyPanel`, so that a waiting player
+     * reads what they *will* be able to do (AGENTS.md) — but `phase` and the
+     * action counter belong to whoever is playing, not to the reader, so the
+     * two turn-closing sheets below are the viewer's own or nobody's.
+     */
+    isMyTurn: boolean;
     /** Which of the two tile-picking actions is armed, if either. */
     mode: BannedIsletBoardMode | null;
     onModeChange: (mode: BannedIsletBoardMode | null) => void;
@@ -128,7 +136,10 @@ interface BannedIsletActionsProps {
  *
  * Off-turn the whole sheet is made inert by `ReadOnlyPanel` on the page: a
  * waiting player reads what they *will* be able to do rather than being shown
- * nothing (AGENTS.md). Nothing in here asks whose turn it is.
+ * nothing (AGENTS.md). That is the only thing `isMyTurn` is for — it keeps the
+ * two sheets that *close* a turn (the End Turn button and the hand-limit
+ * picker) off a reader's screen, since `phase` and `actionsLeft` describe
+ * whoever is playing rather than whoever is looking.
  *
  * Once the three actions are spent the sheet becomes the End Turn button, and
  * if the two cards drawn push the hand past the limit it becomes the discard
@@ -138,6 +149,7 @@ interface BannedIsletActionsProps {
 export default function BannedIsletActions({
     gs,
     myUserId,
+    isMyTurn,
     mode,
     onModeChange,
     targetCounts,
@@ -158,7 +170,7 @@ export default function BannedIsletActions({
     //     nothing else on the turn can happen until the hand is back down.
     //     BannedIsletEndTurn has already drawn and put the game in this phase;
     //     BannedIsletDiscard is what closes it and runs the flood. ──
-    if (gs.phase === 'discard') {
+    if (isMyTurn && gs.phase === 'discard') {
         return (
             <DiscardPicker
                 hand={me.hand}
@@ -172,7 +184,7 @@ export default function BannedIsletActions({
     // ── Out of actions (§7 Phase 1): the only thing left is to hand the turn
     //     to the island. Deliberately its own command rather than something
     //     the third action does for you (§21.4). ──
-    if (me.actionsLeft <= 0) {
+    if (isMyTurn && me.actionsLeft <= 0) {
         return (
             <div className="ag-actionsheet">
                 <p className="ag-action-hint" style={{ marginTop: 0 }}>

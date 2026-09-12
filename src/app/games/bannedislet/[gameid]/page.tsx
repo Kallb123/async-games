@@ -278,6 +278,7 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
                                 // viewer's own seat — what *they* will be able
                                 // to do — rather than the current player's.
                                 myUserId={myUserId}
+                                isMyTurn={isMyTurn}
                                 mode={mode}
                                 onModeChange={setMode}
                                 targetCounts={{ move: moveTargets.length, shoreUp: shoreTargets.length }}
