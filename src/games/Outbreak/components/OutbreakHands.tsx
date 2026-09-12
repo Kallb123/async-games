@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React from 'react';
 import type { IOutbreakPlayerStateResponse } from '@/games/Outbreak/apiModels';
-import { roleDef, type OutbreakRoleDef } from '@/games/Outbreak/board';
+import { roleDef } from '@/games/Outbreak/board';
 import PlayerHands, { PlayerHandSeat } from '@/components/ui/PlayerHands';
 import OutbreakCardChip from './OutbreakCardChip';
-import RoleInfoPopup from '@/components/ui/RoleInfoPopup';
+import RoleNote from '@/components/ui/RoleNote';
 
 interface OutbreakHandsProps {
     playerStates: { [userId: string]: IOutbreakPlayerStateResponse };
@@ -35,9 +35,9 @@ interface OutbreakHandsProps {
  *
  * The seat loop itself is `PlayerHands` — Banned Islet's open table wanted the
  * identical stack, so it moved to `src/components/ui/` rather than being
- * copied. What stays here is what is Outbreak's: the city/event chip, the
- * Contingency Planner's stored card sitting outside the hand limit, and the
- * role popup each panel's note opens.
+ * copied. What stays here is what is Outbreak's: the city/event chip and the
+ * Contingency Planner's stored card sitting outside the hand limit. The role
+ * note each panel carries, and the card it opens, are shared too (`RoleNote`).
  */
 export default function OutbreakHands({
     playerStates,
@@ -48,8 +48,6 @@ export default function OutbreakHands({
     onCardTap,
     highlightedCityId = null,
 }: OutbreakHandsProps) {
-    const [infoRole, setInfoRole] = useState<OutbreakRoleDef | null>(null);
-
     const seats: PlayerHandSeat[] = Object.values(playerStates).map(ps => {
         const role = roleDef(ps.role);
         return {
@@ -71,28 +69,17 @@ export default function OutbreakHands({
                     {ps.contingencyCard !== null && <OutbreakCardChip cardId={ps.contingencyCard} stored />}
                 </>
             ),
-            note: role && (
-                <button
-                    type="button"
-                    className="ag-hand-note ag-hand-note--tappable"
-                    onClick={() => setInfoRole(role)}
-                >
-                    {role.name} ⓘ
-                </button>
-            ),
+            note: role && <RoleNote role={role} />,
         };
     });
 
     return (
-        <>
-            {infoRole && <RoleInfoPopup role={infoRole} onClose={() => setInfoRole(null)} />}
-            <PlayerHands
-                seats={seats}
-                turnOrder={turnOrder}
-                userIdList={userIdList}
-                myUserId={myUserId}
-                activeUserId={activeUserId}
-            />
-        </>
+        <PlayerHands
+            seats={seats}
+            turnOrder={turnOrder}
+            userIdList={userIdList}
+            myUserId={myUserId}
+            activeUserId={activeUserId}
+        />
     );
 }

@@ -1,12 +1,10 @@
 'use client'
-import React, { useState } from 'react';
+import React from 'react';
 import PlayerHands, { PlayerHandSeat } from '@/components/ui/PlayerHands';
-import RoleInfoPopup from '@/components/ui/RoleInfoPopup';
+import RoleNote from '@/components/ui/RoleNote';
 import NamedChip from '@/components/ui/NamedChip';
 import type { IBannedIsletPlayerStateResponse } from '@/games/BannedIslet/apiModels';
 import { cardGlyph, cardName, roleDef } from '@/games/BannedIslet/board';
-import type { IBannedIsletRoleDef } from '@/games/BannedIslet/board';
-
 
 interface BannedIsletHandsProps {
     playerStates: { [userId: string]: IBannedIsletPlayerStateResponse };
@@ -31,14 +29,12 @@ interface BannedIsletHandsProps {
  * colour) — and the role the seat is playing. The chip itself is the shared
  * `NamedChip`, which the flood-discard panel wears too.
  *
- * Every role name is tappable, opening the shared `RoleInfoPopup` on what that
- * seat can do (§12). Not a nicety: §12 calls the roles "the first thing a team
- * plans around", and a plan needs the *other* seats' abilities as much as your
- * own — the action sheet only ever teaches you yours.
+ * Every role name is the shared `RoleNote`, tappable for what that seat can do
+ * (§12). Not a nicety: §12 calls the roles "the first thing a team plans
+ * around", and a plan needs the *other* seats' abilities as much as your own —
+ * the action sheet only ever teaches you yours.
  */
 export default function BannedIsletHands({ playerStates, userIdList, turnOrder, myUserId, activeUserId }: BannedIsletHandsProps) {
-    const [infoRole, setInfoRole] = useState<IBannedIsletRoleDef | null>(null);
-
     const seats: PlayerHandSeat[] = Object.values(playerStates).map(ps => ({
         userId: ps.userId,
         username: ps.username,
@@ -53,27 +49,16 @@ export default function BannedIsletHands({ playerStates, userIdList, turnOrder, 
                 label={cardName(card)}
             />
         )),
-        note: (
-            <button
-                type="button"
-                className="ag-hand-note ag-hand-note--tappable"
-                onClick={() => setInfoRole(roleDef(ps.role))}
-            >
-                {roleDef(ps.role).name} ⓘ
-            </button>
-        ),
+        note: <RoleNote role={roleDef(ps.role)} />,
     }));
 
     return (
-        <>
-            {infoRole && <RoleInfoPopup role={infoRole} onClose={() => setInfoRole(null)} />}
-            <PlayerHands
-                seats={seats}
-                turnOrder={turnOrder}
-                userIdList={userIdList}
-                myUserId={myUserId}
-                activeUserId={activeUserId}
-            />
-        </>
+        <PlayerHands
+            seats={seats}
+            turnOrder={turnOrder}
+            userIdList={userIdList}
+            myUserId={myUserId}
+            activeUserId={activeUserId}
+        />
     );
 }
