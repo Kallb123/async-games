@@ -90,20 +90,37 @@ export function positionAt(row: number, col: number): number | null {
 
 const ORTHOGONAL_STEPS = [[-1, 0], [1, 0], [0, -1], [0, 1]] as const;
 
-/**
- * The positions orthogonally next to `position` — up, down, left, right, and
- * never a diagonal (§5.1). Tile state is not consulted: this is the island's
- * fixed geometry, and rules.ts filters out the holes. The Explorer's diagonals
- * (§12) are the one exception to it and arrive with the rest of the roles.
- */
-export function orthogonalNeighbours(position: number): number[] {
+const DIAGONAL_STEPS = [[-1, -1], [-1, 1], [1, -1], [1, 1]] as const;
+
+function stepsFrom(position: number, steps: readonly (readonly number[])[]): number[] {
     const { row, col } = CELL_OF_POSITION[position];
     const neighbours: number[] = [];
-    for (const [dRow, dCol] of ORTHOGONAL_STEPS) {
+    for (const [dRow, dCol] of steps) {
         const neighbour = positionAt(row + dRow, col + dCol);
         if (neighbour !== null) neighbours.push(neighbour);
     }
     return neighbours;
+}
+
+/**
+ * The positions orthogonally next to `position` — up, down, left, right, and
+ * never a diagonal (§5.1). Tile state is not consulted: this is the island's
+ * fixed geometry, and rules.ts filters out the holes. The Explorer's diagonals
+ * (§12) are the one exception to it, and live next door rather than here.
+ */
+export function orthogonalNeighbours(position: number): number[] {
+    return stepsFrom(position, ORTHOGONAL_STEPS);
+}
+
+/**
+ * The four corners touching `position` — §12's Explorer, and nothing else in
+ * the game. Kept separate from `orthogonalNeighbours` rather than folded into
+ * a parameterised one, because the base island is orthogonal (§5.1) and every
+ * caller that isn't asking on the Explorer's behalf should not have to say so:
+ * `rules.ts`'s `adjacentFor` is the single place the two are added together.
+ */
+export function diagonalNeighbours(position: number): number[] {
+    return stepsFrom(position, DIAGONAL_STEPS);
 }
 
 // ─── The tiles (§5.2) ───────────────────────────────────────────────────────
@@ -306,6 +323,12 @@ export const ROLES: readonly IBannedIsletRoleDef[] = [
 ];
 
 export const ROLE_IDS: readonly BannedIsletRoleId[] = ROLES.map(r => r.id);
+
+/** §12 Engineer: two flooded tiles dried for the price of one action, rather than one. */
+export const ENGINEER_SHORE_UPS = 2;
+
+/** §12 Navigator: how far another player's pawn can be sent for one action. */
+export const NAVIGATOR_STEPS = 2;
 
 /** Falls back to the Pilot rather than throwing on a role id that was never validated — a stored game is read long after the value was written. */
 export function roleDef(role: BannedIsletRoleId): IBannedIsletRoleDef {

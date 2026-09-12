@@ -3,7 +3,7 @@
 import { roleDef } from '@/games/Outbreak/board';
 import type { OutbreakRoleId } from '@/games/Outbreak/board';
 import { useDismissibleBanner } from '@/utils/hooks/useDismissibleBanner';
-import OutbreakRoleInfoPopup from './OutbreakRoleInfoPopup';
+import RoleInfoPopup from '@/components/ui/RoleInfoPopup';
 
 interface OutbreakRoleIntroProps {
     gameId: string;
@@ -14,7 +14,7 @@ interface OutbreakRoleIntroProps {
 /**
  * The welcome a player gets the first time they open a game they're in: a
  * popup naming the role they've been dealt and explaining what it lets them
- * do. It reuses OutbreakRoleInfoPopup — the same card that opens when anyone
+ * do. It reuses the shared `RoleInfoPopup` — the same card that opens when anyone
  * taps a role name in OutbreakHands — with a lead-in, and remembers per
  * browser (via useDismissibleBanner) that this player has met their role, so
  * it greets them once and never again.
@@ -29,7 +29,7 @@ export default function OutbreakRoleIntro({ gameId, myUserId, role }: OutbreakRo
     if (dismissed || !def) return null;
 
     return (
-        <OutbreakRoleInfoPopup
+        <RoleInfoPopup
             role={def}
             intro={`Welcome to the crew! You’ve been dealt the ${def.name} — here’s what only you can do. Forgot it? Tap your role name (ⓘ) in your hand to see this again any time.`}
             onClose={dismiss}

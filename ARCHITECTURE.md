@@ -603,7 +603,8 @@ enforcement job. It:
     registers an `ITurnTimeoutAdapter` (`src/utils/games/turnTimeout.ts`) has
     its stalled turn run through its own commands, so a game whose board only
     deteriorates on a player's own turn — Outbreak's draw and infect phases,
-    Fires Out's Advance Fire — doesn't get to skip that by going quiet, and
+    Fires Out's Advance Fire, Banned Islet's draw and flood — doesn't get to
+    skip that by going quiet, and
     `CheckEndTurn` moves the turn on; a game that registers nothing gets the
     plain `currentTurn` advance. Either way the timer resets (or, once that
     player has missed `MAX_CONSECUTIVE_MISSED_TURNS` in a row, the game is

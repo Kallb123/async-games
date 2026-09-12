@@ -1,6 +1,7 @@
 'use client'
 import React from 'react';
 import PlayerHands, { PlayerHandSeat } from '@/components/ui/PlayerHands';
+import RoleNote from '@/components/ui/RoleNote';
 import NamedChip from '@/components/ui/NamedChip';
 import type { IBannedIsletPlayerStateResponse } from '@/games/BannedIslet/apiModels';
 import { cardGlyph, cardName, roleDef } from '@/games/BannedIslet/board';
@@ -27,6 +28,11 @@ interface BannedIsletHandsProps {
  * chip — a treasure's own figure and its name (§17: a silhouette, never a
  * colour) — and the role the seat is playing. The chip itself is the shared
  * `NamedChip`, which the flood-discard panel wears too.
+ *
+ * Every role name is the shared `RoleNote`, tappable for what that seat can do
+ * (§12). Not a nicety: §12 calls the roles "the first thing a team plans
+ * around", and a plan needs the *other* seats' abilities as much as your own —
+ * the action sheet only ever teaches you yours.
  */
 export default function BannedIsletHands({ playerStates, userIdList, turnOrder, myUserId, activeUserId }: BannedIsletHandsProps) {
     const seats: PlayerHandSeat[] = Object.values(playerStates).map(ps => ({
@@ -43,7 +49,7 @@ export default function BannedIsletHands({ playerStates, userIdList, turnOrder, 
                 label={cardName(card)}
             />
         )),
-        note: <span className="ag-hand-note">{roleDef(ps.role).name}</span>,
+        note: <RoleNote role={roleDef(ps.role)} />,
     }));
 
     return (

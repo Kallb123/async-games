@@ -13,6 +13,7 @@ import {
     cardGlyph,
     cardName,
     isTreasureCard,
+    roleDef,
     tileName,
     treasureGlyph,
     treasureName,
@@ -21,8 +22,29 @@ import {
 import { countCards, treasureAt } from '@/games/BannedIslet/rules';
 import { pluralize } from '@/utils/ui/text';
 
-/** The two actions that need a tile picked on the board before they can be sent (§8). */
-export type BannedIsletBoardMode = 'move' | 'shoreUp';
+/**
+ * The actions that need a tile picked on the board before they can be sent —
+ * §8's two, plus §12's two role abilities that also land on a tile. The other
+ * four roles widen a verb that is already here rather than adding one (§21.4).
+ */
+export type BannedIsletBoardMode = 'move' | 'shoreUp' | 'pilotFlight' | 'navigatorMove';
+
+/** The three whose reach is one list from where my own pawn stands; the Navigator's is per teammate. */
+export type BannedIsletSelfMode = 'move' | 'shoreUp' | 'pilotFlight';
+
+/**
+ * What the board is being asked for right now. A mode alone isn't enough for
+ * two of §12's abilities: the Navigator's move acts on somebody else's pawn, so
+ * it has to say whose, and the Engineer's shore up dries two tiles for one
+ * action, so between the taps it carries the first one.
+ */
+export interface BannedIsletPick {
+    mode: BannedIsletBoardMode;
+    /** navigatorMove: whose pawn is being sent (§12). */
+    userId?: string;
+    /** shoreUp, Engineer only: the tile already banked, waiting on a second (§12). */
+    first?: number;
+}
 
 // Every choice in this sheet is one shared `BuildRow`, described as data so a
 // sixth kind of action is a line in an array rather than another copy of the
@@ -112,11 +134,17 @@ interface BannedIsletActionsProps {
      * two turn-closing sheets below are the viewer's own or nobody's.
      */
     isMyTurn: boolean;
-    /** Which of the two tile-picking actions is armed, if either. */
-    mode: BannedIsletBoardMode | null;
-    onModeChange: (mode: BannedIsletBoardMode | null) => void;
-    /** How many tiles each armed action can currently reach — 0 disables its row. */
-    targetCounts: Record<BannedIsletBoardMode, number>;
+    /** Which tile-picking action is armed, and what it is acting on. */
+    pick: BannedIsletPick | null;
+    onPickChange: (pick: BannedIsletPick | null) => void;
+    /** How many tiles each of my own pawn's actions can currently reach — 0 disables its row. */
+    targetCounts: Record<BannedIsletSelfMode, number>;
+    /** §8 / §12: the teammates I may hand a treasure card to — my own tile, or anywhere if I am the Messenger. */
+    giveMates: string[];
+    /** §12 Navigator: where each teammate's pawn could be sent, keyed by seat. Empty for every other role. */
+    navigatorReach: Record<string, number[]>;
+    /** §12 Engineer: settle for drying only the tile already banked, rather than waiting for a second. */
+    onShoreUpFirstOnly: (first: number) => void;
     submitCommand: SubmitCommand;
     pendingTarget: string | null;
     submitting: boolean;
@@ -150,9 +178,12 @@ export default function BannedIsletActions({
     gs,
     myUserId,
     isMyTurn,
-    mode,
-    onModeChange,
+    pick,
+    onPickChange,
     targetCounts,
+    giveMates,
+    navigatorReach,
+    onShoreUpFirstOnly,
     submitCommand,
     pendingTarget,
     submitting,
@@ -210,15 +241,47 @@ export default function BannedIsletActions({
     // server would reject.
     const blocked = submitting || actionsLeft <= 0 || gs.phase !== 'actions';
     const here = gs.positions[me.position];
-    // §8 Give a Treasure Card is face to face: both pawns on the same tile.
-    // (The Messenger's exception to that is §12's, and arrives with the roles.)
-    const mates = Object.values(gs.playerStates).filter(p => p.userId !== myUserId && p.position === me.position);
+    // §8 Give a Treasure Card is face to face — both pawns on the same tile —
+    // unless I am §12's Messenger, who gives to anybody anywhere. Which of the
+    // two it is was decided by `giveCardTargets` on the page, so this list is
+    // just those seats.
+    const mates = giveMates.flatMap(userId => {
+        const mate = gs.playerStates[userId];
+        return mate ? [mate] : [];
+    });
     const myTreasureCards = me.hand.filter(isTreasureCard);
 
     function send(apply: (cmd: BannedIsletAction) => void, target: string) {
         const cmd = new BannedIsletAction();
         apply(cmd);
         submitCommand(cmd, undefined, target);
+    }
+
+    // ── §12 Engineer, mid-shore-up: one tile banked, the board asking for a
+    //     second. The way out is here rather than on the board, because "dry
+    //     only this one" is a decision about the action rather than about a
+    //     tile — there is no tile left to tap that would mean it. ──
+    if (pick?.mode === 'shoreUp' && pick.first !== undefined) {
+        const first = pick.first;
+        return (
+            <div className="ag-actionsheet">
+                <p className="ag-action-hint" style={{ marginTop: 0 }}>
+                    🪣 Pumping {tileName(gs.positions[first].tile)}. As the Engineer the same action dries a second
+                    tile too — tap another flooded one on the island, or send it for this tile alone. Nothing is dry
+                    until you do one or the other.
+                </p>
+                <ActionButton
+                    className="ag-btn ag-btn--primary ag-btn--block"
+                    disabled={submitting}
+                    pending={pendingTarget === 'shoreUp'}
+                    pendingLabel="Shoring up…"
+                    onClick={() => onShoreUpFirstOnly(first)}
+                >
+                    Shore up {tileName(gs.positions[first].tile)} on its own
+                </ActionButton>
+                <button type="button" className="ag-btn ag-btn--light ag-btn--block" style={{ marginTop: 8 }} onClick={() => onPickChange(null)}>↩ Cancel</button>
+            </div>
+        );
     }
 
     // The card-picking sheet, once a teammate has been chosen: which of my
@@ -258,23 +321,27 @@ export default function BannedIsletActions({
             key: 'move',
             icon: '🚶',
             name: 'Move',
-            cost: 'Step to a neighbouring tile',
+            cost: me.role === 'diver'
+                ? 'Swim as far as the flooded and sunken tiles reach'
+                : me.role === 'explorer' ? 'Step to a neighbouring tile, corners included' : 'Step to a neighbouring tile',
             disabled: targetCounts.move === 0 || blocked,
-            active: mode === 'move',
+            active: pick?.mode === 'move',
             tag: targetCounts.move === 0 ? 'Nowhere to go' : `${targetCounts.move} ${targetCounts.move === 1 ? 'tile' : 'tiles'}`,
             tagMuted: targetCounts.move === 0,
-            onClick: () => onModeChange(mode === 'move' ? null : 'move'),
+            onClick: () => onPickChange(pick?.mode === 'move' ? null : { mode: 'move' }),
         },
         {
             key: 'shoreUp',
             icon: '🪣',
             name: 'Shore up',
-            cost: 'Pump a flooded tile back to dry — this one or a neighbour',
+            cost: me.role === 'engineer'
+                ? 'Pump two flooded tiles back to dry for the one action'
+                : 'Pump a flooded tile back to dry — this one or a neighbour',
             disabled: targetCounts.shoreUp === 0 || blocked,
-            active: mode === 'shoreUp',
+            active: pick?.mode === 'shoreUp',
             tag: targetCounts.shoreUp === 0 ? 'Nothing flooded' : `${targetCounts.shoreUp} ${targetCounts.shoreUp === 1 ? 'tile' : 'tiles'}`,
             tagMuted: targetCounts.shoreUp === 0,
-            onClick: () => onModeChange(mode === 'shoreUp' ? null : 'shoreUp'),
+            onClick: () => onPickChange(pick?.mode === 'shoreUp' ? null : { mode: 'shoreUp' }),
         },
     ];
 
@@ -300,12 +367,61 @@ export default function BannedIsletActions({
         });
     }
 
+    // ── §12's two abilities that are actions of their own rather than a
+    //     widening of one of §8's verbs. Both arm the board like Move does;
+    //     the other four roles have already changed the rows above. ──
+
+    // Pilot: once a turn, any tile on the island. `targetCounts.pilotFlight` is
+    // 0 both when the flight is spent and when there is nowhere to fly, so the
+    // row says which.
+    if (me.role === 'pilot') {
+        const spent = me.pilotFlightUsed;
+        rows.push({
+            key: 'pilotFlight',
+            icon: '🚁',
+            name: 'Fly across the island',
+            cost: 'Any tile at all, once a turn',
+            disabled: spent || targetCounts.pilotFlight === 0 || blocked,
+            active: pick?.mode === 'pilotFlight',
+            tag: spent ? 'Flown this turn' : targetCounts.pilotFlight === 0 ? 'Nowhere to fly' : `${targetCounts.pilotFlight} tiles`,
+            tagMuted: spent || targetCounts.pilotFlight === 0,
+            onClick: () => onPickChange(pick?.mode === 'pilotFlight' ? null : { mode: 'pilotFlight' }),
+        });
+    }
+
+    // Navigator: one row per teammate, because the action is about whose pawn
+    // moves before it is about which tile — and §21.3's deviation means they
+    // are not asked first.
+    Object.values(gs.playerStates).forEach(mate => {
+        if (mate.userId === myUserId || me.role !== 'navigator') return;
+        const reach = navigatorReach[mate.userId] ?? [];
+        rows.push({
+            key: `navigate:${mate.userId}`,
+            icon: '🧭',
+            name: `Send ${mate.username} across`,
+            cost: 'Up to two tiles, for one action',
+            disabled: reach.length === 0 || blocked,
+            active: pick?.mode === 'navigatorMove' && pick.userId === mate.userId,
+            tag: reach.length === 0 ? 'Nowhere to send them' : `${reach.length} tiles`,
+            tagMuted: reach.length === 0,
+            onClick: () => onPickChange(
+                pick?.mode === 'navigatorMove' && pick.userId === mate.userId
+                    ? null
+                    : { mode: 'navigatorMove', userId: mate.userId },
+            ),
+        });
+    });
+
     mates.forEach(mate => {
         rows.push({
             key: `give:${mate.userId}`,
             icon: '🤝',
             name: `Give a card to ${mate.username}`,
-            cost: `You are both on ${tileName(here.tile)}`,
+            // §12 Messenger: no meeting needed, so the row says where they are
+            // rather than that we are together.
+            cost: mate.position === me.position
+                ? `You are both on ${tileName(here.tile)}`
+                : `They are on ${tileName(gs.positions[mate.position].tile)} — no need to meet`,
             disabled: myTreasureCards.length === 0 || blocked,
             tag: myTreasureCards.length === 0 ? 'No treasure cards' : 'Choose',
             tagMuted: myTreasureCards.length === 0,
@@ -317,7 +433,7 @@ export default function BannedIsletActions({
         <div className="ag-actionsheet">
             <p className="ag-action-hint" style={{ marginTop: 0 }}>
                 {actionsLeft > 0
-                    ? `${actionsLeft} of 3 actions left — tap one, then a tile on the island.`
+                    ? `${roleDef(me.role).name} · ${actionsLeft} of 3 actions left — tap one, then a tile on the island.`
                     : 'No actions left this turn.'}
             </p>
 

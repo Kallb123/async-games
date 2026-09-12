@@ -33,7 +33,10 @@ export const WEST_OF_MIDDLE = positionAt(2, 1)!;   // 7
 export const MIDDLE = positionAt(2, 2)!;           // 8
 export const EAST_OF_MIDDLE = positionAt(2, 3)!;   // 9
 export const FAR_EAST = positionAt(2, 4)!;         // 10
+export const FAR_WEST = positionAt(2, 0)!;         // 6
+export const SOUTH_WEST = positionAt(3, 1)!;       // 13
 export const SOUTH_OF_MIDDLE = positionAt(3, 2)!;  // 14
+export const SOUTH_EAST = positionAt(3, 3)!;       // 15
 
 export const NOTHING_CAPTURED: Record<BannedIsletTreasureId, boolean> = {
     emberCrown: false, stormIdol: false, tideChalice: false, rootStone: false,
@@ -83,7 +86,11 @@ export function baseState(
         playerStates.set(userId, {
             hand: [...(player.hand ?? [])],
             position: player.position ?? MIDDLE,
-            role: player.role ?? 'pilot',
+            // Messenger by default, deliberately: it is the one role of §12
+            // whose ability is not spatial, so a test that doesn't care about
+            // roles gets the base movement, shoring and swimming rules rather
+            // than the Pilot's island-wide flight silently widening them.
+            role: player.role ?? 'messenger',
             pilotFlightUsed: false,
             actionsLeft: player.actionsLeft ?? ACTIONS_PER_TURN,
         });

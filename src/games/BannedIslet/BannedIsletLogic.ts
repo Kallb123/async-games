@@ -25,11 +25,18 @@ import {
     isEscapeReady,
     isPierLoss,
     isWaterLevelLoss,
-    legalMoves,
-    legalShoreUps,
     lostTreasures,
+    moveTargets,
+    navigatorCanMoveOthers,
+    navigatorMoveTargets,
+    pilotFlightAvailable,
+    pilotFlightTargets,
     resolveSwim,
+    giveCardTargets,
+    shoreUpTargets,
+    shoreUpsPerAction,
     IBannedIsletFloodLogEntry,
+    IBannedIsletPawn,
     IBannedIsletSwim,
 } from "@/games/BannedIslet/rules";
 import { playerHistory, userToken } from "@/utils/games/history";
@@ -59,12 +66,18 @@ function playerState(gs: IBannedIsletSpecificGameState, userId: string): IBanned
     return gs.players.get(userId);
 }
 
-// §8 Move: one step to an orthogonally adjacent tile that is still there.
-// `legalMoves` is the same list the client's action picker offers, so a move
-// the picker wouldn't draw is a move Execute won't take (docs/new-game.md,
-// "Isomorphic rules modules").
+/** Every pawn on the island, as the roster-reading rules of §12 want it. */
+function pawnList(gs: IBannedIsletSpecificGameState): IBannedIsletPawn[] {
+    return [...gs.players].map(([userId, ps]) => ({ userId, position: ps.position }));
+}
+
+// §8 Move: one step to an adjacent tile that is still there — and, for the
+// Diver, a swim through any run of ruined tiles to the land beyond (§12).
+// `moveTargets` is the same list the client's action picker offers and takes
+// the same role, so a move the picker wouldn't draw is a move Execute won't
+// take (docs/new-game.md, "Isomorphic rules modules").
 function applyMove(gs: IBannedIsletSpecificGameState, ps: IBannedIsletPlayerState, target: number): string | null {
-    if (!legalMoves(gs.positions, ps.position).includes(target)) return null;
+    if (!moveTargets(gs.positions, ps.position, ps.role).includes(target)) return null;
     const from = tileName(gs.positions[ps.position].tile);
     ps.position = target;
     return `moved from ${from} to ${tileName(gs.positions[target].tile)}`;
@@ -73,16 +86,38 @@ function applyMove(gs: IBannedIsletSpecificGameState, ps: IBannedIsletPlayerStat
 // §8 Shore Up: flip this tile or a neighbour from flooded back to dry — the
 // only action in the game that gives ground back, and never one that un-sinks
 // (§9.1). A dry target is illegal rather than a no-op (§16), which is exactly
-// what `legalShoreUps` listing only the flooded ones expresses.
-function applyShoreUp(gs: IBannedIsletSpecificGameState, ps: IBannedIsletPlayerState, target: number): string | null {
-    if (!legalShoreUps(gs.positions, ps.position).includes(target)) return null;
+// what `shoreUpTargets` listing only the flooded ones expresses.
+//
+// §12's two exceptions both land here: the Explorer's corners are inside
+// `shoreUpTargets`, and the Engineer's second tile is `secondTarget` — one
+// action, two tiles, and "up to two" so a lone flooded tile is still legal.
+// Both targets are checked before either is dried, so a rejected second tile
+// cannot leave the first one quietly dry on a command the pipeline discards.
+function applyShoreUp(
+    gs: IBannedIsletSpecificGameState,
+    ps: IBannedIsletPlayerState,
+    target: number,
+    secondTarget: number,
+): string | null {
+    const targets = shoreUpTargets(gs.positions, ps.position, ps.role);
+    if (!targets.includes(target)) return null;
+
+    const second = secondTarget >= 0 ? secondTarget : null;
+    if (second !== null) {
+        if (shoreUpsPerAction(ps.role) < 2) return null;
+        if (second === target || !targets.includes(second)) return null;
+    }
+
     gs.positions[target].state = 'dry';
-    return `shored up ${tileName(gs.positions[target].tile)}`;
+    if (second === null) return `shored up ${tileName(gs.positions[target].tile)}`;
+    gs.positions[second].state = 'dry';
+    return `shored up ${tileName(gs.positions[target].tile)} and ${tileName(gs.positions[second].tile)}`;
 }
 
 // §8 Give a Treasure Card: the game's only transfer, and a face-to-face one —
-// both pawns on the same tile. The Messenger (§12) is the exception that makes
-// that rule matter and arrives with the rest of the roles in PR 7.
+// both pawns on the same tile, unless the sender is §12's Messenger, who needs
+// no meeting. `giveCardTargets` owns that distinction so this reads the same
+// either way.
 //
 // Only a treasure card moves: §10's specials are played from their holder's
 // own hand rather than traded, and Waters Rise! is never held at all.
@@ -95,7 +130,8 @@ function applyGiveCard(
 ): string | null {
     if (!targetUserId || targetUserId === senderId) return null;
     const target = playerState(gs, targetUserId);
-    if (!target || target.position !== ps.position) return null;
+    if (!target) return null;
+    if (!giveCardTargets(pawnList(gs), senderId, ps.role).includes(targetUserId)) return null;
     if (!card || !isTreasureCard(card)) return null;
 
     const index = ps.hand.indexOf(card);
@@ -104,6 +140,42 @@ function applyGiveCard(
     ps.hand.splice(index, 1);
     target.hand.push(card);
     return `gave their ${cardName(card)} card to ${userToken(targetUserId)}`;
+}
+
+// §12 Pilot: once a turn, for one action, any tile on the island — the answer
+// to §5.1's severed board and the one ability the game persists a flag for.
+// `pilotFlightUsed` is cleared in CheckEndTurn, so the once is per own turn.
+function applyPilotFlight(gs: IBannedIsletSpecificGameState, ps: IBannedIsletPlayerState, target: number): string | null {
+    if (!pilotFlightAvailable(ps.role, ps.pilotFlightUsed)) return null;
+    if (!pilotFlightTargets(gs.positions, ps.position).includes(target)) return null;
+
+    const from = tileName(gs.positions[ps.position].tile);
+    ps.position = target;
+    ps.pilotFlightUsed = true;
+    return `flew from ${from} to ${tileName(gs.positions[target].tile)}`;
+}
+
+// §12 Navigator: for one action, move another player up to two tiles — and
+// §21.3's third deviation, which this is the whole of: the moved player is not
+// asked. Co-op means no adversarial use, exactly the call Outbreak makes for
+// Airlift, and the history line below is what makes sure they can see where
+// they were put.
+function applyNavigatorMove(
+    gs: IBannedIsletSpecificGameState,
+    senderId: string,
+    ps: IBannedIsletPlayerState,
+    targetUserId: string | null,
+    target: number,
+): string | null {
+    if (!navigatorCanMoveOthers(ps.role)) return null;
+    if (!targetUserId || targetUserId === senderId) return null;
+    const moved = playerState(gs, targetUserId);
+    if (!moved) return null;
+    if (!navigatorMoveTargets(gs.positions, moved.position, moved.role).includes(target)) return null;
+
+    const from = tileName(gs.positions[moved.position].tile);
+    moved.position = target;
+    return `sent ${userToken(targetUserId)} from ${from} to ${tileName(gs.positions[target].tile)}`;
 }
 
 // §8 Capture a Treasure: four matching cards, standing on either of that
@@ -183,8 +255,13 @@ export class BannedIsletGameType implements IGameType {
 
 // ─── BannedIsletAction ──────────────────────────────────────────────────────
 
-/** §8's action catalogue, plus the two role kinds that aren't one of those (§21.4). The role kinds arrive with the roles themselves, in PR 7. */
-export type BannedIsletActionKind = 'move' | 'shoreUp' | 'giveCard' | 'capture' | 'pass';
+/**
+ * §8's action catalogue, plus §21.4's two role kinds — the two abilities of §12
+ * that aren't one of the five verbs. The other four roles bend a verb that is
+ * already here (the Explorer's diagonals, the Diver's swim, the Engineer's
+ * second tile, the Messenger's reach) and so add no kind of their own.
+ */
+export type BannedIsletActionKind = 'move' | 'shoreUp' | 'giveCard' | 'capture' | 'pass' | 'pilotFlight' | 'navigatorMove';
 
 @serializable
 export class BannedIsletAction implements IGameCommand {
@@ -194,9 +271,15 @@ export class BannedIsletAction implements IGameCommand {
     senderId: string = 'Unknown';
     senderUsername: string = 'Unknown';
     kind: BannedIsletActionKind = 'pass';
-    /** move / shoreUp: the grid position to step onto or dry out. */
+    /** move / shoreUp / pilotFlight: the grid position to step onto, dry out or fly to. navigatorMove: where the other player's pawn lands. */
     target: number = -1;
-    /** giveCard: the teammate the card moves to. */
+    /**
+     * shoreUp, and only for §12's Engineer: a second flooded tile dried by the
+     * same action. -1 for everybody else, and for an Engineer drying just the
+     * one — the ability is "up to two".
+     */
+    secondTarget: number = -1;
+    /** giveCard: the teammate the card moves to. navigatorMove: whose pawn is being sent. */
     targetUserId: string | null = null;
     /** giveCard: which treasure card moves. A capture names no card — four of the tile's own is the only possible payment (§8). */
     cardId: BannedIsletCardId | null = null;
@@ -214,6 +297,8 @@ export class BannedIsletAction implements IGameCommand {
             case 'giveCard': return this.cardId ? `gave their ${cardName(this.cardId)} card to a teammate` : 'gave a card to a teammate';
             case 'capture': return 'captured a treasure';
             case 'pass': return 'passed';
+            case 'pilotFlight': return 'flew across the island';
+            case 'navigatorMove': return 'sent a teammate across the island';
             default: return 'took an action';
         }
     }
@@ -235,7 +320,7 @@ export class BannedIsletAction implements IGameCommand {
                 historyLine = applyMove(gs, ps, this.target);
                 break;
             case 'shoreUp':
-                historyLine = applyShoreUp(gs, ps, this.target);
+                historyLine = applyShoreUp(gs, ps, this.target, this.secondTarget);
                 break;
             case 'giveCard':
                 historyLine = applyGiveCard(gs, this.senderId, ps, this.targetUserId, this.cardId);
@@ -245,6 +330,12 @@ export class BannedIsletAction implements IGameCommand {
                 break;
             case 'pass':
                 historyLine = `passed, forfeiting ${pluralize(ps.actionsLeft, 'action')}`;
+                break;
+            case 'pilotFlight':
+                historyLine = applyPilotFlight(gs, ps, this.target);
+                break;
+            case 'navigatorMove':
+                historyLine = applyNavigatorMove(gs, this.senderId, ps, this.targetUserId, this.target);
                 break;
             default:
                 historyLine = null;
@@ -433,7 +524,7 @@ function resolveSwims(data: IBannedIsletGameData, position: number): IBannedIsle
         const ps = gs.players.get(userId);
         if (!ps || ps.position !== position) continue;
 
-        const to = resolveSwim(gs.positions, position);
+        const to = resolveSwim(gs.positions, position, ps.role);
         swims.push({ userId, from: position, to });
         if (to === null) {
             endInTeamLoss(

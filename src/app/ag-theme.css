@@ -1635,6 +1635,10 @@ a.ag-list-row, a.ag-list-row-main {
     color: var(--ag-ink-soft);
 }
 .ag-hand-note { font: 600 10.5px var(--ag-font); color: var(--ag-ink-soft); }
+/* The same note, but it opens something — a role's ability card. Every game
+   with roles renders one, so the button reset lives here rather than as inline
+   styles in each hands panel. */
+.ag-hand-note--tappable { background: none; border: 0; padding: 0; cursor: pointer; }
 .ag-hand-cards { display: flex; gap: 7px; }
 .ag-hand-card {
     flex: 1;
