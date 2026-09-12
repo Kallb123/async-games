@@ -5,18 +5,21 @@ import BuildRow, { BuildRowProps } from '@/components/ui/BuildRow';
 import PendingTag from '@/components/ui/PendingTag';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
 import { useResettingState } from '@/utils/hooks/useResettingState';
-import { BannedIsletAction } from '@/utils/apiModels/GameLogic';
+import { BannedIsletAction, BannedIsletDiscard, BannedIsletEndTurn } from '@/utils/apiModels/GameLogic';
 import type { IBannedIsletSpecificGameStateResponse } from '@/games/BannedIslet/apiModels';
 import {
     CARDS_TO_CAPTURE,
+    HAND_LIMIT,
     cardGlyph,
     cardName,
     isTreasureCard,
     tileName,
     treasureGlyph,
     treasureName,
+    BannedIsletCardId,
 } from '@/games/BannedIslet/board';
 import { countCards, treasureAt } from '@/games/BannedIslet/rules';
+import { pluralize } from '@/utils/ui/text';
 
 /** The two actions that need a tile picked on the board before they can be sent (§8). */
 export type BannedIsletBoardMode = 'move' | 'shoreUp';
@@ -31,6 +34,69 @@ function ActionRows({ rows }: { rows: ActionRow[] }) {
     return (
         <div className="ag-build-list">
             {rows.map(({ key, ...row }) => <BuildRow key={key} {...row} />)}
+        </div>
+    );
+}
+
+interface DiscardPickerProps {
+    hand: BannedIsletCardId[];
+    submitCommand: SubmitCommand;
+    pendingTarget: string | null;
+    submitting: boolean;
+}
+
+/**
+ * The hand-limit discard (§10): pick the cards to let go of, and sending them
+ * closes the turn the draw left open.
+ *
+ * Chosen by **position in the hand** rather than by card id, because §10's
+ * cards carry no serial number — five Ember Crown cards are five of the same
+ * card, and a player trimming a hand of four of them is choosing which two
+ * copies go, which an id-keyed selection cannot express. The command takes the
+ * ids back out at send time, where a repeated id means "two of those".
+ *
+ * Every row is the shared `BuildRow` the rest of this sheet is built from, so
+ * a card in the picker and a card in a Give looks and behaves the same way.
+ */
+function DiscardPicker({ hand, submitCommand, pendingTarget, submitting }: DiscardPickerProps) {
+    // Keyed on the hand itself, so the selection clears the moment the discard
+    // lands (and the next player's turn can never inherit one).
+    const [chosen, setChosen] = useResettingState<number[]>([], hand.join(','));
+    const mustDiscard = Math.max(0, hand.length - HAND_LIMIT);
+    const enough = chosen.length === mustDiscard;
+
+    return (
+        <div className="ag-actionsheet">
+            <p className="ag-action-hint" style={{ marginTop: 0 }}>
+                🗂 You are holding {hand.length} cards. Let {pluralize(mustDiscard, 'card')} go to get back to the {HAND_LIMIT}-card limit.
+            </p>
+            <ActionRows rows={hand.map((card, index) => {
+                const selected = chosen.includes(index);
+                return {
+                    key: `${card}-${index}`,
+                    icon: cardGlyph(card),
+                    name: cardName(card),
+                    active: selected,
+                    disabled: submitting,
+                    tag: selected ? 'Letting go' : 'Keep',
+                    tagMuted: !selected,
+                    onClick: () => setChosen(selected ? chosen.filter(i => i !== index) : [...chosen, index]),
+                };
+            })} />
+            <ActionButton
+                className="ag-btn ag-btn--primary ag-btn--block"
+                style={{ marginTop: 10 }}
+                disabled={!enough || submitting}
+                pending={pendingTarget === 'discard'}
+                pendingLabel="Discarding…"
+                onClick={() => {
+                    const cmd = new BannedIsletDiscard();
+                    cmd.cardIds = chosen.map(index => hand[index]);
+                    submitCommand(cmd, undefined, 'discard');
+                }}
+            >
+                {enough ? `Discard ${pluralize(chosen.length, 'card')}` : `Pick ${mustDiscard - chosen.length} more`}
+            </ActionButton>
         </div>
     );
 }
@@ -64,9 +130,10 @@ interface BannedIsletActionsProps {
  * waiting player reads what they *will* be able to do rather than being shown
  * nothing (AGENTS.md). Nothing in here asks whose turn it is.
  *
- * There is no End Turn control yet — the draw and flood phases (§7 Phases 2
- * and 3) are one command that doesn't exist until §21.6's next PR, and until
- * it does a turn simply stays open.
+ * Once the three actions are spent the sheet becomes the End Turn button, and
+ * if the two cards drawn push the hand past the limit it becomes the discard
+ * picker instead — the two phases the player doesn't control, each of them the
+ * only thing the screen will let them do next (§7, §10).
  */
 export default function BannedIsletActions({
     gs,
@@ -86,6 +153,43 @@ export default function BannedIsletActions({
     const [giveTo, setGiveTo] = useResettingState<string | null>(null, `${myUserId}:${me?.actionsLeft ?? 0}`);
 
     if (!me) return null;
+
+    // ── Over the hand limit (§10, §16): the island is waiting on this, and
+    //     nothing else on the turn can happen until the hand is back down.
+    //     BannedIsletEndTurn has already drawn and put the game in this phase;
+    //     BannedIsletDiscard is what closes it and runs the flood. ──
+    if (gs.phase === 'discard') {
+        return (
+            <DiscardPicker
+                hand={me.hand}
+                submitCommand={submitCommand}
+                pendingTarget={pendingTarget}
+                submitting={submitting}
+            />
+        );
+    }
+
+    // ── Out of actions (§7 Phase 1): the only thing left is to hand the turn
+    //     to the island. Deliberately its own command rather than something
+    //     the third action does for you (§21.4). ──
+    if (me.actionsLeft <= 0) {
+        return (
+            <div className="ag-actionsheet">
+                <p className="ag-action-hint" style={{ marginTop: 0 }}>
+                    ⏭ Out of actions — end your turn to draw two cards and let the sea take its turn.
+                </p>
+                <ActionButton
+                    className="ag-btn ag-btn--primary ag-btn--block"
+                    disabled={submitting}
+                    pending={pendingTarget === 'endTurn'}
+                    pendingLabel="Ending turn…"
+                    onClick={() => submitCommand(new BannedIsletEndTurn(), undefined, 'endTurn')}
+                >
+                    End turn
+                </ActionButton>
+            </div>
+        );
+    }
 
     const actionsLeft = me.actionsLeft;
     // Nothing in the sheet can be sent while an action is in flight, once the

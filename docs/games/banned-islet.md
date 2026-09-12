@@ -771,13 +771,23 @@ one to assume.
 
 **Recorded randomness.** Every `shuffle()` at setup — the tile layout, the flood
 deck, the treasure deck, the role deal — lands in `initialSpecificGameState`, so
-replay is deterministic from day one. The **only** mid-game randomness is the
+replay is deterministic from day one. The mid-game randomness is the
 flood-discard shuffle: Waters Rise! (§11) and the empty-deck reshuffle. Both
 must be recorded onto `BannedIsletEndTurn` the first time they run, and the
 field **must be named `recordedFloodShuffles`** — the command route strips every
 incoming `recorded…` property precisely because `Execute` prefers a recorded
 value, and a field named `floodShuffles` would sail straight through and let a
 player choose which tiles drown next.
+
+There is a **second** mid-game shuffle this paragraph originally missed, found
+while building PR 5: §10's treasure deck is reshuffled from its discard when it
+runs out, which §13 expects in any long game and which deals a hand. It is
+recorded exactly the same way and in the same PR — `recordedTreasureShuffles`
+on `BannedIsletEndTurn` — rather than being discovered later by a replay that
+dealt somebody different cards. `BannedIsletDiscard` carries
+`recordedFloodShuffles` too, because it runs Phase 3 in `BannedIsletEndTurn`'s
+place when the hand limit held the turn open, and Phase 3 can empty the flood
+deck.
 
 ### 21.5 Turn recap & planning
 

@@ -11,7 +11,10 @@ export const meta: GameMeta = {
     tagline: "Lift four relics off a sinking island before the sea takes the floor out from under you.",
     accent: "#1f7a8c",
     glyph: "🏝️",
-    // Turned on in the last PR of docs/games/banned-islet.md §21.6, once there
-    // is a board to play it on.
-    available: false,
+    // On from PR 5 of docs/games/banned-islet.md §21.6, ahead of that plan's
+    // §21.6 PR 10, because that is the PR the island starts fighting back in:
+    // the game is playable start to finish, winnable and loseable, at every
+    // difficulty. What is still coming is polish rather than play — the six
+    // roles, the two special cards, the guide, the art and the away recap.
+    available: true,
 };

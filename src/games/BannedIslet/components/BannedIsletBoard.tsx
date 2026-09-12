@@ -55,6 +55,8 @@ interface BannedIsletBoardProps {
     boardTag?: string | null;
     /** Whose pawn is up — ringed, so a four-pawn tile still says who is acting. */
     activeUserId?: string | null;
+    /** The tile a tapped flood-discard card is pointing at — rung here, including the hole a sunk one left behind. */
+    highlightedPosition?: number | null;
 }
 
 /** The treasure still standing on this tile, if any — a captured one has left the island. */
@@ -72,6 +74,7 @@ export default function BannedIsletBoard({
     onPositionClick,
     boardTag = null,
     activeUserId = null,
+    highlightedPosition = null,
 }: BannedIsletBoardProps) {
     // Pawns keyed by the position they stand on — several share a tile often
     // enough (every Give a Treasure Card is two pawns on one tile, §8).
@@ -103,7 +106,7 @@ export default function BannedIsletBoard({
                 <button
                     key={position}
                     type="button"
-                    className={`ag-bi-cell ag-bi-cell--${state}${isValid ? ' ag-bi-cell--valid' : ''}`}
+                    className={`ag-bi-cell ag-bi-cell--${state}${isValid ? ' ag-bi-cell--valid' : ''}${position === highlightedPosition ? ' ag-bi-cell--highlighted' : ''}`}
                     disabled={!isValid}
                     onClick={isValid && onPositionClick ? () => onPositionClick(position) : undefined}
                     title={label}

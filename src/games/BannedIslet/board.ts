@@ -321,6 +321,9 @@ export const MAX_PLAYERS = 4;
 /** §7 Phase 1: three actions a turn, refilled at the start of that player's turn (§21.4). */
 export const ACTIONS_PER_TURN = 3;
 
+/** §7 Phase 2: two treasure cards drawn at the end of every turn. */
+export const CARDS_DRAWN_PER_TURN = 2;
+
 /** §10: checked at the end of Phase 2; over it, the holder discards down. */
 export const HAND_LIMIT = 5;
 

@@ -4327,6 +4327,18 @@ button.ag-tt-ticket { cursor: pointer; }
 /* A tile the armed action can reach — the same gold ring Fires Out's board
    marks its legal spaces with. */
 .ag-bi-cell--valid { cursor: pointer; box-shadow: inset 0 0 0 3px var(--ag-gold); }
+/* The tile a tapped flood-discard card points at — pulsing in sync with the
+   card itself (.ag-hand-card--highlighted), so the name and the place on the
+   island read as one selected thing. Drawn on a hole too: "Kelp Stair was
+   here" is exactly what a player tapping a sunk tile's card is asking. */
+.ag-bi-cell--highlighted {
+    box-shadow: inset 0 0 0 3px var(--ag-danger);
+    --ag-pulse-min: 0.55;
+    animation: ag-pulse 1s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+    .ag-bi-cell--highlighted { animation: none; }
+}
 .ag-bi-cell:disabled { cursor: default; }
 
 /* Every tile is named on its face: the island is 24 shuffled tiles and the
