@@ -10,9 +10,11 @@ import BannedIsletActions, { BannedIsletPick } from "@/games/BannedIslet/compone
 import BannedIsletHands from "@/games/BannedIslet/components/BannedIsletHands";
 import BannedIsletFloodDiscard from "@/games/BannedIslet/components/BannedIsletFloodDiscard";
 import BannedIsletEndTurnScreen from "@/games/BannedIslet/components/BannedIsletEndTurnScreen";
+import { guide as bannedIsletGuide } from "@/games/BannedIslet/guide";
 import GameShell from "@/components/ui/GameShell";
 import { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameGuideModal from "@/components/ui/GameGuideModal";
+import RoleIntroPopup from "@/components/ui/RoleIntroPopup";
 import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
@@ -42,7 +44,6 @@ import {
     shoreUpTargets,
     shoreUpsPerAction,
 } from "@/games/BannedIslet/rules";
-import { guideForGame } from "@/utils/ui/gameGuides";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
 
@@ -112,10 +113,7 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
 
     // The "how to play" popup: shown automatically the first time this account
     // opens a Banned Islet match, and on demand from the game-options menu.
-    // The guide itself is written in a later PR — until it exists there is
-    // nothing to open, so neither the modal nor its menu row draws.
     const gameGuide = useGameGuide('bannedislet');
-    const guide = guideForGame('bannedislet');
 
     const gs = nav.displayedState;
     const complete = nav.displayedComplete;
@@ -298,12 +296,12 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
             icon: '🔁',
             onClick: recap.reshow,
         }] : []),
-        ...(guide ? [{
+        {
             key: 'guide',
             label: 'Game guide',
             icon: '📖',
             onClick: gameGuide.openGuide,
-        }] : []),
+        },
         ...(!complete ? [{
             key: 'end',
             label: 'End game',
@@ -355,7 +353,12 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
         >
             <FcmTokenComp />
 
-            {guide && gameGuide.open && <GameGuideModal guide={guide} onClose={gameGuide.closeGuide} />}
+            {/* Game guide before role guide — a player needs to know the game
+                before their role in it (see useGameGuide's `loaded`/`open`
+                docs), so the role welcome waits for this one to have answered
+                and to not be showing. */}
+            {me && gameGuide.loaded && !gameGuide.open && <RoleIntroPopup gameUrl="bannedislet" gameId={gameId} myUserId={myUserId} role={roleDef(me.role)} />}
+            {gameGuide.open && <GameGuideModal guide={bannedIsletGuide} onClose={gameGuide.closeGuide} />}
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
 

@@ -24,6 +24,7 @@ import { guide as settlementsAndCitiesGuide } from "@/games/SettlementsAndCities
 import { guide as worldDominationGuide } from "@/games/WorldDomination/guide";
 import { guide as trainTimeGuide } from "@/games/TrainTime/guide";
 import { guide as firesOutGuide } from "@/games/FiresOut/guide";
+import { guide as bannedIsletGuide } from "@/games/BannedIslet/guide";
 
 // Keyed by the same url slug as GAME_META. Not every game has a guide yet —
 // callers look it up with guideForGame and handle a miss.
@@ -34,6 +35,7 @@ export const GAME_GUIDES: Record<string, GameGuide> = {
     worlddomination: worldDominationGuide,
     traintime: trainTimeGuide,
     firesout: firesOutGuide,
+    bannedislet: bannedIsletGuide,
 };
 
 export function guideForGame(url: string): GameGuide | undefined {

@@ -11,7 +11,7 @@ import OutbreakInfectionDiscard from "@/games/Outbreak/components/OutbreakInfect
 import OutbreakEventTray, { OutbreakEventTargeting } from "@/games/Outbreak/components/OutbreakEventTray";
 import OutbreakEndTurnScreen from "@/games/Outbreak/components/OutbreakEndTurnScreen";
 import OutbreakInfectionRateScale from "@/games/Outbreak/components/OutbreakInfectionRateScale";
-import OutbreakRoleIntro from "@/games/Outbreak/components/OutbreakRoleIntro";
+import RoleIntroPopup from "@/components/ui/RoleIntroPopup";
 import { guide as outbreakGuide } from "@/games/Outbreak/guide";
 import GameShell from "@/components/ui/GameShell";
 import { GameOption } from "@/components/ui/GameOptionsMenu";
@@ -32,7 +32,7 @@ import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { IOutbreakInfectionPhaseOutcome, OutbreakAction, OutbreakPlayEvent } from "@/utils/apiModels/GameLogic";
 import { HAND_LIMIT, IOutbreakInfectionLogEntry, OutbreakMoveType, getLegalMoves, infectionRateFor, stationCityIds } from "@/games/Outbreak/rules";
-import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, EVENT_CARD_AIRLIFT, EVENT_CARD_GOVERNMENT_GRANT, MAX_RESEARCH_STATIONS } from "@/games/Outbreak/board";
+import { CITIES, DISEASE_COLORS, DISEASE_COLOR_DEFS, EVENT_CARD_AIRLIFT, EVENT_CARD_GOVERNMENT_GRANT, MAX_RESEARCH_STATIONS, roleDef } from "@/games/Outbreak/board";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
 
@@ -328,7 +328,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                 before their role in it (see useGameGuide's `loaded`/`open`
                 docs), so the role welcome waits for this one to have
                 answered and to not be showing. */}
-            {me && gameGuide.loaded && !gameGuide.open && <OutbreakRoleIntro gameId={gameId} myUserId={myUserId} role={me.role} />}
+            {me && gameGuide.loaded && !gameGuide.open && <RoleIntroPopup gameUrl="outbreak" gameId={gameId} myUserId={myUserId} role={roleDef(me.role)} />}
             {gameGuide.open && <GameGuideModal guide={outbreakGuide} onClose={gameGuide.closeGuide} />}
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}
