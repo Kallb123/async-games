@@ -134,6 +134,43 @@ export function applyFloodCard(island: BannedIsletIsland, tile: BannedIsletTileI
     return { island: next, position, from, to, sank: from === 'flooded', cardLeavesGame: to === 'sunk' };
 }
 
+// ─── The flood log (§21.4) ──────────────────────────────────────────────────
+// What one end-of-turn resolution did to the island, card by card, built by
+// BannedIsletEndTurn (and by BannedIsletDiscard, which finishes the same
+// turn) and carried on its outcome — Outbreak's IOutbreakInfectionLogEntry
+// exactly, and for the same two customers: the end-of-turn reveal the client
+// draws and, later, the away-time recap. It lives here rather than beside the
+// command because both the server that writes it and the screen that renders
+// it read it, and this module is the isomorphic half.
+
+/** One pawn caught by a sinking (§9.2) — `to` is null for the swim that had nowhere to go, which is the drowning loss of §4.2. */
+export interface IBannedIsletSwim {
+    userId: string;
+    from: number;
+    to: number | null;
+}
+
+export interface IBannedIsletFloodLogEntry {
+    /**
+     * `flood` — one flood card drawn in Phase 3.
+     * `watersRise` — §11's three-step resolution, drawn in Phase 2.
+     * `reshuffle` — the flood deck emptied mid-draw and the discard refilled
+     *   it (§11), which is the endgame rather than an exception case.
+     */
+    kind: 'flood' | 'watersRise' | 'reshuffle';
+    /** `flood`: the tile the card named. */
+    tile?: BannedIsletTileId;
+    /** `flood`: what the card did to it — §9.1's two transitions. */
+    outcome?: BannedIsletTileState;
+    /** `flood`: the pawns a sinking swept off the tile, in turn order (§9.2). */
+    swims?: IBannedIsletSwim[];
+    /** `watersRise`: the meter after the rise, and what the island now loses a turn. `floodRateAfter` is absent for the rise that reached the skull, which has no rate (§11). */
+    waterLevelAfter?: number;
+    floodRateAfter?: number;
+    /** `watersRise` / `reshuffle`: how many flood cards went back onto the deck. */
+    shuffledBack?: number;
+}
+
 /** §11: how many flood cards Phase 3 draws at this water level. Level 10 is the skull, not a rate (§4.2), so it reads as the deepest one. */
 export function floodRateFor(waterLevel: number): number {
     const index = Math.min(Math.max(Math.trunc(waterLevel), 1), WATER_LEVEL_TRACK.length) - 1;

@@ -771,13 +771,23 @@ one to assume.
 
 **Recorded randomness.** Every `shuffle()` at setup — the tile layout, the flood
 deck, the treasure deck, the role deal — lands in `initialSpecificGameState`, so
-replay is deterministic from day one. The **only** mid-game randomness is the
+replay is deterministic from day one. The mid-game randomness is the
 flood-discard shuffle: Waters Rise! (§11) and the empty-deck reshuffle. Both
 must be recorded onto `BannedIsletEndTurn` the first time they run, and the
 field **must be named `recordedFloodShuffles`** — the command route strips every
 incoming `recorded…` property precisely because `Execute` prefers a recorded
 value, and a field named `floodShuffles` would sail straight through and let a
 player choose which tiles drown next.
+
+There is a **second** mid-game shuffle this paragraph originally missed, found
+while building PR 5: §10's treasure deck is reshuffled from its discard when it
+runs out, which §13 expects in any long game and which deals a hand. It is
+recorded exactly the same way and in the same PR — `recordedTreasureShuffles`
+on `BannedIsletEndTurn` — rather than being discovered later by a replay that
+dealt somebody different cards. `BannedIsletDiscard` carries
+`recordedFloodShuffles` too, because it runs Phase 3 in `BannedIsletEndTurn`'s
+place when the hand limit held the turn open, and Phase 3 can empty the flood
+deck.
 
 ### 21.5 Turn recap & planning
 
@@ -942,7 +952,34 @@ becomes playable start to finish, winnable and loseable, at every difficulty.
   `FiresOutAdvanceFireResult` does — one of those two, not a third. Plus the
   discard picker, reusing `ag-build-row` rather than a new component.
 
-**PR 6 — Turn-timeout resolution.** One `ITurnTimeoutAdapter` registered in
+**What PR 5 actually shipped, beyond that list.** The game was turned on here
+rather than at PR 10: it plays start to finish from this PR, and what is left
+(the roles, the special cards, the guide, the art, the away recap) is polish
+rather than play. That is a deliberate departure from the order below, and it
+dragged three things forward with it, because `meta.available: true` is a
+promise that the game works rather than a flag:
+
+- **PR 6's turn-timeout adapter, in full.** Not optional once real players can
+  start a match. The cron's `noAdapter` fallback advances `currentTurn` and
+  nothing else, which here means a silent player skips their own draw and flood
+  (making a timeout the strongest play at the table), the next player inherits
+  an `actionsLeft` that `CheckEndTurn` never refilled, and — worst — a turn that
+  times out during the hand-limit `discard` phase **deadlocks the game for
+  everybody**, since only that player may send `BannedIsletDiscard` and the
+  command route stops accepting them the moment `currentTurn` moves past.
+- **PR 9's replay adapter** (`replay.ts` only — the recap and the result page
+  stay in PR 9). The board has shipped the turn scrubber since PR 4, gated on a
+  snapshot the game has stored since setup, so without the adapter the timeline
+  route threw and the scrubber showed an error on every tap. It brings §21.7's
+  replay-equality test with it, which is the only thing that proves the recorded
+  shuffles are consumed on the way back rather than re-rolled.
+- **PR 10's share card and its one "What's new" line.** Both are obligations of
+  being listed rather than of being finished, so they move with the flag.
+
+Everything else in PR 10 — the guide and the art — stays where it is.
+
+**PR 6 — Turn-timeout resolution.** *(Landed in PR 5, which turned the game
+on — see above.)* One `ITurnTimeoutAdapter` registered in
 `turnTimeout.ts` alongside Outbreak's and Fires Out's: forfeit each remaining
 action with the same `pass` a live player bailing out would send, hand back
 `BannedIsletEndTurn` to run the draw and flood phases, then a
@@ -975,7 +1012,9 @@ one whose shared-file list is easiest to under-read:
 - The replay adapter, registered inline in the shared
   `src/utils/games/replay.ts` alongside the other nine — there is no per-game
   `replay.ts` in this repo, only a per-game `replay.test.ts` —
-  with `plannableCommands: []` until PR 11.
+  with `plannableCommands: []` until PR 11. *(Landed in PR 5, with its
+  `replay.test.ts`, because the board's turn scrubber needed it the moment the
+  game was turned on. The recap and the result page below did not move.)*
 - `recap.ts` in the game folder with the row selection of 21.5, **plus the
   `import "@/games/BannedIslet/recap";` line in `src/utils/games/recap.ts`**
   without which the adapter never registers; `gameRegistry.test.ts` fails with
@@ -1000,10 +1039,11 @@ turns the game on.
 - Tile and treasure art: masters into `/art-masters` under the path they mirror
   in `public/art`, then `npm run optimise-art` and commit what it writes.
 - `npm run icons` for `public/icons/og-game-bannedislet.png`.
-- `meta.available: true`, **one** "What's new" line in the *New games* group of
-  `src/utils/ui/whatsNew.ts` (one per branch, not one per PR — and PRs 1–9 add
-  none, because until this one lands there is nothing a player can see), and the
-  Banned Islet row in `turn-recap-and-planning.md`'s per-game table.
+- ~~`meta.available: true`, **one** "What's new" line in the *New games* group
+  of `src/utils/ui/whatsNew.ts`, and the Banned Islet row in
+  `turn-recap-and-planning.md`'s per-game table.~~ *All three landed in PR 5,
+  which turned the game on early — see above. The rule they were written to
+  serve still holds: one "What's new" line for the whole game, and it is spent.*
 
 **PR 11 — The route planner** *(optional, and the only PR that touches shared
 routing).* Builds 21.2's gap 2 — the per-game cross-player planning opt-in on

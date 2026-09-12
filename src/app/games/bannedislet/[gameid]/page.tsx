@@ -1,13 +1,15 @@
 'use client'
-import { use } from "react";
+import { use, useState } from "react";
 import { usePathname } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
-import { BannedIsletAction } from "@/utils/apiModels/GameLogic";
+import { BannedIsletAction, IBannedIsletFloodPhaseOutcome } from "@/utils/apiModels/GameLogic";
 import type { IBannedIsletGameDataResponse, IBannedIsletSpecificGameStateResponse } from "@/games/BannedIslet/apiModels";
 import BannedIsletBoard from "@/games/BannedIslet/components/BannedIsletBoard";
 import BannedIsletActions, { BannedIsletBoardMode } from "@/games/BannedIslet/components/BannedIsletActions";
 import BannedIsletHands from "@/games/BannedIslet/components/BannedIsletHands";
+import BannedIsletFloodDiscard from "@/games/BannedIslet/components/BannedIsletFloodDiscard";
+import BannedIsletEndTurnScreen from "@/games/BannedIslet/components/BannedIsletEndTurnScreen";
 import GameShell from "@/components/ui/GameShell";
 import { GameOption } from "@/components/ui/GameOptionsMenu";
 import GameGuideModal from "@/components/ui/GameGuideModal";
@@ -22,10 +24,10 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useGameGuide } from "@/utils/hooks/useGameGuide";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useResettingState } from "@/utils/hooks/useResettingState";
-import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
+import { SubmitCommand, useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
-import { ACTIONS_PER_TURN, LOSING_WATER_LEVEL, POSITION_COUNT, roleDef } from "@/games/BannedIslet/board";
-import { legalMoves, legalShoreUps } from "@/games/BannedIslet/rules";
+import { ACTIONS_PER_TURN, HAND_LIMIT, LOSING_WATER_LEVEL, POSITION_COUNT, roleDef, tileName, BannedIsletTileId } from "@/games/BannedIslet/board";
+import { IBannedIsletFloodLogEntry, legalMoves, legalShoreUps, positionOfTile } from "@/games/BannedIslet/rules";
 import { guideForGame } from "@/utils/ui/gameGuides";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
@@ -38,20 +40,18 @@ import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder 
 // scrubber are all the same components every other game wears, re-tinted under
 // `.ag-game--bannedislet` rather than rebuilt.
 //
-// Three things are deliberately not here yet, each with a PR of its own:
+// PR 5 adds the two phases the player doesn't control, and with them the two
+// screens this page deferred: the end-of-turn reveal — the moment §1's pitch
+// is actually delivered, so it is a screen rather than a prompt — and the
+// flood discard, which §21.4 is emphatic must be rendered rather than hidden,
+// because reading it is the one skill §14.2 rewards.
 //
-//  * **No End Turn.** Phases 2 and 3 (draw, flood, sink) are one command that
-//    lands in the next PR, so a turn currently stays open once its three
-//    actions are spent.
-//  * **No flood-discard panel.** §21.4 is emphatic that the discard is public
-//    and must be rendered — it is the game's only forecast — but until the
-//    flood phase exists it holds exactly the six tiles setup flooded, which the
-//    island itself already shows. It belongs with the phase that makes it a
-//    forecast rather than a copy of the board.
-//  * **No recap.** `useTurnRecap`/`TurnRecapScreen` arrive with the replay
-//    adapter. The scrubber below works today because the game has stored its
-//    opening island since setup (`recapAvailable`), and it is wired with
-//    `canPlan={false}` until the route planner opts this game in.
+// One thing is still deliberately missing, with a PR of its own: **no recap**.
+// `useTurnRecap`/`TurnRecapScreen` are the away-time narrative and arrive with
+// `recap.ts`. The scrubber below is a different thing and does work today —
+// `recapAvailable` says the opening island has been stored since setup, and PR
+// 5 registered the replay adapter that turns it into a timeline. It stays
+// wired with `canPlan={false}` until the route planner opts this game in.
 export default function GameBannedIslet({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
@@ -62,8 +62,21 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
 
     const { gameData, setGameData, getGameData } = useGameData<IBannedIsletGameDataResponse>(gameId);
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
-    const { submitCommand, submitting, pendingTarget } = useSubmitCommand<IBannedIsletGameDataResponse>(gameId, user, setGameData, getGameData);
+    const { submitCommand: rawSubmitCommand, submitting, pendingTarget } = useSubmitCommand<IBannedIsletGameDataResponse>(gameId, user, setGameData, getGameData);
     const { endGame } = useEndGame(gameId);
+
+    // The end-of-turn reveal: whichever command ran the flood phase hands back
+    // what the sea did on its own outcome (IBannedIsletFloodPhaseOutcome) —
+    // BannedIsletEndTurn, or the BannedIsletDiscard that closed the same turn.
+    // Every submit goes through this one wrapper so it is caught whichever
+    // control fired it.
+    const [turnResult, setTurnResult] = useState<IBannedIsletFloodLogEntry[] | null>(null);
+    const submitCommand: SubmitCommand = (command, callback, target) =>
+        rawSubmitCommand(command, (r) => {
+            const floodLog = (r.outcome as IBannedIsletFloodPhaseOutcome).floodLog;
+            if (floodLog?.length) setTurnResult(floodLog);
+            callback?.(r);
+        }, target);
 
     // Turn review steps back through the match's real actions (one per played
     // command, not one per turn); the board, the hands and the log all render
@@ -102,6 +115,12 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
     // else's turn.
     const [mode, setMode] = useResettingState<BannedIsletBoardMode | null>(null, `${displayedCurrentTurn}`);
 
+    // Which tile a tapped flood-discard card is ringing on the island right
+    // now — purely a lookup aid on a board of 24 shuffled names, reset
+    // alongside the pick above so a stale ring never carries into somebody
+    // else's turn.
+    const [highlightedTile, setHighlightedTile] = useResettingState<BannedIsletTileId | null>(null, `${displayedCurrentTurn}`);
+
     // The one legality question this screen asks, asked of rules.ts: which
     // tiles each action can reach from where my pawn stands. The counts feed
     // the action sheet's rows and the set feeds the board's tappable tiles, so
@@ -133,6 +152,8 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
             subtitle = abandoned.subtitle;
         } else if (complete) {
             subtitle = gameData?.endReason === 'teamloss' ? '💀 The team lost' : '🎉 The team escaped!';
+        } else if (isMyTurn && gs.phase === 'discard') {
+            subtitle = <span className="ag-hi">Discard down to {HAND_LIMIT}</span>;
         } else if (isMyTurn) {
             subtitle = <><span className="ag-hi">Your move</span> · {me?.actionsLeft ?? 0} actions left</>;
         } else {
@@ -176,6 +197,20 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
     ];
 
     const tilesLeft = gs ? gs.positions.filter(p => p.state !== 'sunk').length : 0;
+
+    // The end-of-turn reveal: what the draw and flood phases just did to the
+    // island, shown once before the board moves on to whoever is up now.
+    if (turnResult && gs) {
+        return (
+            <BannedIsletEndTurnScreen
+                floodLog={turnResult}
+                playerStates={gs.playerStates}
+                userIdList={userIdList}
+                tileAt={position => tileName(gs.positions[position].tile)}
+                onDismiss={() => setTurnResult(null)}
+            />
+        );
+    }
 
     return (
         <GameShell
@@ -232,6 +267,7 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
                             onPositionClick={isMyTurn && !submitting ? handlePositionClick : undefined}
                             boardTag={boardTag}
                             activeUserId={complete ? null : displayedCurrentTurn}
+                            highlightedPosition={highlightedTile ? positionOfTile(gs.positions, highlightedTile) : null}
                         />
                     </div>
 
@@ -243,6 +279,7 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
                                 // viewer's own seat — what *they* will be able
                                 // to do — rather than the current player's.
                                 myUserId={myUserId}
+                                isMyTurn={isMyTurn}
                                 mode={mode}
                                 onModeChange={setMode}
                                 targetCounts={{ move: moveTargets.length, shoreUp: shoreTargets.length }}
@@ -252,6 +289,18 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
                             />
                         </ReadOnlyPanel>
                     )}
+
+                    {/* The team's only forecast (§14.2), and public by §21.4 —
+                        every card in it is a tile the sea has already bitten,
+                        and the next Waters Rise! puts the whole pile back on
+                        top of the deck. */}
+                    <BannedIsletFloodDiscard
+                        floodDiscard={gs.floodDiscard}
+                        positions={gs.positions}
+                        floodDeckCount={gs.floodDeckCount}
+                        onTileTap={tile => setHighlightedTile(highlightedTile === tile ? null : tile)}
+                        highlightedTile={highlightedTile}
+                    />
 
                     {/* Every hand is public (§2), so these are outside the
                         ReadOnlyPanel above: there is nothing here to take out
