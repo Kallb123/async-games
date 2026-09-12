@@ -7,9 +7,9 @@ import { useStoredValue } from '@/utils/hooks/useStoredValue';
  * including making a dismissal stick for the session when the store refuses
  * to keep it.
  *
- * Shared by the offers in `BottomBanner` and by Outbreak's role welcome: each
- * passes its own key, and all of them get the same "dismissed stays dismissed"
- * behaviour without a second copy of the plumbing.
+ * Shared by the offers in `BottomBanner` and by every game's role welcome
+ * (`RoleIntroPopup`): each passes its own key, and all of them get the same
+ * "dismissed stays dismissed" behaviour without a second copy of the plumbing.
  */
 export function useDismissibleBanner(storageKey: string) {
     const [stored, store] = useStoredValue(storageKey);
