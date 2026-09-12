@@ -668,9 +668,9 @@ deviation below for what that costs the design.
 
 ### 21.3 Deviations from this document
 
-Async play forces five, and building the roles turned up a sixth that it
-didn't — a reading of §12 rather than a concession to turns hours apart, but
-recorded here for the same reason: a deviation is anything a reader of this
+Async play forces five, and building the game turned up two more that it
+didn't — readings of §12 and §10 rather than concessions to turns hours apart,
+but recorded here for the same reason: a deviation is anything a reader of this
 document alone would not predict from the code. Record each in a "Deviations"
 subsection of this document as it lands.
 
@@ -715,6 +715,21 @@ subsection of this document as it lands.
 
   The same PR settled a question §12 never asks: a Navigator-moved pawn keeps
   the moved role's **adjacency** but not its **abilities** — see §12's note.
+
+* **The Helicopter Lift that wins the game moves nobody** (PR 8). §10 describes
+  the card as "move any number of pawns from one tile to any other tile", which
+  has no form for the one play §4.1 is actually won with: the team is already
+  standing on Beacon Pier together, so there is no other tile to fly them to.
+  `BannedIsletPlayCard` therefore reads an **empty passenger list as the escape
+  call** — the card played to *leave* the island rather than to cross it — and
+  it is the only form that names no destination tile.
+
+  §4.1's four conditions are then checked *after* the lift has moved whoever it
+  moved, which is the other half of the same reading: a lift that carries the
+  last straggler home wins on the spot rather than gathering the team and
+  leaving them to find a second card. §16's "the card is spent either way"
+  still holds for both forms — a lift played onto an island that isn't ready is
+  gone.
 
 ### 21.4 State and command surface
 

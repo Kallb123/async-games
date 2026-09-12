@@ -12,7 +12,7 @@ import {
     moveTargets,
     navigatorMoveTargets,
     pilotFlightAvailable,
-    pilotFlightTargets,
+    flightTargets,
     resolveSwim,
     shoreUpTargets,
     shoreUpsPerAction,
@@ -203,7 +203,7 @@ describe("Pilot (§12)", () => {
 
     it("reaches every surviving tile but the one under the pawn", () => {
         const board = island({ sunk: [EAST_OF_MIDDLE] });
-        const reach = pilotFlightTargets(board, MIDDLE);
+        const reach = flightTargets(board, MIDDLE);
 
         expect(reach).toHaveLength(POSITION_COUNT - 2); // less the hole, less its own tile
         expect(reach).not.toContain(MIDDLE);
@@ -257,7 +257,7 @@ describe("Pilot (§12)", () => {
             sunk: [MIDDLE, NORTH_OF_MIDDLE, WEST_OF_MIDDLE, EAST_OF_MIDDLE, SOUTH_OF_MIDDLE],
         });
         expect(resolveSwim(sinking, MIDDLE, BASE)).toBeNull();
-        expect(swimReach(sinking, MIDDLE, 'pilot')).toEqual(pilotFlightTargets(sinking, MIDDLE));
+        expect(swimReach(sinking, MIDDLE, 'pilot')).toEqual(flightTargets(sinking, MIDDLE));
         expect(resolveSwim(sinking, MIDDLE, 'pilot')).not.toBeNull();
     });
 });

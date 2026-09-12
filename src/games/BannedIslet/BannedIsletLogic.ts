@@ -14,6 +14,7 @@ import {
     BannedIsletCardId,
     BannedIsletTileId,
     cardName,
+    isPlayableCard,
     isTreasureCard,
     tileName,
     treasureName,
@@ -30,8 +31,10 @@ import {
     navigatorCanMoveOthers,
     navigatorMoveTargets,
     pilotFlightAvailable,
-    pilotFlightTargets,
+    flightTargets,
+    liftOrigin,
     resolveSwim,
+    sandbagsTargets,
     giveCardTargets,
     shoreUpTargets,
     shoreUpsPerAction,
@@ -56,9 +59,9 @@ import { pluralize } from "@/utils/ui/text";
 // a turn open between them) — which is what makes the game loseable, and so
 // playable start to finish.
 //
-// One clause of §4.1's win is still missing: a Helicopter Lift actually
-// played, which needs PR 8's BannedIsletPlayCard. Until it exists, reaching
-// the state is the win.
+// PR 8 adds the last command, BannedIsletPlayCard, and with it the last
+// clause of §4.1: the win is now an *action taken* rather than a state
+// reached, because a Helicopter Lift has to be played to leave the island.
 
 const INVALID: ICommandOutcome = { validMove: false, turnOver: false };
 
@@ -147,7 +150,7 @@ function applyGiveCard(
 // `pilotFlightUsed` is cleared in CheckEndTurn, so the once is per own turn.
 function applyPilotFlight(gs: IBannedIsletSpecificGameState, ps: IBannedIsletPlayerState, target: number): string | null {
     if (!pilotFlightAvailable(ps.role, ps.pilotFlightUsed)) return null;
-    if (!pilotFlightTargets(gs.positions, ps.position).includes(target)) return null;
+    if (!flightTargets(gs.positions, ps.position).includes(target)) return null;
 
     const from = tileName(gs.positions[ps.position].tile);
     ps.position = target;
@@ -225,31 +228,19 @@ export class BannedIsletGameType implements IGameType {
     }
 
     CheckGameOver(gameData: IGameData): boolean {
-        const data = gameData as IBannedIsletGameData;
-        // §4.2's four defeats can only be detected mid-resolution, inside the
-        // flood phase, so they are ended there rather than re-derived here —
-        // see endInTeamLoss below, which is what has already set `complete`
-        // by the time the command route asks.
-        if (data.complete) return true;
-
-        const gs = data.specificGameState;
-        const pawns = [...gs.players.values()].map(ps => ps.position);
-        if (!isEscapeReady(gs.positions, gs.treasures, pawns)) return false;
-
-        // §4.1: all four treasures aboard and the whole team on an unsunk
-        // Beacon Pier. The fourth clause — a Helicopter Lift actually played —
-        // is what makes this an action taken rather than a state reached, and
-        // PR 8 moves the ending into BannedIsletPlayCard when the card exists
-        // to play. Until then reaching the state is the win.
+        // Nothing is derived here, and that is §4.1: the win is *an action
+        // taken, not a state reached*, so it fires inside BannedIsletPlayCard
+        // the moment a Helicopter Lift is played on a ready island (see
+        // endInEscape) rather than the moment the island becomes ready. §4.2's
+        // four defeats are the same shape for a different reason — each can
+        // only be spotted mid-resolution, inside the flood phase, so they end
+        // the game there (endInTeamLoss).
         //
-        // A co-op result, so no single id can be the winner: finishGame reads
-        // 'teamwin' as one shared ending for the whole roster.
-        data.complete = true;
-        data.winner = '';
-        data.endReason = 'teamwin';
-        data.currentTurn = '';
-        data.gameState.history.unshift({ text: 'All four treasures are off the island and the team is clear of the water — they win!' });
-        return true;
+        // Both have therefore already set `complete` by the time the command
+        // route asks, and re-deriving either here is what would quietly turn
+        // the team's most memorable failure — everything done and no card in
+        // hand — back into a win.
+        return (gameData as IBannedIsletGameData).complete;
     }
 }
 
@@ -385,6 +376,26 @@ export interface IBannedIsletFloodPhaseOutcome extends ICommandOutcome {
 
 function floodPhaseOutcome(turnOver: boolean, floodLog: IBannedIsletFloodLogEntry[]): IBannedIsletFloodPhaseOutcome {
     return { validMove: true, turnOver, floodLog };
+}
+
+/**
+ * Ends the game in §4.1's shared win — the only thing in this game that does,
+ * and only ever from a Helicopter Lift being played (BannedIsletPlayCard).
+ * §4.1's first three conditions are `isEscapeReady`; playing the card is the
+ * fourth, which is what makes the win an action taken rather than a state
+ * reached.
+ *
+ * A co-op result, so no single id can be the winner: finishGame reads
+ * 'teamwin' as one shared ending for the whole roster.
+ */
+function endInEscape(data: IBannedIsletGameData): void {
+    data.complete = true;
+    data.winner = '';
+    data.endReason = 'teamwin';
+    data.currentTurn = '';
+    data.gameState.history.unshift({
+        text: `All four treasures are off the island and the whole team is off ${tileName(PIER_TILE)} — they win!`,
+    });
 }
 
 /**
@@ -602,6 +613,32 @@ function resolveFloodPhase(data: IBannedIsletGameData, shuffleFlood: FloodShuffl
     return log;
 }
 
+/**
+ * The end of a turn the hand limit held open (§10, §16): once the hand is back
+ * at the limit the island gets its turn after all, so the phase goes back to
+ * 'actions' and Phase 3 runs in BannedIsletEndTurn's place.
+ *
+ * Two commands can bring a hand down — BannedIsletDiscard by letting cards go,
+ * and BannedIsletPlayCard by playing one of §10's specials instead of
+ * discarding it, which §10 calls "the only way Sandbags reliably reaches the
+ * board" — so both finish the turn through this, and the two cannot drift
+ * apart. Outbreak's maybeFinishDrawPhase is the same helper for the same pair.
+ *
+ * Does nothing outside the discard phase (a special played during the action
+ * phase ends nothing) and nothing while the hand is still over the limit (a
+ * player two cards over who plays one still owes a discard).
+ */
+function maybeFinishFloodPhase(
+    data: IBannedIsletGameData,
+    ps: IBannedIsletPlayerState,
+    shuffleFlood: FloodShuffler,
+): IBannedIsletFloodPhaseOutcome {
+    const gs = data.specificGameState;
+    if (gs.phase !== 'discard' || ps.hand.length > HAND_LIMIT) return floodPhaseOutcome(false, []);
+    gs.phase = 'actions';
+    return floodPhaseOutcome(true, resolveFloodPhase(data, shuffleFlood));
+}
+
 // ─── BannedIsletEndTurn ─────────────────────────────────────────────────────
 
 @serializable
@@ -755,7 +792,6 @@ export class BannedIsletDiscard implements IGameCommand {
 
         for (const card of chosen) ps.hand.splice(ps.hand.indexOf(card), 1);
         gs.treasureDiscard.push(...chosen);
-        gs.phase = 'actions';
         data.gameState.history.unshift(playerHistory(
             this.senderId,
             `discarded ${pluralize(chosen.length, 'card')} down to the hand limit`,
@@ -768,7 +804,150 @@ export class BannedIsletDiscard implements IGameCommand {
             () => this.recordedFloodShuffles,
             orders => { this.recordedFloodShuffles = orders; },
         );
-        return floodPhaseOutcome(true, resolveFloodPhase(data, shuffleFlood));
+        return maybeFinishFloodPhase(data, ps, shuffleFlood);
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  THE SPECIAL CARDS (§10, §21.6 PR 8)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// §10's two playable specials in one parameterised command — the fourth and
+// last of §21.4's "four command classes, not fifteen". Neither costs an action
+// (§8: special cards "are not actions and do not cost one"), so neither
+// touches `actionsLeft`, and §21.3 puts both on the holder's own turn: at any
+// point in their action phase, and during their own discard phase to duck the
+// hand limit, which §10 calls the only way Sandbags reliably reaches the
+// board. The command route already rejects anything from a user who isn't
+// `currentTurn`, so nothing here re-checks whose turn it is.
+//
+// This is also where the game is won. §4.1's fourth condition is a Helicopter
+// Lift actually played, which is what makes the win an action taken rather
+// than a state reached — see endInEscape, and CheckGameOver, which derives
+// nothing precisely so that the team can be one card short of escaping.
+
+/**
+ * §10 Sandbags: dry any one flooded tile on the island, free and from
+ * anywhere — the whole of what §21.3 left the card when async play took its
+ * timing away. A dry or sunk target is illegal rather than a wasted card
+ * (§16), which is exactly what `sandbagsTargets` listing only the flooded ones
+ * expresses.
+ */
+function applySandbags(gs: IBannedIsletSpecificGameState, target: number): string | null {
+    if (!sandbagsTargets(gs.positions).includes(target)) return null;
+
+    gs.positions[target].state = 'dry';
+    return `played Sandbags on ${tileName(gs.positions[target].tile)}, drying it back out`;
+}
+
+/**
+ * §10 Helicopter Lift: move any number of pawns from one tile to any other,
+ * free. `liftOrigin` owns "from one tile" — a passenger list spanning two of
+ * them is one helicopter short — and `flightTargets` owns "any other tile",
+ * which is the same reach as §12's Pilot flight because it is the same
+ * helicopter.
+ *
+ * An **empty passenger list is §4.1's escape call**: the lift played to leave
+ * the island rather than to cross it, which moves nobody because everybody is
+ * already standing on Beacon Pier. That is the one form of this card a reader
+ * of §10 alone would not predict, so it is recorded in §21.3 — and it is why
+ * `target` is -1 there rather than naming a tile the helicopter would fly to.
+ */
+function applyHelicopterLift(
+    gs: IBannedIsletSpecificGameState,
+    ps: IBannedIsletPlayerState,
+    userIds: string[],
+    target: number,
+): string | null {
+    if (userIds.length === 0) {
+        if (target >= 0) return null;
+        return `played Helicopter Lift, bringing the helicopter down onto ${tileName(gs.positions[ps.position].tile)}`;
+    }
+
+    const from = liftOrigin(pawnList(gs), userIds);
+    if (from === null) return null;
+    if (!flightTargets(gs.positions, from).includes(target)) return null;
+
+    for (const userId of userIds) playerState(gs, userId)!.position = target;
+
+    const tokens = userIds.map(userToken);
+    const flown = tokens.length === 1 ? tokens[0] : `${tokens.slice(0, -1).join(', ')} and ${tokens[tokens.length - 1]}`;
+    return `played Helicopter Lift, flying ${flown} from ${tileName(gs.positions[from].tile)} to ${tileName(gs.positions[target].tile)}`;
+}
+
+@serializable
+export class BannedIsletPlayCard implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    /** Which of §10's two playable specials — and it must be one the sender is actually holding. */
+    cardId: BannedIsletCardId | null = null;
+    /** Sandbags: the flooded tile to dry. Helicopter Lift: where the passengers land, or -1 for §4.1's escape call, which flies nobody anywhere. */
+    target: number = -1;
+    /** Helicopter Lift: whose pawns fly, all of them from one tile (§10). Empty for the escape call, and unread by Sandbags. */
+    userIds: string[] = [];
+    /**
+     * Playing a special during the discard phase can close the turn the hand
+     * limit held open, and closing it runs Phase 3 — which can empty the flood
+     * deck and reshuffle its discard (§11). Same field, same name and same
+     * reason as BannedIsletEndTurn's: stripped from live requests by
+     * stripRecordedRandomness, supplied on replay.
+     */
+    recordedFloodShuffles?: BannedIsletTileId[][];
+    readonly className = 'BannedIsletPlayCard';
+
+    myString() {
+        return this.cardId ? `played ${cardName(this.cardId)}` : 'played a special card';
+    }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const data = gameData as IBannedIsletGameData;
+        const gs = data.specificGameState;
+
+        const ps = playerState(gs, this.senderId);
+        if (!ps) return INVALID;
+        // Both of the game's phases accept a special (§21.3), so — unlike
+        // every other command here — there is no phase to refuse.
+        const card = this.cardId;
+        // Held, and one of the two that can be played at all: a treasure card
+        // is collected rather than played (§8), and Waters Rise! is never in a
+        // hand to begin with (§10).
+        if (!card || !isPlayableCard(card) || !ps.hand.includes(card)) return INVALID;
+
+        const passengers = Array.isArray(this.userIds) ? this.userIds : [];
+        const historyLine = card === 'sandbags'
+            ? applySandbags(gs, this.target)
+            : applyHelicopterLift(gs, ps, passengers, this.target);
+        // Validated before it is spent: an illegal target leaves the card in
+        // the hand rather than burning the team's escape on a no-op.
+        if (historyLine === null) return INVALID;
+
+        ps.hand.splice(ps.hand.indexOf(card), 1);
+        gs.treasureDiscard.push(card);
+        data.gameState.history.unshift(playerHistory(this.senderId, historyLine));
+
+        // §4.1 and §16: all four conditions are checked at the moment the card
+        // is played, and the card is spent either way. Checked *after* the lift
+        // has moved whoever it moved, so a lift that carries the last pawn home
+        // wins on the spot rather than needing a second one.
+        if (card === 'helicopterLift' && isEscapeReady(gs.positions, gs.treasures, pawnList(gs).map(p => p.position))) {
+            endInEscape(data);
+            return floodPhaseOutcome(true, []);
+        }
+
+        // Played in the action phase this ends nothing; played to duck the hand
+        // limit it is what finally lets the island take its turn (§10).
+        const shuffleFlood = recordedShuffler<BannedIsletTileId>(
+            () => this.recordedFloodShuffles,
+            orders => { this.recordedFloodShuffles = orders; },
+        );
+        return maybeFinishFloodPhase(data, ps, shuffleFlood);
     }
 
     Undo(gameData: IGameData): void {

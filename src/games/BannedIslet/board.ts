@@ -252,6 +252,21 @@ export function isTreasureCard(card: BannedIsletCardId): card is BannedIsletTrea
     return TREASURE_IDS.some(id => id === card);
 }
 
+/**
+ * §10's two playable specials — the pair BannedIsletPlayCard covers (§21.4),
+ * and the only cards in the game that are held *and* played rather than
+ * collected. Waters Rise! is a special too and is deliberately not one of
+ * these: it is never held (§10), resolving the instant it is drawn, so there
+ * is no moment at which a player could play it.
+ */
+export type BannedIsletPlayableCardId = 'helicopterLift' | 'sandbags';
+
+export const PLAYABLE_CARD_IDS: readonly BannedIsletPlayableCardId[] = ['helicopterLift', 'sandbags'];
+
+export function isPlayableCard(card: BannedIsletCardId): card is BannedIsletPlayableCardId {
+    return PLAYABLE_CARD_IDS.some(id => id === card);
+}
+
 /** What to call a card to a player — a treasure's own name, or the special's. */
 export function cardName(card: BannedIsletCardId): string {
     return isTreasureCard(card) ? treasureName(card) : SPECIAL_CARD_NAMES[card];

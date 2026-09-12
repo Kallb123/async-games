@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildTimeline } from "@/utils/games/replay";
 import { runCommand } from "@/utils/games/commandPipeline";
-import { BannedIsletAction, BannedIsletDiscard, BannedIsletEndTurn, BannedIsletGameType } from "./BannedIsletLogic";
+import { BannedIsletAction, BannedIsletDiscard, BannedIsletEndTurn, BannedIsletGameType, BannedIsletPlayCard } from "./BannedIsletLogic";
 import {
     IBannedIsletGameData,
     buildInitialBannedIsletState,
     cloneBannedIsletState,
     gameStateToModel,
 } from "./BannedIsletModels";
-import { HAND_LIMIT, isTreasureCard, roleDef, BannedIsletCardId, BannedIsletDifficulty, BannedIsletRoleId } from "./board";
+import { HAND_LIMIT, isPlayableCard, isTreasureCard, roleDef, BannedIsletCardId, BannedIsletDifficulty, BannedIsletRoleId } from "./board";
 import {
     forcedDiscard,
     giveCardTargets,
@@ -16,7 +16,8 @@ import {
     moveTargets,
     navigatorMoveTargets,
     pilotFlightAvailable,
-    pilotFlightTargets,
+    flightTargets,
+    sandbagsTargets,
     shoreUpTargets,
 } from "./rules";
 
@@ -93,21 +94,18 @@ function makeGame(roles?: BannedIsletRoleId[], difficulty: BannedIsletDifficulty
     } as unknown as IBannedIsletGameData;
 }
 
-function send(command: BannedIsletAction | BannedIsletEndTurn | BannedIsletDiscard, senderId: string) {
+function send(command: BannedIsletAction | BannedIsletEndTurn | BannedIsletDiscard | BannedIsletPlayCard, senderId: string) {
     command.senderId = senderId;
     command.senderUsername = NAMES[senderId as keyof typeof NAMES] ?? senderId;
     return command;
 }
 
 /**
- * A table that passes every turn, played through the real command pipeline.
- * Nothing here is good play — the point is that Legendary's rate of four
- * drowns them in a handful of turns while drawing the whole treasure deck,
- * which is what puts a Waters Rise! shuffle, a flood-deck reshuffle and a
- * treasure-deck reshuffle into one command log.
+ * A table that passes every turn, played through the real command pipeline —
+ * discarding when the draw demands it, and playing one of §10's specials
+ * instead whenever the hand holds one.
  */
-async function playPassiveGame(): Promise<IBannedIsletGameData> {
-    const game = makeGame();
+async function playOut(game: IBannedIsletGameData): Promise<IBannedIsletGameData> {
     const gameType = new BannedIsletGameType();
 
     for (let turn = 0; turn < 200 && !game.complete; turn++) {
@@ -115,6 +113,13 @@ async function playPassiveGame(): Promise<IBannedIsletGameData> {
         const ps = game.specificGameState.players.get(userId)!;
 
         if (game.specificGameState.phase === 'discard') {
+            // §10: a special is played rather than discarded to get under the
+            // limit wherever one is held — which is the path that lets
+            // BannedIsletPlayCard close a turn and run Phase 3 itself,
+            // recorded flood shuffles and all. Anything else is discarded.
+            const special = specialPlay(game.specificGameState, userId, ps);
+            if (special && (await runCommand(game, gameType, send(special, userId))).outcome.validMove) continue;
+
             const command = new BannedIsletDiscard();
             command.cardIds = ps.hand.slice(0, ps.hand.length - HAND_LIMIT);
             await runCommand(game, gameType, send(command, userId));
@@ -128,6 +133,48 @@ async function playPassiveGame(): Promise<IBannedIsletGameData> {
         await runCommand(game, gameType, send(new BannedIsletEndTurn(), userId));
     }
     return game;
+}
+
+/**
+ * Nothing here is good play — the point is that Legendary's rate of four
+ * drowns the table in a handful of turns while drawing the whole treasure
+ * deck, which is what puts a Waters Rise! shuffle, a flood-deck reshuffle and
+ * a treasure-deck reshuffle into one command log.
+ */
+function playPassiveGame(): Promise<IBannedIsletGameData> {
+    return playOut(makeGame());
+}
+
+/**
+ * The same table, with the opening deal stacked so that the first seat is
+ * certain to end its turn one card over the hand limit holding Sandbags — and
+ * so certain to duck the limit by playing it (§10). That is the one path on
+ * which BannedIsletPlayCard runs Phase 3 itself rather than ending nothing,
+ * and the passive run above only reaches it when the shuffle happens to oblige.
+ *
+ * Every card is moved rather than conjured, so §10's 28 still add up, and the
+ * starting snapshot is taken after the stacking rather than before — it is the
+ * state replay rebuilds from.
+ */
+function playSpecialGame(): Promise<IBannedIsletGameData> {
+    const game = makeGame(undefined, 'novice');
+    const gs = game.specificGameState;
+    const ps = gs.players.get(PLAYERS[0])!;
+
+    const take = (matches: (card: BannedIsletCardId) => boolean): BannedIsletCardId[] => {
+        const index = gs.treasureDeck.findIndex(matches);
+        return index < 0 ? [] : gs.treasureDeck.splice(index, 1);
+    };
+
+    gs.treasureDeck.push(...ps.hand);
+    ps.hand = [...take(card => card === 'sandbags')];
+    while (ps.hand.length < HAND_LIMIT - 1) ps.hand.push(...take(isTreasureCard));
+    // Two ordinary cards on top, so the draw of §7's Phase 2 really does add
+    // two to that hand — a Waters Rise! would resolve instead of joining it.
+    gs.treasureDeck.unshift(...take(isTreasureCard), ...take(isTreasureCard));
+    game.initialSpecificGameState = cloneBannedIsletState(gs, [...PLAYERS]);
+
+    return playOut(game);
 }
 
 /**
@@ -180,6 +227,35 @@ async function playRoleGame(roles: BannedIsletRoleId[]): Promise<IBannedIsletGam
     return game;
 }
 
+/**
+ * One of §10's specials out of this hand, aimed at the first legal target — or
+ * null when the hand holds none or the island offers nowhere to put it. Never
+ * the escape call, which would end the game rather than replay a card.
+ */
+function specialPlay(
+    gs: IBannedIsletGameData['specificGameState'],
+    userId: string,
+    ps: { position: number; hand: BannedIsletCardId[] },
+): BannedIsletPlayCard | null {
+    const card = ps.hand.find(isPlayableCard);
+    if (!card) return null;
+
+    const command = new BannedIsletPlayCard();
+    command.cardId = card;
+    if (card === 'sandbags') {
+        const targets = sandbagsTargets(gs.positions);
+        if (targets.length === 0) return null;
+        command.target = targets[0];
+        return command;
+    }
+
+    const reach = flightTargets(gs.positions, ps.position);
+    if (reach.length === 0) return null;
+    command.userIds = [userId];
+    command.target = reach[0];
+    return command;
+}
+
 /** The one action this seat's role gives it, aimed at the first legal target — or null when the island offers none this turn. */
 function roleAction(
     gs: IBannedIsletGameData['specificGameState'],
@@ -191,7 +267,7 @@ function roleAction(
 
     switch (ps.role) {
         case 'pilot': {
-            const reach = pilotFlightTargets(gs.positions, ps.position);
+            const reach = flightTargets(gs.positions, ps.position);
             if (!pilotFlightAvailable('pilot', ps.pilotFlightUsed) || reach.length === 0) return null;
             action.kind = 'pilotFlight';
             action.target = reach[0];
@@ -262,6 +338,20 @@ describe("Banned Islet replay", () => {
         const timeline = await noRandomness(() => buildTimeline(game, userIdNameMap));
 
         // One snapshot for the opening island, then one per accepted command.
+        expect(timeline.snapshots.length).toBe(game.gameState.commandHistory.length + 1);
+        expect(timeline.snapshots[timeline.currentIndex].specificGameState)
+            .toEqual(gameStateToModel(game.specificGameState, userIdNameMap, null));
+    });
+
+    it("replays a turn closed by a special card played to duck the hand limit (§10)", async () => {
+        const game = await playSpecialGame();
+
+        const played = game.gameState.commandHistory.filter(c => c.className === 'BannedIsletPlayCard');
+        expect(played.length).toBeGreaterThan(0);
+
+        const userIdNameMap = { ...NAMES };
+        const timeline = await noRandomness(() => buildTimeline(game, userIdNameMap));
+
         expect(timeline.snapshots.length).toBe(game.gameState.commandHistory.length + 1);
         expect(timeline.snapshots[timeline.currentIndex].specificGameState)
             .toEqual(gameStateToModel(game.specificGameState, userIdNameMap, null));
