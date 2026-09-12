@@ -350,10 +350,11 @@ A move of *N* rows is **exactly *N* steps** of the (r → r+1, lane ±1) rule in
 
 **You choose a destination, not a path.** The game computes every space
 reachable in exactly *N* steps without passing through an occupied space, marks
-them on the board, and you tap one. The path itself is then derived, and it only
-matters for two things — which oil slicks you crossed (§14) and which corners
-you crossed (§10) — both of which the derivation resolves in the player's
-favour where it has a choice (see §14).
+them on the board, and you tap one. The path itself is then derived, and it
+matters for exactly one thing: **which oil slicks you crossed** (§14), which
+the derivation minimises. Which *corners* you crossed is not a choice at all —
+a corner is a band of rows, and every path of exactly *N* steps crosses exactly
+the same rows — so there is one objective here, not two, and nothing to search.
 
 This is the single biggest concession to asynchronous play in the design, and
 it costs less than it looks. In a live game a driver picks their line row by row
@@ -391,6 +392,28 @@ you must **end inside it** before you are allowed past its last row.
 
 **Overshoot cost: 1 tyre per row past the corner's last row.** A car that blows
 through Gravel Bend (last row 51) and lands on row 55 pays 4 tyres.
+
+**Overshoot is counted along the path, not by subtracting row numbers.** Rows
+wrap at the finish line, so a car on row 60 that moves 20 ends on row 2 of the
+next lap having crossed The Kink, and `2 − 65` is not the answer. Every corner
+crossing — and the finish line itself — is an event resolved **in path order**,
+which is also what keeps §13's "nothing further on the path is resolved" from
+moving a spun car backwards over a line it had already crossed.
+
+**An overshoot you could not have avoided is free.** If, when your turn begins,
+no legal move can keep you inside the corner — you are standing on its last row,
+and §9 forbids standing still — then the corner's remaining stops are **waived**
+and leaving costs nothing. You have taken it as slowly as the road allows.
+
+Without that clause the game has a hole at the one place every car visits every
+lap: a car that ends its first hairpin stop on row 14 has banked one stop of
+two, cannot reach row 14 or lower on its next turn, and is charged for a corner
+it was never given the chance to satisfy — with no decision anywhere in the
+sequence, and a guaranteed spin once its tyres are gone. Landing deep in a
+corner is meant to be *lucky*, not a trap. It is a low-probability break rather
+than an exploit: reaching a 2-stop hairpin's last row exactly takes the right
+roll, and the rolls either side of it either bank an ordinary stop or overshoot
+in the ordinary, charged way.
 
 **If you cannot pay the full cost, you spin** (§13). You do not pay what you can
 and spin for the rest — you pay nothing, the car is placed on the corner's last
@@ -454,7 +477,12 @@ every rule a normal move follows.
   move did. **A tow can push you out of a corner you still owe stops to**, and
   the overshoot is charged in full.
 - **One tow per turn.** Ending the tow behind a third car does not earn another.
-- A tow that is blocked short takes the same 1 tyre a blocked move does.
+- A tow that is blocked short takes the same 1 tyre a blocked move does. A tow
+  with **nothing reachable at all** — both lanes of the Esses occupied one row
+  ahead — is simply **not offered**, rather than offered and then punished. The
+  check belongs in `slipstreamOffered`, not in the command that accepts it: a
+  player should never be able to accept an offer that costs them for accepting
+  it.
 
 Slipstream is the game's rubber band, and it is pointed the right way round: it
 only ever helps the car behind, it is strongest where the field is closest, and
@@ -521,9 +549,17 @@ that destination crosses it. The board marks those destinations, so choosing to
 risk oil is a choice the player makes knowingly rather than one the app makes
 for them.
 
+**One slick to a space.** An oil spin rests the car on the slick's own space,
+which would otherwise lay a second slick on top of the first — two d6 checks for
+one patch of oil, and two of the twelve slots spent on one hazard. A slick laid
+where one already lies **refreshes** the existing one's `laidOnRound` instead.
+
 **Slicks fade.** A slick laid during round *r* is swept at the end of round
 *r + 1*, so it threatens roughly one full round of following traffic. **At most
-12 slicks exist at once**; laying a thirteenth sweeps the oldest.
+12 slicks exist at once**; laying a thirteenth sweeps the oldest, and — since
+six drivers can lay twelve in a single round, all sharing one `laidOnRound` —
+"oldest" means lowest `laidOnRound`, ties broken by the order they were laid.
+The list is therefore kept in laying order and swept from the front.
 
 ---
 
@@ -635,6 +671,10 @@ like a cliff.
 | Blocked short *and* the short landing is an overshoot | Both apply: 1 tyre for the block, plus 1 per row past the corner |
 | Blocked short with 0 tyres | The block's scuff is a debt that cannot be paid, and an unpayable *block* does not spin — only an unpayable overshoot does. The car stops and takes nothing |
 | Boxed in inside a corner owing stops | Staying put ends the turn inside the corner, so it **banks a stop** |
+| On a corner's last row, still owing a stop | No legal move keeps you inside it, so the remaining stops are waived and leaving is free (§10). The one overshoot in the game that costs nothing |
+| A tow with no reachable space | Not offered at all (§12), rather than offered and charged |
+| A spun car is 1–2 rows behind another | A spin ends the turn outright. No tow is offered, to a car that has just been told it is missing its next turn |
+| Two slicks on one space | Impossible: the second refreshes the first (§14) |
 | A car is lapped | Nothing special happens. A lapped car blocks, tows and corners exactly as any other; §4.2 classifies by laps first, so it is simply behind |
 | The last free lane of a corner is taken when a spin needs it | The spin resolves onto the last *available* space searching backwards along the corner; a corner is never fully occupied by fewer than six cars |
 | A driver is removed from the game mid-race | The game ends for everybody as abandoned — the engine's existing behaviour, not a racing rule |
@@ -712,19 +752,18 @@ contract with a better shape.
 The circuit is 78 rows long. Fitted to a 400px column, a row is about five
 pixels, which is fine for *where is everybody* and useless for *where can I go*.
 
-Two surfaces, one renderer:
+**One surface, and it is the one three other games already use.** The full
+circuit inside `ag-board-frame` with `BoardZoom` over it, at the 220–260% the
+other boards zoom to, with only the legal destinations tappable. Outbreak, World
+Domination and Settlements & Cities all solve "board too big for a phone" that
+way and none of them has ever needed a second cropped copy.
 
-- **The map** — the full circuit inside `ag-board-frame`, with `BoardZoom` for
-  the pinch-and-pan pass over it. This is context: the field, the gaps, the
-  corners, the oil.
-- **The strip** — the ±20 rows around the viewer's own car, drawn large, with
-  the legal destinations highlighted and tappable. This is where every turn is
-  actually taken.
-
-They must be **one space renderer used twice at two scales**, not two
-components. A second copy of the space markup is the defect AGENTS.md names
-first, and the strip exists precisely because the same drawing needs to be
-bigger — which is a prop, not a component.
+If a playtest proves that 78 rows at 260% still cannot be tapped reliably, the
+answer is **a `window?: { fromRow, toRow }` prop on the same board component**
+that narrows the `viewBox` to the rows around the viewer's car and drops the
+art — same component, same file, same markup, a different rectangle. It is not
+a second component, and it does not get built before a playtest says it is
+needed.
 
 ---
 
@@ -742,7 +781,12 @@ Ordered by what each one buys against what it costs.
    racing the host's spec. The async cost is what kills it today: a setup phase
    is a whole extra round of turns before anything moves. It becomes free the
    moment it is folded into the *first* turn's command — choose your spec and
-   your launch gear in one tap — which is where it should be built.
+   your launch gear in one tap — which is where it should be built. **That
+   shape is also what keeps §2's fourth pillar true.** A separate setup phase
+   is a simultaneous commit — every driver picks before anyone moves — which is
+   hidden state, sitting under a response builder that ignores its viewer.
+   Folded into the first turn it is revealed in turn order like every other
+   choice in this game, and there is nothing to redact.
 3. **Weather.** One switch that narrows every gear band by two at the top: a
    wet race is the same circuit driven a gear lower. Cheap to implement,
    changes every corner, and needs no new art beyond a wet variant of the board.
@@ -823,8 +867,8 @@ PR shape deliberately.
 | Running a command identically live, on replay and on timeout | `runCommand` (`src/utils/games/commandPipeline.ts`) |
 | Keeping a client from choosing its own dice | `stripRecordedRandomness` on the command route, which deletes every `recorded…` property off an incoming command |
 | Car colours | `playerColourForId()` (`src/utils/ui/playerColours.ts`) — six colours against a six-car grid, which is the exact fit §19.1 depends on |
-| The dice on screen | `Dice` / `DieFace` (`src/components/ui/`), which already print anything over six sides as a numeral — so the d8, d12, d20 and d30 of §8.1 need no new component |
-| The roll card | `RollReadout` — the dark card holding the dice, the total and a line naming what the roll moved. "4th · 9 · into Gravel Bend" is precisely its `headline`/`sub` shape |
+| The dice on screen | `Dice` / `DieFace` (`src/components/ui/`), which already print anything over six sides as a numeral — so the d8, d12, d20 and d30 of §8.1 need no new component. `Dice` forwards a `sides[]`; `RollReadout` does not yet (§23.2 gap 3) |
+| The roll card | `RollReadout` — the dark card holding the dice, the total and a line naming what the roll moved. "4th · 9 · into Gravel Bend" is precisely its `headline`/`sub` shape. It needs one two-line change first; see §23.2 gap 3 |
 | Board zoom and pan | `BoardZoom` inside `ag-board-frame` |
 | Per-turn boards for the recap | `buildTimeline()`, given a replay adapter and recorded RNG |
 | "It's your turn" push, turn timers, surrender, rematch, chat | The command pipeline, the turntimer cron, `/api/game/end`, `GameFinishBanner` |
@@ -840,15 +884,29 @@ Three non-uses worth stating so nobody reaches for them:
   Fires Out and Banned Islet both compute their own grid neighbours for the same
   reason; this is the third.
 - **`ClickableMapNode` and `MapEdges` are not how the spaces are drawn.** Those
-  are for a few dozen named nodes on an illustrated map with a drawn edge layer.
-  A circuit is 214 unnamed lozenges and its edges are implied by position and
-  never drawn; `MapEdges` would have nothing to render and `ClickableMapNode`'s
-  three rings and `<title>` per space would cost 214 of each to express a
-  legal/illegal state that one class on a `<rect>` expresses. The nodes here are
-  Snakes & Ladders' cells drawn over art, not Outbreak's cities.
-- **`src/utils/games/Cards.ts` has nothing to offer a game with no cards.**
-  Stated only because it is the first thing a reader scanning `utils/games/`
-  reaches for.
+  are for a few dozen *named* nodes on an illustrated map with a drawn edge
+  layer. A circuit is 214 unnamed lozenges whose edges are implied by position
+  and never drawn, so `MapEdges` would have nothing to render. And a space's
+  legal/illegal state is one class on a `<rect>`, where `ClickableMapNode` would
+  add a `<title>` per space — 214 of them — and ring each lozenge with a circle
+  (`r={radius + 4.5}`), which is the wrong shape for it. The rings themselves
+  are conditional and cost nothing when unset; the tooltip and the geometry are
+  the real reasons, and it is worth saying so precisely rather than inflating
+  the case.
+
+  The precedent this board follows is **`OutbreakBoard.tsx`** — SVG nodes
+  positioned over an `<image>` inside `BoardZoom`. *Not* Snakes & Ladders, which
+  is a CSS grid of `.ag-sl-cell` divs with an SVG layer over the top, no art
+  image and no zoom.
+
+**And one *use* that is easy to miss, which AGENTS.md makes mandatory.** The
+three corner names printed on the board go through **`MapLabelLayer`**, never a
+bare `MapLabel` each: it lays every name out in one pass so none lands on
+another name, on a space, on a marker beside one, or off the map. Its
+`obstacles` are the corner-stop pip rows of §19 and the cars, both of which
+move. Baking the names into the PNG instead is the alternative, and it is the
+expensive one — §20's fourth hook re-dresses the circuit with different names,
+which a baked name turns into a second board render.
 
 ### 23.2 What the engine does not give us yet
 
@@ -858,12 +916,21 @@ the order at the top of each round from track position (§15). Nothing in the
 engine forbids it — `CheckEndTurn` sets `currentTurn` to whatever the game says
 — but nothing in the engine helps either, so the round bookkeeping
 (`roundOrder`, `roundIndex`, `round`) is game state and the recompute is a pure
-function in `rules.ts`. **The one engine-shaped consequence** is that a game's
-`turnOrder` is what several shared surfaces read for "who is playing" — the
-scoreboard, the recap's player ordering, `playerColourForId`. Those must keep
-reading the **join order**, which never changes, and only the *turn* must follow
-the race. Colours that reshuffle when a car overtakes would be a bug in six
-places at once.
+function in `rules.ts`. **The one engine-shaped consequence** is that the race order must not be
+written where the shared surfaces look. `playerColourForId(userId, userIdList)`
+keys on `gameData.userIdList` — the roster, in join order, which also backs
+`currentTurnIndex` — and `gameState.turnOrder` is forwarded on every response
+and read by board screens for seating. **Both must stay in join order.** The
+race order is `roundOrder` inside `specificGameState` and nowhere else. Sorting
+either shared field by track position would recolour every car the moment
+somebody overtook, in the scoreboard, the board, the log and the recap at once.
+
+Two shared surfaces also **write** `currentTurn` along `turnOrder`, neither of
+them game-aware: `POST /api/game/taketurn`, and the turn-timer cron's
+`noAdapter` branch. Race Cars cannot stop either, so it has to survive both —
+which is what the per-player `phase`/`roll` of 23.4 and the
+`roundOrder[roundIndex]` guard are for. Any game whose turn order differs from
+its seating order inherits this, and Race Cars is the first.
 
 **2. `GameResultEventIcon` is a closed union.** It is
 `'landmark' | 'explosion' | 'rescue' | 'epidemic' | 'sinking'` in
@@ -873,11 +940,31 @@ marker can be recoloured per chart line. A spin marker needs one name — `'spin
 was considered and rejected: a chart legend that calls a spin an explosion
 misreads the race, and the documented cost of a new one is one line each.
 
-**3. Nothing else.** Race Cars needs no new sharing, no new redaction, no new
+**3. `RollReadout` cannot say which die was thrown.** `DieFace` takes `sides`
+and prints anything over six as a numeral, and `Dice` forwards a `sides[]` — but
+`RollReadout` calls `<Dice values={values} size={40} rolling={rolling} />` and
+passes no `sides`. So the card that exists to tell a driver *which die they bet
+on* would draw every gear-1, gear-2 and low gear-3 roll as a pipped d6, which is
+§2's first pillar rendered wrong. The fix is `sides?: number[]` on `RollReadout`,
+forwarded to `Dice` — two lines in a shared component, not a bespoke Race Cars
+dice-and-total card, which is what PR 4 would otherwise reach for on discovering
+this.
+
+**4. There is no shared number stepper.** The brake spend of §11 is a
+−/value/+ control, and `WorldDominationActions.tsx` already has one: a local
+`Stepper` with four call sites, inline-styled with hard-coded `width: 40` and
+`font: '800 18px'`. Writing a second one in `RaceCarsActions.tsx` is the
+copy-paste AGENTS.md names as a defect, and a second copy is the signal to
+extract the first. PR 4 extracts `src/components/ui/Stepper.tsx` with an
+`ag-stepper` class pair in `ag-theme.css` (which retires World Domination's
+inline magic numbers for tokens on the way past), repoints those four call
+sites, and calls it.
+
+**5. Nothing else.** Race Cars needs no new sharing, no new redaction, no new
 ending kind: it is a single-winner competitive game, which is the case
 `finishGame` was built for and the case `GameEndReason: 'win'` already covers.
-This is the shortest gap list of any game added since Train Time, and it is
-worth saying out loud because it is why the PR list below is mostly game code.
+Gaps 3 and 4 are both two-line changes to shared components, which is why the
+PR list below is still mostly game code.
 
 ### 23.3 Deviations from this document
 
@@ -930,9 +1017,22 @@ interface RaceCarsTrack {
   maxGear: 1 | 2 | 3 | 4 | 5 | 6,     // 5 at Ashcombe (§8.3)
   art: { href: string, viewBox: { width: number, height: number } },
   // Where each space is drawn on the art, and which way the car faces there.
+  // Emitted by the generator of §23.6 and read through a Map built once in
+  // module scope — a `.find()` per space is ~92,000 comparisons a render, on
+  // every poll.
   geometry: { row: number, lane: number, x: number, y: number, heading: number }[],
 }
 ```
+
+**Two invariants belong on the track data rather than in Ashcombe's geometry,
+and `board.test.ts` asserts both.** §18 rules that a spin searches backwards
+along its corner for a free space, which is only total if **every corner holds
+at least `MAX_PLAYERS` cars** — true of Ashcombe's three corners of 10–12
+spaces, and not true of §20's proposed Old Harbour, whose "narrow two-lane
+street circuit" could hold four cars in a corner and seat six drivers. And a
+corner whose `from` is row 0 has nothing behind it to search. Assert
+`(to − from + 1) × laneWidth >= MAX_PLAYERS` and `from > 0` for every corner, so
+the second circuit fails a test rather than a race.
 
 `specificGameState`:
 
@@ -945,8 +1045,6 @@ interface RaceCarsTrack {
   round: number,
   roundOrder: string[],        // userIds, leader first — fixed for this round
   roundIndex: number,          // whose turn within roundOrder
-  phase: 'shift' | 'move' | 'slipstream',
-  roll: number | null,         // this turn's rolled distance, once shifted
   slicks: { row: number, lane: number, laidOnRound: number }[],   // max 12
   players: Map<userId, {
       raceNumber: number,      // grid slot, 1-6 — the second identity channel (§19)
@@ -955,28 +1053,75 @@ interface RaceCarsTrack {
       lapsCompleted: number,
       gear: 0 | 1 | 2 | 3 | 4 | 5 | 6,
       tyres: number, brakes: number, gearbox: number,
-      cornerId: string | null, // the corner the car is standing in
-      cornerStops: number,     // stops banked in it
+      cornerStops: number,     // stops banked in the corner it is standing in
       skipNextTurn: boolean,   // set by a spin (§13)
-      finishedPosition: number | null,
+      finishedPosition: number | null,   // written once, for everyone, at the ending
+      // The turn-in-progress, per player and never global (see below).
+      phase: 'shift' | 'move' | 'slipstream',
+      roll: number | null,     // this turn's rolled distance, once shifted
+      brakeSpent: number,      // this turn, for §14's 3+ slick source
   }>,
 }
 ```
 
 **One map of per-player subdocuments, not parallel maps** — the shape every
-multiplayer game here uses, giving `gameStateToModel` one loop and one
-`markModified` surface. `slicks` is the only plain array, so it is the only
-thing needing `markModified('specificGameState')` care; the per-player
-subdocument mutations track themselves.
+multiplayer game here uses, giving `gameStateToModel` one loop.
+
+**Declare the whole thing as a typed schema, and then `markModified` is needed
+nowhere.** A declared array path tracks its own `push`/`splice` — Settlements &
+Cities has a test asserting exactly that — and so do subdocument mutations. The
+question that decides this is not "which field is a plain array" but "is
+`specificGameState` typed or `Schema.Types.Mixed`": typed, and nothing needs
+marking; `Mixed`, and **every** field does, at which point remembering it for
+`slicks` alone is a false sense of safety. Build it on the sub-schema factory
+`makeBannedIsletStateSchemaDef` demonstrates, and carry SAC's test across to
+prove it.
 
 **Position is `(row, lane)`, never a space id.** Every rule in §§9–14 is
 arithmetic on the row, and a space id would be resolved back to a row on every
 single legality check.
 
+**Which corner a car is in is derived, not stored**, by the same argument one
+paragraph later. It is `cornerAt(track, row)` — a scan of three bands — and
+storing it beside `row` is a second source of truth that a move can forget to
+update, with a bug that stays invisible until a car banks a stop in a corner it
+has already left. The stop-reset of §10 needs only
+`cornerAt(oldRow) !== cornerAt(newRow)`, and `resolveArrival` holds both rows.
+For the same reason **`phase` is the authority and `roll` follows it**, not the
+other way round: `phase === 'shift'` and `roll === null` are the same fact, and
+only one of them can be the one `CheckEndTurn` maintains.
+
+**`phase` and `roll` live on the player, not on the game.** They look like
+game-level fields — only one driver is mid-turn at a time — and as game-level
+fields they are a security bug and a deadlock waiting together:
+
+- `POST /api/game/taketurn` advances `currentTurn` along `gameState.turnOrder`
+  for *any* game, with no game-type awareness and without running
+  `CheckEndTurn`. A driver who shifts, sees a 17 they cannot afford, and then
+  calls that route instead of moving gets a **free skip on a bad roll** — the
+  one thing §9 forbids — and leaves a global `roll: 17` and `phase: 'move'`
+  behind for the next driver to spend on *their own* car.
+- The turn-timer cron's `noAdapter` branch does the same thing, which is
+  precisely the state Race Cars is in between PR 3 and PR 6.
+- And a global `phase` that `CheckEndTurn` forgets to reset locks out every
+  driver after the first. That is not hypothetical: `turnTimeout.ts` records
+  this repo shipping the identical bug on Banned Islet's `actionsLeft`.
+
+Owned by the player, a stale roll is simply their own stale roll: it can never
+be spent by somebody else, and each driver's `phase` resets to `'shift'` when
+their own turn begins.
+
 **`round` / `roundOrder` / `roundIndex` are persisted rather than derived.**
 The order is a *fixed* fact about a round (§15), so deriving it from live
 positions mid-round would reorder the drivers behind whoever just moved. It is
-recomputed in exactly one place — `CheckEndTurn`, when `roundIndex` wraps.
+recomputed in exactly one place — `CheckEndTurn`, when `roundIndex` wraps — and
+it is **rebuilt whole, at index 0, never spliced mid-round**. A splice leaves
+`roundIndex` pointing past the end, `currentTurn` becomes `undefined`, and the
+cron then banks a missed turn against a phantom player. The recompute must also
+**snapshot the previous order before sorting**: §15's third tie-break reads the
+array being sorted, and an in-place `sort` whose comparator reads a half-permuted
+array is an inconsistent comparator — which is reached at every corner, because
+bunching the field into equal rows is exactly what corners are for.
 
 Three command classes, not nine:
 
@@ -984,13 +1129,47 @@ Three command classes, not nine:
 |---|---|
 | `RaceCarsShift { gear, recordedRoll? }` | Validates the shift against §8.2, pays gearbox, rolls the gear's die. `turnOver: false` |
 | `RaceCarsMove { row, lane, brake, recordedOilRolls? }` | Spends brakes, walks the derived path, resolves corners, overshoot, blocking, spins and oil. `turnOver: false` only if a tow is on offer |
-| `RaceCarsSlipstream { row, lane, decline, recordedOilRolls? }` | Takes or declines the tow. Always ends the turn |
+| `RaceCarsSlipstream { tow: { row, lane } \| null, recordedOilRolls? }` | Takes the tow, or declines it with `null`. Always ends the turn |
 
 **`RaceCarsShift` is deliberately separate from `RaceCarsMove`.** They could be
 one command carrying both the gear and the destination — and they must not be,
 because §7's whole design is that *the number is known before the destination is
 chosen*. One command would mean the client either chose blind or rolled locally,
-and a client that rolls locally is a client that chooses its own dice.
+and a client that rolls locally is a client that chooses its own dice. The split
+buys a second thing worth not losing later: because the die is thrown
+server-side inside `Shift` and revealed in the same breath, there is never a
+moment when a resolved roll exists that its owner has not been told, and never
+an unspent roll sitting in state.
+
+**`RaceCarsSlipstream` owns no rule of its own.** §12 says the tow is "a move,
+not a bonus", and the command has to mean that literally: its `Execute` is a
+call into the same `derivePath` and `resolveArrival` that `RaceCarsMove` uses,
+with the distance fixed at 3, and it must not re-derive corner handling, oil
+checks or blocking a second time. If it grows a second copy of any of that, the
+two commands should be collapsed into one that reads `phase` for its distance —
+which is the version to prefer the moment the tow's `Execute` is longer than a
+few lines. It stays separate today only because the log, the recap and the
+timeout adapter all read a tow as its own event, and a distinct class says that
+without a discriminator field.
+
+The `tow: { row, lane } | null` shape is deliberate too: a `decline` flag beside
+`row`/`lane` means a declined tow posts coordinates that mean nothing, and a
+command whose fields can be meaningless is a command whose validation has a case
+nobody writes.
+
+**What refuses a command.** Five of the six fields on the three commands are
+attacker-supplied, and a plan that says what each command *does* without saying
+what makes it say *no* is a plan that ships the no's late. Every `Execute`
+opens with all of these:
+
+| Guard | Refuses |
+|---|---|
+| `userId === roundOrder[roundIndex]` | A driver acting out of race order — `currentTurn` alone is not proof, because `taketurn` and the cron's fallback both move it along `turnOrder` without touching `roundIndex` |
+| `ps.phase === 'shift' \| 'move' \| 'slipstream'` as the command requires, and `RaceCarsShift` additionally `ps.roll === null` | **Re-rolling the dice.** `RaceCarsShift` returns `turnOver: false`, so `currentTurn` never moves: without this guard a driver re-sends the same body until the d20 comes up 20, and every gate on the command route still passes |
+| `Number.isInteger(brake) && brake >= 0 && brake <= ps.brakes && brake <= ps.roll - 1` | A negative brake (extra rows *and* extra tokens), a brake larger than the pool, and a free slick laid by a driver with nothing to spend (§14) |
+| `reachableSpaces(...).some(s => s.row === row && s.lane === lane)` — a **membership test**, with the distance computed from the persisted `ps.roll` and the validated `brake`, never from the command | Teleporting. Deriving a path *to* a submitted destination rather than checking it is in the server's set accepts `{ row: 77, lane: 1 }` and wins the race from the grid. Lane 3 on a two-lane row, lane 0 and a fractional row die here too |
+| §9's blocked-short set as its **own** explicit set | A driver stopping wherever they like, which is §9's "you can never choose to stop" dressed as a block |
+| `slipstreamOffered(state, userId)` re-run server-side | Three free rows claimed by a driver who earned no tow. The offer is the gate in both directions — a `decline` flag cannot be trusted to decide anything, not least because `"false"` is truthy |
 
 **`rules.ts` is pure and isomorphic**, imported by the command classes and by
 the board alike (`docs/new-game.md`, "Isomorphic rules modules"). It is where
@@ -1000,8 +1179,8 @@ every function in this document lives:
 |---|---|
 | `legalGears(state, userId)` | 8.2 |
 | `rollFor(gear)` | 8.1 |
-| `reachableSpaces(state, userId, distance)` | 9 |
-| `derivePath(state, from, to, distance)` — slick-avoiding | 9, 14 |
+| `reachableSpaces(state, userId, distance)` — one breadth-first walk keeping its parent tree; the frontier is at most a lane width wide, so it visits ≤ 3N nodes | 9 |
+| `derivePath(...)` — reads that tree rather than walking again. **Single-objective** (fewest slicks crossed) and **deterministic**, because `recordedOilRolls` is a positional log and a tie broken by map iteration order replays a different number of dice than the live game rolled | 9, 14 |
 | `resolveArrival(state, userId, path)` — corners, overshoot, spins | 10, 13 |
 | `slipstreamOffered(state, userId)` | 12 |
 | `trackProgress(state, userId)` / `recomputeRoundOrder(state)` | 15 |
@@ -1011,13 +1190,50 @@ That table is also the test plan: every row is a pure function with a fixture
 and no Mongo.
 
 **Redaction: there is none, and that is the thing to prove.** Every field above
-is public by §2's fourth pillar. `CreateDataResponse(viewerId)` still takes the
-viewer, because the signature is not optional and because a later feature might
-need it — and `gameStateToModel` deliberately ignores it. The croupier's job on
-this game is therefore the *inverse* of the usual one: confirm the absence of
-hidden state rather than the presence of redaction, and add Race Cars to
-`publicGameState.test.ts`'s explicit `RESPONSE_BUILDERS` list so the claim is
-asserted on the serialised response rather than on the typings.
+is public by §2's fourth pillar. `CreateDataResponse` still takes the viewer —
+named **`_viewerId`**, which is the spelling `publicGameState.test.ts` documents
+for "a game that genuinely ignores its viewer" — and passes it down to
+`gameStateToModel`, which declares it and does not read it. Threading an
+argument nobody uses looks like clutter and is not: it is what makes adding a
+hidden field later a change inside one function rather than across four
+signatures, a call site and a replay registration, and the four-place version is
+the one somebody skips.
+
+The croupier's job on this game is therefore the *inverse* of the usual one:
+confirm the **absence** of hidden state rather than the presence of redaction.
+That takes three guards, and it is worth being precise about what each proves,
+because two of them prove less than they look like they do:
+
+| Guard | What it actually proves |
+|---|---|
+| Race Cars' line in `publicGameState.test.ts`'s `RESPONSE_BUILDERS` | That `gameState` is built through `publicGameState(` — the `commandHistory` leak — and that the viewer is in the signature. It is a **source scan**: it never looks at `specificGameState`, so it would pass a builder that shipped the whole document |
+| A three-viewer identity assertion in `hiddenHands.test.ts`, on the Fires Out pattern already there | That `gameStateToModel` ignores its viewer — serialising as `u1`, as `u2` and as `null` gives three identical strings |
+| **A key-set assertion on the serialised response** — the exact top-level keys, and the exact keys of one player entry, against this section's list | That nothing hidden is on the wire at all |
+
+Only the third proves the claim. Both leaks this repo has actually shipped —
+World Domination's cards and Settlements & Cities' resources — were **identical
+for every viewer**: they leaked because a field that should have been a count
+was an array, which a viewer-identity test passes without blinking. The key-set
+assertion is the one that fails the day somebody adds a field, and failing on
+that day is the whole mechanism by which §2's fourth pillar survives nine PRs
+and everything after them.
+
+**The race settings are validated in `CreateGame`, not in the route.** There
+are **two** creation paths, not one: `POST /api/newgame/racecars`, and the
+generic join-code lobby at `POST /api/lobby`, which Race Cars gets for free by
+adopting `useCreateLobbyOrInvite`. That route destructures `...gameSettings` off
+the body and spreads them into the invitation model; Mongoose's strict mode
+limits which *keys* survive and says nothing about values. So a hand-written
+lobby body carrying `laps: 99` and `spec: "unobtanium"` reaches
+`buildInitialRaceCarsState`, which then deals wear pools of `undefined` — making
+every overshoot unpayable and spinning the entire field — or silently changes
+the race the other five drivers accepted.
+
+Validate the distance, the spec and the oil flag in the one place both paths
+reach, and have the route call the same helper rather than carrying its own
+copy. The **party-size bound** is the route's own, and is not optional: the grid
+of §5.2 has six slots, so a seventh driver reads `grid[6] === undefined` and
+parks a car at an undefined row with a duplicate race number.
 
 **Recorded randomness.** Three sources, all named `recorded…` so
 `stripRecordedRandomness` deletes them off an incoming request:
@@ -1027,6 +1243,17 @@ asserted on the serialised response rather than on the typings.
 | `recordedRoll` | `RaceCarsShift` | The gear's die |
 | `recordedOilRolls: number[]` | `RaceCarsMove` | One d6 per slick entered, in path order |
 | `recordedOilRolls: number[]` | `RaceCarsSlipstream` | The tow crosses spaces too (§12) |
+
+The convention is load-bearing rather than decorative, and it holds on exactly
+three conditions. `stripRecordedRandomness` deletes **own top-level** keys by
+`startsWith("recorded")` with no regard for type, so the variable-length array
+is deleted whole and changes nothing — **but** folding the rolls into a nested
+object, or renaming them `oilRolls`, restores choose-your-own-dice silently.
+Second, because the field is `undefined` on every live request after the strip,
+consumption must be **per element with a live fallback** — copy Fires Out's
+`makeNextRoll` verbatim, cursor and `used` array included. Third, `Execute` must
+**write the used log back onto the command** before `runCommand` pushes it into
+`commandHistory`, or replay has nothing to consume.
 
 The grid draw at setup goes into `initialSpecificGameState` rather than onto a
 command, because it happens in `CreateGame` where there is no command to carry
@@ -1063,8 +1290,9 @@ This is the one column where Race Cars departs from the shared doc's usual
 answer, so here is the reasoning in its terms. By
 [the four questions](../turn-recap-and-planning.md#planning-what-can-be-planned)
 the game qualifies easily: its randomness is **memoryless** (dice, not a deck),
-it hides nothing at all, and nothing is revealed at game over. A planner would
-be safe.
+it hides nothing at all *because §2's fourth pillar holds* — not as a fact
+standing on its own — and nothing is revealed at game over. A planner would be
+safe for exactly as long as that pillar is.
 
 It would also be **actively misleading**, which is the reason not to build it. A
 planned turn resolves one hypothetical roll and shows the player a board where
@@ -1084,6 +1312,16 @@ route — and it tells the truth about a range instead of lying about a number.
 
 `plannableCommands` therefore stays `[]`, which is the default-deny the shared
 doc asks for, and `canPlan` stays `false` on `TurnNavControls`.
+
+**The comment beside that empty array has to carry a second reason, because the
+one above is a design opinion somebody can reasonably disagree with.** The
+timeline route deliberately does *not* strip recorded randomness — planned
+commands are a player's own hypotheticals, never saved — so the allowlist is,
+in that route's own words, the only enforcement point. Adding `RaceCarsShift` to
+it would accept `{"className":"RaceCarsShift","gear":5,"recordedRoll":20}` and
+resolve it against the live game's real state. A future maintainer reading only
+"a planner would mislead the driver" may decide the drivers can cope; one
+reading "and it would hand them a chosen die" will not.
 
 ### 23.6 The art
 
@@ -1144,11 +1382,38 @@ and its grid inspected in the API response.
 - `RaceCarsModels.ts`: both discriminators, `buildInitialRaceCarsState` (the
   grid draw via `rollOffTurnOrder`, recorded into `initialSpecificGameState`),
   and `gameStateToModel` with 23.4's deliberate non-redaction.
-- `apiModels.ts` and `meta.ts` (`available: false`, categories `["Dice",
-  "Strategy"]`, `glyph: "🏎️"`, `minPlayers: 2`, `maxPlayers: 6`).
+- The two things that travel with that snapshot and are easy to leave until the
+  PR that needs them: **a second Mongoose path built from the same sub-schema
+  factory**, and **`recapAvailable: !!doc.initialSpecificGameState` on the
+  response** (`docs/new-game.md` §7(a)). Both belong here rather than in PR 8 —
+  PR 4 mounts `TurnNavControls`, and every board page that offers recap gates on
+  that flag.
+- `apiModels.ts` and `meta.ts` — `available: false`, categories `["Dice",
+  "Strategy"]`, `glyph: "🏎️"`, `minPlayers: 2`, `maxPlayers: 6`, plus the
+  `tagline`, `players` and **`accent`** that `GameMeta` requires. `accent` is
+  what `scripts/generate-icons.mjs` draws the share card from, so choosing it
+  here rather than at PR 9 is the difference between picking a colour and
+  picking one that matches art already drawn.
 - `POST /api/newgame/racecars` through `readGameSetupRequest` + `seatsFor`,
-  validating the distance, the spec and the oil flag against their tables the
-  way the Outbreak route validates its difficulty.
+  with the **party-size bound** against PR 1's `MIN_PLAYERS`/`MAX_PLAYERS` (the
+  four lines every other game's route carries, and which nothing shared
+  supplies), and the distance/spec/oil check delegated to the shared helper of
+  23.4 so the lobby path gets it too.
+- One thing this PR does **not** close, stated so it is a decision rather than
+  an oversight: **no `/api/newgame/*` route rate limits**, this one included.
+  Each call is a Clerk username lookup, an invitation write and a push fan-out,
+  and the "User not found" answer makes it the same username oracle
+  `/api/friends/invite` carries a 30/hour limit for. It is a pre-existing gap
+  across nine routes rather than a Race Cars regression, and one
+  `consumeRateLimit` inside `readGameSetupRequest` would close all of them —
+  which is a change to a shared helper and belongs to whoever takes that on, not
+  to a new game's setup PR.
+- **`meta.available: false` is a catalogue filter, not a gate.** Its only reader
+  is `GameLibrary`. The route answers a hand-written request from any unlocked
+  account from this PR onward, and the games it creates have no timeout adapter
+  until PR 6 and no replay adapter until PR 8 — so the flag must not be flipped
+  before both land, which is the lesson Banned Islet's `meta.ts` records in its
+  own comment.
 - The setup screen, composed as `src/app/newgame/outbreak/page.tsx` composes
   its own: `GameSetupLayout` wrapping `UserInviteList` (driven by
   `usePlayerList`), `SeatCountSelect`, `TurnTimerSelect`, `PartySizeHint`, two
@@ -1174,13 +1439,22 @@ raced around the circuit against no hazards but the other cars.
   `recordedRoll` lands here, in the PR that introduces the command — never a
   later one, because a command already in `commandHistory` can never be given
   the field retroactively.
-- `CheckEndTurn`: advance `roundIndex`, consume `skipNextTurn`, and recompute
-  `roundOrder` when the round wraps (§15).
-- `CheckGameOver`: nothing. The win is *an event in play order* (§4.1), so it is
-  set inside `RaceCarsMove`/`RaceCarsSlipstream` where the line is crossed, and
-  `CheckGameOver` is the pass-through the command route calls. A version that
-  re-derived the win from state would hand it to whoever was furthest along,
-  which is not the same thing.
+- `CheckEndTurn`: advance `roundIndex`, consume `skipNextTurn`, recompute
+  `roundOrder` when the round wraps (§15), **and reset the incoming driver's
+  `phase` to `'shift'`, `roll` to `null` and `brakeSpent` to 0**. Forgetting that
+  last clause is the bug `turnTimeout.ts` records this repo already shipping once
+  on Banned Islet's `actionsLeft`; here it locks out every driver after the
+  first. A run of consecutive spun drivers unwinds in one pass as long as
+  `skipNextTurn` is consumed at the moment of skipping — the loop bound is
+  implicit, so assert it.
+- `CheckGameOver`: **returns the flag the winning command already set** — not
+  "nothing". `runCommand` only reports `gameOver: true` when `CheckGameOver`
+  returns truthy, and only that makes the route call `finishGame`; a method that
+  literally does nothing leaves a game with a `winner` and `complete: false`,
+  still taking turns. It must not *re-derive* the win, because §4.1's win is an
+  event in play order rather than a state, and a derived version would hand it to
+  whoever was furthest along. The win itself arrives in PR 5, so this is a stub
+  here and is tested there.
 - `RaceCarsLogic.test.ts` on the in-memory harness `SolitaireLogic.test.ts` and
   both co-ops use.
 
@@ -1191,16 +1465,20 @@ every PR after this one is playtestable as it lands.
   `BoardZoom`, the art `<image>` (placeholder until PR 8), the space layer, and
   the car silhouette of §19.1 filled by `playerColourForId` and carrying its
   race number.
-- `components/RaceCarsStrip.tsx`: the ±20-row decision surface of §19.2 —
-  **drawn by the same space renderer as the board, at a different scale**. If
-  writing it proves the two need genuinely different markup, keep them apart and
-  say so in the commit message; a second copy of the space is the defect
-  AGENTS.md names first.
+  The corner names go over it through `MapLabelLayer`, with the corner-stop pip
+  rows and the cars as its `obstacles` (§23.1). **One surface, no second cropped
+  copy** — §19.2 — and the `window` prop it describes is not built until a
+  playtest asks for it.
 - `components/RaceCarsActions.tsx`: the gear picker as a run of `BuildRow`
   inside `.ag-build-list` — one row per legal gear showing its die, its band and
   its reach (23.5's reach band) — then the brake stepper and the destination
   prompt. Wrapped in `ReadOnlyPanel` so it goes inert off-turn.
-- The roll shown through `RollReadout`, not a new card.
+- The two shared-component gaps of §23.2, both paid here rather than worked
+  around: `sides` forwarded through `RollReadout` (gap 3), and
+  `src/components/ui/Stepper.tsx` extracted from World Domination's local copy
+  with its four call sites repointed (gap 4). The roll is then shown through
+  `RollReadout` and the brake spend through `Stepper` — no new card, no second
+  stepper.
 - The rest of the chrome is the shared kit re-tinted under a
   `.ag-game--racecars` scope and never rebuilt: `GameShell`, `GameScoreboard`
   (one row per driver, `sub` carrying the gear and wear, `score` the position),
@@ -1228,22 +1506,44 @@ won, and it can go wrong.
 PR that turns the game on. The cron's `noAdapter` fallback advances
 `currentTurn` and nothing else, which here means a silent driver's car does not
 move — making a timeout a way to conserve wear — and, worse, a turn that times
-out in the `slipstream` phase **deadlocks the race for everybody**, since only
-that driver may send `RaceCarsSlipstream` and the command route stops accepting
-it the moment `currentTurn` moves past.
+out in the `slipstream` phase takes the race down — and not as a clean hang,
+which would at least be legible. Only that driver may send
+`RaceCarsSlipstream`, and the command route stops accepting it the moment
+`currentTurn` moves past; every subsequent driver's shift is then refused
+against a phase that is not theirs, each of them times out in turn, and after
+three rotations the game ends as an **abandonment blamed on whichever innocent
+driver happened to be current**. (Per-player `phase` — 23.4 — is what reduces
+this from fatal to one lost turn; the adapter is what removes it.)
 
-- `conservativeTurn()` in `rules.ts` (§23.4's last row), tested on its own: hold
-  the gear if its maximum cannot overshoot the next corner, otherwise drop to the
-  highest gear that cannot; spend the minimum brakes needed to avoid an
-  overshoot, if affordable; take the furthest legal destination that neither
-  overshoots nor crosses oil; decline the tow unless it does neither.
+- `conservativeTurn()` in `rules.ts` (§23.4's last row), and it must be **total
+  by construction**: it always names a gear and always names a destination.
+  Preference order — hold the gear if its maximum cannot overshoot the next
+  corner, else drop to the highest gear that cannot; spend the minimum brakes
+  needed to avoid an overshoot, if affordable; take the furthest legal
+  destination that neither overshoots nor crosses oil; decline the tow unless it
+  does neither — and then **fall through to the cheapest overshoot, spinning if
+  it cannot be paid**, because that is a legal outcome of §10 and a spin at
+  least ends the turn.
+
+  A preference list with no fallthrough is not a style problem here, it is a
+  permanently stuck game. The candidate set is empty at ordinary board states,
+  an empty set builds a command with an undefined destination, `Execute` refuses
+  it, and `resolveStalledTurn` reports `'stuck'` — on which the cron **returns
+  before saving**, discarding the `missedTurnCounts` increment with it. The
+  abandon ladder never climbs, and the same game is re-read every tick forever,
+  holding a sweep-candidate slot. The cron's comment assumes `'stuck'` is
+  transient; a deterministic pure function is what would make it permanent.
 - One `ITurnTimeoutAdapter` registered in `turnTimeout.ts` alongside Outbreak's,
-  Fires Out's and Banned Islet's, handing back `RaceCarsShift`, then
-  `RaceCarsMove`, then `RaceCarsSlipstream` — no engine work, since
-  `resolveStalledTurn` already loops an adapter to completion inside one cron
-  tick.
-- `turnTimeout.test.ts` covers a timeout at each of the three phases, and one
-  where the conservative line still ends the race.
+  Fires Out's and Banned Islet's. It **branches on the stalled driver's phase**
+  rather than handing back a fixed three-command sequence — all three existing
+  adapters do, for the same reason: the cron can pick a game up mid-turn (a turn
+  is three separate POSTs), so a blind `RaceCarsShift` at `phase: 'move'`
+  re-rolls a die already thrown, and a blind `RaceCarsSlipstream` is refused
+  whenever no tow was offered, which on an empty road is most of the time. It
+  carries the `if (!ps) return null` guard the other three carry.
+- `turnTimeout.test.ts` covers a timeout at each of the three phases, a car on a
+  corner's last row, a spun car, and one where the conservative line ends the
+  race.
 
 **PR 7 — Oil spills.** The optional module, last among the rules PRs because it
 is the only one that is switchable off and the only one that adds randomness
@@ -1261,7 +1561,17 @@ whose shared-file list is easiest to under-read:
 - The replay adapter, registered inline in the shared
   `src/utils/games/replay.ts` alongside the others — there is no per-game
   `replay.ts` in this repo, only a per-game `replay.test.ts` — with
-  `plannableCommands: []` permanently (23.5).
+  `plannableCommands: []` permanently (23.5), **and Race Cars' line in
+  `plannableCommands.test.ts`'s explicit "plans nothing" list**. The field
+  defaults to `[]`, so nothing breaks if that line is forgotten — which is
+  exactly why it has to be written down. The comment beside the empty array
+  should read as a decision rather than a to-do: every other entry there means
+  "feasible, nobody built the UI", and only Smartthink's means "out by design".
+  This is the second of those.
+- **No push-copy work.** `buildEventFeed` builds the "your move" body from the
+  same recap feed with no per-game branching, so Race Cars' push is exactly as
+  safe as its recap rows and `notificationContent.ts` needs no edit. Said here
+  so nobody writes bespoke copy and reopens the question.
 - `recap.ts` in the game folder with the row selection of 23.5, **plus the
   `import "@/games/RaceCars/recap";` line in `src/utils/games/recap.ts`**
   without which the adapter never registers; `gameRegistry.test.ts` fails with
@@ -1325,10 +1635,21 @@ Mongo and no Clerk.
   towed out of a corner that still owes a stop.
 * **Blocking.** A two-lane corner with both lanes filled ahead; the blocked-short
   scuff; the boxed-in case that banks a stop by standing still.
-* **Round order.** Recomputed only on wrap; a spun driver keeps their slot; a
-  finished driver leaves it; an exact tie falls back to the previous round.
-  Assert alongside it that **`turnOrder` and the colour map never change** —
-  23.2's gap 1 is a bug in six places if it slips.
+* **Round order.** Recomputed only on wrap and rebuilt whole; a spun driver
+  keeps their slot; an exact tie falls back to the previous round *and* the
+  comparator still sorts consistently when several drivers tie, which is the
+  designed state at every corner. Assert alongside it that **`turnOrder` and the
+  colour map never change** — 23.2's gap 1 is a bug in six places if it slips.
+
+  There is deliberately no "a finished driver leaves the order" case: §4.1 ends
+  the race the instant a car crosses, so no round ever contains one.
+  `finishedPosition` is written once, for the whole field, by the ending.
+* **The key set on the wire.** Serialise a response and assert the exact set of
+  top-level keys, and the exact keys of one player entry, against §23.4's list.
+  This is the guard that carries §2's fourth pillar (23.4): a viewer-identity
+  test passes a field that leaks to everybody equally, which is the shape of both
+  leaks this repo has actually shipped, and only a key-set assertion fails on the
+  day a hidden field is added.
 * **Conservation.** After every command, assert each pool is within `0..spec`
   and that no two cars occupy one space — which is what catches a path
   derivation that walked through a car.
