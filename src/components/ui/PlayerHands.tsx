@@ -14,7 +14,7 @@ export interface PlayerHandSeat {
     /** The chips themselves. Only the game knows what one of its cards looks
      *  like, so the card is passed in rather than described here. */
     cards: React.ReactNode;
-    /** Trailing note on the head row — a role name, or a button opening its details. */
+    /** Trailing note on the head row. A game with roles passes `RoleNote`, which is the name and the card it opens. */
     note?: React.ReactNode;
 }
 

@@ -378,6 +378,16 @@ Six roles, dealt at random, each bending exactly one spatial rule.
 | **Messenger** | Give treasure cards to any player anywhere, for 1 action | Removes the "meet in person" tax that otherwise eats half the team's actions |
 | **Navigator** | Move another player up to 2 adjacent tiles for 1 action | Buys actions for whoever is furthest from where they need to be |
 
+**What the Navigator lends a pawn.** A pawn the Navigator moves reads the
+island with its *own* adjacency but does not get to spend its *own* abilities:
+an Explorer sent by the Navigator still turns corners, because the diagonals are
+how that pawn sees the board at all, but a Diver sent by the Navigator gets two
+ordinary steps rather than a swim, because the swim is an action the Diver
+spends and the Navigator is spending their own. The asymmetry is between a
+geometry and an action, and it is what keeps "up to 2 adjacent tiles" from
+quietly becoming the strongest move in the game whenever a Diver is at the
+table.
+
 **Role balance note.** The Pilot and Diver both solve connectivity; the Engineer
 and Explorer both solve survivability; the Messenger and Navigator both solve
 the action economy. A hand of two roles from the same pair is the worst draw and
@@ -658,8 +668,11 @@ deviation below for what that costs the design.
 
 ### 21.3 Deviations from this document
 
-Async play forces five. Record each in a "Deviations" subsection of this
-document as it lands.
+Async play forces five, and building the roles turned up a sixth that it
+didn't — a reading of §12 rather than a concession to turns hours apart, but
+recorded here for the same reason: a deviation is anything a reader of this
+document alone would not predict from the code. Record each in a "Deviations"
+subsection of this document as it lands.
 
 * **A swim is resolved by rule, not by the swimmer.** §9.2 gives the drowning
   player the choice of tile. Their tile sinks during somebody else's turn, and
@@ -690,6 +703,18 @@ document as it lands.
   a legible board carry §2, so a silent table plays as well as a chatty one.
 * **A player who drops out ends the game for everybody** — the cron's abandon
   path, reading as "the team lost", exactly as in the other two co-ops.
+* **The Diver reaches any land a run of ruined tiles touches, not only the
+  nearest** (PR 7). §12 says "to the nearest land", which would have the app
+  pick the landing tile and hand the Diver a move with no decision in it — on
+  the one role §12 calls "the rescue role", whose whole job is choosing where to
+  be. So `moveTargets` offers every standable tile on the far side of a
+  contiguous flooded-or-sunk run and lets the player choose, while
+  `resolveSwim` — where the sea is doing the choosing, not the Diver — keeps
+  picking one by §21.3's own preference above. A *forced* swim is still "the
+  nearest land"; a spent action isn't.
+
+  The same PR settled a question §12 never asks: a Navigator-moved pawn keeps
+  the moved role's **adjacency** but not its **abilities** — see §12's note.
 
 ### 21.4 State and command surface
 
