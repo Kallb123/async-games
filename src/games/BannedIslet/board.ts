@@ -192,6 +192,11 @@ export const TREASURES: readonly IBannedIsletTreasureDef[] = [
 
 export const TREASURE_IDS: readonly BannedIsletTreasureId[] = TREASURES.map(t => t.id);
 
+/** What to call a treasure to a player — the figure itself, and the four cards that buy it. */
+export function treasureName(treasure: BannedIsletTreasureId): string {
+    return TREASURES.find(t => t.id === treasure)?.name ?? 'Unknown treasure';
+}
+
 // ─── The treasure cards (§10) ───────────────────────────────────────────────
 // A card is identified by what it *is*, not by a serial number: the five Ember
 // Crown cards are interchangeable and a capture asks only for four of a kind
@@ -213,6 +218,27 @@ export const TREASURE_DECK_CARDS: readonly BannedIsletCardId[] = [
     ...new Array<BannedIsletCardId>(HELICOPTER_LIFT_CARD_COUNT).fill('helicopterLift'),
     ...new Array<BannedIsletCardId>(SANDBAGS_CARD_COUNT).fill('sandbags'),
 ];
+
+const SPECIAL_CARD_NAMES: Record<BannedIsletSpecialCardId, string> = {
+    watersRise: 'Waters Rise!',
+    helicopterLift: 'Helicopter Lift',
+    sandbags: 'Sandbags',
+};
+
+/**
+ * Whether a card is one of §10's 20 treasure cards rather than one of its
+ * three specials. §8's Give a Treasure Card hands over exactly these: the
+ * specials are not actions and are played from the holder's own hand (§10),
+ * and Waters Rise! is never held at all.
+ */
+export function isTreasureCard(card: BannedIsletCardId): card is BannedIsletTreasureId {
+    return TREASURE_IDS.some(id => id === card);
+}
+
+/** What to call a card to a player — a treasure's own name, or the special's. */
+export function cardName(card: BannedIsletCardId): string {
+    return isTreasureCard(card) ? treasureName(card) : SPECIAL_CARD_NAMES[card];
+}
 
 // ─── The roles (§12) ────────────────────────────────────────────────────────
 // Static reference data only — dealt at setup and expressed as small pure

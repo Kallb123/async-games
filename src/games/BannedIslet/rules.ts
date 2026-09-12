@@ -233,3 +233,27 @@ export function isDrowningLoss(island: BannedIsletIsland, position: number): boo
 export function isWaterLevelLoss(waterLevel: number): boolean {
     return waterLevel >= LOSING_WATER_LEVEL;
 }
+
+// ─── The win (§4.1) ─────────────────────────────────────────────────────────
+
+/**
+ * §4.1's first three conditions: all four treasures captured, Beacon Pier
+ * still above water, and every pawn standing on it. The fourth — a Helicopter
+ * Lift actually played — is what makes the win *an action taken rather than a
+ * state reached*, which §4.1 calls the design's most memorable failure and
+ * worth preserving; the card arrives in PR 8 (§21.6) and `CheckGameOver`
+ * fires on these three alone until it does.
+ *
+ * `pawns` is every player's position, so a seat that has yet to reach the pier
+ * holds the whole team on the island. An empty roster never escapes.
+ */
+export function isEscapeReady(
+    island: BannedIsletIsland,
+    captured: Record<BannedIsletTreasureId, boolean>,
+    pawns: readonly number[],
+): boolean {
+    if (!TREASURES.every(t => captured[t.id])) return false;
+    if (isPierLoss(island)) return false;
+    const pier = pierPosition(island);
+    return pawns.length > 0 && pawns.every(p => p === pier);
+}
