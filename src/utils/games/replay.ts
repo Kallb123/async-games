@@ -15,6 +15,7 @@ import { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/Sett
 import { buildInitialWorldDominationState, gameStateToResponse as worldDominationStateToModel, IWorldDominationGameData } from "@/games/WorldDomination/WorldDominationModels";
 import { buildInitialTrainTimeStateFromGameData, gameStateToModel as trainTimeStateToModel, ITrainTimeGameData } from "@/games/TrainTime/TrainTimeModels";
 import { buildInitialOutbreakStateFromGameData, gameStateToModel as outbreakStateToModel, IOutbreakGameData } from "@/games/Outbreak/OutbreakModels";
+import { buildInitialBannedIsletStateFromGameData, gameStateToModel as bannedIsletStateToModel, IBannedIsletGameData } from "@/games/BannedIslet/BannedIsletModels";
 import { buildInitialFiresOutStateFromGameData, gameStateToModel as firesOutStateToModel, IFiresOutGameData } from "@/games/FiresOut/FiresOutModels";
 // Side-effect import: evaluating GameLogic registers every @serializable command
 // class so deserializeJSON can rehydrate them during replay.
@@ -208,6 +209,21 @@ registerReplayAdapter({
     // The crew planner is §21.6 step 13, not this one — deck freeze is
     // feasible (only OutbreakEndTurn touches a deck) but no planning UI
     // exists yet, so this stays empty until that step turns it on.
+    plannableCommands: [],
+});
+
+registerReplayAdapter({
+    className: "BannedIsletGameType",
+    buildInitialSpecificGameState: (gameData) => buildInitialBannedIsletStateFromGameData(gameData as IBannedIsletGameData),
+    toResponseState: (specificGameState, userIdNameMap, viewerId) =>
+        bannedIsletStateToModel(specificGameState as never, userIdNameMap, viewerId),
+    // docs/games/banned-islet.md §21.5: the route planner is a PR of its own
+    // and needs the cross-player opt-in that doesn't exist yet, so nothing is
+    // plannable here. When it does arrive, BannedIsletAction is the whole safe
+    // set under deck freeze — BannedIsletEndTurn and BannedIsletDiscard are the
+    // only commands that touch a deck, and a planned draw would read the top of
+    // the real flood deck, which is the one thing this game is about not
+    // knowing.
     plannableCommands: [],
 });
 
