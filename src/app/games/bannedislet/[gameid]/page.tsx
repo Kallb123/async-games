@@ -47,10 +47,11 @@ import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder 
 // because reading it is the one skill §14.2 rewards.
 //
 // One thing is still deliberately missing, with a PR of its own: **no recap**.
-// `useTurnRecap`/`TurnRecapScreen` arrive with the replay adapter. The scrubber
-// below works today because the game has stored its opening island since setup
-// (`recapAvailable`), and it is wired with `canPlan={false}` until the route
-// planner opts this game in.
+// `useTurnRecap`/`TurnRecapScreen` are the away-time narrative and arrive with
+// `recap.ts`. The scrubber below is a different thing and does work today —
+// `recapAvailable` says the opening island has been stored since setup, and PR
+// 5 registered the replay adapter that turns it into a timeline. It stays
+// wired with `canPlan={false}` until the route planner opts this game in.
 export default function GameBannedIslet({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);

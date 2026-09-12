@@ -8,6 +8,9 @@ import { IOutbreakGameData } from "@/games/Outbreak/OutbreakModels";
 import { HAND_LIMIT } from "@/games/Outbreak/rules";
 import { FiresOutAction } from "@/games/FiresOut/FiresOutLogic";
 import { IFiresOutGameData } from "@/games/FiresOut/FiresOutModels";
+import { BannedIsletAction, BannedIsletDiscard, BannedIsletEndTurn } from "@/games/BannedIslet/BannedIsletLogic";
+import { IBannedIsletGameData } from "@/games/BannedIslet/BannedIsletModels";
+import { HAND_LIMIT as BANNED_ISLET_HAND_LIMIT } from "@/games/BannedIslet/board";
 
 // docs/games/outbreak-gdd.md §21.2, gap 2: the turn-timer cron used to handle
 // every game the same way — advance currentTurn and nothing else — which is
@@ -124,6 +127,53 @@ registerTurnTimeoutAdapter({
         const action = new FiresOutAction();
         action.kind = 'endTurn';
         return action;
+    },
+});
+
+registerTurnTimeoutAdapter({
+    className: "BannedIsletGameType",
+    // docs/games/banned-islet.md §21.6 PR 6, and the same problem Outbreak's
+    // adapter above solves: this island only deteriorates during the active
+    // player's own turn, so the cron's plain advance would let a silent player
+    // skip their draw and their flood entirely — making timing out the
+    // strongest play at the table.
+    //
+    // Two further things the plain advance broke here, both of which this is
+    // the only fix for. `actionsLeft` refills in CheckEndTurn, which the plain
+    // advance never calls, so the next player inherited an exhausted counter
+    // and could do nothing but end their own turn. And a turn stalled in
+    // 'discard' (§10's hand limit) deadlocked the game outright: every command
+    // refuses outside 'actions' except BannedIsletDiscard, which only the
+    // player holding the oversized hand can send — and once currentTurn had
+    // moved past them, the command route refused them too.
+    //
+    // Every step is a command a live player could have sent, and nothing here
+    // touches specificGameState: forfeit what is left of the three actions with
+    // the same Pass a player bailing out early would submit (§8), hand back
+    // BannedIsletEndTurn to run §7's draw and flood phases, then the
+    // BannedIsletDiscard the draw calls for if it pushed the hand over the
+    // limit. resolveStalledTurn re-asks until the turn ends.
+    buildTimeoutCommand(gameData, userId) {
+        const gs = (gameData as IBannedIsletGameData).specificGameState;
+        const ps = gs.players.get(userId);
+        if (!ps) return null;
+
+        if (gs.phase === 'discard') {
+            const discard = new BannedIsletDiscard();
+            // The oldest cards in hand, since a forced resolution should not
+            // invent the judgement a real player would have applied — and §10
+            // makes them interchangeable copies anyway, so "the first N" is a
+            // choice of quantity rather than of card.
+            discard.cardIds = ps.hand.slice(0, ps.hand.length - BANNED_ISLET_HAND_LIMIT);
+            return discard;
+        }
+        if (gs.phase !== 'actions') return null;
+        if (ps.actionsLeft > 0) {
+            const action = new BannedIsletAction();
+            action.kind = 'pass';
+            return action;
+        }
+        return new BannedIsletEndTurn();
     },
 });
 
