@@ -145,6 +145,14 @@ export class RaceCarsGameType implements IGameType {
                 // this one place and rebuilt whole at index 0 — never spliced
                 // mid-round, which would leave `roundIndex` pointing past the
                 // end and `currentTurn` pointing at nobody.
+                //
+                // One increment per wrap, and a wrap this loop reaches twice
+                // counts twice: a round every driver sat out is still a round
+                // that elapsed — each of them consumed their slot in it, and
+                // said so in the log. Counting it once instead would leave the
+                // counter disagreeing with its own "sat out the round" lines,
+                // and would hold §14's slicks on the road a round longer than
+                // the traffic they were laid for.
                 gs.round += 1;
                 gs.roundOrder = recomputeRoundOrder(gs);
                 gs.roundIndex = 0;

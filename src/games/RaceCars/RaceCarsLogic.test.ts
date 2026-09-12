@@ -496,6 +496,35 @@ describe("CheckEndTurn (§15)", () => {
         expect(seat(game, 'b').roll).toBeNull();
     });
 
+    it("counts a round the whole field sat out, wrapping twice in the one pass", async () => {
+        // The mover is last in the order and spins, and everybody ahead of them
+        // is already sitting out — so this one CheckEndTurn walks off the end of
+        // the order twice: once to finish round 1, and once more across a round
+        // 2 in which every driver consumed their slot by missing it.
+        const game = makeGame(race({
+            a: { row: 20, lane: 2, skipNextTurn: true },
+            b: { row: 38, lane: 2, gear: 4, phase: 'shift', tyres: 3, brakes: 0 },
+        }));
+        game.specificGameState.roundIndex = 1;
+        game.currentTurn = 'b';
+
+        await driveTurn(game, 'b', 5, 17, { row: 55, lane: 1 });
+
+        expect(seat(game, 'b').row).toBe(51);
+        expect(seat(game, 'a').skipNextTurn).toBe(false);
+        expect(seat(game, 'b').skipNextTurn).toBe(false);
+        // Three, not two. Round 2 elapsed with nobody driving, and the log says
+        // so twice — one "sat out" line per driver, one per slot of that round.
+        // A counter that only moved once per CheckEndTurn would contradict its
+        // own log, and would age §14's slicks a round too slowly.
+        expect(game.specificGameState.round).toBe(3);
+        expect(game.gameState.history.filter(entry => entry.text.includes('sat out the round')))
+            .toHaveLength(2);
+        expect(game.specificGameState.roundIndex).toBe(0);
+        expect(game.currentTurn).toBe(game.specificGameState.roundOrder[0]);
+        expect(seat(game, game.currentTurn).phase).toBe('shift');
+    });
+
     it("a spun driver keeps their slot in the order the next round", async () => {
         const game = makeGame(race({
             a: { row: 20, lane: 2, gear: 3, phase: 'shift' },

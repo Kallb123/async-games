@@ -1454,6 +1454,12 @@ raced around the circuit against no hazards but the other cars.
   `recordedRoll` lands here, in the PR that introduces the command — never a
   later one, because a command already in `commandHistory` can never be given
   the field retroactively.
+- **The unpayable-overshoot spin lands here too, not in PR 5**, because PR 1's
+  `resolveArrival` already produces one whenever a corner cannot be paid for and
+  a move that applied half of what it returned would be worse than one that
+  applied all of it. So `RaceCarsMove` writes the spin's landing, its gear 0 and
+  its `skipNextTurn`, and logs it. PR 5 keeps the paths that do not exist yet —
+  the tow's, and (with PR 7) oil's — and the reveal that presents them.
 - `CheckEndTurn`: advance `roundIndex`, consume `skipNextTurn`, recompute
   `roundOrder` when the round wraps (§15), **and reset the incoming driver's
   `phase` to `'shift'`, `roll` to `null` and `brakeSpent` to 0**. Forgetting that
@@ -1509,8 +1515,9 @@ won, and it can go wrong.
 
 - `RaceCarsSlipstream` and the `phase: 'slipstream'` hand-off from
   `RaceCarsMove`.
-- Spins (§13) — every path into one, the `skipNextTurn` flag PR 3's
-  `CheckEndTurn` already consumes, and its log line.
+- Spins (§13) — the paths into one that PR 3 could not reach, the tow's above
+  all, against the `skipNextTurn` flag PR 3's `CheckEndTurn` already consumes
+  and the landing its `RaceCarsMove` already writes for an unpayable overshoot.
 - Crossing the line: `finishedPosition`, the classification of §4.2, and the
   ending through `finishGame` with `endReason: 'win'`.
 - The end-of-move reveal — the roll, the corner verdict and the tow offer —
