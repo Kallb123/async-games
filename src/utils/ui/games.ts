@@ -53,6 +53,7 @@ import { meta as trainTimeMeta } from "@/games/TrainTime/meta";
 import { meta as outbreakMeta } from "@/games/Outbreak/meta";
 import { meta as firesOutMeta } from "@/games/FiresOut/meta";
 import { meta as bannedIsletMeta } from "@/games/BannedIslet/meta";
+import { meta as raceCarsMeta } from "@/games/RaceCars/meta";
 
 export const GAME_META: Record<string, GameMeta> = {
     dicecities: diceCitiesMeta,
@@ -65,6 +66,7 @@ export const GAME_META: Record<string, GameMeta> = {
     outbreak: outbreakMeta,
     firesout: firesOutMeta,
     bannedislet: bannedIsletMeta,
+    racecars: raceCarsMeta,
 };
 
 // Games that don't have an implementation yet but are teased in the library.
@@ -124,6 +126,7 @@ const NAME_TO_URL: Record<string, string> = {
     "outbreak": "outbreak",
     "fires out!": "firesout",
     "banned islet": "bannedislet",
+    "race cars": "racecars",
 };
 
 export function metaForGame(opts: { url?: string; friendlyName?: string }): GameMeta | undefined {

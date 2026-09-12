@@ -203,6 +203,57 @@ export function distanceDef(distanceId: string): RaceCarsDistanceDef {
     return RACE_DISTANCES.find(distance => distance.id === distanceId) ?? RACE_DISTANCES[0];
 }
 
+// ─── The race the host chose (§6) ───────────────────────────────────────────
+
+/** The three settings of §6 — everything a host picks, and the whole of it. */
+export interface IRaceCarsSettings {
+    distance: RaceCarsDistanceId;
+    spec: RaceCarsSpecId;
+    oilSpills: boolean;
+}
+
+/**
+ * §6's three settings read off whatever was sent: each snapped to a value the
+ * rules can actually run, plus the reason to refuse the request outright if
+ * one of them was not a value at all.
+ *
+ * Both halves exist because there are **two** creation paths (§23.4).
+ * `POST /api/newgame/racecars` checks its body and answers 400 with
+ * `rejection`; `POST /api/lobby` destructures `...gameSettings` off its body
+ * and spreads them into the invitation, where Mongoose's strict mode limits
+ * which *keys* survive and says nothing about values. So a hand-written lobby
+ * body carrying `laps: 99` and `spec: "unobtanium"` reaches `CreateGame`
+ * unchecked, and `settings` is what it gets instead: the race the other five
+ * drivers accepted, rather than wear pools of `undefined` that make every
+ * overshoot unpayable and spin the entire field.
+ *
+ * One helper rather than a copy each, so the lobby path can never be the one
+ * that was forgotten.
+ */
+export function readRaceSettings(raw: {
+    distance?: unknown;
+    spec?: unknown;
+    oilSpills?: unknown;
+}): { settings: IRaceCarsSettings; rejection: string | null } {
+    const distance = RACE_DISTANCES.find(option => option.id === raw.distance);
+    const spec = SPECS.find(option => option.id === raw.spec);
+    // Not `!!raw.oilSpills`: `"false"` is truthy, and a setting the whole
+    // field races under should be a boolean or a 400, never a coercion.
+    const oilSpills = typeof raw.oilSpills === 'boolean' ? raw.oilSpills : null;
+
+    return {
+        settings: {
+            distance: distance?.id ?? DEFAULT_DISTANCE,
+            spec: spec?.id ?? DEFAULT_SPEC,
+            oilSpills: oilSpills ?? false,
+        },
+        rejection: !distance ? "Unknown race distance"
+            : !spec ? "Unknown car spec"
+            : oilSpills === null ? "Oil spills must be on or off"
+            : null,
+    };
+}
+
 // ─── Oil, slipstream and the small numbers the rules quote (§9, §12, §14) ───
 
 /** Slicks alive at once; a thirteenth sweeps the oldest (§14). */
