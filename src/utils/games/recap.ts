@@ -8,6 +8,7 @@ import { settlementsAndCitiesRecapAdapter } from "@/games/SettlementsAndCities/r
 import { worldDominationRecapAdapter } from "@/games/WorldDomination/recap";
 import { trainTimeRecapAdapter } from "@/games/TrainTime/recap";
 import { outbreakRecapAdapter } from "@/games/Outbreak/recap";
+import { bannedIsletRecapAdapter } from "@/games/BannedIslet/recap";
 import { firesOutRecapAdapter } from "@/games/FiresOut/recap";
 
 // A single "here's what happened" entry in a since-you-were-last-here recap.
@@ -206,4 +207,5 @@ registerRecapAdapter(settlementsAndCitiesRecapAdapter);
 registerRecapAdapter(worldDominationRecapAdapter);
 registerRecapAdapter(trainTimeRecapAdapter);
 registerRecapAdapter(outbreakRecapAdapter);
+registerRecapAdapter(bannedIsletRecapAdapter);
 registerRecapAdapter(firesOutRecapAdapter);

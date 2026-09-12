@@ -14,9 +14,10 @@ export const meta: GameMeta = {
     // On from PR 5 of docs/games/banned-islet.md §21.6 rather than that plan's
     // PR 10, because PR 5 is where the island starts fighting back: the game is
     // playable start to finish, winnable and loseable, at every difficulty.
-    // What is still coming — the six roles, the two special cards, the guide,
-    // the art, the away recap and the result page — is polish rather than play,
-    // and each degrades to nothing rather than to something broken.
+    // What was still coming then — the six roles (PR 7), the two special cards
+    // (PR 8), the away recap and the result page (PR 9), and the guide and the
+    // art (PR 10) — was polish rather than play, and each degraded to nothing
+    // rather than to something broken.
     //
     // Two things were *not* polish and came forward with this flag, because it
     // is a promise the game works rather than a label: PR 6's turn-timeout

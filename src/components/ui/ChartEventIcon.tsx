@@ -37,6 +37,16 @@ const ICON_ART: Record<GameResultEventIcon, ReactNode> = {
     epidemic: (
         <path d="M3.7 8a4.3 4.3 0 1 0 8.6 0a4.3 4.3 0 1 0-8.6 0 M10.7 10.4 13.9 11.1 14.3 9.9 11.6 8.2z M13.35 10.7a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0 M8.2 11.6 9.9 14.3 11.1 13.9 10.4 10.7z M9.55 14.5a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0 M5.6 10.7 4.9 13.9 6.1 14.3 7.8 11.6z M4.15 14.5a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0 M4.4 8.2 1.7 9.9 2.1 11.1 5.3 10.4z M0.35 10.7a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0 M5.3 5.6 2.1 4.9 1.7 6.1 4.4 7.8z M0.35 5.3a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0 M7.8 4.4 6.1 1.7 4.9 2.1 5.6 5.3z M4.15 1.5a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0 M10.4 5.3 11.1 2.1 9.9 1.7 8.2 4.4z M9.55 1.5a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0 M11.6 7.8 14.3 6.1 13.9 4.9 10.7 5.6z M13.35 5.3a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0" />
     ),
+    // A sinking tile: the sea, and one of the island's tiles tipping into it,
+    // a quarter of it already under. Drawn sea-first, so the tile's own halo
+    // (.ag-chart-event-icon paints its stroke under the fill) reads as the
+    // waterline cutting across it rather than as a seam through the wave.
+    sinking: (
+        <>
+            <path d="M0 9.6q2-1.8 4 0t4 0 4 0 4 0V16H0z" />
+            <path d="M5.65 2.99 12.41 5.45 9.95 12.21 3.19 9.75z" />
+        </>
+    ),
 };
 
 interface ChartEventIconProps {

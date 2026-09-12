@@ -287,7 +287,7 @@ Three separate opt-ins, so a game can have one without the others:
 | Train Time | ✅ from snapshot | ✅ (tip, `postProcess`) | 🚧 deck freeze, not built |
 | Outbreak | 🚧 planned (snapshot) | 🚧 planned (tip) | 🚧 planned — crew planner |
 | Fires Out | 🚧 planned (snapshot) | 🚧 planned (tip) | 🚧 planned — two modes |
-| Banned Islet | ✅ from snapshot | 🚧 planned (tip) | 🚧 planned — route planner, needs the cross-player opt-in |
+| Banned Islet | ✅ from snapshot | ✅ (tip) | 🚧 planned — route planner, needs the cross-player opt-in |
 
 Outbreak and Fires Out are designed but unbuilt; their rows record the decisions
 their GDDs commit to (`docs/games/outbreak-gdd.md` §21.5,

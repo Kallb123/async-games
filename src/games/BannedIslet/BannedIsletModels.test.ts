@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { buildInitialBannedIsletState, cloneBannedIsletState, gameStateToModel } from "./BannedIsletModels";
-import type { BannedIsletDifficulty } from "./board";
+import {
+    buildInitialBannedIsletState,
+    cloneBannedIsletState,
+    detectCaptureEvents,
+    detectSinkingEvents,
+    gameStateToModel,
+    TILES_SERIES_KEY,
+} from "./BannedIsletModels";
+import type { IBannedIsletFloodPhaseOutcome } from "./BannedIsletLogic";
+import type { IReplayStep } from "@/utils/games/replay";
+import type { BannedIsletDifficulty, BannedIsletTreasureId } from "./board";
 import {
     DIFFICULTIES,
     HELICOPTER_LIFT_CARD_COUNT,
@@ -14,6 +23,8 @@ import {
     TREASURE_IDS,
     WATERS_RISE_CARD_COUNT,
     roleDef,
+    tileName,
+    treasureName,
 } from "./board";
 import { positionOfTile } from "./rules";
 
@@ -196,5 +207,61 @@ describe("gameStateToModel — what reaches the client (§21.4)", () => {
         const state = buildInitialBannedIsletState(["u1", "u2"], "normal");
         const wire = gameStateToModel(state, {}, "u1");
         expect(wire.playerStates.u1.username).toBe("u1");
+    });
+});
+
+// ─── Result-stat detectors (§21.6 PR 9) ─────────────────────────────────────
+// The two computePerTurnEvents detectors behind the result page's markers —
+// unit-tested here rather than only through a full replay, the same way Fires
+// Out tests detectExplosionEvent and detectRescueEvent.
+
+function stepWith(
+    floodLog: IBannedIsletFloodPhaseOutcome['floodLog'],
+    prevTreasures: Partial<Record<BannedIsletTreasureId, boolean>> = {},
+    nextTreasures: Partial<Record<BannedIsletTreasureId, boolean>> = {},
+): IReplayStep {
+    const treasures = (overrides: Partial<Record<BannedIsletTreasureId, boolean>>) =>
+        Object.fromEntries(TREASURE_IDS.map(id => [id, overrides[id] ?? false])) as Record<BannedIsletTreasureId, boolean>;
+    return {
+        prev: { specificGameState: { treasures: treasures(prevTreasures) } },
+        next: { specificGameState: { treasures: treasures(nextTreasures) } },
+        command: {},
+        outcome: { validMove: true, turnOver: true, floodLog },
+        planned: false,
+    } as unknown as IReplayStep;
+}
+
+describe("detectSinkingEvents", () => {
+    it("marks the tiles line once per tile that went under, naming it", () => {
+        const [first, second] = TILE_IDS;
+        const events = detectSinkingEvents(stepWith([
+            { kind: 'flood', tile: first, outcome: 'sunk' },
+            { kind: 'flood', tile: second, outcome: 'flooded' },
+            { kind: 'flood', tile: TILE_IDS[2], outcome: 'sunk' },
+        ]));
+
+        expect(events).toEqual([
+            { icon: 'sinking', title: `${tileName(first)} sank`, seriesKey: TILES_SERIES_KEY },
+            { icon: 'sinking', title: `${tileName(TILE_IDS[2])} sank`, seriesKey: TILES_SERIES_KEY },
+        ]);
+    });
+
+    it("reports nothing for a flood phase that only flooded, or for a command with no flood phase at all", () => {
+        expect(detectSinkingEvents(stepWith([{ kind: 'flood', tile: TILE_IDS[0], outcome: 'flooded' }]))).toBeUndefined();
+        expect(detectSinkingEvents({ outcome: { validMove: true, turnOver: false } } as unknown as IReplayStep)).toBeUndefined();
+    });
+});
+
+describe("detectCaptureEvents", () => {
+    it("marks the tiles line for each relic that came off the island between the two snapshots", () => {
+        const events = detectCaptureEvents(stepWith([], { emberCrown: true }, { emberCrown: true, rootStone: true }));
+
+        expect(events).toEqual([
+            { icon: 'landmark', title: `The ${treasureName('rootStone')} came off the island`, seriesKey: TILES_SERIES_KEY },
+        ]);
+    });
+
+    it("reports nothing when no treasure changed hands", () => {
+        expect(detectCaptureEvents(stepWith([], { emberCrown: true }, { emberCrown: true }))).toBeUndefined();
     });
 });

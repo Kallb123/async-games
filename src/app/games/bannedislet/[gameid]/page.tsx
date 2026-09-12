@@ -18,6 +18,7 @@ import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import ReadOnlyPanel from "@/components/ui/ReadOnlyPanel";
 import Stat from "@/components/ui/Stat";
 import TurnNavControls from "@/components/games/TurnNavControls";
+import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
@@ -26,6 +27,7 @@ import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { SubmitCommand, useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
+import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { ACTIONS_PER_TURN, HAND_LIMIT, LOSING_WATER_LEVEL, POSITION_COUNT, roleDef, tileName, BannedIsletTileId } from "@/games/BannedIslet/board";
 import {
     IBannedIsletFloodLogEntry,
@@ -58,12 +60,13 @@ import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder 
 // flood discard, which §21.4 is emphatic must be rendered rather than hidden,
 // because reading it is the one skill §14.2 rewards.
 //
-// One thing is still deliberately missing, with a PR of its own: **no recap**.
-// `useTurnRecap`/`TurnRecapScreen` are the away-time narrative and arrive with
-// `recap.ts`. The scrubber below is a different thing and does work today —
-// `recapAvailable` says the opening island has been stored since setup, and PR
-// 5 registered the replay adapter that turns it into a timeline. It stays
-// wired with `canPlan={false}` until the route planner opts this game in.
+// PR 9 adds the third screen, the away-time one: `useTurnRecap` +
+// `TurnRecapScreen`, the "since you were last here" narrative of §21.5 — the
+// island getting smaller while you weren't looking. The scrubber below is a
+// different thing and has worked since PR 5 — `recapAvailable` says the
+// opening island has been stored since setup, and PR 5 registered the replay
+// adapter that turns it into a timeline. It stays wired with
+// `canPlan={false}` until the route planner opts this game in.
 export default function GameBannedIslet({ params }: { params: Promise<{ gameid: uuidString }> }) {
     const pathName = usePathname();
     console.log(`GET ${pathName}`);
@@ -101,6 +104,11 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
         history: gameData?.gameState?.history ?? [],
     });
     const recapAvailable = gameData?.recapAvailable ?? false;
+
+    // "Since you were last here": the away-time narrative is the island
+    // getting smaller (§3, §21.5) — shown before the board whenever it's our
+    // turn and the sea did something while we were away.
+    const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
 
     // The "how to play" popup: shown automatically the first time this account
     // opens a Banned Islet match, and on demand from the game-options menu.
@@ -284,6 +292,12 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
         : [];
 
     const menuOptions: GameOption[] = [
+        ...(recap.hasRecap ? [{
+            key: 'recap',
+            label: 'Show last recap',
+            icon: '🔁',
+            onClick: recap.reshow,
+        }] : []),
         ...(guide ? [{
             key: 'guide',
             label: 'Game guide',
@@ -300,6 +314,20 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
     ];
 
     const tilesLeft = gs ? gs.positions.filter(p => p.state !== 'sunk').length : 0;
+
+    // Recap intro: a standalone welcome-back screen shown before the board
+    // when it's our turn and the island changed while we were away.
+    if (recap.show) {
+        return (
+            <TurnRecapScreen
+                recap={recap.recap!}
+                cta="See what's left →"
+                onDismiss={recap.dismiss}
+                viewerId={user?.id}
+                onReact={recap.react}
+            />
+        );
+    }
 
     // The end-of-turn reveal: what the draw and flood phases just did to the
     // island, shown once before the board moves on to whoever is up now.
