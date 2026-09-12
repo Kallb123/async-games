@@ -79,8 +79,12 @@ out. A second copy is the signal to extract the first one.
   `ReadOnlyPanel` is how a game screen shows a waiting player the panels they
   can look at but not act on — their hand, the face-up cards, the market — by
   making the turn sheet inert rather than growing a second read-only copy of it.
-  (Outbreak is the exception: every hand is public there, so `OutbreakHands`
-  renders them all, on or off your turn, and needs no wrapper.)
+  (The open-handed co-ops are the exception: every hand is public in Outbreak
+  and Banned Islet, so `PlayerHands` renders them all, on or off your turn, and
+  needs no wrapper.) `PlayerHands` is that stack of hands — one `ag-hand` panel
+  per seat, ordered from the viewer outwards, carrying the colour dot and the
+  now/next markers. A game passes its seats and its own card chip; it never
+  loops the seats itself.
 - `src/utils/ui/` — pure presentation helpers: `games.ts` (per-game metadata:
   name, art, accent, players), `gameThemes.ts` (the themes each game can be
   played in — see [`docs/game-themes.md`](./docs/game-themes.md)),
