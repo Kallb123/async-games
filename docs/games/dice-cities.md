@@ -916,27 +916,27 @@ from a theme, so it does not change.
 
 ## 14 Theme Summary
 
-| Base name | Outer Rim |
-| --- | --- |
-| **Wheat Field** | **Moisture Farm** |
-| **Ranch** | **Grazer Pens** |
-| **Bakery** | **Portion-Bread Stall** |
-| **Cafe** | **Safehouse Cantina** |
-| **Convenience Store** | **Outfitter's Post** |
-| **Forest** | **Timber Camp** |
-| **Stadium** | **Grav-Ball Arena** |
-| **TV Station** | **Holovid Studio** |
-| **Business Center** | **Claims Office** |
+| Base name | Outer Rim | Wasteland |
+| --- | --- | --- |
+| **Wheat Field** | **Moisture Farm** | Hydroponic Plot
+| **Ranch** | **Grazer Pens** | Brahmin Pen
+| **Bakery** | **Portion-Bread Stall** | Snackcake Bakery
+| **Cafe** | **Safehouse Cantina** | Roadside Diner
+| **Convenience Store** | **Outfitter's Post** | Salvage Trade Post
+| **Forest** | **Timber Camp** | Blasted Timber Yard
+| **Stadium** | **Grav-Ball Arena** | Cage Fight Arena
+| **TV Station** | **Holovid Studio** | Pirate Radio Station
+| **Business Center** | **Claims Office** | Barter Exchange
 | **Cheese Factory** | **Creamery Works** |
 | **Furniture Factory** | **Parts Foundry** |
 | **Mine** | **Spice Mine** |
 | **Family Restaurant** | **Spaceport Diner** |
 | **Apple Orchard** | **Orchard Terraces** |
 | **Fruit and Vegetable Market** | **Growers' Co-op** |
-| **Train Station** | **Docking Bay** |
+| **Train Station** | **Docking Bay** | Vault Door
 | **Shopping Mall** | **Way Station** |
 | **Amusement Park** | **Speeder Circuit** |
-| **Radio Tower** | **Sensor Array** |
+| **Radio Tower** | **Sensor Array** | Overseer Terminal
 | **Harbour** (5th landmark) | **Orbital Dock** |
 | **Sushi Bar** | **Void-Crab Grill** |
 | **Flower Orchard** | **Glowbloom Field** |
