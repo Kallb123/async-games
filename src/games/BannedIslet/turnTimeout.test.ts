@@ -64,6 +64,25 @@ describe("Banned Islet turn timeout (§21.6 PR 6)", () => {
         expect(game.currentTurn).toBe("u2");
     });
 
+    it("keeps §10's specials back when it has to choose the discard (§21.3)", async () => {
+        // The forced discard is rules.ts's `forcedDiscard`, not "the first N in
+        // the array": a stalled turn must not cost the team the only Helicopter
+        // Lift, which is the card §4.1's win is actually taken with.
+        const state = baseState(
+            { u1: { actionsLeft: 0, hand: ['helicopterLift', 'sandbags', 'emberCrown', 'stormIdol', 'tideChalice'] }, u2: {} },
+        );
+        state.treasureDeck = ['rootStone', 'rootStone'];
+        state.floodDeck = ['kelpStair', 'saltMarket'];
+        const game = makeGame(state);
+
+        expect(await resolveStalledTurn(game, "u1", "Alice")).toBe('advanced');
+
+        const hand = state.players.get("u1")!.hand;
+        expect(hand).toHaveLength(HAND_LIMIT);
+        expect(hand).toContain('helicopterLift');
+        expect(hand).toContain('sandbags');
+    });
+
     it("resolves a turn the draw left over the hand limit, which nothing else could (§10)", async () => {
         const state = baseState(
             { u1: { actionsLeft: 0, hand: ['emberCrown', 'emberCrown', 'emberCrown', 'emberCrown', 'stormIdol'] }, u2: {} },

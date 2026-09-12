@@ -319,7 +319,7 @@ export interface OutbreakRoleDef {
 }
 
 // All seven, dealt one per seat at random (§6 step 5) — see rules.ts's
-// dealRoles. `ability` is read by players (OutbreakRoleInfoPopup), so it is
+// dealRoles. `ability` is read by players (`RoleInfoPopup`), so it is
 // written in their language: what the role lets you do at the table, with no
 // GDD section references and no pronouns for whoever was dealt it.
 export const ROLES: OutbreakRoleDef[] = [

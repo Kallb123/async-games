@@ -2,7 +2,7 @@ import type { GameGuide } from "@/utils/ui/gameGuides";
 
 // The general how-to-play primer shown from the game-options menu and, once
 // per account, the first time a player opens an Outbreak match (see
-// useGameGuide). Role-specific ability text lives in OutbreakRoleInfoPopup —
+// useGameGuide). Role-specific ability text lives in the shared RoleInfoPopup —
 // this only covers what every player needs regardless of who they were
 // dealt (docs/games/outbreak-gdd.md §4, §7).
 export const guide: GameGuide = {

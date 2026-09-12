@@ -6,22 +6,28 @@
 // capture eligibility a second time (see docs/new-game.md, "Isomorphic rules
 // modules").
 //
-// These are the **base** rules only. Every one of §12's six roles bends
-// exactly one of them, and each arrives here as its own small pure predicate
-// in PR 7 (§21.6) — deliberately after the rules they bend are stable, rather
-// than woven through them now.
+// §12's six roles each bend exactly one of these rules, and each is its own
+// small pure predicate at the bottom of this file (§21.6 PR 7) rather than an
+// `if (role === ...)` branch inside a command — so the server's `Execute` and
+// the client's action picker ask the same question and can never disagree
+// about what a Pilot may do.
 //
 // Everything here is a function of the island and a position, never of a saved
 // document: the engine passes in `positions` and gets back a decision.
 import {
     CARDS_TO_CAPTURE,
+    ENGINEER_SHORE_UPS,
     LOSING_WATER_LEVEL,
+    NAVIGATOR_STEPS,
     PIER_TILE,
     TREASURES,
     WATER_LEVEL_TRACK,
+    diagonalNeighbours,
+    isTreasureCard,
     orthogonalNeighbours,
     tileOrder,
     BannedIsletCardId,
+    BannedIsletRoleId,
     BannedIsletTileId,
     BannedIsletTileState,
     BannedIsletTreasureId,
@@ -57,18 +63,90 @@ export function isStandable(island: BannedIsletIsland, position: number): boolea
     return state === 'dry' || state === 'flooded';
 }
 
-// ─── Movement and shoring (§8) ──────────────────────────────────────────────
+// ─── Movement and shoring (§8, §12) ─────────────────────────────────────────
+// Both of §8's spatial actions take the acting pawn's role, because two of
+// §12's six bend them: the Explorer counts the corners as adjacent (for moving
+// *and* for shoring), and the Diver swims a whole run of ruined tiles in one
+// action. Every other role gets the base rule back unchanged, which is why
+// these are the plain names rather than a base pair plus a role-aware pair —
+// one question with one answer, asked by `Execute` and by the action picker.
 
-/** §8 Move: the tiles a pawn can step onto for one action — orthogonally adjacent, and not a hole. */
-export function legalMoves(island: BannedIsletIsland, position: number): number[] {
-    return orthogonalNeighbours(position).filter(p => isStandable(island, p));
+/**
+ * What this role treats as next door. §5.1's island is orthogonal and the
+ * Explorer is the single exception (§12) — the one place the two neighbour
+ * sets in board.ts are added together, so nothing else has to know that
+ * diagonals exist.
+ */
+function adjacentFor(position: number, role: BannedIsletRoleId): number[] {
+    return role === 'explorer'
+        ? [...orthogonalNeighbours(position), ...diagonalNeighbours(position)]
+        : orthogonalNeighbours(position);
 }
 
-/** §8 Shore Up: the flooded tiles a pawn can dry out — its own and its neighbours'. A dry tile is not a no-op but an illegal target (§16), which is why this lists rather than shrugs. */
-export function legalShoreUps(island: BannedIsletIsland, position: number): number[] {
-    return [position, ...orthogonalNeighbours(position)]
+/** The standable tiles one ordinary step away, by this role's own geometry — what a Navigator sends a pawn along, one step at a time. */
+function steppableFrom(island: BannedIsletIsland, position: number, role: BannedIsletRoleId): number[] {
+    return adjacentFor(position, role).filter(p => isStandable(island, p));
+}
+
+/**
+ * §12 Diver / §9.2: the land on the far side of a run of ruined tiles. Swims
+ * *through* flooded and sunk positions and may stop on anything standable —
+ * so a flooded tile is both a step along the way and a place to stop (§9.1
+ * makes flooded standable), while dry land ends the swim rather than being
+ * swum through.
+ *
+ * §12 says "to the nearest land", which this reads as *the land a run of
+ * ruined tiles reaches* rather than only the single closest tile: the Diver is
+ * "the only pawn a collapsing island cannot strand", and picking their landing
+ * spot for them would take away the rescue the role is for. `resolveSwim`
+ * still picks one when the sea does the choosing.
+ */
+function diverReach(island: BannedIsletIsland, from: number): number[] {
+    const canStop = new Set<number>();
+    const seen = new Set<number>([from]);
+    let frontier = [from];
+    while (frontier.length > 0) {
+        const next: number[] = [];
+        for (const position of frontier) {
+            for (const neighbour of orthogonalNeighbours(position)) {
+                if (seen.has(neighbour)) continue;
+                seen.add(neighbour);
+                const state = tileStateAt(island, neighbour);
+                if (state === 'flooded' || state === 'sunk') next.push(neighbour);
+                if (state === 'flooded' || state === 'dry') canStop.add(neighbour);
+            }
+        }
+        frontier = next;
+    }
+    return [...canStop];
+}
+
+/** §8 Move: the tiles this pawn can reach for one action — adjacent and standable, plus the Diver's swim through anything ruined (§12). */
+export function moveTargets(island: BannedIsletIsland, position: number, role: BannedIsletRoleId): number[] {
+    const stepped = steppableFrom(island, position, role);
+    const reach = role === 'diver' ? new Set([...stepped, ...diverReach(island, position)]) : new Set(stepped);
+    reach.delete(position);
+    return [...reach].sort((a, b) => a - b);
+}
+
+/**
+ * §8 Shore Up: the flooded tiles this pawn can dry out — its own and its
+ * neighbours', the Explorer's corners included (§12). A dry tile is not a
+ * no-op but an illegal target (§16), which is why this lists rather than
+ * shrugs, and a sunk one can never be dried (§9.1).
+ *
+ * The Engineer changes the *price* rather than the targets — see
+ * `shoreUpsPerAction`.
+ */
+export function shoreUpTargets(island: BannedIsletIsland, position: number, role: BannedIsletRoleId): number[] {
+    return [position, ...adjacentFor(position, role)]
         .filter(p => tileStateAt(island, p) === 'flooded')
         .sort((a, b) => a - b);
+}
+
+/** §12 Engineer: two flooded tiles for one action, and one for everybody else. "Up to" — drying a single tile is still a legal shore up for them. */
+export function shoreUpsPerAction(role: BannedIsletRoleId): number {
+    return role === 'engineer' ? ENGINEER_SHORE_UPS : 1;
 }
 
 // ─── Capturing (§8) ─────────────────────────────────────────────────────────
@@ -177,6 +255,43 @@ export function floodRateFor(waterLevel: number): number {
     return WATER_LEVEL_TRACK[index];
 }
 
+// ─── The forced discard (§10, §21.3) ────────────────────────────────────────
+
+/**
+ * Which cards a player who is *not there* lets go of, when the draw pushed
+ * their hand over §10's limit and the turn-timer cron has to finish the turn
+ * for them (`utils/games/turnTimeout.ts`). The second decision in this game the
+ * app makes on a player's behalf, after `resolveSwim`, and held to the same
+ * §21.3 standard: pure, total, and deliberate rather than incidental.
+ *
+ * "The first N in the array" is what this replaced, and it was wrong twice
+ * over. It could discard the team's only Helicopter Lift — the card §4.1's win
+ * is actually taken with — purely because of where it happened to sit; and the
+ * array is not even ordered by age once any card has changed hands, since
+ * `applyGiveCard` splices out of the middle and pushes onto the end.
+ *
+ * So the order it lets go in is:
+ *
+ *   1. §10's treasure cards before its specials. A spare treasure card is one
+ *      of twenty; a Helicopter Lift is one of three and is the §4.1 win.
+ *   2. among treasure cards, the treasure the player holds fewest of — so a
+ *      lone card goes before one of the four that are nearly a capture (§8).
+ *   3. then by card id, so a replay and a recap reach the same hand.
+ */
+export function forcedDiscard(hand: readonly BannedIsletCardId[], limit: number): BannedIsletCardId[] {
+    const excess = hand.length - limit;
+    if (excess <= 0) return [];
+    return hand
+        .map((card, index) => ({ card, index }))
+        .sort((a, b) =>
+            (isTreasureCard(a.card) ? 0 : 1) - (isTreasureCard(b.card) ? 0 : 1)
+            || countCards(hand, a.card) - countCards(hand, b.card)
+            || a.card.localeCompare(b.card)
+            || a.index - b.index)
+        .slice(0, excess)
+        .map(entry => entry.card);
+}
+
 // ─── Routes (§5.1, §21.3) ───────────────────────────────────────────────────
 
 /**
@@ -209,6 +324,23 @@ export function routeDistance(island: BannedIsletIsland, from: number, to: numbe
 // ─── Swimming (§9.2, §21.3) ─────────────────────────────────────────────────
 
 /**
+ * §9.2's candidates when the tile under a pawn sinks — every tile that role
+ * could have *moved* to, since a swim is the same geometry without the action
+ * cost, plus the Pilot's whole island.
+ *
+ * The Pilot is the one role whose swim is wider than their move: flying costs
+ * an action and happens once a turn on their own turn (§12), but a tile going
+ * out from under them is neither their choice nor their turn, so the fare is
+ * waived rather than the ability being spent. That is exactly what §9.2 means
+ * by "the Pilot may swim to any tile on the island".
+ */
+export function swimReach(island: BannedIsletIsland, from: number, role: BannedIsletRoleId): number[] {
+    return role === 'pilot'
+        ? pilotFlightTargets(island, from)
+        : moveTargets(island, from, role);
+}
+
+/**
  * Where a pawn ends up when the tile under it sinks — §21.3's deviation, and
  * the one place the app decides something a player would have decided. Pure
  * and total, so it can run inside the sinking player's own `Execute` rather
@@ -221,12 +353,13 @@ export function routeDistance(island: BannedIsletIsland, from: number, to: numbe
  *      reproducible on replay rather than dependent on array order.
  *
  * `null` means there is nowhere to go, which is the drowning loss of §4.2 —
- * see `isDrowningLoss`. §9.2's three role exceptions widen the candidates
- * without touching that preference, and arrive with the rest of the roles in
- * PR 7.
+ * see `isDrowningLoss`. §9.2's three role exceptions widen *which* tiles are
+ * candidates (`swimReach`) without touching the preference between them, so a
+ * Diver and a Messenger dropped off the same tile rank the same shortlist
+ * differently sized.
  */
-export function resolveSwim(island: BannedIsletIsland, from: number): number | null {
-    const candidates = orthogonalNeighbours(from).filter(p => isStandable(island, p));
+export function resolveSwim(island: BannedIsletIsland, from: number, role: BannedIsletRoleId): number | null {
+    const candidates = swimReach(island, from, role);
     if (candidates.length === 0) return null;
 
     const pier = pierPosition(island);
@@ -238,6 +371,99 @@ export function resolveSwim(island: BannedIsletIsland, from: number): number | n
     }));
     ranked.sort((a, b) => a.dry - b.dry || a.toPier - b.toPier || a.tile - b.tile);
     return ranked[0].position;
+}
+
+// ─── Roles (§12, §21.6 PR 7) ────────────────────────────────────────────────
+// The three abilities that are not a widening of a base rule above. The other
+// three are, and live with the rule each of them bends: the Explorer's
+// diagonals and the Diver's swim in `moveTargets` / `shoreUpTargets`, and the
+// Engineer's second tile in `shoreUpsPerAction`. Every one of them is a
+// predicate rather than a branch inside a command, which is what keeps
+// `Execute` and the client's action picker asking the same question.
+
+/**
+ * §12 Pilot: whether the flight is there to be taken — the game's one
+ * once-per-turn ability, and the only reason `pilotFlightUsed` is persisted.
+ * Reset in `CheckEndTurn` alongside `actionsLeft`, so it refills at the start
+ * of the Pilot's own turn rather than the end of somebody else's.
+ */
+export function pilotFlightAvailable(role: BannedIsletRoleId, pilotFlightUsed: boolean): boolean {
+    return role === 'pilot' && !pilotFlightUsed;
+}
+
+/**
+ * Where that flight can land: any surviving tile but the one already under the
+ * pawn — "any tile on the island" (§12), which is what makes the Pilot the
+ * answer to §5.1's severed island and the role the team plans around.
+ *
+ * Not gated on the role itself: `swimReach` reads it for a Pilot swept off a
+ * tile, where the flight is free and unspent (§9.2), and the gate for the
+ * *action* is `pilotFlightAvailable` above.
+ */
+export function pilotFlightTargets(island: BannedIsletIsland, position: number): number[] {
+    return island
+        .map((_, p) => p)
+        .filter(p => p !== position && isStandable(island, p));
+}
+
+/** §12 Navigator: may spend an action on somebody else's pawn. Nobody else may touch another pawn at all. */
+export function navigatorCanMoveOthers(role: BannedIsletRoleId): boolean {
+    return role === 'navigator';
+}
+
+/**
+ * §12 Navigator: where another player's pawn can be sent for one action — up
+ * to `NAVIGATOR_STEPS` ordinary steps, each one legal on its own, so a two-step
+ * route always has standable ground in the middle of it and never hops a hole.
+ *
+ * The steps use the **moved** pawn's geometry, not the Navigator's: an Explorer
+ * sent by the Navigator still turns corners, because the diagonals are how that
+ * pawn reads the island (§12) rather than something the Navigator does to it.
+ * A Diver being sent does *not* get their swim, though — that is an action the
+ * Diver spends, and the Navigator is spending their own.
+ */
+export function navigatorMoveTargets(island: BannedIsletIsland, from: number, movedRole: BannedIsletRoleId): number[] {
+    const reached = new Set<number>();
+    let frontier = [from];
+    for (let step = 0; step < NAVIGATOR_STEPS; step++) {
+        const next: number[] = [];
+        for (const position of frontier) {
+            for (const target of steppableFrom(island, position, movedRole)) {
+                if (target === from || reached.has(target)) continue;
+                reached.add(target);
+                next.push(target);
+            }
+        }
+        frontier = next;
+    }
+    return [...reached].sort((a, b) => a - b);
+}
+
+/** One pawn, as the two role rules that read the whole roster need it. */
+export interface IBannedIsletPawn {
+    userId: string;
+    position: number;
+}
+
+/**
+ * §8 Give a Treasure Card: who the sender can hand one to. Face to face by
+ * default — the game's only transfer and deliberately a costly one — and
+ * §12's Messenger is the exception that makes that rule matter, giving to
+ * anybody anywhere and removing what §12 calls "the meet-in-person tax".
+ *
+ * Returns user ids rather than positions because this is the one action whose
+ * target is a player instead of a tile.
+ */
+export function giveCardTargets(
+    pawns: readonly IBannedIsletPawn[],
+    senderId: string,
+    role: BannedIsletRoleId,
+): string[] {
+    const sender = pawns.find(p => p.userId === senderId);
+    if (!sender) return [];
+    return pawns
+        .filter(p => p.userId !== senderId && (role === 'messenger' || p.position === sender.position))
+        .map(p => p.userId);
 }
 
 // ─── The four losses (§4.2) ─────────────────────────────────────────────────
@@ -261,9 +487,9 @@ export function isTreasureLoss(island: BannedIsletIsland, captured: Record<Banne
     return lostTreasures(island, captured).length > 0;
 }
 
-/** A player drowns: their tile sank and §9.2 leaves them nowhere to swim to. */
-export function isDrowningLoss(island: BannedIsletIsland, position: number): boolean {
-    return resolveSwim(island, position) === null;
+/** A player drowns: their tile sank and §9.2 leaves them nowhere to swim to — which for a Pilot or a Diver means the island itself has run out of land (§12). */
+export function isDrowningLoss(island: BannedIsletIsland, position: number, role: BannedIsletRoleId): boolean {
+    return resolveSwim(island, position, role) === null;
 }
 
 /** The sea wins: the meter has climbed to the skull (§11). */

@@ -6,7 +6,7 @@ import { uuidString } from "@/utils/apiModels/GameDataApi";
 import { BannedIsletAction, IBannedIsletFloodPhaseOutcome } from "@/utils/apiModels/GameLogic";
 import type { IBannedIsletGameDataResponse, IBannedIsletSpecificGameStateResponse } from "@/games/BannedIslet/apiModels";
 import BannedIsletBoard from "@/games/BannedIslet/components/BannedIsletBoard";
-import BannedIsletActions, { BannedIsletBoardMode } from "@/games/BannedIslet/components/BannedIsletActions";
+import BannedIsletActions, { BannedIsletPick } from "@/games/BannedIslet/components/BannedIsletActions";
 import BannedIsletHands from "@/games/BannedIslet/components/BannedIsletHands";
 import BannedIsletFloodDiscard from "@/games/BannedIslet/components/BannedIsletFloodDiscard";
 import BannedIsletEndTurnScreen from "@/games/BannedIslet/components/BannedIsletEndTurnScreen";
@@ -27,7 +27,17 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { SubmitCommand, useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { ACTIONS_PER_TURN, HAND_LIMIT, LOSING_WATER_LEVEL, POSITION_COUNT, roleDef, tileName, BannedIsletTileId } from "@/games/BannedIslet/board";
-import { IBannedIsletFloodLogEntry, legalMoves, legalShoreUps, positionOfTile } from "@/games/BannedIslet/rules";
+import {
+    IBannedIsletFloodLogEntry,
+    giveCardTargets,
+    moveTargets,
+    navigatorMoveTargets,
+    pilotFlightAvailable,
+    pilotFlightTargets,
+    positionOfTile,
+    shoreUpTargets,
+    shoreUpsPerAction,
+} from "@/games/BannedIslet/rules";
 import { guideForGame } from "@/utils/ui/gameGuides";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
@@ -110,10 +120,11 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
     const scoreboardOrder = scoreboardSeatOrder(gameData, myUserId);
     const me = gs?.playerStates[myUserId];
 
-    // Which of the two tile-picking actions is armed, if either — reset
-    // whenever the turn changes, so a stale pick never lingers into somebody
-    // else's turn.
-    const [mode, setMode] = useResettingState<BannedIsletBoardMode | null>(null, `${displayedCurrentTurn}`);
+    // Which tile-picking action is armed, if any — and, for the two that act on
+    // something other than the viewer's own pawn, what they are acting on (§12).
+    // Reset whenever the turn changes, so a stale pick never lingers into
+    // somebody else's turn.
+    const [pick, setPick] = useResettingState<BannedIsletPick | null>(null, `${displayedCurrentTurn}`);
 
     // Which tile a tapped flood-discard card is ringing on the island right
     // now — purely a lookup aid on a board of 24 shuffled names, reset
@@ -121,27 +132,86 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
     // else's turn.
     const [highlightedTile, setHighlightedTile] = useResettingState<BannedIsletTileId | null>(null, `${displayedCurrentTurn}`);
 
-    // The one legality question this screen asks, asked of rules.ts: which
-    // tiles each action can reach from where my pawn stands. The counts feed
-    // the action sheet's rows and the set feeds the board's tappable tiles, so
-    // the two can never disagree about what is legal.
-    const moveTargets = gs && me ? legalMoves(gs.positions, me.position) : [];
-    const shoreTargets = gs && me ? legalShoreUps(gs.positions, me.position) : [];
-    const validPositions = new Set<number>(
-        !isMyTurn || !mode ? [] : mode === 'move' ? moveTargets : shoreTargets,
-    );
-
-    function handlePositionClick(position: number) {
-        if (!mode) return;
-        const cmd = new BannedIsletAction();
-        cmd.kind = mode;
-        cmd.target = position;
-        submitCommand(cmd, () => setMode(null), mode);
+    // The only legality questions this screen asks, all of them asked of
+    // rules.ts and every one of them given my own role — so the tiles the board
+    // lights up are exactly the ones `Execute` would accept, roles included
+    // (docs/new-game.md, "Isomorphic rules modules"). The counts feed the action
+    // sheet's rows and the sets feed the board's tappable tiles, so the two can
+    // never disagree about what a Pilot or an Engineer may do.
+    const moveReach = gs && me ? moveTargets(gs.positions, me.position, me.role) : [];
+    const shoreReach = gs && me ? shoreUpTargets(gs.positions, me.position, me.role) : [];
+    const flightReach = gs && me && pilotFlightAvailable(me.role, me.pilotFlightUsed)
+        ? pilotFlightTargets(gs.positions, me.position)
+        : [];
+    // §8 / §12: who I can hand a treasure card to — my own tile, or anywhere at
+    // all if I am the Messenger.
+    const giveMates = gs && me
+        ? giveCardTargets(Object.values(gs.playerStates).map(p => ({ userId: p.userId, position: p.position })), myUserId, me.role)
+        : [];
+    // §12 Navigator: how far each teammate's own pawn could be sent, keyed by
+    // seat — both the rows that offer it and the tiles the board lights up once
+    // one is chosen.
+    const navigatorReach: Record<string, number[]> = {};
+    if (gs && me && me.role === 'navigator') {
+        for (const p of Object.values(gs.playerStates)) {
+            if (p.userId === myUserId) continue;
+            navigatorReach[p.userId] = navigatorMoveTargets(gs.positions, p.position, p.role);
+        }
     }
 
-    const boardTag = !isMyTurn || !mode ? null
-        : mode === 'move' ? 'Choose a tile to move to'
-        : 'Choose a flooded tile to shore up';
+    function positionsFor(current: BannedIsletPick): number[] {
+        switch (current.mode) {
+            case 'move': return moveReach;
+            // §12 Engineer, mid-pick: the tile already banked is not offered a
+            // second time — one action dries two *different* tiles.
+            case 'shoreUp': return current.first === undefined ? shoreReach : shoreReach.filter(p => p !== current.first);
+            case 'pilotFlight': return flightReach;
+            case 'navigatorMove': return current.userId ? navigatorReach[current.userId] ?? [] : [];
+        }
+    }
+
+    const validPositions = new Set<number>(!isMyTurn || !pick ? [] : positionsFor(pick));
+
+    function sendAction(apply: (cmd: BannedIsletAction) => void, target: string) {
+        const cmd = new BannedIsletAction();
+        apply(cmd);
+        submitCommand(cmd, () => setPick(null), target);
+    }
+
+    function handlePositionClick(position: number) {
+        if (!pick || !me) return;
+        // §12 Engineer: the first tap banks a tile and the board keeps asking,
+        // because one action dries two. It only waits when there is a second
+        // tile to wait for — otherwise the tap is the whole shore up, and
+        // `applyShoreUp` treats a missing second target as "up to two".
+        if (pick.mode === 'shoreUp' && pick.first === undefined
+            && shoreUpsPerAction(me.role) > 1 && shoreReach.length > 1) {
+            setPick({ mode: 'shoreUp', first: position });
+            return;
+        }
+        sendAction(cmd => {
+            cmd.kind = pick.mode;
+            cmd.target = pick.first ?? position;
+            if (pick.first !== undefined) cmd.secondTarget = position;
+            if (pick.mode === 'navigatorMove') cmd.targetUserId = pick.userId ?? null;
+        }, pick.mode);
+    }
+
+    let boardTag: string | null = null;
+    if (isMyTurn && pick && gs) {
+        switch (pick.mode) {
+            case 'move': boardTag = 'Choose a tile to move to'; break;
+            case 'pilotFlight': boardTag = 'Choose any tile on the island to fly to'; break;
+            case 'navigatorMove':
+                boardTag = `Choose where to send ${pick.userId ? nameForUserId(gameData, pick.userId) : 'them'}`;
+                break;
+            case 'shoreUp':
+                boardTag = pick.first === undefined
+                    ? 'Choose a flooded tile to shore up'
+                    : `Choose a second flooded tile to dry with ${tileName(gs.positions[pick.first].tile)}`;
+                break;
+        }
+    }
 
     const currentTurnUsername = nameForUserId(gameData, displayedCurrentTurn);
     const abandoned = abandonedGameStatus(complete, gameData?.endReason, nameForUserId(gameData, gameData?.forfeitedBy));
@@ -280,9 +350,19 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
                                 // to do — rather than the current player's.
                                 myUserId={myUserId}
                                 isMyTurn={isMyTurn}
-                                mode={mode}
-                                onModeChange={setMode}
-                                targetCounts={{ move: moveTargets.length, shoreUp: shoreTargets.length }}
+                                pick={pick}
+                                onPickChange={setPick}
+                                targetCounts={{
+                                    move: moveReach.length,
+                                    shoreUp: shoreReach.length,
+                                    pilotFlight: flightReach.length,
+                                }}
+                                giveMates={giveMates}
+                                navigatorReach={navigatorReach}
+                                onShoreUpFirstOnly={first => sendAction(cmd => {
+                                    cmd.kind = 'shoreUp';
+                                    cmd.target = first;
+                                }, 'shoreUp')}
                                 submitCommand={submitCommand}
                                 pendingTarget={pendingTarget}
                                 submitting={submitting}

@@ -158,7 +158,9 @@ describe("BannedIsletAction 'giveCard' (§8)", () => {
 
     it("refuses a teammate on another tile — the meet-in-person tax the Messenger removes (§12)", async () => {
         const state = baseState({
-            u1: { position: MIDDLE, hand: ['emberCrown'] },
+            // Explicitly not the Messenger: the base rule is the one under
+            // test, and the exception to it gets its own test in roles.test.ts.
+            u1: { position: MIDDLE, hand: ['emberCrown'], role: 'engineer' },
             u2: { position: NORTH_OF_MIDDLE, hand: [] },
         });
         const game = makeGame(state);

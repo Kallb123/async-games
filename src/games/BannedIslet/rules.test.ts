@@ -3,6 +3,7 @@ import {
     PIER_TILE,
     TILE_IDS,
     WATER_LEVEL_TRACK,
+    BannedIsletRoleId,
     BannedIsletTileId,
 } from "./board";
 import {
@@ -15,13 +16,13 @@ import {
     isStandable,
     isTreasureLoss,
     isWaterLevelLoss,
-    legalMoves,
-    legalShoreUps,
     lostTreasures,
+    moveTargets,
     pierPosition,
     positionOfTile,
     resolveSwim,
     routeDistance,
+    shoreUpTargets,
     treasureAt,
 } from "./rules";
 import {
@@ -40,37 +41,43 @@ import {
     IIslandOptions,
 } from "./testFixtures";
 
-describe("legalMoves (§8)", () => {
+// The role to ask the base rules with: §12's Messenger is the only one of the
+// six whose ability isn't spatial, so it reads every movement, shoring and
+// swimming rule exactly as written. The five that don't have their own
+// describe block below.
+const BASE: BannedIsletRoleId = 'messenger';
+
+describe("moveTargets (§8)", () => {
     it("offers the four orthogonal neighbours, and never a diagonal", () => {
-        expect(legalMoves(island(), MIDDLE).sort((a, b) => a - b)).toEqual(
+        expect(moveTargets(island(), MIDDLE, BASE).sort((a, b) => a - b)).toEqual(
             [NORTH_OF_MIDDLE, WEST_OF_MIDDLE, EAST_OF_MIDDLE, SOUTH_OF_MIDDLE].sort((a, b) => a - b),
         );
-        expect(legalMoves(island(), MIDDLE)).not.toContain(NORTH_WEST);
+        expect(moveTargets(island(), MIDDLE, BASE)).not.toContain(NORTH_WEST);
     });
 
     it("counts a flooded tile as standable and a hole as gone (§9.1, §16)", () => {
         const board = island({ flooded: [NORTH_OF_MIDDLE], sunk: [EAST_OF_MIDDLE] });
-        expect(legalMoves(board, MIDDLE)).toContain(NORTH_OF_MIDDLE);
-        expect(legalMoves(board, MIDDLE)).not.toContain(EAST_OF_MIDDLE);
+        expect(moveTargets(board, MIDDLE, BASE)).toContain(NORTH_OF_MIDDLE);
+        expect(moveTargets(board, MIDDLE, BASE)).not.toContain(EAST_OF_MIDDLE);
         expect(isStandable(board, NORTH_OF_MIDDLE)).toBe(true);
         expect(isStandable(board, EAST_OF_MIDDLE)).toBe(false);
     });
 
     it("leaves a pawn ringed by holes with nowhere to step", () => {
         const severed = island({ sunk: [NORTH_OF_MIDDLE, WEST_OF_MIDDLE, EAST_OF_MIDDLE, SOUTH_OF_MIDDLE] });
-        expect(legalMoves(severed, MIDDLE)).toEqual([]);
+        expect(moveTargets(severed, MIDDLE, BASE)).toEqual([]);
     });
 });
 
-describe("legalShoreUps (§8)", () => {
+describe("shoreUpTargets (§8)", () => {
     it("dries out this tile and its neighbours, and only the flooded ones (§16)", () => {
         const board = island({ flooded: [MIDDLE, EAST_OF_MIDDLE] });
-        expect(legalShoreUps(board, MIDDLE)).toEqual([MIDDLE, EAST_OF_MIDDLE].sort((a, b) => a - b));
+        expect(shoreUpTargets(board, MIDDLE, BASE)).toEqual([MIDDLE, EAST_OF_MIDDLE].sort((a, b) => a - b));
     });
 
     it("never un-sinks a tile, and never reaches past a neighbour (§9.1)", () => {
-        expect(legalShoreUps(island({ sunk: [EAST_OF_MIDDLE] }), MIDDLE)).toEqual([]);
-        expect(legalShoreUps(island({ flooded: [FAR_EAST] }), MIDDLE)).toEqual([]);
+        expect(shoreUpTargets(island({ sunk: [EAST_OF_MIDDLE] }), MIDDLE, BASE)).toEqual([]);
+        expect(shoreUpTargets(island({ flooded: [FAR_EAST] }), MIDDLE, BASE)).toEqual([]);
     });
 });
 
@@ -150,7 +157,7 @@ describe("resolveSwim (§9.2, §21.3)", () => {
             flooded: [NORTH_OF_MIDDLE, EAST_OF_MIDDLE, SOUTH_OF_MIDDLE],
             sunk: [MIDDLE],
         });
-        expect(resolveSwim(sinking, MIDDLE)).toBe(WEST_OF_MIDDLE);
+        expect(resolveSwim(sinking, MIDDLE, BASE)).toBe(WEST_OF_MIDDLE);
     });
 
     it("stands a pawn on a flooded tile rather than drowning it (§16)", () => {
@@ -158,7 +165,7 @@ describe("resolveSwim (§9.2, §21.3)", () => {
             flooded: [NORTH_OF_MIDDLE, WEST_OF_MIDDLE, EAST_OF_MIDDLE, SOUTH_OF_MIDDLE],
             sunk: [MIDDLE],
         });
-        expect(resolveSwim(sinking, MIDDLE)).not.toBeNull();
+        expect(resolveSwim(sinking, MIDDLE, BASE)).not.toBeNull();
     });
 
     it("breaks a tie between two dry tiles by the route home to Beacon Pier", () => {
@@ -167,7 +174,7 @@ describe("resolveSwim (§9.2, §21.3)", () => {
             sunk: [MIDDLE, WEST_OF_MIDDLE, SOUTH_OF_MIDDLE],
         });
         expect(pierPosition(sinking)).toBe(EAST_OF_MIDDLE);
-        expect(resolveSwim(sinking, MIDDLE)).toBe(EAST_OF_MIDDLE);
+        expect(resolveSwim(sinking, MIDDLE, BASE)).toBe(EAST_OF_MIDDLE);
     });
 
     it("breaks a remaining tie by the lowest tile id, so a replay swims the same way", () => {
@@ -178,17 +185,17 @@ describe("resolveSwim (§9.2, §21.3)", () => {
             sunk: [MIDDLE, NORTH_OF_MIDDLE, NORTH_EAST, SOUTH_OF_MIDDLE],
         };
         const westIsLower = island({ ...cutOff, tiles: { ...cutOff.tiles, [WEST_OF_MIDDLE]: 'cinderTemple', [EAST_OF_MIDDLE]: 'shellRoad' } });
-        expect(resolveSwim(westIsLower, MIDDLE)).toBe(WEST_OF_MIDDLE);
+        expect(resolveSwim(westIsLower, MIDDLE, BASE)).toBe(WEST_OF_MIDDLE);
 
         const eastIsLower = island({ ...cutOff, tiles: { ...cutOff.tiles, [EAST_OF_MIDDLE]: 'cinderTemple', [WEST_OF_MIDDLE]: 'shellRoad' } });
-        expect(resolveSwim(eastIsLower, MIDDLE)).toBe(EAST_OF_MIDDLE);
+        expect(resolveSwim(eastIsLower, MIDDLE, BASE)).toBe(EAST_OF_MIDDLE);
     });
 
     it("drowns a pawn with nowhere to go — and that is the loss (§4.2)", () => {
         const stranded = island({ sunk: [TOP_TIP, TOP_TIP_EAST, NORTH_OF_MIDDLE] });
-        expect(resolveSwim(stranded, TOP_TIP)).toBeNull();
-        expect(isDrowningLoss(stranded, TOP_TIP)).toBe(true);
-        expect(isDrowningLoss(island({ sunk: [TOP_TIP] }), TOP_TIP)).toBe(false);
+        expect(resolveSwim(stranded, TOP_TIP, BASE)).toBeNull();
+        expect(isDrowningLoss(stranded, TOP_TIP, BASE)).toBe(true);
+        expect(isDrowningLoss(island({ sunk: [TOP_TIP] }), TOP_TIP, BASE)).toBe(false);
     });
 });
 

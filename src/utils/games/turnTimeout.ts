@@ -11,6 +11,7 @@ import { IFiresOutGameData } from "@/games/FiresOut/FiresOutModels";
 import { BannedIsletAction, BannedIsletDiscard, BannedIsletEndTurn } from "@/games/BannedIslet/BannedIsletLogic";
 import { IBannedIsletGameData } from "@/games/BannedIslet/BannedIsletModels";
 import { HAND_LIMIT as BANNED_ISLET_HAND_LIMIT } from "@/games/BannedIslet/board";
+import { forcedDiscard } from "@/games/BannedIslet/rules";
 
 // docs/games/outbreak-gdd.md §21.2, gap 2: the turn-timer cron used to handle
 // every game the same way — advance currentTurn and nothing else — which is
@@ -160,11 +161,14 @@ registerTurnTimeoutAdapter({
 
         if (gs.phase === 'discard') {
             const discard = new BannedIsletDiscard();
-            // The oldest cards in hand, since a forced resolution should not
-            // invent the judgement a real player would have applied — and §10
-            // makes them interchangeable copies anyway, so "the first N" is a
-            // choice of quantity rather than of card.
-            discard.cardIds = ps.hand.slice(0, ps.hand.length - BANNED_ISLET_HAND_LIMIT);
+            // Which cards go is rules.ts's call, not this adapter's —
+            // `forcedDiscard` is held to the same §21.3 standard as
+            // `resolveSwim`, the game's other decision made on behalf of a
+            // player who isn't there. In particular it keeps §10's specials
+            // back: this used to take the first N in the array, which could
+            // throw away the team's only Helicopter Lift — the card §4.1's win
+            // is actually taken with — purely because of where it sat.
+            discard.cardIds = forcedDiscard(ps.hand, BANNED_ISLET_HAND_LIMIT);
             return discard;
         }
         if (gs.phase !== 'actions') return null;

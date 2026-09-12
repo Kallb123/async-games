@@ -3,7 +3,7 @@ import type { IOutbreakPlayerStateResponse } from '@/games/Outbreak/apiModels';
 import { roleDef, type OutbreakRoleDef } from '@/games/Outbreak/board';
 import PlayerHands, { PlayerHandSeat } from '@/components/ui/PlayerHands';
 import OutbreakCardChip from './OutbreakCardChip';
-import OutbreakRoleInfoPopup from './OutbreakRoleInfoPopup';
+import RoleInfoPopup from '@/components/ui/RoleInfoPopup';
 
 interface OutbreakHandsProps {
     playerStates: { [userId: string]: IOutbreakPlayerStateResponse };
@@ -74,8 +74,7 @@ export default function OutbreakHands({
             note: role && (
                 <button
                     type="button"
-                    className="ag-hand-note"
-                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                    className="ag-hand-note ag-hand-note--tappable"
                     onClick={() => setInfoRole(role)}
                 >
                     {role.name} ⓘ
@@ -86,7 +85,7 @@ export default function OutbreakHands({
 
     return (
         <>
-            {infoRole && <OutbreakRoleInfoPopup role={infoRole} onClose={() => setInfoRole(null)} />}
+            {infoRole && <RoleInfoPopup role={infoRole} onClose={() => setInfoRole(null)} />}
             <PlayerHands
                 seats={seats}
                 turnOrder={turnOrder}
