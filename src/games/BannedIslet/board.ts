@@ -272,6 +272,17 @@ export function cardName(card: BannedIsletCardId): string {
     return isTreasureCard(card) ? treasureName(card) : SPECIAL_CARD_NAMES[card];
 }
 
+/** Every held card id, in the fixed order a hand groups them by — a treasure's
+ *  own "colour" the way the physical deck prints it, then the two playable
+ *  specials. Waters Rise! is left out: §10 never lets it sit in a hand. */
+const HAND_GROUP_ORDER: readonly BannedIsletCardId[] = [...TREASURE_IDS, ...PLAYABLE_CARD_IDS];
+
+/** A hand, grouped so identical cards sit together rather than in draw order —
+ *  the same "sort your hand by colour" a player does with the physical deck. */
+export function sortHand(hand: readonly BannedIsletCardId[]): BannedIsletCardId[] {
+    return [...hand].sort((a, b) => HAND_GROUP_ORDER.indexOf(a) - HAND_GROUP_ORDER.indexOf(b));
+}
+
 // ─── What things look like (§17) ────────────────────────────────────────────
 // §17 is an accessibility rule before it is an art direction: a treasure is
 // told apart by its **silhouette** and a flooded tile by its **face and its

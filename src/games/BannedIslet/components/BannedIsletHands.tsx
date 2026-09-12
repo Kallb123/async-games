@@ -4,7 +4,7 @@ import PlayerHands, { PlayerHandSeat } from '@/components/ui/PlayerHands';
 import RoleNote from '@/components/ui/RoleNote';
 import NamedChip from '@/components/ui/NamedChip';
 import type { IBannedIsletPlayerStateResponse } from '@/games/BannedIslet/apiModels';
-import { cardGlyph, cardName, roleDef } from '@/games/BannedIslet/board';
+import { cardGlyph, cardName, roleDef, sortHand } from '@/games/BannedIslet/board';
 
 interface BannedIsletHandsProps {
     playerStates: { [userId: string]: IBannedIsletPlayerStateResponse };
@@ -39,10 +39,12 @@ export default function BannedIsletHands({ playerStates, userIdList, turnOrder, 
         userId: ps.userId,
         username: ps.username,
         cardCount: ps.hand.length,
-        // Keyed by position in the hand: the cards are interchangeable copies
-        // (§10 — four Ember Crown cards are four of the same card), so there is
-        // no id to key on and the index is what tells two of them apart.
-        cards: ps.hand.map((card, index) => (
+        // Grouped by colour (sortHand) so identical cards sit together rather
+        // than in draw order. Keyed by position in the sorted hand: the cards
+        // are interchangeable copies (§10 — four Ember Crown cards are four of
+        // the same card), so there is no id to key on and the index is what
+        // tells two of them apart.
+        cards: sortHand(ps.hand).map((card, index) => (
             <NamedChip
                 key={`${card}-${index}`}
                 indicator={<span className="ag-hand-card-emoji" aria-hidden="true">{cardGlyph(card)}</span>}
