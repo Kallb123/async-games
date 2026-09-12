@@ -87,7 +87,7 @@ export interface GameResultChartSeries {
 // `fill`, so a landmark bought by the blue player looked identical to one
 // bought by the red player. Each name is drawn as a monochrome SVG shape by
 // ChartEventIcon (components/ui), which paints it in the series colour.
-export type GameResultEventIcon = 'landmark' | 'explosion' | 'rescue' | 'epidemic';
+export type GameResultEventIcon = 'landmark' | 'explosion' | 'rescue' | 'epidemic' | 'sinking';
 
 // One in-game moment worth calling out on a GameResultChart — Outbreak's
 // epidemic draws, Dice Cities' landmark buys, Fires Out's explosions.

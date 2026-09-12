@@ -91,6 +91,19 @@ import {
     formatFiresOutCharts,
 } from "@/games/FiresOut/FiresOutModels";
 import type { IFiresOutSpecificGameStateResponse } from "@/games/FiresOut/apiModels";
+import {
+    IBannedIsletGameData,
+    IBannedIsletGameResultStats,
+    computeBannedIsletResultStats,
+    detectCaptureEvents,
+    detectSinkingEvents,
+    bannedIsletGameResultStatsSchemaDef,
+    formatBannedIsletResultStats,
+    formatBannedIsletCharts,
+    TILES_SERIES_KEY,
+    WATER_SERIES_KEY,
+} from "@/games/BannedIslet/BannedIsletModels";
+import type { IBannedIsletSpecificGameStateResponse } from "@/games/BannedIslet/apiModels";
 import { totalDamage } from "@/games/FiresOut/rules";
 
 export interface IGameResultData {
@@ -260,6 +273,16 @@ var FiresOutGameResultSchema = new Schema<IFiresOutGameResultDataDocument>({
 }, { discriminatorKey: 'kind' });
 export var FiresOutGameResultModel = models.FiresOutGameResult || GameResultModel.discriminator<IFiresOutGameResultDataDocument, IFiresOutGameResultDataModel>('FiresOutGameResult', FiresOutGameResultSchema);
 
+export interface IBannedIsletGameResultData extends IGameResultData {
+    stats: IBannedIsletGameResultStats;
+}
+export interface IBannedIsletGameResultDataDocument extends IBannedIsletGameResultData, Document {}
+export interface IBannedIsletGameResultDataModel extends Model<IBannedIsletGameResultDataDocument> {}
+var BannedIsletGameResultSchema = new Schema<IBannedIsletGameResultDataDocument>({
+    stats: bannedIsletGameResultStatsSchemaDef
+}, { discriminatorKey: 'kind' });
+export var BannedIsletGameResultModel = models.BannedIsletGameResult || GameResultModel.discriminator<IBannedIsletGameResultDataDocument, IBannedIsletGameResultDataModel>('BannedIsletGameResult', BannedIsletGameResultSchema);
+
 // Maps a GameData's gameType to the discriminator model + stats calculator
 // that boil its final specificGameState down to the interesting numbers, plus
 // a formatter that turns those numbers into display-ready stat groups. Games
@@ -375,6 +398,30 @@ const GAME_RESULT_STATS: Record<string, {
         },
         format: formatOutbreakResultStats,
         charts: formatOutbreakCharts,
+    },
+    BannedIslet: {
+        model: BannedIsletGameResultModel,
+        compute: async (gameData) => {
+            const bannedIsletGameData = gameData as IBannedIsletGameData;
+            // Both series belong to the island, not to a player — one fixed
+            // key rather than one per userId, the same way Fires Out keys its
+            // damage line and Outbreak its cube supply.
+            const tilesLeftPerTurn = await computePerTurnStat<IBannedIsletSpecificGameStateResponse>(
+                bannedIsletGameData,
+                (state) => state.positions.filter(p => p.state !== 'sunk').length,
+                [TILES_SERIES_KEY],
+            );
+            const waterLevelPerTurn = await computePerTurnStat<IBannedIsletSpecificGameStateResponse>(
+                bannedIsletGameData,
+                (state) => state.waterLevel,
+                [WATER_SERIES_KEY],
+            );
+            const sinkingEvents = await computePerTurnEvents(bannedIsletGameData, detectSinkingEvents);
+            const captureEvents = await computePerTurnEvents(bannedIsletGameData, detectCaptureEvents);
+            return computeBannedIsletResultStats(bannedIsletGameData, tilesLeftPerTurn, waterLevelPerTurn, sinkingEvents, captureEvents);
+        },
+        format: formatBannedIsletResultStats,
+        charts: formatBannedIsletCharts,
     },
     FiresOut: {
         model: FiresOutGameResultModel,

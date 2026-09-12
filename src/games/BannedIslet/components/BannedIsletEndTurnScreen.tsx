@@ -3,6 +3,7 @@ import TurnRecap, { TurnRecapEvent } from '@/components/games/TurnRecap';
 import type { IBannedIsletPlayerStateResponse } from '@/games/BannedIslet/apiModels';
 import type { IBannedIsletFloodLogEntry, IBannedIsletSwim } from '@/games/BannedIslet/rules';
 import { LOSING_WATER_LEVEL, tileName } from '@/games/BannedIslet/board';
+import { swimLines, tileList, watersRiseLines } from '@/games/BannedIslet/narration';
 import { meta } from '@/games/BannedIslet/meta';
 import { playerColourForId } from '@/utils/ui/playerColours';
 import { pluralize } from '@/utils/ui/text';
@@ -26,21 +27,11 @@ const SUNK_DOT = '#0b3b46';
 
 /** One swim, as its own row — §21.3: the app decided this, so it is never a silent pawn teleport. */
 function swimEvent(swim: IBannedIsletSwim, id: string, name: string, colour: string, tileAt: (position: number) => string): TurnRecapEvent {
-    if (swim.to === null) {
-        return {
-            id,
-            dotColour: colour,
-            glyph: '💀',
-            title: `${name} went into the water with nowhere to swim`,
-            detail: 'Every tile around them was already gone.',
-        };
-    }
     return {
         id,
         dotColour: colour,
-        glyph: '🏊',
-        title: `${name} swam to ${tileAt(swim.to)}`,
-        detail: 'One Move on their own turn puts them back where they meant to be.',
+        glyph: swim.to === null ? '💀' : '🏊',
+        ...swimLines(swim, name, tileAt),
     };
 }
 
@@ -60,21 +51,11 @@ function eventsFor(
     const id = `${index}`;
 
     if (entry.kind === 'watersRise') {
-        if (entry.floodRateAfter === undefined) {
-            return [{
-                id,
-                dotColour: SUNK_DOT,
-                glyph: '💀',
-                title: `Waters Rise! The meter reached ${LOSING_WATER_LEVEL}`,
-                detail: 'The sea wins.',
-            }];
-        }
         return [{
             id,
             dotColour: SUNK_DOT,
-            glyph: '📈',
-            title: `Waters Rise! The water meter climbs to level ${entry.waterLevelAfter}`,
-            detail: `${pluralize(entry.shuffledBack ?? 0, 'flood card')} go back on top of the deck — the island now loses ${pluralize(entry.floodRateAfter, 'tile')} a turn.`,
+            glyph: entry.floodRateAfter === undefined ? '💀' : '📈',
+            ...watersRiseLines(entry),
         }];
     }
 
@@ -131,7 +112,7 @@ function summaryFor(floodLog: IBannedIsletFloodLogEntry[]): { headline: string; 
     if (sunk.length > 0) {
         return {
             headline: '🕳️ The island is smaller',
-            subline: `${sunk.map(e => tileName(e.tile!)).join(' and ')} ${sunk.length === 1 ? 'is' : 'are'} gone for good.`,
+            subline: `${tileList(sunk.map(e => e.tile!))} ${sunk.length === 1 ? 'is' : 'are'} gone for good.`,
         };
     }
     if (flooded > 0) {

@@ -2,9 +2,11 @@ import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { v4 as uuidv4 } from 'uuid';
-import type { uuidString } from "@/utils/apiModels/GameDataApi";
+import type { GameResultChart, GameResultChartSeries, GameResultEvent, GameResultStatGroup, uuidString } from "@/utils/apiModels/GameDataApi";
+import { compactCharts, formatPerTurnChart, gameResultEventSchemaDef } from "@/utils/apiModels/GameDataApi";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
-import { BannedIsletGameType } from "@/utils/apiModels/GameLogic";
+import { BannedIsletGameType, type IBannedIsletFloodPhaseOutcome } from "@/utils/apiModels/GameLogic";
+import type { IReplayStep } from "@/utils/games/replay";
 import { shuffle } from "@/utils/games/shuffle";
 import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
 import { userToken } from "@/utils/games/history";
@@ -21,6 +23,7 @@ import {
     BannedIsletRoleId,
     BannedIsletTileId,
     BannedIsletTreasureId,
+    LOSING_WATER_LEVEL,
     difficultyDef,
     ROLE_IDS,
     STARTING_HAND_SIZE,
@@ -31,8 +34,10 @@ import {
     roleDef,
     startWaterLevelFor,
     tileName,
+    treasureName,
 } from "./board";
 import { IBannedIsletPosition, positionOfTile } from "./rules";
+import { meta } from "./meta";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  BANNED ISLET
@@ -378,3 +383,153 @@ export function gameStateToModel(
 export var BannedIsletGameDataModel =
     models.BannedIsletGameData ||
     GameDataModel.discriminator<IBannedIsletGameDataDocument, IBannedIsletGameDataModel>('BannedIsletGameData', BannedIsletGameDataSchema);
+
+// ─── Result stats (§21.6 PR 9) ──────────────────────────────────────────────
+// A co-op table shares one result — one game-wide stat group, no per-player
+// breakdown — the same shape Outbreak's and Fires Out's own summaries use.
+// Wired into GAME_RESULT_STATS in src/utils/mongodb/GameResultData.ts.
+
+export interface IBannedIsletGameResultStats {
+    treasuresCaptured: number;
+    tilesLost: number;
+    waterLevel: number;
+    turnsLasted: number;
+    difficulty: BannedIsletDifficulty;
+    // Both series belong to the island rather than to any player, so — like
+    // Fires Out's damagePerTurn and Outbreak's cubesLeftPerTurn — each is
+    // keyed by one fixed name instead of by userId. §14.2's two economies,
+    // plotted: how much island is left, and how fast the sea is rising.
+    tilesLeftPerTurn: Map<string, number>[];
+    waterLevelPerTurn: Map<string, number>[];
+    // Every tile that went under for good, and every relic that came off the
+    // island — the two things that move §14.2's ratchet, marked on the tiles
+    // line they both belong to. Computed by computePerTurnEvents from the
+    // same replay pass as the series above.
+    sinkingEvents: GameResultEvent[];
+    captureEvents: GameResultEvent[];
+}
+
+export const bannedIsletGameResultStatsSchemaDef = {
+    treasuresCaptured: Number,
+    tilesLost: Number,
+    waterLevel: Number,
+    turnsLasted: Number,
+    difficulty: String,
+    tilesLeftPerTurn: [{ type: Schema.Types.Map, of: Number }],
+    waterLevelPerTurn: [{ type: Schema.Types.Map, of: Number }],
+    sinkingEvents: [gameResultEventSchemaDef],
+    captureEvents: [gameResultEventSchemaDef],
+};
+
+// The two board-wide series keys. Exported because the computePerTurnStat
+// calls that build the series live in GAME_RESULT_STATS (GameResultData.ts)
+// while the GameResultChartSeries that names them lives here, and two strings
+// that have to agree are one string. TILES_SERIES_KEY is also what every
+// marker below pins itself to.
+export const TILES_SERIES_KEY = 'tiles';
+export const WATER_SERIES_KEY = 'water';
+
+/**
+ * A computePerTurnEvents detector (see replay.ts): one marker per tile that
+ * sank, read off the same `floodLog` the end-of-turn screen and the recap both
+ * narrate (IBannedIsletFloodPhaseOutcome). Asked of every command rather than
+ * only BannedIsletEndTurn, because a hand-limit BannedIsletDiscard or a
+ * BannedIsletPlayCard can be what closes the turn and runs the flood phase.
+ * Exported so it can be unit-tested and wired straight into
+ * GAME_RESULT_STATS.BannedIslet.compute (GameResultData.ts).
+ */
+export function detectSinkingEvents(step: IReplayStep): Omit<GameResultEvent, 'turnIndex'>[] | undefined {
+    const sunk = ((step.outcome as IBannedIsletFloodPhaseOutcome).floodLog ?? [])
+        .filter(entry => entry.kind === 'flood' && entry.outcome === 'sunk');
+    if (sunk.length === 0) return undefined;
+    return sunk.map(entry => ({
+        icon: 'sinking' as const,
+        title: `${tileName(entry.tile!)} sank`,
+        seriesKey: TILES_SERIES_KEY,
+    }));
+}
+
+/**
+ * A computePerTurnEvents detector (see replay.ts): one marker per relic lifted
+ * off the island. Read from the treasures record's delta between the step's
+ * two snapshots rather than from any one command's `kind`, the same way Fires
+ * Out's detectRescueEvent reads `rescued` — so it stays right whichever
+ * command turns out to claim one. Exported so it can be unit-tested and wired
+ * straight into GAME_RESULT_STATS.BannedIslet.compute (GameResultData.ts).
+ */
+export function detectCaptureEvents(step: IReplayStep): Omit<GameResultEvent, 'turnIndex'>[] | undefined {
+    const prev = (step.prev.specificGameState as IBannedIsletSpecificGameStateResponse).treasures;
+    const next = (step.next.specificGameState as IBannedIsletSpecificGameStateResponse).treasures;
+    const captured = TREASURE_IDS.filter(id => next[id] && !prev[id]);
+    if (captured.length === 0) return undefined;
+    return captured.map(id => ({
+        // Reusing the landmark marker rather than minting a second new icon:
+        // a relic off a sinking island is the same beat Dice Cities marks
+        // when a landmark is finally bought — the team's own good news,
+        // against a line that is otherwise only falling.
+        icon: 'landmark' as const,
+        title: `The ${treasureName(id)} came off the island`,
+        seriesKey: TILES_SERIES_KEY,
+    }));
+}
+
+export function computeBannedIsletResultStats(
+    gameData: IBannedIsletGameData,
+    tilesLeftPerTurn: Map<string, number>[],
+    waterLevelPerTurn: Map<string, number>[],
+    sinkingEvents: GameResultEvent[],
+    captureEvents: GameResultEvent[],
+): IBannedIsletGameResultStats {
+    const gs = gameData.specificGameState;
+    return {
+        treasuresCaptured: TREASURE_IDS.filter(id => gs.treasures[id]).length,
+        tilesLost: gs.positions.filter(p => p.state === 'sunk').length,
+        waterLevel: gs.waterLevel,
+        // BannedIsletEndTurn is sent exactly once per turn and is the only
+        // command that starts the draw (§21.4) — every other command in
+        // commandHistory is a mid-turn action, discard or special — so this
+        // counts real turns rather than raw command volume.
+        turnsLasted: gameData.gameState.commandHistory.filter(c => c.className === 'BannedIsletEndTurn').length,
+        difficulty: gs.difficulty,
+        tilesLeftPerTurn,
+        waterLevelPerTurn,
+        sinkingEvents,
+        captureEvents,
+    };
+}
+
+// Both lines belong to the island rather than to a player — the same
+// treatment Fires Out gives its damage line — so each is drawn in a colour of
+// the island's own rather than in a player colour: the game's accent for the
+// land, and the deep sea blue the board's own water wears for the meter
+// climbing toward LOSING_WATER_LEVEL.
+const TILES_SERIES: GameResultChartSeries[] = [{ key: TILES_SERIES_KEY, name: 'Tiles left', color: meta.accent }];
+const WATER_SERIES: GameResultChartSeries[] = [{ key: WATER_SERIES_KEY, name: 'Water level', color: '#28527a' }];
+
+/**
+ * §14.2's two economies as two charts, which is what they are: the island
+ * shrinking and the sea rising are counted in different units and share no
+ * axis. The markers go on the tiles chart, the one they both move — a tile
+ * gone for good, and a relic saved from one.
+ */
+export function formatBannedIsletCharts(
+    stats: IBannedIsletGameResultStats,
+    usernameById: Map<string, string>,
+): GameResultChart[] {
+    return compactCharts(
+        formatPerTurnChart(
+            stats.tilesLeftPerTurn, "Tiles left, turn by turn", "Tiles", usernameById.size, TILES_SERIES,
+            [...stats.sinkingEvents, ...stats.captureEvents],
+        ),
+        formatPerTurnChart(stats.waterLevelPerTurn, "Water level, turn by turn", "Level", usernameById.size, WATER_SERIES),
+    );
+}
+
+export function formatBannedIsletResultStats(stats: IBannedIsletGameResultStats): GameResultStatGroup[] {
+    return [{
+        lines: [
+            `${pluralize(stats.treasuresCaptured, 'relic')} of ${TREASURE_IDS.length} lifted off the island · ${difficultyDef(stats.difficulty).label}`,
+            `${pluralize(stats.tilesLost, 'tile')} lost of ${TILE_IDS.length} · water level ${stats.waterLevel}/${LOSING_WATER_LEVEL} · ${pluralize(stats.turnsLasted, 'turn')}`,
+        ],
+    }];
+}
