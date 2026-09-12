@@ -9,6 +9,7 @@ import BannedIsletBoard from "@/games/BannedIslet/components/BannedIsletBoard";
 import BannedIsletActions, { BannedIsletPick } from "@/games/BannedIslet/components/BannedIsletActions";
 import BannedIsletHands from "@/games/BannedIslet/components/BannedIsletHands";
 import BannedIsletFloodDiscard from "@/games/BannedIslet/components/BannedIsletFloodDiscard";
+import BannedIsletWaterLevelScale from "@/games/BannedIslet/components/BannedIsletWaterLevelScale";
 import BannedIsletEndTurnScreen from "@/games/BannedIslet/components/BannedIsletEndTurnScreen";
 import { guide as bannedIsletGuide } from "@/games/BannedIslet/guide";
 import GameShell from "@/components/ui/GameShell";
@@ -87,6 +88,7 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
     // Every submit goes through this one wrapper so it is caught whichever
     // control fired it.
     const [turnResult, setTurnResult] = useState<IBannedIsletFloodLogEntry[] | null>(null);
+    const [showWaterScale, setShowWaterScale] = useState(false);
     const submitCommand: SubmitCommand = (command, callback, target) =>
         rawSubmitCommand(command, (r) => {
             const floodLog = (r.outcome as IBannedIsletFloodPhaseOutcome).floodLog;
@@ -365,9 +367,15 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
             {gs && (
                 <>
                     <div className="ag-stat-row">
-                        <Stat value={`${gs.waterLevel}/${LOSING_WATER_LEVEL}`} label="Water level" />
+                        <Stat
+                            value={`${gs.waterLevel}/${LOSING_WATER_LEVEL}`}
+                            label="Water level"
+                            onClick={() => setShowWaterScale(v => !v)}
+                            pressed={showWaterScale}
+                        />
                         <Stat value={`${tilesLeft}/${POSITION_COUNT}`} label="Tiles left" />
                     </div>
+                    {showWaterScale && <BannedIsletWaterLevelScale waterLevel={gs.waterLevel} />}
 
                     {complete && (
                         <GameFinishBanner

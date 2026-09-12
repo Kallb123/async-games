@@ -10,11 +10,13 @@ import {
     MAX_PLAYERS,
     MIN_PLAYERS,
     PIER_TILE,
+    PLAYABLE_CARD_IDS,
     POSITION_COUNT,
     ROLES,
     TILES,
     TILE_COUNT,
     TILE_IDS,
+    TREASURE_IDS,
     TREASURES,
     WATER_LEVEL_TRACK,
     colOf,
@@ -23,8 +25,10 @@ import {
     orthogonalNeighbours,
     positionAt,
     rowOf,
+    sortHand,
     startWaterLevelFor,
     tileOrder,
+    BannedIsletCardId,
     BannedIsletDifficulty,
 } from "./board";
 
@@ -180,5 +184,22 @@ describe("the numbers (§7, §8, §10, §11, §13)", () => {
 
     it("falls back to Novice rather than trusting a difficulty that was never validated", () => {
         expect(difficultyDef('nonsense' as BannedIsletDifficulty)).toBe(DIFFICULTIES[0]);
+    });
+});
+
+describe("sortHand", () => {
+    it("groups a hand by card type — every treasure before either special", () => {
+        const hand: BannedIsletCardId[] = ['sandbags', 'stormIdol', 'emberCrown', 'helicopterLift', 'stormIdol'];
+        expect(sortHand(hand)).toEqual(['emberCrown', 'stormIdol', 'stormIdol', 'helicopterLift', 'sandbags']);
+    });
+
+    it("orders treasures before specials, matching TREASURE_IDS then PLAYABLE_CARD_IDS", () => {
+        const hand: BannedIsletCardId[] = [...PLAYABLE_CARD_IDS, ...TREASURE_IDS].reverse();
+        expect(sortHand(hand)).toEqual([...TREASURE_IDS, ...PLAYABLE_CARD_IDS]);
+    });
+
+    it("never has to place Waters Rise! — §10 never lets it sit in a hand", () => {
+        expect(TREASURE_IDS as readonly BannedIsletCardId[]).not.toContain('watersRise');
+        expect(PLAYABLE_CARD_IDS as readonly BannedIsletCardId[]).not.toContain('watersRise');
     });
 });

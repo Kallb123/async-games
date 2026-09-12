@@ -67,6 +67,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Banned Islet's water level and hands get easier to read",
+                detail: "Tap the water level stat to see what each level means — the same trick Outbreak's infection rate uses — and check how many flood cards land at each one, right down to the skull. Every hand's cards now sit grouped by type instead of draw order, so it's easier to see what everyone's holding at a glance.",
+                game: "bannedislet",
+            },
+            {
                 title: "The home screen fills a big screen",
                 detail: "On a laptop or a desktop, the dashboard stops being a phone-width strip: a rail down the left puts every game you have on the go one click away wherever you have scrolled to, the games waiting on you sit side by side across the middle, and invites you have sent, finished games and the two big buttons move into a panel of their own on the right. On a phone it is exactly the screen it was.",
             },
@@ -103,11 +108,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Reactions now show up in the turn history log",
                 detail: "A reaction used to only ever reach the one player it was sent to, as a push notification. It now sits right on that move in the turn history log too, so anyone flipping back through what happened can see what landed and on which line — and a move used to take one reaction total, whichever opponent got there first, but now every player has their own to give, so a big roll can pick up an 😱 from one opponent and a Nice! from another, all shown together wherever that move appears, recap screen included. You can drop yours straight from the turn history log too, not just from the recap screen — its 💬 trigger is now a plain grey smiley, and the chat and turn history panels both say which end is newest.",
-            },
-            {
-                title: "Play Dice Cities in the wasteland",
-                detail: "Dice Cities now has themes: pick one when you set up a game and everyone plays in it. Alongside the original there's Rust & Bottlecaps — a post-nuclear wasteland where you're an Overseer rebuilding a settlement, the Wheat Field is a Hydroponic Plot, the Ranch is a Brahmin Pen, and everything is paid for in caps. Only the names and the look change: every cost, number and rule is identical, so it plays exactly the same. Its card art is still being drawn, so some cards still wear the original faces for now.",
-                game: "dicecities",
             },
         ],
     },

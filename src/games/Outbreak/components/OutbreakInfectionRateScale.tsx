@@ -17,15 +17,15 @@ export default function OutbreakInfectionRateScale({ infectionRateIndex }: Outbr
     const current = Math.min(infectionRateIndex, INFECTION_RATE_TRACK.length - 1);
 
     return (
-        <div className="ag-ob-ratescale">
-            <div className="ag-ob-ratescale-track">
+        <div className="ag-escalation-scale">
+            <div className="ag-escalation-scale-track">
                 {INFECTION_RATE_TRACK.map((rate, i) => (
                     <div
                         key={i}
                         className={
-                            'ag-ob-ratescale-space'
-                            + (i === current ? ' ag-ob-ratescale-space--current' : '')
-                            + (i < current ? ' ag-ob-ratescale-space--past' : '')
+                            'ag-escalation-scale-space'
+                            + (i === current ? ' ag-escalation-scale-space--current' : '')
+                            + (i < current ? ' ag-escalation-scale-space--past' : '')
                         }
                         aria-current={i === current ? 'true' : undefined}
                     >
@@ -33,7 +33,7 @@ export default function OutbreakInfectionRateScale({ infectionRateIndex }: Outbr
                     </div>
                 ))}
             </div>
-            <p className="ag-ob-ratescale-note">
+            <p className="ag-escalation-scale-note">
                 Every epidemic nudges the marker one space along. Where it lands is how many
                 infection cards are drawn at the end of each turn.
             </p>
