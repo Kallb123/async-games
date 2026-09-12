@@ -968,9 +968,10 @@ PR list below is still mostly game code.
 
 ### 23.3 Deviations from this document
 
-Asynchronous play forces four. Record each in a "Deviations" subsection of this
-document as it lands — a deviation is anything a reader of this document alone
-would not predict from the code.
+Asynchronous play forces four, and building it has since added one more.
+Record each in a "Deviations" subsection of this document as it lands — a
+deviation is anything a reader of this document alone would not predict from
+the code.
 
 * **The player picks a destination, not a path** (§9). At a table a driver
   threads their line row by row against live traffic; here the traffic is frozen
@@ -1000,6 +1001,20 @@ would not predict from the code.
   What it costs is named honestly in §17: the last round is decided by who leads
   into it. The Kink owing a stop twelve rows from the line is the design's answer
   to that, and it is a tuning knob rather than a fix.
+
+* **The conservative line climbs the gear ladder**, where §23.7's PR 6 preference
+  order says "hold the gear if its maximum cannot overshoot the next corner, else
+  drop to the highest gear that cannot". Read literally that rule never goes up:
+  a timed-out driver launches to gear 2 and stays in it, and The Mile's 32 rows
+  alone take eleven turns at an average of three. `conservativeTurn` therefore
+  takes **the highest legal gear that cannot overshoot**, which holds and drops
+  exactly as described and also climbs on a clear straight. What it costs:
+  nothing at a corner, where the two readings agree, because a gear that cannot
+  overshoot is a gear that cannot overshoot however you arrived at it. What it
+  buys: a driver who times out repeatedly still finishes the race, and §23.8's
+  turn-count assertion — a Sprint in roughly twelve turns a driver — still means
+  something when it is the auto-played line being counted. Landed in PR 1 with
+  the rest of `rules.ts`, ahead of the PR 6 that consumes it.
 
 ### 23.4 State and command surface
 
