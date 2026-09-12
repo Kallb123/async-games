@@ -68,7 +68,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "Banned Islet's water level and hands get easier to read",
-                detail: "Tap the water level stat to open the escalation scale behind it — the same drawer Outbreak's infection rate uses — and see how many flood cards land at each level, right down to the skull. Every hand's cards now sit grouped by type instead of draw order, so it's easier to see what everyone's holding at a glance.",
+                detail: "Tap the water level stat to see what each level means — the same trick Outbreak's infection rate uses — and check how many flood cards land at each one, right down to the skull. Every hand's cards now sit grouped by type instead of draw order, so it's easier to see what everyone's holding at a glance.",
                 game: "bannedislet",
             },
             {
