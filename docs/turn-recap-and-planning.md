@@ -288,6 +288,7 @@ Three separate opt-ins, so a game can have one without the others:
 | Outbreak | 🚧 planned (snapshot) | 🚧 planned (tip) | 🚧 planned — crew planner |
 | Fires Out | 🚧 planned (snapshot) | 🚧 planned (tip) | 🚧 planned — two modes |
 | Banned Islet | ✅ from snapshot | ✅ (tip) | 🚧 planned — route planner, needs the cross-player opt-in |
+| Race Cars | 🚧 planned (snapshot) | 🚧 planned (tip) | ✖ by design — the reach band, `docs/games/race-cars.md` §23.5 |
 
 Outbreak and Fires Out are designed but unbuilt; their rows record the decisions
 their GDDs commit to (`docs/games/outbreak-gdd.md` §21.5,
