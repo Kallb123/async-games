@@ -1043,8 +1043,21 @@ those rules doubles the surface being debugged.
 
 **PR 8 — Special cards.** `BannedIsletPlayCard` for Helicopter Lift and
 Sandbags, neither costing an action, both playable in the action phase and in
-the player's own discard phase (§21.3). This is the PR that completes §4.1: the
-win check in `CheckGameOver` gains its fourth condition.
+the player's own discard phase (§21.3). This is the PR that completes §4.1 —
+though not in the shape this line predicted. ~~The win check in `CheckGameOver`
+gains its fourth condition.~~ It **loses the other three** instead:
+§4.1's win is *an action taken, not a state reached*, so the ending moved out
+of `CheckGameOver` — which now derives nothing at all — and into the command
+that plays the card. A `CheckGameOver` still re-deriving the first three would
+hand the team the win the moment the island became ready, which is precisely
+the failure §4.1 asks us to preserve. It also picked up the deviation §21.3's
+last bullet records: the lift played to escape moves nobody.
+
+The same PR corrected the Banned Islet line in "What's new", which had been
+promising the roles and the special cards as still to come since PR 5 turned
+the game on. Rewriting that one line is what the release-note rule asks for
+here — the game's single entry is still spent, and a live line that describes
+a game a player can no longer find is the thing the rule exists to prevent.
 
 **PR 9 — Replay, recap and the result page.** The largest wiring PR, and the
 one whose shared-file list is easiest to under-read:

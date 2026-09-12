@@ -71,6 +71,21 @@ function ActionRows({ rows }: { rows: ActionRow[] }) {
     );
 }
 
+/**
+ * The way back out of a sheet that is mid-pick — three of them here, and every
+ * one of them the same button saying the same word, which is why it is written
+ * once. Local to this screen deliberately: the shared kit has no cancel
+ * primitive yet, and one screen's three copies is the signal to fix this file
+ * rather than the signal to change eight of them.
+ */
+function CancelButton({ onClick, gap = 8 }: { onClick: () => void; gap?: number }) {
+    return (
+        <button type="button" className="ag-btn ag-btn--light ag-btn--block" style={{ marginTop: gap }} onClick={onClick}>
+            ↩ Cancel
+        </button>
+    );
+}
+
 interface DiscardPickerProps {
     hand: BannedIsletCardId[];
     /** §10's specials, offered as the alternative to letting a card go — see SpecialCards. */
@@ -191,7 +206,7 @@ function LiftPassengers({ gs, chosen, onChange, onReady, onCancel, submitting }:
             >
                 {chosen.length === 0 ? 'Pick who flies' : `Choose where ${pluralize(chosen.length, 'pawn')} land`}
             </button>
-            <button type="button" className="ag-btn ag-btn--light ag-btn--block" style={{ marginTop: 8 }} onClick={onCancel}>↩ Cancel</button>
+            <CancelButton onClick={onCancel} />
         </div>
     );
 }
@@ -464,7 +479,7 @@ export default function BannedIsletActions({
                 >
                     Shore up {tileName(gs.positions[first].tile)} on its own
                 </ActionButton>
-                <button type="button" className="ag-btn ag-btn--light ag-btn--block" style={{ marginTop: 8 }} onClick={() => onPickChange(null)}>↩ Cancel</button>
+                <CancelButton onClick={() => onPickChange(null)} />
             </div>
         );
     }
@@ -496,7 +511,7 @@ export default function BannedIsletActions({
                         }, target),
                     };
                 })} />
-                <button type="button" className="ag-btn ag-btn--light ag-btn--block" onClick={() => setGiveTo(null)}>↩ Cancel</button>
+                <CancelButton onClick={() => setGiveTo(null)} gap={0} />
             </div>
         );
     }
