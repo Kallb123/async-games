@@ -968,7 +968,7 @@ PR list below is still mostly game code.
 
 ### 23.3 Deviations from this document
 
-Asynchronous play forces four, and building it has since added one more.
+Asynchronous play forces four, and building it has since added three more.
 Record each in a "Deviations" subsection of this document as it lands — a
 deviation is anything a reader of this document alone would not predict from
 the code.
@@ -1015,6 +1015,31 @@ the code.
   turn-count assertion — a Sprint in roughly twelve turns a driver — still means
   something when it is the auto-played line being counted. Landed in PR 1 with
   the rest of `rules.ts`, ahead of the PR 6 that consumes it.
+
+* **The placeholder circuit is a loop, not an unrolled strip.** PR 1 specifies
+  "placeholder `geometry` (a straight-line unrolled circuit)", which is enough
+  to test the rules against and not enough to play on: all 78 rows along one
+  axis is a 17:1 rectangle, which is exactly the five-pixels-a-row board §19.2
+  measures in a 400px column. PR 4 folds the same rows round a
+  rounded-rectangle loop instead — even spacing along a centre line, lanes
+  offset across it, each space facing its tangent — which puts a row at roughly
+  three times that and is also the shape the real circuit is, so the board
+  screen is not written against geometry it will never see again. Nothing
+  outside the board screen reads `x`/`y`/`heading`, so no rule, cost or number
+  changes, and §23.6's generator still replaces the whole thing.
+
+* **`meta.available` is on from PR 4 rather than PR 9.** The flag is a
+  catalogue filter whose only reader is `GameLibrary` (§23.7 PR 2), and turning
+  it on early is what makes PR 4's "playtestable as it lands" true of people
+  who are not holding a hand-written request. What rides with it is named in
+  `meta.ts` rather than discovered: until PR 6 there is no turn-timeout
+  adapter, and the cron's `noAdapter` fallback walks `currentTurn` along
+  `turnOrder` while `roundOrder`/`roundIndex` stays put — so a timed-out turn
+  stalls the race until the sweep walks `currentTurn` back round to the driver
+  whose turn it really is, banking a missed turn against an innocent driver
+  each tick on the way. Per-player `phase`/`roll` (§23.4) is what holds that to
+  a stall rather than one driver spending another's roll. Until PR 6 lands, a
+  race wants a turn timer its drivers will beat.
 
 ### 23.4 State and command surface
 
@@ -1380,7 +1405,8 @@ can be clicked.
 
 - `src/games/RaceCars/tracks/ashcombe.ts` and the `RaceCarsTrack` shape of
   23.4, with placeholder `geometry` (a straight-line unrolled circuit) so the
-  rules can be tested before any art exists.
+  rules can be tested before any art exists. PR 4 reshapes that placeholder
+  into a loop for the board screen's sake — see 23.3.
 - `board.ts`: the gear table of §8.1, the shift-down costs of §8.2, the spec
   table of §11, `MIN_PLAYERS`/`MAX_PLAYERS` (2/6), `SLICK_CAP`, the race
   distances, and the step rule of §5.1 as `stepsFrom(row, lane)`.
@@ -1622,9 +1648,12 @@ game on.
   in the player's language, matching the existing guides rather than restating
   this document.
 - `npm run icons` for `public/icons/og-game-racecars.png`.
-- `meta.available: true`, **one** "What's new" line in the *New games* group of
-  `src/utils/ui/whatsNew.ts`, and the Race Cars row in
-  `turn-recap-and-planning.md`'s per-game table (`✅ from snapshot` / `✅ (tip)` /
+- `meta.available` is already on from PR 4 (23.3). **The "What's new" line is
+  still owed here and was deliberately not taken there** — PR 4 turned the flag
+  on without writing one, so this PR owes **one** line in the *New games* group
+  of `src/utils/ui/whatsNew.ts` and must not read PR 4's flag as evidence the
+  entry already exists. The Race Cars row in `turn-recap-and-planning.md`'s
+  per-game table lands here too (`✅ from snapshot` / `✅ (tip)` /
   `✖ by design — the reach band, 23.5`).
 
 **One "What's new" line for the whole game.** Nine PRs, one entry, written when
