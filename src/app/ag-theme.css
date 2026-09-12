@@ -1666,6 +1666,9 @@ a.ag-list-row, a.ag-list-row-main {
     max-width: 130px;
 }
 .ag-hand-card-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+/* The same slot as the dot above, for a game whose cards are told apart by a
+   figure rather than by a colour — Banned Islet's treasures (§17). */
+.ag-hand-card-emoji { font-size: 12px; line-height: 1; flex: none; }
 .ag-hand-card-name {
     font: 700 10.5px var(--ag-font);
     color: var(--ag-ink);
@@ -4232,6 +4235,130 @@ button.ag-tt-ticket { cursor: pointer; }
     font: 600 12.5px var(--ag-font);
 }
 .ag-fo-advance-reveal { animation: ag-reveal-fade-in 0.35s ease both; }
+
+/* ==========================================================================
+   Banned Islet — a shrinking island in deep water, over the teal accent
+   from meta.ts
+   ==========================================================================
+   Same deal as Outbreak and Fires Out above: scoped to .ag-game--bannedislet,
+   re-tinting the shared chrome (top bar, scoreboard, stat row, buttons, hands,
+   board sea) rather than growing private copies of it. Only the island grid
+   below is this game's own. */
+.ag-game--bannedislet {
+    --bi-deep: oklch(0.3 0.06 235);
+    --bi-deep-2: oklch(0.36 0.07 230);
+    --bi-teal: #1f7a8c;
+    --bi-teal-deep: #145a68;
+    --bi-sand: oklch(0.9 0.05 85);
+    --bi-sand-2: oklch(0.81 0.07 72);
+    --bi-shallow: oklch(0.72 0.1 220);
+    --bi-shallow-2: oklch(0.57 0.12 228);
+}
+.ag-game--bannedislet .ag-game-topbar { background: var(--bi-deep); }
+.ag-game--bannedislet .ag-scorestrip { background: var(--bi-deep-2); }
+.ag-game--bannedislet .ag-score-pill--me { background: color-mix(in oklch, var(--bi-teal) 9%, var(--ag-surface)); }
+.ag-game--bannedislet .ag-score-pill--active { --ag-score-ring: 0 0 0 2px oklch(0.68 0.11 215); }
+.ag-game--bannedislet .ag-hand--me { background: color-mix(in oklch, var(--bi-teal) 9%, transparent); }
+.ag-game--bannedislet .ag-hand--active { box-shadow: inset 3px 0 0 var(--bi-teal); }
+.ag-game--bannedislet .ag-tag:not(.ag-tag--quiet) { background: color-mix(in oklch, var(--bi-teal) 16%, var(--ag-surface)); color: var(--bi-teal-deep); }
+.ag-game--bannedislet .ag-btn--primary {
+    background: var(--bi-teal);
+    color: var(--ag-on-dark);
+    box-shadow: 0 3px 0 var(--bi-teal-deep);
+}
+.ag-game--bannedislet .ag-stat-row { background: var(--bi-deep-2); padding: 0 12px 10px; }
+.ag-game--bannedislet .ag-stat { background: var(--ag-surface); border-radius: 9px; }
+
+/* ---- The island: §5.1's diamond of 24 tiles inside a 6 x 6 grid, one CSS
+   grid in the shape of .ag-fo-grid above (see BannedIsletBoard.tsx). The 12
+   cells the diamond doesn't cover draw nothing, so the frame's own deep water
+   is what shows through them. ---- */
+.ag-game--bannedislet .ag-board-area { background: radial-gradient(circle at 50% 25%, var(--bi-shallow), var(--bi-deep)); }
+.ag-bannedislet-frame {
+    background: var(--bi-deep);
+    box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.32), 0 4px 0 var(--bi-teal-deep);
+}
+.ag-bi-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; }
+.ag-bi-cell {
+    position: relative;
+    aspect-ratio: 1;
+    box-sizing: border-box;
+    border: none;
+    border-radius: 7px;
+    padding: 2px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    cursor: default;
+    overflow: hidden;
+}
+
+/* §17 is the rule these three faces exist to keep: a tile's state is read from
+   its *surface*, never from a tint, so each one is a different material and
+   sits at a different depth. They stay legible in greyscale, and the
+   hand-drawn art of the last PR replaces the faces without touching that. */
+
+/* Dry: sand over rock, standing proud of the water — a grain and a lit edge. */
+.ag-bi-cell--dry {
+    background:
+        repeating-linear-gradient(48deg, rgba(255, 255, 255, 0.16) 0 2px, transparent 2px 6px),
+        linear-gradient(165deg, var(--bi-sand), var(--bi-sand-2));
+    box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.13), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+/* Flooded: the same tile seen through water — ripples running across it, sunk
+   into the board rather than standing on it, and the wave marker in the
+   corner. Art *and* an icon, which is exactly what §17 asks for. */
+.ag-bi-cell--flooded {
+    background:
+        repeating-linear-gradient(100deg, rgba(255, 255, 255, 0.28) 0 3px, transparent 3px 9px),
+        linear-gradient(165deg, var(--bi-shallow), var(--bi-shallow-2));
+    box-shadow: inset 0 2px 7px rgba(0, 0, 0, 0.3);
+}
+/* Sunk: not a tile at all. A hole in the island with nothing drawn in it —
+   §5.1's "a sunk tile leaves a hole", and the loudest of the three states. */
+.ag-bi-cell--sunk {
+    background: radial-gradient(circle at 50% 45%, oklch(0.24 0.05 238), oklch(0.15 0.04 242));
+    box-shadow: inset 0 3px 11px rgba(0, 0, 0, 0.55);
+}
+/* Open sea: outside the diamond, and never a tile that was there. */
+.ag-bi-cell--sea { background: none; }
+/* A tile the armed action can reach — the same gold ring Fires Out's board
+   marks its legal spaces with. */
+.ag-bi-cell--valid { cursor: pointer; box-shadow: inset 0 0 0 3px var(--ag-gold); }
+.ag-bi-cell:disabled { cursor: default; }
+
+/* Every tile is named on its face: the island is 24 shuffled tiles and the
+   flood deck names them, so "Kelp Stair went under" has to be findable. */
+.ag-bi-name {
+    font: 800 8px/1.05 var(--ag-font);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    text-align: center;
+    color: oklch(0.35 0.03 60);
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+.ag-bi-cell--flooded .ag-bi-name { color: #fff; text-shadow: 0 1px 1px rgba(0, 0, 0, 0.4); }
+/* The treasure figures and the pier — silhouettes, not colours (§17). */
+.ag-bi-figure { font-size: 15px; line-height: 1; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3)); }
+/* Beacon Pier is the one tile the whole game is about (§4.1): the way off the
+   island, and the tile whose sinking ends it on the spot. It gets a glow the
+   treasure figures don't, so it is findable at a glance on a shuffled island. */
+.ag-bi-figure--pier { filter: drop-shadow(0 0 3px var(--ag-gold)) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35)); }
+/* The flooded tile's own icon, out of the way of the figure and the name. */
+.ag-bi-state { position: absolute; top: 2px; left: 3px; font-size: 9px; line-height: 1; }
+.ag-bi-pawns { display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; }
+.ag-bi-pawn {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    border: 1.5px solid #fff;
+    display: inline-block;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+.ag-bi-pawn--active { box-shadow: 0 0 0 2px var(--ag-gold); }
 
 /* ============================================================= *
  *  Desktop expansion — design §16.

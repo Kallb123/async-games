@@ -240,6 +240,46 @@ export function cardName(card: BannedIsletCardId): string {
     return isTreasureCard(card) ? treasureName(card) : SPECIAL_CARD_NAMES[card];
 }
 
+// ─── What things look like (§17) ────────────────────────────────────────────
+// §17 is an accessibility rule before it is an art direction: a treasure is
+// told apart by its **silhouette** and a flooded tile by its **face and its
+// icon**, never by a tint. The glyphs therefore live beside the names rather
+// than inside one component — the board draws the treasure figures, the hand
+// draws the cards that buy them, and a player has to read the two as the same
+// thing. `cardColor` sits in Outbreak's board.ts for the same reason.
+
+const TREASURE_GLYPHS: Record<BannedIsletTreasureId, string> = {
+    emberCrown: '👑',
+    stormIdol: '🗿',
+    tideChalice: '🏆',
+    rootStone: '🪨',
+};
+
+const SPECIAL_CARD_GLYPHS: Record<BannedIsletSpecialCardId, string> = {
+    watersRise: '🌊',
+    helicopterLift: '🚁',
+    sandbags: '🧱',
+};
+
+/** The figure standing on the island, and the face of the four cards that buy it. */
+export function treasureGlyph(treasure: BannedIsletTreasureId): string {
+    return TREASURE_GLYPHS[treasure];
+}
+
+/** One card's face — a treasure's own figure, or the special's. */
+export function cardGlyph(card: BannedIsletCardId): string {
+    return isTreasureCard(card) ? TREASURE_GLYPHS[card] : SPECIAL_CARD_GLYPHS[card];
+}
+
+/**
+ * §4.1: the escape point wears the thing that lifts the team off it — the same
+ * figure as the Helicopter Lift card, deliberately, because the card is what
+ * the tile is *for*. The two never appear in the same role (one is a place on
+ * the island, the other a card in a hand), so sharing the glyph reads as the
+ * connection it is rather than as an ambiguity.
+ */
+export const PIER_GLYPH = '🚁';
+
 // ─── The roles (§12) ────────────────────────────────────────────────────────
 // Static reference data only — dealt at setup and expressed as small pure
 // exceptions to the base rules in rules.ts, rather than as `if (role === ...)`
