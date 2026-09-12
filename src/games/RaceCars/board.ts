@@ -87,16 +87,16 @@ export type RaceCarsGear = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export interface RaceCarsGearDef {
     gear: RaceCarsGear;
-    /** Sides on the die this gear throws — null in gear 0, which rolls nothing. */
-    sides: number | null;
     /** The band, inclusive. A roll is uniform across it. */
     min: number;
     max: number;
     /**
      * The faces printed on the die the board draws, so a player reading "d8"
-     * sees a d8. Cosmetic only: §8.1 rolls `min + randomInt(span)`, uniform
-     * over the band, and gear 3's eight faces cannot be uniform over a
-     * five-wide one. `rollFor` never reads this list.
+     * sees a d8 — and `faces.length` **is** the die, which is why the number of
+     * sides is not stated a second time beside them. Cosmetic only: §8.1 rolls
+     * `min + randomInt(span)`, uniform over the band, and gear 3's eight faces
+     * cannot be uniform over a five-wide one. `rollFor` never reads this list.
+     * Gear 0 has no die and no faces.
      */
     faces: number[];
     /** §8.1's "what it is for", for the gear picker and the guide. */
@@ -105,13 +105,13 @@ export interface RaceCarsGearDef {
 
 /** §8.1's table, indexed by gear. */
 export const GEARS: RaceCarsGearDef[] = [
-    { gear: 0, sides: null, min: 0, max: 0, faces: [], purpose: 'Stopped: the grid, and a car that has spun' },
-    { gear: 1, sides: 4, min: 1, max: 2, faces: [1, 1, 2, 2], purpose: 'Crawling out of a hairpin; the only gear that can bank a second stop in a five-row corner' },
-    { gear: 2, sides: 6, min: 2, max: 4, faces: [2, 2, 3, 3, 4, 4], purpose: 'Corner entry and corner exit' },
-    { gear: 3, sides: 8, min: 4, max: 8, faces: [4, 5, 5, 6, 6, 7, 7, 8], purpose: 'The workhorse — wide enough to reach a corner, short enough to stop in one' },
-    { gear: 4, sides: 12, min: 7, max: 12, faces: [7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12], purpose: "The Mile's gear. Committed: a five-row corner cannot contain it" },
-    { gear: 5, sides: 20, min: 11, max: 20, faces: [11, 11, 12, 12, 13, 13, 14, 14, 15, 15, 16, 16, 17, 17, 18, 18, 19, 19, 20, 20], purpose: 'The gamble. Reaches a corner from a long way out, and cannot stop in one without brakes' },
-    { gear: 6, sides: 30, min: 21, max: 30, faces: [21, 21, 21, 22, 22, 22, 23, 23, 23, 24, 24, 24, 25, 25, 25, 26, 26, 26, 27, 27, 27, 28, 28, 28, 29, 29, 29, 30, 30, 30], purpose: 'Top gear, reachable only on a circuit with a straight long enough to climb the ladder' },
+    { gear: 0, min: 0, max: 0, faces: [], purpose: 'Stopped: the grid, and a car that has spun' },
+    { gear: 1, min: 1, max: 2, faces: [1, 1, 2, 2], purpose: 'Crawling out of a hairpin; the only gear that can bank a second stop in a five-row corner' },
+    { gear: 2, min: 2, max: 4, faces: [2, 2, 3, 3, 4, 4], purpose: 'Corner entry and corner exit' },
+    { gear: 3, min: 4, max: 8, faces: [4, 5, 5, 6, 6, 7, 7, 8], purpose: 'The workhorse — wide enough to reach a corner, short enough to stop in one' },
+    { gear: 4, min: 7, max: 12, faces: [7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12], purpose: "The Mile's gear. Committed: a five-row corner cannot contain it" },
+    { gear: 5, min: 11, max: 20, faces: [11, 11, 12, 12, 13, 13, 14, 14, 15, 15, 16, 16, 17, 17, 18, 18, 19, 19, 20, 20], purpose: 'The gamble. Reaches a corner from a long way out, and cannot stop in one without brakes' },
+    { gear: 6, min: 21, max: 30, faces: [21, 21, 21, 22, 22, 22, 23, 23, 23, 24, 24, 24, 25, 25, 25, 26, 26, 26, 27, 27, 27, 28, 28, 28, 29, 29, 29, 30, 30, 30], purpose: 'Top gear, reachable only on a circuit with a straight long enough to climb the ladder' },
 ];
 
 export const TOP_GEAR: RaceCarsGear = 6;
@@ -275,6 +275,18 @@ export function stepsFrom(track: RaceCarsTrack, row: number, lane: number): Race
         if (candidate >= 1 && candidate <= width) steps.push({ row: to, lane: candidate });
     }
     return steps;
+}
+
+/**
+ * The corner whose remaining stops are written off if this car leaves it — §10's
+ * waiver, which applies to a car standing on a corner's **last row** and nowhere
+ * else: §9 forbids standing still, so no legal move can keep it inside, and it
+ * has taken the corner as slowly as the road allows. The road decides this and
+ * never the gear, so a car that arrived at speed is charged in the ordinary way.
+ */
+export function waivedCornerIdAt(track: RaceCarsTrack, row: number): string | null {
+    const corner = cornerAt(track, row);
+    return corner && row === corner.to ? corner.id : null;
 }
 
 /**

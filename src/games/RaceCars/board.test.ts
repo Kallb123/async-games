@@ -130,13 +130,14 @@ describe("the gear table (§8.1)", () => {
     });
 
     it("gives gear 0 no die and no distance", () => {
-        expect(GEARS[0].sides).toBeNull();
+        expect(GEARS[0].faces).toEqual([]);
         expect(GEARS[0].min).toBe(0);
         expect(GEARS[0].max).toBe(0);
     });
 
     it("prints §8.1's bands on §8.1's dice", () => {
-        expect(GEARS.slice(1).map(def => [def.sides, def.min, def.max])).toEqual([
+        // The die is its face count, so this checks the d4/d6/d8/d12/d20/d30 too.
+        expect(GEARS.slice(1).map(def => [def.faces.length, def.min, def.max])).toEqual([
             [4, 1, 2],
             [6, 2, 4],
             [8, 4, 8],
@@ -151,7 +152,6 @@ describe("the gear table (§8.1)", () => {
         // five-wide band — but the die on screen still has to be the right die,
         // showing only numbers the gear can actually produce.
         for (const def of GEARS.slice(1)) {
-            expect(def.faces).toHaveLength(def.sides!);
             expect(Math.min(...def.faces)).toBe(def.min);
             expect(Math.max(...def.faces)).toBe(def.max);
         }

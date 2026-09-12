@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { MAX_PLAYERS, RaceCarsSpace, RaceCarsTrack, TRACKS } from "./board";
 import {
     conservativeTurn,
@@ -44,7 +44,13 @@ const TWO_CORNERS: RaceCarsTrack = {
     art: { href: '', viewBox: { width: 0, height: 0 } },
     geometry: [],
 };
+// `trackById` resolves through the exported registry, so a fixture circuit has
+// to be registered rather than passed in — and taken out again afterwards, so a
+// later test that enumerates TRACKS never inherits it. It is built to satisfy
+// board.test.ts's own per-track invariants deliberately, not by luck: three rows
+// of two lanes holds a full field, and its first corner starts past row 0.
 TRACKS[TWO_CORNERS.id] = TWO_CORNERS;
+afterAll(() => { delete TRACKS[TWO_CORNERS.id]; });
 
 function car(overrides: Partial<IRaceCarsPlayerState> = {}): IRaceCarsPlayerState {
     return {
@@ -132,6 +138,61 @@ describe("reach (§9)", () => {
     it("wraps the finish line", () => {
         expect(reachableSpaces(race({ a: { row: 76, lane: 1 } }), 'a', 3).map(space => space.row))
             .toEqual([1, 1, 1]);
+    });
+});
+
+describe("arguments this module refuses", () => {
+    it("refuses a path that does not start where the car is", () => {
+        const state = race({ a: { row: 20, lane: 2 } });
+        expect(() => resolveArrival(state, 'a', [{ row: 40, lane: 1 }, { row: 41, lane: 1 }]))
+            .toThrow(/path starts at/);
+    });
+
+    it("refuses a path that teleports, however plausible each end looks", () => {
+        // The forged move that would otherwise finish the race from anywhere.
+        const state = race({ a: { row: 20, lane: 2 } }, { laps: 1 });
+        expect(() => resolveArrival(state, 'a', [{ row: 20, lane: 2 }, { row: 0, lane: 1 }]))
+            .toThrow(/does not step to/);
+    });
+
+    it("refuses a path driven through another car", () => {
+        const state = race({ a: { row: 20, lane: 2 }, b: { row: 21, lane: 2 } });
+        const through = [{ row: 20, lane: 2 }, { row: 21, lane: 2 }, { row: 22, lane: 2 }];
+        expect(() => resolveArrival(state, 'a', through)).toThrow(/runs through the car/);
+    });
+
+    it("refuses a path carrying a row that is not a row", () => {
+        // NaN would otherwise be written straight onto the car, and `stepsFrom`
+        // can never step off it again — a soft-lock rather than a crash.
+        const state = race({ a: { row: 20, lane: 2 } });
+        expect(() => resolveArrival(state, 'a', [{ row: 20, lane: 2 }, { row: NaN, lane: 1 }]))
+            .toThrow(/does not step to/);
+    });
+
+    it("refuses a move for a driver with no car", () => {
+        expect(() => reachableSpaces(race({ a: {} }), 'ghost', 3)).toThrow(/no car for/);
+    });
+
+    it("floors a fractional distance rather than calling the move blocked short", () => {
+        const state = race({ a: { row: 20, lane: 2 } });
+        const reach = moveOptions(state, 'a', 2.9);
+        expect(reach).toMatchObject({ distance: 2, blockedShort: false, boxedIn: false });
+        expect(reach.spaces.every(space => space.row === 22)).toBe(true);
+    });
+
+    it.each([0, -5, NaN, Infinity])("treats a distance of %s as going nowhere", distance => {
+        const state = race({ a: { row: 20, lane: 2 } });
+        expect(moveOptions(state, 'a', distance)).toMatchObject({ distance: 0, boxedIn: true });
+    });
+
+    it("never walks further than a lap, whatever it is asked for", () => {
+        const state = race({ a: { row: 20, lane: 2 } });
+        expect(moveOptions(state, 'a', 5_000_000).distance).toBe(78);
+    });
+
+    it("still offers a gear to a car whose gearbox somehow went negative", () => {
+        const options = legalGears(race({ a: { gear: 3, gearbox: -2 } }), 'a');
+        expect(options.map(option => option.gear)).toEqual([2, 3, 4]);
     });
 });
 
@@ -584,6 +645,13 @@ describe("the conservative line (§23.7)", () => {
                 expect(plan.gear).toBeGreaterThan(0);
             }
         }
+    });
+
+    it("answers for a driver the round order has outlived, rather than throwing", () => {
+        // §23.7 PR 6: a throw here wedges the turn-timeout cron exactly as a
+        // preference list with no fallthrough would.
+        const state = race({ a: {} });
+        expect(conservativeTurn(state, 'ghost')).toEqual({ phase: 'slipstream', tow: null });
     });
 
     it("declines a tow it was never offered", () => {

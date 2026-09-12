@@ -8,6 +8,13 @@
 // here reads state and returns a description of what should happen; nothing
 // mutates, so a command can ask "what would this cost" as cheaply as it can
 // apply it.
+//
+// **What these functions refuse.** A userId with no car, and a path that is not
+// one this board can be driven, are programming errors by the time they get
+// here — PR 3's `Execute` guards both before calling in — so they throw rather
+// than degrade, loudly and without touching any state. The one exception is
+// `conservativeTurn`, which the turn-timeout cron depends on being total and
+// which therefore answers even for a driver who has no car (§23.7 PR 6).
 import { DiceRoll } from "@/utils/games/DiceRoll";
 import { mongoMap } from "@/utils/games/mongoMaps";
 import { randomInt } from "@/utils/games/random";
@@ -31,6 +38,7 @@ import {
     spaceKey,
     stepsFrom,
     trackById,
+    waivedCornerIdAt,
 } from "./board";
 
 // ─── State (§23.4) ──────────────────────────────────────────────────────────
@@ -131,11 +139,15 @@ export function legalGears(state: IRaceCarsSpecificGameState, userId: string): R
             .map(gear => ({ gear, gearboxCost: 0 }));
     }
 
+    // Floored rather than read raw: holding a gear is free, so a pool that ever
+    // went negative would price even that out and hand back an empty list — and
+    // an empty list is a live driver with nothing to tap, not just a stalled one.
+    const gearbox = Math.max(0, ps.gearbox);
     const options: RaceCarsGearOption[] = [];
     for (let gear = 1 as RaceCarsGear; gear <= maxGear; gear++) {
         if (gear > ps.gear + 1) continue;
         const gearboxCost = gear > ps.gear ? 0 : shiftDownCost(ps.gear, gear);
-        if (gearboxCost === null || gearboxCost > ps.gearbox) continue;
+        if (gearboxCost === null || gearboxCost > gearbox) continue;
         options.push({ gear, gearboxCost });
     }
     return options;
@@ -163,8 +175,25 @@ interface WalkNode {
 interface RaceCarsWalk {
     /** Steps actually walked — short of what was asked when traffic is in the way. */
     distance: number;
+    /** Steps the walk was asked for, once made driveable. */
+    requested: number;
     /** One map per step, 0 (the car's own space) to `distance`. */
     levels: Map<string, WalkNode>[];
+}
+
+/**
+ * A distance this board can actually be asked to walk: a whole number of rows,
+ * never negative, never longer than a lap.
+ *
+ * Both halves earn their place. A **fractional** distance would floor itself
+ * against the loop bound and then read as short of what was asked — reporting a
+ * move as blocked by traffic that nothing blocked, and charging a tyre for it.
+ * An **oversized** one is work and memory proportional to a number chosen
+ * off-board rather than to the circuit, and no gear can roll past a lap anyway.
+ */
+function driveableDistance(track: RaceCarsTrack, distance: number): number {
+    if (!Number.isFinite(distance) || distance < 1) return 0;
+    return Math.min(Math.floor(distance), track.rows);
 }
 
 function occupiedBy(state: IRaceCarsSpecificGameState, exceptUserId: string): Set<string> {
@@ -203,7 +232,8 @@ function walk(state: IRaceCarsSpecificGameState, userId: string, distance: numbe
         new Map([[spaceKey(start.row, start.lane), { space: start, slicks: 0, parent: null }]]),
     ];
 
-    for (let step = 1; step <= distance; step++) {
+    const requested = driveableDistance(track, distance);
+    for (let step = 1; step <= requested; step++) {
         const previous = levels[step - 1];
         const next = new Map<string, WalkNode>();
         for (const [fromKey, node] of previous) {
@@ -220,7 +250,7 @@ function walk(state: IRaceCarsSpecificGameState, userId: string, distance: numbe
         levels.push(next);
     }
 
-    return { distance: levels.length - 1, levels };
+    return { distance: levels.length - 1, requested, levels };
 }
 
 function spacesAt(level: Map<string, WalkNode>): RaceCarsSpace[] {
@@ -240,8 +270,10 @@ export function reachableSpaces(
     userId: string,
     distance: number,
 ): RaceCarsSpace[] {
-    const walked = walk(state, userId, distance);
-    return walked.distance === distance ? spacesAt(walked.levels[walked.distance]) : [];
+    const options = moveOptions(state, userId, distance);
+    // Exactly-N reach is the case that is neither short of the ask nor stuck on
+    // the spot, which keeps this honest about a distance that had to be floored.
+    return options.blockedShort || options.boxedIn ? [] : options.spaces;
 }
 
 export interface RaceCarsMoveOptions {
@@ -272,7 +304,7 @@ export function moveOptions(
     return {
         spaces: spacesAt(walked.levels[walked.distance]),
         distance: walked.distance,
-        blockedShort: walked.distance > 0 && walked.distance < distance,
+        blockedShort: walked.distance > 0 && walked.distance < walked.requested,
         boxedIn: walked.distance === 0,
     };
 }
@@ -364,6 +396,44 @@ function spinLanding(track: RaceCarsTrack, occupied: Set<string>, corner: RaceCa
 }
 
 /**
+ * Refuse a path this car could not have driven.
+ *
+ * This is the function that actually writes a car's row, lane, tyres and laps,
+ * and it is handed an array rather than deriving one — so it checks that array
+ * instead of trusting whoever built it. A forged `[own space, { row: 0, lane: 1 }]`
+ * would otherwise finish the race from anywhere on the circuit, and a path
+ * carrying a NaN row would park a car on a space `stepsFrom` can never step off
+ * again: a silent soft-lock rather than a crash, which is the worse of the two.
+ *
+ * `derivePath` is the way to build one, and its output always passes. Anything
+ * else is a caller that skipped §23.4's membership test, which is a bug in the
+ * command rather than a move to resolve — so this throws rather than guessing.
+ */
+function assertDriveable(
+    track: RaceCarsTrack,
+    ps: IRaceCarsPlayerState,
+    occupied: Set<string>,
+    path: RaceCarsSpace[],
+): void {
+    if (path.length === 0) return;
+    const [start] = path;
+    if (start.row !== ps.row || start.lane !== ps.lane) {
+        throw new Error(`Race Cars: path starts at ${start.row}:${start.lane}, car is at ${ps.row}:${ps.lane}`);
+    }
+    for (let step = 1; step < path.length; step++) {
+        const from = path[step - 1];
+        const to = path[step];
+        const legal = stepsFrom(track, from.row, from.lane)
+            .some(candidate => candidate.row === to.row && candidate.lane === to.lane);
+        if (!legal) throw new Error(`Race Cars: ${from.row}:${from.lane} does not step to ${to.row}:${to.lane}`);
+        // A car is a wall (§9), on this path as much as on the walk that built it.
+        if (occupied.has(spaceKey(to.row, to.lane))) {
+            throw new Error(`Race Cars: path runs through the car on ${to.row}:${to.lane}`);
+        }
+    }
+}
+
+/**
  * Resolve a move that has already been chosen: walk the path row by row and
  * settle the finish line, corner stops, overshoots, spins and oil **in path
  * order** (§10). Pure — it reports the car's new state and the events that got
@@ -391,6 +461,7 @@ export function resolveArrival(
     const track = trackById(state.trackId);
     const occupied = occupiedBy(state, userId);
     const slicks = slickKeys(state);
+    assertDriveable(track, ps, occupied, path);
     const nextOilRoll = options.nextOilRoll ?? (() => DiceRoll(OIL_DIE_SIDES));
 
     const start = path[0] ?? { row: ps.row, lane: ps.lane };
@@ -441,13 +512,7 @@ export function resolveArrival(
         tyres = Math.max(0, tyres - 1);
     }
 
-    // §10's waiver: a car that begins its turn on a corner's last row has taken
-    // the corner as slowly as the road allows — nothing legal keeps it inside,
-    // because §9 forbids standing still — so what it still owes is written off.
-    // The road decides this, never the gear: a car that arrives at speed has
-    // not taken it slowly and is charged in the ordinary way.
-    const startCorner = cornerAt(track, start.row);
-    const waivedCornerId = startCorner && start.row === startCorner.to ? startCorner.id : null;
+    const waivedCornerId = waivedCornerIdAt(track, start.row);
 
     const exits = new Map(cornerExits(track, start.row, distance).map(exit => [exit.step, exit.corner]));
 
@@ -603,8 +668,7 @@ export type RaceCarsConservativeTurn =
  * shorter, so a distance this says is clean is clean however it is blocked.
  */
 function plannedOvershoot(track: RaceCarsTrack, ps: IRaceCarsPlayerState, distance: number): number {
-    const startCorner = cornerAt(track, ps.row);
-    const waivedCornerId = startCorner && ps.row === startCorner.to ? startCorner.id : null;
+    const waivedCornerId = waivedCornerIdAt(track, ps.row);
     let stops = ps.cornerStops;
     let rows = 0;
     for (const { corner, step } of cornerExits(track, ps.row, distance)) {
@@ -651,52 +715,71 @@ function safestDestination(
  * that never climbs never leaves gear 2, and The Mile alone would then take a
  * driver eleven turns — which §23.8's turn-count assertion is there to catch.
  */
+/** The highest legal gear whose best roll still cannot overshoot — see the note above. */
+function planShift(state: IRaceCarsSpecificGameState, userId: string): RaceCarsConservativeTurn {
+    const ps = requirePlayer(state, userId);
+    const track = trackById(state.trackId);
+    const options = legalGears(state, userId);
+    const safe = options.filter(option => plannedOvershoot(track, ps, gearDef(option.gear).max) === 0);
+    const chosen = safe.length > 0 ? safe[safe.length - 1] : options[0];
+    // `legalGears` is never empty — holding the current gear is always free, and
+    // gear 0 can always launch — but gear 1 is the answer if it ever became so.
+    return { phase: 'shift', gear: chosen ? chosen.gear : 1 };
+}
+
+/** The fewest brakes that avoid an overshoot, else the cheapest overshoot going. */
+function planMove(state: IRaceCarsSpecificGameState, userId: string): RaceCarsConservativeTurn {
+    const ps = requirePlayer(state, userId);
+    const track = trackById(state.trackId);
+    // `phase` is the authority and `roll` follows it (§23.4). A move phase with
+    // no roll is a bug upstream; one row keeps this function total.
+    const roll = ps.roll ?? MIN_MOVE_ROWS;
+    const mostBrakes = Math.min(ps.brakes, Math.max(0, roll - MIN_MOVE_ROWS));
+
+    // Crossing oil is the tie-break rather than a veto: a certain overshoot is
+    // worse than a one-in-six chance of a spin.
+    let oily: RaceCarsConservativeTurn | null = null;
+    for (let brake = 0; brake <= mostBrakes; brake++) {
+        const distance = roll - brake;
+        if (plannedOvershoot(track, ps, distance) > 0) continue;
+        const best = safestDestination(state, userId, distance);
+        if (best.slicks === 0) return { phase: 'move', brake, destination: best.space };
+        oily = oily ?? { phase: 'move', brake, destination: best.space };
+    }
+    if (oily) return oily;
+
+    // The shortest move the brake pool can buy is the fewest rows past the
+    // corner's last row, which is the cheapest overshoot available.
+    const destination = safestDestination(state, userId, roll - mostBrakes).space;
+    return { phase: 'move', brake: mostBrakes, destination };
+}
+
+/** Take the tow only if it is free: three rows in a braking zone are three rows of overshoot. */
+function planTow(state: IRaceCarsSpecificGameState, userId: string): RaceCarsConservativeTurn {
+    if (!slipstreamOffered(state, userId)) return { phase: 'slipstream', tow: null };
+    const ps = requirePlayer(state, userId);
+    const track = trackById(state.trackId);
+    const options = moveOptions(state, userId, SLIPSTREAM_ROWS);
+    const best = safestDestination(state, userId, SLIPSTREAM_ROWS);
+    const free = !options.blockedShort
+        && best.slicks === 0
+        && plannedOvershoot(track, ps, options.distance) === 0;
+    return { phase: 'slipstream', tow: free ? best.space : null };
+}
+
 export function conservativeTurn(
     state: IRaceCarsSpecificGameState,
     userId: string,
 ): RaceCarsConservativeTurn {
-    const ps = requirePlayer(state, userId);
-    const track = trackById(state.trackId);
-
-    if (ps.phase === 'shift') {
-        const options = legalGears(state, userId);
-        const safe = options.filter(option => plannedOvershoot(track, ps, gearDef(option.gear).max) === 0);
-        const chosen = safe.length > 0 ? safe[safe.length - 1] : options[0];
-        // `legalGears` is never empty: holding the current gear is always free,
-        // and gear 0 can always launch to gear 1.
-        return { phase: 'shift', gear: chosen ? chosen.gear : 1 };
-    }
-
-    if (ps.phase === 'move') {
-        // `phase` is the authority and `roll` follows it (§23.4). A move phase
-        // with no roll is a bug upstream; one row keeps this function total.
-        const roll = ps.roll ?? MIN_MOVE_ROWS;
-        const mostBrakes = Math.min(ps.brakes, Math.max(0, roll - MIN_MOVE_ROWS));
-        // Fewest brakes that avoid an overshoot — which is also the furthest
-        // this car can legally get without paying tyres for it. Crossing oil is
-        // the tie-break rather than a veto: a certain overshoot is worse than a
-        // one-in-six chance of a spin.
-        let oily: RaceCarsConservativeTurn | null = null;
-        for (let brake = 0; brake <= mostBrakes; brake++) {
-            const distance = roll - brake;
-            if (plannedOvershoot(track, ps, distance) > 0) continue;
-            const best = safestDestination(state, userId, distance);
-            if (best.slicks === 0) return { phase: 'move', brake, destination: best.space };
-            oily = oily ?? { phase: 'move', brake, destination: best.space };
-        }
-        if (oily) return oily;
-        // Fall through to the cheapest overshoot: the shortest move the brake
-        // pool can buy is the fewest rows past the corner's last row.
-        return { phase: 'move', brake: mostBrakes, destination: safestDestination(state, userId, roll - mostBrakes).space };
-    }
-
-    if (!slipstreamOffered(state, userId)) return { phase: 'slipstream', tow: null };
-    const options = moveOptions(state, userId, SLIPSTREAM_ROWS);
-    const best = safestDestination(state, userId, SLIPSTREAM_ROWS);
-    // Three free rows are three rows of overshoot in a braking zone — decline
-    // unless the tow neither overshoots nor crosses oil.
-    const safe = !options.blockedShort
-        && best.slicks === 0
-        && plannedOvershoot(track, ps, options.distance) === 0;
-    return { phase: 'slipstream', tow: safe ? best.space : null };
+    const ps = playerStates(state).get(userId);
+    // Total for a driver with no car, too. `roundOrder` can outlive `players` —
+    // a driver removed mid-race, or any drift between the two — and throwing
+    // here would wedge the cron in exactly the way the fallthrough below exists
+    // to prevent, one step earlier: `resolveStalledTurn` reports 'stuck', the
+    // cron returns before saving, and the abandon ladder never climbs. Declining
+    // a tow is the one plan that ends a turn while changing nothing.
+    if (!ps) return { phase: 'slipstream', tow: null };
+    if (ps.phase === 'shift') return planShift(state, userId);
+    if (ps.phase === 'move') return planMove(state, userId);
+    return planTow(state, userId);
 }
