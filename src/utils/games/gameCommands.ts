@@ -112,6 +112,12 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
         "BannedIsletDiscard",
         "BannedIsletPlayCard",
     ],
+    // docs/games/race-cars.md §23.7: PR 2 adds RaceCarsGameType and a skeleton
+    // RaceCarsShift; PR 3 fills that in and adds RaceCarsMove, and PR 5 adds
+    // RaceCarsSlipstream — §23.4's three command classes, not nine.
+    RaceCarsGameType: [
+        "RaceCarsShift",
+    ],
 };
 
 /** The game types this map knows, for the test that guards it. */

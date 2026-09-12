@@ -11,13 +11,14 @@ import { TrainTimeGameDataModel, TrainTimeInvitationModel } from '@/games/TrainT
 import { OutbreakGameDataModel, OutbreakInvitationModel } from '@/games/Outbreak/OutbreakModels';
 import { FiresOutGameDataModel, FiresOutInvitationModel } from '@/games/FiresOut/FiresOutModels';
 import { BannedIsletGameDataModel, BannedIsletInvitationModel } from '@/games/BannedIslet/BannedIsletModels';
+import { RaceCarsGameDataModel, RaceCarsInvitationModel } from '@/games/RaceCars/RaceCarsModels';
 import { InvitationModel } from './InvitationData';
 
 // Add new game discriminator keys here whenever a new game is introduced.
 // TypeScript will produce a compile error if a key is listed but its model is
 // not present in GAME_DATA_MODELS / INVITATION_MODELS.
-type GameDataDiscriminatorKey = 'DiceCitiesGameData' | 'SnakesAndLaddersGameData' | 'SettlementsAndCitiesGameData' | 'SmartthinkGameData' | 'WorldDominationGameData' | 'SolitaireGameData' | 'TrainTimeGameData' | 'OutbreakGameData' | 'FiresOutGameData' | 'BannedIsletGameData';
-type InvitationDiscriminatorKey = 'DiceCitiesInvitation' | 'SnakesAndLaddersInvitation' | 'SettlementsAndCitiesInvitation' | 'SmartthinkInvitation' | 'WorldDominationInvitation' | 'SolitaireInvitation' | 'TrainTimeInvitation' | 'OutbreakInvitation' | 'FiresOutInvitation' | 'BannedIsletInvitation';
+type GameDataDiscriminatorKey = 'DiceCitiesGameData' | 'SnakesAndLaddersGameData' | 'SettlementsAndCitiesGameData' | 'SmartthinkGameData' | 'WorldDominationGameData' | 'SolitaireGameData' | 'TrainTimeGameData' | 'OutbreakGameData' | 'FiresOutGameData' | 'BannedIsletGameData' | 'RaceCarsGameData';
+type InvitationDiscriminatorKey = 'DiceCitiesInvitation' | 'SnakesAndLaddersInvitation' | 'SettlementsAndCitiesInvitation' | 'SmartthinkInvitation' | 'WorldDominationInvitation' | 'SolitaireInvitation' | 'TrainTimeInvitation' | 'OutbreakInvitation' | 'FiresOutInvitation' | 'BannedIsletInvitation' | 'RaceCarsInvitation';
 
 declare global {
   var mongoose: any; // This must be a `var` and not a `let / const`
@@ -76,6 +77,7 @@ const GAME_DATA_MODELS: Record<GameDataDiscriminatorKey, Model<IGameDataDocument
   OutbreakGameData: OutbreakGameDataModel,
   FiresOutGameData: FiresOutGameDataModel,
   BannedIsletGameData: BannedIsletGameDataModel,
+  RaceCarsGameData: RaceCarsGameDataModel,
 };
 
 // The model that persists a game of `gameType` — one lookup in place of a
@@ -101,6 +103,7 @@ const INVITATION_MODELS: Record<InvitationDiscriminatorKey, Model<IInvitationDat
   OutbreakInvitation: OutbreakInvitationModel,
   FiresOutInvitation: FiresOutInvitationModel,
   BannedIsletInvitation: BannedIsletInvitationModel,
+  RaceCarsInvitation: RaceCarsInvitationModel,
 };
 
 // The model that persists an invitation of `gameType` — the invitation-side

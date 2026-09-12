@@ -13,6 +13,7 @@ import type { ISACSpecificGameState } from "@/games/SettlementsAndCities/board";
 import { makeState as makeSacState, player as sacPlayer } from "@/games/SettlementsAndCities/testFixtures";
 import { gameStateToModel as firesOutStateToModel, IFiresOutSpecificGameState } from "@/games/FiresOut/FiresOutModels";
 import { buildEmptyEdges, buildEmptySpaces, newFirefighter } from "@/games/FiresOut/rules";
+import { buildInitialRaceCarsState, gameStateToModel as raceCarsStateToModel } from "@/games/RaceCars/RaceCarsModels";
 import { AMBULANCE_START, EDGE_COUNT, ENGINE_START, INTERIOR_SPACE_COUNT, SPACE_COUNT, spaceIndex } from "@/games/FiresOut/board";
 
 // Two of the games this guards were once sending every player's hidden hand to
@@ -339,5 +340,48 @@ describe("Fires Out's response", () => {
         expect(JSON.stringify(response)).not.toContain('"victim":true');
         // The stored state is left exactly as it was — the response builder reads, it doesn't migrate.
         expect(state.spaces).toHaveLength(INTERIOR_SPACE_COUNT + 16);
+    });
+});
+
+// ─── Race Cars ──────────────────────────────────────────────────────────────
+// The inverse of every guard above: Race Cars hides *nothing* (§2's fourth
+// pillar — docs/games/race-cars.md §23.4), so what has to be proved is the
+// absence of hidden state rather than the presence of redaction. Two
+// assertions, and only one of them proves it:
+//
+// - serialising as three different viewers gives three identical strings,
+//   which proves `gameStateToModel` ignores its viewer — and nothing more.
+//   Both leaks this file exists for were identical for every viewer;
+// - the exact key set, top level and one player entry, against §23.4's list.
+//   That is the one that fails the day a field arrives that a driver should
+//   not see, which is the mechanism by which the pillar survives PRs 3-9.
+
+describe("Race Cars' response", () => {
+    const raceCarsState = () => buildInitialRaceCarsState(["u1", "u2"], {
+        distance: 'grandPrix', spec: 'balanced', oilSpills: true,
+    });
+
+    it("carries exactly §23.4's state and nothing else", () => {
+        const wire = JSON.parse(JSON.stringify(raceCarsStateToModel(raceCarsState(), NAMES, "u1")));
+
+        expect(Object.keys(wire).sort()).toEqual([
+            "laps", "oilSpills", "playerStates", "round", "roundIndex", "roundOrder",
+            "slicks", "spec", "trackId",
+        ]);
+        expect(Object.keys(wire.playerStates.u1).sort()).toEqual([
+            "brakeSpent", "brakes", "cornerStops", "finishedPosition", "gear", "gearbox",
+            "lane", "lapsCompleted", "phase", "raceNumber", "roll", "row", "skipNextTurn",
+            "tyres", "userId", "username",
+        ]);
+    });
+
+    it("serialises identically for every viewer, including none", () => {
+        const state = raceCarsState();
+        const asU1 = JSON.stringify(raceCarsStateToModel(state, NAMES, "u1"));
+        const asU2 = JSON.stringify(raceCarsStateToModel(state, NAMES, "u2"));
+        const asNobody = JSON.stringify(raceCarsStateToModel(state, NAMES, null));
+
+        expect(asU2).toEqual(asU1);
+        expect(asNobody).toEqual(asU1);
     });
 });
