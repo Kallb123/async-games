@@ -399,7 +399,7 @@ approaching a corner therefore knows exactly how much overshoot they can afford,
 and that number is the most-read thing on their screen.
 
 **A move may cross more than one corner.** On Ashcombe, Gravel Bend (rows 47–51)
-and The Kink (rows 62–65) are eleven rows apart, so a car sitting in the Bend
+ends ten rows before The Kink (rows 62–65) begins, so a car sitting in the Bend
 that rolls 20 in fifth crosses both. Each corner crossed is resolved **in order
 along the path**, and each charges its own overshoot. A move that spins the car
 at the first corner stops there and never reaches the second.
@@ -635,7 +635,7 @@ like a cliff.
 | Blocked short *and* the short landing is an overshoot | Both apply: 1 tyre for the block, plus 1 per row past the corner |
 | Blocked short with 0 tyres | The block's scuff is a debt that cannot be paid, and an unpayable *block* does not spin — only an unpayable overshoot does. The car stops and takes nothing |
 | Boxed in inside a corner owing stops | Staying put ends the turn inside the corner, so it **banks a stop** |
-| A car is on the grid and the field has lapped it | Not possible in a 2-lap race; a circuit that allows it classifies by laps first (§4.2), and a lapped car is simply behind |
+| A car is lapped | Nothing special happens. A lapped car blocks, tows and corners exactly as any other; §4.2 classifies by laps first, so it is simply behind |
 | The last free lane of a corner is taken when a spin needs it | The spin resolves onto the last *available* space searching backwards along the corner; a corner is never fully occupied by fewer than six cars |
 | A driver is removed from the game mid-race | The game ends for everybody as abandoned — the engine's existing behaviour, not a racing rule |
 
@@ -813,7 +813,7 @@ PR shape deliberately.
 | Need | Provided by |
 |---|---|
 | Invite, accept, create a game | The shared invitation engine — one `RaceCarsInvitationModel` with a `CreateGame` |
-| Reading and validating the setup request | `readGameSetupRequest` / `seatsFor` (`src/utils/api/gameSetupRequest.ts`) — auth, body parsing and rate limiting in one call, as every other `POST /api/newgame/<game>` uses |
+| Reading and validating the setup request | `readGameSetupRequest` / `seatsFor` (`src/utils/api/gameSetupRequest.ts`) — signed-in host, host eligibility (`canHostGame`), body parsing, invitee resolution and turn-timer validation in one call, as every other `POST /api/newgame/<game>` uses. It does **not** cover the game's own settings; §23.7 PR 2 owes those checks |
 | Persist and mutate board state | `GameData` discriminator + `specificGameState` |
 | A move that validates, mutates and logs | `IGameCommand.Execute` |
 | A turn made of several commands (shift → move → tow) | `turnOver: false` on the outcome, exactly as Outbreak's and Banned Islet's multi-command turns already do |
