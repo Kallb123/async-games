@@ -63,7 +63,11 @@ out. A second copy is the signal to extract the first one.
   thread and the log are `.ag-log`, the picker deliberately isn't. `ChatGif` is one GIF
   attachment drawn — the chat thread's row and the GIF picker's result grid both
   go through it, and it owns the degraded "GIF unavailable" caption for one that
-  can't be shown, so that string has one home. The node-and-edge map
+  can't be shown, so that string has one home. `NamedChip` is one card-sized
+  "what is this" chip — a mark, a name, and the tappable wiring that has to
+  remember `role`, `tabIndex` and the Enter key — which every hand, discard pile
+  and forecast list is built from; a game passes in its own mark (a colour dot,
+  a figure) and keeps nothing else. The node-and-edge map
   boards (World Domination, Outbreak) share `BoardZoom`, `ClickableMapNode`,
   `MapLabel` and `MapEdges` (the adjacency layer, which draws cross-map edges
   as labelled stubs off each edge rather than a line across the whole board).

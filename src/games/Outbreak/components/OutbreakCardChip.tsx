@@ -1,4 +1,5 @@
 import React from 'react';
+import NamedChip from '@/components/ui/NamedChip';
 import { cardColor, cardName, isCityCardId } from '@/games/Outbreak/board';
 
 interface OutbreakCardChipProps {
@@ -16,24 +17,20 @@ interface OutbreakCardChipProps {
  * One named card tile — a city or event card, dotted in its colour. Shared by
  * the per-player hand panel and the infection discard panel (§21.6 step 11),
  * both of which just need "what card is this" rendered compactly.
+ *
+ * All this game owns is which dot and which name; the chip itself is the
+ * shared `NamedChip`.
  */
 export default function OutbreakCardChip({ cardId, stored = false, onTap, highlighted = false }: OutbreakCardChipProps) {
     const tappable = !!onTap && isCityCardId(cardId);
-    const classes = ['ag-hand-card', 'ag-hand-card--named'];
-    if (tappable) classes.push('ag-hand-card--tappable');
-    if (tappable && highlighted) classes.push('ag-hand-card--highlighted');
 
     return (
-        <div
-            className={classes.join(' ')}
+        <NamedChip
+            indicator={<span className="ag-hand-card-dot" style={{ background: cardColor(cardId) }} />}
+            label={`${cardName(cardId)}${stored ? ' ⭐' : ''}`}
             title={stored ? `${cardName(cardId)} · stored` : cardName(cardId)}
-            onClick={tappable ? () => onTap(cardId) : undefined}
-            role={tappable ? 'button' : undefined}
-            tabIndex={tappable ? 0 : undefined}
-            onKeyDown={tappable ? (e) => { if (e.key === 'Enter') onTap(cardId); } : undefined}
-        >
-            <span className="ag-hand-card-dot" style={{ background: cardColor(cardId) }} />
-            <span className="ag-hand-card-name">{cardName(cardId)}{stored ? ' ⭐' : ''}</span>
-        </div>
+            onTap={tappable ? () => onTap(cardId) : undefined}
+            highlighted={highlighted}
+        />
     );
 }

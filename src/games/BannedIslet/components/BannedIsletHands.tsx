@@ -1,7 +1,7 @@
 'use client'
 import React from 'react';
 import PlayerHands, { PlayerHandSeat } from '@/components/ui/PlayerHands';
-import BannedIsletChip from './BannedIsletChip';
+import NamedChip from '@/components/ui/NamedChip';
 import type { IBannedIsletPlayerStateResponse } from '@/games/BannedIslet/apiModels';
 import { cardGlyph, cardName, roleDef } from '@/games/BannedIslet/board';
 
@@ -25,8 +25,8 @@ interface BannedIsletHandsProps {
  *
  * The stack itself is `PlayerHands`; what belongs to Banned Islet is the card
  * chip — a treasure's own figure and its name (§17: a silhouette, never a
- * colour), which is `BannedIsletChip`, shared with the flood discard — and the
- * role the seat is playing.
+ * colour) — and the role the seat is playing. The chip itself is the shared
+ * `NamedChip`, which the flood-discard panel wears too.
  */
 export default function BannedIsletHands({ playerStates, userIdList, turnOrder, myUserId, activeUserId }: BannedIsletHandsProps) {
     const seats: PlayerHandSeat[] = Object.values(playerStates).map(ps => ({
@@ -37,7 +37,11 @@ export default function BannedIsletHands({ playerStates, userIdList, turnOrder, 
         // (§10 — four Ember Crown cards are four of the same card), so there is
         // no id to key on and the index is what tells two of them apart.
         cards: ps.hand.map((card, index) => (
-            <BannedIsletChip key={`${card}-${index}`} glyph={cardGlyph(card)} label={cardName(card)} />
+            <NamedChip
+                key={`${card}-${index}`}
+                indicator={<span className="ag-hand-card-emoji" aria-hidden="true">{cardGlyph(card)}</span>}
+                label={cardName(card)}
+            />
         )),
         note: <span className="ag-hand-note">{roleDef(ps.role).name}</span>,
     }));

@@ -1,6 +1,6 @@
 'use client'
 import React from 'react';
-import BannedIsletChip from './BannedIsletChip';
+import NamedChip from '@/components/ui/NamedChip';
 import type { IBannedIsletPositionResponse } from '@/games/BannedIslet/apiModels';
 import { tileName, BannedIsletTileId } from '@/games/BannedIslet/board';
 import { positionOfTile } from '@/games/BannedIslet/rules';
@@ -49,13 +49,13 @@ export default function BannedIsletFloodDiscard({
                 {cards.length === 0
                     ? <span className="ag-hand-note">Empty — every card is still in the deck.</span>
                     : cards.map((tile, index) => {
-                        const state = positions[positionOfTile(positions, tile)]?.state;
+                        const stillFlooded = positions[positionOfTile(positions, tile)]?.state === 'flooded';
                         return (
-                            <BannedIsletChip
+                            <NamedChip
                                 key={`${tile}-${index}`}
-                                glyph={state === 'flooded' ? '🌊' : '🏝️'}
+                                indicator={<span className="ag-hand-card-emoji" aria-hidden="true">{stillFlooded ? '🌊' : '🏝️'}</span>}
                                 label={tileName(tile)}
-                                note={state === 'flooded' ? 'still flooded' : 'shored up again'}
+                                title={`${tileName(tile)} · ${stillFlooded ? 'still flooded' : 'shored up again'}`}
                                 onTap={onTileTap ? () => onTileTap(tile) : undefined}
                                 highlighted={tile === highlightedTile}
                             />
