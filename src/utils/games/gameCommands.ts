@@ -104,11 +104,13 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
     ],
     // docs/games/banned-islet.md §21.6: PR 2 added BannedIsletGameType and a
     // skeleton BannedIsletAction; PR 5 added BannedIsletEndTurn and
-    // BannedIsletDiscard, and PR 8 adds BannedIsletPlayCard.
+    // BannedIsletDiscard, and PR 8 added BannedIsletPlayCard — §21.4's four
+    // command classes, all four now listed.
     BannedIsletGameType: [
         "BannedIsletAction",
         "BannedIsletEndTurn",
         "BannedIsletDiscard",
+        "BannedIsletPlayCard",
     ],
 };
 

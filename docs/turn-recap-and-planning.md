@@ -224,7 +224,7 @@ adapter; the default stays own-moves-only.
 | Solitaire | shuffled face-down deal | No | No — drawing *is* the game | Out |
 | Outbreak | both decks + Intensify shuffle | **Yes** (hands and discards public by §2) | By design — see its GDD | Deck freeze (decoy rejected) |
 | Fires Out | d6/d8 + POI pool | Yes (pool composition known) | Yes — `endTurn` | Deck freeze **and** decoy |
-| Banned Islet | both decks + the Waters Rise! and empty-deck reshuffles | **Yes** (hands and both discards public by §2) | By design — only `BannedIsletEndTurn`/`BannedIsletDiscard` draw | Deck freeze (decoy rejected — a phantom hole is worse than no plan) |
+| Banned Islet | both decks + the Waters Rise! and empty-deck reshuffles | **Yes** (hands and both discards public by §2) | By design — `BannedIsletAction` alone never touches a deck; the other three can all end a turn and flood | Deck freeze (decoy rejected — a phantom hole is worse than no plan) |
 
 Every row above except Snakes & Ladders currently declares
 `plannableCommands: []`, because none of them has a planning UI. The "Planning"

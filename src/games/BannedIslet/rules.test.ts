@@ -16,12 +16,14 @@ import {
     isStandable,
     isTreasureLoss,
     isWaterLevelLoss,
+    liftOrigin,
     lostTreasures,
     moveTargets,
     pierPosition,
     positionOfTile,
     resolveSwim,
     routeDistance,
+    sandbagsTargets,
     shoreUpTargets,
     treasureAt,
 } from "./rules";
@@ -233,5 +235,41 @@ describe("the four losses (§4.2)", () => {
     it("loses when the meter reaches the skull, and not a level before it", () => {
         expect(isWaterLevelLoss(9)).toBe(false);
         expect(isWaterLevelLoss(10)).toBe(true);
+    });
+});
+
+describe("the special cards (§10)", () => {
+    it("sandbags reach every flooded tile on the island, and only those", () => {
+        const board = island({ flooded: [TOP_TIP, FAR_EAST], sunk: [MIDDLE] });
+
+        // The whole board, not just a neighbourhood: that reach is the one
+        // thing §21.3 left the card when async play took its timing away.
+        expect(sandbagsTargets(board)).toEqual([TOP_TIP, FAR_EAST].sort((a, b) => a - b));
+        // Never a dry tile (§16) and never a hole (§9.1).
+        expect(sandbagsTargets(island())).toEqual([]);
+        expect(sandbagsTargets(board)).not.toContain(MIDDLE);
+    });
+
+    it("a lift takes passengers off one tile, and refuses a list that spans two", () => {
+        const pawns = [
+            { userId: "u1", position: MIDDLE },
+            { userId: "u2", position: MIDDLE },
+            { userId: "u3", position: TOP_TIP },
+        ];
+
+        expect(liftOrigin(pawns, ["u1"])).toBe(MIDDLE);
+        expect(liftOrigin(pawns, ["u1", "u2"])).toBe(MIDDLE);
+        expect(liftOrigin(pawns, ["u3"])).toBe(TOP_TIP);
+        expect(liftOrigin(pawns, ["u1", "u3"])).toBeNull();
+    });
+
+    it("has no origin for nobody, a repeated passenger or a pawn that isn't there", () => {
+        const pawns = [{ userId: "u1", position: MIDDLE }];
+
+        // An empty list is §4.1's escape call rather than an error — it moves
+        // nobody, so it has no tile to move them off.
+        expect(liftOrigin(pawns, [])).toBeNull();
+        expect(liftOrigin(pawns, ["u1", "u1"])).toBeNull();
+        expect(liftOrigin(pawns, ["u9"])).toBeNull();
     });
 });

@@ -336,7 +336,7 @@ export function routeDistance(island: BannedIsletIsland, from: number, to: numbe
  */
 export function swimReach(island: BannedIsletIsland, from: number, role: BannedIsletRoleId): number[] {
     return role === 'pilot'
-        ? pilotFlightTargets(island, from)
+        ? flightTargets(island, from)
         : moveTargets(island, from, role);
 }
 
@@ -392,15 +392,18 @@ export function pilotFlightAvailable(role: BannedIsletRoleId, pilotFlightUsed: b
 }
 
 /**
- * Where that flight can land: any surviving tile but the one already under the
- * pawn — "any tile on the island" (§12), which is what makes the Pilot the
- * answer to §5.1's severed island and the role the team plans around.
+ * Where a helicopter can put a pawn down: any surviving tile but the one it is
+ * already standing on. That is "any tile on the island" (§12) for the Pilot's
+ * flight, and "any other tile" (§10) for a Helicopter Lift — the same reach,
+ * because it is the same helicopter, so it is one function rather than two
+ * identical ones drifting apart.
  *
- * Not gated on the role itself: `swimReach` reads it for a Pilot swept off a
- * tile, where the flight is free and unspent (§9.2), and the gate for the
- * *action* is `pilotFlightAvailable` above.
+ * Not gated on the role or the card: `swimReach` reads it for a Pilot swept
+ * off a tile, where the flight is free and unspent (§9.2); the gate for the
+ * *action* is `pilotFlightAvailable` above, and the gate for the card is
+ * holding it.
  */
-export function pilotFlightTargets(island: BannedIsletIsland, position: number): number[] {
+export function flightTargets(island: BannedIsletIsland, position: number): number[] {
     return island
         .map((_, p) => p)
         .filter(p => p !== position && isStandable(island, p));
@@ -464,6 +467,56 @@ export function giveCardTargets(
     return pawns
         .filter(p => p.userId !== senderId && (role === 'messenger' || p.position === sender.position))
         .map(p => p.userId);
+}
+
+// ─── The special cards (§10, §21.6 PR 8) ────────────────────────────────────
+// §10's two playable specials, which cost no action and so are not in §8's
+// catalogue at all (§21.3 drops them to the player's own turn, which is the
+// only thing the command route can express). Each is one question, asked here
+// so `BannedIsletPlayCard` and the card row in the action sheet can never
+// disagree about what the card would do.
+//
+// A Helicopter Lift's landing tiles are `flightTargets` above: the same
+// helicopter, the same reach.
+
+/**
+ * §10 Sandbags: every flooded tile on the island, because the card shores
+ * "any one tile anywhere" — the whole board, rather than §8's own tile and its
+ * neighbours, and the one thing §21.3 says Sandbags kept when async play took
+ * away its timing.
+ *
+ * A sunk tile is not here: shoring never un-sinks (§9.1) and §16 is explicit
+ * that Sandbags on a hole is illegal rather than a wasted card.
+ */
+export function sandbagsTargets(island: BannedIsletIsland): number[] {
+    return island
+        .map((_, position) => position)
+        .filter(position => tileStateAt(island, position) === 'flooded');
+}
+
+/**
+ * §10 Helicopter Lift: the tile the named pawns are lifted *from*, or `null`
+ * if they aren't a liftable group — because the card moves "any number of
+ * pawns **from one tile**", so a list spanning two tiles is one helicopter
+ * short.
+ *
+ * `null` for an unknown user id or a repeated one as well, so the command and
+ * the passenger picker both get a single yes-or-no out of a list a client
+ * chose. An empty list is not an error and has no origin: that is §4.1's
+ * escape call, which moves nobody (see `isEscapeReady`).
+ */
+export function liftOrigin(pawns: readonly IBannedIsletPawn[], userIds: readonly string[]): number | null {
+    if (userIds.length === 0) return null;
+    if (new Set(userIds).size !== userIds.length) return null;
+
+    let origin: number | null = null;
+    for (const userId of userIds) {
+        const pawn = pawns.find(p => p.userId === userId);
+        if (!pawn) return null;
+        if (origin === null) origin = pawn.position;
+        else if (pawn.position !== origin) return null;
+    }
+    return origin;
 }
 
 // ─── The four losses (§4.2) ─────────────────────────────────────────────────

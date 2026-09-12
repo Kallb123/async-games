@@ -5,6 +5,7 @@ import {
     BannedIsletDiscard,
     BannedIsletEndTurn,
     BannedIsletGameType,
+    BannedIsletPlayCard,
     IBannedIsletFloodPhaseOutcome,
 } from "./BannedIsletLogic";
 import { buildInitialBannedIsletState } from "./BannedIsletModels";
@@ -62,8 +63,29 @@ function cmd(kind: BannedIsletActionKind, fields: Partial<BannedIsletAction> = {
     return Object.assign(action, fields);
 }
 
+function playCard(fields: Partial<BannedIsletPlayCard> = {}, senderId = "u1"): BannedIsletPlayCard {
+    const command = new BannedIsletPlayCard();
+    command.senderId = senderId;
+    command.senderUsername = senderId;
+    return Object.assign(command, fields);
+}
+
 /** Four of a kind plus a spare, so a capture test can prove it paid exactly four. */
 const FIVE_EMBER: BannedIsletCardId[] = ['emberCrown', 'emberCrown', 'emberCrown', 'emberCrown', 'emberCrown'];
+
+/**
+ * §4.1's first three conditions, and only those: everything aboard, and both
+ * pawns on an unsunk Beacon Pier. The fourth — a Helicopter Lift played — is
+ * what the tests below either supply or deliberately withhold.
+ */
+function escapedState(): IBannedIsletSpecificGameState {
+    const state = baseState(
+        { u1: { position: MIDDLE }, u2: { position: MIDDLE } },
+        { tiles: { [MIDDLE]: PIER_TILE } },
+    );
+    for (const id of TREASURE_IDS) state.treasures[id] = true;
+    return state;
+}
 
 describe("BannedIsletAction 'move' (§8)", () => {
     it("steps onto an orthogonally adjacent tile for one action", async () => {
@@ -336,55 +358,18 @@ describe("BannedIsletGameType.CheckEndTurn (§21.4)", () => {
 });
 
 describe("BannedIsletGameType.CheckGameOver (§4.1)", () => {
-    // The whole team on Beacon Pier with everything lifted — §4.1 minus the
-    // Helicopter Lift, which is all PR 3 can check.
-    function escapedState(): IBannedIsletSpecificGameState {
-        const state = baseState(
-            { u1: { position: MIDDLE }, u2: { position: MIDDLE } },
-            { tiles: { [MIDDLE]: PIER_TILE } },
-        );
-        for (const id of TREASURE_IDS) state.treasures[id] = true;
-        return state;
-    }
-
-    it("ends the game as a shared win once everything is aboard and everyone is on the pier", () => {
+    it("does not win a game that has merely become winnable — §4.1's win is an action taken", () => {
+        // Everything aboard and the whole team on the pier: §4.1's first three
+        // conditions, and still not a win, because the fourth is a Helicopter
+        // Lift actually played (BannedIsletPlayCard). A team can be one card
+        // short of escaping with everything else done, which §4.1 calls the
+        // design's most memorable failure and worth preserving.
         const state = escapedState();
-        const game = makeGame(state);
-
-        expect(new BannedIsletGameType().CheckGameOver(game)).toBe(true);
-        expect(game.complete).toBe(true);
-        expect(game.endReason).toBe('teamwin');
-        // A co-op result: no single id can be the winner.
-        expect(game.winner).toBe("");
-        expect(game.currentTurn).toBe("");
-        expect(game.gameState.history[0].text).toMatch(/they win/);
-        expect(game.gameState.history[0].text).not.toMatch(/\{\{/);
-    });
-
-    it("holds the whole team on the island while one treasure is still out there", () => {
-        const state = escapedState();
-        state.treasures.rootStone = false;
         const game = makeGame(state);
 
         expect(new BannedIsletGameType().CheckGameOver(game)).toBe(false);
         expect(game.complete).toBe(false);
-    });
-
-    it("holds the whole team on the island while one pawn is still off the pier", () => {
-        const state = escapedState();
-        state.players.get("u2")!.position = NORTH_OF_MIDDLE;
-        const game = makeGame(state);
-
-        expect(new BannedIsletGameType().CheckGameOver(game)).toBe(false);
-    });
-
-    it("is not a win on a sunk pier — that is §4.2's loss, and it fires wherever the pawns were (§16)", () => {
-        const state = escapedState();
-        state.positions[MIDDLE].state = 'sunk';
-        const game = makeGame(state);
-
-        expect(new BannedIsletGameType().CheckGameOver(game)).toBe(false);
-        expect(game.complete).toBe(false);
+        expect(game.gameState.history).toHaveLength(0);
     });
 
     it("passes a finished game straight through without rewriting how it ended", () => {
@@ -404,7 +389,7 @@ describe("A whole escape, played through the command surface", () => {
         // Temple next to Beacon Pier, everything else already lifted.
         const state = baseState(
             {
-                u1: { position: NORTH_OF_MIDDLE, hand: ['emberCrown', 'emberCrown', 'emberCrown'] },
+                u1: { position: NORTH_OF_MIDDLE, hand: ['emberCrown', 'emberCrown', 'emberCrown', 'helicopterLift'] },
                 u2: { position: NORTH_OF_MIDDLE, hand: ['emberCrown'] },
             },
             { tiles: { [NORTH_OF_MIDDLE]: 'cinderTemple', [MIDDLE]: PIER_TILE }, flooded: [MIDDLE] },
@@ -421,11 +406,17 @@ describe("A whole escape, played through the command surface", () => {
         expect(state.positions[MIDDLE].state).toBe('dry');
         expect(gameType.CheckGameOver(game)).toBe(false);
 
-        // u1 lifts the crown and follows them onto the pier.
+        // u1 lifts the crown and follows them onto the pier — which is §4.1's
+        // first three conditions and still not a win.
         game.currentTurn = "u1";
         expect((await cmd('capture', {}, "u1").Execute(game)).validMove).toBe(true);
         expect(gameType.CheckGameOver(game)).toBe(false);
         expect((await cmd('move', { target: MIDDLE }, "u1").Execute(game)).validMove).toBe(true);
+        expect(gameType.CheckGameOver(game)).toBe(false);
+
+        // The fourth condition: the card, which costs neither of the actions
+        // u1 has left (§8).
+        expect((await playCard({ cardId: 'helicopterLift' }, "u1").Execute(game)).validMove).toBe(true);
 
         expect(gameType.CheckGameOver(game)).toBe(true);
         expect(game.endReason).toBe('teamwin');
@@ -873,5 +864,268 @@ describe("A whole game, at every difficulty (§13, §21.7)", () => {
         expect(game.endReason).toBe('teamloss');
         expect(game.endDetail).toBeTruthy();
         expect(floodCardsAccountedFor(state)).toBe(TILE_COUNT);
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  PR 8 — THE SPECIAL CARDS (§10), AND §4.1'S FOURTH CONDITION
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe("BannedIsletPlayCard — Sandbags (§10)", () => {
+    it("dries a flooded tile on the far side of the island, and costs no action", async () => {
+        const state = baseState({ u1: { position: MIDDLE, hand: ['sandbags'] } }, { flooded: [TOP_TIP] });
+        const game = makeGame(state);
+
+        const outcome = await playCard({ cardId: 'sandbags', target: TOP_TIP }).Execute(game);
+
+        expect(outcome).toEqual({ validMove: true, turnOver: false, floodLog: [] });
+        expect(state.positions[TOP_TIP].state).toBe('dry');
+        // §8: a special card is not an action and does not cost one.
+        expect(state.players.get("u1")!.actionsLeft).toBe(ACTIONS_PER_TURN);
+        expect(state.players.get("u1")!.hand).toEqual([]);
+        expect(state.treasureDiscard).toEqual(['sandbags']);
+    });
+
+    it("refuses a dry tile and a sunk one, leaving the card in hand (§16, §9.1)", async () => {
+        const state = baseState({ u1: { position: MIDDLE, hand: ['sandbags'] } }, { sunk: [FAR_EAST] });
+        const game = makeGame(state);
+
+        for (const target of [NORTH_OF_MIDDLE, FAR_EAST, -1]) {
+            expect(await playCard({ cardId: 'sandbags', target }).Execute(game)).toEqual({ validMove: false, turnOver: false });
+        }
+        expect(state.positions[FAR_EAST].state).toBe('sunk');
+        expect(state.players.get("u1")!.hand).toEqual(['sandbags']);
+        expect(state.treasureDiscard).toEqual([]);
+    });
+});
+
+describe("BannedIsletPlayCard — Helicopter Lift (§10)", () => {
+    it("flies every named pawn off one tile to any other, and costs no action", async () => {
+        const state = baseState({
+            u1: { position: MIDDLE, hand: ['helicopterLift'] },
+            u2: { position: MIDDLE },
+        });
+        const game = makeGame(state);
+
+        const outcome = await playCard({ cardId: 'helicopterLift', target: TOP_TIP, userIds: ["u1", "u2"] }).Execute(game);
+
+        expect(outcome).toEqual({ validMove: true, turnOver: false, floodLog: [] });
+        expect(state.players.get("u1")!.position).toBe(TOP_TIP);
+        expect(state.players.get("u2")!.position).toBe(TOP_TIP);
+        expect(state.players.get("u1")!.actionsLeft).toBe(ACTIONS_PER_TURN);
+        expect(state.treasureDiscard).toEqual(['helicopterLift']);
+    });
+
+    it("flies one pawn and leaves the other standing — 'any number of pawns'", async () => {
+        const state = baseState({
+            u1: { position: MIDDLE, hand: ['helicopterLift'] },
+            u2: { position: MIDDLE },
+        });
+        const game = makeGame(state);
+
+        expect((await playCard({ cardId: 'helicopterLift', target: TOP_TIP, userIds: ["u2"] }).Execute(game)).validMove).toBe(true);
+
+        expect(state.players.get("u2")!.position).toBe(TOP_TIP);
+        expect(state.players.get("u1")!.position).toBe(MIDDLE);
+    });
+
+    it("refuses passengers standing on two different tiles — one helicopter, one tile", async () => {
+        const state = baseState({
+            u1: { position: MIDDLE, hand: ['helicopterLift'] },
+            u2: { position: NORTH_OF_MIDDLE },
+        });
+        const game = makeGame(state);
+
+        expect(await playCard({ cardId: 'helicopterLift', target: TOP_TIP, userIds: ["u1", "u2"] }).Execute(game))
+            .toEqual({ validMove: false, turnOver: false });
+        expect(state.players.get("u1")!.position).toBe(MIDDLE);
+        expect(state.players.get("u1")!.hand).toEqual(['helicopterLift']);
+    });
+
+    it("refuses a hole, the tile they are already on, an unknown passenger and a repeated one", async () => {
+        const state = baseState({
+            u1: { position: MIDDLE, hand: ['helicopterLift'] },
+            u2: { position: MIDDLE },
+        }, { sunk: [TOP_TIP] });
+        const game = makeGame(state);
+
+        const refused: Partial<BannedIsletPlayCard>[] = [
+            { target: TOP_TIP, userIds: ["u1"] },            // a hole is not standable (§9.1)
+            { target: MIDDLE, userIds: ["u1"] },             // "any *other* tile" (§10)
+            { target: NORTH_OF_MIDDLE, userIds: ["u9"] },    // nobody's pawn
+            { target: NORTH_OF_MIDDLE, userIds: ["u1", "u1"] },
+            { target: NORTH_OF_MIDDLE, userIds: [] },        // the escape call names no tile
+        ];
+        for (const fields of refused) {
+            expect(await playCard({ cardId: 'helicopterLift', ...fields }).Execute(game))
+                .toEqual({ validMove: false, turnOver: false });
+        }
+        expect(state.players.get("u1")!.position).toBe(MIDDLE);
+        expect(state.players.get("u1")!.hand).toEqual(['helicopterLift']);
+    });
+});
+
+describe("BannedIsletPlayCard — what can be played at all (§10)", () => {
+    it("refuses a treasure card, a Waters Rise! and a card the player isn't holding", async () => {
+        const state = baseState({ u1: { position: MIDDLE, hand: ['emberCrown', 'watersRise'] } }, { flooded: [TOP_TIP] });
+        const game = makeGame(state);
+
+        for (const cardId of ['emberCrown', 'watersRise', 'sandbags', null] as (BannedIsletCardId | null)[]) {
+            expect(await playCard({ cardId, target: TOP_TIP }).Execute(game)).toEqual({ validMove: false, turnOver: false });
+        }
+        expect(state.players.get("u1")!.hand).toEqual(['emberCrown', 'watersRise']);
+        expect(state.positions[TOP_TIP].state).toBe('flooded');
+    });
+
+    it("refuses a sender who isn't in the game at all", async () => {
+        const state = baseState({ u1: { position: MIDDLE, hand: ['sandbags'] } }, { flooded: [TOP_TIP] });
+        const game = makeGame(state);
+
+        expect(await playCard({ cardId: 'sandbags', target: TOP_TIP }, "nobody").Execute(game))
+            .toEqual({ validMove: false, turnOver: false });
+    });
+
+    it("spends exactly one copy of a card held twice", async () => {
+        const state = baseState({ u1: { position: MIDDLE, hand: ['sandbags', 'sandbags'] } }, { flooded: [TOP_TIP] });
+        const game = makeGame(state);
+
+        expect((await playCard({ cardId: 'sandbags', target: TOP_TIP }).Execute(game)).validMove).toBe(true);
+
+        expect(state.players.get("u1")!.hand).toEqual(['sandbags']);
+        expect(state.treasureDiscard).toEqual(['sandbags']);
+    });
+});
+
+describe("BannedIsletPlayCard — ducking the hand limit (§10, §21.3)", () => {
+    /** A turn the draw left over the limit, holding `hand` and waiting on the flood. */
+    function overTheLimit(hand: BannedIsletCardId[]): IBannedIsletSpecificGameState {
+        const state = endOfTurnState({ u1: { position: MIDDLE, hand } }, { flooded: [TOP_TIP] });
+        state.phase = 'discard';
+        state.waterLevel = 1;                       // §11: rate 2
+        state.floodDeck = ['kelpStair', 'saltMarket'];
+        return state;
+    }
+
+    it("plays a special instead of discarding it, which closes the turn and floods (§10)", async () => {
+        const hand: BannedIsletCardId[] = ['emberCrown', 'emberCrown', 'emberCrown', 'emberCrown', 'stormIdol', 'sandbags'];
+        const state = overTheLimit(hand);
+        const game = makeGame(state);
+
+        const outcome = await playCard({ cardId: 'sandbags', target: TOP_TIP }).Execute(game) as IBannedIsletFloodPhaseOutcome;
+
+        expect(outcome.validMove).toBe(true);
+        expect(outcome.turnOver).toBe(true);
+        expect(state.players.get("u1")!.hand).toHaveLength(HAND_LIMIT);
+        expect(state.positions[TOP_TIP].state).toBe('dry');
+        // The island got its turn after all — Phase 3 ran here, in
+        // BannedIsletEndTurn's place.
+        expect(state.phase).toBe('actions');
+        expect(outcome.floodLog.map(e => e.tile)).toEqual(['kelpStair', 'saltMarket']);
+    });
+
+    it("leaves the turn open while the hand is still over the limit", async () => {
+        const hand: BannedIsletCardId[] = ['emberCrown', 'emberCrown', 'emberCrown', 'emberCrown', 'stormIdol', 'sandbags', 'helicopterLift'];
+        const state = overTheLimit(hand);
+        const game = makeGame(state);
+
+        const outcome = await playCard({ cardId: 'sandbags', target: TOP_TIP }).Execute(game) as IBannedIsletFloodPhaseOutcome;
+
+        expect(outcome).toEqual({ validMove: true, turnOver: false, floodLog: [] });
+        expect(state.phase).toBe('discard');
+        expect(state.floodDeck).toHaveLength(2);
+    });
+
+    it("records the flood shuffle it rolled while closing the turn (§21.4)", async () => {
+        const hand: BannedIsletCardId[] = ['emberCrown', 'emberCrown', 'emberCrown', 'emberCrown', 'stormIdol', 'sandbags'];
+        const state = overTheLimit(hand);
+        // Empty deck, stocked discard: Phase 3 has to reshuffle mid-draw (§11),
+        // which is randomness this command must record rather than re-roll on
+        // replay.
+        state.floodDeck = [];
+        state.floodDiscard = ['kelpStair', 'saltMarket', 'crabFlats'];
+        const command = playCard({ cardId: 'sandbags', target: TOP_TIP });
+
+        expect((await command.Execute(makeGame(state))).validMove).toBe(true);
+
+        expect(command.recordedFloodShuffles).toHaveLength(1);
+        expect([...command.recordedFloodShuffles![0]].sort())
+            .toEqual(['crabFlats', 'kelpStair', 'saltMarket']);
+    });
+
+    it("prefers a recorded shuffle over rolling a new one, so a replay floods identically (§21.4)", async () => {
+        const hand: BannedIsletCardId[] = ['emberCrown', 'emberCrown', 'emberCrown', 'emberCrown', 'stormIdol', 'sandbags'];
+        const state = overTheLimit(hand);
+        state.floodDeck = [];
+        state.floodDiscard = ['kelpStair', 'saltMarket', 'crabFlats'];
+        const command = playCard({ cardId: 'sandbags', target: TOP_TIP });
+        command.recordedFloodShuffles = [['crabFlats', 'saltMarket', 'kelpStair']];
+
+        const outcome = await command.Execute(makeGame(state)) as IBannedIsletFloodPhaseOutcome;
+
+        // The recorded order, in the recorded order — not a fresh shuffle that
+        // would drown a different pair of tiles on the way back.
+        expect(outcome.floodLog.filter(e => e.kind === 'flood').map(e => e.tile))
+            .toEqual(['crabFlats', 'saltMarket']);
+        expect(command.recordedFloodShuffles).toEqual([['crabFlats', 'saltMarket', 'kelpStair']]);
+    });
+});
+
+describe("§4.1's fourth condition — the escape", () => {
+    it("wins the game when a Helicopter Lift is played with everything aboard and everyone on the pier", async () => {
+        const state = escapedState();
+        state.players.get("u1")!.hand = ['helicopterLift'];
+        const game = makeGame(state);
+
+        const outcome = await playCard({ cardId: 'helicopterLift' }).Execute(game);
+
+        expect(outcome).toEqual({ validMove: true, turnOver: true, floodLog: [] });
+        expect(new BannedIsletGameType().CheckGameOver(game)).toBe(true);
+        expect(game.complete).toBe(true);
+        expect(game.endReason).toBe('teamwin');
+        // A co-op result: no single id can be the winner.
+        expect(game.winner).toBe("");
+        expect(game.currentTurn).toBe("");
+        expect(game.gameState.history[0].text).toMatch(/they win/);
+        expect(game.gameState.history[0].text).not.toMatch(/\{\{/);
+        expect(state.treasureDiscard).toEqual(['helicopterLift']);
+    });
+
+    it("wins on the lift that carries the last pawn onto the pier", async () => {
+        const state = escapedState();
+        state.players.get("u2")!.position = NORTH_OF_MIDDLE;
+        state.players.get("u2")!.hand = ['helicopterLift'];
+        const game = makeGame(state);
+
+        // Checked at the moment the card is played, which is after it has moved
+        // whoever it moved — so this lift both gathers the team and escapes.
+        expect((await playCard({ cardId: 'helicopterLift', target: MIDDLE, userIds: ["u2"] }, "u2").Execute(game)).validMove).toBe(true);
+
+        expect(game.complete).toBe(true);
+        expect(game.endReason).toBe('teamwin');
+    });
+
+    it("spends the card anyway when a treasure is still on the island (§16)", async () => {
+        const state = escapedState();
+        state.treasures.rootStone = false;
+        state.players.get("u1")!.hand = ['helicopterLift'];
+        const game = makeGame(state);
+
+        expect((await playCard({ cardId: 'helicopterLift' }).Execute(game)).validMove).toBe(true);
+
+        expect(game.complete).toBe(false);
+        expect(state.players.get("u1")!.hand).toEqual([]);
+        expect(state.treasureDiscard).toEqual(['helicopterLift']);
+    });
+
+    it("is not won by Sandbags, however ready the island is", async () => {
+        const state = escapedState();
+        state.positions[TOP_TIP].state = 'flooded';
+        state.players.get("u1")!.hand = ['sandbags'];
+        const game = makeGame(state);
+
+        expect((await playCard({ cardId: 'sandbags', target: TOP_TIP }).Execute(game)).validMove).toBe(true);
+
+        expect(game.complete).toBe(false);
+        expect(new BannedIsletGameType().CheckGameOver(game)).toBe(false);
     });
 });

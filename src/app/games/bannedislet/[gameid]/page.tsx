@@ -3,7 +3,7 @@ import { use, useState } from "react";
 import { usePathname } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
-import { BannedIsletAction, IBannedIsletFloodPhaseOutcome } from "@/utils/apiModels/GameLogic";
+import { BannedIsletAction, BannedIsletPlayCard, IBannedIsletFloodPhaseOutcome } from "@/utils/apiModels/GameLogic";
 import type { IBannedIsletGameDataResponse, IBannedIsletSpecificGameStateResponse } from "@/games/BannedIslet/apiModels";
 import BannedIsletBoard from "@/games/BannedIslet/components/BannedIsletBoard";
 import BannedIsletActions, { BannedIsletPick } from "@/games/BannedIslet/components/BannedIsletActions";
@@ -30,11 +30,13 @@ import { ACTIONS_PER_TURN, HAND_LIMIT, LOSING_WATER_LEVEL, POSITION_COUNT, roleD
 import {
     IBannedIsletFloodLogEntry,
     giveCardTargets,
+    liftOrigin,
     moveTargets,
     navigatorMoveTargets,
     pilotFlightAvailable,
-    pilotFlightTargets,
+    flightTargets,
     positionOfTile,
+    sandbagsTargets,
     shoreUpTargets,
     shoreUpsPerAction,
 } from "@/games/BannedIslet/rules";
@@ -141,8 +143,11 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
     const moveReach = gs && me ? moveTargets(gs.positions, me.position, me.role) : [];
     const shoreReach = gs && me ? shoreUpTargets(gs.positions, me.position, me.role) : [];
     const flightReach = gs && me && pilotFlightAvailable(me.role, me.pilotFlightUsed)
-        ? pilotFlightTargets(gs.positions, me.position)
+        ? flightTargets(gs.positions, me.position)
         : [];
+    // §10 Sandbags: every flooded tile on the island, wherever my own pawn is
+    // standing — the one thing the card kept when §21.3 took its timing away.
+    const sandbagsReach = gs ? sandbagsTargets(gs.positions) : [];
     // §8 / §12: who I can hand a treasure card to — my own tile, or anywhere at
     // all if I am the Messenger.
     const giveMates = gs && me
@@ -167,6 +172,17 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
             case 'shoreUp': return current.first === undefined ? shoreReach : shoreReach.filter(p => p !== current.first);
             case 'pilotFlight': return flightReach;
             case 'navigatorMove': return current.userId ? navigatorReach[current.userId] ?? [] : [];
+            case 'sandbags': return sandbagsReach;
+            // §10 Helicopter Lift: the passengers were chosen in the action
+            // sheet, and where they can land follows from the one tile they are
+            // all standing on — `liftOrigin` is the same answer the server's
+            // Execute gets, so a tile the board lights up is never refused.
+            case 'helicopterLift': {
+                if (!gs) return [];
+                const pawns = Object.values(gs.playerStates).map(p => ({ userId: p.userId, position: p.position }));
+                const origin = liftOrigin(pawns, current.userIds ?? []);
+                return origin === null ? [] : flightTargets(gs.positions, origin);
+            }
         }
     }
 
@@ -180,6 +196,17 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
 
     function handlePositionClick(position: number) {
         if (!pick || !me) return;
+        // §10's two specials are cards rather than actions, so the tap sends
+        // BannedIsletPlayCard rather than one of §8's verbs — and costs none
+        // of the three.
+        if (pick.mode === 'sandbags' || pick.mode === 'helicopterLift') {
+            const cmd = new BannedIsletPlayCard();
+            cmd.cardId = pick.mode;
+            cmd.target = position;
+            if (pick.mode === 'helicopterLift') cmd.userIds = pick.userIds ?? [];
+            submitCommand(cmd, () => setPick(null), pick.mode);
+            return;
+        }
         // §12 Engineer: the first tap banks a tile and the board keeps asking,
         // because one action dries two. It only waits when there is a second
         // tile to wait for — otherwise the tap is the whole shore up, and
@@ -189,12 +216,16 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
             setPick({ mode: 'shoreUp', first: position });
             return;
         }
+        // Narrowed to §8's verbs here — the two card modes returned above —
+        // and read out before the closure, which is where that narrowing would
+        // otherwise be lost.
+        const kind = pick.mode;
         sendAction(cmd => {
-            cmd.kind = pick.mode;
+            cmd.kind = kind;
             cmd.target = pick.first ?? position;
             if (pick.first !== undefined) cmd.secondTarget = position;
-            if (pick.mode === 'navigatorMove') cmd.targetUserId = pick.userId ?? null;
-        }, pick.mode);
+            if (kind === 'navigatorMove') cmd.targetUserId = pick.userId ?? null;
+        }, kind);
     }
 
     let boardTag: string | null = null;
@@ -210,6 +241,8 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
                     ? 'Choose a flooded tile to shore up'
                     : `Choose a second flooded tile to dry with ${tileName(gs.positions[pick.first].tile)}`;
                 break;
+            case 'sandbags': boardTag = 'Choose any flooded tile to sandbag'; break;
+            case 'helicopterLift': boardTag = 'Choose where the helicopter puts them down'; break;
         }
     }
 
@@ -356,6 +389,7 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
                                     move: moveReach.length,
                                     shoreUp: shoreReach.length,
                                     pilotFlight: flightReach.length,
+                                    sandbags: sandbagsReach.length,
                                 }}
                                 giveMates={giveMates}
                                 navigatorReach={navigatorReach}
