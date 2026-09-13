@@ -116,6 +116,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Train Time's match review speaks plain English",
+                detail: "Stepping back through a Train Time match used to label every action with internal gibberish — \"Train Time ClaimRoute route=3 cards=blue,blue,blue,blue\" — instead of what happened. Each step now reads the way the turn history does: \"drew from the deck\", \"took the face-up red\", \"claimed Seattle – Vancouver (1 track, +1)\", \"kept 2 of 3 destination tickets\".",
+                game: "traintime",
+            },
+            {
                 title: "Settlements & Cities' match review speaks plain English",
                 detail: "Stepping back through a match used to label every action with internal gibberish — \"SAC BuildSettlement vertex=17\" — instead of what happened. Each step now reads the way the turn history does: \"built a settlement\", \"moved the robber and stole a resource from Bob\", and a roll names who collected what — \"rolled a 9 — Alice +2🪵 +1🌾, Bob +1⛏️\".",
                 game: "settlementsandcities",
@@ -156,10 +161,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Dice Cities' Amusement Park can be built again",
                 detail: "Buying the Amusement Park quietly asked for the Radio Tower instead — so it was refused unless you could afford the more expensive one, and if you could, you got the wrong landmark for the wrong price. The two also had each other's powers: the extra turn on doubles belonged to the Radio Tower and the Amusement Park did nothing at all. Both now build, and cost, and do what their cards say.",
                 game: "dicecities",
-            },
-            {
-                title: "Chat opens on a game nobody has said anything in yet",
-                detail: "Tapping 💬 on a board where the thread was still empty broke the screen instead of opening it — “That didn't go to plan” — which was every game until someone got the first message in somehow. An empty thread now opens ready for it.",
             },
         ],
     },

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import * as TrainTimeLogic from "./TrainTimeLogic";
 import {
     TrainTimeClaimRoute,
     TrainTimeDrawCarriageCard,
@@ -32,6 +33,7 @@ import {
     paymentIsValid,
     payableColours,
     playerNetwork,
+    routeName,
     routeScore,
     ticketIsComplete,
     ticketsToKeep,
@@ -836,5 +838,70 @@ describe("a full simulated game", () => {
         for (const ps of gs.playerStates.values()) expect(ps.trains).toBeGreaterThanOrEqual(0);
         // Every route on the board is claimed at most once.
         expect(gs.routeOwners.length).toBe(ROUTE_COUNT);
+    });
+});
+
+// ─── What the match review calls each action ────────────────────────────────
+// myString() titles every step of a review ("Alice · claimed the Red Line
+// (4 track, +7)"), the same way Outbreak's and Settlements & Cities' do. These
+// used to be the debug strings the commands were first written with
+// ("Train Time ClaimRoute route=3 cards=blue,blue,blue,blue"), which is
+// exactly what a reviewing player saw.
+
+describe("Train Time — action summaries", () => {
+    // Swept off the module rather than listed, so a command added later can't
+    // ship a debug summary just by not being added to this test.
+    const commandClasses = (Object.values(TrainTimeLogic) as unknown[]).filter(
+        (exported): exported is new () => IGameCommand =>
+            typeof exported === "function" &&
+            typeof (exported as { prototype?: { myString?: unknown } }).prototype?.myString === "function"
+    );
+
+    it("summarises every command in words, not as a debug string", () => {
+        expect(commandClasses.length).toBe(5);
+        for (const Command of commandClasses) {
+            const summary = new Command().myString();
+            expect(summary, `${new Command().className} reads as debug output`)
+                .not.toMatch(/Train Time |=|routeId|marketIndex/);
+            // It continues "<player> · …", so it starts mid-sentence.
+            expect(summary[0]).toBe(summary[0].toLowerCase());
+        }
+    });
+
+    it("names the face-up card a market draw took, and nothing about a blind one", () => {
+        const market = drawFromMarket(0);
+        expect(market.myString()).toBe('took a face-up card');
+        market.takenCard = 'red';
+        expect(market.myString()).toBe('took the face-up red');
+
+        // A deck draw never names a colour — that card stays in the hand it
+        // was dealt to, not on a screen the whole table steps through.
+        expect(drawFromDeck().myString()).toBe('drew from the deck');
+    });
+
+    it("names the route it claimed straight off the static route list", () => {
+        const route = ROUTES.find(r => r.length === 4)!;
+        expect(claim(route.id, []).myString()).toBe(`claimed ${routeName(route)} (4 track, +7)`);
+        expect(claim(-1, []).myString()).toBe('claimed a route');
+    });
+
+    it("names how many tickets a draw actually dealt", () => {
+        const command = new TrainTimeDrawTickets();
+        expect(command.myString()).toBe('drew destination tickets');
+        command.drawnCount = 3;
+        expect(command.myString()).toBe('drew 3 destination tickets');
+        command.drawnCount = 1;
+        expect(command.myString()).toBe('drew 1 destination ticket');
+    });
+
+    it("names how many tickets were kept, and of how many once it knows", () => {
+        const command = keepTickets([1, 2]);
+        expect(command.myString()).toBe('kept 2 destination tickets');
+        command.offeredCount = 3;
+        expect(command.myString()).toBe('kept 2 of 3 destination tickets');
+    });
+
+    it("names what a pass says in the history line, exactly", () => {
+        expect(new TrainTimePassTurn().myString()).toBe('had no legal move and passed');
     });
 });
