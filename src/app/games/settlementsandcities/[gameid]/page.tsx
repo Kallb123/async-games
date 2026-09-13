@@ -270,9 +270,12 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             const isLongestRoad = gs.longestRoadOwner === userId;
             const isLargestArmy = gs.largestArmyOwner === userId;
             const roadLength = calculateLongestRoad(userId, gs.vertices, gs.edges);
+            // Card count is left out here — it's already the pill's `sub` line
+            // for anyone not holding a bonus, and repeating it under an
+            // expanded pill that already shows 🛣️ LR / ⚔️ LA up top would just
+            // echo the collapsed row.
             const detail = (
                 <>
-                    <div>{totalCards} card{totalCards === 1 ? '' : 's'}</div>
                     <div>⚔️ {ps.knightsPlayed} knight{ps.knightsPlayed === 1 ? '' : 's'}{isLargestArmy && ' · Largest Army'}</div>
                     <div>🛣️ {roadLength} segment{roadLength === 1 ? '' : 's'}{isLongestRoad && ' · Longest Road'}</div>
                 </>
