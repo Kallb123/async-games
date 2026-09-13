@@ -3,10 +3,12 @@ import {
     SettlementsAndCitiesGameDataModel,
     cloneSACState,
     gameStateToResponse,
+    computeSettlementsAndCitiesResultStats,
+    formatSettlementsAndCitiesCharts,
 } from "./SettlementsAndCitiesModels";
 import { makeState, player } from "./testFixtures";
 import type { ISACRollChange, ISACSpecificGameState } from "./board";
-import { NO_RESOURCES } from "./board";
+import { BOARD_TOPOLOGY, NO_RESOURCES } from "./board";
 
 const NAMES = { u1: "Alice", u2: "Bob" };
 
@@ -18,6 +20,12 @@ function stateWith(lastRollChanges: ISACRollChange[] | undefined): ISACSpecificG
     return makeState({
         lastRollChanges,
         playerStates: new Map([["u1", player()], ["u2", player()]]),
+        // A real (empty) board rather than makeState's default `[]` — calculateLongestRoad
+        // walks BOARD_TOPOLOGY's edge/vertex ids into these arrays, so the
+        // roll-frequency stats tests below (which call the full result-stats
+        // computation, longest road included) need them the real size.
+        vertices: Array.from({ length: BOARD_TOPOLOGY.numVertices }, () => ({ building: null, owner: null })),
+        edges: Array.from({ length: BOARD_TOPOLOGY.numEdges }, () => ({ hasRoad: false, owner: null })),
     });
 }
 
@@ -96,5 +104,75 @@ describe("Settlements & Cities' roll payout through Mongoose", () => {
         expect(cloned.lastRollChanges).not.toBe(changes);
         expect(cloned.lastRollChanges![0].gained).not.toBe(changes[0].gained);
         expect(cloneSACState(stateWith(undefined), ["u1", "u2"]).lastRollChanges).toBeUndefined();
+    });
+});
+
+// A roll's total (2-12) is tallied straight off SACRollDice's own recorded
+// dice in commandHistory, not replayed - see computeSACRollFrequency. These
+// prove the tally against the shape commandHistory actually stores rolls in,
+// not just a made-up input.
+describe("Settlements & Cities' roll-frequency stat", () => {
+    function rollCommand(recordedRoll1: number, recordedRoll2: number) {
+        return { className: "SACRollDice", senderId: "u1", recordedRoll1, recordedRoll2 };
+    }
+
+    it("tallies every roll's total, seeding every possible total (2-12) at zero", () => {
+        const doc = docFor(stateWith(undefined));
+        doc.gameState.commandHistory.push(
+            rollCommand(3, 4), // 7
+            rollCommand(1, 1), // 2
+            rollCommand(6, 6), // 12
+            rollCommand(3, 4), // 7 again
+        );
+
+        const stats = computeSettlementsAndCitiesResultStats(doc, []);
+
+        expect(Object.fromEntries(stats.rollFrequency)).toEqual({
+            "2": 1, "3": 0, "4": 0, "5": 0, "6": 0,
+            "7": 2, "8": 0, "9": 0, "10": 0, "11": 0, "12": 1,
+        });
+    });
+
+    it("ignores commands that aren't a roll, and a roll with no recorded dice", () => {
+        const doc = docFor(stateWith(undefined));
+        doc.gameState.commandHistory.push(
+            { className: "SACEndTurn", senderId: "u1" },
+            rollCommand(2, 2), // 4
+            { className: "SACRollDice", senderId: "u1" }, // never executed - no recorded dice
+        );
+
+        const stats = computeSettlementsAndCitiesResultStats(doc, []);
+
+        expect(stats.rollFrequency.get("4")).toBe(1);
+        expect([...stats.rollFrequency.values()].reduce((a, b) => a + b, 0)).toBe(1);
+    });
+
+    it("appears as the last chart, after the resources/round line chart, with one bar per total", () => {
+        const doc = docFor(stateWith(undefined));
+        doc.gameState.commandHistory.push(rollCommand(4, 5)); // 9
+
+        const stats = computeSettlementsAndCitiesResultStats(doc, [new Map([["u1", 3]])]);
+        const charts = formatSettlementsAndCitiesCharts(stats, new Map(Object.entries(NAMES)));
+
+        expect(charts).toHaveLength(2);
+        expect(charts[0].title).toBe("Resources gathered per round");
+        const rollChart = charts[1];
+        expect(rollChart.title).toBe("Dice roll frequency");
+        expect(rollChart.kind).toBe("bar");
+        if (rollChart.kind !== "bar") throw new Error("expected a bar chart");
+        expect(rollChart.bars.map(b => b.label)).toEqual(
+            ["2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]
+        );
+        expect(rollChart.bars.find(b => b.label === "9")?.value).toBe(1);
+        expect(rollChart.bars.find(b => b.label === "2")?.value).toBe(0);
+    });
+
+    it("still charts the roll frequency even when no resources chart is recorded", () => {
+        const doc = docFor(stateWith(undefined));
+        const stats = computeSettlementsAndCitiesResultStats(doc, []);
+        const charts = formatSettlementsAndCitiesCharts(stats, new Map(Object.entries(NAMES)));
+
+        expect(charts).toHaveLength(1);
+        expect(charts[0].title).toBe("Dice roll frequency");
     });
 });

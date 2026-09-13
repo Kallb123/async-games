@@ -2,7 +2,7 @@ import { GameDataModel, IGameData, IGameDataDocument, publicGameState } from "@/
 import { IInvitationData, IInvitationDataDocument, InvitationModel, IInvitationRequest } from "@/utils/mongodb/InvitationData";
 import { Model, Schema, models } from "mongoose";
 import { ISACGameDataResponse, ISACSpecificGameStateResponse, ISACPlayerStateResponse } from "./apiModels";
-import { uuidString, GameResultStatGroup, GameResultChart, formatPerTurnChart, compactCharts, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
+import { uuidString, GameResultStatGroup, GameResultBarChart, GameResultAnyChart, formatPerTurnChart, compactCharts, playerByUserId as findPlayerByUserId } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
 import { v4 as uuidv4 } from 'uuid';
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
@@ -520,7 +520,20 @@ export interface ISACGameResultStats {
     // game's GAME_RESULT_STATS entry in GameResultData.ts, since it isn't
     // tracked as history on specificGameState.
     resourcesPerTurn: Map<string, number>[];
+    // How many times each roll total (2-12) came up over the whole game,
+    // keyed by the total as a string (Mongoose's Schema.Types.Map only keys by
+    // string - see resourcesPerTurn above for the same convention). Tallied
+    // straight off every SACRollDice in commandHistory rather than through
+    // computePerTurnStat, since this isn't a per-turn series at all - it's one
+    // whole-game distribution with no round axis. Powers the roll-frequency
+    // bar chart at the bottom of the result page.
+    rollFrequency: Map<string, number>;
 }
+
+// The possible totals of two six-sided dice, lowest to highest - the fixed set
+// of categories the roll-frequency bar chart's x-axis walks, and the keys
+// computeSACRollFrequency tallies into.
+export const SAC_ROLL_VALUES = Array.from({ length: 11 }, (_, i) => i + 2);
 
 export const sacGameResultStatsSchemaDef = {
     playerStats: {
@@ -538,7 +551,26 @@ export const sacGameResultStatsSchemaDef = {
         },
     },
     resourcesPerTurn: [{ type: Schema.Types.Map, of: Number }],
+    rollFrequency: { type: Schema.Types.Map, of: Number },
 };
+
+// Tallies every dice roll's total (2-12) across the whole game, read straight
+// off commandHistory's SACRollDice commands rather than replayed state - the
+// same "read the field the command recorded" shortcut BannedIslet's and
+// Outbreak's turnsLasted use for a plain command count. A roll from before
+// recordedRoll1/2 existed (there shouldn't be one - see SACRollDice) is
+// skipped rather than guessed at.
+export function computeSACRollFrequency(gameData: ISettlementsAndCitiesGameData): Map<string, number> {
+    const frequency = new Map<string, number>(SAC_ROLL_VALUES.map(v => [String(v), 0]));
+    for (const command of gameData.gameState.commandHistory) {
+        if (command.className !== 'SACRollDice') continue;
+        const { recordedRoll1, recordedRoll2 } = command as unknown as { recordedRoll1?: number; recordedRoll2?: number };
+        if (recordedRoll1 === undefined || recordedRoll2 === undefined) continue;
+        const roll = String(recordedRoll1 + recordedRoll2);
+        frequency.set(roll, (frequency.get(roll) ?? 0) + 1);
+    }
+    return frequency;
+}
 
 export function computeSettlementsAndCitiesResultStats(
     gameData: ISettlementsAndCitiesGameData,
@@ -566,7 +598,7 @@ export function computeSettlementsAndCitiesResultStats(
             victoryPoints,
         });
     }
-    return { playerStats, resourcesPerTurn };
+    return { playerStats, resourcesPerTurn, rollFrequency: computeSACRollFrequency(gameData) };
 }
 
 // Renders ISACGameResultStats as one stat group per player, for the shared
@@ -590,8 +622,25 @@ export function formatSettlementsAndCitiesResultStats(stats: ISACGameResultStats
     return groups;
 }
 
-// Renders resourcesPerTurn as GameResult charts: one entry per round, keyed by
-// username, for the result page's resources/round chart.
-export function formatSettlementsAndCitiesCharts(stats: ISACGameResultStats, usernameById: Map<string, string>): GameResultChart[] {
-    return compactCharts(formatPerTurnChart(stats.resourcesPerTurn, "Resources gathered per round", "Resources", usernameById.size));
+// Renders rollFrequency as a bar chart: one bar per roll total (2-12), in
+// order, with nothing to key by player since every roll belongs to whoever's
+// turn it was, not to one line on a chart.
+function formatSACRollFrequencyChart(rollFrequency: Map<string, number>): GameResultBarChart {
+    return {
+        kind: 'bar',
+        title: "Dice roll frequency",
+        yLabel: "Rolls",
+        bars: SAC_ROLL_VALUES.map(roll => ({ label: String(roll), value: rollFrequency.get(String(roll)) ?? 0 })),
+    };
+}
+
+// Renders resourcesPerTurn and rollFrequency as GameResult charts: the
+// resources/round line chart first, then the roll-frequency bar chart last -
+// it summarises the whole game rather than one round, so it belongs at the
+// bottom of the result page, below every round-by-round chart.
+export function formatSettlementsAndCitiesCharts(stats: ISACGameResultStats, usernameById: Map<string, string>): GameResultAnyChart[] {
+    return [
+        ...compactCharts(formatPerTurnChart(stats.resourcesPerTurn, "Resources gathered per round", "Resources", usernameById.size)),
+        formatSACRollFrequencyChart(stats.rollFrequency),
+    ];
 }

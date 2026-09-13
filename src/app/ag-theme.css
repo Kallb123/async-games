@@ -2442,6 +2442,40 @@ button.ag-chat-gif { cursor: pointer; }
     color: var(--ag-ink-softer);
 }
 
+/* ---- GameResult frequency bar chart (BarChart) ---- */
+.ag-barchart-plot {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 160px;
+}
+.ag-barchart-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    height: 100%;
+    min-width: 0;
+}
+.ag-barchart-value {
+    font: 700 10px var(--ag-font);
+    color: var(--ag-ink-soft);
+    margin-bottom: 3px;
+}
+.ag-barchart-bar {
+    width: 100%;
+    max-width: 22px;
+    min-height: 2px;
+    background: var(--ag-terracotta);
+    border-radius: 4px 4px 0 0;
+}
+.ag-barchart-label {
+    margin-top: 6px;
+    font: 600 9px var(--ag-font);
+    color: var(--ag-ink-softer);
+}
+
 /* ==========================================================================
    Snakes & Ladders — the walnut 100-square board, tokens and roll-result sheet
    ========================================================================== */

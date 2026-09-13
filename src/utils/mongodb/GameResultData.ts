@@ -1,6 +1,6 @@
 import { Document, Model, Schema, model, models } from "mongoose";
 import type { IGameData } from "./GameData";
-import type { uuidString, GameEndReason, GameResultStatGroup, GameResultChart } from "../apiModels/GameDataApi";
+import type { uuidString, GameEndReason, GameResultStatGroup, GameResultAnyChart } from "../apiModels/GameDataApi";
 // The shared, generic player lookup. The older games each wrap it in a typed
 // alias of their own; a new one doesn't need to — the state type infers the
 // player type.
@@ -292,7 +292,7 @@ const GAME_RESULT_STATS: Record<string, {
     model: Model<any>,
     compute: (gameData: IGameData) => unknown | Promise<unknown>,
     format: (stats: any, usernameById: Map<string, string>) => GameResultStatGroup[],
-    charts?: (stats: any, usernameById: Map<string, string>) => GameResultChart[],
+    charts?: (stats: any, usernameById: Map<string, string>) => GameResultAnyChart[],
 }> = {
     DiceCities: {
         model: DiceCitiesGameResultModel,
@@ -456,7 +456,7 @@ export function formatGameResultStats(gameType: string, stats: unknown, username
 // Renders a GameResult document's discriminated `stats` field into zero or
 // more round-by-round charts, for games that register any. Returns [] for
 // games with no charts registered (or no stats present).
-export function formatGameResultCharts(gameType: string, stats: unknown, usernameById: Map<string, string>): GameResultChart[] {
+export function formatGameResultCharts(gameType: string, stats: unknown, usernameById: Map<string, string>): GameResultAnyChart[] {
     const specific = GAME_RESULT_STATS[gameType];
     if (!specific?.charts || !stats) return [];
     return specific.charts(stats, usernameById);
