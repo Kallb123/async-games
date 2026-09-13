@@ -12,6 +12,10 @@ import { BannedIsletAction, BannedIsletDiscard, BannedIsletEndTurn } from "@/gam
 import { IBannedIsletGameData } from "@/games/BannedIslet/BannedIsletModels";
 import { HAND_LIMIT as BANNED_ISLET_HAND_LIMIT } from "@/games/BannedIslet/board";
 import { forcedDiscard } from "@/games/BannedIslet/rules";
+import { RaceCarsMove, RaceCarsShift, RaceCarsSlipstream } from "@/games/RaceCars/RaceCarsLogic";
+import { IRaceCarsGameData } from "@/games/RaceCars/RaceCarsModels";
+import { conservativeTurn } from "@/games/RaceCars/rules";
+import { mongoMap } from "./mongoMaps";
 
 // docs/games/outbreak-gdd.md §21.2, gap 2: the turn-timer cron used to handle
 // every game the same way — advance currentTurn and nothing else — which is
@@ -178,6 +182,72 @@ registerTurnTimeoutAdapter({
             return action;
         }
         return new BannedIsletEndTurn();
+    },
+});
+
+registerTurnTimeoutAdapter({
+    className: "RaceCarsGameType",
+    // docs/games/race-cars.md §23.7 PR 6. The cron's plain advance is wrong
+    // here twice over, and the second way is fatal.
+    //
+    // A silent driver's car does not move — which makes timing out a way to
+    // conserve wear, the same "skipping is the strongest play" shape Outbreak's
+    // adapter above exists to close. And a turn that times out in the
+    // 'slipstream' phase takes the whole race down, not even as a clean hang:
+    // only that driver may send RaceCarsSlipstream, and the command route stops
+    // accepting it the moment currentTurn moves past. Every subsequent driver's
+    // shift is then refused against a phase that is not theirs, each of them
+    // times out in turn, and after three rotations the game ends as an
+    // abandonment blamed on whichever innocent driver happened to be current.
+    // Per-player `phase` (§23.4) is what reduces that from fatal to one lost
+    // turn; this adapter is what removes it.
+    //
+    // It branches on the stalled driver's own phase rather than handing back a
+    // fixed shift/move/slipstream sequence, for the reason all three adapters
+    // above branch: a turn is three separate POSTs and the cron can pick a game
+    // up between any two of them. A blind RaceCarsShift at phase 'move' would
+    // re-roll a die already thrown (the `roll === null` guard refuses it), and a
+    // blind RaceCarsSlipstream is refused whenever no tow was offered — which,
+    // on an empty road, is most of the time.
+    //
+    // What each command *says* is rules.ts's call, not this adapter's:
+    // `conservativeTurn` is held to the same standard as Banned Islet's
+    // `forcedDiscard` above, and is **total by construction** — it always names
+    // a gear and always names a destination, falling through to the cheapest
+    // overshoot and spinning if that cannot be paid. A preference list with no
+    // fallthrough would build a command with an undefined destination, which
+    // `Execute` refuses, which `resolveStalledTurn` reports as 'stuck', on which
+    // the cron returns *before saving* — discarding the missed-turn increment
+    // with it, so the abandon ladder never climbs and the same game is re-read
+    // every tick forever. 'stuck' is commented below as transient; a
+    // deterministic pure function is what would make it permanent.
+    buildTimeoutCommand(gameData, userId) {
+        const gs = (gameData as IRaceCarsGameData).specificGameState;
+        // The same `if (!ps) return null` the three adapters above carry, and it
+        // is a guard rather than a fetch: `conservativeTurn` is total for a
+        // driver with no car too, and `Execute` refuses one anyway, so without
+        // this a seat the race does not hold would push a doomed command
+        // through the pipeline to arrive at the same 'declined'. Saying so here
+        // keeps that outcome a decision rather than a refusal reached by
+        // accident — which is what `unresolved` below is written against.
+        if (!mongoMap(gs.players).has(userId)) return null;
+
+        const plan = conservativeTurn(gs, userId);
+        if (plan.phase === 'shift') {
+            const shift = new RaceCarsShift();
+            shift.gear = plan.gear;
+            return shift;
+        }
+        if (plan.phase === 'move') {
+            const move = new RaceCarsMove();
+            move.row = plan.destination.row;
+            move.lane = plan.destination.lane;
+            move.brake = plan.brake;
+            return move;
+        }
+        const slipstream = new RaceCarsSlipstream();
+        slipstream.tow = plan.tow;
+        return slipstream;
     },
 });
 
