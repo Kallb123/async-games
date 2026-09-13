@@ -1,5 +1,37 @@
 # Game Design Document: Dice Cities
 
+## Table of Contents
+
+1. [Game Overview](#1-game-overview)
+2. [Theme & Setting](#2-theme--setting)
+3. [Physical Components](#3-physical-components)
+4. [Setup](#4-setup)
+5. [Core Gameplay Loop](#5-core-gameplay-loop)
+6. [Mechanics & Systems](#6-mechanics--systems)
+7. [Win Conditions](#7-win-conditions)
+8. [Optional Expansion: The Docks](#8-optional-expansion-the-docks-harbour)
+9. [Optional Expansion: Billionaires Row](#9-optional-expansion-billionaires-row-millionaires-row)
+10. [Design Notes & Balance](#10-design-notes--balance)
+11. [Public Information: Seeing the Other Cities](#11-public-information-seeing-the-other-cities)
+12. [Appendix: Alternative Theme — "Rust & Bottlecaps"](#12-appendix-alternative-theme--rust--bottlecaps)
+    - [12.1 Vocabulary](#121-vocabulary)
+    - [12.2 Holding types](#122-holding-types-icon-groups)
+    - [12.3 Base game](#123-base-game)
+    - [12.4 Reclamation Projects](#124-reclamation-projects-the-win-engine)
+    - [12.5 The Docks expansion](#125-the-docks-expansion--the-wharf)
+    - [12.6 Billionaires Row expansion](#126-billionaires-row-expansion--kingpins-row)
+13. [Appendix: Alternative Theme — "Outer Rim"](#13-appendix-alternative-theme--outer-rim)
+    - [13.1 The three-column tables](#131-the-three-column-tables)
+    - [13.2 Vocabulary](#132-vocabulary)
+    - [13.3 Operation types](#133-operation-types-icon-groups)
+    - [13.4 Base game](#134-base-game)
+    - [13.5 Installations](#135-installations-the-win-engine)
+    - [13.6 The expansions](#136-the-expansions)
+    - [13.7 What it would take to ship](#137-what-it-would-take-to-ship)
+14. [Theme Summary](#14-theme-summary)
+
+---
+
 ## 1. Game Overview
 
 * **Genre:** Tableau Building, Engine Building, Dice Rolling, Economic Strategy
@@ -913,3 +945,43 @@ vocabulary ("Your turn", "End turn", the turn timer) belongs to Async Games
 rather than to this game, so "supply run" is flavour only; and the share card
 (`public/icons/og-game-dicecities.png`) is drawn from the game's `meta`, not
 from a theme, so it does not change.
+
+## 14. Theme Summary
+
+A quick reference of all card names across the three themes: Rising Sun (base), Outer Rim (galactic), and Rust & Bottlecaps (wasteland).
+
+| Base name | Outer Rim | Wasteland |
+| --- | --- | --- |
+| **Wheat Field** | **Moisture Farm** | **Hydroponic Plot** |
+| **Ranch** | **Grazer Pens** | **Brahmin Pen** |
+| **Bakery** | **Portion-Bread Stall** | **Snackcake Bakery** |
+| **Cafe** | **Safehouse Cantina** | **Roadside Diner** |
+| **Convenience Store** | **Outfitter's Post** | **Salvage Trading Post** |
+| **Forest** | **Timber Camp** | **Blasted Timber Yard** |
+| **Stadium** | **Grav-Ball Arena** | **Cage Fight Arena** |
+| **TV Station** | **Holovid Studio** | **Pirate Radio Station** |
+| **Business Center** | **Claims Office** | **Barter Exchange** |
+| **Cheese Factory** | **Creamery Works** | **Jerky Smokehouse** |
+| **Furniture Factory** | **Parts Foundry** | **Scrap Workshop** |
+| **Mine** | **Spice Mine** | **Uranium Mine** |
+| **Family Restaurant** | **Spaceport Diner** | **Scavvers' Mess Hall** |
+| **Apple Orchard** | **Orchard Terraces** | **Mutfruit Grove** |
+| **Fruit and Vegetable Market** | **Growers' Co-op** | **Caravan Bazaar** |
+| **Train Station** | **Docking Bay** | **Vault Door** |
+| **Shopping Mall** | **Way Station** | **Ruined Superstore** |
+| **Amusement Park** | **Speeder Circuit** | **Abandoned Funfair** |
+| **Radio Tower** | **Sensor Array** | **Overseer's Terminal** |
+| **Harbour** (5th landmark) | **Orbital Dock** | **Salvage Pier** |
+| **Sushi Bar** | **Void-Crab Grill** | **Crab Cake Stand** |
+| **Flower Orchard** | **Glowbloom Field** | **Glowcap Bed** |
+| **Flower Shop** | **Bacta Apothecary** | **Chem Stand** |
+| **Mackerel Boat** | **Ore Hauler** | **Fishing Raft** |
+| **Food Warehouse** | **Provisions Warehouse** | **Ration Depot** |
+| **Tuna Boat** | **Bulk Freighter** | **Deep-Water Trawler** |
+| **Loan Office** | **Cartel Loan Broker** | **Cap Lender's Booth** |
+| **Publisher** | **Holonet Newsfeed** | **Broadsheet Press** |
+| **Renovation Company** | **Imperial Inspection** | **Wrecking Crew** |
+| **Tax Office** | **Imperial Tithe Office** | **Tribute Collectors** |
+| **Corporate HQ** | **Rebel Cell Command** | **Settlers' Council** |
+| **Exhibition Hall** | **Antiquities Gallery** | **Pre-War Relic Hall** |
+
