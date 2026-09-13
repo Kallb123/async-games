@@ -80,9 +80,10 @@ command, next to the recorded dice: SAC's roll records the payout it dealt in
 `rollChanges`, because `gs.lastRollChanges` holds only the newest roll and a
 review steps back past it. A review re-runs `Execute`, so a command persisted
 before such a field existed has it recomputed rather than lost — which is why
-the fallback should say less ("rolled a 9"), never guess. Where the command knows less than its
-history line does (a maritime trade's rate comes off the board's harbours, a
-roll's payout off the state), say less rather than saying it in ids.
+the fallback should say less ("rolled a 9"), never guess. Where the phrase truly
+can't be had — a maritime trade's rate comes off the board's harbours, and no
+field on the command would make it the rate this trade was actually priced at —
+say less rather than saying it in ids.
 
 ### Deterministic replay & RNG recording
 
