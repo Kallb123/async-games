@@ -372,6 +372,17 @@ export interface RaceCarsArrivalOptions {
     blockedShort?: boolean;
     /** One d6 per slick entered, live or replayed (§14, §23.4). */
     nextOilRoll?: () => number;
+    /**
+     * Whether §10's waiver is in play — true for the turn's own move, false for
+     * §12's tow.
+     *
+     * The waiver forgives a corner a car "could not have avoided leaving": it
+     * began its turn on the last row, and §9 forbids standing still. A tow is
+     * the one leg where that reasoning does not hold, because declining costs
+     * nothing — so §12 charges its overshoot in full, and a driver towed onto a
+     * corner's last row is making a choice rather than being pushed.
+     */
+    waiveUnavoidableCorner?: boolean;
 }
 
 /**
@@ -512,7 +523,9 @@ export function resolveArrival(
         tyres = Math.max(0, tyres - 1);
     }
 
-    const waivedCornerId = waivedCornerIdAt(track, start.row);
+    const waivedCornerId = (options.waiveUnavoidableCorner ?? true)
+        ? waivedCornerIdAt(track, start.row)
+        : null;
 
     const exits = new Map(cornerExits(track, start.row, distance).map(exit => [exit.step, exit.corner]));
 
@@ -655,6 +668,22 @@ export function recomputeRoundOrder(state: IRaceCarsSpecificGameState): string[]
     });
 }
 
+/**
+ * §4.2's classification: the whole field in finishing order, the winner first.
+ *
+ * Classification is **not** a tie-break for the win — §4.1's win is an event in
+ * play order, and this is only what the result page and the match record
+ * report. So the winner is placed by having crossed rather than by having the
+ * most track progress, and everybody else is ordered by §15's own sort: laps,
+ * then row, then the round they were in when it ended.
+ *
+ * Written once, for everyone, at the ending: no round ever contains a finished
+ * driver, because the race stops the instant a car crosses.
+ */
+export function classification(state: IRaceCarsSpecificGameState, winnerId: string): string[] {
+    return [winnerId, ...recomputeRoundOrder(state).filter(userId => userId !== winnerId)];
+}
+
 // ─── The conservative line (§23.7 PR 6) ─────────────────────────────────────
 
 export type RaceCarsConservativeTurn =
@@ -667,8 +696,13 @@ export type RaceCarsConservativeTurn =
  * oil — what the timeout driver plans against. Traffic can only make a move
  * shorter, so a distance this says is clean is clean however it is blocked.
  */
-function plannedOvershoot(track: RaceCarsTrack, ps: IRaceCarsPlayerState, distance: number): number {
-    const waivedCornerId = waivedCornerIdAt(track, ps.row);
+function plannedOvershoot(
+    track: RaceCarsTrack,
+    ps: IRaceCarsPlayerState,
+    distance: number,
+    waiveUnavoidableCorner = true,
+): number {
+    const waivedCornerId = waiveUnavoidableCorner ? waivedCornerIdAt(track, ps.row) : null;
     let stops = ps.cornerStops;
     let rows = 0;
     for (const { corner, step } of cornerExits(track, ps.row, distance)) {
@@ -761,9 +795,12 @@ function planTow(state: IRaceCarsSpecificGameState, userId: string): RaceCarsCon
     const track = trackById(state.trackId);
     const options = moveOptions(state, userId, SLIPSTREAM_ROWS);
     const best = safestDestination(state, userId, SLIPSTREAM_ROWS);
+    // §12's tow gets no waiver, so the plan is priced the way `resolveArrival`
+    // will price it — otherwise the one board state where the two disagree is
+    // the one where the cron takes a free tow into a corner and pays for it.
     const free = !options.blockedShort
         && best.slicks === 0
-        && plannedOvershoot(track, ps, options.distance) === 0;
+        && plannedOvershoot(track, ps, options.distance, false) === 0;
     return { phase: 'slipstream', tow: free ? best.space : null };
 }
 

@@ -8,22 +8,26 @@ import {
     gearName,
     MIN_MOVE_ROWS,
     RaceCarsGear,
-    RaceCarsTrack,
+    RaceCarsSpace,
+    SLIPSTREAM_ROWS,
     trackById,
 } from "@/games/RaceCars/board";
 import {
+    classification,
     derivePath,
     legalGears,
     moveOptions,
     recomputeRoundOrder,
     resolveArrival,
     rollFor,
+    slipstreamOffered,
     IRaceCarsPlayerState,
     IRaceCarsSpecificGameState,
     RaceCarsArrival,
 } from "@/games/RaceCars/rules";
+import { arrivalClauses, RaceCarsArrivalSummary } from "@/games/RaceCars/narration";
 import { mongoMap } from "@/utils/games/mongoMaps";
-import { playerHistory } from "@/utils/games/history";
+import { playerHistory, userToken } from "@/utils/games/history";
 import { pluralize } from "@/utils/ui/text";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -39,9 +43,9 @@ import { pluralize } from "@/utils/ui/text";
 // `moveOptions` decides where a move may finish, and `resolveArrival` settles
 // the corners it crossed. Nothing in this file knows what a corner is.
 //
-// PR 5 adds the third command — `RaceCarsSlipstream`, and with it the
-// `phase: 'slipstream'` hand-off `RaceCarsMove` does not yet make — along with
-// §4.1's ending. PR 7 adds oil and its `recordedOilRolls`.
+// PR 5 adds the third command — `RaceCarsSlipstream`, the `phase: 'slipstream'`
+// hand-off `RaceCarsMove` makes when a tow is on offer, and §4.1's ending. PR 7
+// adds oil and its `recordedOilRolls`.
 
 const INVALID: ICommandOutcome = { validMove: false, turnOver: false };
 
@@ -61,54 +65,149 @@ function driverOnTurn(gs: IRaceCarsSpecificGameState, userId: string): IRaceCars
     return mongoMap(gs.players).get(userId) ?? null;
 }
 
-function cornerName(track: RaceCarsTrack, cornerId: string): string {
-    return track.corners.find(corner => corner.id === cornerId)?.name ?? 'the corner';
+/**
+ * What one leg of a turn resolved to, handed back on the outcome for the
+ * end-of-move reveal (§23.7 PR 5) — the ICommandOutcome-extension pattern every
+ * other game with per-command result data uses (see
+ * IOutbreakInfectionPhaseOutcome). `outcome` is Execute's own return value and
+ * never something deserialised from a request body, so there is nothing here
+ * for a client to forge — and nothing worth persisting either, since replaying
+ * the command recomputes it identically.
+ */
+export interface IRaceCarsArrivalOutcome extends ICommandOutcome {
+    arrival: RaceCarsArrivalSummary & {
+        lane: number;
+        /**
+         * The gear and number this leg was driven on, for the reveal — null on
+         * §12's tow, which is a fixed three rows and no roll at all.
+         *
+         * Carried here rather than read off the car afterwards: a spin drops
+         * the gear to neutral and being boxed in drops it to first, so by the
+         * time the response lands, the car is no longer in the gear its number
+         * was rolled in.
+         */
+        roll: { gear: RaceCarsGear; value: number } | null;
+        /** Tyres this leg actually cost — totalled from the pool, never from the events (see arrivalClauses). */
+        tyresSpent: number;
+        /** §12's tow is on offer: the one decision left in this turn. */
+        towOffered: boolean;
+    };
 }
 
 /**
- * What arriving cost and banked, as history clauses in the order it happened —
- * `resolveArrival`'s own event list read back in the player's language (§10).
+ * §4.1 and §4.2: the race ends the instant a car crosses, and the whole field
+ * is classified by where it stood at that moment.
  *
- * No clause claims a tyre. An overshoot the car could not pay charges nothing
- * at all (§10: you pay nothing, and the car spins), so the events alone cannot
- * say what was spent — the caller totals it from the pools instead, which is
- * the one reading that is true of every path through here.
+ * Written once, for everyone, here — there is no later round to change
+ * anybody's place, because the crossing stopped the race. `complete` is what
+ * `CheckGameOver` reads back, which is what makes `runCommand` report the game
+ * over and the command route call `finishGame` with `endReason: 'win'`.
+ * `currentTurn` is cleared for the same reason every other game's CheckGameOver
+ * clears it: a replay never reaches `finishGame`.
  */
-function arrivalClauses(track: RaceCarsTrack, arrival: RaceCarsArrival): string[] {
-    const clauses: string[] = [];
-    for (const event of arrival.events) {
-        switch (event.type) {
-            case 'blocked':
-                clauses.push('was blocked and had to lift');
-                break;
-            case 'boxedIn':
-                clauses.push('was boxed in and stayed put');
-                break;
-            case 'cornerStop':
-                clauses.push(`banked a stop in ${cornerName(track, event.cornerId)} (${event.banked} of ${event.owed})`);
-                break;
-            case 'cornerCleared':
-                clauses.push(`cleared ${cornerName(track, event.cornerId)}`);
-                break;
-            case 'overshoot':
-                clauses.push(event.waived
-                    ? `left ${cornerName(track, event.cornerId)} as slowly as the road allows`
-                    : `overshot ${cornerName(track, event.cornerId)} by ${pluralize(event.rows, 'row')}`);
-                break;
-            case 'lap':
-                clauses.push(`completed ${pluralize(event.lapsCompleted, 'lap')}`);
-                break;
-            case 'finish':
-                clauses.push('crossed the line');
-                break;
-            case 'spin':
-                clauses.push(`spun back to row ${arrival.row} and misses their next turn`);
-                break;
-            // 'oilCheck' says nothing on its own — the spin it may cause is the
-            // event worth a line, and oil arrives in PR 7 with the rest of §14.
-        }
+function takeTheFlag(data: IRaceCarsGameData, winnerId: string): void {
+    const gs = data.specificGameState;
+    const players = mongoMap(gs.players);
+    const order = classification(gs, winnerId);
+    order.forEach((userId, index) => {
+        const ps = players.get(userId);
+        if (ps) ps.finishedPosition = index + 1;
+    });
+
+    data.complete = true;
+    data.winner = winnerId;
+    data.currentTurn = '';
+
+    data.gameState.history.unshift(playerHistory(winnerId, 'takes the chequered flag'));
+    // §4.2 is what makes finishing fourth instead of sixth worth driving for,
+    // so the order the race was classified in is written down where a driver
+    // who is not the winner can read it.
+    if (order.length > 1) {
+        data.gameState.history.unshift({
+            text: `Classified: ${order.map((userId, index) => `P${index + 1} ${userToken(userId)}`).join(', ')}`,
+        });
     }
-    return clauses;
+}
+
+/**
+ * Settle one leg of a turn: resolve the path the driver chose, write what it
+ * decided onto their car, log it, and — if it crossed the line — end the race.
+ *
+ * §12's tow is "a move, not a bonus" (§23.4), so `RaceCarsSlipstream` is this
+ * same call with the distance fixed at three. Corners, overshoots, spins, laps
+ * and the finish are resolved once, here, and neither command class knows what
+ * a corner is.
+ */
+function settle(
+    data: IRaceCarsGameData,
+    ps: IRaceCarsPlayerState,
+    senderId: string,
+    path: RaceCarsSpace[],
+    leg: { blockedShort: boolean; waiveUnavoidableCorner?: boolean; lead: string },
+): { arrival: RaceCarsArrival; tyresSpent: number } {
+    const gs = data.specificGameState;
+    const track = trackById(gs.trackId);
+    const tyresBefore = ps.tyres;
+
+    const arrival = resolveArrival(gs, senderId, path, {
+        blockedShort: leg.blockedShort,
+        waiveUnavoidableCorner: leg.waiveUnavoidableCorner,
+    });
+
+    ps.row = arrival.row;
+    ps.lane = arrival.lane;
+    ps.lapsCompleted = arrival.lapsCompleted;
+    ps.tyres = arrival.tyres;
+    ps.cornerStops = arrival.cornerStops;
+    ps.gear = arrival.gear;
+    // §13 step 4. The flag is consumed by `CheckEndTurn` when the round reaches
+    // them; the slick a spin lays (step 5) arrives with the rest of oil in PR 7.
+    if (arrival.spun) ps.skipNextTurn = true;
+
+    const tyresSpent = tyresBefore - arrival.tyres;
+    const clauses = [leg.lead, ...arrivalClauses(track, arrival)].filter(clause => clause.length > 0);
+    const cost = tyresSpent > 0 ? ` — ${pluralize(tyresSpent, 'tyre')}` : '';
+    data.gameState.history.unshift(playerHistory(senderId, `${clauses.join(', ')}${cost}`));
+
+    // After the line that says how they got there, so the log reads in order.
+    if (arrival.finished) takeTheFlag(data, senderId);
+
+    return { arrival, tyresSpent };
+}
+
+/**
+ * The outcome one leg of a turn hands back, and whether the turn is over.
+ *
+ * §12's offer is the gate in both directions (§23.4), so it is re-derived here
+ * from the board the leg left behind rather than read off anything the client
+ * sent — and a crossing beats it, because the race has already stopped.
+ */
+function arrivalOutcome(
+    gs: IRaceCarsSpecificGameState,
+    ps: IRaceCarsPlayerState,
+    senderId: string,
+    settled: { arrival: RaceCarsArrival; tyresSpent: number },
+    leg: { roll: { gear: RaceCarsGear; value: number } | null; offerTow: boolean },
+): IRaceCarsArrivalOutcome {
+    const { arrival, tyresSpent } = settled;
+    // §12: one tow per turn, so only the rolled move can earn one — and a
+    // crossing beats even that, because the race has already stopped.
+    const towOffered = leg.offerTow && !arrival.finished && slipstreamOffered(gs, senderId);
+    if (towOffered) ps.phase = 'slipstream';
+    return {
+        validMove: true,
+        turnOver: !towOffered,
+        arrival: {
+            events: arrival.events,
+            row: arrival.row,
+            lane: arrival.lane,
+            roll: leg.roll,
+            spun: arrival.spun,
+            finished: arrival.finished,
+            tyresSpent,
+            towOffered,
+        },
+    };
 }
 
 @serializable
@@ -320,44 +419,107 @@ export class RaceCarsMove implements IGameCommand {
         const options = moveOptions(gs, this.senderId, ps.roll - this.brake);
         if (!options.spaces.some(space => space.row === this.row && space.lane === this.lane)) return INVALID;
 
-        const track = trackById(gs.trackId);
         const path = derivePath(gs, this.senderId, options.distance, { row: this.row, lane: this.lane });
         if (path.length === 0) return INVALID;
 
-        const tyresBefore = ps.tyres;
-        const arrival = resolveArrival(gs, this.senderId, path, { blockedShort: options.blockedShort });
-
         ps.brakes -= this.brake;
         ps.brakeSpent = this.brake;
-        ps.row = arrival.row;
-        ps.lane = arrival.lane;
-        ps.lapsCompleted = arrival.lapsCompleted;
-        ps.tyres = arrival.tyres;
-        ps.cornerStops = arrival.cornerStops;
-        ps.gear = arrival.gear;
-        // §13 step 4. The flag is consumed by `CheckEndTurn` above when the
-        // round reaches them; the slick a spin lays (step 5) arrives with the
-        // rest of oil in PR 7, and §4.1's ending — `finishedPosition`, the
-        // classification and `finishGame` — in PR 5, which is why
-        // `arrival.finished` moves the car and does not yet end the race.
-        if (arrival.spun) ps.skipNextTurn = true;
 
         const rows = path.length - 1;
         const braked = this.brake > 0 ? ` after braking ${pluralize(this.brake, 'row')} off the roll` : '';
-        const tyresSpent = tyresBefore - arrival.tyres;
-        const clauses = [
-            ...(rows > 0 ? [`drove ${pluralize(rows, 'row')} to row ${path[rows].row}${braked}`] : []),
-            ...arrivalClauses(track, arrival),
-        ];
-        const cost = tyresSpent > 0 ? ` — ${pluralize(tyresSpent, 'tyre')}` : '';
-        data.gameState.history.unshift(playerHistory(this.senderId, `${clauses.join(', ')}${cost}`));
+        // Read before the arrival is applied: a spin drops the gear to neutral.
+        const roll = { gear: ps.gear, value: ps.roll };
+        const settled = settle(data, ps, this.senderId, path, {
+            blockedShort: options.blockedShort,
+            lead: rows > 0 ? `drove ${pluralize(rows, 'row')} to row ${path[rows].row}${braked}` : '',
+        });
 
-        // §12's tow is the one thing that can still happen this turn, and it
-        // arrives in PR 5 with the command that takes it. Until then a move is
-        // the end of a turn: handing off to a `slipstream` phase no command can
-        // answer would strand the driver — and every driver after them, since
-        // `currentTurn` would never move.
-        return { validMove: true, turnOver: true };
+        // §12: a move that ends one or two rows behind another car is owed a
+        // tow, and the turn is not over until the driver has taken it or
+        // declined it. Everything else — a spin, a crossing, an empty road —
+        // ends the turn here.
+        return arrivalOutcome(gs, ps, this.senderId, settled, { roll, offerTow: true });
+    }
+
+    Undo(gameData: IGameData): void {
+        gameData.gameState.commandHistory.pop();
+    }
+}
+
+// ─── RaceCarsSlipstream (§7 step 3, §12) ────────────────────────────────────
+
+@serializable
+export class RaceCarsSlipstream implements IGameCommand {
+    id: uuidString = uuidv4() as uuidString;
+    timestamp: string = new Date().toISOString();
+    gameId: uuidString = NIL_UUID as uuidString;
+    senderId: string = 'Unknown';
+    senderUsername: string = 'Unknown';
+    /**
+     * Where the tow finishes, or `null` to decline it.
+     *
+     * One field rather than a `decline` flag beside `row`/`lane` (§23.4): a
+     * declined tow would otherwise post coordinates that mean nothing, and a
+     * command whose fields can be meaningless is a command whose validation has
+     * a case nobody writes. Whatever arrives here is checked for membership in
+     * the server's own three-row reach set, so a forged row, a fractional one
+     * and a lane that does not exist all fail the same way.
+     */
+    tow: RaceCarsSpace | null = null;
+    readonly className = 'RaceCarsSlipstream';
+
+    myString() {
+        return this.tow === null ? 'waved the tow away' : 'took the tow';
+    }
+
+    async Execute(gameData: IGameData): Promise<ICommandOutcome> {
+        const data = gameData as IRaceCarsGameData;
+        const gs = data.specificGameState;
+        const ps = driverOnTurn(gs, this.senderId);
+        if (!ps) return INVALID;
+        if (ps.phase !== 'slipstream') return INVALID;
+
+        // The offer is the gate in both directions (§23.4). Re-derived here
+        // rather than trusted from the phase: three free rows claimed by a
+        // driver who earned no tow is the whole of what this command could be
+        // abused for, and a `decline` flag cannot be trusted to decide anything
+        // — not least because `"false"` is truthy.
+        if (!slipstreamOffered(gs, this.senderId)) return INVALID;
+
+        const tow = this.tow;
+        if (tow === null || tow === undefined) {
+            // §12: declining costs nothing, and it is a real choice — three
+            // free rows in a braking zone are three rows of overshoot. The
+            // phase is left where the turn got to; `CheckEndTurn` resets it
+            // when the round comes back round to this driver, which is the one
+            // place that reset lives (§23.7 PR 3).
+            data.gameState.history.unshift(playerHistory(this.senderId, 'waved the tow away'));
+            return { validMove: true, turnOver: true };
+        }
+
+        // Exactly the same reach the first move validated against, with the
+        // distance fixed at three — and the blocked-short set is its own set
+        // here too, so "I would rather stop here" cannot be dressed as a block.
+        const options = moveOptions(gs, this.senderId, SLIPSTREAM_ROWS);
+        if (!options.spaces.some(space => space.row === tow.row && space.lane === tow.lane)) return INVALID;
+
+        const path = derivePath(gs, this.senderId, options.distance, { row: tow.row, lane: tow.lane });
+        if (path.length === 0) return INVALID;
+
+        const rows = path.length - 1;
+        const settled = settle(data, ps, this.senderId, path, {
+            blockedShort: options.blockedShort,
+            // §12: a tow can push a car out of a corner it still owes stops to,
+            // and the overshoot is charged in full. §10's waiver forgives a
+            // corner the driver "could not have avoided leaving"; declining
+            // this costs nothing, so that reasoning does not reach the tow.
+            waiveUnavoidableCorner: false,
+            lead: `took the tow ${pluralize(rows, 'row')} to row ${path[rows].row}`,
+        });
+
+        // §12: one tow per turn. Ending it behind a third car earns nothing, so
+        // no second offer is made and the turn is over either way.
+        return arrivalOutcome(gs, ps, this.senderId, settled, { roll: null, offerTow: false });
     }
 
     Undo(gameData: IGameData): void {

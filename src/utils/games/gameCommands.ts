@@ -118,6 +118,7 @@ const COMMANDS_BY_GAME_TYPE: Record<string, readonly string[]> = {
     RaceCarsGameType: [
         "RaceCarsShift",
         "RaceCarsMove",
+        "RaceCarsSlipstream",
     ],
 };
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { RaceCarsGameType, RaceCarsMove, RaceCarsShift } from "./RaceCarsLogic";
+import { RaceCarsGameType, RaceCarsMove, RaceCarsShift, RaceCarsSlipstream } from "./RaceCarsLogic";
+import type { IRaceCarsArrivalOutcome } from "./RaceCarsLogic";
 import type { IRaceCarsGameData } from "./RaceCarsModels";
 import type { IRaceCarsPlayerState, IRaceCarsSpecificGameState } from "./rules";
 import { legalGears, moveOptions } from "./rules";
@@ -51,8 +52,15 @@ function move(fields: Partial<RaceCarsMove>, senderId = "a"): RaceCarsMove {
     return Object.assign(command, fields);
 }
 
+function slipstream(fields: Partial<RaceCarsSlipstream>, senderId = "a"): RaceCarsSlipstream {
+    const command = new RaceCarsSlipstream();
+    command.senderId = senderId;
+    command.senderUsername = senderId;
+    return Object.assign(command, fields);
+}
+
 /** One command through the pipeline the command route, replay and the cron all use. */
-function run(game: IRaceCarsGameData, command: RaceCarsShift | RaceCarsMove) {
+function run(game: IRaceCarsGameData, command: RaceCarsShift | RaceCarsMove | RaceCarsSlipstream) {
     return runCommand(game, new RaceCarsGameType(), command);
 }
 
@@ -185,7 +193,8 @@ describe("RaceCarsMove (§7 step 2, §9-§11)", () => {
         const game = makeGame(rolled(7, { row: 20, lane: 2 }));
         const { outcome } = await run(game, move({ row: 27, lane: 1 }));
 
-        expect(outcome).toEqual({ validMove: true, turnOver: true });
+        expect(outcome.validMove).toBe(true);
+        expect(outcome.turnOver).toBe(true);
         expect(seat(game, 'a').row).toBe(27);
         expect(seat(game, 'a').lane).toBe(1);
         expect(log(game)).toContain('drove 7 rows to row 27');
@@ -588,7 +597,7 @@ describe("CheckGameOver", () => {
 });
 
 describe("a race that keeps running", () => {
-    it("drives two cars round Ashcombe turn after turn without leaking a pool or sharing a space", async () => {
+    it("drives two cars round Ashcombe to the flag without leaking a pool or sharing a space", async () => {
         const track = trackById('ashcombe');
         const game = makeGame(race({
             a: { row: 2, lane: 1, gear: 0, phase: 'shift' },
@@ -598,30 +607,299 @@ describe("a race that keeps running", () => {
         // Both drivers take the highest gear they are allowed and its lowest
         // roll, every turn — a deliberately reckless line that blows through
         // corners, empties the tyre pool and spins, so the loop below visits
-        // the blocked, boxed, overshot and spun paths rather than a clean lap.
-        for (let turn = 0; turn < 40; turn++) {
+        // the blocked, boxed, overshot, spun and towed paths rather than a
+        // clean lap. §23.8's assertion is termination: a lap of Ashcombe at
+        // this pace is well inside the bound, so a loop that runs out of turns
+        // is a race that has wedged.
+        let turns = 0;
+        while (!game.complete && turns < 60) {
+            turns += 1;
             const driver = game.currentTurn;
+            const ps = seat(game, driver);
+
+            if (ps.phase === 'slipstream') {
+                // Take every tow going, which is what drives the tow's own
+                // corners, overshoots and spins through this loop as well.
+                const tow = moveOptions(game.specificGameState, driver, 3).spaces[0];
+                expect((await run(game, slipstream({ tow }, driver))).outcome.validMove).toBe(true);
+                expectConserved(game);
+                continue;
+            }
+
             const gears = legalGears(game.specificGameState, driver);
             const gear = gears[gears.length - 1].gear;
-
             const shifted = await run(game, shift({ gear, recordedRoll: gearDef(gear).min }, driver));
             expect(shifted.outcome.validMove).toBe(true);
 
             const reach = moveOptions(game.specificGameState, driver, seat(game, driver).roll!);
-            const destination = reach.spaces[0];
-            const moved = await run(game, move(destination, driver));
+            const moved = await run(game, move(reach.spaces[0], driver));
             expect(moved.outcome.validMove).toBe(true);
             expectConserved(game);
         }
 
+        expect(game.complete).toBe(true);
+        expect(game.winner).not.toBe('');
         for (const [, ps] of cars(game)) {
             expect(ps.row).toBeGreaterThanOrEqual(0);
             expect(ps.row).toBeLessThan(track.rows);
             expect(ps.gear).toBeLessThanOrEqual(track.maxGear);
+            // §4.2's classification is written for the whole field, not just
+            // the car that crossed.
+            expect(ps.finishedPosition).not.toBeNull();
         }
-        // Forty turns between two drivers is well past the round boundary, so
-        // the recompute has run — repeatedly — without wedging anybody.
+        // A lap between two drivers is well past the round boundary, so the
+        // recompute has run — repeatedly — without wedging anybody.
         expect(game.specificGameState.round).toBeGreaterThan(1);
         expect(game.gameState.turnOrder).toEqual(['a', 'b']);
+    });
+});
+
+// ─── PR 5 ───────────────────────────────────────────────────────────────────
+
+describe("the slipstream hand-off (§12)", () => {
+    /** `a` finishes its move on row 20; `b` sits two rows up the road at 22. */
+    function towable(overrides: Record<string, Partial<IRaceCarsPlayerState>> = {}) {
+        return makeGame(race({
+            a: { row: 16, lane: 1, phase: 'move', roll: 4 },
+            b: { row: 22, lane: 1 },
+            ...overrides,
+        }));
+    }
+
+    it("hands the driver into the slipstream phase rather than ending the turn", async () => {
+        const game = towable();
+        const { outcome } = await run(game, move({ row: 20, lane: 1 }));
+
+        expect(outcome.turnOver).toBe(false);
+        expect(seat(game, 'a').phase).toBe('slipstream');
+        // turnOver is false, so nobody has been handed anything (§7).
+        expect(game.currentTurn).toBe('a');
+        expect(game.specificGameState.roundIndex).toBe(0);
+    });
+
+    it("ends the turn when no car is one or two rows ahead", async () => {
+        const game = towable({ b: { row: 40, lane: 1 } });
+        const { outcome } = await run(game, move({ row: 20, lane: 1 }));
+
+        expect(outcome.turnOver).toBe(true);
+        expect(seat(game, 'a').phase).toBe('move');
+        expect(game.currentTurn).toBe('b');
+    });
+
+    it("offers no tow to a car that has just spun — the spin ended the turn (§18)", async () => {
+        // Driving out of the Hairpin with nothing banked costs two tyres this
+        // car does not have, so it spins back onto the corner's last row (§10)
+        // — one row behind `b`, which would otherwise be a tow.
+        const game = makeGame(race({
+            a: { row: 13, lane: 1, phase: 'move', roll: 3, tyres: 1 },
+            b: { row: 16, lane: 1 },
+        }));
+        const { outcome } = await run(game, move({ row: 16, lane: 2 }));
+
+        expect(seat(game, 'a').row).toBe(14);
+        expect(seat(game, 'a').skipNextTurn).toBe(true);
+        expect(outcome.turnOver).toBe(true);
+        expect(seat(game, 'a').phase).not.toBe('slipstream');
+    });
+
+    it("reports the arrival on the outcome, for the end-of-move reveal", async () => {
+        const game = towable();
+        const { outcome } = await run(game, move({ row: 20, lane: 1 }));
+        const { arrival } = outcome as IRaceCarsArrivalOutcome;
+
+        expect(arrival.row).toBe(20);
+        expect(arrival.towOffered).toBe(true);
+        expect(arrival.spun).toBe(false);
+        expect(arrival.finished).toBe(false);
+        expect(arrival.tyresSpent).toBe(0);
+    });
+});
+
+describe("RaceCarsSlipstream (§7 step 3, §12)", () => {
+    /** `a` has already moved and is sitting on the tow behind `b`. */
+    function towed(driver: Partial<IRaceCarsPlayerState> = {}, others: Record<string, Partial<IRaceCarsPlayerState>> = {}) {
+        return makeGame(race({
+            a: { row: 20, lane: 1, phase: 'slipstream', roll: 4, ...driver },
+            b: { row: 22, lane: 1 },
+            ...others,
+        }));
+    }
+
+    it("takes the tow three rows and ends the turn", async () => {
+        const game = towed();
+        const { outcome } = await run(game, slipstream({ tow: { row: 23, lane: 2 } }));
+
+        expect(outcome.turnOver).toBe(true);
+        expect(seat(game, 'a').row).toBe(23);
+        expect(seat(game, 'a').lane).toBe(2);
+        expect(log(game)).toContain('took the tow 3 rows to row 23');
+        expect(game.currentTurn).toBe('b');
+        expectConserved(game);
+    });
+
+    it("declines with a null tow, which costs nothing and moves nothing", async () => {
+        const game = towed();
+        const { outcome } = await run(game, slipstream({ tow: null }));
+
+        expect(outcome.turnOver).toBe(true);
+        expect(seat(game, 'a').row).toBe(20);
+        expect(seat(game, 'a').tyres).toBe(5);
+        expect(log(game)).toContain('waved the tow away');
+        expect(game.currentTurn).toBe('b');
+    });
+
+    it("refuses a driver who was never offered a tow, whatever their phase says", async () => {
+        const game = towed({}, { b: { row: 40, lane: 1 } });
+        expect((await run(game, slipstream({ tow: { row: 23, lane: 1 } }))).outcome.validMove).toBe(false);
+        expect(seat(game, 'a').row).toBe(20);
+    });
+
+    it("refuses a tow outside the server's own three-row reach set", async () => {
+        const game = towed();
+        for (const tow of [{ row: 30, lane: 1 }, { row: 22, lane: 1 }, { row: 23, lane: 9 }, { row: 23.5, lane: 1 }]) {
+            expect((await run(game, slipstream({ tow }))).outcome.validMove).toBe(false);
+        }
+        expect(seat(game, 'a').row).toBe(20);
+    });
+
+    it("refuses a slipstream before the move that earns it, and from a driver off turn", async () => {
+        const beforeTheMove = towed({ phase: 'move' });
+        expect((await run(beforeTheMove, slipstream({ tow: null }))).outcome.validMove).toBe(false);
+
+        const offTurn = towed();
+        expect((await run(offTurn, slipstream({ tow: null }, 'b'))).outcome.validMove).toBe(false);
+        expect(offTurn.currentTurn).toBe('a');
+    });
+
+    it("charges a tow out of a corner in full — §10's waiver does not reach it (§12)", async () => {
+        // Row 14 is the Hairpin's last row with one of its two stops banked. A
+        // *move* off it is free (§10: the road allowed nothing slower); a tow
+        // off it is a choice, so its three rows are three tyres.
+        const game = towed({ row: 14, lane: 1, cornerStops: 1 }, { b: { row: 16, lane: 1 } });
+        const { outcome } = await run(game, slipstream({ tow: { row: 17, lane: 2 } }));
+
+        expect(outcome.validMove).toBe(true);
+        expect(seat(game, 'a').row).toBe(17);
+        expect(seat(game, 'a').tyres).toBe(2);
+        expect(log(game)).toContain('overshot Ashcombe Hairpin by 3 rows');
+    });
+
+    it("spins the car when the tow's overshoot cannot be paid (§13)", async () => {
+        const game = towed({ row: 13, lane: 1, cornerStops: 1, tyres: 1 }, { b: { row: 15, lane: 1 } });
+        const { outcome } = await run(game, slipstream({ tow: { row: 16, lane: 2 } }));
+
+        expect(outcome.turnOver).toBe(true);
+        // §10: you pay nothing, and the car is placed on the corner's last row.
+        expect(seat(game, 'a').tyres).toBe(1);
+        expect(seat(game, 'a').row).toBe(14);
+        expect(seat(game, 'a').gear).toBe(0);
+        expect(seat(game, 'a').skipNextTurn).toBe(true);
+        expect(log(game)).toContain('misses their next turn');
+    });
+
+    it("takes a tyre for a tow the traffic cuts short (§9, §12)", async () => {
+        // Both lanes of row 23 are taken, so three rows are not reachable and
+        // the tow stops on the furthest space that is.
+        const game = towed({ row: 20, lane: 1 }, {
+            b: { row: 22, lane: 1 },
+            c: { row: 23, lane: 1 },
+            d: { row: 23, lane: 2 },
+            e: { row: 23, lane: 3 },
+        });
+        const { outcome } = await run(game, slipstream({ tow: { row: 22, lane: 2 } }));
+
+        expect(outcome.validMove).toBe(true);
+        expect(seat(game, 'a').row).toBe(22);
+        expect(seat(game, 'a').tyres).toBe(4);
+        expect(log(game)).toContain('was blocked and had to lift');
+    });
+
+    it("offers no second tow — one a turn, however it ends (§12)", async () => {
+        const game = towed({}, { b: { row: 22, lane: 1 }, c: { row: 25, lane: 1 } });
+        const { outcome } = await run(game, slipstream({ tow: { row: 23, lane: 2 } }));
+
+        // Row 23 is two rows behind c, which would be a fresh offer if §12
+        // allowed one.
+        expect(outcome.turnOver).toBe(true);
+        expect((outcome as IRaceCarsArrivalOutcome).arrival.towOffered).toBe(false);
+        expect(game.currentTurn).toBe('b');
+    });
+});
+
+describe("crossing the line (§4.1, §4.2)", () => {
+    /** `a` is four rows from the line on the last lap; `b` and `c` are not. */
+    function lastLap(laps = 1) {
+        return makeGame(race({
+            a: { row: 74, lane: 1, phase: 'move', roll: 4, lapsCompleted: laps - 1 },
+            b: { row: 30, lane: 1 },
+            c: { row: 50, lane: 1 },
+        }, { laps }));
+    }
+
+    it("ends the race the instant a car completes the distance", async () => {
+        const game = lastLap();
+        const { outcome, gameOver } = await run(game, move({ row: 0, lane: 1 }));
+
+        expect(outcome.validMove).toBe(true);
+        expect(gameOver).toBe(true);
+        expect(game.complete).toBe(true);
+        expect(game.winner).toBe('a');
+        // finishGame clears this too, but a replay never reaches finishGame.
+        expect(game.currentTurn).toBe('');
+        expect(new RaceCarsGameType().CheckGameOver(game)).toBe(true);
+    });
+
+    it("classifies the whole field by track progress at the moment of the crossing (§4.2)", async () => {
+        const game = lastLap();
+        await run(game, move({ row: 0, lane: 1 }));
+
+        expect(seat(game, 'a').finishedPosition).toBe(1);
+        expect(seat(game, 'c').finishedPosition).toBe(2);
+        expect(seat(game, 'b').finishedPosition).toBe(3);
+        expect(game.gameState.history[1].text).toContain('takes the chequered flag');
+        expect(game.gameState.history[0].text).toContain('Classified: P1 {{a}}, P2 {{c}}, P3 {{b}}');
+    });
+
+    it("does not hand the turn on, and offers no tow, once the flag is out", async () => {
+        // `b` sits one row past the line, which would be a tow on any other lap.
+        const game = lastLap();
+        seat(game, 'b').row = 1;
+        const { outcome } = await run(game, move({ row: 0, lane: 1 }));
+
+        expect((outcome as IRaceCarsArrivalOutcome).arrival.towOffered).toBe(false);
+        expect(seat(game, 'a').phase).not.toBe('slipstream');
+        // CheckEndTurn never runs on a game that just ended (commandPipeline).
+        expect(game.specificGameState.roundIndex).toBe(0);
+    });
+
+    it("counts a lap without ending a Grand Prix until the distance is done", async () => {
+        const game = lastLap(2);
+        seat(game, 'a').lapsCompleted = 0;
+        const { gameOver } = await run(game, move({ row: 0, lane: 1 }));
+
+        expect(gameOver).toBe(false);
+        expect(game.complete).toBe(false);
+        expect(seat(game, 'a').lapsCompleted).toBe(1);
+        expect(seat(game, 'a').finishedPosition).toBeNull();
+    });
+
+    it("can be won on the tow (§12)", async () => {
+        const game = makeGame(race({
+            a: { row: 72, lane: 1, phase: 'move', roll: 3 },
+            b: { row: 77, lane: 1 },
+            c: { row: 40, lane: 1 },
+        }));
+
+        const { outcome } = await run(game, move({ row: 75, lane: 1 }));
+        expect(outcome.turnOver).toBe(false);
+        expect(seat(game, 'a').phase).toBe('slipstream');
+
+        const towed = await run(game, slipstream({ tow: { row: 0, lane: 2 } }));
+        expect(towed.gameOver).toBe(true);
+        expect(game.winner).toBe('a');
+        expect(seat(game, 'a').lapsCompleted).toBe(1);
+        expect(seat(game, 'b').finishedPosition).toBe(2);
+        expect(seat(game, 'c').finishedPosition).toBe(3);
+        expect(log(game)).toContain('Classified');
     });
 });
