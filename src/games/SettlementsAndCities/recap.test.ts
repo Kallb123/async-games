@@ -109,6 +109,27 @@ describe("Settlements & Cities recap adapter", () => {
         expect(events[0].affectedIds).toEqual([]);
     });
 
+    it("reads the roll off the command when it auto-ended the turn and reset state", () => {
+        // sacFinishTurn can end the turn inside the same SACRollDice command
+        // (nothing left to build/trade), which resets lastRoll/lastRollChanges
+        // to null/[] before this snapshot is taken — the recap must still show
+        // the real roll and payout, recorded on the command itself.
+        const prev = state([player({ userId: "u1", username: "Alice" })]);
+        const next = state([player({ userId: "u1", username: "Alice" })], { lastRoll: null, lastRollChanges: [] });
+        const events = settlementsAndCitiesRecapAdapter.toEvents(
+            snap(prev), snap(next),
+            cmd({
+                className: "SACRollDice",
+                recordedRoll1: 5,
+                recordedRoll2: 3,
+                rollChanges: [gain("u1", { lumber: 1 })],
+            } as Partial<IGameCommand> & { className: string }),
+            OK,
+        );
+        expect(events[0].title).toBe("Alice rolled a 8");
+        expect(events[0].detail).toBe("Alice +1🪵");
+    });
+
     it("leaves the payout line off a roll from a game older than the field", () => {
         const st = state([player({ userId: "u1", username: "Alice" })], { lastRoll: 8, lastRollChanges: undefined });
         const events = settlementsAndCitiesRecapAdapter.toEvents(snap(st), snap(st), cmd({ className: "SACRollDice" }), OK);

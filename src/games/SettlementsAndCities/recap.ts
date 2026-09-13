@@ -2,7 +2,7 @@ import type { IRecapAdapter, IGameEvent, IRecapSummary, IRecapTip } from "@/util
 import type { ITurnSnapshot } from "@/utils/games/replay";
 import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic";
 import type { ISACSpecificGameStateResponse, ISACPlayerStateResponse } from "@/games/SettlementsAndCities/apiModels";
-import type { SAC_Resource } from "@/games/SettlementsAndCities/board";
+import type { SAC_Resource, ISACRollChange } from "@/games/SettlementsAndCities/board";
 import { NO_RESOURCES } from "@/games/SettlementsAndCities/board";
 import { sacRollChangeLabel, sacRollChangeParts } from "@/games/SettlementsAndCities/ui";
 import { playerByUserId } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
@@ -79,12 +79,27 @@ function toEvents(
 
     switch (command.className) {
         case "SACRollDice": {
-            const roll = nextState.lastRoll ?? 0;
+            // A roll that leaves the player with nothing left to build, buy or
+            // trade auto-ends the turn in this same command (sacFinishTurn ->
+            // CheckEndTurn -> sacAdvanceMainTurn), which resets lastRoll /
+            // lastRollChanges to null/[] before this snapshot is taken. The dice
+            // command itself always carries what it actually rolled and paid out
+            // (set by Execute before that reset can run), so read from there first
+            // — falling back to state only for a roll replayed before these fields
+            // existed on the command.
+            const diceCommand = command as unknown as {
+                recordedRoll1?: number;
+                recordedRoll2?: number;
+                rollChanges?: ISACRollChange[];
+            };
+            const roll = diceCommand.recordedRoll1 !== undefined && diceCommand.recordedRoll2 !== undefined
+                ? diceCommand.recordedRoll1 + diceCommand.recordedRoll2
+                : nextState.lastRoll ?? 0;
             // The roll recorded what it moved, so the recap names it rather than
             // inferring "somebody gained something" from hand sizes: every reader
             // sees the same line, which is why nobody is "You" here — the board's
             // version of this line is the one that says that.
-            const changes = nextState.lastRollChanges;
+            const changes = diceCommand.rollChanges ?? nextState.lastRollChanges;
             const parts = sacRollChangeParts(changes, (userId) =>
                 playerByUserId(nextState, userId)?.username
                 ?? playerByUserId(prevState, userId)?.username
