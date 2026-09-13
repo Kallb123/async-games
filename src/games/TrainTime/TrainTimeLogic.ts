@@ -233,8 +233,20 @@ export class TrainTimeDrawCarriageCard implements IGameCommand {
      * didn't empty the deck, which is nearly all of them.
      */
     recordedShuffles?: TrainTimeCardColour[][];
+    /**
+     * The colour Execute took off the market, so a match review can name it —
+     * the way the history line does ("took the face-up red") — without myString()
+     * needing state. Never set for a deck draw: what came off the blind deck
+     * stays in this player's hand, not on a screen the whole table steps through.
+     */
+    takenCard?: TrainTimeCardColour;
 
-    myString() { return `Train Time DrawCarriageCard source=${this.source} index=${this.marketIndex}`; }
+    myString() {
+        if (this.source === 'market') {
+            return this.takenCard ? `took the face-up ${this.takenCard}` : 'took a face-up card';
+        }
+        return 'drew from the deck';
+    }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const trainData = gameData as ITrainTimeGameData;
@@ -263,6 +275,7 @@ export class TrainTimeDrawCarriageCard implements IGameCommand {
             }
             gs.market.splice(this.marketIndex, 1);
             refillMarket(gs, shuffles);
+            this.takenCard = drawn;
         } else {
             const card = drawFromDeck(gs, shuffles);
             if (card === null) return INVALID;
@@ -309,7 +322,15 @@ export class TrainTimeClaimRoute implements IGameCommand {
     cards: TrainTimeCardColour[] = [];
     readonly className = 'TrainTimeClaimRoute';
 
-    myString() { return `Train Time ClaimRoute route=${this.routeId} cards=${this.cards.join(',')}`; }
+    // Reads the route's own name/length/score straight off ROUTES — a static,
+    // public list — so no state has to ride on the command for this one. The
+    // Long Haul lead note the history line adds needs everyone's routes, which
+    // myString() doesn't have, so a review says a little less than the log.
+    myString() {
+        const route = ROUTES[this.routeId];
+        if (!route) return 'claimed a route';
+        return `claimed ${routeName(route)} (${route.length} track, +${routeScore(route.length)})`;
+    }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const trainData = gameData as ITrainTimeGameData;
@@ -371,8 +392,18 @@ export class TrainTimeDrawTickets implements IGameCommand {
     senderId: string = 'Unknown';
     senderUsername: string = 'Unknown';
     readonly className = 'TrainTimeDrawTickets';
+    /**
+     * How many tickets Execute actually dealt — usually TICKETS_DRAWN_PER_TURN,
+     * but a near-empty ticket deck deals fewer. myString() has no state to read
+     * this off, so it rides on the command the way SAC's roll keeps its payout.
+     */
+    drawnCount?: number;
 
-    myString() { return `Train Time DrawTickets`; }
+    myString() {
+        return this.drawnCount === undefined
+            ? 'drew destination tickets'
+            : `drew ${pluralize(this.drawnCount, 'destination ticket')}`;
+    }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const trainData = gameData as ITrainTimeGameData;
@@ -387,6 +418,7 @@ export class TrainTimeDrawTickets implements IGameCommand {
 
         // Three, or whatever is left — the deck is never reshuffled (§5).
         ps.pendingTickets = gs.ticketDeck.splice(0, TICKETS_DRAWN_PER_TURN);
+        this.drawnCount = ps.pendingTickets.length;
 
         trainData.gameState.history.unshift(playerHistory(
             this.senderId,
@@ -419,8 +451,20 @@ export class TrainTimeKeepTickets implements IGameCommand {
     /** Ticket ids to keep; the rest go to the bottom of the ticket deck. */
     keep: number[] = [];
     readonly className = 'TrainTimeKeepTickets';
+    /**
+     * How many tickets were actually on offer — needed for "kept 2 of 3", and
+     * only known to the state (ps.pendingTickets), which Execute clears before
+     * myString() could ever read it back. Recorded here the way SAC's roll
+     * keeps its payout.
+     */
+    offeredCount?: number;
 
-    myString() { return `Train Time KeepTickets keep=${this.keep.join(',')}`; }
+    myString() {
+        const kept = new Set(this.keep).size;
+        return this.offeredCount === undefined
+            ? `kept ${pluralize(kept, 'destination ticket')}`
+            : `kept ${kept} of ${pluralize(this.offeredCount, 'destination ticket')}`;
+    }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const trainData = gameData as ITrainTimeGameData;
@@ -441,6 +485,7 @@ export class TrainTimeKeepTickets implements IGameCommand {
         if (keep.length < mustKeep) return INVALID;
         if (keep.some(id => !offered.includes(id))) return INVALID;
 
+        this.offeredCount = offered.length;
         ps.tickets.push(...keep);
         // Returned tickets go to the bottom, so they come round again later (§5).
         gs.ticketDeck.push(...offered.filter(id => !keep.includes(id)));
@@ -487,7 +532,7 @@ export class TrainTimePassTurn implements IGameCommand {
     senderUsername: string = 'Unknown';
     readonly className = 'TrainTimePassTurn';
 
-    myString() { return `Train Time PassTurn`; }
+    myString() { return 'had no legal move and passed'; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const trainData = gameData as ITrainTimeGameData;

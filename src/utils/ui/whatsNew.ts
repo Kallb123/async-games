@@ -116,6 +116,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Train Time's match review speaks plain English",
+                detail: "Stepping back through a Train Time match used to label every action with internal gibberish — \"Train Time ClaimRoute route=3 cards=blue,blue,blue,blue\" — instead of what happened. Each step now reads the way the turn history does: \"drew from the deck\", \"took the face-up red\", \"claimed Seattle – Vancouver (1 track, +1)\", \"kept 2 of 3 destination tickets\".",
+                game: "traintime",
+            },
+            {
                 title: "Settlements & Cities' match review speaks plain English",
                 detail: "Stepping back through a match used to label every action with internal gibberish — \"SAC BuildSettlement vertex=17\" — instead of what happened. Each step now reads the way the turn history does: \"built a settlement\", \"moved the robber and stole a resource from Bob\", and a roll names who collected what — \"rolled a 9 — Alice +2🪵 +1🌾, Bob +1⛏️\".",
                 game: "settlementsandcities",
