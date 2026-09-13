@@ -280,8 +280,8 @@ describe("Settlements & Cities — auto-ending a turn with nothing left to do", 
         const game = makeGame(gs);
 
         const trade = cmd(new SACMaritimeTrade());
-        trade.give = "lumber";
-        trade.receive = "wool";
+        trade.offerResource = "lumber";
+        trade.wantResource = "wool";
         const outcome = await trade.Execute(game as unknown as IGameData);
 
         expect(outcome.validMove).toBe(true);
@@ -290,7 +290,7 @@ describe("Settlements & Cities — auto-ending a turn with nothing left to do", 
         // trade — there's nothing left to decide, so the turn ends for them.
         expect(outcome.turnOver).toBe(true);
         expect(game.gameState.history[0].text).toBe(
-            "{{u1}} had nothing left to build or trade, so their turn ended automatically",
+            "{{u1}} had nothing left to build, buy or trade, so their turn ended automatically",
         );
     });
 
@@ -301,30 +301,34 @@ describe("Settlements & Cities — auto-ending a turn with nothing left to do", 
         const game = makeGame(gs);
 
         const trade = cmd(new SACMaritimeTrade());
-        trade.give = "lumber";
-        trade.receive = "wool";
+        trade.offerResource = "lumber";
+        trade.wantResource = "wool";
         const outcome = await trade.Execute(game as unknown as IGameData);
 
         expect(outcome.validMove).toBe(true);
         // Still holding 4 lumber — enough for one more 4:1 trade.
         expect(gs.playerStates.get("u1")!.resources).toEqual({ ...NO_RESOURCES, lumber: 4, wool: 1 });
         expect(outcome.turnOver).toBe(false);
-        expect(game.gameState.history).toHaveLength(0);
+        // Just the trade's own history line — nothing from the auto-end check.
+        expect(game.gameState.history).toHaveLength(1);
     });
 
     it("leaves the turn open when a dev card is still affordable", async () => {
         const gs = makeState({
             devCardDeck: ["knight"],
-            playerStates: new Map([["u1", player({ resources: { lumber: 4 } })]]),
+            playerStates: new Map([["u1", player({ resources: { lumber: 4, wool: 1, grain: 1 } })]]),
         });
         const game = makeGame(gs);
 
         const trade = cmd(new SACMaritimeTrade());
-        trade.give = "lumber";
-        trade.receive = "ore";
+        trade.offerResource = "lumber";
+        trade.wantResource = "ore";
         const outcome = await trade.Execute(game as unknown as IGameData);
 
         expect(outcome.validMove).toBe(true);
+        // Still holding wool + grain from before the trade, and the trade itself
+        // paid out the ore — 🐑🌾⛏️ is exactly what a dev card costs.
+        expect(gs.playerStates.get("u1")!.resources).toEqual({ ...NO_RESOURCES, wool: 1, grain: 1, ore: 1 });
         expect(outcome.turnOver).toBe(false);
     });
 });
