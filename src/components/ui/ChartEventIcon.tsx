@@ -47,6 +47,16 @@ const ICON_ART: Record<GameResultEventIcon, ReactNode> = {
             <path d="M5.65 2.99 12.41 5.45 9.95 12.21 3.19 9.75z" />
         </>
     ),
+    // A spin: the skid a car leaves losing control, curling back on itself —
+    // an almost-complete loop with an arrowhead at the gap, the way a
+    // refresh/rotate glyph reads as motion (Race Cars docs/games/race-cars.md
+    // §23.2 gap 2).
+    spin: (
+        <>
+            <path d="M8 1.5a6.5 6.5 0 1 1-6.5 6.5h1.8A4.7 4.7 0 1 0 8 3.3z" />
+            <path d="M1.2 5.4 3.6 6l-.4 2.6z" />
+        </>
+    ),
 };
 
 interface ChartEventIconProps {

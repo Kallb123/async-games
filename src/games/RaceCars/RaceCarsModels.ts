@@ -4,7 +4,16 @@ import { Model, Schema, models } from "mongoose";
 import { v4 as uuidv4 } from 'uuid';
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
 import { userIdListToNamesAndMap } from "@/utils/users/clerk";
-import { RaceCarsGameType } from "@/utils/apiModels/GameLogic";
+import { RaceCarsGameType, IRaceCarsArrivalOutcome } from "@/utils/apiModels/GameLogic";
+import {
+    GameResultStatGroup,
+    GameResultChart,
+    GameResultEvent,
+    gameResultEventSchemaDef,
+    formatPerTurnChart,
+    compactCharts,
+} from "@/utils/apiModels/GameDataApi";
+import { buildTimeline, IReplayStep } from "@/utils/games/replay";
 import { rollOffTurnOrder } from "@/utils/games/rollOff";
 import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
 import { userToken } from "@/utils/games/history";
@@ -12,9 +21,12 @@ import { pluralize } from "@/utils/ui/text";
 import {
     DEFAULT_TRACK_ID,
     distanceDef,
+    gearName,
     RaceCarsDistanceId,
+    RaceCarsGear,
     RaceCarsSpecId,
     readRaceSettings,
+    spaceKey,
     specDef,
     trackById,
 } from "./board";
@@ -378,3 +390,226 @@ export function gameStateToModel(
 export var RaceCarsGameDataModel =
     models.RaceCarsGameData ||
     GameDataModel.discriminator<IRaceCarsGameDataDocument, IRaceCarsGameDataModel>('RaceCarsGameData', RaceCarsGameDataSchema);
+
+// ─── Result stats (§23.7 PR 8) ───────────────────────────────────────────────
+//
+// Boiled-down stats for the GameResult read model, computed once at game-end
+// (see recordGameResult in GameResultData.ts). §23.4's non-redaction means
+// every one of these is already public on the wire; the result page is simply
+// the first place they are totalled up rather than read turn by turn.
+
+export interface IRaceCarsGameResultStats {
+    /** §4.2's classification — written once, for the whole field, by the ending. */
+    finishingPosition: Map<string, number>;
+    /** Laps × the track's row count, plus the final row — net progress, the same reading `rowsPerTurn` takes each round. */
+    rowsCovered: Map<string, number>;
+    topGear: Map<string, number>;
+    tyresSpent: Map<string, number>;
+    brakesSpent: Map<string, number>;
+    gearboxSpent: Map<string, number>;
+    /** Overshoots that actually cost tyres — an unpayable one spins instead and is counted there, not here. */
+    cornersOvershot: Map<string, number>;
+    towsTaken: Map<string, number>;
+    spins: Map<string, number>;
+    slicksLaid: Map<string, number>;
+    /** Every slick entered, whether or not the d6 came up a spin (§14). */
+    slicksHit: Map<string, number>;
+    /**
+     * Net progress per player at the end of each round — the race trace: rows
+     * covered per driver per round, whose crossing lines are the overtakes.
+     * Powers the result page's per-turn chart. Computed by replaying
+     * commandHistory via computePerTurnStat (see replay.ts), driven from this
+     * game's GAME_RESULT_STATS entry in GameResultData.ts.
+     */
+    rowsPerTurn: Map<string, number>[];
+    /** Every spin, keyed to the spinning driver's own line on that chart (§23.2 gap 2). */
+    spinEvents: GameResultEvent[];
+}
+
+export const raceCarsGameResultStatsSchemaDef = {
+    finishingPosition: { type: Schema.Types.Map, of: Number },
+    rowsCovered: { type: Schema.Types.Map, of: Number },
+    topGear: { type: Schema.Types.Map, of: Number },
+    tyresSpent: { type: Schema.Types.Map, of: Number },
+    brakesSpent: { type: Schema.Types.Map, of: Number },
+    gearboxSpent: { type: Schema.Types.Map, of: Number },
+    cornersOvershot: { type: Schema.Types.Map, of: Number },
+    towsTaken: { type: Schema.Types.Map, of: Number },
+    spins: { type: Schema.Types.Map, of: Number },
+    slicksLaid: { type: Schema.Types.Map, of: Number },
+    slicksHit: { type: Schema.Types.Map, of: Number },
+    rowsPerTurn: [{ type: Schema.Types.Map, of: Number }],
+    spinEvents: [gameResultEventSchemaDef],
+};
+
+/**
+ * A computePerTurnEvents detector (see replay.ts): marks the spinning driver's
+ * own line on the rows/round chart wherever a spin lands, so the result page
+ * can show a marker at the round it happened. Exported so it can be
+ * unit-tested and wired straight into GAME_RESULT_STATS.RaceCars.compute
+ * (GameResultData.ts) without GameResultData.ts having to know this game's
+ * command names or its arrival-event shape itself.
+ *
+ * Doubles as the per-driver spin count: every spin is exactly one event here
+ * (`resolveArrival` returns the instant it spins a car, §13), so grouping
+ * these by `seriesKey` is the same count `computeArrivalTotals` would have to
+ * take a second replay pass to reach.
+ */
+export function detectSpinEvent(step: IReplayStep): Omit<GameResultEvent, 'turnIndex'>[] | undefined {
+    if (step.command.className !== "RaceCarsMove" && step.command.className !== "RaceCarsSlipstream") return undefined;
+    // A declined tow (§12) carries no arrival at all — nothing to mark.
+    const arrival = (step.outcome as Partial<IRaceCarsArrivalOutcome>).arrival;
+    if (!arrival?.spun) return undefined;
+    return [{ icon: 'spin', title: `${step.command.senderUsername} spun`, seriesKey: step.command.senderId }];
+}
+
+function spinsByDriver(spinEvents: GameResultEvent[]): Map<string, number> {
+    const spins = new Map<string, number>();
+    for (const event of spinEvents) {
+        if (event.seriesKey) spins.set(event.seriesKey, (spins.get(event.seriesKey) ?? 0) + 1);
+    }
+    return spins;
+}
+
+/**
+ * The four totals no `computePerTurnStat`/`computePerTurnEvents` call already
+ * gives us — corners overshot, tows taken, slicks laid and slicks hit — read
+ * straight off the same `RaceCarsArrivalEvent`s the recap reads (recap.ts),
+ * one replay pass for all four rather than one apiece. Spins are not among
+ * them: `detectSpinEvent`'s own events already carry that count (see
+ * `spinsByDriver`), and a driver's finishing numbers (position, rows covered,
+ * top gear, pool spend) come straight off the final `specificGameState`
+ * rather than a replay at all.
+ */
+async function computeArrivalTotals(gameData: IRaceCarsGameData): Promise<{
+    overshoots: Map<string, number>;
+    tows: Map<string, number>;
+    slicksLaid: Map<string, number>;
+    slicksHit: Map<string, number>;
+}> {
+    const overshoots = new Map<string, number>();
+    const tows = new Map<string, number>();
+    const slicksLaid = new Map<string, number>();
+    const slicksHit = new Map<string, number>();
+    const bump = (map: Map<string, number>, userId: string) => map.set(userId, (map.get(userId) ?? 0) + 1);
+
+    const identityMap = Object.fromEntries(gameData.userIdList.map(userId => [userId, userId]));
+    try {
+        await buildTimeline(gameData, identityMap, [], (step) => {
+            if (step.command.className !== "RaceCarsMove" && step.command.className !== "RaceCarsSlipstream") return;
+            const senderId = step.command.senderId;
+            // A declined tow (§12) carries no arrival at all — nothing moved.
+            const arrival = (step.outcome as Partial<IRaceCarsArrivalOutcome>).arrival;
+            for (const event of arrival?.events ?? []) {
+                if (event.type === 'overshoot' && !event.waived) bump(overshoots, senderId);
+                if (event.type === 'oilCheck') bump(slicksHit, senderId);
+            }
+            if (step.command.className === "RaceCarsSlipstream"
+                && (step.command as unknown as { tow: unknown }).tow !== null) {
+                bump(tows, senderId);
+            }
+
+            const prevSlicks = new Set(
+                (step.prev.specificGameState as IRaceCarsSpecificGameStateResponse).slicks
+                    .map(slick => spaceKey(slick.row, slick.lane)));
+            for (const slick of (step.next.specificGameState as IRaceCarsSpecificGameStateResponse).slicks) {
+                if (!prevSlicks.has(spaceKey(slick.row, slick.lane))) bump(slicksLaid, senderId);
+            }
+        });
+    } catch {
+        // Mirrors replayTurnByTurn's own graceful downgrade (utils/games/replay.ts):
+        // a game that can't be replayed (no starting snapshot) reports zeroes for
+        // these four rather than failing the whole result, since this runs at
+        // game-end inside recordGameResult and a player's final turn is worth
+        // more than a handful of extra numbers.
+    }
+
+    return { overshoots, tows, slicksLaid, slicksHit };
+}
+
+export async function computeRaceCarsResultStats(
+    gameData: IRaceCarsGameData,
+    rowsPerTurn: Map<string, number>[],
+    topGearPerTurn: Map<string, number>[],
+    spinEvents: GameResultEvent[],
+): Promise<IRaceCarsGameResultStats> {
+    const gs = gameData.specificGameState;
+    const track = trackById(gs.trackId);
+    const spec = specDef(gs.spec);
+
+    const finishingPosition = new Map<string, number>();
+    const rowsCovered = new Map<string, number>();
+    const tyresSpent = new Map<string, number>();
+    const brakesSpent = new Map<string, number>();
+    const gearboxSpent = new Map<string, number>();
+    for (const [userId, ps] of mongoMap(gs.players)) {
+        finishingPosition.set(userId, ps.finishedPosition ?? 0);
+        rowsCovered.set(userId, ps.lapsCompleted * track.rows + ps.row);
+        tyresSpent.set(userId, spec.tyres - ps.tyres);
+        brakesSpent.set(userId, spec.brakes - ps.brakes);
+        gearboxSpent.set(userId, spec.gearbox - ps.gearbox);
+    }
+
+    const topGear = new Map<string, number>();
+    for (const userId of gameData.userIdList) {
+        topGear.set(userId, Math.max(0, ...topGearPerTurn.map(turn => turn.get(userId) ?? 0)));
+    }
+
+    const totals = await computeArrivalTotals(gameData);
+
+    return {
+        finishingPosition,
+        rowsCovered,
+        topGear,
+        tyresSpent,
+        brakesSpent,
+        gearboxSpent,
+        cornersOvershot: totals.overshoots,
+        towsTaken: totals.tows,
+        spins: spinsByDriver(spinEvents),
+        slicksLaid: totals.slicksLaid,
+        slicksHit: totals.slicksHit,
+        rowsPerTurn,
+        spinEvents,
+    };
+}
+
+/**
+ * Renders IRaceCarsGameResultStats as one stat group per driver, ordered by
+ * how they were classified (§4.2) — P1 first, the same order the scoreboard's
+ * `finishedPosition` sorts by.
+ */
+export function formatRaceCarsResultStats(stats: IRaceCarsGameResultStats, usernameById: Map<string, string>): GameResultStatGroup[] {
+    const byPosition = [...stats.finishingPosition.entries()].sort(([, a], [, b]) => a - b);
+
+    return byPosition.map(([userId, position]) => {
+        const lines = [
+            `Finished P${position}`,
+            `Covered ${pluralize(stats.rowsCovered.get(userId) ?? 0, 'row')} · top gear ${gearName((stats.topGear.get(userId) ?? 0) as RaceCarsGear)}`,
+            `Spent ${stats.tyresSpent.get(userId) ?? 0} tyres, ${stats.brakesSpent.get(userId) ?? 0} brakes, ${stats.gearboxSpent.get(userId) ?? 0} gearbox`,
+        ];
+
+        const overshot = stats.cornersOvershot.get(userId) ?? 0;
+        const tows = stats.towsTaken.get(userId) ?? 0;
+        const spins = stats.spins.get(userId) ?? 0;
+        const trouble = [
+            overshot > 0 ? pluralize(overshot, 'corner overshot', 'corners overshot') : null,
+            tows > 0 ? pluralize(tows, 'tow') : null,
+            spins > 0 ? pluralize(spins, 'spin') : null,
+        ].filter((line): line is string => line !== null);
+        if (trouble.length > 0) lines.push(trouble.join(', '));
+
+        const laid = stats.slicksLaid.get(userId) ?? 0;
+        const hit = stats.slicksHit.get(userId) ?? 0;
+        if (laid > 0 || hit > 0) lines.push(`Laid ${pluralize(laid, 'slick')} · hit ${pluralize(hit, 'slick')}`);
+
+        return { username: usernameById.get(userId) ?? userId, lines };
+    });
+}
+
+/** Renders rowsPerTurn as the race trace, with every spin marked on the spinning driver's own line. */
+export function formatRaceCarsCharts(stats: IRaceCarsGameResultStats, usernameById: Map<string, string>): GameResultChart[] {
+    return compactCharts(
+        formatPerTurnChart(stats.rowsPerTurn, "Rows covered per round", "Rows", usernameById.size, undefined, stats.spinEvents),
+    );
+}

@@ -19,6 +19,7 @@ import GameScoreboard, { ScoreEntry } from "@/components/ui/GameScoreboard";
 import GameFinishBanner from "@/components/ui/GameFinishBanner";
 import Stat from "@/components/ui/Stat";
 import TurnNavControls from "@/components/games/TurnNavControls";
+import TurnRecapScreen from "@/components/games/TurnRecapScreen";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
@@ -28,6 +29,7 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useOutcomeReveal } from "@/utils/hooks/useOutcomeReveal";
 import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
+import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
 import { guideForGame } from "@/utils/ui/gameGuides";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
@@ -70,6 +72,12 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
         history: gameData?.gameState?.history ?? [],
     });
     const recapAvailable = gameData?.recapAvailable ?? false;
+
+    // "Since you were last here": the away-time narrative is the order
+    // changing (§23.5) — shown before the board on open when moves happened
+    // while this driver was away, exactly as every other recap-carrying game
+    // wires it (see useTurnRecap).
+    const recap = useTurnRecap(gameId, { viewerId: user?.id, setGameData, getGameData });
 
     // The how-to-play popup, shown the first time this account opens a race and
     // from the ⋮ menu after that. The guide itself lands in PR 8 (§23.7); until
@@ -186,6 +194,12 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
         : [];
 
     const menuOptions: GameOption[] = [
+        ...(recap.hasRecap ? [{
+            key: 'recap',
+            label: 'Show last recap',
+            icon: '🔁',
+            onClick: recap.reshow,
+        }] : []),
         ...(guide ? [{
             key: 'guide',
             label: 'Game guide',
@@ -211,6 +225,18 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
     // no longer has a decision in it, and a prompt for one somebody else has
     // made is worse than no prompt. What the corner made of the roll does not
     // go stale and still reads.
+    if (recap.show) {
+        return (
+            <TurnRecapScreen
+                recap={recap.recap!}
+                cta="See the grid →"
+                onDismiss={recap.dismiss}
+                viewerId={user?.id}
+                onReact={recap.react}
+            />
+        );
+    }
+
     if (reveal && gs && nav.isLive) {
         return (
             <RaceCarsEndMoveScreen

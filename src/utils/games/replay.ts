@@ -17,6 +17,7 @@ import { buildInitialTrainTimeStateFromGameData, gameStateToModel as trainTimeSt
 import { buildInitialOutbreakStateFromGameData, gameStateToModel as outbreakStateToModel, IOutbreakGameData } from "@/games/Outbreak/OutbreakModels";
 import { buildInitialBannedIsletStateFromGameData, gameStateToModel as bannedIsletStateToModel, IBannedIsletGameData } from "@/games/BannedIslet/BannedIsletModels";
 import { buildInitialFiresOutStateFromGameData, gameStateToModel as firesOutStateToModel, IFiresOutGameData } from "@/games/FiresOut/FiresOutModels";
+import { buildInitialRaceCarsStateFromGameData, gameStateToModel as raceCarsStateToModel, IRaceCarsGameData } from "@/games/RaceCars/RaceCarsModels";
 // Side-effect import: evaluating GameLogic registers every @serializable command
 // class so deserializeJSON can rehydrate them during replay.
 import "../apiModels/GameLogic";
@@ -235,6 +236,25 @@ registerReplayAdapter({
     // §17.5: both deck freeze and decoy are feasible — the d6/d8 are
     // memoryless and the POI pool's remaining composition is already public
     // — but no planning UI exists yet (steps 13/14). Empty until then.
+    plannableCommands: [],
+});
+
+registerReplayAdapter({
+    className: "RaceCarsGameType",
+    buildInitialSpecificGameState: (gameData) => buildInitialRaceCarsStateFromGameData(gameData as IRaceCarsGameData),
+    toResponseState: (specificGameState, userIdNameMap) =>
+        raceCarsStateToModel(specificGameState as never, userIdNameMap, null),
+    // Out by design, and permanently (docs/games/race-cars.md §23.5) — the
+    // second of these, after Smartthink's. A planned shift would resolve one
+    // hypothetical roll and show the driver a board they will not get: the
+    // decision this game asks for is which *band* to bet on, not where a made-up
+    // number lands, and the reach band ships instead of a planner. And the
+    // timeline route deliberately does not strip recorded randomness — planned
+    // commands are a player's own hypotheticals, never saved — so this list is,
+    // in that route's own words, the only enforcement point. Adding
+    // RaceCarsShift here would accept
+    // `{"className":"RaceCarsShift","gear":5,"recordedRoll":20}` and resolve it
+    // against the live game's real state, letting a driver choose their own die.
     plannableCommands: [],
 });
 

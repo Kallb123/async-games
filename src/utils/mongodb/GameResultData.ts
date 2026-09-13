@@ -105,6 +105,17 @@ import {
 } from "@/games/BannedIslet/BannedIsletModels";
 import type { IBannedIsletSpecificGameStateResponse } from "@/games/BannedIslet/apiModels";
 import { totalDamage } from "@/games/FiresOut/rules";
+import {
+    IRaceCarsGameData,
+    IRaceCarsGameResultStats,
+    computeRaceCarsResultStats,
+    detectSpinEvent,
+    raceCarsGameResultStatsSchemaDef,
+    formatRaceCarsResultStats,
+    formatRaceCarsCharts,
+} from "@/games/RaceCars/RaceCarsModels";
+import type { IRaceCarsSpecificGameStateResponse } from "@/games/RaceCars/apiModels";
+import { trackById } from "@/games/RaceCars/board";
 
 export interface IGameResultData {
     gameId: uuidString,
@@ -283,6 +294,16 @@ var BannedIsletGameResultSchema = new Schema<IBannedIsletGameResultDataDocument>
 }, { discriminatorKey: 'kind' });
 export var BannedIsletGameResultModel = models.BannedIsletGameResult || GameResultModel.discriminator<IBannedIsletGameResultDataDocument, IBannedIsletGameResultDataModel>('BannedIsletGameResult', BannedIsletGameResultSchema);
 
+export interface IRaceCarsGameResultData extends IGameResultData {
+    stats: IRaceCarsGameResultStats;
+}
+export interface IRaceCarsGameResultDataDocument extends IRaceCarsGameResultData, Document {}
+export interface IRaceCarsGameResultDataModel extends Model<IRaceCarsGameResultDataDocument> {}
+var RaceCarsGameResultSchema = new Schema<IRaceCarsGameResultDataDocument>({
+    stats: raceCarsGameResultStatsSchemaDef
+}, { discriminatorKey: 'kind' });
+export var RaceCarsGameResultModel = models.RaceCarsGameResult || GameResultModel.discriminator<IRaceCarsGameResultDataDocument, IRaceCarsGameResultDataModel>('RaceCarsGameResult', RaceCarsGameResultSchema);
+
 // Maps a GameData's gameType to the discriminator model + stats calculator
 // that boil its final specificGameState down to the interesting numbers, plus
 // a formatter that turns those numbers into display-ready stat groups. Games
@@ -441,6 +462,34 @@ const GAME_RESULT_STATS: Record<string, {
         },
         format: formatFiresOutResultStats,
         charts: formatFiresOutCharts,
+    },
+    RaceCars: {
+        model: RaceCarsGameResultModel,
+        compute: async (gameData) => {
+            const rcGameData = gameData as IRaceCarsGameData;
+            // Fixed for the whole race (§23.4), so this is read once rather
+            // than per per-turn snapshot.
+            const trackRows = trackById(rcGameData.specificGameState.trackId).rows;
+            const rowsPerTurn = await computePerTurnStat<IRaceCarsSpecificGameStateResponse>(
+                rcGameData,
+                (state, userId) => {
+                    const ps = state.playerStates[userId];
+                    // Net progress — laps completed times the lap, plus the
+                    // row within it — the same reading the result stats take
+                    // at game-end, so a driver's line on the chart ends where
+                    // their final "rows covered" number says it should.
+                    return ps ? ps.lapsCompleted * trackRows + ps.row : undefined;
+                },
+            );
+            const topGearPerTurn = await computePerTurnStat<IRaceCarsSpecificGameStateResponse>(
+                rcGameData,
+                (state, userId) => state.playerStates[userId]?.gear,
+            );
+            const spinEvents = await computePerTurnEvents(rcGameData, detectSpinEvent);
+            return computeRaceCarsResultStats(rcGameData, rowsPerTurn, topGearPerTurn, spinEvents);
+        },
+        format: formatRaceCarsResultStats,
+        charts: formatRaceCarsCharts,
     },
 };
 
