@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import * as TrainTimeLogic from "./TrainTimeLogic";
 import {
     TrainTimeClaimRoute,
     TrainTimeDrawCarriageCard,
@@ -850,19 +851,20 @@ describe("a full simulated game", () => {
 describe("Train Time — action summaries", () => {
     // Swept off the module rather than listed, so a command added later can't
     // ship a debug summary just by not being added to this test.
-    const commandClasses = [
-        TrainTimeDrawCarriageCard,
-        TrainTimeClaimRoute,
-        TrainTimeDrawTickets,
-        TrainTimeKeepTickets,
-        TrainTimePassTurn,
-    ];
+    const commandClasses = (Object.values(TrainTimeLogic) as unknown[]).filter(
+        (exported): exported is new () => IGameCommand =>
+            typeof exported === "function" &&
+            typeof (exported as { prototype?: { myString?: unknown } }).prototype?.myString === "function"
+    );
 
     it("summarises every command in words, not as a debug string", () => {
+        expect(commandClasses.length).toBe(5);
         for (const Command of commandClasses) {
             const summary = new Command().myString();
             expect(summary, `${new Command().className} reads as debug output`)
                 .not.toMatch(/Train Time |=|routeId|marketIndex/);
+            // It continues "<player> · …", so it starts mid-sentence.
+            expect(summary[0]).toBe(summary[0].toLowerCase());
         }
     });
 
