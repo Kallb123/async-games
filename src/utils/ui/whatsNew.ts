@@ -67,6 +67,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Settlements & Cities' player tabs expand for more detail",
+                detail: "Tap the row of player tabs at the top of the board and every seat opens at once: how many cards they're holding, how many knights they've played (tagged Largest Army if they hold it), and their longest stretch of road (tagged Longest Road if it's the longest on the board). Tap again to close them.",
+                game: "settlementsandcities",
+            },
+            {
                 title: "Settlements & Cities' result page charts how the dice actually fell",
                 detail: "A new bar chart at the bottom of the result page counts every roll of the game by its total, 2 through 12 — so you can see at a glance whether this game's dice ran hot on 7s or cold on the middle numbers, alongside the existing resources-per-round chart above it.",
                 game: "settlementsandcities",
@@ -104,11 +109,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Result charts mark the moments that mattered",
                 detail: "The charts on the result page now drop a small icon right on the turn something big happened: a biohazard mark where Outbreak drew an epidemic card, a building where a Dice Cities player bought a landmark, and an explosion or an ambulance wherever Fires Out's fire blew or a victim made it out — so you can see exactly how it lines up with the swings in the line around it.",
-            },
-            {
-                title: "Play Fires Out! on your own",
-                detail: "Fires Out! now has a solo mode. Pick Solo when you set a game up, choose how big a crew you want, and every firefighter on the board is yours to run — each one takes their own turn with their own action points, and the fire still advances after each of them, so a bigger crew is more to spend and more to keep alive. There's nobody to invite and nothing to wait for, though you can still set a turn timer if you want the pressure: it runs per firefighter's turn, and going quiet for long enough ends the game the same way walking away from any other does. Playing the Experienced game solo, a Fire Captain can now spend their command points directing any other firefighter in your crew. Carrying a victim is easier to find in every game too: once you're standing on one, the \"Carry the victim here\" switch sits right under the Move action instead of hiding until you'd already tapped Move.",
-                game: "firesout",
             },
         ],
     },
