@@ -55,3 +55,37 @@ for (const user of USERS) {
     await page.context().storageState({ path: user.storageState });
   });
 }
+
+// Guests left behind by an earlier run, swept before any spec starts.
+//
+// The guest-invite spec (e2e/specs/outbreak-guest-invite.spec.ts) mints a real
+// Clerk user every run, and the `clearGames` teardown every spec shares only
+// clears Mongo — so without this each run leaves another guest in the dev
+// Clerk instance, forever. Nothing else reaps them: `/api/cron/staleguests`
+// fires on the production deployment only (docs/environments.md), and the e2e
+// database isn't the one a dev guest's game would be in anyway.
+//
+// At the *start* of a run rather than the end of one, so a run that crashes
+// mid-spec is still tidied up — by the next run, rather than never.
+//
+// In this project rather than in `global-setup.ts`, which has nobody to be:
+// the `/api/dev/*` routes are gated on a signed-in caller (`requireDevCaller`),
+// and the sessions saved above are the run's first.
+setup.describe('leftover guests', () => {
+  setup.use({ storageState: USERS[0].storageState });
+
+  setup('are swept from Clerk', async ({ request }) => {
+    // Well past Playwright's 30s default, which this would breach on the one
+    // run that matters most: the first after a long backlog has built up, when
+    // there are the most guests to delete. A timeout here fails the whole run
+    // before a spec starts — `chromium` depends on this project — so it must
+    // not be the thing that decides a build. The route has its own budget
+    // (`maxDuration`) and gives up cleanly well inside this.
+    setup.setTimeout(120_000);
+
+    const swept = await request.get('/api/dev/clearguests');
+    if (!swept.ok()) {
+      throw new Error(`Failed to sweep guest accounts: ${swept.status()} ${await swept.text()}`);
+    }
+  });
+});
