@@ -310,6 +310,35 @@ export function moveOptions(
 }
 
 /**
+ * The set of destination spaces where all paths cross at least one slick (§14).
+ * Returns space keys for destinations marked as having unavoidable oil.
+ * Only meaningful when oil spills are enabled and there are slicks on the board.
+ */
+export function unavoidableOilDestinations(
+    state: IRaceCarsSpecificGameState,
+    userId: string,
+    distance: number,
+): Set<string> {
+    if (!state.oilSpills) return new Set();
+    
+    const walked = walk(state, userId, distance);
+    const unavoidable = new Set<string>();
+    
+    // For each destination space, check if the best path (minimum slicks) crosses at least one slick.
+    // If it does, then all paths to that destination must cross at least one slick.
+    const destinations = walked.levels[walked.distance];
+    if (!destinations) return unavoidable;
+    
+    for (const [key, node] of destinations) {
+        if (node.slicks > 0) {
+            unavoidable.add(key);
+        }
+    }
+    
+    return unavoidable;
+}
+
+/**
  * The route the car takes to `destination`, start space first, or `[]` if that
  * destination is not one this move can legally finish on.
  *

@@ -9,7 +9,7 @@ import RaceCarsBoard from "@/games/RaceCars/components/RaceCarsBoard";
 import RaceCarsActions from "@/games/RaceCars/components/RaceCarsActions";
 import RaceCarsEndMoveScreen from "@/games/RaceCars/components/RaceCarsEndMoveScreen";
 import { MIN_MOVE_ROWS, SLIPSTREAM_ROWS, spaceKey } from "@/games/RaceCars/board";
-import { moveOptions } from "@/games/RaceCars/rules";
+import { moveOptions, unavoidableOilDestinations } from "@/games/RaceCars/rules";
 import type { IRaceCarsArrivalOutcome } from "@/games/RaceCars/RaceCarsLogic";
 import { positionOf, rowsBehindLeader, rulesState, standings, wearSummary } from "@/games/RaceCars/ui";
 import GameShell from "@/components/ui/GameShell";
@@ -118,6 +118,7 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
     // how they come to disagree about a road that traffic has closed.
     const options = gs && distance !== null ? moveOptions(rulesState(gs), myUserId, distance) : null;
     const validSpaces = new Set((options?.spaces ?? []).map(space => spaceKey(space.row, space.lane)));
+    const unavoidableOilSpaces = gs && distance !== null ? unavoidableOilDestinations(rulesState(gs), myUserId, distance) : new Set<string>();
 
     // One tap on the circuit, whichever leg of the turn it is: §12's tow is a
     // move and is chosen the same way, so the board learns nothing new about
@@ -267,6 +268,7 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
                             gs={gs}
                             userIdList={userIdList}
                             validSpaces={validSpaces}
+                            unavoidableOilSpaces={unavoidableOilSpaces}
                             onSpaceClick={isMyTurn && !submitting ? chooseDestination : undefined}
                             boardTag={options
                                 ? `${towing ? 'Take the tow' : 'Choose where to stop'} · ${pluralize(options.spaces.length, 'space')}`

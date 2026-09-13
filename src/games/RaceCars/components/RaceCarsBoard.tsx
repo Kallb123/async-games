@@ -63,12 +63,18 @@ function labelDir(x: number, y: number, track: RaceCarsTrack): MapLabelSpec['dir
     return dy < 0 ? 'n' : 's';
 }
 
+// §14's oil slick marker — a visual indicator of where slicks are on the board.
+const SLICK_RADIUS = 6;
+const SLICK_CHAR = '🛢️';
+
 interface RaceCarsBoardProps {
     gs: IRaceCarsSpecificGameStateResponse;
     /** Player seats in join order — the key `playerColourForId` colours a car by. */
     userIdList: string[];
     /** Spaces this move may finish on, as `spaceKey`s — the tappable ones. */
     validSpaces: Set<string>;
+    /** Spaces where the only route crosses oil (unavoidable oil). */
+    unavoidableOilSpaces?: Set<string>;
     onSpaceClick?: (row: number, lane: number) => void;
     boardTag?: string | null;
 }
@@ -88,7 +94,7 @@ interface RaceCarsBoardProps {
  * one class, where the shared node would ring each lozenge with a circle and
  * hang a `<title>` off all 214 of them.
  */
-export default function RaceCarsBoard({ gs, userIdList, validSpaces, onSpaceClick, boardTag = null }: RaceCarsBoardProps) {
+export default function RaceCarsBoard({ gs, userIdList, validSpaces, unavoidableOilSpaces = new Set(), onSpaceClick, boardTag = null }: RaceCarsBoardProps) {
     const track = trackById(gs.trackId);
     const geometry = geometryFor(track);
     const { width, height } = track.art.viewBox;
@@ -187,6 +193,44 @@ export default function RaceCarsBoard({ gs, userIdList, validSpaces, onSpaceClic
                             🏁
                         </text>
                     )}
+
+                    {/* §14: Oil slicks — rendered as markers on the board */}
+                    {gs.oilSpills && gs.slicks.map((slick, index) => {
+                        const at = geometry.get(spaceKey(slick.row, slick.lane));
+                        if (!at) return null;
+                        return (
+                            <text
+                                key={`slick-${index}`}
+                                className="ag-rc-slick"
+                                x={at.x}
+                                y={at.y + 8}
+                                textAnchor="middle"
+                                dominantBaseline="central"
+                                fontSize="14"
+                            >
+                                {SLICK_CHAR}
+                            </text>
+                        );
+                    })}
+
+                    {/* §14: Mark destinations with unavoidable oil routes */}
+                    {gs.oilSpills && Array.from(unavoidableOilSpaces).map((key) => {
+                        const space = track.geometry.find(s => spaceKey(s.row, s.lane) === key);
+                        if (!space) return null;
+                        return (
+                            <circle
+                                key={`unavoidable-${key}`}
+                                className="ag-rc-unavoidable-oil"
+                                cx={space.x}
+                                cy={space.y}
+                                r={SLICK_RADIUS}
+                                fill="none"
+                                stroke="var(--ag-alert, red)"
+                                strokeWidth="2"
+                                strokeDasharray="2,2"
+                            />
+                        );
+                    })}
 
                     {cars.map(({ userId, ps, at, colour, pips }) => (
                         <g key={userId}>
