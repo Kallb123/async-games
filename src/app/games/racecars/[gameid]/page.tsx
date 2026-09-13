@@ -118,7 +118,7 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
     // how they come to disagree about a road that traffic has closed.
     const options = gs && distance !== null ? moveOptions(rulesState(gs), myUserId, distance) : null;
     const validSpaces = new Set((options?.spaces ?? []).map(space => spaceKey(space.row, space.lane)));
-    const unavoidableOilSpaces = gs && distance !== null ? unavoidableOilDestinations(rulesState(gs), myUserId, distance) : new Set();
+    const unavoidableOilSpaces = gs && distance !== null ? unavoidableOilDestinations(rulesState(gs), myUserId, distance) : new Set<string>();
 
     // One tap on the circuit, whichever leg of the turn it is: §12's tow is a
     // move and is chosen the same way, so the board learns nothing new about

@@ -326,7 +326,10 @@ export function unavoidableOilDestinations(
     
     // For each destination space, check if the best path (minimum slicks) crosses at least one slick.
     // If it does, then all paths to that destination must cross at least one slick.
-    for (const [key, node] of walked.levels[walked.distance]) {
+    const destinations = walked.levels[walked.distance];
+    if (!destinations) return unavoidable;
+    
+    for (const [key, node] of destinations) {
         if (node.slicks > 0) {
             unavoidable.add(key);
         }
