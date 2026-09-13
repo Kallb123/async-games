@@ -159,6 +159,71 @@ function sacCanPlayDevCard(gs: ISettlementsAndCitiesGameData['specificGameState'
     return true;
 }
 
+// ─── Auto-end a turn with nothing left to decide ───────────────────────────
+
+// The trade ratio the bank gives `userId` for `resource`, from the harbours
+// they hold a settlement/city on. Mirrors the client's own copy of this in
+// SettlementsAndCitiesActions.tsx (SACMaritimeTrade.Execute has its own too),
+// so what the auto-end check below counts as "tradeable" is exactly what a
+// live SACMaritimeTrade would accept.
+function sacTradeRatio(gs: ISettlementsAndCitiesGameData['specificGameState'], userId: string, resource: SAC_Resource): number {
+    let ratio = 4;
+    for (const harbor of gs.harbors) {
+        const hasAccess = harbor.vertices.some(vid => {
+            const v = gs.vertices[vid];
+            return v.owner === userId && v.building !== null;
+        });
+        if (!hasAccess) continue;
+        if (harbor.type === '3to1' && ratio > 3) ratio = 3;
+        if (harbor.type === resource) { ratio = 2; break; }
+    }
+    return ratio;
+}
+
+// True once `userId` (the active player) has something they could still
+// spend this turn: an affordable settlement/road/city with a piece left to
+// place, a dev card they can afford (and the deck isn't empty), a resource
+// they hold enough of to trade with the bank at their own rate, or a dev card
+// in hand they're allowed to play.
+function sacHasAnyAction(gs: ISettlementsAndCitiesGameData['specificGameState'], userId: string, ps: ISACPlayerState): boolean {
+    if (ps.remainingSettlements > 0 && ps.resources.brick >= 1 && ps.resources.lumber >= 1 && ps.resources.wool >= 1 && ps.resources.grain >= 1) return true;
+    if (ps.remainingRoads > 0 && ps.resources.brick >= 1 && ps.resources.lumber >= 1) return true;
+    if (ps.remainingCities > 0 && ps.resources.grain >= 2 && ps.resources.ore >= 3) return true;
+    if (gs.devCardDeck.length > 0 && ps.resources.wool >= 1 && ps.resources.grain >= 1 && ps.resources.ore >= 1) return true;
+    if (SAC_RESOURCES.some(r => ps.resources[r] >= sacTradeRatio(gs, userId, r))) return true;
+    if (sacCanPlayDevCard(gs)) {
+        const playable: SAC_DevCard[] = ['knight', 'roadBuilding', 'yearOfPlenty', 'monopoly'];
+        if (playable.some(k => ps.devCards[k] > 0)) return true;
+    }
+    return false;
+}
+
+// The outcome every command above returns on success: a valid move that
+// doesn't end the turn, unless `userId` is left with nothing above true to
+// do — in the same spirit as Dice Cities' settleRoll/noActionsAvailable, a
+// player with nothing left to build, buy or trade shouldn't have to tap "End
+// turn" for no reason. Called at the tail of every command that can leave a
+// player in ordinary free play (post-roll main turn, or a Special Build
+// turn): one still mid-sequence (a pending robber move, free roads yet to
+// place) never auto-ends, since the check only fires once
+// `hasRolled`/`specialBuildActive` holds and both of those have cleared.
+function sacFinishTurn(sacData: ISettlementsAndCitiesGameData, userId: string): ICommandOutcome {
+    const outcome: ICommandOutcome = { validMove: true, turnOver: false };
+    const gs = sacData.specificGameState;
+    if (gs.phase !== 'main' || gs.pendingRobber || gs.pendingRoadBuilding > 0) return outcome;
+    if (!gs.specialBuildActive && !gs.hasRolled) return outcome;
+    const ps = gs.playerStates.get(userId);
+    if (!ps || sacHasAnyAction(gs, userId, ps)) return outcome;
+    outcome.turnOver = true;
+    sacData.gameState.history.unshift(playerHistory(
+        userId,
+        gs.specialBuildActive
+            ? `had nothing left to build or trade, so their special build ended automatically`
+            : `had nothing left to build, buy or trade, so their turn ended automatically`,
+    ));
+    return outcome;
+}
+
 // Ends a regular main turn: reset per-turn flags, promote freshly-bought dev
 // cards to playable, and pass the dice to the next seat in turn order.
 function sacAdvanceMainTurn(sacData: ISettlementsAndCitiesGameData): void {
@@ -551,7 +616,7 @@ export class SACRollDice implements IGameCommand {
         ));
 
         gs.hasRolled = true;
-        return { validMove: true, turnOver: false };
+        return sacFinishTurn(sacData, this.senderId);
     }
 
     Undo(gameData: IGameData): void {
@@ -634,7 +699,7 @@ export class SACMoveRobber implements IGameCommand {
 
         gs.robberHexIndex = this.hexId;
         gs.pendingRobber = false;
-        return { validMove: true, turnOver: false };
+        return sacFinishTurn(sacData, this.senderId);
     }
 
     Undo(gameData: IGameData): void {
@@ -690,7 +755,7 @@ export class SACBuildRoad implements IGameCommand {
 
         sacUpdateLongestRoad(sacData);
         sacData.gameState.history.unshift(playerHistory(this.senderId, `built a road`));
-        return { validMove: true, turnOver: false };
+        return sacFinishTurn(sacData, this.senderId);
     }
 
     Undo(gameData: IGameData): void {
@@ -744,7 +809,7 @@ export class SACBuildSettlement implements IGameCommand {
         gs.vertices[this.vertexId].owner = this.senderId;
 
         sacData.gameState.history.unshift(playerHistory(this.senderId, `built a settlement`));
-        return { validMove: true, turnOver: false };
+        return sacFinishTurn(sacData, this.senderId);
     }
 
     Undo(gameData: IGameData): void {
@@ -790,7 +855,7 @@ export class SACBuildCity implements IGameCommand {
         gs.vertices[this.vertexId].building = 'city';
 
         sacData.gameState.history.unshift(playerHistory(this.senderId, `built a city`));
-        return { validMove: true, turnOver: false };
+        return sacFinishTurn(sacData, this.senderId);
     }
 
     Undo(gameData: IGameData): void {
@@ -833,7 +898,7 @@ export class SACBuyDevCard implements IGameCommand {
         ps.devCardsBought++;
 
         sacData.gameState.history.unshift(playerHistory(this.senderId, `bought a development card`));
-        return { validMove: true, turnOver: false };
+        return sacFinishTurn(sacData, this.senderId);
     }
 
     Undo(gameData: IGameData): void {
@@ -907,7 +972,7 @@ export class SACPlayYearOfPlenty implements IGameCommand {
         ps.resourcesGathered += 2;
 
         sacData.gameState.history.unshift(playerHistory(this.senderId, `played Year of Plenty (+${this.resource1}, +${this.resource2})`));
-        return { validMove: true, turnOver: false };
+        return sacFinishTurn(sacData, this.senderId);
     }
 
     Undo(gameData: IGameData): void {
@@ -951,7 +1016,7 @@ export class SACPlayMonopoly implements IGameCommand {
         ps.resourcesGathered += total;
 
         sacData.gameState.history.unshift(playerHistory(this.senderId, `played Monopoly on ${this.resource} (+${total})`));
-        return { validMove: true, turnOver: false };
+        return sacFinishTurn(sacData, this.senderId);
     }
 
     Undo(gameData: IGameData): void {
@@ -987,17 +1052,7 @@ export class SACMaritimeTrade implements IGameCommand {
         const ps = gs.playerStates.get(this.senderId);
         if (!ps) return { validMove: false, turnOver: false };
 
-        // Determine trade ratio
-        let ratio = 4;
-        for (const harbor of gs.harbors) {
-            const hasAccess = harbor.vertices.some(vid => {
-                const v = gs.vertices[vid];
-                return v.owner === this.senderId && v.building !== null;
-            });
-            if (!hasAccess) continue;
-            if (harbor.type === '3to1' && ratio > 3) ratio = 3;
-            if (harbor.type === this.offerResource) { ratio = 2; break; }
-        }
+        const ratio = sacTradeRatio(gs, this.senderId, this.offerResource);
 
         if (ps.resources[this.offerResource] < ratio) return { validMove: false, turnOver: false };
 
@@ -1005,7 +1060,7 @@ export class SACMaritimeTrade implements IGameCommand {
         ps.resources[this.wantResource]++;
 
         sacData.gameState.history.unshift(playerHistory(this.senderId, `traded ${ratio}x ${this.offerResource} → 1x ${this.wantResource}`));
-        return { validMove: true, turnOver: false };
+        return sacFinishTurn(sacData, this.senderId);
     }
 
     Undo(gameData: IGameData): void {

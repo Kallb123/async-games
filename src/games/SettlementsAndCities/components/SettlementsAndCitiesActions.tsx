@@ -513,16 +513,16 @@ export default function SettlementsAndCitiesActions({
                 <div className="ag-callout" style={{ marginBottom: 10 }}>
                     <b>⚡ Special Build</b> · spend resources to build or trade with the bank, then pass.
                 </div>
-                {buildList}
                 <ActionButton
                     className="ag-btn ag-btn--success ag-btn--block"
-                    style={{ marginTop: 12, padding: '14px 0', fontSize: 15 }}
+                    style={{ marginBottom: 12, padding: '14px 0', fontSize: 15 }}
                     pending={pendingTarget === 'endTurn'}
                     pendingLabel="Passing…"
                     onClick={() => submit(new SACEndTurn(), 'endTurn')}
                 >
                     ✓ Done building
                 </ActionButton>
+                {buildList}
                 <p className="ag-action-hint">Nothing to build? Just pass — the dice move on once everyone&apos;s had a chance.</p>
                 {tradeModal}
             </div>
@@ -586,19 +586,20 @@ export default function SettlementsAndCitiesActions({
     // ── Post-roll ─────────────────────────────────────────────────────────────
     return (
         <div className="ag-actionsheet">
-            {buildList}
-
-            {devCardSection && <div style={{ marginTop: 12 }}>{devCardSection}</div>}
-
             <ActionButton
                 className="ag-btn ag-btn--success ag-btn--block"
-                style={{ marginTop: 12, padding: '14px 0', fontSize: 15 }}
+                style={{ marginBottom: 12, padding: '14px 0', fontSize: 15 }}
                 pending={pendingTarget === 'endTurn'}
                 pendingLabel="Ending your turn…"
                 onClick={() => submit(new SACEndTurn(), 'endTurn')}
             >
                 ✓ End turn
             </ActionButton>
+
+            {buildList}
+
+            {devCardSection && <div style={{ marginTop: 12 }}>{devCardSection}</div>}
+
             <p className="ag-action-hint">We&apos;ll let the next player know it&apos;s their move.</p>
 
             {yopModal}

@@ -9,6 +9,7 @@ import {
     SACRollDice,
     SACMoveRobber,
     SACEndTurn,
+    SACMaritimeTrade,
 } from "./SettlementsAndCitiesLogic";
 import * as SACLogic from "./SettlementsAndCitiesLogic";
 import { makeState, player } from "./testFixtures";
@@ -202,11 +203,15 @@ describe("Settlements & Cities — the dice roll", () => {
             { userId: "u1", gained: { lumber: 2, wool: 0, grain: 0, brick: 0, ore: 0 }, discarded: 0 },
             { userId: "u2", gained: { lumber: 1, wool: 0, grain: 0, brick: 0, ore: 0 }, discarded: 0 },
         ]);
-        expect(game.gameState.history[0].text).toBe("{{u1}} rolled a 8 — {{u1}} +2🪵, {{u2}} +1🪵");
+        // Lumber alone can't build, buy or trade with — the roll leaves u1 with
+        // nothing to decide, so it auto-ends their turn (see the auto-end test
+        // group below) and the payout line sits one below that on the log.
+        expect(outcome.turnOver).toBe(true);
+        expect(game.gameState.history[1].text).toBe("{{u1}} rolled a 8 — {{u1}} +2🪵, {{u2}} +1🪵");
         // The payout also rides on the command, so the match review's title for
         // this roll is the same sentence the log got — see sacRollSentence.
         expect(roll.rollChanges).toEqual(gs.lastRollChanges);
-        expect(`{{u1}} ${roll.myString()}`).toBe(game.gameState.history[0].text);
+        expect(`{{u1}} ${roll.myString()}`).toBe(game.gameState.history[1].text);
     });
 
     it("records a roll that paid nobody as exactly that", async () => {
@@ -216,7 +221,9 @@ describe("Settlements & Cities — the dice roll", () => {
 
         await rollOf(5, 3).Execute(game as unknown as IGameData);
         expect(gs.lastRollChanges).toEqual([]);
-        expect(game.gameState.history[0].text).toBe("{{u1}} rolled a 8 — nobody collected");
+        // Nobody collected and u1 had nothing to begin with — again nothing left
+        // to decide, so the turn auto-ends on top of the roll's own line.
+        expect(game.gameState.history[1].text).toBe("{{u1}} rolled a 8 — nobody collected");
     });
 
     it("leaves a hex the robber is sitting on out of the payout", async () => {
@@ -262,6 +269,67 @@ describe("Settlements & Cities — the dice roll", () => {
         new SettlementsAndCitiesGameType().CheckEndTurn(game as unknown as IGameData, endTurn);
         expect(gs.lastRoll).toBeNull();
         expect(gs.lastRollChanges).toEqual([]);
+    });
+});
+
+describe("Settlements & Cities — auto-ending a turn with nothing left to do", () => {
+    it("ends the turn once a trade leaves the player unable to build, buy or trade further", async () => {
+        const gs = makeState({
+            playerStates: new Map([["u1", player({ resources: { lumber: 4 } })]]),
+        });
+        const game = makeGame(gs);
+
+        const trade = cmd(new SACMaritimeTrade());
+        trade.offerResource = "lumber";
+        trade.wantResource = "wool";
+        const outcome = await trade.Execute(game as unknown as IGameData);
+
+        expect(outcome.validMove).toBe(true);
+        expect(gs.playerStates.get("u1")!.resources).toEqual({ ...NO_RESOURCES, wool: 1 });
+        // No dev cards in the deck, no resources left for another build or
+        // trade — there's nothing left to decide, so the turn ends for them.
+        expect(outcome.turnOver).toBe(true);
+        expect(game.gameState.history[0].text).toBe(
+            "{{u1}} had nothing left to build, buy or trade, so their turn ended automatically",
+        );
+    });
+
+    it("leaves the turn open when the player can still trade again", async () => {
+        const gs = makeState({
+            playerStates: new Map([["u1", player({ resources: { lumber: 8 } })]]),
+        });
+        const game = makeGame(gs);
+
+        const trade = cmd(new SACMaritimeTrade());
+        trade.offerResource = "lumber";
+        trade.wantResource = "wool";
+        const outcome = await trade.Execute(game as unknown as IGameData);
+
+        expect(outcome.validMove).toBe(true);
+        // Still holding 4 lumber — enough for one more 4:1 trade.
+        expect(gs.playerStates.get("u1")!.resources).toEqual({ ...NO_RESOURCES, lumber: 4, wool: 1 });
+        expect(outcome.turnOver).toBe(false);
+        // Just the trade's own history line — nothing from the auto-end check.
+        expect(game.gameState.history).toHaveLength(1);
+    });
+
+    it("leaves the turn open when a dev card is still affordable", async () => {
+        const gs = makeState({
+            devCardDeck: ["knight"],
+            playerStates: new Map([["u1", player({ resources: { lumber: 4, wool: 1, grain: 1 } })]]),
+        });
+        const game = makeGame(gs);
+
+        const trade = cmd(new SACMaritimeTrade());
+        trade.offerResource = "lumber";
+        trade.wantResource = "ore";
+        const outcome = await trade.Execute(game as unknown as IGameData);
+
+        expect(outcome.validMove).toBe(true);
+        // Still holding wool + grain from before the trade, and the trade itself
+        // paid out the ore — 🐑🌾⛏️ is exactly what a dev card costs.
+        expect(gs.playerStates.get("u1")!.resources).toEqual({ ...NO_RESOURCES, wool: 1, grain: 1, ore: 1 });
+        expect(outcome.turnOver).toBe(false);
     });
 });
 
