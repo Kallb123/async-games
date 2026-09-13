@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ISACGameDataResponse, ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
-import { BOARD_TOPOLOGY, NO_RESOURCES, SAC_RESOURCES, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
+import { BOARD_TOPOLOGY, NO_RESOURCES, SAC_RESOURCES, calculateLongestRoad, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
 import { SAC_EXPANSION_IDS, enabledExpansionNames, normaliseExpansions } from "@/games/SettlementsAndCities/expansions";
 import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER, SAC_RESOURCE_EMOJI, sacRollChangeParts, type SACSpotKind } from "@/games/SettlementsAndCities/ui";
 import SettlementsAndCitiesBoard from "@/games/SettlementsAndCities/components/SettlementsAndCitiesBoard";
@@ -267,11 +267,25 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             if (gs.longestRoadOwner === userId) sub = '🛣️ LR';
             else if (gs.largestArmyOwner === userId) sub = '⚔️ LA';
             else sub = `${totalCards} cards`;
+            const isLongestRoad = gs.longestRoadOwner === userId;
+            const isLargestArmy = gs.largestArmyOwner === userId;
+            const roadLength = calculateLongestRoad(userId, gs.vertices, gs.edges);
+            // The pill's `sub` line already shows either the LR/LA tag or the
+            // card count when collapsed; `GameScoreboard` swaps it out for
+            // this once expanded, so all three figures still belong here.
+            const detail = (
+                <>
+                    <div>{totalCards} card{totalCards === 1 ? '' : 's'}</div>
+                    <div>⚔️ {ps.knightsPlayed} knight{ps.knightsPlayed === 1 ? '' : 's'}{isLargestArmy && ' · Largest Army'}</div>
+                    <div>🛣️ {roadLength} segment{roadLength === 1 ? '' : 's'}{isLongestRoad && ' · Longest Road'}</div>
+                </>
+            );
             return [{
                 id: userId,
                 name: isMe ? 'You' : ps.username,
                 color: colorForOwner(userId),
                 sub,
+                detail,
                 score: <>{ps.visibleVP}<span className="ag-score-vp-target">/{victoryTarget}</span></>,
                 isMe,
                 isActive,
