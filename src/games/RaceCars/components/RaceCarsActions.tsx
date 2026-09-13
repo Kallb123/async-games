@@ -7,7 +7,7 @@ import RollReadout from '@/components/ui/RollReadout';
 import Stepper from '@/components/ui/Stepper';
 import { pluralize } from '@/utils/ui/text';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
-import { RaceCarsShift } from '@/utils/apiModels/GameLogic';
+import { RaceCarsShift, RaceCarsSlipstream } from '@/utils/apiModels/GameLogic';
 import type { IRaceCarsSpecificGameStateResponse } from '@/games/RaceCars/apiModels';
 import {
     cornerAt,
@@ -15,6 +15,7 @@ import {
     gearName,
     MIN_MOVE_ROWS,
     rowsBetween,
+    SLIPSTREAM_ROWS,
     trackById,
     type RaceCarsGear,
     type RaceCarsTrack,
@@ -69,12 +70,39 @@ function cornerVerdict(track: RaceCarsTrack, ps: IRaceCarsPlayerState, min: numb
         : `can stop in ${next.corner.name}`;
 }
 
-/** What the worst of an overshoot costs, in the currency §10 charges it in. */
-function tyreCost(ps: IRaceCarsPlayerState, rows: number): string {
+/**
+ * What an overshoot costs, in the currency §10 charges it in.
+ *
+ * `qualifier` is what separates the two readers: the reach band is quoting the
+ * worst of a range, §12's tow is quoting an exact number of rows.
+ */
+function tyreCost(ps: IRaceCarsPlayerState, rows: number, qualifier = 'up to '): string {
     if (rows <= 0) return '';
     return rows > ps.tyres
         ? ` — more tyres than you have left: a spin`
-        : ` — up to ${pluralize(rows, 'tyre')}`;
+        : ` — ${qualifier}${pluralize(rows, 'tyre')}`;
+}
+
+/**
+ * §12's offer, priced. Three rows are free on an open road and are three rows
+ * of overshoot in a braking zone, which is the whole decision — so the prompt
+ * names the corner and what leaving it would cost rather than saying "free".
+ */
+function towPrompt(track: RaceCarsTrack, ps: IRaceCarsPlayerState, options: RaceCarsMoveOptions): string {
+    if (options.blockedShort) {
+        return `Traffic — the tow only runs ${pluralize(options.distance, 'row')}. Tap a highlighted space to take what there is and scuff a tyre.`;
+    }
+    const here = cornerAt(track, ps.row);
+    const past = here && here.stops > ps.cornerStops
+        ? SLIPSTREAM_ROWS - rowsBetween(track, ps.row, here.to)
+        : 0;
+    if (past > 0) {
+        // §12: a tow out of a corner is charged in full — §10's waiver forgives
+        // a corner you could not avoid leaving, and declining this costs
+        // nothing.
+        return `Three rows — but they push you out of ${here!.name} by ${pluralize(past, 'row')}, charged in full${tyreCost(ps, past, '')}.`;
+    }
+    return `Three free rows. Tap a highlighted space to take the tow.`;
 }
 
 /** What the move the driver is lining up will actually do, in their language. */
@@ -83,6 +111,9 @@ function movePrompt(options: RaceCarsMoveOptions): string {
     if (options.blockedShort) return `Traffic — the road runs out ${pluralize(options.distance, 'row')} along. Tap a highlighted space to stop short and scuff a tyre.`;
     return `Tap one of the ${options.spaces.length} highlighted spaces on the circuit.`;
 }
+
+/** The `target` a declined tow wears while it is in flight — shared with the board page's own tow taps. */
+export const TOW_DECLINE = 'tow:decline';
 
 interface RaceCarsActionsProps {
     gs: IRaceCarsSpecificGameStateResponse;
@@ -110,7 +141,7 @@ interface RaceCarsActionsProps {
 }
 
 /**
- * The turn sheet: §7's shift, then §7's brake-and-destination.
+ * The turn sheet: §7's shift, then its brake-and-destination, then §12's tow.
  *
  * Wrapped in `ReadOnlyPanel` rather than hidden off-turn — a waiting driver
  * wants to read their own gear ladder and what each band would reach, which is
@@ -129,10 +160,36 @@ export default function RaceCarsActions({ gs, myUserId, brake, setBrake, options
     // that stale roll back as though it were live is what the read-only branch
     // avoids — the ladder from where the car now sits is the honest answer.
     //
-    // Anything that is not §7 step 2 lands here too, which today means only the
-    // `slipstream` phase PR 3 never reaches: PR 5 adds the tow's own branch
-    // below alongside the command that answers it.
+    // Off-turn this is where the `slipstream` phase lands too — the branch
+    // below answers it only on the driver's own turn, because a tow nobody can
+    // take is not a control, and the ladder is what a waiting driver reads.
     const roll = ps.roll;
+
+    // §12 step 3 of the turn: the move is driven and the one decision left is
+    // the tow. Taking it is a tap on the circuit — the same board tap the move
+    // was — so the only control here is the one the board cannot offer.
+    if (!readOnly && ps.phase === 'slipstream' && options !== null) {
+        return (
+            <div className="ag-actionsheet">
+                <div className="ag-callout">{towPrompt(track, ps, options)}</div>
+                <div className="ag-build-list">
+                    <BuildRow
+                        icon={<span className="ag-rc-gearmark">🌀</span>}
+                        name="Wave the tow away"
+                        cost="Costs nothing, and ends your turn here"
+                        tag={pendingTarget === TOW_DECLINE ? <PendingTag label="Declining…" /> : 'Decline'}
+                        pending={pendingTarget === TOW_DECLINE}
+                        onClick={() => {
+                            const command = new RaceCarsSlipstream();
+                            command.tow = null;
+                            submitCommand(command, undefined, TOW_DECLINE);
+                        }}
+                    />
+                </div>
+            </div>
+        );
+    }
+
     const picking = readOnly || ps.phase !== 'move' || roll === null || options === null;
 
     if (picking) {

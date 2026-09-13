@@ -1,14 +1,16 @@
 'use client'
-import { use } from "react";
+import { use, useState } from "react";
 import { usePathname } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
-import { RaceCarsMove } from "@/utils/apiModels/GameLogic";
+import { RaceCarsMove, RaceCarsSlipstream } from "@/utils/apiModels/GameLogic";
 import type { IRaceCarsGameDataResponse, IRaceCarsSpecificGameStateResponse } from "@/games/RaceCars/apiModels";
 import RaceCarsBoard from "@/games/RaceCars/components/RaceCarsBoard";
 import RaceCarsActions from "@/games/RaceCars/components/RaceCarsActions";
-import { MIN_MOVE_ROWS, spaceKey, trackById } from "@/games/RaceCars/board";
+import RaceCarsEndMoveScreen from "@/games/RaceCars/components/RaceCarsEndMoveScreen";
+import { MIN_MOVE_ROWS, SLIPSTREAM_ROWS, spaceKey } from "@/games/RaceCars/board";
 import { moveOptions } from "@/games/RaceCars/rules";
+import type { IRaceCarsArrivalOutcome } from "@/games/RaceCars/RaceCarsLogic";
 import { positionOf, rowsBehindLeader, rulesState, standings, wearSummary } from "@/games/RaceCars/ui";
 import GameShell from "@/components/ui/GameShell";
 import GameGuideModal from "@/components/ui/GameGuideModal";
@@ -23,7 +25,7 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useGameGuide } from "@/utils/hooks/useGameGuide";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useResettingState } from "@/utils/hooks/useResettingState";
-import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
+import { useSubmitCommand, type SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { guideForGame } from "@/utils/ui/gameGuides";
 import { playerColourForId } from "@/utils/ui/playerColours";
@@ -40,8 +42,22 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
 
     const { gameData, setGameData, getGameData } = useGameData<IRaceCarsGameDataResponse>(gameId);
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
-    const { submitCommand, submitting, pendingTarget } = useSubmitCommand<IRaceCarsGameDataResponse>(gameId, user, setGameData, getGameData);
+    const { submitCommand: rawSubmitCommand, submitting, pendingTarget } = useSubmitCommand<IRaceCarsGameDataResponse>(gameId, user, setGameData, getGameData);
     const { endGame } = useEndGame(gameId);
+
+    // The end-of-move reveal (§23.7 PR 5): whichever of the two moving commands
+    // just resolved hands back what the corner made of the roll, and whether a
+    // tow is on offer — see IRaceCarsArrivalOutcome. Every submit goes through
+    // this one wrapper so it is caught whether the tap came from the circuit or
+    // from the turn sheet; a shift carries no arrival and falls straight
+    // through.
+    const [reveal, setReveal] = useState<IRaceCarsArrivalOutcome['arrival'] | null>(null);
+    const submitCommand: SubmitCommand = (command, callback, target) =>
+        rawSubmitCommand(command, (r) => {
+            const arrival = (r.outcome as IRaceCarsArrivalOutcome).arrival;
+            if (arrival) setReveal(arrival);
+            callback?.(r);
+        }, target);
 
     // Turn review steps back through the match's recorded commands. `canPlan`
     // is false permanently and by design (§23.5): a planner would resolve one
@@ -90,19 +106,35 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
     // server will only throw away.
     const appliedBrake = me?.roll == null ? 0 : Math.min(brake, Math.max(0, Math.min(me.brakes, me.roll - MIN_MOVE_ROWS)));
 
-    // Where this move may finish, straight off the same pure rules the command
-    // validates against (§23.4) — so a space the board offers is a space
-    // `RaceCarsMove` accepts, and the two can never drift. Worked out once and
-    // handed to the turn sheet as well: the board's tappable set and the sheet's
-    // "tap one of N" are two readings of this one answer, and computing it twice
-    // is how they come to disagree about a road that traffic has closed.
-    const options = gs && me && isMyTurn && me.phase === 'move' && me.roll !== null
-        ? moveOptions(rulesState(gs), myUserId, me.roll - appliedBrake)
+    // How far the car is being asked to travel right now: §7 step 2's rolled
+    // move less the brakes dialled in, or §12's fixed three-row tow. Null
+    // whenever this driver is not choosing a destination at all.
+    const towing = !!me && isMyTurn && me.phase === 'slipstream';
+    const distance = !gs || !me || !isMyTurn ? null
+        : towing ? SLIPSTREAM_ROWS
+        : me.phase === 'move' && me.roll !== null ? me.roll - appliedBrake
         : null;
+
+    // Where this leg may finish, straight off the same pure rules the commands
+    // validate against (§23.4) — so a space the board offers is a space the
+    // server accepts, and the two can never drift. Worked out once and handed
+    // to the turn sheet as well: the board's tappable set and the sheet's "tap
+    // one of N" are two readings of this one answer, and computing it twice is
+    // how they come to disagree about a road that traffic has closed.
+    const options = gs && distance !== null ? moveOptions(rulesState(gs), myUserId, distance) : null;
     const validSpaces = new Set((options?.spaces ?? []).map(space => spaceKey(space.row, space.lane)));
 
+    // One tap on the circuit, whichever leg of the turn it is: §12's tow is a
+    // move and is chosen the same way, so the board learns nothing new about
+    // the phase and this is the one place that branches on it.
     function chooseDestination(row: number, lane: number) {
         if (!isMyTurn || submitting) return;
+        if (towing) {
+            const tow = new RaceCarsSlipstream();
+            tow.tow = { row, lane };
+            submitCommand(tow, undefined, `tow:${row}:${lane}`);
+            return;
+        }
         const command = new RaceCarsMove();
         command.row = row;
         command.lane = lane;
@@ -121,9 +153,11 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
         } else if (complete) {
             subtitle = `🏁 ${nameForUserId(gameData, gameData?.winner)} takes the flag`;
         } else if (isMyTurn) {
-            subtitle = me?.phase === 'move' && me.roll !== null
-                ? <><span className="ag-hi">Your move</span> · rolled {me.roll} — pick a space</>
-                : <><span className="ag-hi">Your move</span> · pick a gear</>;
+            subtitle = towing
+                ? <><span className="ag-hi">Your move</span> · slipstream — take the tow or wave it away</>
+                : me?.phase === 'move' && me.roll !== null
+                    ? <><span className="ag-hi">Your move</span> · rolled {me.roll} — pick a space</>
+                    : <><span className="ag-hi">Your move</span> · pick a gear</>;
         } else {
             subtitle = <>{currentTurnUsername}&apos;s move · round {gs.round + 1}</>;
         }
@@ -168,6 +202,19 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
     ];
 
     const gap = gs && me ? rowsBehindLeader(gs, myUserId) : 0;
+
+    // Shown once, over the board, the instant a move comes back — and never
+    // while stepping back through the match, where the timeline is the story.
+    if (reveal && gs && nav.isLive) {
+        return (
+            <RaceCarsEndMoveScreen
+                trackId={gs.trackId}
+                roll={reveal.roll}
+                arrival={reveal}
+                onDismiss={() => setReveal(null)}
+            />
+        );
+    }
 
     return (
         <GameShell
@@ -216,7 +263,9 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
                             userIdList={userIdList}
                             validSpaces={validSpaces}
                             onSpaceClick={isMyTurn && !submitting ? chooseDestination : undefined}
-                            boardTag={options ? `Choose where to stop · ${pluralize(options.spaces.length, 'space')}` : null}
+                            boardTag={options
+                                ? `${towing ? 'Take the tow' : 'Choose where to stop'} · ${pluralize(options.spaces.length, 'space')}`
+                                : null}
                         />
                     </div>
 

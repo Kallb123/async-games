@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { MAX_PLAYERS, RaceCarsSpace, RaceCarsTrack, TRACKS } from "./board";
 import {
+    classification,
     conservativeTurn,
     derivePath,
     IRaceCarsPlayerState,
@@ -58,7 +59,7 @@ function drive(
     state: IRaceCarsSpecificGameState,
     userId: string,
     distance: number,
-    options: { lane?: number; oilRolls?: number[] } = {},
+    options: { lane?: number; oilRolls?: number[]; waiveUnavoidableCorner?: boolean } = {},
 ) {
     const reach = moveOptions(state, userId, distance);
     const destination = options.lane === undefined
@@ -68,6 +69,7 @@ function drive(
     const rolls = [...(options.oilRolls ?? [])];
     return resolveArrival(state, userId, path, {
         blockedShort: reach.blockedShort,
+        waiveUnavoidableCorner: options.waiveUnavoidableCorner,
         nextOilRoll: () => rolls.shift() ?? 6,
     });
 }
@@ -291,6 +293,15 @@ describe("overshoot (§10)", () => {
         const arrival = drive(race({ a: { row: 51, lane: 1, cornerStops: 0 } }), 'a', 4);
         expect(arrival).toMatchObject({ row: 55, tyres: 5, spun: false, cornerStops: 0 });
         expect(arrival.events).toContainEqual({ type: 'overshoot', cornerId: 'gravel', rows: 4, waived: true });
+    });
+
+    it("is charged in full to a tow off that same last row (§12)", () => {
+        // The waiver forgives a corner the driver could not avoid leaving.
+        // Declining §12's tow costs nothing, so that reasoning never reaches
+        // it — and RaceCarsSlipstream is the one caller that turns this off.
+        const arrival = drive(race({ a: { row: 51, lane: 1, cornerStops: 0 } }), 'a', 3, { waiveUnavoidableCorner: false });
+        expect(arrival).toMatchObject({ row: 54, tyres: 2 });
+        expect(arrival.events).toContainEqual({ type: 'overshoot', cornerId: 'gravel', rows: 3, waived: false });
     });
 
     it("is charged in full one row earlier, where the road still offered a stop", () => {
@@ -547,6 +558,18 @@ describe("turn order (§15)", () => {
         const order = ['d', 'f', 'a', 'c', 'e', 'b'];
         const state = race(seats, { roundOrder: order });
         expect(recomputeRoundOrder(state)).toEqual(order);
+    });
+
+    it("classifies the field with the winner first, however far along they stopped (§4.2)", () => {
+        // The winner's car sits on row 2 of a new lap, behind everybody on the
+        // road — classification is not a tie-break for the win, it is what the
+        // result page reports about everybody else.
+        const state = race({
+            a: { row: 2, lane: 1, lapsCompleted: 1 },
+            b: { row: 30, lane: 1 },
+            c: { row: 50, lane: 1 },
+        });
+        expect(classification(state, 'a')).toEqual(['a', 'c', 'b']);
     });
 
     it("rebuilds the order whole, never spliced", () => {
