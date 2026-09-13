@@ -304,7 +304,9 @@ describe("Settlements & Cities — victory-point cards", () => {
 
 describe("Settlements & Cities — action summaries", () => {
     // Swept off the module rather than listed, so a command added later can't
-    // ship a debug summary just by not being added to this test.
+    // ship a debug summary just by not being added to this test. What the sweep
+    // can't see is a summary that reads fine but says it differently from the
+    // history line the same command writes — that one is a reading job.
     const commandClasses = (Object.values(SACLogic) as unknown[]).filter(
         (exported): exported is new () => IGameCommand =>
             typeof exported === "function" &&
@@ -336,6 +338,6 @@ describe("Settlements & Cities — action summaries", () => {
         const move = cmd(new SACMoveRobber());
         expect(move.myString()).toBe("moved the robber");
         move.stealFromUserId = "u2";
-        expect(resolveTokens(move.myString(), { u2: "Bob" })).toBe("moved the robber and stole a card from Bob");
+        expect(resolveTokens(move.myString(), { u2: "Bob" })).toBe("moved the robber and stole a resource from Bob");
     });
 });

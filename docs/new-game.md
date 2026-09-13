@@ -112,7 +112,9 @@ handful of one-line additions to shared files in the last step.
   command's history line uses, continuing the sentence their name starts:
   `'built a settlement'`, `` `rolled a ${roll}` ``. Name a player in it with
   `userToken(userId)`, which the replay engine resolves to today's name exactly
-  as it does a history line. What it must **not** be is the debug string a
+  as it does a history line — a summary may name someone its history line leaves
+  out (SAC's robber names its victim) as long as that is something the whole
+  table can already see, but it says it in the log's words, not new ones. What it must **not** be is the debug string a
   command is easiest to write first (`SAC BuildSettlement vertex=17`): that ends
   up on a player's screen, which is the bug this bullet exists to stop it being
   written again. A command that knows less than its history line does (the

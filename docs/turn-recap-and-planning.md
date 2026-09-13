@@ -68,7 +68,10 @@ That makes `myString()` player-facing copy in every game that ships recap, and
 a command written with a debug string (`SAC BuildSettlement vertex=17`) shows
 a reviewing player exactly that. Write the phrase the command's own history
 line uses, continuing the sentence the player's name starts — see
-[`new-game.md`](./new-game.md) §3. Where the command knows less than its
+[`new-game.md`](./new-game.md) §3. One vocabulary across the three surfaces a
+player reads (the log, the review, the recap) is the point, so a summary that
+says more than its log line says it in the same words: SAC's robber adds the
+victim the log leaves out, and still steals "a resource", not "a card". Where the command knows less than its
 history line does (a maritime trade's rate comes off the board's harbours, a
 roll's payout off the state), say less rather than saying it in ids.
 

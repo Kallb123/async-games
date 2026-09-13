@@ -561,12 +561,13 @@ export class SACMoveRobber implements IGameCommand {
     recordedStealIndex?: number;
 
     myString() {
-        // Who was robbed is public — the recap names them to the whole table —
-        // while which card was taken stays hidden, so it is left unsaid. The
-        // victim is tokenised the way a history line names a player, for the
-        // replay engine to resolve (see userToken / resolveTokens).
+        // The history line's words, plus the victim it leaves out: who was robbed
+        // is public — the recap names them to the whole table — while *which*
+        // resource was taken stays hidden either way. The victim is tokenised the
+        // way a history line names a player, for the replay engine to resolve
+        // (see userToken / resolveTokens).
         return this.stealFromUserId
-            ? `moved the robber and stole a card from ${userToken(this.stealFromUserId)}`
+            ? `moved the robber and stole a resource from ${userToken(this.stealFromUserId)}`
             : 'moved the robber';
     }
 
@@ -747,7 +748,7 @@ export class SACBuildCity implements IGameCommand {
     vertexId: number = 0;
     readonly className = 'SACBuildCity';
 
-    myString() { return 'upgraded a settlement to a city'; }
+    myString() { return 'built a city'; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const sacData = gameData as ISettlementsAndCitiesGameData;
