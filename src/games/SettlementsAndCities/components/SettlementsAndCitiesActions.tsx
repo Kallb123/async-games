@@ -1,5 +1,5 @@
 'use client'
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Button, Form, Modal } from 'react-bootstrap';
 import type { ISACSpecificGameStateResponse } from '@/games/SettlementsAndCities/apiModels';
 import type { SAC_Resource, SAC_DevCard } from '@/games/SettlementsAndCities/board';
@@ -95,6 +95,7 @@ export default function SettlementsAndCitiesActions({
 
     const myState = gs.playerStates[myUserId];
     const myDevCards = gs.playerDevCards?.[myUserId];
+    if (!myState) return null;
 
     const phase = gs.phase;
     const isSetup = phase === 'setup';
@@ -114,7 +115,7 @@ export default function SettlementsAndCitiesActions({
     // ── Shared build list (settlement / road / city + dev card + bank trade) ────
     // Reused by the post-roll main turn and the 5–6 Special Build Phase, which
     // both let a player spend resources on the board and trade with the bank.
-    const res = myState?.resources ?? NO_RESOURCES;
+    const res = myState.resources ?? NO_RESOURCES;
     const ROAD_COST: Cost = { brick: 1, lumber: 1 };
     const SETTLEMENT_COST: Cost = { brick: 1, lumber: 1, wool: 1, grain: 1 };
     const CITY_COST: Cost = { grain: 2, ore: 3 };
@@ -128,16 +129,15 @@ export default function SettlementsAndCitiesActions({
         piecesLeft: number;
     }
     const builds: BuildDef[] = [
-        { mode: 'placeSettlement', icon: '🛖', name: 'Settlement', cost: SETTLEMENT_COST, suffix: '+1 VP', piecesLeft: myState?.remainingSettlements ?? 0 },
-        { mode: 'placeRoad', icon: '🛤️', name: 'Road', cost: ROAD_COST, suffix: 'reach new spots', piecesLeft: myState?.remainingRoads ?? 0 },
-        { mode: 'placeCity', icon: '🏰', name: 'City', cost: CITY_COST, suffix: '+2 VP', piecesLeft: myState?.remainingCities ?? 0 },
+        { mode: 'placeSettlement', icon: '🛖', name: 'Settlement', cost: SETTLEMENT_COST, suffix: '+1 VP', piecesLeft: myState.remainingSettlements },
+        { mode: 'placeRoad', icon: '🛤️', name: 'Road', cost: ROAD_COST, suffix: 'reach new spots', piecesLeft: myState.remainingRoads },
+        { mode: 'placeCity', icon: '🏰', name: 'City', cost: CITY_COST, suffix: '+2 VP', piecesLeft: myState.remainingCities },
     ];
     const DEV_CARD_COST: Cost = { wool: 1, grain: 1, ore: 1 };
     const devShort = shortfall(DEV_CARD_COST, res);
     const devDeckEmpty = gs.devCardDeckSize <= 0;
     const canBuyDevCard = !devShort && !devDeckEmpty;
     const buyingDevCard = pendingTarget === 'buyDevCard';
-    const canBuildAny = builds.some(b => !shortfall(b.cost, res) && b.piecesLeft > 0);
 
     const buildList = (
         <div className="ag-build-list">
@@ -405,25 +405,6 @@ export default function SettlementsAndCitiesActions({
             )}
         </div>
     ) : null;
-
-    // ── Auto-end turn when nothing is left to do ────────────────────────────────
-    // A main turn (post-roll) or Special Build turn that can't build, buy a dev
-    // card, trade with the bank (not enough of any resource to offer) or play a
-    // dev card is one with nothing left to decide — end it automatically rather
-    // than making the player tap "End turn" themselves. Held off while a modal
-    // is open or a board-placement mode is armed, so an in-progress choice is
-    // never cut short, and while a command is already in flight.
-    const canPlayAnyDevCard = canPlayDevCards && heldPlayable.length > 0;
-    const canAct = canBuildAny || canBuyDevCard || anyTradeable || canPlayAnyDevCard;
-    const inAutoEndablePhase = !!myState && !readOnly && !isSetup && !pendingRobber && pendingRoadBuilding === 0
-        && (specialBuild || hasRolled);
-    const modalOpen = showYopModal || showMonopolyModal || showTradeModal;
-    useEffect(() => {
-        if (!inAutoEndablePhase || modalOpen || boardMode !== 'idle' || pendingTarget !== null || canAct) return;
-        submitCommand(new SACEndTurn(), () => { setBoardMode('idle'); }, 'endTurn');
-    }, [inAutoEndablePhase, modalOpen, boardMode, pendingTarget, canAct, submitCommand, setBoardMode]);
-
-    if (!myState) return null;
 
     // ── Year of Plenty modal (shared by pre- and post-roll) ─────────────────────
     const yopModal = (
