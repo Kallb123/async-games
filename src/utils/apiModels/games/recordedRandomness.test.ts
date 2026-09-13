@@ -98,4 +98,19 @@ describe("the command route", () => {
         expect(run).not.toBeNull();
         expect(strip!.index).toBeLessThan(run!.index);
     });
+
+    // Execute is not the first thing to read the command: the route logs
+    // `myString()`, and a summary reads the recorded fields to name the roll and
+    // the payout it dealt (SAC's rollChanges, Dice Cities' moneyChanges, both
+    // printed only once the dice are recorded). Stripping after the log put a
+    // forged body straight into the log line — unbounded numbers, and text of
+    // the caller's choosing inside a `{{…}}` token nothing had resolved.
+    it("strips recorded randomness before logging the command's summary", () => {
+        const strip = /^[ \t]*stripRecordedRandomness\(commandRequest\);/m.exec(routeSource);
+        const log = /^[ \t]*console\.log\(commandRequest\.myString\(\)\);/m.exec(routeSource);
+
+        expect(strip).not.toBeNull();
+        expect(log).not.toBeNull();
+        expect(strip!.index).toBeLessThan(log!.index);
+    });
 });

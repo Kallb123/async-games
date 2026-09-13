@@ -115,6 +115,11 @@ called `savedRoll` or `rngLog` would sail straight through.
 `recordedRandomness.test.ts` guards the route's call site, but it cannot guard
 your field's name.
 
+The strip runs before the route's own log line, not just before `Execute`: that
+line is `myString()`, and a summary reads the recorded dice to name the roll and
+the payout it dealt. Stripping afterwards logged whatever the request claimed.
+The same test guards that order.
+
 Replay is the only legitimate source of these values, so neither `buildTimeline`
 nor the timeline route strips them: their commands come from persisted
 `commandHistory` (already trusted) or from a player's own planned moves, which

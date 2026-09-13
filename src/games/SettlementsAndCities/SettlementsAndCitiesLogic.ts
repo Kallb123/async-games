@@ -450,10 +450,10 @@ export class SACRollDice implements IGameCommand {
 
     myString() {
         // A roll replayed from history always has its dice recorded; the
-        // unrecorded case is a command that has not been executed yet — and
-        // `recorded…` fields are stripped off an incoming request body
-        // (stripRecordedRandomness), so a client can't get a payout printed
-        // either.
+        // unrecorded case is a command that has not been executed yet. The
+        // command route strips `recorded…` fields off an incoming body before
+        // it logs this line, so a live request can't have a forged payout
+        // printed either — it is this method's only untrusted caller.
         if (this.recordedRoll1 === undefined || this.recordedRoll2 === undefined) return 'rolled the dice';
         const roll = this.recordedRoll1 + this.recordedRoll2;
         // Without a payout there is nothing to name, and "nobody collected" would
