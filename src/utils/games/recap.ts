@@ -10,6 +10,7 @@ import { trainTimeRecapAdapter } from "@/games/TrainTime/recap";
 import { outbreakRecapAdapter } from "@/games/Outbreak/recap";
 import { bannedIsletRecapAdapter } from "@/games/BannedIslet/recap";
 import { firesOutRecapAdapter } from "@/games/FiresOut/recap";
+import { raceCarsRecapAdapter } from "@/games/RaceCars/recap";
 
 // A single "here's what happened" entry in a since-you-were-last-here recap.
 // Games synthesise these from replayed turns via an IRecapAdapter; the generic
@@ -209,3 +210,4 @@ registerRecapAdapter(trainTimeRecapAdapter);
 registerRecapAdapter(outbreakRecapAdapter);
 registerRecapAdapter(bannedIsletRecapAdapter);
 registerRecapAdapter(firesOutRecapAdapter);
+registerRecapAdapter(raceCarsRecapAdapter);

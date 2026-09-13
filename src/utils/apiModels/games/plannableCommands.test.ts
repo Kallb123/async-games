@@ -86,6 +86,7 @@ describe("plannableCommands", () => {
         "SmartthinkGameType",
         "TrainTimeGameType",
         "WorldDominationGameType",
+        "RaceCarsGameType",
     ])("plans nothing in %s until its planning UI opts in", (className) => {
         expect(getReplayAdapter(className)).toBeDefined();
         expect(plannableCommands(className)).toEqual([]);
