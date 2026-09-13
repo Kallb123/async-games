@@ -1857,6 +1857,15 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-action-grid { display: flex; gap: 8px; }
 .ag-action-grid > * { flex: 1; }
 
+/* ---- Number stepper (Stepper.tsx) ---- */
+/* The −/value/+ control for picking a number in a range: armies to deploy,
+   dice to roll, brake points to spend. Tokens rather than the inline
+   `width: 40` / `font: '800 18px'` the World Domination copy carried, so a
+   game that re-tints the chrome re-tints this with it. */
+.ag-stepper { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.ag-stepper-btn { width: 40px; padding: 8px 0; }
+.ag-stepper-value { font: 800 18px var(--ag-font); min-width: 32px; text-align: center; }
+
 /* Big end-turn / roll CTAs reuse .ag-btn; a "success" variant for end turn */
 .ag-btn--success {
     background: oklch(0.5 0.1 145);
@@ -4382,6 +4391,120 @@ button.ag-tt-ticket { cursor: pointer; }
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 .ag-bi-pawn--active { box-shadow: 0 0 0 2px var(--ag-gold); }
+
+/* ==========================================================================
+   Race Cars — a circuit through parkland, over the British racing green
+   accent from meta.ts
+   ==========================================================================
+   Same deal as Outbreak and Banned Islet above: scoped to .ag-game--racecars,
+   re-tinting the shared chrome (top bar, scoreboard, stat row, buttons, roll
+   card) rather than growing private copies of it. Only the circuit itself
+   below is this game's own. */
+.ag-game--racecars {
+    --rc-night: oklch(0.28 0.04 155);
+    --rc-night-2: oklch(0.34 0.045 155);
+    --rc-green: #1b5e3a;
+    --rc-green-deep: #124228;
+    --rc-grass: oklch(0.52 0.09 140);
+    --rc-grass-2: oklch(0.61 0.1 140);
+    /* The road and the kerbed corner bands. §19 keeps the *stops* off the
+       tarmac — those are the pip rows beside each car — so this pair says
+       only "corner" and never "how much of it is paid". */
+    --rc-tarmac: oklch(0.44 0.01 250);
+    --rc-tarmac-corner: oklch(0.5 0.02 250);
+    --rc-kerb: oklch(0.62 0.18 25);
+}
+.ag-game--racecars .ag-game-topbar { background: var(--rc-night); }
+.ag-game--racecars .ag-scorestrip { background: var(--rc-night-2); }
+.ag-game--racecars .ag-score-pill--me { background: color-mix(in oklch, var(--rc-green) 10%, var(--ag-surface)); }
+.ag-game--racecars .ag-score-pill--active { --ag-score-ring: 0 0 0 2px oklch(0.62 0.12 150); }
+.ag-game--racecars .ag-tag:not(.ag-tag--quiet) { background: color-mix(in oklch, var(--rc-green) 14%, var(--ag-surface)); color: var(--rc-green-deep); }
+.ag-game--racecars .ag-btn--primary {
+    background: var(--rc-green);
+    color: var(--ag-on-dark);
+    box-shadow: 0 3px 0 var(--rc-green-deep);
+}
+.ag-game--racecars .ag-build-tag { color: var(--rc-green); }
+.ag-game--racecars .ag-build-row--active { border-color: var(--rc-green); box-shadow: 0 0 0 1px var(--rc-green); }
+.ag-game--racecars .ag-stat-row { background: var(--rc-night-2); padding: 0 12px 10px; }
+.ag-game--racecars .ag-stat { background: var(--ag-surface); border-radius: 9px; }
+.ag-game--racecars .ag-board-tag { background: var(--rc-green); color: var(--ag-on-dark); }
+.ag-game--racecars .ag-roll { margin-bottom: 10px; }
+
+/* ---- The circuit ---- */
+/* Parkland under the board and inside the frame, so the tarmac reads as road
+   rather than as panels on cream. The art of §23.6 lands in PR 9 and covers
+   this ground; until then the space layer alone is the circuit. */
+.ag-game--racecars .ag-board-area { background: radial-gradient(circle at 50% 40%, var(--rc-grass-2), var(--rc-grass)); }
+.ag-racecars-frame {
+    background: var(--rc-grass);
+    box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.28), 0 4px 0 var(--rc-green-deep);
+}
+
+/* A space is one lozenge, and they are sized to tile into the road — which is
+   why nothing draws a tarmac ribbon under them. Its legal/illegal state is one
+   class on the `<rect>` (§23.1): no ring, no per-space tooltip. */
+.ag-rc-space {
+    fill: var(--rc-tarmac);
+    stroke: rgba(255, 255, 255, 0.1);
+    stroke-width: 0.8;
+}
+/* The corner bands of §10, legible without a legend. The kerb is the corner;
+   how many of its stops a car has banked is the pip row beside that car. */
+.ag-rc-space--corner { fill: var(--rc-tarmac-corner); stroke: var(--rc-kerb); stroke-width: 1.4; }
+/* Row 0 — the start/finish line. */
+.ag-rc-space--line { fill: oklch(0.78 0.01 250); }
+.ag-rc-space--valid {
+    fill: color-mix(in oklch, var(--ag-gold) 55%, var(--rc-tarmac));
+    stroke: var(--ag-gold);
+    stroke-width: 2.5;
+    cursor: pointer;
+}
+.ag-rc-space--valid:hover { fill: var(--ag-gold); }
+
+/* §19.1's car: the shared silhouette, filled with the driver's own colour and
+   turned to the heading of the space it stands on. The stroke is painted under
+   the fill so the wheels and wings read as one shape's outline. */
+.ag-rc-car {
+    stroke: rgba(255, 255, 255, 0.9);
+    stroke-width: 1.1;
+    paint-order: stroke;
+    filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.45));
+}
+/* The second identity channel (§19): the race number, haloed so it reads on
+   every one of the six colours rather than only on the dark ones. */
+.ag-rc-number {
+    font: 900 10px var(--ag-font);
+    fill: #fff;
+    stroke: rgba(0, 0, 0, 0.65);
+    stroke-width: 2.4;
+    paint-order: stroke;
+    pointer-events: none;
+}
+/* "● ○" — one stop banked of the two this corner owes (§19). */
+.ag-rc-pip {
+    fill: none;
+    stroke: #fff;
+    stroke-width: 1.4;
+    filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.6));
+}
+.ag-rc-pip--banked { fill: #fff; }
+.ag-rc-startflag { font-size: 15px; }
+
+/* ---- The turn sheet ---- */
+/* The gear numeral in the picker's icon box — the gear is the choice, so it is
+   what the row leads with. */
+.ag-rc-gearmark { font: 900 18px var(--ag-font); color: var(--rc-green); }
+.ag-rc-brake {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 10px 0;
+}
+.ag-rc-brake-label { font: 700 12px var(--ag-font); color: var(--ag-ink-soft); }
+/* The race number beside the position on the scoreboard, quieter than it. */
+.ag-rc-racenum { font-size: 11px; font-weight: 700; opacity: 0.6; }
 
 /* ============================================================= *
  *  Desktop expansion — design §16.

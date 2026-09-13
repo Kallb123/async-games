@@ -45,26 +45,117 @@ const CORNERS: RaceCarsCorner[] = SECTIONS
         stops: section.corner!.stops,
     }));
 
-// Placeholder geometry: the circuit unrolled into a straight strip, one column
-// of spaces per row, narrow rows centred in the three-lane band. It exists so
-// the rules can be driven and tested before any art is drawn (§23.7 PR 1) —
-// the generator of §23.6 replaces this wholesale, and nothing outside the
-// board screen reads x/y/heading, so replacing it changes no rule.
-const ROW_PITCH = 20;
+// Placeholder geometry (§23.7 PR 1): the circuit drawn as a plain
+// rounded-rectangle loop, the 78 rows spaced evenly round its centre line and
+// each lane offset across it. It exists so the rules — and, from PR 4, the
+// board screen — can be driven before any art is drawn; §23.6's generator
+// samples the real centre line and replaces this wholesale. Nothing outside
+// the board screen reads x/y/heading, so replacing it changes no rule.
+//
+// A loop rather than the unrolled strip this started as, for one reason: a
+// strip puts all 78 rows along one axis, which is the 17:1 rectangle §19.2
+// measures at five pixels a row in a 400px column. Folded into a loop the same
+// rows are three times that, which is what makes PR 4 playable by hand — and
+// it is also the shape the real circuit is, so the board screen is not being
+// written against geometry it will never see again.
+const TRACK_WIDTH = 700;
+const TRACK_HEIGHT = 380;
+const TRACK_RADIUS = 130;
+/** Gap between neighbouring lanes, across the road. */
 const LANE_PITCH = 22;
-const MARGIN = 24;
-const WIDEST_ROW = 3;
+/** Room round the loop for the cars, the corner-stop pips and the corner names. */
+const MARGIN = 64;
 
-const GEOMETRY: RaceCarsGeometry[] = LANE_WIDTH.flatMap((width, row) =>
-    Array.from({ length: width }, (_unused, index) => ({
-        row,
-        lane: index + 1,
-        x: MARGIN + row * ROW_PITCH,
-        y: MARGIN + (index + (WIDEST_ROW - width) / 2) * LANE_PITCH,
-        // Every space on an unrolled strip points the same way: along the rows.
-        heading: 0,
-    })),
-);
+/**
+ * One straight or one quarter-circle of the centre line, with the length the
+ * row spacing is measured along. Clockwise from the top-left corner's end.
+ */
+interface LoopSegment {
+    length: number;
+    /** Where along this segment (0-1) the point and its heading are. */
+    at: (t: number) => { x: number; y: number; heading: number };
+}
+
+const STRAIGHT_X = TRACK_WIDTH - 2 * TRACK_RADIUS;
+const STRAIGHT_Y = TRACK_HEIGHT - 2 * TRACK_RADIUS;
+const QUARTER = (Math.PI * TRACK_RADIUS) / 2;
+
+function straight(fromX: number, fromY: number, toX: number, toY: number): LoopSegment {
+    const heading = (Math.atan2(toY - fromY, toX - fromX) * 180) / Math.PI;
+    return {
+        length: Math.hypot(toX - fromX, toY - fromY),
+        at: t => ({ x: fromX + (toX - fromX) * t, y: fromY + (toY - fromY) * t, heading }),
+    };
+}
+
+/** A quarter turn clockwise about (cx, cy), starting at `fromDegrees`. */
+function quarter(cx: number, cy: number, fromDegrees: number): LoopSegment {
+    return {
+        length: QUARTER,
+        at: t => {
+            const angle = ((fromDegrees + 90 * t) * Math.PI) / 180;
+            return {
+                x: cx + TRACK_RADIUS * Math.cos(angle),
+                y: cy + TRACK_RADIUS * Math.sin(angle),
+                // A clockwise arc's tangent is its radius turned a quarter on.
+                heading: fromDegrees + 90 * t + 90,
+            };
+        },
+    };
+}
+
+const LEFT = MARGIN;
+const TOP = MARGIN;
+const RIGHT = MARGIN + TRACK_WIDTH;
+const BOTTOM = MARGIN + TRACK_HEIGHT;
+
+// Row 0 — the start/finish line — sits at the start of the top straight, so
+// the Start / Finish Straight and the run to the line share the top edge.
+const LOOP: LoopSegment[] = [
+    straight(LEFT + TRACK_RADIUS, TOP, RIGHT - TRACK_RADIUS, TOP),
+    quarter(RIGHT - TRACK_RADIUS, TOP + TRACK_RADIUS, -90),
+    straight(RIGHT, TOP + TRACK_RADIUS, RIGHT, BOTTOM - TRACK_RADIUS),
+    quarter(RIGHT - TRACK_RADIUS, BOTTOM - TRACK_RADIUS, 0),
+    straight(RIGHT - TRACK_RADIUS, BOTTOM, LEFT + TRACK_RADIUS, BOTTOM),
+    quarter(LEFT + TRACK_RADIUS, BOTTOM - TRACK_RADIUS, 90),
+    straight(LEFT, BOTTOM - TRACK_RADIUS, LEFT, TOP + TRACK_RADIUS),
+    quarter(LEFT + TRACK_RADIUS, TOP + TRACK_RADIUS, 180),
+];
+
+const LOOP_LENGTH = 2 * STRAIGHT_X + 2 * STRAIGHT_Y + 4 * QUARTER;
+
+/** The centre-line point and heading a given distance round the loop. */
+function alongLoop(distance: number): { x: number; y: number; heading: number } {
+    let left = ((distance % LOOP_LENGTH) + LOOP_LENGTH) % LOOP_LENGTH;
+    for (const segment of LOOP) {
+        if (left <= segment.length) return segment.at(left / segment.length);
+        left -= segment.length;
+    }
+    return LOOP[0].at(0);
+}
+
+// Lane 2 rides the centre line and lanes 1 and 3 sit either side of it, so a
+// two-lane row is the three-lane road with its outer lane taken away — which
+// is the merge `stepsFrom` already describes (lane 3 has only lane 2 to go to).
+const CENTRE_LANE = 2;
+
+const GEOMETRY: RaceCarsGeometry[] = LANE_WIDTH.flatMap((width, row) => {
+    const centre = alongLoop((row / ROWS) * LOOP_LENGTH);
+    const radians = (centre.heading * Math.PI) / 180;
+    // Across the road, to the outside of the loop.
+    const acrossX = Math.sin(radians);
+    const acrossY = -Math.cos(radians);
+    return Array.from({ length: width }, (_unused, index) => {
+        const offset = (index + 1 - CENTRE_LANE) * LANE_PITCH;
+        return {
+            row,
+            lane: index + 1,
+            x: centre.x + acrossX * offset,
+            y: centre.y + acrossY * offset,
+            heading: centre.heading,
+        };
+    });
+});
 
 export const ASHCOMBE: RaceCarsTrack = {
     id: 'ashcombe',
@@ -91,8 +182,8 @@ export const ASHCOMBE: RaceCarsTrack = {
         // alone until the file lands.
         href: '/art/racecars/ashcombe.png',
         viewBox: {
-            width: MARGIN * 2 + (ROWS - 1) * ROW_PITCH,
-            height: MARGIN * 2 + (WIDEST_ROW - 1) * LANE_PITCH,
+            width: MARGIN * 2 + TRACK_WIDTH,
+            height: MARGIN * 2 + TRACK_HEIGHT,
         },
     },
     geometry: GEOMETRY,

@@ -5,6 +5,7 @@ import type { WorldDominationCardType } from '@/games/WorldDomination/board';
 import { TERRITORIES, isValidCardSet } from '@/games/WorldDomination/board';
 import Dice from '@/components/ui/Dice';
 import ActionButton from '@/components/ui/ActionButton';
+import Stepper from '@/components/ui/Stepper';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
 import { useResettingState } from '@/utils/hooks/useResettingState';
 import {
@@ -23,18 +24,6 @@ const CARD_EMOJI: Record<WorldDominationCardType, string> = {
 const CARD_NAME: Record<WorldDominationCardType, string> = {
     infantry: 'Infantry', cavalry: 'Cavalry', artillery: 'Artillery', wild: 'Wild',
 };
-
-function Stepper({ value, min, max, onChange }: { value: number; min: number; max: number; onChange: (v: number) => void }) {
-    return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
-            <button type="button" className="ag-btn ag-btn--light" style={{ width: 40, padding: '8px 0' }}
-                disabled={value <= min} onClick={() => onChange(Math.max(min, value - 1))}>−</button>
-            <span style={{ font: '800 18px var(--ag-font)', minWidth: 32, textAlign: 'center' }}>{value}</span>
-            <button type="button" className="ag-btn ag-btn--light" style={{ width: 40, padding: '8px 0' }}
-                disabled={value >= max} onClick={() => onChange(Math.min(max, value + 1))}>+</button>
-        </div>
-    );
-}
 
 interface WorldDominationActionsProps {
     gs: IWorldDominationSpecificGameStateResponse;
@@ -169,7 +158,7 @@ export default function WorldDominationActions({
                         <p className="ag-action-hint" style={{ marginTop: 0 }}>
                             Deploying to <b>{TERRITORIES[selFrom].name}</b> ({fromTerritory?.armies ?? 0} there now)
                         </p>
-                        <Stepper value={deployCount} min={1} max={gs.reinforcementsRemaining} onChange={setDeployCount} />
+                        <Stepper value={deployCount} min={1} max={gs.reinforcementsRemaining} onChange={setDeployCount} label="armies to place" />
                         <div className="ag-action-grid" style={{ marginTop: 10 }}>
                             <button type="button" className="ag-btn ag-btn--light" onClick={() => setSelFrom(null)}>Change spot</button>
                             <ActionButton
@@ -197,7 +186,7 @@ export default function WorldDominationActions({
                     <div className="ag-callout" style={{ marginBottom: 10 }}>
                         <b>Conquered {TERRITORIES[p.toTerritoryId].name}!</b> Move armies in.
                     </div>
-                    <Stepper value={occupyCount} min={p.minArmies} max={Math.max(p.minArmies, p.maxArmies)} onChange={setOccupyCount} />
+                    <Stepper value={occupyCount} min={p.minArmies} max={Math.max(p.minArmies, p.maxArmies)} onChange={setOccupyCount} label="armies to move in" />
                     <ActionButton
                         className="ag-btn ag-btn--primary ag-btn--block"
                         style={{ marginTop: 10 }}
@@ -296,7 +285,7 @@ export default function WorldDominationActions({
                         <p className="ag-action-hint" style={{ marginTop: 0 }}>
                             {fromArmies} armies at {TERRITORIES[selFrom].name} · roll up to {maxDice} {maxDice === 1 ? 'die' : 'dice'}
                         </p>
-                        <Stepper value={diceCount} min={1} max={Math.max(1, maxDice)} onChange={setDiceCount} />
+                        <Stepper value={diceCount} min={1} max={Math.max(1, maxDice)} onChange={setDiceCount} label="dice" />
                         <div className="ag-action-grid" style={{ marginTop: 10 }}>
                             <button type="button" className="ag-btn ag-btn--light" onClick={clearSelection}>Stop attack</button>
                             <ActionButton
@@ -359,7 +348,7 @@ export default function WorldDominationActions({
                 <p className="ag-action-hint" style={{ marginTop: 0 }}>
                     {TERRITORIES[selFrom].name} → {TERRITORIES[selTo!].name}
                 </p>
-                <Stepper value={fortifyCount} min={1} max={Math.max(1, fromArmies - 1)} onChange={setFortifyCount} />
+                <Stepper value={fortifyCount} min={1} max={Math.max(1, fromArmies - 1)} onChange={setFortifyCount} label="armies to move" />
                 <div className="ag-action-grid" style={{ marginTop: 10 }}>
                     <button type="button" className="ag-btn ag-btn--light" onClick={clearSelection}>Cancel</button>
                     <ActionButton
