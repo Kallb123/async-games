@@ -11,6 +11,10 @@ import {
     RaceCarsSpace,
     SLIPSTREAM_ROWS,
     trackById,
+    BRAKE_SLICK_THRESHOLD,
+    SLICK_CAP,
+    SLICK_LIFETIME_ROUNDS,
+    spaceKey,
 } from "@/games/RaceCars/board";
 import {
     classification,
@@ -24,6 +28,7 @@ import {
     IRaceCarsPlayerState,
     IRaceCarsSpecificGameState,
     RaceCarsArrival,
+    IRaceCarsSlick,
 } from "@/games/RaceCars/rules";
 import { arrivalClauses, RaceCarsArrivalSummary } from "@/games/RaceCars/narration";
 import { mongoMap } from "@/utils/games/mongoMaps";
@@ -161,7 +166,7 @@ function settle(
     ps.cornerStops = arrival.cornerStops;
     ps.gear = arrival.gear;
     // §13 step 4. The flag is consumed by `CheckEndTurn` when the round reaches
-    // them; the slick a spin lays (step 5) arrives with the rest of oil in PR 7.
+    // them; the slick a spin lays (step 5) is handled below.
     if (arrival.spun) ps.skipNextTurn = true;
 
     const tyresSpent = tyresBefore - arrival.tyres;
@@ -171,6 +176,37 @@ function settle(
 
     // After the line that says how they got there, so the log reads in order.
     if (arrival.finished) takeTheFlag(data, senderId);
+
+    // §14: lay a slick if oil is on and the conditions are met.
+    if (gs.oilSpills) {
+        const slickSpace = 
+            // A spin (from overshoot or oil check) lays a slick where it came to rest.
+            arrival.slick ??
+            // Spending 3 or more brakes lays a slick at the final space.
+            (ps.brakeSpent >= BRAKE_SLICK_THRESHOLD ? { row: arrival.row, lane: arrival.lane } : null);
+
+        if (slickSpace) {
+            const key = spaceKey(slickSpace.row, slickSpace.lane);
+            const existingSlick = gs.slicks.find(s => spaceKey(s.row, s.lane) === key);
+
+            if (existingSlick) {
+                // A slick laid where one already exists refreshes the existing one.
+                existingSlick.laidOnRound = gs.round;
+            } else {
+                // Lay a new slick. If we're at the cap, remove the oldest one.
+                if (gs.slicks.length >= SLICK_CAP) {
+                    // Find and remove the oldest slick (lowest laidOnRound, ties broken by order).
+                    const oldestIndex = gs.slicks.findIndex(s => 
+                        s.laidOnRound === Math.min(...gs.slicks.map(sl => sl.laidOnRound))
+                    );
+                    if (oldestIndex >= 0) {
+                        gs.slicks.splice(oldestIndex, 1);
+                    }
+                }
+                gs.slicks.push({ row: slickSpace.row, lane: slickSpace.lane, laidOnRound: gs.round });
+            }
+        }
+    }
 
     return { arrival, tyresSpent };
 }
@@ -252,6 +288,16 @@ export class RaceCarsGameType implements IGameType {
                 // counter disagreeing with its own "sat out the round" lines,
                 // and would hold §14's slicks on the road a round longer than
                 // the traffic they were laid for.
+                
+                // §14: sweep slicks laid SLICK_LIFETIME_ROUNDS ago. A slick
+                // laid during round r is swept at the end of round r+1, so when
+                // we're incrementing to the next round, we sweep slicks from
+                // (current round - 1 - SLICK_LIFETIME_ROUNDS).
+                const sweepRound = gs.round - SLICK_LIFETIME_ROUNDS;
+                if (gs.oilSpills && sweepRound >= 1) {
+                    gs.slicks = gs.slicks.filter(slick => slick.laidOnRound > sweepRound);
+                }
+
                 gs.round += 1;
                 gs.roundOrder = recomputeRoundOrder(gs);
                 gs.roundIndex = 0;
@@ -385,6 +431,15 @@ export class RaceCarsMove implements IGameCommand {
     lane: number = -1;
     /** Brake points spent to shorten this roll, one row each (§11). */
     brake: number = 0;
+    /**
+     * One d6 per slick entered, for replay. Named `recorded…` so
+     * `stripRecordedRandomness` deletes it off a live request — without which
+     * a driver posts `{"row":10,"lane":1,"recordedOilRolls":[1,4]}` and picks
+     * their own dice (§23.4). `Execute` writes the values it used back here
+     * before `runCommand` pushes the command into `commandHistory`, so a replay
+     * reproduces the numbers the live race rolled.
+     */
+    recordedOilRolls?: number[];
     readonly className = 'RaceCarsMove';
 
     myString() {
@@ -434,6 +489,9 @@ export class RaceCarsMove implements IGameCommand {
             lead: rows > 0 ? `drove ${pluralize(rows, 'row')} to row ${path[rows].row}${braked}` : '',
         });
 
+        // Store the oil rolls back into the command for replay (§23.4).
+        this.recordedOilRolls = settled.arrival.oilRolls;
+
         // §12: a move that ends one or two rows behind another car is owed a
         // tow, and the turn is not over until the driver has taken it or
         // declined it. Everything else — a spin, a crossing, an empty road —
@@ -466,6 +524,14 @@ export class RaceCarsSlipstream implements IGameCommand {
      * and a lane that does not exist all fail the same way.
      */
     tow: RaceCarsSpace | null = null;
+    /**
+     * One d6 per slick entered, for replay. Named `recorded…` so
+     * `stripRecordedRandomness` deletes it off a live request (§23.4).
+     * `Execute` writes the values it used back here before `runCommand` pushes
+     * the command into `commandHistory`, so a replay reproduces the numbers
+     * the live race rolled.
+     */
+    recordedOilRolls?: number[];
     readonly className = 'RaceCarsSlipstream';
 
     myString() {
@@ -516,6 +582,9 @@ export class RaceCarsSlipstream implements IGameCommand {
             waiveUnavoidableCorner: false,
             lead: `took the tow ${pluralize(rows, 'row')} to row ${path[rows].row}`,
         });
+
+        // Store the oil rolls back into the command for replay (§23.4).
+        this.recordedOilRolls = settled.arrival.oilRolls;
 
         // §12: one tow per turn. Ending it behind a third car earns nothing, so
         // no second offer is made and the turn is over either way.
