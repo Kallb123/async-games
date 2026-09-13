@@ -82,3 +82,25 @@ export function sacRollChangeParts(
         .filter(({ label }) => label !== '')
         .map(({ change, label }) => `${nameFor(change.userId)} ${label}`);
 }
+
+/**
+ * A roll as one sentence, continuing the roller's name: `rolled a 9 — Bob +2🪵
+ * +1🌾, Alice +1⛏️`.
+ *
+ * Written once because two places say it: the history line `SACRollDice.Execute`
+ * writes at roll time, and the same command's `myString()`, which titles that
+ * step of the match review. Both pass `userToken` for `nameFor`, so the names
+ * resolve on the way out (see utils/games/history.ts).
+ *
+ * A 7 that paid nobody anything says only the number — it moved the robber, it
+ * didn't fail to pay out.
+ */
+export function sacRollSentence(
+    roll: number,
+    changes: ISACRollChange[] | undefined,
+    nameFor: (userId: string) => string,
+): string {
+    const summary = sacRollChangeParts(changes, nameFor).join(', ');
+    if (summary) return `rolled a ${roll} — ${summary}`;
+    return roll === 7 ? 'rolled a 7' : `rolled a ${roll} — nobody collected`;
+}

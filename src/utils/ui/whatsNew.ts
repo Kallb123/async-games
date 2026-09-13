@@ -117,7 +117,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "Settlements & Cities' match review speaks plain English",
-                detail: "Stepping back through a match used to label every action with internal gibberish — \"SAC BuildSettlement vertex=17\" — instead of what happened. Each step now reads the way the turn history and the recap do: \"built a settlement\", \"rolled a 9\", \"moved the robber and stole a card from Bob\".",
+                detail: "Stepping back through a match used to label every action with internal gibberish — \"SAC BuildSettlement vertex=17\" — instead of what happened. Each step now reads the way the turn history does: \"built a settlement\", \"moved the robber and stole a resource from Bob\", and a roll names who collected what — \"rolled a 9 — Alice +2🪵 +1🌾, Bob +1⛏️\".",
                 game: "settlementsandcities",
             },
             {

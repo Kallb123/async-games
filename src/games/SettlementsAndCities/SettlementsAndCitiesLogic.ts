@@ -1,7 +1,7 @@
 import type { ISettlementsAndCitiesGameData } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import type { SAC_Resource, SAC_DevCard, ISACPlayerState, ISACRollChange } from "@/games/SettlementsAndCities/board";
 import { BOARD_TOPOLOGY, NO_RESOURCES, SAC_RESOURCES, TERRAIN_TO_RESOURCE, calculateLongestRoad, calculateVisibleVP, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
-import { sacRollChangeParts } from "@/games/SettlementsAndCities/ui";
+import { sacRollSentence } from "@/games/SettlementsAndCities/ui";
 import type { IGameData } from "@/utils/mongodb/GameData";
 import type { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ICommandOutcome, IGameCommand, IGameType } from "@/utils/apiModels/gameCommand";
@@ -439,16 +439,29 @@ export class SACRollDice implements IGameCommand {
     // Raw draws consumed by the discard shuffle when a 7 is rolled (variable
     // length — one shuffle per player holding >7 cards).
     recordedDiscards?: number[];
+    // What this roll paid out. The state keeps only the *latest* roll's payout
+    // (`gs.lastRollChanges`), and myString() — which titles this step of a match
+    // review — is handed no state at all, so the payout rides on the command
+    // too. Dice Cities' `moneyChanges` is the same field for the same reason.
+    // Set by Execute below, so a value a client sends is overwritten before
+    // anything reads it; a review replays Execute, so a roll played before this
+    // field existed gets its payout recomputed rather than losing it.
+    rollChanges?: ISACRollChange[];
 
     myString() {
         // A roll replayed from history always has its dice recorded; the
-        // unrecorded case is a command that has not been executed yet.
+        // unrecorded case is a command that has not been executed yet — and
+        // `recorded…` fields are stripped off an incoming request body
+        // (stripRecordedRandomness), so a client can't get a payout printed
+        // either.
         if (this.recordedRoll1 === undefined || this.recordedRoll2 === undefined) return 'rolled the dice';
         const roll = this.recordedRoll1 + this.recordedRoll2;
-        // What the roll paid out lives on the state, not on the command, so the
-        // history line and the recap say it and this doesn't. A 7 at least says
-        // why the robber is about to move.
-        return roll === 7 ? 'rolled a 7 — the robber stirs' : `rolled a ${roll}`;
+        // Without a payout there is nothing to name, and "nobody collected" would
+        // be a claim rather than a reading — a rolled-but-unexecuted command, or
+        // one read straight out of commandHistory from before this field, says
+        // only the number.
+        if (!this.rollChanges) return `rolled a ${roll}`;
+        return sacRollSentence(roll, this.rollChanges, userToken);
     }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
@@ -528,10 +541,13 @@ export class SACRollDice implements IGameCommand {
             .map(userId => changes.get(userId))
             .filter((change): change is ISACRollChange => change !== undefined);
 
-        const summary = sacRollChangeParts(gs.lastRollChanges, userToken).join(', ');
+        // The same payout on the command, so a match review of this roll still
+        // has it once the state has moved on to the next one.
+        this.rollChanges = gs.lastRollChanges;
+
         sacData.gameState.history.unshift(playerHistory(
             this.senderId,
-            `rolled a ${roll}${summary ? ` — ${summary}` : roll === 7 ? '' : ' — nobody collected'}`,
+            sacRollSentence(roll, gs.lastRollChanges, userToken),
         ));
 
         gs.hasRolled = true;

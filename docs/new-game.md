@@ -117,9 +117,12 @@ handful of one-line additions to shared files in the last step.
   table can already see, but it says it in the log's words, not new ones. What it must **not** be is the debug string a
   command is easiest to write first (`SAC BuildSettlement vertex=17`): that ends
   up on a player's screen, which is the bug this bullet exists to stop it being
-  written again. A command that knows less than its history line does (the
-  harbour rate a maritime trade was priced at lives on the board, not the
-  command) says less, rather than saying it in ids.
+  written again. Where the phrase needs something only the state knows, put that
+  on the command as the dice are (SAC's roll keeps the payout it dealt in
+  `rollChanges`, so a review of it still names who collected what) — and where
+  it genuinely can't, say less rather than saying it in ids: a maritime trade
+  names what was swapped, while the harbour rate it was priced at lives on the
+  board.
 - **Any `Execute` that consumes randomness records its outcome on the command**
   (`this.recordedRoll ?? DiceRoll(6)`) — §7(b). Draw it through `DiceRoll`
   (`DiceRoll.ts`), `shuffle` (`shuffle.ts`), or `randomInt`/`randomFloat`

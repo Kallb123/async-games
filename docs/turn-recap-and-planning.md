@@ -71,7 +71,16 @@ line uses, continuing the sentence the player's name starts — see
 [`new-game.md`](./new-game.md) §3. One vocabulary across the three surfaces a
 player reads (the log, the review, the recap) is the point, so a summary that
 says more than its log line says it in the same words: SAC's robber adds the
-victim the log leaves out, and still steals "a resource", not "a card". Where the command knows less than its
+victim the log leaves out, and still steals "a resource", not "a card". Where
+the sentence is the same one twice, write it once and let both call it — SAC's
+`sacRollSentence` is the roll's payout line for the log and the review alike.
+
+`myString()` is handed no state, so a phrase that needs some keeps it on the
+command, next to the recorded dice: SAC's roll records the payout it dealt in
+`rollChanges`, because `gs.lastRollChanges` holds only the newest roll and a
+review steps back past it. A review re-runs `Execute`, so a command persisted
+before such a field existed has it recomputed rather than lost — which is why
+the fallback should say less ("rolled a 9"), never guess. Where the command knows less than its
 history line does (a maritime trade's rate comes off the board's harbours, a
 roll's payout off the state), say less rather than saying it in ids.
 
