@@ -145,6 +145,10 @@ export const gameResultEventSchemaDef = { turnIndex: Number, icon: String, glyph
 // any game's GameResult stats power the same chart component. The chart renderer
 // pairs each userId with a display name and colour through the players list.
 export interface GameResultChart {
+    // Absent (rather than `'line'`) on every chart built before
+    // GameResultBarChart existed — reading back undefined still means "line
+    // chart", but the field only needs writing where it disambiguates.
+    kind?: 'line';
     title: string;
     yLabel: string;
     rounds: Record<string, number>[];
@@ -255,6 +259,35 @@ export function mapEventsToRounds(
 export function compactCharts(...charts: (GameResultChart | undefined)[]): GameResultChart[] {
     return charts.filter((c): c is GameResultChart => !!c);
 }
+
+// One category on a GameResultBarChart — a fixed x-axis label (Settlements &
+// Cities' roll frequency chart uses the roll total, "2" through "12") and how
+// many times it happened. Distinct from GameResultChart because this isn't a
+// round-by-round series at all: it's a single frequency distribution over a
+// fixed, known set of categories, so it needs its own x-axis labels rather
+// than round numbers.
+export interface GameResultBarChartBucket {
+    label: string;
+    value: number;
+}
+
+// A bar chart for the GameResult page: a fixed category on the x-axis (not a
+// round number) and a count on the y-axis. `kind` distinguishes it from a
+// round-by-round GameResultChart so the result page knows which chart
+// component to render (see GameResultAnyChart).
+export interface GameResultBarChart {
+    kind: 'bar';
+    title: string;
+    yLabel: string;
+    bars: GameResultBarChartBucket[];
+}
+
+// Either shape a game's GAME_RESULT_STATS.charts entry can hand back: a
+// round-by-round GameResultChart (no `kind`, the common case) or a
+// GameResultBarChart (`kind: 'bar'`). Kept as one union rather than two
+// separate chart lists so the result page renders whatever a game sends back,
+// in the order the game names it, with one `.map()`.
+export type GameResultAnyChart = GameResultChart | GameResultBarChart;
 
 // Look a player up in a response-shaped game state by their Clerk userId —
 // what commands and replay carry, and what playerStates is keyed by. Scans

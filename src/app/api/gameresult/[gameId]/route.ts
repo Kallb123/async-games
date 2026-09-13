@@ -4,7 +4,7 @@ import { dbConnect } from '@/utils/mongodb/mongodb';
 import { GameResultModel, formatGameResultStats, formatGameResultCharts } from '@/utils/mongodb/GameResultData';
 import { areFriends } from '@/utils/mongodb/FriendshipData';
 import { userIdListToUsernameMap } from '@/utils/users/clerk';
-import type { GameEndReason, GameResultStatGroup, GameResultChart } from '@/utils/apiModels/GameDataApi';
+import type { GameEndReason, GameResultStatGroup, GameResultAnyChart } from '@/utils/apiModels/GameDataApi';
 
 export interface IGameResultResponse {
     gameId: string;
@@ -25,7 +25,7 @@ export interface IGameResultResponse {
     endedAt: string;
     totalTurns: number;
     stats: GameResultStatGroup[];
-    charts: GameResultChart[];
+    charts: GameResultAnyChart[];
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ gameId: string }> }) {
