@@ -67,6 +67,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Settlements & Cities ends your turn for you when there's nothing left to do",
+                detail: "Once you can't afford a settlement, road or city, can't buy or play a development card, and don't have enough of any resource to trade with the bank, your turn ends on its own instead of waiting for you to tap End turn. The End turn (and Special Build's Done building) button also moved to the top of the list, above the build options, so it's the first thing you see.",
+                game: "settlementsandcities",
+            },
+            {
                 title: "Settlements & Cities' player tabs expand for more detail",
                 detail: "Tap the row of player tabs at the top of the board and every seat opens at once: how many cards they're holding, how many knights they've played (tagged Largest Army if they hold it), and their longest stretch of road (tagged Longest Road if it's the longest on the board). Tap again to close them.",
                 game: "settlementsandcities",
@@ -105,10 +110,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Chat says who's talking with their avatar",
                 detail: "Every message in a game's chat now leads with the sender's avatar, ringed in the colour they're playing as, instead of the small colour dot that used to sit beside it — so a glance down the thread tells you who said what.",
-            },
-            {
-                title: "Result charts mark the moments that mattered",
-                detail: "The charts on the result page now drop a small icon right on the turn something big happened: a biohazard mark where Outbreak drew an epidemic card, a building where a Dice Cities player bought a landmark, and an explosion or an ambulance wherever Fires Out's fire blew or a victim made it out — so you can see exactly how it lines up with the swings in the line around it.",
             },
         ],
     },
