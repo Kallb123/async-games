@@ -26,7 +26,8 @@ import { useEndGame } from "@/utils/hooks/useEndGame";
 import { useGameData } from "@/utils/hooks/useGameData";
 import { useGameGuide } from "@/utils/hooks/useGameGuide";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
-import { SubmitCommand, useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
+import { useOutcomeReveal } from "@/utils/hooks/useOutcomeReveal";
+import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useResettingState } from "@/utils/hooks/useResettingState";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
@@ -70,13 +71,13 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     // limit) hands back what it drew and what it did on its own outcome —
     // see IOutbreakInfectionPhaseOutcome. Every submit goes through this one
     // wrapper so it's caught regardless of which control fired it.
-    const [turnResult, setTurnResult] = useState<IOutbreakInfectionLogEntry[] | null>(null);
-    const submitCommand: SubmitCommand = (command, callback, target) =>
-        rawSubmitCommand(command, (r) => {
-            const infectionLog = (r.outcome as IOutbreakInfectionPhaseOutcome).infectionLog;
-            if (infectionLog?.length) setTurnResult(infectionLog);
-            callback?.(r);
-        }, target);
+    const { submitCommand, reveal: turnResult, dismiss: dismissTurnResult } = useOutcomeReveal(
+        rawSubmitCommand,
+        (outcome) => {
+            const infectionLog = (outcome as IOutbreakInfectionPhaseOutcome).infectionLog;
+            return infectionLog?.length ? infectionLog : null;
+        },
+    );
 
     // Turn review steps back through the match's real actions (one per played
     // command, not one per turn); the board, the hands and the log all render
@@ -315,7 +316,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
         return (
             <OutbreakEndTurnScreen
                 infectionLog={turnResult}
-                onDismiss={() => setTurnResult(null)}
+                onDismiss={dismissTurnResult}
             />
         );
     }

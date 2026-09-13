@@ -41,6 +41,12 @@ export const meta: GameMeta = {
     //   what keeps this to a stall rather than one driver spending another's
     //   roll; PR 6's adapter is what removes it. Until then a race wants a
     //   turn timer its drivers will actually beat.
+    //
+    //   PR 5 raises the stakes without changing the shape: a turn is now up to
+    //   three POSTs, so the cron can find a driver stalled in the `slipstream`
+    //   phase having *already* been moved — a corner banked and tyres spent —
+    //   and the fallback, which never runs `CheckEndTurn`, leaves them frozen
+    //   there with the move paid for and the tow unanswered.
     // - **No replay adapter until PR 8**, so the board's "Review actions"
     //   scrubber reports that it cannot build the timeline rather than showing
     //   one. That one is inert: it fails in place and nothing else is touched.

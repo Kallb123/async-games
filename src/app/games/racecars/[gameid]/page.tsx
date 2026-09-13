@@ -1,5 +1,5 @@
 'use client'
-import { use, useState } from "react";
+import { use } from "react";
 import { usePathname } from "next/navigation";
 import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { uuidString } from "@/utils/apiModels/GameDataApi";
@@ -25,7 +25,8 @@ import { useGameData } from "@/utils/hooks/useGameData";
 import { useGameGuide } from "@/utils/hooks/useGameGuide";
 import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useResettingState } from "@/utils/hooks/useResettingState";
-import { useSubmitCommand, type SubmitCommand } from "@/utils/hooks/useSubmitCommand";
+import { useOutcomeReveal } from "@/utils/hooks/useOutcomeReveal";
+import { useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { guideForGame } from "@/utils/ui/gameGuides";
 import { playerColourForId } from "@/utils/ui/playerColours";
@@ -47,17 +48,11 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
 
     // The end-of-move reveal (§23.7 PR 5): whichever of the two moving commands
     // just resolved hands back what the corner made of the roll, and whether a
-    // tow is on offer — see IRaceCarsArrivalOutcome. Every submit goes through
-    // this one wrapper so it is caught whether the tap came from the circuit or
-    // from the turn sheet; a shift carries no arrival and falls straight
-    // through.
-    const [reveal, setReveal] = useState<IRaceCarsArrivalOutcome['arrival'] | null>(null);
-    const submitCommand: SubmitCommand = (command, callback, target) =>
-        rawSubmitCommand(command, (r) => {
-            const arrival = (r.outcome as IRaceCarsArrivalOutcome).arrival;
-            if (arrival) setReveal(arrival);
-            callback?.(r);
-        }, target);
+    // tow is on offer — see IRaceCarsArrivalOutcome. The hook wraps every
+    // submit, so it is caught whether the tap came from the circuit or from the
+    // turn sheet; a shift carries no arrival and falls straight through.
+    const { submitCommand, reveal, dismiss: dismissReveal } =
+        useOutcomeReveal(rawSubmitCommand, (outcome) => (outcome as IRaceCarsArrivalOutcome).arrival);
 
     // Turn review steps back through the match's recorded commands. `canPlan`
     // is false permanently and by design (§23.5): a planner would resolve one
@@ -175,7 +170,11 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
                 // §4.2's classification, which is the only score this game
                 // keeps — and the race number beside it is §19's second
                 // identity channel, printed on the car as well as here.
-                score: <>P{positionOf(order, userId)} <span className="ag-rc-racenum">#{ps.raceNumber}</span></>,
+                //
+                // Once the flag is out the recorded classification is the
+                // answer rather than a fresh reading of the road: the winner is
+                // sitting on row 2 of a lap they will never finish.
+                score: <>P{ps.finishedPosition ?? positionOf(order, userId)} <span className="ag-rc-racenum">#{ps.raceNumber}</span></>,
                 isMe: userId === myUserId,
                 isActive: userId === displayedCurrentTurn && !complete,
                 // A car that has spun is missing its next turn, which is worth
@@ -205,13 +204,19 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
 
     // Shown once, over the board, the instant a move comes back — and never
     // while stepping back through the match, where the timeline is the story.
+    //
+    // The tow offer is re-read off the live board rather than trusted from the
+    // response that opened the screen: a turn the sweep has already moved past
+    // no longer has a decision in it, and a prompt for one somebody else has
+    // made is worse than no prompt. What the corner made of the roll does not
+    // go stale and still reads.
     if (reveal && gs && nav.isLive) {
         return (
             <RaceCarsEndMoveScreen
                 trackId={gs.trackId}
                 roll={reveal.roll}
-                arrival={reveal}
-                onDismiss={() => setReveal(null)}
+                arrival={reveal.towOffered && !towing ? { ...reveal, towOffered: false } : reveal}
+                onDismiss={dismissReveal}
             />
         );
     }
