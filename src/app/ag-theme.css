@@ -1481,6 +1481,11 @@ a.ag-list-row, a.ag-list-row-main {
     scrollbar-width: none;
 }
 .ag-scorestrip::-webkit-scrollbar { display: none; }
+/* Present once any pill carries `detail` — the strip becomes one disclosure
+   over every seat, matching the tap-to-open feel of `.ag-score-pill--tappable`
+   one level down rather than adding a second affordance style. */
+.ag-scorestrip--expandable { cursor: pointer; }
+.ag-scorestrip--expandable:active { filter: brightness(0.96); }
 .ag-score-pill {
     flex: 1 0 auto;
     min-width: 84px;
@@ -1546,6 +1551,10 @@ a.ag-list-row, a.ag-list-row-main {
     .ag-score-turn { animation: none; }
 }
 .ag-score-sub { font: 600 9px/1.1 var(--ag-font); opacity: 0.85; margin-top: 3px; }
+/* The per-seat breakdown revealed when the strip expands — one line per
+   figure, the same weight as `.ag-score-sub` since it's the same kind of
+   fact, just more of it. */
+.ag-score-detail { font: 600 9px/1.4 var(--ag-font); opacity: 0.85; margin-top: 3px; }
 .ag-score-vp { font: 800 15px var(--ag-font); }
 .ag-score-vp-target { font-size: 0.7em; font-weight: 700; opacity: 0.55; }
 
