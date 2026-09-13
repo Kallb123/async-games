@@ -10,7 +10,10 @@ export interface ScoreEntry {
     /** Player colour swatch. */
     color: string;
     /** Small status under the name (e.g. "🛣️ LR", "4 cards"). Whose turn it
-     *  is comes from `isActive` — don't spell it out here too. */
+     *  is comes from `isActive` — don't spell it out here too. Hidden while
+     *  `detail` is showing (see below) rather than sitting above it — it's a
+     *  summary of exactly the figures `detail` spells out in full, so
+     *  showing both at once would just repeat the same line twice. */
     sub?: React.ReactNode;
     /** The big number on the right — victory points. */
     score: React.ReactNode;
@@ -31,9 +34,10 @@ export interface ScoreEntry {
     highlighted?: boolean;
     /**
      * Extra per-player detail rows (e.g. cards held, knights played), shown
-     * beneath `sub` once the strip is expanded. Any entry carrying this is
-     * what makes the whole strip tappable — the strip expands and collapses
-     * as one, not pill by pill, since it's one disclosure over every seat.
+     * in place of `sub` once the strip is expanded. Any entry carrying this
+     * is what makes the whole strip tappable — the strip expands and
+     * collapses as one, not pill by pill, since it's one disclosure over
+     * every seat.
      */
     detail?: React.ReactNode;
 }
@@ -79,7 +83,10 @@ export default function GameScoreboard({ entries }: { entries: ScoreEntry[] }) {
                             {e.isActive && <span className="ag-score-turn" aria-hidden="true">▶</span>}
                             {e.name}
                         </div>
-                        {e.sub != null && <div className="ag-score-sub">{e.sub}</div>}
+                        {/* The collapsed status line is a summary of the same
+                            figures `detail` spells out — hidden once this
+                            pill's detail is showing instead of stacking both. */}
+                        {e.sub != null && !(expanded && e.detail != null) && <div className="ag-score-sub">{e.sub}</div>}
                         {expandable && (
                             <Collapse phase={expanded ? undefined : 'exit'}>
                                 <div className="ag-score-detail">{e.detail}</div>
