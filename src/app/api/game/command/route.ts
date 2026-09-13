@@ -104,6 +104,20 @@ export async function POST(request: NextRequest) {
   if (!commandRequest) {
     return NextResponse.json({}, {status: 400, statusText: "Not a valid command"});
   }
+  // The client supplies the move, never the randomness it consumes. Recorded
+  // RNG is a replay mechanism, and every Execute prefers a recorded value over
+  // rolling fresh, so a request that arrived carrying one would be choosing its
+  // own dice. Replay (buildTimeline) still honours them; a live request can't.
+  //
+  // Stripped here, before the line below reads the command, rather than further
+  // down beside the other client-can't-supply-this fix: `myString()` prints a
+  // roll's dice and the payout it dealt (SAC's `rollChanges`, Dice Cities'
+  // `moneyChanges`), and both games only print a payout once the dice are
+  // recorded. Stripping afterwards left that log line reading a forged body —
+  // arbitrary numbers, and text of the caller's choosing inside a `{{…}}` token
+  // that nothing has resolved yet.
+  stripRecordedRandomness(commandRequest);
+
   console.log(commandRequest.myString());
 
   await dbConnect();
@@ -129,12 +143,6 @@ export async function POST(request: NextRequest) {
     console.warn(`POST ${request.nextUrl.pathname} 400: ${commandRequest.className} is not a ${gameData.gameType.className} command`);
     return NextResponse.json({}, {status: 400, statusText: "Not a command for this game"});
   }
-
-  // The client supplies the move, never the randomness it consumes. Recorded
-  // RNG is a replay mechanism, and every Execute prefers a recorded value over
-  // rolling fresh, so a request that arrived carrying one would be choosing its
-  // own dice. Replay (buildTimeline) still honours them; a live request can't.
-  stripRecordedRandomness(commandRequest);
 
   // The client supplies the move, never the name on it. `senderUsername` is
   // recorded on the command and read back by every replayed view — the recap

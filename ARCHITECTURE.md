@@ -483,7 +483,7 @@ interface IGameCommand {
     senderUsername: string;  // stamped by the server from senderId, never by the client
     readonly className: string;
 
-    myString(): string;                                   // human summary (for history/logs)
+    myString(): string;                                   // player-facing summary (match review, logs)
     Execute(gameData: IGameData): Promise<ICommandOutcome>; // validate + mutate state
     Undo(gameData: IGameData): void;                      // (partially implemented)
 }
@@ -494,7 +494,10 @@ state and returns `{ validMove: false }` if illegal (nothing is mutated), or
 mutates `specificGameState`, appends to `gameState.history` (via
 `playerHistory`, so the line names its player by `{{userId}}` token rather than
 by a name that can change — see `src/utils/games/history.ts`), and returns
-`{ validMove: true, turnOver: bool }`. Subclasses extend `ICommandOutcome` to
+`{ validMove: true, turnOver: bool }`. `myString()` is the phrase the match
+review prints after the player's name ("Alice · built a settlement"), so it is
+written in the player's language, tokenised the same way, and never as a debug
+string. Subclasses extend `ICommandOutcome` to
 carry extra data back to the client (e.g. dice results, Mastermind peg feedback).
 
 Examples: `SnakesAndLaddersRequestDiceRoll`, `DiceCitiesRequestCardPurchase`,

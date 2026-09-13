@@ -55,6 +55,36 @@ commands after it. Same engine, two inputs.
 | Per-turn stats | `computePerTurnStat` (`replay.ts`) + a game's `charts` entry in `GameResultData.ts` | Replays the finished game, sampling one value per key at each turn's end, for the result page's line charts. The keys default to the roster (one value per player); pass a game's own keys — Outbreak's four disease colours — for a series whose lines aren't players, and name those lines with `GameResultChart.series` so `LineChart` labels and colours them instead of reading the roster. A game that can't be replayed (no snapshot) yields no series rather than throwing — this runs on the final move, and a missing chart must never cost a player their last turn |
 | Per-turn events | `computePerTurnEvents` (`replay.ts`) + a game's own `detect*Event(s)` function (e.g. `DiceCitiesModels.ts`'s `detectLandmarkEvent`) | Same replay, same graceful no-throw fallback as per-turn stats — shares its turn-boundary bookkeeping via the private `replayTurnByTurn` helper — but instead of sampling a value every turn, calls a per-game `detect` function on every command and collects the `GameResultEvent`s it returns (a named `icon` — `landmark`, `explosion`, `rescue`, `epidemic` — an optional `title`, and an optional `seriesKey` naming the chart line it belongs to). `mapEventsToRounds` (`GameDataApi.ts`) later places them on a chart's round axis (translating the emoji a result recorded before the icons were drawn, and dropping a marker it can't draw rather than letting it take up a stacking slot) the same way `collapseToRounds` places the per-turn series next to them, and `LineChart` draws each as a marker on its line, in that line's colour, through `ChartEventIcon` (which is why the icon is named rather than an emoji: an emoji can't be recoloured) — or, with no `seriesKey`, above the plot in the page's ink — e.g. Outbreak's epidemic draws, Dice Cities' landmark buys, Fires Out's explosions |
 
+### What each action is called
+
+Every step of a review is titled by the command itself: `buildTimeline` calls
+`myString()` on the rehydrated command and puts the result in
+`snapshot.command.summary`, which `TurnNavControls` prints after the player's
+name — "Alice · built a settlement". It runs the string through `resolveTokens`
+first, so a summary can name a player with `userToken(userId)` and get today's
+name, the same way a history line does.
+
+That makes `myString()` player-facing copy in every game that ships recap, and
+a command written with a debug string (`SAC BuildSettlement vertex=17`) shows
+a reviewing player exactly that. Write the phrase the command's own history
+line uses, continuing the sentence the player's name starts — see
+[`new-game.md`](./new-game.md) §3. One vocabulary across the three surfaces a
+player reads (the log, the review, the recap) is the point, so a summary that
+says more than its log line says it in the same words: SAC's robber adds the
+victim the log leaves out, and still steals "a resource", not "a card". Where
+the sentence is the same one twice, write it once and let both call it — SAC's
+`sacRollSentence` is the roll's payout line for the log and the review alike.
+
+`myString()` is handed no state, so a phrase that needs some keeps it on the
+command, next to the recorded dice: SAC's roll records the payout it dealt in
+`rollChanges`, because `gs.lastRollChanges` holds only the newest roll and a
+review steps back past it. A review re-runs `Execute`, so a command persisted
+before such a field existed has it recomputed rather than lost — which is why
+the fallback should say less ("rolled a 9"), never guess. Where the phrase truly
+can't be had — a maritime trade's rate comes off the board's harbours, and no
+field on the command would make it the rate this trade was actually priced at —
+say less rather than saying it in ids.
+
 ### Deterministic replay & RNG recording
 
 Replaying a command must reproduce exactly what happened. Any command that
@@ -84,6 +114,11 @@ that work, so a new game's recorded field **must** use the prefix; a field
 called `savedRoll` or `rngLog` would sail straight through.
 `recordedRandomness.test.ts` guards the route's call site, but it cannot guard
 your field's name.
+
+The strip runs before the route's own log line, not just before `Execute`: that
+line is `myString()`, and a summary reads the recorded dice to name the roll and
+the payout it dealt. Stripping afterwards logged whatever the request claimed.
+The same test guards that order.
 
 Replay is the only legitimate source of these values, so neither `buildTimeline`
 nor the timeline route strips them: their commands come from persisted
@@ -504,11 +539,14 @@ must only ever describe what the whole table can already see.
    `gameType.className`.
 3. Record RNG in any command whose `Execute` consumes randomness (see pattern
    above).
-4. Wire `useTurnNavigation` + `TurnNavControls` into the game page: render
+4. Check every command's `myString()` reads as a phrase a player would say —
+   it titles each step of the review (see
+   [What each action is called](#what-each-action-is-called)).
+5. Wire `useTurnNavigation` + `TurnNavControls` into the game page: render
    `nav.displayedState` instead of the live state, drive the History log from
    `nav.displayedHistory`, and disable interactive controls while
    `!nav.isLive`.
-5. For the "since you were last here" card, add `src/games/<Game>/recap.ts`
+6. For the "since you were last here" card, add `src/games/<Game>/recap.ts`
    exporting an `IRecapAdapter` (`toEvents`, `summarize`, optional `tip` and
    `postProcess`), import it from `src/utils/games/recap.ts`, and render
    `TurnRecapScreen` from `useTurnRecap(gameId)` on the board page (`recap.show`

@@ -105,6 +105,24 @@ handful of one-line additions to shared files in the last step.
   with `playerHistory(this.senderId, ...)` so the line names its player by
   token, never by a name that can change (`src/utils/games/history.ts`) — and
   returns `{ validMove: true, turnOver }`.
+- **`myString()` is read by players, not by you.** It is the line the match
+  review prints after the player's name — "Alice · built a settlement" (see
+  `TurnNavControls`, fed by `buildTimeline`'s `command.summary`) — and the one
+  line `/api/game/command` logs. So write the same player-facing phrase the
+  command's history line uses, continuing the sentence their name starts:
+  `'built a settlement'`, `` `rolled a ${roll}` ``. Name a player in it with
+  `userToken(userId)`, which the replay engine resolves to today's name exactly
+  as it does a history line — a summary may name someone its history line leaves
+  out (SAC's robber names its victim) as long as that is something the whole
+  table can already see, but it says it in the log's words, not new ones. What it must **not** be is the debug string a
+  command is easiest to write first (`SAC BuildSettlement vertex=17`): that ends
+  up on a player's screen, which is the bug this bullet exists to stop it being
+  written again. Where the phrase needs something only the state knows, put that
+  on the command as the dice are (SAC's roll keeps the payout it dealt in
+  `rollChanges`, so a review of it still names who collected what) — and where
+  it genuinely can't, say less rather than saying it in ids: a maritime trade
+  names what was swapped, while the harbour rate it was priced at lives on the
+  board.
 - **Any `Execute` that consumes randomness records its outcome on the command**
   (`this.recordedRoll ?? DiceRoll(6)`) — §7(b). Draw it through `DiceRoll`
   (`DiceRoll.ts`), `shuffle` (`shuffle.ts`), or `randomInt`/`randomFloat`

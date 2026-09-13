@@ -7,13 +7,17 @@ import {
     SACPlayYearOfPlenty,
     SACPlayMonopoly,
     SACRollDice,
+    SACMoveRobber,
     SACEndTurn,
 } from "./SettlementsAndCitiesLogic";
+import * as SACLogic from "./SettlementsAndCitiesLogic";
 import { makeState, player } from "./testFixtures";
-import { BOARD_TOPOLOGY } from "./board";
+import { BOARD_TOPOLOGY, NO_RESOURCES } from "./board";
 import type { ISACSpecificGameState, ISACPlayerState, SAC_DevCard } from "./board";
 import type { ISettlementsAndCitiesGameData } from "./SettlementsAndCitiesModels";
 import type { IGameData } from "@/utils/mongodb/GameData";
+import type { IGameCommand } from "@/utils/apiModels/GameLogic";
+import { resolveTokens } from "@/utils/games/history";
 
 // ─── Minimal in-memory game harness ───────────────────────────────────────────
 // The dev-card commands only touch playerStates + a handful of scalar flags, so
@@ -188,7 +192,8 @@ describe("Settlements & Cities — the dice roll", () => {
         gs.playerStates.set("u2", player());
         const game = makeGame(gs);
 
-        const outcome = await rollOf(5, 3).Execute(game as unknown as IGameData);
+        const roll = rollOf(5, 3);
+        const outcome = await roll.Execute(game as unknown as IGameData);
         expect(outcome.validMove).toBe(true);
         // A city pays two, a settlement one.
         expect(gs.playerStates.get("u1")!.resources.lumber).toBe(2);
@@ -198,6 +203,10 @@ describe("Settlements & Cities — the dice roll", () => {
             { userId: "u2", gained: { lumber: 1, wool: 0, grain: 0, brick: 0, ore: 0 }, discarded: 0 },
         ]);
         expect(game.gameState.history[0].text).toBe("{{u1}} rolled a 8 — {{u1}} +2🪵, {{u2}} +1🪵");
+        // The payout also rides on the command, so the match review's title for
+        // this roll is the same sentence the log got — see sacRollSentence.
+        expect(roll.rollChanges).toEqual(gs.lastRollChanges);
+        expect(`{{u1}} ${roll.myString()}`).toBe(game.gameState.history[0].text);
     });
 
     it("records a roll that paid nobody as exactly that", async () => {
@@ -288,5 +297,65 @@ describe("Settlements & Cities — victory-point cards", () => {
         const won = new SettlementsAndCitiesGameType().CheckGameOver(game as unknown as IGameData);
         expect(won).toBe(false);
         expect(game.complete).toBe(false);
+    });
+});
+
+// ─── What the match review calls each action ──────────────────────────────────
+// `myString()` is the line the review dock prints after the player's name
+// ("Alice · built a road") — the same place the recap screen reads like prose —
+// so it has to be written in the player's language. These used to be the debug
+// strings the commands were first written with ("SAC BuildRoad edge=17"), which
+// is exactly what a reviewing player saw.
+
+describe("Settlements & Cities — action summaries", () => {
+    // Swept off the module rather than listed, so a command added later can't
+    // ship a debug summary just by not being added to this test. What the sweep
+    // can't see is a summary that reads fine but says it differently from the
+    // history line the same command writes — that one is a reading job.
+    const commandClasses = (Object.values(SACLogic) as unknown[]).filter(
+        (exported): exported is new () => IGameCommand =>
+            typeof exported === "function" &&
+            typeof (exported as { prototype?: { myString?: unknown } }).prototype?.myString === "function"
+    );
+
+    it("summarises every command in words, not as a debug string", () => {
+        expect(commandClasses.length).toBeGreaterThan(10);
+        for (const Command of commandClasses) {
+            const summary = new Command().myString();
+            expect(summary, `${new Command().className} reads as debug output`).not.toMatch(/SAC |=|vertexId|edgeId/);
+            // It continues "<player> · …", so it starts mid-sentence.
+            expect(summary[0]).toBe(summary[0].toLowerCase());
+        }
+    });
+
+    it("names the roll it recorded and what it paid out", () => {
+        const roll = new SACRollDice();
+        expect(roll.myString()).toBe("rolled the dice");
+        // Dice but no recorded payout: the number, and no claim about who collected.
+        roll.recordedRoll1 = 2;
+        roll.recordedRoll2 = 3;
+        expect(roll.myString()).toBe("rolled a 5");
+        roll.rollChanges = [
+            { userId: "u1", gained: { ...NO_RESOURCES, lumber: 2, grain: 1 }, discarded: 0 },
+            { userId: "u2", gained: { ...NO_RESOURCES, ore: 1 }, discarded: 0 },
+        ];
+        expect(resolveTokens(roll.myString(), { u1: "Alice", u2: "Bob" }))
+            .toBe("rolled a 5 — Alice +2🪵 +1🌾, Bob +1⛏️");
+        // A roll that paid nobody says so; a 7 moved the robber instead.
+        roll.rollChanges = [];
+        expect(roll.myString()).toBe("rolled a 5 — nobody collected");
+        roll.recordedRoll1 = 3;
+        roll.recordedRoll2 = 4;
+        expect(roll.myString()).toBe("rolled a 7");
+        roll.rollChanges = [{ userId: "u2", gained: { ...NO_RESOURCES }, discarded: 3 }];
+        expect(resolveTokens(roll.myString(), { u2: "Bob" })).toBe("rolled a 7 — Bob −3 cards");
+    });
+
+
+    it("names who the robber stole from by token, so replay resolves the name", () => {
+        const move = cmd(new SACMoveRobber());
+        expect(move.myString()).toBe("moved the robber");
+        move.stealFromUserId = "u2";
+        expect(resolveTokens(move.myString(), { u2: "Bob" })).toBe("moved the robber and stole a resource from Bob");
     });
 });
