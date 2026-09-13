@@ -299,7 +299,7 @@ export class SACPlaceSettlementSetup implements IGameCommand {
     vertexId: number = 0;
     readonly className = 'SACPlaceSettlementSetup';
 
-    myString() { return `SAC PlaceSettlementSetup vertex=${this.vertexId}`; }
+    myString() { return 'placed a settlement (setup)'; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const sacData = gameData as ISettlementsAndCitiesGameData;
@@ -352,7 +352,7 @@ export class SACPlaceRoadSetup implements IGameCommand {
     edgeId: number = 0;
     readonly className = 'SACPlaceRoadSetup';
 
-    myString() { return `SAC PlaceRoadSetup edge=${this.edgeId}`; }
+    myString() { return 'placed a road (setup)'; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const sacData = gameData as ISettlementsAndCitiesGameData;
@@ -393,7 +393,7 @@ export class SACPlayKnight implements IGameCommand {
     senderUsername: string = 'Unknown';
     readonly className = 'SACPlayKnight';
 
-    myString() { return `SAC PlayKnight`; }
+    myString() { return 'played a Knight card'; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const sacData = gameData as ISettlementsAndCitiesGameData;
@@ -440,7 +440,16 @@ export class SACRollDice implements IGameCommand {
     // length — one shuffle per player holding >7 cards).
     recordedDiscards?: number[];
 
-    myString() { return `SAC RollDice`; }
+    myString() {
+        // A roll replayed from history always has its dice recorded; the
+        // unrecorded case is a command that has not been executed yet.
+        if (this.recordedRoll1 === undefined || this.recordedRoll2 === undefined) return 'rolled the dice';
+        const roll = this.recordedRoll1 + this.recordedRoll2;
+        // What the roll paid out lives on the state, not on the command, so the
+        // history line and the recap say it and this doesn't. A 7 at least says
+        // why the robber is about to move.
+        return roll === 7 ? 'rolled a 7 — the robber stirs' : `rolled a ${roll}`;
+    }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const sacData = gameData as ISettlementsAndCitiesGameData;
@@ -551,7 +560,15 @@ export class SACMoveRobber implements IGameCommand {
     // resource. Persisted in commandHistory.
     recordedStealIndex?: number;
 
-    myString() { return `SAC MoveRobber hex=${this.hexId} stealFrom=${this.stealFromUserId}`; }
+    myString() {
+        // Who was robbed is public — the recap names them to the whole table —
+        // while which card was taken stays hidden, so it is left unsaid. The
+        // victim is tokenised the way a history line names a player, for the
+        // replay engine to resolve (see userToken / resolveTokens).
+        return this.stealFromUserId
+            ? `moved the robber and stole a card from ${userToken(this.stealFromUserId)}`
+            : 'moved the robber';
+    }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const sacData = gameData as ISettlementsAndCitiesGameData;
@@ -620,7 +637,7 @@ export class SACBuildRoad implements IGameCommand {
     edgeId: number = 0;
     readonly className = 'SACBuildRoad';
 
-    myString() { return `SAC BuildRoad edge=${this.edgeId}`; }
+    myString() { return 'built a road'; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const sacData = gameData as ISettlementsAndCitiesGameData;
@@ -676,7 +693,7 @@ export class SACBuildSettlement implements IGameCommand {
     vertexId: number = 0;
     readonly className = 'SACBuildSettlement';
 
-    myString() { return `SAC BuildSettlement vertex=${this.vertexId}`; }
+    myString() { return 'built a settlement'; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const sacData = gameData as ISettlementsAndCitiesGameData;
@@ -730,7 +747,7 @@ export class SACBuildCity implements IGameCommand {
     vertexId: number = 0;
     readonly className = 'SACBuildCity';
 
-    myString() { return `SAC BuildCity vertex=${this.vertexId}`; }
+    myString() { return 'upgraded a settlement to a city'; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const sacData = gameData as ISettlementsAndCitiesGameData;
@@ -775,7 +792,7 @@ export class SACBuyDevCard implements IGameCommand {
     senderUsername: string = 'Unknown';
     readonly className = 'SACBuyDevCard';
 
-    myString() { return `SAC BuyDevCard`; }
+    myString() { return 'bought a development card'; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const sacData = gameData as ISettlementsAndCitiesGameData;
@@ -818,7 +835,7 @@ export class SACPlayRoadBuilding implements IGameCommand {
     senderUsername: string = 'Unknown';
     readonly className = 'SACPlayRoadBuilding';
 
-    myString() { return `SAC PlayRoadBuilding`; }
+    myString() { return 'played Road Building'; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const sacData = gameData as ISettlementsAndCitiesGameData;
@@ -855,7 +872,7 @@ export class SACPlayYearOfPlenty implements IGameCommand {
     resource2: SAC_Resource = 'lumber';
     readonly className = 'SACPlayYearOfPlenty';
 
-    myString() { return `SAC PlayYearOfPlenty r1=${this.resource1} r2=${this.resource2}`; }
+    myString() { return `played Year of Plenty (+${this.resource1}, +${this.resource2})`; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const sacData = gameData as ISettlementsAndCitiesGameData;
@@ -893,7 +910,7 @@ export class SACPlayMonopoly implements IGameCommand {
     resource: SAC_Resource = 'lumber';
     readonly className = 'SACPlayMonopoly';
 
-    myString() { return `SAC PlayMonopoly resource=${this.resource}`; }
+    myString() { return `played Monopoly on ${this.resource}`; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const sacData = gameData as ISettlementsAndCitiesGameData;
@@ -938,7 +955,10 @@ export class SACMaritimeTrade implements IGameCommand {
     wantResource: SAC_Resource = 'wool';
     readonly className = 'SACMaritimeTrade';
 
-    myString() { return `SAC MaritimeTrade offer=${this.offerResource} want=${this.wantResource}`; }
+    // The trade ratio comes off the board's harbours, which the command can't
+    // read, so the summary names what was swapped and the history line (written
+    // with the state to hand) keeps the rate.
+    myString() { return `traded ${this.offerResource} for ${this.wantResource}`; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const sacData = gameData as ISettlementsAndCitiesGameData;
@@ -987,7 +1007,7 @@ export class SACEndTurn implements IGameCommand {
     senderUsername: string = 'Unknown';
     readonly className = 'SACEndTurn';
 
-    myString() { return `SAC EndTurn`; }
+    myString() { return 'ended their turn'; }
 
     async Execute(gameData: IGameData): Promise<ICommandOutcome> {
         const sacData = gameData as ISettlementsAndCitiesGameData;

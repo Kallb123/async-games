@@ -55,7 +55,12 @@ The barrel export is the one with a silent failure mode worth understanding:
 missing from the barrel can't be rehydrated — the game would fail to replay or
 execute rather than fail to compile.
 
-Also for a new game: an `IReplayAdapter` (optional, but a game with no adapter
+Also for a new game: a player-readable `myString()` on **every** command — it
+titles each step of the match review ("Alice · built a settlement"), so the
+debug string a command is easiest to write first (`SAC BuildSettlement
+vertex=17`) is a player-visible bug, not a stray log line (`new-game.md` §3).
+This one has no guard test and has been missed more than once, so read the
+commands. Also: an `IReplayAdapter` (optional, but a game with no adapter
 gets no recap), an entry in `publicGameState.test.ts`'s explicit
 `RESPONSE_BUILDERS` list, and the **share card** — run `npm run icons` and
 commit `public/icons/og-game-<slug>.png`. The script draws it from the game's

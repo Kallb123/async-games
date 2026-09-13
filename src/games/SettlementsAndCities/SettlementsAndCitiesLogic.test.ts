@@ -7,13 +7,17 @@ import {
     SACPlayYearOfPlenty,
     SACPlayMonopoly,
     SACRollDice,
+    SACMoveRobber,
     SACEndTurn,
 } from "./SettlementsAndCitiesLogic";
+import * as SACLogic from "./SettlementsAndCitiesLogic";
 import { makeState, player } from "./testFixtures";
 import { BOARD_TOPOLOGY } from "./board";
 import type { ISACSpecificGameState, ISACPlayerState, SAC_DevCard } from "./board";
 import type { ISettlementsAndCitiesGameData } from "./SettlementsAndCitiesModels";
 import type { IGameData } from "@/utils/mongodb/GameData";
+import type { IGameCommand } from "@/utils/apiModels/GameLogic";
+import { resolveTokens } from "@/utils/games/history";
 
 // ─── Minimal in-memory game harness ───────────────────────────────────────────
 // The dev-card commands only touch playerStates + a handful of scalar flags, so
@@ -288,5 +292,50 @@ describe("Settlements & Cities — victory-point cards", () => {
         const won = new SettlementsAndCitiesGameType().CheckGameOver(game as unknown as IGameData);
         expect(won).toBe(false);
         expect(game.complete).toBe(false);
+    });
+});
+
+// ─── What the match review calls each action ──────────────────────────────────
+// `myString()` is the line the review dock prints after the player's name
+// ("Alice · built a road") — the same place the recap screen reads like prose —
+// so it has to be written in the player's language. These used to be the debug
+// strings the commands were first written with ("SAC BuildRoad edge=17"), which
+// is exactly what a reviewing player saw.
+
+describe("Settlements & Cities — action summaries", () => {
+    // Swept off the module rather than listed, so a command added later can't
+    // ship a debug summary just by not being added to this test.
+    const commandClasses = (Object.values(SACLogic) as unknown[]).filter(
+        (exported): exported is new () => IGameCommand =>
+            typeof exported === "function" &&
+            typeof (exported as { prototype?: { myString?: unknown } }).prototype?.myString === "function"
+    );
+
+    it("summarises every command in words, not as a debug string", () => {
+        expect(commandClasses.length).toBeGreaterThan(10);
+        for (const Command of commandClasses) {
+            const summary = new Command().myString();
+            expect(summary, `${new Command().className} reads as debug output`).not.toMatch(/SAC |=|vertexId|edgeId/);
+            // It continues "<player> · …", so it starts mid-sentence.
+            expect(summary[0]).toBe(summary[0].toLowerCase());
+        }
+    });
+
+    it("names the roll it recorded, and why a 7 stirs the robber", () => {
+        const roll = new SACRollDice();
+        expect(roll.myString()).toBe("rolled the dice");
+        roll.recordedRoll1 = 2;
+        roll.recordedRoll2 = 3;
+        expect(roll.myString()).toBe("rolled a 5");
+        roll.recordedRoll1 = 3;
+        roll.recordedRoll2 = 4;
+        expect(roll.myString()).toBe("rolled a 7 — the robber stirs");
+    });
+
+    it("names who the robber stole from by token, so replay resolves the name", () => {
+        const move = cmd(new SACMoveRobber());
+        expect(move.myString()).toBe("moved the robber");
+        move.stealFromUserId = "u2";
+        expect(resolveTokens(move.myString(), { u2: "Bob" })).toBe("moved the robber and stole a card from Bob");
     });
 });
