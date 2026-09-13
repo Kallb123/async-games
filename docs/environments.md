@@ -59,8 +59,19 @@ curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/turn
 
 ## Dev-only tooling
 
-The Settings footer carries two buttons that wipe collections outright
-(`DevTools`, calling `/api/dev/clearlive` and `/api/dev/clearresults`).
+The Settings footer carries three wipe buttons (`DevTools`). Two clear
+collections outright (`/api/dev/clearlive`, `/api/dev/clearresults`); the third,
+**Dev: sweep guest accounts** (`/api/dev/clearguests`), clears Clerk instead —
+it deletes every unclaimed guest in the instance.
+
+That one exists because the cron above doesn't run here. A guest is a real,
+billable Clerk user (docs/account-less-play.md §3), production sweeps the
+unclaimed ones a week after their last game (`/api/cron/staleguests`), and no
+cron fires on a dev deployment — so every guest a manual run of the join flow
+or a Playwright run mints stays in the dev instance until somebody removes it.
+It is `staleguests` minus the "does this guest still have somewhere to be"
+check: on a deployment whose games the button above wipes, there is nothing
+for any of them to come back to.
 
 The 🚧 DEV badge on a game's top bar is a menu rather than a label
 (`DevGameMenu`), and its one row today is **Duplicate this game**
@@ -108,10 +119,24 @@ CI's E2E job (`.github/workflows/e2e.yml`) runs against a *third* database,
 `…mongodb.net/asyncgames-e2e` — same free Atlas cluster as above, just another
 path segment — rather than `asyncgames-dev`, so a CI run's `/api/dev/clearlive`
 + `/api/dev/clearresults` calls (`e2e/specs/*.spec.ts`) can't wipe out anyone's
-manual dev testing. It reuses the dev Clerk instance's `pk_test_`/`sk_test_`
-keys; Mongo doesn't need to be 1:1 with a Clerk instance, only Clerk user IDs
-need to resolve, and this database only ever holds rows this Clerk instance
-created.
+manual dev testing. The Clerk instance *is* shared, though, and the guest-invite
+spec mints a guest in it every run — so `e2e/auth.setup.ts` also calls
+`/api/dev/clearguests` once per run, at the start rather than the end, so a run
+that crashes mid-spec is still tidied up by the next one. It is the same
+unconditional sweep the button is, so a guest sitting in a live *dev* game goes
+with the rest.
+
+It reuses the dev Clerk instance's `pk_test_`/`sk_test_` keys; Mongo doesn't
+need to be 1:1 with a Clerk instance, only Clerk user IDs need to resolve, and
+this database only ever holds rows this Clerk instance created.
+
+Which is the standing reason not to run two e2e runs at once. `e2e.yml`'s
+concurrency group is per-branch, so two open PRs pushing together give two
+runs sharing one `asyncgames-e2e` database, one pair of standing Clerk users
+and — now — one guest sweep: each run's `clearlive` teardown already deletes
+the other's live game, and the sweep at the top of a starting run deletes a
+guest the other one is mid-spec with. Serialising the workflow across branches
+would fix all three at once, and is worth doing on its own.
 
 Two standing password-auth users live in the dev Clerk instance for this
 (email verification is off there, so no inbox is needed) —
