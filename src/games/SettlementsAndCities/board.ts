@@ -129,10 +129,26 @@ export interface ISACSpecificGameState {
     lastRollDie2: number | null;
     // What that roll moved, per player, in turn order — only the players it
     // touched. Cleared with the rest of the last-roll fields when the turn
-    // passes. Absent on a game whose last roll predates the field; readers
-    // answer that with `?? []` and simply show no payout, rather than claiming
-    // a roll paid nobody.
+    // passes — unless `lastRollAutoEnded` says the turn passed on its own, in
+    // which case they ride into the next turn so the roll stays visible.
+    // Absent on a game whose last roll predates the field; readers answer that
+    // with `?? []` and simply show no payout, rather than claiming a roll paid
+    // nobody.
     lastRollChanges?: ISACRollChange[];
+    // True once `sacFinishTurn` has ended the turn on its own — nothing left to
+    // build, buy or trade — rather than the player tapping "End turn". The dice
+    // and payout above are left in place rather than cleared so the roll that
+    // caused it isn't hidden the instant it happens, and the UI reads this to
+    // add the "no actions were possible" note. Reset to false as soon as the
+    // next roll lands (`SACRollDice`), so it never outlives the roll it
+    // explains.
+    lastRollAutoEnded: boolean;
+    // Who that roll belonged to — the only viewer the preserved roll and note
+    // above are shown to. Once the turn has moved on, showing it to anyone
+    // else (the new current player included) reads as "you already rolled
+    // this", which isn't true; the player it actually happened to is the one
+    // person who should still see it. Reset alongside `lastRollAutoEnded`.
+    lastRollAutoEndedBy: string | null;
     pendingRobber: boolean;
     longestRoadOwner: string | null;
     largestArmyOwner: string | null;

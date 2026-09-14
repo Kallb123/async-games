@@ -49,6 +49,8 @@ export function makeState(overrides: Partial<ISACSpecificGameState> = {}): ISACS
         lastRollDie1: 5,
         lastRollDie2: 3,
         lastRollChanges: [],
+        lastRollAutoEnded: false,
+        lastRollAutoEndedBy: null,
         pendingRobber: false,
         longestRoadOwner: null,
         largestArmyOwner: null,

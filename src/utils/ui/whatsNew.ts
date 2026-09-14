@@ -118,6 +118,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "Settlements & Cities shows the roll that ended your turn",
+                detail: "When a roll left you nothing to build, buy or trade, your turn ended itself before you ever saw what you rolled — the dice vanished in the same instant the turn moved on. Your roll and its payout now stay on screen for you, with a note that there was nothing left to do, until your next roll — without making it look to whoever plays next like they'd already rolled.",
+                game: "settlementsandcities",
+            },
+            {
                 title: "Train Time's match review speaks plain English",
                 detail: "Stepping back through a Train Time match used to label every action with internal gibberish — \"Train Time ClaimRoute route=3 cards=blue,blue,blue,blue\" — instead of what happened. Each step now reads the way the turn history does: \"drew from the deck\", \"took the face-up red\", \"claimed Seattle – Vancouver (1 track, +1)\", \"kept 2 of 3 destination tickets\".",
                 game: "traintime",
@@ -158,11 +163,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "No more “Alarms and reminders” prompt on Android",
                 detail: "The Android app asked for permission to set alarms and reminders even though it never actually schedules one — a notification's plugin quietly carried the request along. It's gone for good now.",
-            },
-            {
-                title: "Dice Cities' Amusement Park can be built again",
-                detail: "Buying the Amusement Park quietly asked for the Radio Tower instead — so it was refused unless you could afford the more expensive one, and if you could, you got the wrong landmark for the wrong price. The two also had each other's powers: the extra turn on doubles belonged to the Radio Tower and the Amusement Park did nothing at all. Both now build, and cost, and do what their cards say.",
-                game: "dicecities",
             },
         ],
     },
