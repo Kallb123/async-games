@@ -6,6 +6,7 @@
 // rules.ts, and the board screen reads both for the reach band (docs/new-game.md,
 // "Isomorphic rules modules"), so nothing here may reach for Mongoose, Clerk or
 // `node:`.
+import { ANGLET } from "./tracks/anglet";
 import { ASHCOMBE } from "./tracks/ashcombe";
 
 // ─── The circuit (§5.1) ─────────────────────────────────────────────────────
@@ -66,6 +67,7 @@ export interface RaceCarsTrack {
 
 export const TRACKS: Record<string, RaceCarsTrack> = {
     [ASHCOMBE.id]: ASHCOMBE,
+    [ANGLET.id]: ANGLET,
 };
 
 export const DEFAULT_TRACK_ID = ASHCOMBE.id;
