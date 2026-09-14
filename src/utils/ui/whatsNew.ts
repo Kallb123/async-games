@@ -119,7 +119,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "Settlements & Cities shows the roll that ended your turn",
-                detail: "When a roll left you nothing to build, buy or trade, your turn ended itself before you ever saw what you rolled — the dice vanished in the same instant the turn moved on. The roll and its payout now stay on screen, with a note that there was nothing left to do, until the next roll replaces them.",
+                detail: "When a roll left you nothing to build, buy or trade, your turn ended itself before you ever saw what you rolled — the dice vanished in the same instant the turn moved on. Your roll and its payout now stay on screen for you, with a note that there was nothing left to do, until your next roll — without making it look to whoever plays next like they'd already rolled.",
                 game: "settlementsandcities",
             },
             {

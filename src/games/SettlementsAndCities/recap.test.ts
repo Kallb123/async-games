@@ -42,6 +42,7 @@ function state(players: ISACPlayerStateResponse[], overrides: Partial<ISACSpecif
         lastRollDie2: null,
         lastRollChanges: [],
         lastRollAutoEnded: false,
+        lastRollAutoEndedBy: null,
         pendingRobber: false,
         longestRoadOwner: null,
         largestArmyOwner: null,

@@ -138,11 +138,17 @@ export interface ISACSpecificGameState {
     // True once `sacFinishTurn` has ended the turn on its own — nothing left to
     // build, buy or trade — rather than the player tapping "End turn". The dice
     // and payout above are left in place rather than cleared so the roll that
-    // caused it stays on screen, and the UI reads this to add the "no actions
-    // were possible" note. Reset to false as soon as the next roll lands
-    // (`SACRollDice`) or the turn passes for any other reason
-    // (`sacAdvanceMainTurn`), so it never outlives the roll it explains.
+    // caused it isn't hidden the instant it happens, and the UI reads this to
+    // add the "no actions were possible" note. Reset to false as soon as the
+    // next roll lands (`SACRollDice`), so it never outlives the roll it
+    // explains.
     lastRollAutoEnded: boolean;
+    // Who that roll belonged to — the only viewer the preserved roll and note
+    // above are shown to. Once the turn has moved on, showing it to anyone
+    // else (the new current player included) reads as "you already rolled
+    // this", which isn't true; the player it actually happened to is the one
+    // person who should still see it. Reset alongside `lastRollAutoEnded`.
+    lastRollAutoEndedBy: string | null;
     pendingRobber: boolean;
     longestRoadOwner: string | null;
     largestArmyOwner: string | null;

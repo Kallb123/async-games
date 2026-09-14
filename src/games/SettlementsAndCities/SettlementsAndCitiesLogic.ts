@@ -218,7 +218,10 @@ function sacFinishTurn(sacData: ISettlementsAndCitiesGameData, userId: string): 
     // Flagged only for an ordinary main turn — a Special Build player running
     // dry closes their own slot (sacAdvanceSpecialBuild), which never touches
     // the dice display, so there's nothing here for it to mark.
-    if (!gs.specialBuildActive) gs.lastRollAutoEnded = true;
+    if (!gs.specialBuildActive) {
+        gs.lastRollAutoEnded = true;
+        gs.lastRollAutoEndedBy = userId;
+    }
     sacData.gameState.history.unshift(playerHistory(
         userId,
         gs.specialBuildActive
@@ -559,8 +562,9 @@ export class SACRollDice implements IGameCommand {
         gs.lastRollDie1 = die1;
         gs.lastRollDie2 = die2;
         // This roll's own outcome decides whether the note belongs — never the
-        // stale flag from whatever ended the previous turn.
+        // stale flag (or stale owner) from whatever ended the previous turn.
         gs.lastRollAutoEnded = false;
+        gs.lastRollAutoEndedBy = null;
 
         // What this roll moved, per player, built up as it resolves and then
         // parked on the state: the board screen, the turn recap and the history

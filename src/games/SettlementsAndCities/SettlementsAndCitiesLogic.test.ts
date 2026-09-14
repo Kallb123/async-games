@@ -288,7 +288,7 @@ describe("Settlements & Cities — a roll that auto-ends the turn stays on scree
         });
     }
 
-    it("keeps the dice and marks the roll as having auto-ended the turn", async () => {
+    it("keeps the dice and marks the roll as u1's, even once it's u2's turn", async () => {
         const gs = boardWithOneForest(8);
         // No harbours, no dev cards, and a single lumber from the roll below —
         // nothing left to build, buy or trade with, so the roll ends the turn
@@ -307,15 +307,18 @@ describe("Settlements & Cities — a roll that auto-ends the turn stays on scree
 
         // The turn has already moved on to u2 …
         expect(game.currentTurn).toBe("u2");
-        // … but the roll that ended it is still there for both players to see.
+        // … but the roll that ended it is still there, tagged as u1's — the
+        // UI reads `lastRollAutoEndedBy` to show it only to u1, not to u2
+        // (whose turn it now is) or anyone else.
         expect(gs.lastRoll).toBe(8);
         expect(gs.lastRollDie1).toBe(5);
         expect(gs.lastRollDie2).toBe(3);
         expect(gs.lastRollChanges).toHaveLength(1);
         expect(gs.lastRollAutoEnded).toBe(true);
+        expect(gs.lastRollAutoEndedBy).toBe("u1");
     });
 
-    it("clears the note and the dice as soon as the next roll lands", async () => {
+    it("clears the note, the dice and its owner as soon as the next roll lands", async () => {
         const gs = boardWithOneForest(8);
         gs.vertices[BOARD_TOPOLOGY.hexVertices[0][0]] = { building: "settlement", owner: "u1" };
         gs.playerStates.set("u1", player());
@@ -328,6 +331,7 @@ describe("Settlements & Cities — a roll that auto-ends the turn stays on scree
         const firstOutcome = await firstRoll.Execute(game as unknown as IGameData);
         new SettlementsAndCitiesGameType().CheckEndTurn(game as unknown as IGameData, firstOutcome);
         expect(gs.lastRollAutoEnded).toBe(true);
+        expect(gs.lastRollAutoEndedBy).toBe("u1");
 
         // u2 rolls a 3 — the board's only hex needs an 8 to pay out, so this
         // roll pays no one, but u2 still has ore to trade with, so their turn
@@ -338,6 +342,7 @@ describe("Settlements & Cities — a roll that auto-ends the turn stays on scree
         const secondOutcome = await secondRoll.Execute(game as unknown as IGameData);
         expect(secondOutcome.turnOver).toBe(false);
         expect(gs.lastRollAutoEnded).toBe(false);
+        expect(gs.lastRollAutoEndedBy).toBeNull();
         expect(gs.lastRoll).toBe(3);
     });
 });
