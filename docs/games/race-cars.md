@@ -771,12 +771,15 @@ needed.
 
 Ordered by what each one buys against what it costs.
 
-1. **A second circuit.** The track is data (§23.4): rows, lane widths, corner
-   bands, stop counts, `maxGear`. A new layout is one file and one render.
-   Two worth building: **Bonneville Oval** — two enormous straights, two
-   one-stop corners, `maxGear: 6`, the circuit that exists to make sixth gear
-   real — and **Old Harbour**, a narrow two-lane street circuit with four
-   corners where blocking decides the race.
+1. **A second circuit — landed.** `tracks/anglet.ts`: **Anglet Chambre
+   d'Amour**, a seven-corner street course transcribed off a real board
+   (`art-masters/racecars/anglet.png`), two of whose chicanes require two
+   stops rather than one. Registered in `TRACKS`; not yet reachable in play,
+   since nothing lets a host choose a track (§6's settings have no `trackId`),
+   and its `geometry` is still a hand-traced straight-edged approximation of
+   the art rather than §23.6's generator's output. Still worth building on
+   the same hook: **Bonneville Oval** — two enormous straights, two one-stop
+   corners, `maxGear: 6`, the circuit that exists to make sixth gear real.
 2. **Per-driver spec.** Let each driver split their own twelve tokens instead of
    racing the host's spec. The async cost is what kills it today: a setup phase
    is a whole extra round of turns before anything moves. It becomes free the
@@ -1065,12 +1068,13 @@ interface RaceCarsTrack {
 ```
 
 **Two invariants belong on the track data rather than in Ashcombe's geometry,
-and `board.test.ts` asserts both.** §18 rules that a spin searches backwards
-along its corner for a free space, which is only total if **every corner holds
-at least `MAX_PLAYERS` cars** — true of Ashcombe's three corners of 10–12
-spaces, and not true of §20's proposed Old Harbour, whose "narrow two-lane
-street circuit" could hold four cars in a corner and seat six drivers. And a
-corner whose `from` is row 0 has nothing behind it to search. Assert
+and `board.test.ts` asserts both, against every registered track.** §18 rules
+that a spin searches backwards along its corner for a free space, which is
+only total if **every corner holds at least `MAX_PLAYERS` cars** — true of
+Ashcombe's three corners of 10–12 spaces and of Anglet's seven of 8–10, and
+the reason a "narrow two-lane street circuit" needs each corner a touch
+longer than the road alone would draw it, not just narrower. And a corner
+whose `from` is row 0 has nothing behind it to search. Assert
 `(to − from + 1) × laneWidth >= MAX_PLAYERS` and `from > 0` for every corner, so
 the second circuit fails a test rather than a race.
 
