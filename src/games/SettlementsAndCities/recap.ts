@@ -79,14 +79,14 @@ function toEvents(
 
     switch (command.className) {
         case "SACRollDice": {
-            // A roll that leaves the player with nothing left to build, buy or
-            // trade auto-ends the turn in this same command (sacFinishTurn ->
-            // CheckEndTurn -> sacAdvanceMainTurn), which resets lastRoll /
-            // lastRollChanges to null/[] before this snapshot is taken. The dice
-            // command itself always carries what it actually rolled and paid out
-            // (set by Execute before that reset can run), so read from there first
-            // — falling back to state only for a roll replayed before these fields
-            // existed on the command.
+            // The dice command itself always carries what it actually rolled and
+            // paid out, so read from there first — falling back to state only for
+            // a roll replayed before these fields existed on the command. State
+            // usually agrees, but not always: a roll that leaves the player with
+            // nothing left to build, buy or trade auto-ends the turn in this same
+            // command (sacFinishTurn -> CheckEndTurn -> sacAdvanceMainTurn), and a
+            // *manual* end turn later in the same replay still clears state's
+            // lastRoll / lastRollChanges — the command's own copy doesn't move.
             const diceCommand = command as unknown as {
                 recordedRoll1?: number;
                 recordedRoll2?: number;

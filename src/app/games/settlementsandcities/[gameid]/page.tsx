@@ -295,9 +295,11 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
 
     // ── This turn's roll ─────────────────────────────────────────────────────
     // The dice and what they paid, as a panel under the board. `lastRoll` is
-    // cleared when the turn passes (sacAdvanceMainTurn), so the panel is the
-    // current turn's roll — and it's read off the shared game state rather than
-    // the roller's own command response, so an opponent looking in sees the same
+    // cleared when the turn passes (sacAdvanceMainTurn) — unless the roll left
+    // the roller nothing to build, buy or trade, in which case it rides into
+    // the next turn (`lastRollAutoEnded`) so it isn't hidden the instant the
+    // turn ends itself. It's read off the shared game state rather than the
+    // roller's own command response, so an opponent looking in sees the same
     // dice and the same payout.
     //
     // The payout line is left off entirely when nothing is recorded against the
@@ -305,9 +307,12 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     // "Rolled 8" on its own is true where "nobody collected" would not be.
     const rollParts = sacRollChangeParts(gs?.lastRollChanges, (userId) =>
         userId === myUserId ? 'You' : playerName(userId));
-    const rollSubline = gs?.lastRoll === 7
-        ? ['the robber is on the move', ...rollParts].join(' · ')
-        : rollParts.join(', ');
+    const rollSubline = [
+        gs?.lastRoll === 7
+            ? ['the robber is on the move', ...rollParts].join(' · ')
+            : rollParts.join(', '),
+        gs?.lastRollAutoEnded ? 'no actions were possible, so the turn ended automatically' : null,
+    ].filter(Boolean).join(' · ');
 
     // ── Your hand ────────────────────────────────────────────────────────────
     const myState = gs?.playerStates?.[myUserId];

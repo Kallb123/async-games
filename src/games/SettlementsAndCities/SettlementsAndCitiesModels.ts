@@ -121,6 +121,7 @@ export function cloneSACState(
         lastRollDie1: gs.lastRollDie1,
         lastRollDie2: gs.lastRollDie2,
         lastRollChanges: cloneRollChanges(gs.lastRollChanges),
+        lastRollAutoEnded: gs.lastRollAutoEnded ?? false,
         pendingRobber: gs.pendingRobber,
         longestRoadOwner: gs.longestRoadOwner,
         largestArmyOwner: gs.largestArmyOwner,
@@ -221,6 +222,7 @@ SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
         lastRollDie1: null,
         lastRollDie2: null,
         lastRollChanges: [],
+        lastRollAutoEnded: false,
         pendingRobber: false,
         longestRoadOwner: null,
         largestArmyOwner: null,
@@ -337,6 +339,7 @@ function makeSACStateSchemaDef() {
             type: [{ userId: String, gained: resourcesSubSchema, discarded: Number }],
             default: undefined,
         },
+        lastRollAutoEnded: Boolean,
         pendingRobber: Boolean,
         longestRoadOwner: { type: String, default: null },
         largestArmyOwner: { type: String, default: null },
@@ -456,6 +459,7 @@ export function gameStateToResponse(
         // live Mongoose document, and sending the subdocuments as they are would
         // ship their internals (and an `_id` per row) along with them.
         lastRollChanges: cloneRollChanges(gs.lastRollChanges),
+        lastRollAutoEnded: gs.lastRollAutoEnded ?? false,
         pendingRobber: gs.pendingRobber,
         longestRoadOwner,
         largestArmyOwner,

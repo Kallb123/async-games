@@ -257,18 +257,88 @@ describe("Settlements & Cities — the dice roll", () => {
     it("clears the last roll and its payout when the turn passes", async () => {
         const gs = boardWithOneForest(8);
         gs.vertices[BOARD_TOPOLOGY.hexVertices[0][0]] = { building: "settlement", owner: "u1" };
-        gs.playerStates.set("u1", player());
+        // A spare ore keeps a bank trade on the table after the roll, so u1
+        // ends the turn by choice rather than the roll auto-ending it — this
+        // test is about the manual "End turn" path, which the auto-end tests
+        // below cover separately.
+        gs.playerStates.set("u1", player({ resources: { ore: 4 } }));
         gs.playerStates.set("u2", player());
         const game = makeGame(gs);
 
-        await rollOf(5, 3).Execute(game as unknown as IGameData);
+        const roll = await rollOf(5, 3).Execute(game as unknown as IGameData);
         expect(gs.lastRollChanges).toHaveLength(1);
+        expect(roll.turnOver).toBe(false);
 
         // Passing the dice on is CheckEndTurn's job, not the command's.
         const endTurn = await cmd(new SACEndTurn()).Execute(game as unknown as IGameData);
         new SettlementsAndCitiesGameType().CheckEndTurn(game as unknown as IGameData, endTurn);
         expect(gs.lastRoll).toBeNull();
         expect(gs.lastRollChanges).toEqual([]);
+    });
+});
+
+describe("Settlements & Cities — a roll that auto-ends the turn stays on screen", () => {
+    function boardWithOneForest(numberToken: number): ISACSpecificGameState {
+        return makeState({
+            robberHexIndex: 18,
+            hexes: [{ terrain: "forest", numberToken }],
+            vertices: Array.from({ length: BOARD_TOPOLOGY.numVertices }, () => ({ building: null, owner: null })),
+            hasRolled: false,
+            lastRoll: null,
+        });
+    }
+
+    it("keeps the dice and marks the roll as having auto-ended the turn", async () => {
+        const gs = boardWithOneForest(8);
+        // No harbours, no dev cards, and a single lumber from the roll below —
+        // nothing left to build, buy or trade with, so the roll ends the turn
+        // on its own (see the "auto-ending a turn" suite above).
+        gs.vertices[BOARD_TOPOLOGY.hexVertices[0][0]] = { building: "settlement", owner: "u1" };
+        gs.playerStates.set("u1", player());
+        gs.playerStates.set("u2", player());
+        const game = makeGame(gs);
+
+        const roll = cmd(new SACRollDice());
+        roll.recordedRoll1 = 5;
+        roll.recordedRoll2 = 3;
+        const outcome = await roll.Execute(game as unknown as IGameData);
+        expect(outcome.turnOver).toBe(true);
+        new SettlementsAndCitiesGameType().CheckEndTurn(game as unknown as IGameData, outcome);
+
+        // The turn has already moved on to u2 …
+        expect(game.currentTurn).toBe("u2");
+        // … but the roll that ended it is still there for both players to see.
+        expect(gs.lastRoll).toBe(8);
+        expect(gs.lastRollDie1).toBe(5);
+        expect(gs.lastRollDie2).toBe(3);
+        expect(gs.lastRollChanges).toHaveLength(1);
+        expect(gs.lastRollAutoEnded).toBe(true);
+    });
+
+    it("clears the note and the dice as soon as the next roll lands", async () => {
+        const gs = boardWithOneForest(8);
+        gs.vertices[BOARD_TOPOLOGY.hexVertices[0][0]] = { building: "settlement", owner: "u1" };
+        gs.playerStates.set("u1", player());
+        gs.playerStates.set("u2", player({ resources: { ore: 4 } }));
+        const game = makeGame(gs);
+
+        const firstRoll = cmd(new SACRollDice());
+        firstRoll.recordedRoll1 = 5;
+        firstRoll.recordedRoll2 = 3;
+        const firstOutcome = await firstRoll.Execute(game as unknown as IGameData);
+        new SettlementsAndCitiesGameType().CheckEndTurn(game as unknown as IGameData, firstOutcome);
+        expect(gs.lastRollAutoEnded).toBe(true);
+
+        // u2 rolls a 3 — the board's only hex needs an 8 to pay out, so this
+        // roll pays no one, but u2 still has ore to trade with, so their turn
+        // stays open.
+        const secondRoll = cmd(new SACRollDice(), "u2");
+        secondRoll.recordedRoll1 = 1;
+        secondRoll.recordedRoll2 = 2;
+        const secondOutcome = await secondRoll.Execute(game as unknown as IGameData);
+        expect(secondOutcome.turnOver).toBe(false);
+        expect(gs.lastRollAutoEnded).toBe(false);
+        expect(gs.lastRoll).toBe(3);
     });
 });
 

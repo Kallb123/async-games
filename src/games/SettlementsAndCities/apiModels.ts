@@ -79,6 +79,11 @@ export interface ISACSpecificGameStateResponse {
     // nothing to re-declare: the state's own shape goes straight out. Undefined
     // for a game whose last roll predates the field.
     lastRollChanges?: ISACRollChange[];
+    // True when the roll above ended the turn on its own — nothing left to
+    // build, buy or trade — rather than the player tapping "End turn". The
+    // board shows the roll with a "no actions were possible" note instead of
+    // hiding it the instant the turn moves on.
+    lastRollAutoEnded: boolean;
     pendingRobber: boolean;
     // Bonus holders, as stable Clerk userIds (resolve a name via playerStates).
     longestRoadOwner: string | null;

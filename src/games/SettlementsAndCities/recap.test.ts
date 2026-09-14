@@ -41,6 +41,7 @@ function state(players: ISACPlayerStateResponse[], overrides: Partial<ISACSpecif
         lastRollDie1: null,
         lastRollDie2: null,
         lastRollChanges: [],
+        lastRollAutoEnded: false,
         pendingRobber: false,
         longestRoadOwner: null,
         largestArmyOwner: null,
@@ -109,11 +110,11 @@ describe("Settlements & Cities recap adapter", () => {
         expect(events[0].affectedIds).toEqual([]);
     });
 
-    it("reads the roll off the command when it auto-ended the turn and reset state", () => {
-        // sacFinishTurn can end the turn inside the same SACRollDice command
-        // (nothing left to build/trade), which resets lastRoll/lastRollChanges
-        // to null/[] before this snapshot is taken — the recap must still show
-        // the real roll and payout, recorded on the command itself.
+    it("reads the roll off the command when state's own copy has moved on", () => {
+        // A later manual end turn in the same replay (or a game older than these
+        // fields) leaves state's lastRoll/lastRollChanges at null/[] by the time
+        // this snapshot is taken — the recap must still show the real roll and
+        // payout, recorded on the command itself.
         const prev = state([player({ userId: "u1", username: "Alice" })]);
         const next = state([player({ userId: "u1", username: "Alice" })], { lastRoll: null, lastRollChanges: [] });
         const events = settlementsAndCitiesRecapAdapter.toEvents(
