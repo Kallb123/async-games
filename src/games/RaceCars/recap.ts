@@ -189,7 +189,7 @@ function tip(liveState: unknown, forUserId: string): IRecapTip | null {
     const gap = rowsBehindLeader(gs, forUserId);
     const positionText = position === 1 ? "You're leading" : `You're P${position}, ${pluralize(gap, 'row')} off the lead`;
 
-    const corner = cornerAt(trackById(gs.trackId), me.row);
+    const corner = cornerAt(trackById(gs.trackId), me.row, me.lane);
     const owed = corner ? corner.stops - me.cornerStops : 0;
     const cornerText = corner && owed > 0 ? `, and ${corner.name} still owes you ${pluralize(owed, 'stop')}` : '';
 

@@ -42,11 +42,23 @@ export interface RaceCarsSpace {
 export interface RaceCarsTrackSpace extends RaceCarsSpace {
     /** Every space one step from here, in row then lane order. Never empty. */
     exits: readonly RaceCarsSpace[];
+    /**
+     * The corner this space belongs to, if any (§10) — membership is per space,
+     * not per row. A corner covers all of its lanes, but not every lane on every
+     * one of its rows: the inside line is the short way round and takes fewer
+     * tiles through the corner than the outside does (§5.1), so it is in the
+     * corner for fewer rows. A straight's spaces carry no id.
+     */
+    cornerId?: string;
 }
 
 /**
- * A corner is a contiguous band of rows with a stop count, not a turn of the
- * wheel (§5.1). `from`/`to` are inclusive row numbers.
+ * A corner is a band of rows with a stop count, not a turn of the wheel (§5.1).
+ * `from`/`to` are the inclusive row band its spaces span — the outside line's
+ * extent, since the inside line covers it in fewer rows — and §10 charges
+ * overshoot in rows past `to`. Which spaces are actually in it is carried on the
+ * spaces themselves (`cornerId`), because within that band different rows hold
+ * different lanes of it.
  */
 export interface RaceCarsCorner {
     id: string;
@@ -516,13 +528,14 @@ export function crossesStartLine(track: RaceCarsTrack, fromRow: number, toRow: n
 }
 
 /**
- * The corner this row is inside, or null on a straight. Derived rather than
- * stored beside the car's row (§23.4): a second source of truth is one a move
- * can forget to update, and the bug stays invisible until a car banks a stop
- * in a corner it has already left.
+ * The corner this space is in, or null on a straight — read off the space's own
+ * `cornerId`, so it is per space, not per row (§10): the inside line of a corner
+ * is in it for fewer rows than the outside, and two cars level on the same row
+ * can be one in the corner and one already out of it.
  */
-export function cornerAt(track: RaceCarsTrack, row: number): RaceCarsCorner | null {
-    return track.corners.find(corner => row >= corner.from && row <= corner.to) ?? null;
+export function cornerAt(track: RaceCarsTrack, row: number, lane: number): RaceCarsCorner | null {
+    const cornerId = spaceAt(track, row, lane)?.cornerId;
+    return cornerId ? track.corners.find(corner => corner.id === cornerId) ?? null : null;
 }
 
 /**
@@ -532,17 +545,17 @@ export function cornerAt(track: RaceCarsTrack, row: number): RaceCarsCorner | nu
  * the corner as slowly as the road allows. The road decides this and never the
  * gear, so a car that arrived at speed is charged in the ordinary way.
  *
- * Read off the exits rather than off the row number, because "standing on the
- * corner's last row" is only the same thing on a circuit whose lanes run in
- * step: an inside line whose last space is two rows short of the corner's last
- * row still has nowhere to go but out, and is owed the same waiver.
+ * Read off whether each exit is still in the same corner, not off the row band:
+ * an inside line whose last corner space feeds only spaces outside the corner
+ * has nowhere to go but out, and is owed the waiver even though the outside line
+ * carries the band on for several more rows.
  */
 export function waivedCornerIdAt(track: RaceCarsTrack, row: number, lane: number): string | null {
-    const corner = cornerAt(track, row);
+    const corner = cornerAt(track, row, lane);
     if (!corner) return null;
     const exits = stepsFrom(track, row, lane);
     const stuckInside = exits.length > 0
-        && exits.every(exit => exit.row < corner.from || exit.row > corner.to);
+        && exits.every(exit => cornerAt(track, exit.row, exit.lane)?.id !== corner.id);
     return stuckInside ? corner.id : null;
 }
 

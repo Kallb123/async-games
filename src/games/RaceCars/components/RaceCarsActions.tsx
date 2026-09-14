@@ -47,7 +47,7 @@ function reachBand(track: RaceCarsTrack, ps: IRaceCarsPlayerState, gear: RaceCar
 
 /** `min`/`max` are rows of road the gear's band covers, never its dice faces. */
 function cornerVerdict(track: RaceCarsTrack, ps: IRaceCarsPlayerState, min: number, max: number): string {
-    const here = cornerAt(track, ps.row);
+    const here = cornerAt(track, ps.row, ps.lane);
     const owed = here ? here.stops - ps.cornerStops : 0;
 
     // The corner under the car still owes a stop, so the band is measured
@@ -98,7 +98,7 @@ function towPrompt(track: RaceCarsTrack, ps: IRaceCarsPlayerState, options: Race
     if (options.blockedShort) {
         return `Traffic — the tow only runs ${pluralize(options.distance, 'space')}. Tap a highlighted space to take what there is and scuff a tyre.`;
     }
-    const here = cornerAt(track, ps.row);
+    const here = cornerAt(track, ps.row, ps.lane);
     // The worst the tow can do, which is what a warning should quote: three
     // steps are three rows of road until a corner's lanes run out of step, and
     // then they are as many rows as the longest line through it covers (§5.1).

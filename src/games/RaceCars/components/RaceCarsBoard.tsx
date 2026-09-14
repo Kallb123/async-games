@@ -105,7 +105,7 @@ export default function RaceCarsBoard({ gs, userIdList, validSpaces, unavoidable
         const ps: IRaceCarsPlayerStateResponse | undefined = gs.playerStates[userId];
         const at = ps && geometry.get(spaceKey(ps.row, ps.lane));
         if (!ps || !at) return [];
-        const corner = cornerAt(track, ps.row);
+        const corner = cornerAt(track, ps.row, ps.lane);
         return [{
             userId,
             ps,
@@ -158,7 +158,7 @@ export default function RaceCarsBoard({ gs, userIdList, validSpaces, unavoidable
                     {track.geometry.map(space => {
                         const key = spaceKey(space.row, space.lane);
                         const isValid = validSpaces.has(key);
-                        const corner = cornerAt(track, space.row);
+                        const corner = cornerAt(track, space.row, space.lane);
                         const className = [
                             'ag-rc-space',
                             corner ? 'ag-rc-space--corner' : '',

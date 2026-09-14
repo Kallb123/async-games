@@ -213,6 +213,16 @@ to go if it arrives too fast.
 rows with a **stop count** attached (§10). Corners are narrower than the
 straights they join, which is what makes them block.
 
+**Which spaces are in a corner is per space, not per row.** A corner covers all
+of its lanes, but not every lane on every one of its rows: the inside line is
+the short way round and takes fewer spaces through the corner than the outside
+does (above), so it is in the corner for fewer rows. Its band `from`/`to` is the
+outside line's extent — what §10 charges overshoot against — while membership,
+banking a stop and the waiver all read the space a car is actually on. On the
+two circuits that ship every corner is a plain band with all its lanes in it on
+every row; the per-space rule is what lets a hand-cut corner drop the inside
+line out once it has rounded its own apex.
+
 ### 5.2 Ashcombe Park
 
 The circuit that ships. 78 rows, three corners, one very long straight.
@@ -418,7 +428,9 @@ the field up, and a car that wants to go slower has to pay for it.
 A corner is a band of rows with a **stop count** — the number of separate turns
 you must **end inside it** before you are allowed past its last row.
 
-- Ending a turn on any space whose row is inside the corner **banks one stop**.
+- Ending a turn on any space **that is in the corner** (§5.1 — membership is per
+  space, so a lane that has already left the corner does not count even on a row
+  the corner's band still spans) **banks one stop**.
 - Your banked stops **reset to zero** the moment you legally leave the corner.
 - Ending a turn past the corner's last row with fewer stops banked than it owes
   is an **overshoot**.
@@ -1113,8 +1125,11 @@ interface RaceCarsTrack {
   // Every space, and the spaces each one may be driven to (§5.1). The graph is
   // the track: a straight's spaces carry the three above them, a painted corner
   // carries the one in front, and a lane that skips a row simply has no space
-  // on it.
-  spaces: { row: number, lane: number, exits: { row: number, lane: number }[] }[],
+  // on it. `cornerId` marks the spaces in a corner — per space, not per row, so
+  // the inside line can be in it for fewer rows than the outside (§5.1, §10).
+  spaces: { row: number, lane: number, exits: { row: number, lane: number }[], cornerId?: string }[],
+  // A corner's row band is the outside line's extent (§10 charges overshoot in
+  // rows past `to`); which spaces are in it lives on the spaces above.
   corners: { id: string, name: string, from: number, to: number, stops: 1 | 2 }[],
   grid: { row: number, lane: number }[],   // P1 first
   maxGear: 1 | 2 | 3 | 4 | 5 | 6,     // 5 at Ashcombe (§8.3)
@@ -1206,11 +1221,14 @@ is still where on the road the car is, and the lane is still which line it is
 taking.
 
 **Which corner a car is in is derived, not stored**, by the same argument one
-paragraph later. It is `cornerAt(track, row)` — a scan of three bands — and
-storing it beside `row` is a second source of truth that a move can forget to
-update, with a bug that stays invisible until a car banks a stop in a corner it
-has already left. The stop-reset of §10 needs only
-`cornerAt(oldRow) !== cornerAt(newRow)`, and `resolveArrival` holds both rows.
+paragraph later. It is `cornerAt(track, row, lane)` — the space's own `cornerId`
+looked up off the track index (§5.1: membership is per space, since the inside
+line is in a corner for fewer rows than the outside) — and storing it beside
+`row` is a second source of truth that a move can forget to update, with a bug
+that stays invisible until a car banks a stop in a corner it has already left.
+The stop-reset of §10 needs only
+`cornerAt(oldRow, oldLane) !== cornerAt(newRow, newLane)`, and `resolveArrival`
+holds both spaces.
 For the same reason **`phase` is the authority and `roll` follows it**, not the
 other way round: `phase === 'shift'` and `roll === null` are the same fact, and
 only one of them can be the one `CheckEndTurn` maintains.
@@ -1470,11 +1488,20 @@ render worth using. `npm run icons` writes
 installed as a system font and warns rather than failing without it.
 
 **Producing the geometry is the part to plan for.** 214 hand-placed
-coordinates is not a thing to type. The track's centre line is authored as a
-path, and a small build-time script samples it at 78 points, offsets each by
-lane, and writes `geometry` — so the art and the data are generated from the
-same curve. That script lives beside the track data and runs once per circuit;
-it is not a runtime dependency and nothing in `src/` imports it.
+coordinates is not a thing to type. This was first imagined as a build-time
+script sampling an authored centre line at 78 points; the spaces-graph refactor
+(§5.1) made a plain sampled curve too blunt, because a corner's inside line now
+takes fewer tiles round than the outside and each of those tiles has its own
+`exits` to name — a curve can offset by lane but it cannot draw a graph edge.
+
+So the geometry (and the corner merges) are authored interactively instead, in
+the **Race Cars track editor** at `/admin/racecars`
+([`docs/admin-tools.md`](../admin-tools.md)): an admin drops each tile onto the
+art to fix its centre point, draws the exits that break §5.1's default rule,
+bands the corners, and the editor prints a `tracks/` file — validated through
+the game's own `assembleSpaces`, so a circuit that passes in the editor is one
+that loads in the game. It is a build-time aid, not a runtime dependency:
+nothing in `src/` imports it, and it persists nothing server-side.
 
 ### 23.7 The PRs
 
