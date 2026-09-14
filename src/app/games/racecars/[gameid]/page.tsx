@@ -103,14 +103,14 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
     // never carry into the next roll.
     const [brake, setBrake] = useResettingState(0, `${displayedCurrentTurn}:${me?.roll ?? ''}`);
 
-    // §11 bounds the spend at what is in the pool and at leaving one row to
+    // §11 bounds the spend at what is in the pool and at leaving one space to
     // drive; `RaceCarsMove` refuses anything outside that, so the screen is
     // clamped to the same window rather than allowed to build a command the
     // server will only throw away.
     const appliedBrake = me?.roll == null ? 0 : Math.min(brake, Math.max(0, Math.min(me.brakes, me.roll - MIN_MOVE_STEPS)));
 
     // How far the car is being asked to travel right now: §7 step 2's rolled
-    // move less the brakes dialled in, or §12's fixed three-row tow. Null
+    // move less the brakes dialled in, or §12's fixed three-space tow. Null
     // whenever this driver is not choosing a destination at all.
     const towing = !!me && isMyTurn && me.phase === 'slipstream';
     const distance = !gs || !me || !isMyTurn ? null

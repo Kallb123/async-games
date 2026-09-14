@@ -419,18 +419,40 @@ export function stepsFrom(track: RaceCarsTrack, row: number, lane: number): read
     return spaceAt(track, row, lane)?.exits ?? [];
 }
 
+/**
+ * A distance this board can actually be asked to walk: a whole number of steps,
+ * never negative, never longer than a lap.
+ *
+ * Both halves earn their place. A **fractional** distance would floor itself
+ * against the loop bound and then read as short of what was asked — reporting a
+ * move as blocked by traffic that nothing blocked, and charging a tyre for it.
+ * An **oversized** one is work and memory proportional to a number chosen
+ * off-board rather than to the circuit, and no gear can roll past a lap anyway.
+ */
+export function driveableSteps(track: RaceCarsTrack, steps: number): number {
+    if (!Number.isFinite(steps) || steps < 1) return 0;
+    return Math.min(Math.floor(steps), track.rows);
+}
+
+/** Rows covered by the end of each step of a path; index 0 is none of it yet. */
+function rowsByStep(track: RaceCarsTrack, path: RaceCarsSpace[]): number[] {
+    const covered = [0];
+    for (let step = 1; step < path.length; step++) {
+        covered.push(covered[step - 1] + rowsBetween(track, path[step - 1].row, path[step].row));
+    }
+    return covered;
+}
+
 /** Rows covered by a path, which is what §10 charges in — never its step count. */
 export function rowsAlong(track: RaceCarsTrack, path: RaceCarsSpace[]): number {
-    let rows = 0;
-    for (let step = 1; step < path.length; step++) {
-        rows += rowsBetween(track, path[step - 1].row, path[step].row);
-    }
-    return rows;
+    const covered = rowsByStep(track, path);
+    return covered[covered.length - 1];
 }
 
 /**
  * Rows a move of exactly `steps` steps from this space can cover, at its
- * shortest and its longest, ignoring traffic.
+ * shortest and its longest, ignoring traffic. (Not `RaceCarsModels`'
+ * `rowsCovered`, which is the whole race's worth on the result page.)
  *
  * The two are the same number on a circuit whose lanes all run in step, and
  * that is the only reason the rest of the game could ever say "a roll of 8" and
@@ -439,7 +461,7 @@ export function rowsAlong(track: RaceCarsTrack, path: RaceCarsSpace[]): number {
  * than a number of them — so the reach band quotes it as one (§23.5), and the
  * conservative line plans against the far end of it (§23.7 PR 6).
  */
-export function rowsCovered(
+export function rowSpan(
     track: RaceCarsTrack,
     from: RaceCarsSpace,
     steps: number,
@@ -449,7 +471,7 @@ export function rowsCovered(
         [spaceKey(from.row, from.lane), { space: from, min: 0, max: 0 }],
     ]);
 
-    const walked = Number.isFinite(steps) ? Math.max(0, Math.min(Math.floor(steps), track.rows)) : 0;
+    const walked = driveableSteps(track, steps);
     for (let step = 1; step <= walked; step++) {
         const next = new Map<string, Reach>();
         for (const node of frontier.values()) {
@@ -570,13 +592,9 @@ export function cornerCrossings(
 ): (RaceCarsCornerPass & { step: number })[] {
     if (path.length < 2) return [];
 
-    // Rows covered by the end of each step. A step is not a row once a lane can
-    // skip one (§5.1), so where a corner falls has to be measured rather than
-    // counted off.
-    const covered = [0];
-    for (let step = 1; step < path.length; step++) {
-        covered.push(covered[step - 1] + rowsBetween(track, path[step - 1].row, path[step].row));
-    }
+    // A step is not a row once a lane can skip one (§5.1), so where a corner
+    // falls along the path has to be measured rather than counted off.
+    const covered = rowsByStep(track, path);
     const rows = covered[covered.length - 1];
 
     return cornersPassed(track, path[0].row, rows).map(pass => ({

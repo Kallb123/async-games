@@ -15,7 +15,7 @@ import {
     RaceCarsTrack,
     rowsAlong,
     rowsBetween,
-    rowsCovered,
+    rowSpan,
     shiftDownCost,
     SHIFT_DOWN_GEARBOX_COST,
     SLICK_CAP,
@@ -31,7 +31,8 @@ import {
     WEAR_TOKENS_PER_CAR,
 } from "./board";
 import { ASHCOMBE } from "./tracks/ashcombe";
-import { deriveTrack, type TrackSection } from "./tracks/sections";
+import type { TrackSection } from "./tracks/sections";
+import { KETTLE_CORNER, testTrack } from "./testFixtures";
 
 const TRACK_LIST: RaceCarsTrack[] = Object.values(TRACKS);
 
@@ -126,7 +127,9 @@ describe("every track", () => {
         // The step rule is a graph now (§5.1), so the holes it can have are a
         // graph's holes: a space nothing leads out of, a step onto a space that
         // isn't there, and a step that doesn't carry the car forward — which is
-        // a car driving a corner's stop count for free.
+        // a car driving a corner's stop count for free. `deriveTrack` throws on
+        // all three, and this is the assertion for a circuit that ever stops
+        // coming through it — a hand-written `spaces`, or a generated one.
         for (const space of track.spaces) {
             expect(space.exits.length).toBeGreaterThan(0);
             for (const exit of space.exits) {
@@ -340,58 +343,21 @@ describe("corner geometry (§10)", () => {
     });
 
     it("quotes a gear's band in rows, which is its step count while the lanes run in step", () => {
-        expect(rowsCovered(ASHCOMBE, { row: 20, lane: 2 }, 8)).toEqual({ min: 8, max: 8 });
-        expect(rowsCovered(ASHCOMBE, { row: 20, lane: 2 }, 0)).toEqual({ min: 0, max: 0 });
+        expect(rowSpan(ASHCOMBE, { row: 20, lane: 2 }, 8)).toEqual({ min: 8, max: 8 });
+        expect(rowSpan(ASHCOMBE, { row: 20, lane: 2 }, 0)).toEqual({ min: 0, max: 0 });
     });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** A circuit built from `sections` alone — no art, no grid, no geometry. */
-function testTrack(sections: TrackSection[]): RaceCarsTrack {
-    return {
-        id: 'test',
-        name: 'Test',
-        ...deriveTrack(sections),
-        grid: [],
-        maxGear: 5,
-        art: { href: '', viewBox: { width: 0, height: 0 } },
-        geometry: [],
-    };
-}
-
-// The Kettle: a corner whose outside is painted — each of its spaces feeds the
-// one in front and nothing else — and whose inside takes four spaces to cover
-// the eight rows the outside takes. Both of the things §5.1's own step rule
-// cannot say, on one corner, because a real board says them on one corner.
-//
-// Deliberately not a circuit anybody races: Ashcombe and Anglet are the tracks,
-// and this is the shape the data has to be able to hold.
-const KETTLE_SECTIONS: TrackSection[] = [
+// The Kettle (testFixtures.ts) with a straight either side of it: a corner
+// whose outside is painted and whose inside takes four spaces to the outside's
+// eight, which is both of the things §5.1's own step rule cannot say.
+const KETTLE = testTrack([
     { name: 'Straight', from: 0, to: 5, lanes: 3, corner: null },
-    {
-        name: 'The Kettle',
-        from: 6,
-        to: 13,
-        lanes: 2,
-        corner: { id: 'kettle', stops: 1 },
-        tiles: [
-            // The outside, one space a row, and no crossing off it.
-            ...[6, 7, 8, 9, 10, 11, 12].map(row => ({ row, lane: 2, exits: [{ row: row + 1, lane: 2 }] })),
-            // Its last space rejoins the straight under §5.1's own rule.
-            { row: 13, lane: 2 },
-            // The inside, four spaces to the outside's eight, rejoining the
-            // road in either lane at the end of it.
-            { row: 6, lane: 1, exits: [{ row: 8, lane: 1 }] },
-            { row: 8, lane: 1, exits: [{ row: 10, lane: 1 }] },
-            { row: 10, lane: 1, exits: [{ row: 12, lane: 1 }] },
-            { row: 12, lane: 1, exits: [{ row: 14, lane: 1 }, { row: 14, lane: 2 }] },
-        ],
-    },
+    KETTLE_CORNER,
     { name: 'Run to the Line', from: 14, to: 19, lanes: 3, corner: null },
-];
-
-const KETTLE = testTrack(KETTLE_SECTIONS);
+]);
 
 describe("a corner whose lanes do not run in step (§5.1)", () => {
     it("steps where the space says it may, and nowhere else", () => {
@@ -406,14 +372,14 @@ describe("a corner whose lanes do not run in step (§5.1)", () => {
     });
 
     it("covers the corner in four spaces on the inside and eight on the outside", () => {
-        expect(rowsCovered(KETTLE, { row: 6, lane: 1 }, 4)).toEqual({ min: 8, max: 8 });
-        expect(rowsCovered(KETTLE, { row: 6, lane: 2 }, 4)).toEqual({ min: 4, max: 4 });
+        expect(rowSpan(KETTLE, { row: 6, lane: 1 }, 4)).toEqual({ min: 8, max: 8 });
+        expect(rowSpan(KETTLE, { row: 6, lane: 2 }, 4)).toEqual({ min: 4, max: 4 });
     });
 
     it("makes a gear's band a range of rows rather than a number of them", () => {
         // From the straight, where the line into the corner is still a choice:
         // five spaces are five rows round the outside and nine down the inside.
-        expect(rowsCovered(KETTLE, { row: 5, lane: 2 }, 5)).toEqual({ min: 5, max: 9 });
+        expect(rowSpan(KETTLE, { row: 5, lane: 2 }, 5)).toEqual({ min: 5, max: 9 });
     });
 
     it("charges an overshoot in rows of road, not in spaces driven", () => {

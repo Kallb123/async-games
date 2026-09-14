@@ -23,6 +23,7 @@ import {
     cornerCrossings,
     cornersPassed,
     crossesStartLine,
+    driveableSteps,
     gearDef,
     MIN_MOVE_STEPS,
     OIL_DIE_SIDES,
@@ -33,7 +34,7 @@ import {
     RaceCarsSpecId,
     RaceCarsTrack,
     rowsBetween,
-    rowsCovered,
+    rowSpan,
     shiftDownCost,
     SLIPSTREAM_GAP_ROWS,
     SLIPSTREAM_STEPS,
@@ -184,21 +185,6 @@ interface RaceCarsWalk {
     levels: Map<string, WalkNode>[];
 }
 
-/**
- * A distance this board can actually be asked to walk: a whole number of steps,
- * never negative, never longer than a lap.
- *
- * Both halves earn their place. A **fractional** distance would floor itself
- * against the loop bound and then read as short of what was asked — reporting a
- * move as blocked by traffic that nothing blocked, and charging a tyre for it.
- * An **oversized** one is work and memory proportional to a number chosen
- * off-board rather than to the circuit, and no gear can roll past a lap anyway.
- */
-function driveableDistance(track: RaceCarsTrack, distance: number): number {
-    if (!Number.isFinite(distance) || distance < 1) return 0;
-    return Math.min(Math.floor(distance), track.rows);
-}
-
 function occupiedBy(state: IRaceCarsSpecificGameState, exceptUserId: string): Set<string> {
     const occupied = new Set<string>();
     for (const [userId, ps] of playerStates(state)) {
@@ -235,7 +221,7 @@ function walk(state: IRaceCarsSpecificGameState, userId: string, distance: numbe
         new Map([[spaceKey(start.row, start.lane), { space: start, slicks: 0, parent: null }]]),
     ];
 
-    const requested = driveableDistance(track, distance);
+    const requested = driveableSteps(track, distance);
     for (let step = 1; step <= requested; step++) {
         const previous = levels[step - 1];
         const next = new Map<string, WalkNode>();
@@ -418,6 +404,25 @@ export interface RaceCarsArrivalOptions {
 }
 
 /**
+ * §10 on one corner a move leaves behind: which of its three outcomes this is,
+ * and the rows it is past the corner.
+ *
+ * One reading of the rule for the resolver that charges it and the line that
+ * plans against it (§23.7 PR 6) alike — two readings are two things to keep in
+ * lockstep, and the state where they disagree is the one where the cron takes a
+ * move it priced as free and then pays for it.
+ */
+function settleCorner(
+    corner: RaceCarsCorner,
+    stops: number,
+    waivedCornerId: string | null,
+    rowsPast: number,
+): { outcome: 'cleared' | 'waived' | 'charged'; rows: number } {
+    if (corner.stops - stops <= 0) return { outcome: 'cleared', rows: 0 };
+    return { outcome: corner.id === waivedCornerId ? 'waived' : 'charged', rows: rowsPast };
+}
+
+/**
  * Where a spin comes to rest: the corner's last row, first free lane, searching
  * backwards along the corner for a free space (§13, §18).
  *
@@ -596,21 +601,20 @@ export function resolveArrival(
         const crossing = exits.get(step);
         if (crossing) {
             const corner = crossing.corner;
-            const owed = corner.stops - stops;
-            if (owed <= 0) {
+            const { outcome, rows } = settleCorner(corner, stops, waivedCornerId, crossing.rowsPast);
+            if (outcome === 'cleared') {
                 events.push({ type: 'cornerCleared', cornerId: corner.id });
-            } else if (corner.id === waivedCornerId) {
-                events.push({ type: 'overshoot', cornerId: corner.id, rows: crossing.rowsPast, waived: true });
             } else {
-                const rows = crossing.rowsPast;
-                events.push({ type: 'overshoot', cornerId: corner.id, rows, waived: false });
-                if (tyres >= rows) {
-                    tyres -= rows;
-                } else {
-                    // §10: you do not pay what you can and spin for the rest.
-                    // You pay nothing, and the car is placed back in the corner.
-                    events.push({ type: 'spin', cause: 'overshoot', cornerId: corner.id });
-                    return rest(spinLanding(track, occupied, corner), 0, true, true);
+                events.push({ type: 'overshoot', cornerId: corner.id, rows, waived: outcome === 'waived' });
+                if (outcome === 'charged') {
+                    if (tyres >= rows) {
+                        tyres -= rows;
+                    } else {
+                        // §10: you do not pay what you can and spin for the rest.
+                        // You pay nothing, and the car is placed back in the corner.
+                        events.push({ type: 'spin', cause: 'overshoot', cornerId: corner.id });
+                        return rest(spinLanding(track, occupied, corner), 0, true, true);
+                    }
                 }
             }
             // Banked stops reset the moment the corner is legally left (§10).
@@ -747,8 +751,9 @@ function plannedOvershoot(
     const waivedCornerId = waiveUnavoidableCorner ? waivedCornerIdAt(track, ps.row, ps.lane) : null;
     let stops = ps.cornerStops;
     let charged = 0;
-    for (const { corner, rowsPast } of cornersPassed(track, ps.row, rowsCovered(track, ps, steps).max)) {
-        if (corner.stops - stops > 0 && corner.id !== waivedCornerId) charged += rowsPast;
+    for (const { corner, rowsPast } of cornersPassed(track, ps.row, rowSpan(track, ps, steps).max)) {
+        const settled = settleCorner(corner, stops, waivedCornerId, rowsPast);
+        if (settled.outcome === 'charged') charged += settled.rows;
         stops = 0;
     }
     return charged;

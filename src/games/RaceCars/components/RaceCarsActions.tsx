@@ -15,7 +15,7 @@ import {
     gearName,
     MIN_MOVE_STEPS,
     rowsBetween,
-    rowsCovered,
+    rowSpan,
     SLIPSTREAM_STEPS,
     trackById,
     type RaceCarsGear,
@@ -40,7 +40,7 @@ function reachBand(track: RaceCarsTrack, ps: IRaceCarsPlayerState, gear: RaceCar
     // The die is thrown in spaces and §10 is charged in rows, and the two are
     // only the same number while a circuit's lanes run in step (§5.1) — so the
     // band is converted to road here, once, and everything below it reads rows.
-    const rows = { min: rowsCovered(track, ps, min).min, max: rowsCovered(track, ps, max).max };
+    const rows = { min: rowSpan(track, ps, min).min, max: rowSpan(track, ps, max).max };
     const span = `rolls ${min}–${max} → rows ${(ps.row + rows.min) % track.rows}–${(ps.row + rows.max) % track.rows}`;
     return `${span} · ${cornerVerdict(track, ps, rows.min, rows.max)}`;
 }
@@ -90,34 +90,34 @@ function tyreCost(ps: IRaceCarsPlayerState, rows: number, qualifier = 'up to '):
 }
 
 /**
- * §12's offer, priced. Three rows are free on an open road and are three rows
+ * §12's offer, priced. Three spaces are free on an open road and are three rows
  * of overshoot in a braking zone, which is the whole decision — so the prompt
  * names the corner and what leaving it would cost rather than saying "free".
  */
 function towPrompt(track: RaceCarsTrack, ps: IRaceCarsPlayerState, options: RaceCarsMoveOptions): string {
     if (options.blockedShort) {
-        return `Traffic — the tow only runs ${pluralize(options.distance, 'row')}. Tap a highlighted space to take what there is and scuff a tyre.`;
+        return `Traffic — the tow only runs ${pluralize(options.distance, 'space')}. Tap a highlighted space to take what there is and scuff a tyre.`;
     }
     const here = cornerAt(track, ps.row);
     // The worst the tow can do, which is what a warning should quote: three
     // steps are three rows of road until a corner's lanes run out of step, and
     // then they are as many rows as the longest line through it covers (§5.1).
     const past = here && here.stops > ps.cornerStops
-        ? rowsCovered(track, ps, SLIPSTREAM_STEPS).max - rowsBetween(track, ps.row, here.to)
+        ? rowSpan(track, ps, SLIPSTREAM_STEPS).max - rowsBetween(track, ps.row, here.to)
         : 0;
     if (past > 0) {
         // §12: a tow out of a corner is charged in full — §10's waiver forgives
         // a corner you could not avoid leaving, and declining this costs
         // nothing.
-        return `Three rows — but they push you out of ${here!.name} by ${pluralize(past, 'row')}, charged in full${tyreCost(ps, past, '')}.`;
+        return `Three spaces — but they push you out of ${here!.name} by ${pluralize(past, 'row')}, charged in full${tyreCost(ps, past, '')}.`;
     }
-    return `Three free rows. Tap a highlighted space to take the tow.`;
+    return `Three free spaces. Tap a highlighted space to take the tow.`;
 }
 
 /** What the move the driver is lining up will actually do, in their language. */
 function movePrompt(options: RaceCarsMoveOptions): string {
     if (options.boxedIn) return 'Boxed in — nothing is reachable, so tap your own space to stay put. No damage, and the gear drops to first.';
-    if (options.blockedShort) return `Traffic — the road runs out ${pluralize(options.distance, 'row')} along. Tap a highlighted space to stop short and scuff a tyre.`;
+    if (options.blockedShort) return `Traffic — the road runs out ${pluralize(options.distance, 'space')} along. Tap a highlighted space to stop short and scuff a tyre.`;
     return `Tap one of the ${options.spaces.length} highlighted spaces on the circuit.`;
 }
 
@@ -245,7 +245,7 @@ export default function RaceCarsActions({ gs, myUserId, brake, setBrake, options
                     values={[roll]}
                     sides={[die]}
                     headline={`${gearName(ps.gear)} · ${roll}`}
-                    sub={brake > 0 ? `Braking ${pluralize(brake, 'row')} off — ${pluralize(distance, 'row')} to drive` : `${pluralize(distance, 'row')} to drive`}
+                    sub={brake > 0 ? `Braking ${pluralize(brake, 'space')} off — ${pluralize(distance, 'space')} to drive` : `${pluralize(distance, 'space')} to drive`}
                 />
 
                 {maxBrake > 0 && (

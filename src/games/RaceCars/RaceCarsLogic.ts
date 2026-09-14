@@ -430,7 +430,7 @@ export class RaceCarsMove implements IGameCommand {
     /** Where the move finishes — a destination, never a path (§9, §23.3). */
     row: number = -1;
     lane: number = -1;
-    /** Brake points spent to shorten this roll, one row each (§11). */
+    /** Brake points spent to shorten this roll, one space each (§11). */
     brake: number = 0;
     /**
      * One d6 per slick entered, for replay. Named `recorded…` so
@@ -486,7 +486,7 @@ export class RaceCarsMove implements IGameCommand {
         // corner's lanes run out of step (§5.1), and the driver is reading the
         // road rather than counting spaces.
         const rows = rowsAlong(track, path);
-        const braked = this.brake > 0 ? ` after braking ${pluralize(this.brake, 'row')} off the roll` : '';
+        const braked = this.brake > 0 ? ` after braking ${pluralize(this.brake, 'space')} off the roll` : '';
         // Read before the arrival is applied: a spin drops the gear to neutral.
         const roll = { gear: ps.gear, value: ps.roll };
         const settled = settle(data, ps, this.senderId, path, {

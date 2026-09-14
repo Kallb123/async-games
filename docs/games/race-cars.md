@@ -281,12 +281,12 @@ higher than your current gear, or any gear below it that you can pay the gearbox
 cost for (§8.2). The gear's die is then rolled and the number is public.
 
 **Step 2 — Move.** Optionally spend brakes to shorten the roll (§11), then move
-exactly that many rows, choosing your destination from the spaces the roll can
+exactly that many spaces, choosing your destination from the ones the roll can
 legally reach (§9). Corner stops, overshoots, blocking and — if it is on — oil
 are all resolved by arriving.
 
 **Step 3 — Slipstream.** If your move ended one or two rows behind another car,
-you may take a three-row tow (§12), or decline it. Either way the turn ends.
+you may take a three-space tow (§12), or decline it. Either way the turn ends.
 
 The shape of the turn matters as much as its content: **the roll happens in
 step 1, and every decision that follows it is made with the number known.**
@@ -382,8 +382,12 @@ reachable in exactly *N* steps without passing through an occupied space, marks
 them on the board, and you tap one. The path itself is then derived, and it
 matters for exactly one thing: **which oil slicks you crossed** (§14), which
 the derivation minimises. Which *corners* you crossed is not a choice at all —
-a corner is a band of rows, and every path of exactly *N* steps crosses exactly
-the same rows — so there is one objective here, not two, and nothing to search.
+every path to the **same destination** covers the same rows of road, whichever
+line it takes to get there, and a corner is a band of rows — so there is one
+objective here, not two, and nothing to search. (Two *different* destinations
+the same number of spaces away can be a different number of rows apart, where a
+corner runs its lanes out of step (§5.1). That is the choice the destination
+already is, not a second search inside one.)
 
 This is the single biggest concession to asynchronous play in the design, and
 it costs less than it looks. In a live game a driver picks their line row by row
@@ -493,7 +497,8 @@ choice at setup and everybody races it.
 
 **Braking is the only pool you spend on purpose, with the number in front of
 you.** After the roll you may spend any number of brake points up to what you
-have, reducing the distance by one row each, **down to a minimum of one row** —
+have, reducing the distance by one space each, **down to a minimum of one
+space** —
 a car always moves. This is the rule that makes fifth gear into Gravel Bend a
 decision rather than a mistake: a roll of 17 with four brakes left is a roll of
 13, and 13 from row 38 is row 51, which is the last row of the Bend.
@@ -509,7 +514,7 @@ that alone changes which spec is correct.
 ## 12. Slipstream
 
 If your move ends **one or two rows behind another car — in any lane** — you may
-take a tow: a second move of exactly **3 rows**, immediately, resolved under
+take a tow: a second move of exactly **3 spaces**, immediately, resolved under
 every rule a normal move follows.
 
 - You may **decline**. Declining costs nothing.
@@ -527,7 +532,7 @@ every rule a normal move follows.
 Slipstream is the game's rubber band, and it is pointed the right way round: it
 only ever helps the car behind, it is strongest where the field is closest, and
 it is most dangerous exactly where the field is closest — in the braking zone
-for a corner, where three free rows are three rows of overshoot.
+for a corner, where three free spaces are three rows of overshoot.
 
 ---
 
@@ -828,8 +833,9 @@ Ordered by what each one buys against what it costs.
    line of four spaces to the outside's eight — and re-cutting the corners of
    the two circuits that already ship is the cheapest thing on this list to
    make a corner feel like one: no new art, no new rule, no new screen. Still
-   worth building on the same hook: **Bonneville Oval** — two enormous straights, two one-stop
-   corners, `maxGear: 6`, the circuit that exists to make sixth gear real.
+   worth building on the same hook: **Bonneville Oval** — two enormous
+   straights, two one-stop corners, `maxGear: 6`, the circuit that exists to
+   make sixth gear real.
 2. **Per-driver spec.** Let each driver split their own twelve tokens instead of
    racing the host's spec. The async cost is what kills it today: a setup phase
    is a whole extra round of turns before anything moves. It becomes free the
@@ -861,11 +867,11 @@ Ordered by what each one buys against what it costs.
 | **Row** | One position along the circuit. 78 of them at Ashcombe; corners, the finish line and the order of the field are all measured in these |
 | **Lane** | A position across the road, 1–3. Every row is 2 or 3 lanes wide |
 | **Space** | One (row, lane) pair — where a car stands, and what a roll is spent in. 214 at Ashcombe. A lane need not have one on every row (§5.1) |
-| **Band** | The range of rows a gear can travel (§8.1) |
+| **Band** | The range of spaces a gear can travel (§8.1) |
 | **Stop** | A turn ended inside a corner. Corners owe 1 or 2 |
 | **Overshoot** | Ending past a corner's last row without its stops banked. Costs 1 tyre a row |
 | **Spin** | The unpayable-overshoot or lost-control result: gear 0 and a missed turn (§13) |
-| **Tow** | The three free rows a slipstream grants (§12) |
+| **Tow** | The three free spaces a slipstream grants (§12) |
 | **Scuff** | The 1 tyre a blocked-short move costs (§9) |
 | **Spec** | How the field's twelve wear tokens are split (§11) |
 | **Slick** | An oil hazard, module only (§14) |
@@ -877,15 +883,15 @@ Ordered by what each one buys against what it costs.
 **Your turn**
 
 1. **Shift** — up one, or down as many as the gearbox pays for. Roll the gear's die.
-2. **Brake** *(optional)* — 1 point = 1 row less, never below one row.
-3. **Move** — exactly that many rows. Tap a highlighted space.
-4. **Tow** *(optional)* — 3 more rows if you ended 1–2 rows behind a car.
+2. **Brake** *(optional)* — 1 point = 1 space less, never below one space.
+3. **Move** — exactly that many spaces. Tap a highlighted space.
+4. **Tow** *(optional)* — 3 more spaces if you ended 1–2 rows behind a car.
 
 **Gears** · 1: 1–2 · 2: 2–4 · 3: 4–8 · 4: 7–12 · 5: 11–20 · 6: 21–30
 
 **Shifting down** · 2 gears = 1 gearbox · 3 = 3 · 4 = 6 · 5 = illegal
 
-**Costs** · overshoot 1 tyre/row · blocked short 1 tyre · brake 1/row · can't pay an overshoot → spin
+**Costs** · overshoot 1 tyre/row · blocked short 1 tyre · brake 1/space · can't pay an overshoot → spin
 
 **Ashcombe Park** · Hairpin (10–14) 2 stops · Gravel Bend (47–51) 1 · The Kink (62–65) 1 · fifth gear is the top of this circuit
 

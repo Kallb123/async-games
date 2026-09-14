@@ -120,12 +120,13 @@ export default function RaceCarsBoard({ gs, userIdList, validSpaces, unavoidable
         ...(car.pips ? [centredRect(car.at.x, car.at.y + PIP_DROP, car.pips.owed * PIP_PITCH, PIP_RADIUS * 2)] : []),
     ]);
 
+    // Where to hang something on a row, in whichever lane the road actually has
+    // a space there: the inside of a corner can skip a row entirely (§5.1), and
+    // anything pinned to lane 1 alone would go missing on exactly those rows.
+    const anchorOn = (row: number) => geometry.get(spaceKey(row, spacesInRow(track, row)[0]?.lane ?? 1));
+
     const cornerLabels: MapLabelSpec[] = track.corners.flatMap(corner => {
-        // The corner's middle row, in whichever lane the road actually has one
-        // there: the inside of a corner can skip a row entirely (§5.1), and a
-        // label hung off lane 1 alone would go missing on exactly those corners.
-        const mid = Math.round((corner.from + corner.to) / 2);
-        const middle = geometry.get(spaceKey(mid, spacesInRow(track, mid)[0]?.lane ?? 1));
+        const middle = anchorOn(Math.round((corner.from + corner.to) / 2));
         if (!middle) return [];
         return [{
             key: corner.id,
@@ -137,9 +138,7 @@ export default function RaceCarsBoard({ gs, userIdList, validSpaces, unavoidable
         }];
     });
 
-    // Row 0 in whichever lane the road has one, for the same reason the corner
-    // names are placed that way.
-    const startLine = geometry.get(spaceKey(0, spacesInRow(track, 0)[0]?.lane ?? 1));
+    const startLine = anchorOn(0);
 
     return (
         <div className="ag-board-frame ag-racecars-frame">

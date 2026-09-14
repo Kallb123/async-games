@@ -15,8 +15,7 @@ import {
     slipstreamOffered,
     trackProgress,
 } from "./rules";
-import { deriveTrack } from "./tracks/sections";
-import { car, race } from "./testFixtures";
+import { car, KETTLE_CORNER, race, testTrack } from "./testFixtures";
 
 // Ashcombe (§5.2), for reading the fixtures below against:
 //   0-9 straight (3) · 10-14 Hairpin (2, two stops) · 15-46 The Mile (3)
@@ -29,24 +28,20 @@ import { car, race } from "./testFixtures";
 // carries, so the first corner always spins the car and the second is never
 // reached. Two corners six rows apart make both charges payable and visible —
 // and it doubles as proof the rules read the track data rather than Ashcombe.
-const TWO_CORNERS: RaceCarsTrack = {
+const TWO_CORNERS: RaceCarsTrack = testTrack([
+    { name: 'Straight', from: 0, to: 7, lanes: 3, corner: null },
+    { name: 'First', from: 8, to: 10, lanes: 2, corner: { id: 'first', stops: 1 } },
+    { name: 'Between', from: 11, to: 13, lanes: 3, corner: null },
+    { name: 'Second', from: 14, to: 16, lanes: 2, corner: { id: 'second', stops: 1 } },
+    { name: 'Run to the Line', from: 17, to: 29, lanes: 3, corner: null },
+], {
     id: 'twocorners',
     name: 'Two Corners',
-    ...deriveTrack([
-        { name: 'Straight', from: 0, to: 7, lanes: 3, corner: null },
-        { name: 'First', from: 8, to: 10, lanes: 2, corner: { id: 'first', stops: 1 } },
-        { name: 'Between', from: 11, to: 13, lanes: 3, corner: null },
-        { name: 'Second', from: 14, to: 16, lanes: 2, corner: { id: 'second', stops: 1 } },
-        { name: 'Run to the Line', from: 17, to: 29, lanes: 3, corner: null },
-    ]),
     grid: Array.from({ length: MAX_PLAYERS }, (_unused, slot) => ({
         row: 2 - Math.floor(slot / 2),
         lane: slot % 2 === 0 ? 1 : 3,
     })),
-    maxGear: 5,
-    art: { href: '', viewBox: { width: 0, height: 0 } },
-    geometry: [],
-};
+});
 // `trackById` resolves through the exported registry, so a fixture circuit has
 // to be registered rather than passed in — and taken out again afterwards, so a
 // later test that enumerates TRACKS never inherits it. It is built to satisfy
@@ -55,57 +50,42 @@ const TWO_CORNERS: RaceCarsTrack = {
 TRACKS[TWO_CORNERS.id] = TWO_CORNERS;
 afterAll(() => { delete TRACKS[TWO_CORNERS.id]; });
 
-// A circuit whose corner runs its lanes out of step, which neither of the two
-// that ship does. The Kettle's outside is painted — each of its spaces feeds
-// the one in front and nothing else — and its inside covers the same eight rows
-// in four spaces, so the same roll driven down the inside covers twice the
-// road. Its own inside line then cuts across the start/finish line, where the
-// road has no space in lane 1 at all.
+// A circuit built round testFixtures' Kettle corner — lanes that run out of
+// step, and spaces that feed only the spaces they name — with a start/finish
+// straight the inside line steps clean over.
 //
 // Registered here rather than shipped, for the same reason TWO_CORNERS is: it
 // exists to prove the rules read the track data, and §23.7's follow-up is where
-// a real board grows corners shaped like this.
-const UNEVEN: RaceCarsTrack = {
+// a real circuit grows corners shaped like this.
+const UNEVEN: RaceCarsTrack = testTrack([
+    {
+        name: 'Start / Finish Straight', from: 0, to: 5, lanes: 3, corner: null,
+        tiles: [
+            // Lane 1 has no space on the line itself.
+            { row: 0, lane: 2 }, { row: 0, lane: 3 },
+            ...[1, 2, 3, 4, 5].flatMap(row => [1, 2, 3].map(lane => ({ row, lane }))),
+        ],
+    },
+    KETTLE_CORNER,
+    {
+        name: 'Run to the Line', from: 14, to: 23, lanes: 3, corner: null,
+        tiles: [
+            ...[14, 15, 16, 17, 18, 19, 20, 21, 22].flatMap(row => [1, 2, 3].map(lane => ({ row, lane }))),
+            // The inside line cuts across the start/finish line, where the road
+            // has no space in lane 1 at all.
+            { row: 23, lane: 1, exits: [{ row: 1, lane: 1 }] },
+            { row: 23, lane: 2 }, { row: 23, lane: 3 },
+        ],
+    },
+], {
     id: 'uneven',
     name: 'The Kettle',
-    ...deriveTrack([
-        {
-            name: 'Start / Finish Straight', from: 0, to: 5, lanes: 3, corner: null,
-            tiles: [
-                // Lane 1 has no space on the line itself.
-                { row: 0, lane: 2 }, { row: 0, lane: 3 },
-                ...[1, 2, 3, 4, 5].flatMap(row => [1, 2, 3].map(lane => ({ row, lane }))),
-            ],
-        },
-        {
-            name: 'The Kettle', from: 6, to: 13, lanes: 2, corner: { id: 'kettle', stops: 1 },
-            tiles: [
-                ...[6, 7, 8, 9, 10, 11, 12].map(row => ({ row, lane: 2, exits: [{ row: row + 1, lane: 2 }] })),
-                { row: 13, lane: 2 },
-                { row: 6, lane: 1, exits: [{ row: 8, lane: 1 }] },
-                { row: 8, lane: 1, exits: [{ row: 10, lane: 1 }] },
-                { row: 10, lane: 1, exits: [{ row: 12, lane: 1 }] },
-                { row: 12, lane: 1, exits: [{ row: 14, lane: 1 }, { row: 14, lane: 2 }] },
-            ],
-        },
-        {
-            name: 'Run to the Line', from: 14, to: 23, lanes: 3, corner: null,
-            tiles: [
-                ...[14, 15, 16, 17, 18, 19, 20, 21, 22].flatMap(row => [1, 2, 3].map(lane => ({ row, lane }))),
-                { row: 23, lane: 1, exits: [{ row: 1, lane: 1 }] },
-                { row: 23, lane: 2 }, { row: 23, lane: 3 },
-            ],
-        },
-    ]),
     grid: [
         { row: 2, lane: 1 }, { row: 2, lane: 3 },
         { row: 1, lane: 1 }, { row: 1, lane: 3 },
         { row: 0, lane: 2 }, { row: 0, lane: 3 },
     ],
-    maxGear: 5,
-    art: { href: '', viewBox: { width: 0, height: 0 } },
-    geometry: [],
-};
+});
 TRACKS[UNEVEN.id] = UNEVEN;
 afterAll(() => { delete TRACKS[UNEVEN.id]; });
 
