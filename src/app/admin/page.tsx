@@ -1,10 +1,12 @@
 'use client'
 
+import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import AdminGuestRecovery from '@/components/AdminGuestRecovery';
 import AdminUserAnalytics from '@/components/AdminUserAnalytics';
 import BackLink from '@/components/ui/BackLink';
 import ErrorScreen from '@/components/ui/ErrorScreen';
+import Section from '@/components/ui/Section';
 import { useAuthGuard } from '@/utils/hooks/useAuthGuard';
 import { isAdmin } from '@/utils/ui/players';
 
@@ -51,6 +53,12 @@ export default function Admin() {
 
             <AdminGuestRecovery />
             <AdminUserAnalytics />
+
+            <Section label="Game tools">
+                <Link href="/admin/racecars" className="ag-btn ag-btn--light ag-btn--block">
+                    Race Cars track editor
+                </Link>
+            </Section>
         </main>
     );
 }

@@ -94,12 +94,67 @@ function tilesOf(section: TrackSection): SectionTile[] {
  * two-lane corner, lane 3 has only lane 2 to merge into — and because every row
  * has a space on it, the result is never empty, which is what lets §9 treat an
  * empty step list as "boxed in by traffic" rather than "off the end of the map".
+ *
+ * Exported because the track editor (docs/admin-tools.md) draws these faint,
+ * behind the exits an author has overridden, so a corner's real merge reads
+ * against §5.1's default rather than replacing it invisibly.
  */
-function defaultExits(rows: number, spacesByRow: Map<number, number[]>, tile: SectionTile): RaceCarsSpace[] {
+export function defaultExits(rows: number, spacesByRow: Map<number, number[]>, tile: SectionTile): RaceCarsSpace[] {
     const to = (tile.row + 1) % rows;
     return (spacesByRow.get(to) ?? [])
         .filter(lane => Math.abs(lane - tile.lane) <= 1)
         .map(lane => ({ row: to, lane }));
+}
+
+/**
+ * A circuit's `spaces` — every tile with the steps out of it, §5.1's default
+ * rule written onto any that didn't name their own — validated as a graph a
+ * race can actually be driven round.
+ *
+ * The half of `deriveTrack` that is about tiles rather than sections, split out
+ * so the track editor can assemble the same graph from tiles it has no section
+ * table for and refuse the same undriveable circuits (docs/admin-tools.md).
+ * `rows` is the lap length: `deriveTrack` reads it off the last section, the
+ * editor off the highest row it has a tile on. Throws — the errors are the ones
+ * `board.test.ts` pins — on each hole a race would otherwise fall into
+ * silently: two spaces on one square, a row the road skips, a space nothing can
+ * step off, a step onto a space that isn't there, or a step that changes lane
+ * without moving the car forward.
+ */
+export function assembleSpaces(tiles: SectionTile[], rows: number): RaceCarsTrackSpace[] {
+    const spacesByRow = new Map<number, number[]>();
+    for (const tile of tiles) {
+        const lanes = spacesByRow.get(tile.row);
+        if (lanes?.includes(tile.lane)) throw new Error(`Race Cars: two spaces at ${tile.row}:${tile.lane}`);
+        if (lanes) lanes.push(tile.lane);
+        else spacesByRow.set(tile.row, [tile.lane]);
+    }
+    for (const lanes of spacesByRow.values()) lanes.sort((a, b) => a - b);
+    for (let row = 0; row < rows; row++) {
+        // A row the road skips is a gap `defaultExits` steps straight over,
+        // which is a lap distance no rule would agree on.
+        if (!spacesByRow.has(row)) throw new Error(`Race Cars: row ${row} has no spaces on it`);
+    }
+
+    const spaces: RaceCarsTrackSpace[] = tiles.map(tile => ({
+        row: tile.row,
+        lane: tile.lane,
+        exits: tile.exits ?? defaultExits(rows, spacesByRow, tile),
+    }));
+
+    for (const space of spaces) {
+        if (space.exits.length === 0) throw new Error(`Race Cars: nothing to step to from ${space.row}:${space.lane}`);
+        for (const exit of space.exits) {
+            if (!spacesByRow.get(exit.row)?.includes(exit.lane)) {
+                throw new Error(`Race Cars: ${space.row}:${space.lane} steps to ${exit.row}:${exit.lane}, which is not a space`);
+            }
+            if (exit.row === space.row) {
+                throw new Error(`Race Cars: ${space.row}:${space.lane} steps sideways to lane ${exit.lane} — a car changes lane while moving, never on the spot`);
+            }
+        }
+    }
+
+    return spaces;
 }
 
 /**
@@ -138,37 +193,7 @@ export function deriveTrack(sections: TrackSection[]): {
         return tile;
     }));
 
-    const spacesByRow = new Map<number, number[]>();
-    for (const tile of tiles) {
-        const lanes = spacesByRow.get(tile.row);
-        if (lanes?.includes(tile.lane)) throw new Error(`Race Cars: two spaces at ${tile.row}:${tile.lane}`);
-        if (lanes) lanes.push(tile.lane);
-        else spacesByRow.set(tile.row, [tile.lane]);
-    }
-    for (const lanes of spacesByRow.values()) lanes.sort((a, b) => a - b);
-    for (let row = 0; row < rows; row++) {
-        // A row the road skips is a gap `defaultExits` steps straight over,
-        // which is a lap distance no rule would agree on.
-        if (!spacesByRow.has(row)) throw new Error(`Race Cars: row ${row} has no spaces on it`);
-    }
-
-    const spaces: RaceCarsTrackSpace[] = tiles.map(tile => ({
-        row: tile.row,
-        lane: tile.lane,
-        exits: tile.exits ?? defaultExits(rows, spacesByRow, tile),
-    }));
-
-    for (const space of spaces) {
-        if (space.exits.length === 0) throw new Error(`Race Cars: nothing to step to from ${space.row}:${space.lane}`);
-        for (const exit of space.exits) {
-            if (!spacesByRow.get(exit.row)?.includes(exit.lane)) {
-                throw new Error(`Race Cars: ${space.row}:${space.lane} steps to ${exit.row}:${exit.lane}, which is not a space`);
-            }
-            if (exit.row === space.row) {
-                throw new Error(`Race Cars: ${space.row}:${space.lane} steps sideways to lane ${exit.lane} — a car changes lane while moving, never on the spot`);
-            }
-        }
-    }
+    const spaces = assembleSpaces(tiles, rows);
 
     const corners: RaceCarsCorner[] = sections
         .filter(section => section.corner !== null)

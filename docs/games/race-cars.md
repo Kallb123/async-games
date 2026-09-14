@@ -1470,11 +1470,20 @@ render worth using. `npm run icons` writes
 installed as a system font and warns rather than failing without it.
 
 **Producing the geometry is the part to plan for.** 214 hand-placed
-coordinates is not a thing to type. The track's centre line is authored as a
-path, and a small build-time script samples it at 78 points, offsets each by
-lane, and writes `geometry` — so the art and the data are generated from the
-same curve. That script lives beside the track data and runs once per circuit;
-it is not a runtime dependency and nothing in `src/` imports it.
+coordinates is not a thing to type. This was first imagined as a build-time
+script sampling an authored centre line at 78 points; the spaces-graph refactor
+(§5.1) made a plain sampled curve too blunt, because a corner's inside line now
+takes fewer tiles round than the outside and each of those tiles has its own
+`exits` to name — a curve can offset by lane but it cannot draw a graph edge.
+
+So the geometry (and the corner merges) are authored interactively instead, in
+the **Race Cars track editor** at `/admin/racecars`
+([`docs/admin-tools.md`](../admin-tools.md)): an admin drops each tile onto the
+art to fix its centre point, draws the exits that break §5.1's default rule,
+bands the corners, and the editor prints a `tracks/` file — validated through
+the game's own `assembleSpaces`, so a circuit that passes in the editor is one
+that loads in the game. It is a build-time aid, not a runtime dependency:
+nothing in `src/` imports it, and it persists nothing server-side.
 
 ### 23.7 The PRs
 

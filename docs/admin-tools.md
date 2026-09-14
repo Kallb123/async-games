@@ -1,8 +1,9 @@
 # Admin tools
 
-Support tooling for whoever runs the app, at `/admin`. Two jobs today:
+Support tooling for whoever runs the app, at `/admin`. Three jobs today:
 getting a guest back into their game when the link they were given is gone,
-and a look at what platforms players are actually on.
+a look at what platforms players are actually on, and a build-time editor for
+authoring Race Cars circuits onto their art.
 
 ## The problem it solves
 
@@ -123,8 +124,79 @@ tablet, operating system, and browser — from `GET /api/admin/analytics`.
 - **Read-only**, same as the guest list: nothing here writes to a game, a
   lobby, or an account's metadata.
 
+## Game tools: the Race Cars track editor
+
+`/admin` → **Race Cars track editor** → `/admin/racecars`
+(`RaceCarsTrackEditor`). A build-time authoring aid for the Race Cars circuit
+data, not a runtime feature: it produces a `tracks/` source file a developer
+saves into the repo, and it persists nothing server-side, so — unlike the tools
+above — there is **no `/api/admin` route behind it**. The gate is the same
+client-only `isAdmin` dead end the rest of `/admin` uses.
+
+### Why it exists
+
+A Race Cars circuit is a graph of spaces (see
+[`race-cars.md`](./games/race-cars.md) §5.1): every tile carries its own
+`exits` — the spaces a car may drive to next — and its own `geometry` (the
+centre point and heading it is drawn at). Two things about a real circuit can't
+be typed by hand:
+
+- **214 hand-placed coordinates** (§23.6). The centre point of every tile has
+  to sit on the road in the art, and eyeballing pixel pairs into a source file
+  is not a job.
+- **The corner merges that break §5.1's step rule.** The default rule — the
+  next row, this lane or either lane beside it — is written for you. But a
+  painted corner that only feeds particular tiles ahead, and an inside line
+  that takes fewer tiles round a corner than the outside, both need their
+  `exits` naming by hand. That is a graph edge, and drawing edges is what the
+  editor is for.
+
+### What you do with it
+
+1. **Set the art.** Point *Art path* at a file already under `public/`, and/or
+   *Upload backdrop* an image to trace against (the upload is held in this
+   browser only, never written into the printed track). Set the viewBox size —
+   an upload fills it in from the image.
+2. **Place tiles.** In *Place tiles* mode, click the art to drop the next tile;
+   its row/lane auto-advance (lane 1 → 2 → 3 → next row). Drag a tile to nudge
+   its centre; click one to select it and edit its row, lane, heading or corner
+   in the *Tile* panel. Heading is computed from where a tile's exits point
+   unless you set it by hand.
+3. **Draw movement restriction.** Select a tile, switch to *Draw exits*, and
+   click the tiles it may step to — each click adds or removes a step. Faint
+   dashed edges are §5.1's default; solid edges are your overrides. An edit that
+   lands back on the default drops the override, so ordinary straights stay
+   plain.
+4. **Band the corners.** In *Corners*, add a corner (id, name, stop count) and
+   *Tag rows* to mark every tile in a row range as part of it — that is what
+   "which tiles are a corner" means to the rules, and the band feeds §10.
+5. **Validate & export.** The panel runs the tiles through the game's own
+   `assembleSpaces`, so "driveable in the editor" and "loads in the game" are
+   the same check. Copy the printed file, save it as
+   `src/games/RaceCars/tracks/<id>.ts`, and add it to `TRACK_LIST` in
+   `board.ts`.
+
+Load a shipped track (Ashcombe, Anglet) to refine its placeholder geometry
+against the real art rather than placing every tile from nothing.
+
+### Re-aligning lanes after a corner
+
+The inside of a corner covers the same rows in fewer tiles than the outside, so
+the lanes come out of a corner out of step, and past it they have to line up
+again. There is **no separate re-alignment step, and none is needed** — the
+merge *is* an exit. Draw the inside line's last tile straight onto the row it
+should rejoin, and the graph carries the re-alignment; `assembleSpaces` then
+checks that every such exit lands on a real space and moves the car forward.
+
+### No "What's new" entry
+
+This is admin-only internal tooling; a player never sees it, so it does not earn
+a release note (see AGENTS.md, "Keep the What's new notes up to date").
+
 ## Adding another admin tool
 
 Put the route under `src/app/api/admin/**`, open it with `requireAdmin()`, and
 add a section to `/admin` rather than a second screen — the page is a list of
-sections, and `Section` / `ListSection` / `ListRow` already draw them.
+sections, and `Section` / `ListSection` / `ListRow` already draw them. A tool
+that only authors repo data and persists nothing (the track editor) needs no
+API route at all — a client screen behind the same `isAdmin` gate is enough.
