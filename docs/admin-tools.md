@@ -171,10 +171,13 @@ be typed by hand:
    fix for a corner sharp enough that the lanes come out of it out of step (see
    below). It leaves your hand-drawn exits alone.
 4. **Paint the corners.** In *Corners*, add a corner (id, name, stop count),
-   then switch to *Paint corners* and drag over the tiles that belong to it — a
-   corner need **not** take every lane of a row, and can span its rows however
-   the road does. The corner's row band (what §10 reads) follows the painted
-   tiles. Set the brush to *Erase* to clear tiles.
+   then switch to *Paint corners* and drag over its rows. A corner covers
+   **every lane** of the rows it spans — that is what the rules read
+   (`cornerAt` takes a row, not a lane; the GDD's "corners are rows"), so the
+   brush works a row at a time: touch any tile and its whole row joins. The
+   row band (what §10 reads for stops and overshoot) is exactly the rows you
+   paint. Set the brush to *Erase* to clear a row. The export panel warns if a
+   corner's band has a bare or half-covered row.
 5. **Save/resume.** The draft autosaves to this browser's `localStorage`;
    *Save draft to file* / *Open draft file* move it to a `.json` you can keep or
    carry to another machine. That draft is the working copy — separate from the

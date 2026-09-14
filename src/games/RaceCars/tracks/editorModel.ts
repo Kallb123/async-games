@@ -368,6 +368,22 @@ export function validateTrack(state: EditorState): EditorValidation {
         }
     }
 
+    // A corner covers every lane of its rows — that is what the rules honour
+    // (`cornerAt` reads the row, never the lane; §10 / GDD "corners are rows").
+    // So within a corner's row band every tile must carry its id: a bare row
+    // pulls the straight between two stretches into the corner, and a half-tagged
+    // row is a lane the paint missed but the rules will still charge.
+    const cornerIdByTile = new Map(state.tiles.map(tile => [spaceKey(tile.row, tile.lane), tile.cornerId]));
+    for (const corner of buildCorners(state)) {
+        for (const tile of state.tiles) {
+            if (tile.row < corner.from || tile.row > corner.to) continue;
+            if (cornerIdByTile.get(spaceKey(tile.row, tile.lane)) !== corner.id) {
+                warnings.push(`Corner "${corner.name}" doesn't cover every tile between rows ${corner.from} and ${corner.to} — a corner takes all lanes of its rows.`);
+                break;
+            }
+        }
+    }
+
     return { errors, warnings };
 }
 

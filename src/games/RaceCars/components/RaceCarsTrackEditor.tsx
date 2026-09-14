@@ -142,21 +142,27 @@ export default function RaceCarsTrackEditor() {
         setNextLane(lane);
     }, [nextRow, nextLane]);
 
-    // Paint the tile under a key into the active corner (or erase it, when the
-    // brush is set to "none"). A no-op when the tile already carries that corner,
-    // so dragging the brush back over painted ground doesn't stringify the whole
-    // draft to localStorage on every pointermove frame (§23.4).
-    const paint = useCallback((key: string) => {
+    // Paint the tile's whole row into the active corner (or erase it, when the
+    // brush is set to "none"): a corner covers every lane of its rows (§10 /
+    // GDD "corners are rows"), so the brush works a row at a time, not a tile.
+    // A no-op when the row already carries that corner, so dragging the brush
+    // back over painted ground doesn't stringify the whole draft to localStorage
+    // on every pointermove frame (§23.4).
+    const paintRowOf = useCallback((row: number, cornerId: string | undefined) => {
         setState(prev => {
-            const target = activeCorner || undefined;
-            const tile = prev.tiles.find(t => spaceKey(t.row, t.lane) === key);
-            if (!tile || tile.cornerId === target) return prev;
+            const rowTiles = prev.tiles.filter(t => t.row === row);
+            if (rowTiles.length === 0 || rowTiles.every(t => t.cornerId === cornerId)) return prev;
             return {
                 ...prev,
-                tiles: prev.tiles.map(t => (spaceKey(t.row, t.lane) === key ? { ...t, cornerId: target } : t)),
+                tiles: prev.tiles.map(t => (t.row === row ? { ...t, cornerId } : t)),
             };
         });
-    }, [activeCorner]);
+    }, []);
+
+    const paint = useCallback((key: string) => {
+        const tile = tilesByKey.get(key);
+        if (tile) paintRowOf(tile.row, activeCorner || undefined);
+    }, [tilesByKey, activeCorner, paintRowOf]);
 
     const tileKeyAt = useCallback((at: { x: number; y: number }): string | null => {
         for (const tile of state.tiles) {
@@ -387,8 +393,8 @@ export default function RaceCarsTrackEditor() {
                                         ? `Click a tile to add or remove a step from ${selected.row}:${selected.lane}. Faint lines are §5.1's default; solid lines are overrides.`
                                         : 'Select a tile first.')
                                     : activeCorner
-                                        ? `Click or drag over tiles to paint them into "${state.corners[activeCorner]?.name || activeCorner}".`
-                                        : 'Click or drag over tiles to clear their corner. Pick a corner above to paint one on.'}
+                                        ? `Click or drag over the rows in "${state.corners[activeCorner]?.name || activeCorner}" — a corner takes every lane of the rows you paint.`
+                                        : 'Click or drag over rows to clear their corner. Pick a corner above to paint one on.'}
                         </p>
 
                         <EditorCanvas
@@ -433,6 +439,7 @@ export default function RaceCarsTrackEditor() {
                         state={state}
                         tile={selected}
                         onPatch={patch => patchTile(spaceKey(selected.row, selected.lane), patch)}
+                        onSetRowCorner={cornerId => paintRowOf(selected.row, cornerId)}
                         onResetExits={() => patchTile(spaceKey(selected.row, selected.lane), { exits: undefined })}
                         onDelete={() => deleteTile(spaceKey(selected.row, selected.lane))}
                     />
@@ -519,9 +526,9 @@ function EditorCanvas(props: CanvasProps) {
                 {state.tiles.map(tile => {
                     const key = spaceKey(tile.row, tile.lane);
                     const isSelected = key === selectedKey;
-                    // Corner membership is per tile, not per row — a corner can
-                    // take only some lanes of a row (§10 reads the row band, but
-                    // the author paints exactly the tiles that belong).
+                    // A corner covers every lane of its rows (§10 reads the row,
+                    // never the lane), so a whole row lights up at once — the
+                    // brush and the tint both work a row at a time.
                     const inCorner = tile.cornerId !== undefined;
                     const isBrush = mode === 'paint' && activeCorner !== '' && tile.cornerId === activeCorner;
                     const isTarget = mode === 'exits' && selectedKey !== null && !isSelected;
@@ -629,10 +636,11 @@ function TrackPanel({ state, fileError, onPatch, onLoadTrack, onUploadArt, onImp
     );
 }
 
-function SelectedTilePanel({ state, tile, onPatch, onResetExits, onDelete }: {
+function SelectedTilePanel({ state, tile, onPatch, onSetRowCorner, onResetExits, onDelete }: {
     state: EditorState;
     tile: EditorTile;
     onPatch: (patch: Partial<EditorTile>) => void;
+    onSetRowCorner: (cornerId: string | undefined) => void;
     onResetExits: () => void;
     onDelete: () => void;
 }) {
@@ -657,8 +665,8 @@ function SelectedTilePanel({ state, tile, onPatch, onResetExits, onDelete }: {
                             onChange={e => onPatch({ heading: e.target.value === '' ? undefined : Number(e.target.value) })}
                         />
                     </Field>
-                    <Field label="Part of corner">
-                        <select className="ag-select" value={tile.cornerId ?? ''} onChange={e => onPatch({ cornerId: e.target.value || undefined })}>
+                    <Field label={`Corner (all of row ${tile.row})`}>
+                        <select className="ag-select" value={tile.cornerId ?? ''} onChange={e => onSetRowCorner(e.target.value || undefined)}>
                             <option value="">— none —</option>
                             {cornerIds.map(id => <option key={id} value={id}>{state.corners[id].name || id}</option>)}
                         </select>
@@ -709,10 +717,11 @@ function CornersPanel({ state, activeCorner, onSetActiveCorner, onSetCorners }: 
         <Section label="Corners" count={ids.length}>
             <div className="ag-stack">
                 <p className="ag-hint">
-                    A corner is a band of rows with a stop count (§10). Add one, then switch to <strong>Paint corners</strong>
-                    on the canvas and drag over the tiles that belong to it — a corner need not take every lane of a row.
-                    Lane re-alignment after the corner needs no separate step: draw the inside line&apos;s last tile straight
-                    onto the row it should merge back into, and the exit is the re-alignment.
+                    A corner is a band of rows with a stop count (§10), and it takes <strong>every lane</strong> of the rows
+                    it spans — that is what the rules read. Add one, then switch to <strong>Paint corners</strong> on the
+                    canvas and drag over its rows; the whole row joins at once. Lane re-alignment after the corner needs no
+                    separate step: draw the inside line&apos;s last tile straight onto the row it should merge back into, and
+                    the exit is the re-alignment.
                 </p>
 
                 {ids.map(id => (

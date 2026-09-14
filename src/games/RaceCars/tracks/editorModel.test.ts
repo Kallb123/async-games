@@ -49,13 +49,24 @@ describe("editor validation", () => {
         expect(validateTrack(broken).errors[0]).toMatch(/not a space/);
     });
 
-    it("does not force every tile in a corner's rows to be tagged", () => {
-        // A corner can span its rows in a strange way — only some lanes on a
-        // row — and that is not a problem to warn about.
+    it("passes a corner that covers every lane of its rows", () => {
+        expect(validateTrack(tinyState()).warnings.some(w => /cover every tile/.test(w))).toBe(false);
+    });
+
+    it("warns when a corner row is missing a lane — a corner takes all lanes", () => {
         const partial = tinyState();
         partial.tiles[2].cornerId = undefined; // untag row 1 lane 1, keep lane 2
-        expect(validateTrack(partial).warnings.some(w => /unbroken|skips/.test(w))).toBe(false);
-        expect(validateTrack(partial).errors).toEqual([]);
+        expect(validateTrack(partial).warnings.some(w => /cover every tile/.test(w))).toBe(true);
+    });
+
+    it("warns when a corner's row band has a bare interior row (a gap)", () => {
+        const gapped = tinyState();
+        // Tag rows 0 and 2 into the corner but leave row 1 out entirely.
+        gapped.tiles[0].cornerId = "bend";
+        gapped.tiles[1].cornerId = "bend";
+        gapped.tiles[2].cornerId = undefined;
+        gapped.tiles[3].cornerId = undefined;
+        expect(validateTrack(gapped).warnings.some(w => /cover every tile/.test(w))).toBe(true);
     });
 
     it("warns about an exit that runs more than half a lap forward", () => {
