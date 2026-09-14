@@ -8,7 +8,7 @@ import type { IRaceCarsGameDataResponse, IRaceCarsSpecificGameStateResponse } fr
 import RaceCarsBoard from "@/games/RaceCars/components/RaceCarsBoard";
 import RaceCarsActions from "@/games/RaceCars/components/RaceCarsActions";
 import RaceCarsEndMoveScreen from "@/games/RaceCars/components/RaceCarsEndMoveScreen";
-import { MIN_MOVE_ROWS, SLIPSTREAM_ROWS, spaceKey } from "@/games/RaceCars/board";
+import { MIN_MOVE_STEPS, SLIPSTREAM_STEPS, spaceKey } from "@/games/RaceCars/board";
 import { moveOptions, unavoidableOilDestinations } from "@/games/RaceCars/rules";
 import type { IRaceCarsArrivalOutcome } from "@/games/RaceCars/RaceCarsLogic";
 import { positionOf, rowsBehindLeader, rulesState, standings, wearSummary } from "@/games/RaceCars/ui";
@@ -107,14 +107,14 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
     // drive; `RaceCarsMove` refuses anything outside that, so the screen is
     // clamped to the same window rather than allowed to build a command the
     // server will only throw away.
-    const appliedBrake = me?.roll == null ? 0 : Math.min(brake, Math.max(0, Math.min(me.brakes, me.roll - MIN_MOVE_ROWS)));
+    const appliedBrake = me?.roll == null ? 0 : Math.min(brake, Math.max(0, Math.min(me.brakes, me.roll - MIN_MOVE_STEPS)));
 
     // How far the car is being asked to travel right now: §7 step 2's rolled
     // move less the brakes dialled in, or §12's fixed three-row tow. Null
     // whenever this driver is not choosing a destination at all.
     const towing = !!me && isMyTurn && me.phase === 'slipstream';
     const distance = !gs || !me || !isMyTurn ? null
-        : towing ? SLIPSTREAM_ROWS
+        : towing ? SLIPSTREAM_STEPS
         : me.phase === 'move' && me.roll !== null ? me.roll - appliedBrake
         : null;
 

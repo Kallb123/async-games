@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { MAX_PLAYERS, RaceCarsSpace, RaceCarsTrack, TRACKS } from "./board";
+import { MAX_PLAYERS, RaceCarsSpace, RaceCarsTrack, rowsAlong, TRACKS } from "./board";
 import {
     classification,
     conservativeTurn,
@@ -15,6 +15,7 @@ import {
     slipstreamOffered,
     trackProgress,
 } from "./rules";
+import { deriveTrack } from "./tracks/sections";
 import { car, race } from "./testFixtures";
 
 // Ashcombe (§5.2), for reading the fixtures below against:
@@ -31,13 +32,13 @@ import { car, race } from "./testFixtures";
 const TWO_CORNERS: RaceCarsTrack = {
     id: 'twocorners',
     name: 'Two Corners',
-    rows: 30,
-    laneWidth: Array.from({ length: 30 }, (_unused, row) =>
-        (row >= 8 && row <= 10) || (row >= 14 && row <= 16) ? 2 : 3),
-    corners: [
-        { id: 'first', name: 'First', from: 8, to: 10, stops: 1 },
-        { id: 'second', name: 'Second', from: 14, to: 16, stops: 1 },
-    ],
+    ...deriveTrack([
+        { name: 'Straight', from: 0, to: 7, lanes: 3, corner: null },
+        { name: 'First', from: 8, to: 10, lanes: 2, corner: { id: 'first', stops: 1 } },
+        { name: 'Between', from: 11, to: 13, lanes: 3, corner: null },
+        { name: 'Second', from: 14, to: 16, lanes: 2, corner: { id: 'second', stops: 1 } },
+        { name: 'Run to the Line', from: 17, to: 29, lanes: 3, corner: null },
+    ]),
     grid: Array.from({ length: MAX_PLAYERS }, (_unused, slot) => ({
         row: 2 - Math.floor(slot / 2),
         lane: slot % 2 === 0 ? 1 : 3,
@@ -53,6 +54,60 @@ const TWO_CORNERS: RaceCarsTrack = {
 // of two lanes holds a full field, and its first corner starts past row 0.
 TRACKS[TWO_CORNERS.id] = TWO_CORNERS;
 afterAll(() => { delete TRACKS[TWO_CORNERS.id]; });
+
+// A circuit whose corner runs its lanes out of step, which neither of the two
+// that ship does. The Kettle's outside is painted — each of its spaces feeds
+// the one in front and nothing else — and its inside covers the same eight rows
+// in four spaces, so the same roll driven down the inside covers twice the
+// road. Its own inside line then cuts across the start/finish line, where the
+// road has no space in lane 1 at all.
+//
+// Registered here rather than shipped, for the same reason TWO_CORNERS is: it
+// exists to prove the rules read the track data, and §23.7's follow-up is where
+// a real board grows corners shaped like this.
+const UNEVEN: RaceCarsTrack = {
+    id: 'uneven',
+    name: 'The Kettle',
+    ...deriveTrack([
+        {
+            name: 'Start / Finish Straight', from: 0, to: 5, lanes: 3, corner: null,
+            tiles: [
+                // Lane 1 has no space on the line itself.
+                { row: 0, lane: 2 }, { row: 0, lane: 3 },
+                ...[1, 2, 3, 4, 5].flatMap(row => [1, 2, 3].map(lane => ({ row, lane }))),
+            ],
+        },
+        {
+            name: 'The Kettle', from: 6, to: 13, lanes: 2, corner: { id: 'kettle', stops: 1 },
+            tiles: [
+                ...[6, 7, 8, 9, 10, 11, 12].map(row => ({ row, lane: 2, exits: [{ row: row + 1, lane: 2 }] })),
+                { row: 13, lane: 2 },
+                { row: 6, lane: 1, exits: [{ row: 8, lane: 1 }] },
+                { row: 8, lane: 1, exits: [{ row: 10, lane: 1 }] },
+                { row: 10, lane: 1, exits: [{ row: 12, lane: 1 }] },
+                { row: 12, lane: 1, exits: [{ row: 14, lane: 1 }, { row: 14, lane: 2 }] },
+            ],
+        },
+        {
+            name: 'Run to the Line', from: 14, to: 23, lanes: 3, corner: null,
+            tiles: [
+                ...[14, 15, 16, 17, 18, 19, 20, 21, 22].flatMap(row => [1, 2, 3].map(lane => ({ row, lane }))),
+                { row: 23, lane: 1, exits: [{ row: 1, lane: 1 }] },
+                { row: 23, lane: 2 }, { row: 23, lane: 3 },
+            ],
+        },
+    ]),
+    grid: [
+        { row: 2, lane: 1 }, { row: 2, lane: 3 },
+        { row: 1, lane: 1 }, { row: 1, lane: 3 },
+        { row: 0, lane: 2 }, { row: 0, lane: 3 },
+    ],
+    maxGear: 5,
+    art: { href: '', viewBox: { width: 0, height: 0 } },
+    geometry: [],
+};
+TRACKS[UNEVEN.id] = UNEVEN;
+afterAll(() => { delete TRACKS[UNEVEN.id]; });
 
 /** Pick a destination, derive the path and resolve it — one driver's whole move. */
 function drive(
@@ -658,5 +713,57 @@ describe("the conservative line (§23.7)", () => {
         });
         const plan = conservativeTurn(state, 'a');
         expect(plan.phase === 'slipstream' && plan.tow).toEqual({ row: 23, lane: 1 });
+    });
+});
+
+describe("a corner whose lanes run out of step (§5.1, §10)", () => {
+    const kettle = (cars: Parameters<typeof race>[0]) => race(cars, { trackId: 'uneven' });
+
+    it("offers only the spaces a painted corner feeds", () => {
+        expect(reachableSpaces(kettle({ a: { row: 6, lane: 2 } }), 'a', 2).map(key)).toEqual(['8:2']);
+        expect(reachableSpaces(kettle({ a: { row: 6, lane: 1 } }), 'a', 2).map(key)).toEqual(['10:1']);
+    });
+
+    it("covers twice the road down the inside for the same roll", () => {
+        const inside = kettle({ a: { row: 6, lane: 1 } });
+        const insidePath = derivePath(inside, 'a', 5, reachableSpaces(inside, 'a', 5)[0]);
+        expect(rowsAlong(UNEVEN, insidePath)).toBe(9);
+
+        const outside = kettle({ a: { row: 6, lane: 2 } });
+        const outsidePath = derivePath(outside, 'a', 5, reachableSpaces(outside, 'a', 5)[0]);
+        expect(rowsAlong(UNEVEN, outsidePath)).toBe(5);
+    });
+
+    it("charges the overshoot in rows of road, and only to the line that left the corner", () => {
+        // Five spaces down the inside land two rows past the corner's last row.
+        const inside = drive(kettle({ a: { row: 6, lane: 1 } }), 'a', 5);
+        expect(inside.row).toBe(15);
+        expect(inside.events).toContainEqual({ type: 'overshoot', cornerId: 'kettle', rows: 2, waived: false });
+        expect(inside.tyres).toBe(3);
+
+        // The same five round the outside are still inside it, and bank a stop.
+        const outside = drive(kettle({ a: { row: 6, lane: 2 } }), 'a', 5);
+        expect(outside.row).toBe(11);
+        expect(outside.tyres).toBe(5);
+        expect(outside.events).toContainEqual({ type: 'cornerStop', cornerId: 'kettle', banked: 1, owed: 1 });
+    });
+
+    it("waives the corner for an inside line with nowhere left inside it (§10)", () => {
+        // Two rows short of the corner's last row, and every step out of it
+        // leaves the corner — which is the waiver's own reasoning, not the row
+        // number it happens to read on a circuit whose lanes run in step.
+        const arrival = drive(kettle({ a: { row: 12, lane: 1, cornerStops: 0 } }), 'a', 3);
+        expect(arrival.events).toContainEqual({ type: 'overshoot', cornerId: 'kettle', rows: 3, waived: true });
+        expect(arrival.tyres).toBe(5);
+    });
+
+    it("completes the lap on a step that jumps the start line (§15)", () => {
+        // Lane 1 has no space on row 0, so the inside line steps from row 23
+        // straight to row 1 — a lap that only counted on landing on row 0 is a
+        // lap this circuit could never complete.
+        const arrival = drive(kettle({ a: { row: 23, lane: 1 } }), 'a', 1);
+        expect(arrival.row).toBe(1);
+        expect(arrival.lapsCompleted).toBe(1);
+        expect(arrival.finished).toBe(true);
     });
 });

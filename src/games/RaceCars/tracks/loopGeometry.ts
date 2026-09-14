@@ -9,7 +9,7 @@
 // rather than a second copy. Nothing outside the board screen reads
 // x/y/heading, so a track can move onto the real generator without this file,
 // or this one, changing.
-import type { RaceCarsGeometry } from "../board";
+import type { RaceCarsGeometry, RaceCarsSpace } from "../board";
 
 /**
  * One stretch of the centre line, with the length the row spacing is measured
@@ -22,12 +22,19 @@ interface PathSegment {
 }
 
 /**
- * `laneWidth` sampled once per row along a closed path built from `segments`
- * (total length `pathLength`), each lane offset across the road by
- * `lanePitch`. Row 0 sits at the start of the first segment.
+ * A circuit's `spaces` placed along a closed path built from `segments` (total
+ * length `pathLength`): each at its own row's fraction of the way round, offset
+ * across the road by `lanePitch` for its lane. Row 0 sits at the start of the
+ * first segment.
+ *
+ * Driven by the spaces rather than by a lane width per row, so a lane that
+ * skips a row — the inside of a corner, taking fewer spaces round it than the
+ * outside (§5.1) — simply has nothing drawn on that row rather than needing a
+ * second way to describe the road.
  */
 function sampleCentreline(
-    laneWidth: number[],
+    rows: number,
+    spaces: RaceCarsSpace[],
     lanePitch: number,
     pathLength: number,
     segments: PathSegment[],
@@ -47,24 +54,21 @@ function sampleCentreline(
     // which is the merge `stepsFrom` already describes (lane 3 has only lane
     // 2 to go to).
     const CENTRE_LANE = 2;
-    const rows = laneWidth.length;
 
-    return laneWidth.flatMap((lanes, row) => {
-        const centre = alongPath((row / rows) * pathLength);
+    return spaces.map(space => {
+        const centre = alongPath((space.row / rows) * pathLength);
         const radians = (centre.heading * Math.PI) / 180;
         // Across the road, to the outside of the loop.
         const acrossX = Math.sin(radians);
         const acrossY = -Math.cos(radians);
-        return Array.from({ length: lanes }, (_unused, index) => {
-            const offset = (index + 1 - CENTRE_LANE) * lanePitch;
-            return {
-                row,
-                lane: index + 1,
-                x: centre.x + acrossX * offset,
-                y: centre.y + acrossY * offset,
-                heading: centre.heading,
-            };
-        });
+        const offset = (space.lane - CENTRE_LANE) * lanePitch;
+        return {
+            row: space.row,
+            lane: space.lane,
+            x: centre.x + acrossX * offset,
+            y: centre.y + acrossY * offset,
+            heading: centre.heading,
+        };
     });
 }
 
@@ -108,7 +112,8 @@ export interface RoundedRectLoop {
  * ashcombe.ts's history for why a loop and not an unrolled strip.
  */
 export function roundedRectGeometry(
-    laneWidth: number[],
+    rows: number,
+    spaces: RaceCarsSpace[],
     spec: RoundedRectLoop,
     lanePitch: number,
 ): RaceCarsGeometry[] {
@@ -133,7 +138,7 @@ export function roundedRectGeometry(
     ];
     const pathLength = 2 * straightX + 2 * straightY + 4 * ((Math.PI * radius) / 2);
 
-    return sampleCentreline(laneWidth, lanePitch, pathLength, segments);
+    return sampleCentreline(rows, spaces, lanePitch, pathLength, segments);
 }
 
 export interface Waypoint {
@@ -152,7 +157,8 @@ export interface Waypoint {
  * corners.
  */
 export function polylineGeometry(
-    laneWidth: number[],
+    rows: number,
+    spaces: RaceCarsSpace[],
     waypoints: Waypoint[],
     lanePitch: number,
 ): RaceCarsGeometry[] {
@@ -162,5 +168,5 @@ export function polylineGeometry(
     });
     const pathLength = segments.reduce((total, segment) => total + segment.length, 0);
 
-    return sampleCentreline(laneWidth, lanePitch, pathLength, segments);
+    return sampleCentreline(rows, spaces, lanePitch, pathLength, segments);
 }

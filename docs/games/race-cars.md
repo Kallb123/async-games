@@ -165,9 +165,9 @@ A circuit is a **loop of rows**. Each row is 2 or 3 **lanes** wide, and a
 wrap: the row after the last row is row 0 again, and crossing that boundary
 completes a lap.
 
-Movement is always forward by whole rows. From a space you can step to the same
-lane in the next row, or to either adjacent lane in the next row — a car changes
-lane *while* moving, never sideways on the spot:
+Movement is always forward. On an ordinary stretch of road, from a space you can
+step to the same lane in the next row, or to either adjacent lane in the next
+row — a car changes lane *while* moving, never sideways on the spot:
 
 ```
         lane 1   lane 2   lane 3
@@ -176,11 +176,38 @@ row r     ■ ────────┐
 row r+1   ■     ■   ■   ■        (three legal steps from (r, 2))
 ```
 
-Every consequence in this document falls out of that one rule. A move of *N* is
-exactly *N* of those steps; a lane change is free but costs you the row you were
-going to spend anyway; and the set of places a roll of *N* can put you is a
-breadth-first walk of exactly *N* steps, which is four lines of code and the
-reason §9 can let a player tap a destination rather than draw a path.
+Almost every consequence in this document falls out of that one rule. A move of
+*N* is exactly *N* of those steps; a lane change is free but costs you the row
+you were going to spend anyway; and the set of places a roll of *N* can put you
+is a breadth-first walk of exactly *N* steps, which is the reason §9 can let a
+player tap a destination rather than draw a path.
+
+**But the road is what decides, not the rule.** Each space names the spaces it
+may be driven to, and a straight simply names the three above. A real circuit
+does two things that rule cannot say, and both of them live on a corner:
+
+- **A space may feed particular spaces and no others.** The painted line round
+  the outside of a corner is not somewhere a car crosses freely: those spaces
+  feed the space in front of them, and that is all.
+- **Lanes need not run in step.** The inside of a corner is the short way round,
+  so it covers the same rows in fewer spaces than the outside — four against
+  eight is an ordinary hairpin. Past the corner the two lanes are level with
+  each other again, but the number of spaces behind them is not.
+
+```
+             ■ ■ ■ ■ ■ ■ ■ ■      lane 2, the outside: eight spaces
+row 6 ──▶ ■   ■   ■   ■           lane 1, the inside: four
+          6 7 8 9 …               same eight rows of road
+```
+
+**Rows are places on the road, not steps along it.** That is what keeps the two
+lines above comparable: a corner's band, the finish line, who leads, and how far
+you are past a corner are all measured in rows, while a roll is spent in spaces.
+On a circuit whose lanes all run in step — both of the ones that ship today —
+they are the same number, which is why the rest of this document can say "a roll
+of 8" and "eight rows" in the same breath. Where they part, the inside line is
+the one that covers more road for the same roll, and it is the one with nowhere
+to go if it arrives too fast.
 
 **Corners are rows, not turns of the wheel.** A corner is a contiguous band of
 rows with a **stop count** attached (§10). Corners are narrower than the
@@ -402,10 +429,21 @@ crossing — and the finish line itself — is an event resolved **in path order
 which is also what keeps §13's "nothing further on the path is resolved" from
 moving a spun car backwards over a line it had already crossed.
 
+**It is counted in rows of road, not in spaces driven.** The two are the same
+number until a corner's lanes run out of step (§5.1), and then they are not: a
+car that takes five spaces down the inside of an eight-space corner is nine rows
+further on than it started, and the tyre bill is read off the road it is past
+rather than off how few spaces it took to get there. The inside line is the fast
+way round and the expensive way to get it wrong, which is the trade the shape
+exists to offer.
+
 **An overshoot you could not have avoided is free.** If, when your turn begins,
-no legal move can keep you inside the corner — you are standing on its last row,
-and §9 forbids standing still — then the corner's remaining stops are **waived**
-and leaving costs nothing. You have taken it as slowly as the road allows.
+no legal move can keep you inside the corner — every space the road offers you
+leaves it, and §9 forbids standing still — then the corner's remaining stops are
+**waived** and leaving costs nothing. You have taken it as slowly as the road
+allows. On a corner whose lanes run in step that is "you are standing on its
+last row"; on one whose inside line ends two rows short of that row, it is that
+last inside space too.
 
 Without that clause the game has a hole at the one place every car visits every
 lap: a car that ends its first hairpin stop on row 14 has banked one stop of
@@ -782,8 +820,15 @@ Ordered by what each one buys against what it costs.
    `spec` already did (`readRaceSettings`, `RaceCarsInvitationRequest`, the
    invitation schema). Its `geometry` is still a hand-traced straight-edged
    approximation of the art rather than §23.6's generator's output — worth
-   fixing before a third track's own art arrives. Still worth building on the
-   same hook: **Bonneville Oval** — two enormous straights, two one-stop
+   fixing before a third track's own art arrives. **Neither circuit's corners
+   are cut the way §5.1 now allows**, either: both are still even lattices,
+   every lane running in step and every space free to cross to its neighbours,
+   because the data could not say anything else when they were transcribed. It
+   can now — a painted outside that feeds the space in front of it, an inside
+   line of four spaces to the outside's eight — and re-cutting the corners of
+   the two circuits that already ship is the cheapest thing on this list to
+   make a corner feel like one: no new art, no new rule, no new screen. Still
+   worth building on the same hook: **Bonneville Oval** — two enormous straights, two one-stop
    corners, `maxGear: 6`, the circuit that exists to make sixth gear real.
 2. **Per-driver spec.** Let each driver split their own twelve tokens instead of
    racing the host's spec. The async cost is what kills it today: a setup phase
@@ -813,9 +858,9 @@ Ordered by what each one buys against what it costs.
 
 | Term | Meaning |
 |---|---|
-| **Row** | One step along the circuit. 78 of them at Ashcombe; movement is measured in these |
+| **Row** | One position along the circuit. 78 of them at Ashcombe; corners, the finish line and the order of the field are all measured in these |
 | **Lane** | A position across the road, 1–3. Every row is 2 or 3 lanes wide |
-| **Space** | One (row, lane) pair — where a car stands. 214 at Ashcombe |
+| **Space** | One (row, lane) pair — where a car stands, and what a roll is spent in. 214 at Ashcombe. A lane need not have one on every row (§5.1) |
 | **Band** | The range of rows a gear can travel (§8.1) |
 | **Stop** | A turn ended inside a corner. Corners owe 1 or 2 |
 | **Overshoot** | Ending past a corner's last row without its stops banked. Costs 1 tyre a row |
@@ -1058,8 +1103,12 @@ which is what makes §20's first hook one file:
 interface RaceCarsTrack {
   id: 'ashcombe',
   name: 'Ashcombe Park',
-  rows: number,                       // 78
-  laneWidth: number[],                // per row: 2 or 3
+  rows: number,                       // 78 — positions round a lap, not steps
+  // Every space, and the spaces each one may be driven to (§5.1). The graph is
+  // the track: a straight's spaces carry the three above them, a painted corner
+  // carries the one in front, and a lane that skips a row simply has no space
+  // on it.
+  spaces: { row: number, lane: number, exits: { row: number, lane: number }[] }[],
   corners: { id: string, name: string, from: number, to: number, stops: 1 | 2 }[],
   grid: { row: number, lane: number }[],   // P1 first
   maxGear: 1 | 2 | 3 | 4 | 5 | 6,     // 5 at Ashcombe (§8.3)
@@ -1072,16 +1121,32 @@ interface RaceCarsTrack {
 }
 ```
 
-**Two invariants belong on the track data rather than in Ashcombe's geometry,
-and `board.test.ts` asserts both, against every registered track.** §18 rules
-that a spin searches backwards along its corner for a free space, which is
+**Nobody writes 214 spaces by hand.** A circuit is authored as the table of
+sections §5.2 prints — a name, a row band, a lane count and a corner's stop
+count — and `deriveTrack` writes §5.1's own step rule onto every space of it. A
+band that needs something else lists its own `tiles` instead: the spaces it
+actually has, and, for any of them, the exits that replace the rule. That is
+where a corner's painted outside and its short inside line are said, and it is
+said about one band rather than about the circuit.
+
+**`deriveTrack` throws rather than shipping a circuit that cannot be driven.** A
+track is static data read at module load and asserted by `board.test.ts`, so the
+only way to reach one of these is to be writing a circuit — and each is a hole a
+race would fall into silently: a space nothing steps off, a step onto a space
+that isn't there, a row the road skips entirely, a step sideways, a lane wider
+than the road, or a gap between two sections.
+
+**Three invariants belong on the track data rather than in Ashcombe's geometry,
+and `board.test.ts` asserts all three, against every registered track.** §18
+rules that a spin searches backwards along its corner for a free space, which is
 only total if **every corner holds at least `MAX_PLAYERS` cars** — true of
 Ashcombe's three corners of 10–12 spaces and of Anglet's seven of 8–10, and
 the reason a "narrow two-lane street circuit" needs each corner a touch
-longer than the road alone would draw it, not just narrower. And a corner
-whose `from` is row 0 has nothing behind it to search. Assert
-`(to − from + 1) × laneWidth >= MAX_PLAYERS` and `from > 0` for every corner, so
-the second circuit fails a test rather than a race.
+longer than the road alone would draw it, not just narrower. A corner
+whose `from` is row 0 has nothing behind it to search. And **every space can be
+driven off, onto a space that exists, forward** — the graph's own version of
+"no hole in the board", which is what §9 relies on when it reads an empty walk
+as traffic rather than as the end of the map.
 
 `specificGameState`:
 
@@ -1126,9 +1191,13 @@ marking; `Mixed`, and **every** field does, at which point remembering it for
 `makeBannedIsletStateSchemaDef` demonstrates, and carry SAC's test across to
 prove it.
 
-**Position is `(row, lane)`, never a space id.** Every rule in §§9–14 is
-arithmetic on the row, and a space id would be resolved back to a row on every
-single legality check.
+**Position is `(row, lane)`, never a space id.** Everything in §§9–15 that
+compares a car to the circuit or to another car — a corner's band, the finish
+line, the gap to the leader, the order of the field — is read off the row, and a
+space id would be resolved back to one on every single legality check. The pair
+stays the identity even where a lane has no space on every row (§5.1): the row
+is still where on the road the car is, and the lane is still which line it is
+taking.
 
 **Which corner a car is in is derived, not stored**, by the same argument one
 paragraph later. It is `cornerAt(track, row)` — a scan of three bands — and

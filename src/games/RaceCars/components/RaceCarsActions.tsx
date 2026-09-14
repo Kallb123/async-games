@@ -13,9 +13,10 @@ import {
     cornerAt,
     gearDef,
     gearName,
-    MIN_MOVE_ROWS,
+    MIN_MOVE_STEPS,
     rowsBetween,
-    SLIPSTREAM_ROWS,
+    rowsCovered,
+    SLIPSTREAM_STEPS,
     trackById,
     type RaceCarsGear,
     type RaceCarsTrack,
@@ -36,10 +37,15 @@ import { rulesState } from '@/games/RaceCars/ui';
  */
 function reachBand(track: RaceCarsTrack, ps: IRaceCarsPlayerState, gear: RaceCarsGear): string {
     const { min, max } = gearDef(gear);
-    const span = `${min}–${max} rows → rows ${(ps.row + min) % track.rows}–${(ps.row + max) % track.rows}`;
-    return `${span} · ${cornerVerdict(track, ps, min, max)}`;
+    // The die is thrown in spaces and §10 is charged in rows, and the two are
+    // only the same number while a circuit's lanes run in step (§5.1) — so the
+    // band is converted to road here, once, and everything below it reads rows.
+    const rows = { min: rowsCovered(track, ps, min).min, max: rowsCovered(track, ps, max).max };
+    const span = `rolls ${min}–${max} → rows ${(ps.row + rows.min) % track.rows}–${(ps.row + rows.max) % track.rows}`;
+    return `${span} · ${cornerVerdict(track, ps, rows.min, rows.max)}`;
 }
 
+/** `min`/`max` are rows of road the gear's band covers, never its dice faces. */
 function cornerVerdict(track: RaceCarsTrack, ps: IRaceCarsPlayerState, min: number, max: number): string {
     const here = cornerAt(track, ps.row);
     const owed = here ? here.stops - ps.cornerStops : 0;
@@ -93,8 +99,11 @@ function towPrompt(track: RaceCarsTrack, ps: IRaceCarsPlayerState, options: Race
         return `Traffic — the tow only runs ${pluralize(options.distance, 'row')}. Tap a highlighted space to take what there is and scuff a tyre.`;
     }
     const here = cornerAt(track, ps.row);
+    // The worst the tow can do, which is what a warning should quote: three
+    // steps are three rows of road until a corner's lanes run out of step, and
+    // then they are as many rows as the longest line through it covers (§5.1).
     const past = here && here.stops > ps.cornerStops
-        ? SLIPSTREAM_ROWS - rowsBetween(track, ps.row, here.to)
+        ? rowsCovered(track, ps, SLIPSTREAM_STEPS).max - rowsBetween(track, ps.row, here.to)
         : 0;
     if (past > 0) {
         // §12: a tow out of a corner is charged in full — §10's waiver forgives
@@ -225,7 +234,7 @@ export default function RaceCarsActions({ gs, myUserId, brake, setBrake, options
     // §11: braking shortens the roll a row a point, and never below one row —
     // a car always moves. Both bounds are the command's own (RaceCarsMove
     // refuses anything outside them); this control just cannot offer them.
-    const maxBrake = Math.min(ps.brakes, roll - MIN_MOVE_ROWS);
+    const maxBrake = Math.min(ps.brakes, roll - MIN_MOVE_STEPS);
     const distance = roll - Math.min(brake, maxBrake);
     const die = gearDef(ps.gear).faces.length;
 

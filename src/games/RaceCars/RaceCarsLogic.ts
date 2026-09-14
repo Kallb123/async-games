@@ -6,10 +6,11 @@ import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRaceCarsGameData } from "@/games/RaceCars/RaceCarsModels";
 import {
     gearName,
-    MIN_MOVE_ROWS,
+    MIN_MOVE_STEPS,
     RaceCarsGear,
     RaceCarsSpace,
-    SLIPSTREAM_ROWS,
+    rowsAlong,
+    SLIPSTREAM_STEPS,
     trackById,
     BRAKE_SLICK_THRESHOLD,
     SLICK_CAP,
@@ -459,7 +460,7 @@ export class RaceCarsMove implements IGameCommand {
         if (!Number.isInteger(this.brake)
             || this.brake < 0
             || this.brake > ps.brakes
-            || this.brake > ps.roll - MIN_MOVE_ROWS) return INVALID;
+            || this.brake > ps.roll - MIN_MOVE_STEPS) return INVALID;
 
         // The distance comes from the persisted roll and the validated brake,
         // never from the command — and the destination is checked for
@@ -480,13 +481,17 @@ export class RaceCarsMove implements IGameCommand {
         ps.brakes -= this.brake;
         ps.brakeSpent = this.brake;
 
-        const rows = path.length - 1;
+        const track = trackById(gs.trackId);
+        // Rows covered, not steps taken: the two are the same number until a
+        // corner's lanes run out of step (§5.1), and the driver is reading the
+        // road rather than counting spaces.
+        const rows = rowsAlong(track, path);
         const braked = this.brake > 0 ? ` after braking ${pluralize(this.brake, 'row')} off the roll` : '';
         // Read before the arrival is applied: a spin drops the gear to neutral.
         const roll = { gear: ps.gear, value: ps.roll };
         const settled = settle(data, ps, this.senderId, path, {
             blockedShort: options.blockedShort,
-            lead: rows > 0 ? `drove ${pluralize(rows, 'row')} to row ${path[rows].row}${braked}` : '',
+            lead: rows > 0 ? `drove ${pluralize(rows, 'row')} to row ${path[path.length - 1].row}${braked}` : '',
         });
 
         // Store the oil rolls back into the command for replay (§23.4).
@@ -566,13 +571,13 @@ export class RaceCarsSlipstream implements IGameCommand {
         // Exactly the same reach the first move validated against, with the
         // distance fixed at three — and the blocked-short set is its own set
         // here too, so "I would rather stop here" cannot be dressed as a block.
-        const options = moveOptions(gs, this.senderId, SLIPSTREAM_ROWS);
+        const options = moveOptions(gs, this.senderId, SLIPSTREAM_STEPS);
         if (!options.spaces.some(space => space.row === tow.row && space.lane === tow.lane)) return INVALID;
 
         const path = derivePath(gs, this.senderId, options.distance, { row: tow.row, lane: tow.lane });
         if (path.length === 0) return INVALID;
 
-        const rows = path.length - 1;
+        const rows = rowsAlong(trackById(gs.trackId), path);
         const settled = settle(data, ps, this.senderId, path, {
             blockedShort: options.blockedShort,
             // §12: a tow can push a car out of a corner it still owes stops to,
@@ -580,7 +585,7 @@ export class RaceCarsSlipstream implements IGameCommand {
             // corner the driver "could not have avoided leaving"; declining
             // this costs nothing, so that reasoning does not reach the tow.
             waiveUnavoidableCorner: false,
-            lead: `took the tow ${pluralize(rows, 'row')} to row ${path[rows].row}`,
+            lead: `took the tow ${pluralize(rows, 'row')} to row ${path[path.length - 1].row}`,
         });
 
         // Store the oil rolls back into the command for replay (§23.4).

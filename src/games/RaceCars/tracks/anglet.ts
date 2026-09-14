@@ -40,7 +40,7 @@ const SECTIONS: TrackSection[] = [
     { name: 'Run to the Line', from: 87, to: 97, lanes: 3, corner: null },
 ];
 
-const { rows: ROWS, laneWidth: LANE_WIDTH, corners: CORNERS } = deriveTrack(SECTIONS);
+const { rows: ROWS, spaces: SPACES, corners: CORNERS } = deriveTrack(SECTIONS);
 
 // The art is a real 2835×1843 illustration (art-masters/racecars/anglet.png),
 // not a park drawn for this game, so there is a real centre line to read
@@ -81,13 +81,13 @@ const WAYPOINTS: Waypoint[] = [
 /** Gap between neighbouring lanes, across the road — Ashcombe's own pitch. */
 const LANE_PITCH = 22;
 
-const GEOMETRY = polylineGeometry(LANE_WIDTH, WAYPOINTS, LANE_PITCH);
+const GEOMETRY = polylineGeometry(ROWS, SPACES, WAYPOINTS, LANE_PITCH);
 
 export const ANGLET: RaceCarsTrack = {
     id: 'anglet',
     name: "Anglet Chambre d'Amour",
     rows: ROWS,
-    laneWidth: LANE_WIDTH,
+    spaces: SPACES,
     corners: CORNERS,
     grid: STAGGERED_SIX_GRID,
     // Four, not five or six: the longest corner-free run (Front de Mer, 20

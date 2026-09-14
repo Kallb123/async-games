@@ -20,10 +20,11 @@ import { mongoMap } from "@/utils/games/mongoMaps";
 import { randomInt } from "@/utils/games/random";
 import {
     cornerAt,
-    cornerExits,
+    cornerCrossings,
+    cornersPassed,
+    crossesStartLine,
     gearDef,
-    laneWidthAt,
-    MIN_MOVE_ROWS,
+    MIN_MOVE_STEPS,
     OIL_DIE_SIDES,
     OIL_SPIN_FACE,
     RaceCarsCorner,
@@ -32,10 +33,12 @@ import {
     RaceCarsSpecId,
     RaceCarsTrack,
     rowsBetween,
+    rowsCovered,
     shiftDownCost,
     SLIPSTREAM_GAP_ROWS,
-    SLIPSTREAM_ROWS,
+    SLIPSTREAM_STEPS,
     spaceKey,
+    spacesInRow,
     stepsFrom,
     trackById,
     waivedCornerIdAt,
@@ -182,7 +185,7 @@ interface RaceCarsWalk {
 }
 
 /**
- * A distance this board can actually be asked to walk: a whole number of rows,
+ * A distance this board can actually be asked to walk: a whole number of steps,
  * never negative, never longer than a lap.
  *
  * Both halves earn their place. A **fractional** distance would floor itself
@@ -279,7 +282,7 @@ export function reachableSpaces(
 export interface RaceCarsMoveOptions {
     /** Where this move may finish. Never empty: it is the car's own space when boxed in. */
     spaces: RaceCarsSpace[];
-    /** Rows the car will actually travel, which is short of the roll when blocked. */
+    /** Steps the car will actually travel, which is short of the roll when blocked. */
     distance: number;
     /** §9: no space reachable in exactly `distance` — stop on the furthest, 1 tyre. */
     blockedShort: boolean;
@@ -428,8 +431,8 @@ export interface RaceCarsArrivalOptions {
  */
 function spinLanding(track: RaceCarsTrack, occupied: Set<string>, corner: RaceCarsCorner): RaceCarsSpace {
     for (let row = corner.to; row >= corner.from; row--) {
-        for (let lane = 1; lane <= laneWidthAt(track, row); lane++) {
-            if (!occupied.has(spaceKey(row, lane))) return { row, lane };
+        for (const space of spacesInRow(track, row)) {
+            if (!occupied.has(spaceKey(space.row, space.lane))) return { row, lane: space.lane };
         }
     }
     return { row: corner.to, lane: 1 };
@@ -553,10 +556,13 @@ export function resolveArrival(
     }
 
     const waivedCornerId = (options.waiveUnavoidableCorner ?? true)
-        ? waivedCornerIdAt(track, start.row)
+        ? waivedCornerIdAt(track, start.row, start.lane)
         : null;
 
-    const exits = new Map(cornerExits(track, start.row, distance).map(exit => [exit.step, exit.corner]));
+    // Keyed by the step each corner falls behind at, and carrying the rows the
+    // move ends up past it — which is what §10 charges, and is not the count of
+    // steps left in the path once a lane can cover two rows in one (§5.1).
+    const exits = new Map(cornerCrossings(track, path).map(crossing => [crossing.step, crossing]));
 
     for (let step = 1; step <= distance; step++) {
         const to = path[step];
@@ -565,7 +571,7 @@ export function resolveArrival(
         // row to row 0, and the race ends the instant a car completes the
         // distance — distance past the line is not measured, so nothing
         // further along the path is resolved or charged (§4.1, §18).
-        if (to.row === 0) {
+        if (crossesStartLine(track, path[step - 1].row, to.row)) {
             lapsCompleted += 1;
             events.push({ type: 'lap', lapsCompleted });
             if (lapsCompleted >= state.laps) {
@@ -587,15 +593,16 @@ export function resolveArrival(
             }
         }
 
-        const corner = exits.get(step);
-        if (corner) {
+        const crossing = exits.get(step);
+        if (crossing) {
+            const corner = crossing.corner;
             const owed = corner.stops - stops;
             if (owed <= 0) {
                 events.push({ type: 'cornerCleared', cornerId: corner.id });
             } else if (corner.id === waivedCornerId) {
-                events.push({ type: 'overshoot', cornerId: corner.id, rows: distance - step + 1, waived: true });
+                events.push({ type: 'overshoot', cornerId: corner.id, rows: crossing.rowsPast, waived: true });
             } else {
-                const rows = distance - step + 1;
+                const rows = crossing.rowsPast;
                 events.push({ type: 'overshoot', cornerId: corner.id, rows, waived: false });
                 if (tyres >= rows) {
                     tyres -= rows;
@@ -652,7 +659,7 @@ export function slipstreamOffered(state: IRaceCarsSpecificGameState, userId: str
         otherId !== userId && SLIPSTREAM_GAP_ROWS.includes(rowsBetween(track, ps.row, other.row)));
     if (!ahead) return false;
 
-    return !moveOptions(state, userId, SLIPSTREAM_ROWS).boxedIn;
+    return !moveOptions(state, userId, SLIPSTREAM_STEPS).boxedIn;
 }
 
 // ─── Turn order (§15) ───────────────────────────────────────────────────────
@@ -721,24 +728,30 @@ export type RaceCarsConservativeTurn =
     | { phase: 'slipstream'; tow: RaceCarsSpace | null };
 
 /**
- * Rows of overshoot a move of `distance` would be charged, ignoring traffic and
- * oil — what the timeout driver plans against. Traffic can only make a move
- * shorter, so a distance this says is clean is clean however it is blocked.
+ * Rows of overshoot a move of `steps` steps would be charged, ignoring traffic
+ * and oil — what the timeout driver plans against.
+ *
+ * Priced against the **furthest** the road can carry that many steps, for the
+ * same reason it ignores traffic: the plan has to be safe whichever line the
+ * move ends up taking, and where a corner's lanes run out of step (§5.1) the
+ * same roll covers a different number of rows depending on which one it takes.
+ * Traffic and a shorter line can only make a move cover fewer rows, so a roll
+ * this says is clean is clean however it is driven.
  */
 function plannedOvershoot(
     track: RaceCarsTrack,
     ps: IRaceCarsPlayerState,
-    distance: number,
+    steps: number,
     waiveUnavoidableCorner = true,
 ): number {
-    const waivedCornerId = waiveUnavoidableCorner ? waivedCornerIdAt(track, ps.row) : null;
+    const waivedCornerId = waiveUnavoidableCorner ? waivedCornerIdAt(track, ps.row, ps.lane) : null;
     let stops = ps.cornerStops;
-    let rows = 0;
-    for (const { corner, step } of cornerExits(track, ps.row, distance)) {
-        if (corner.stops - stops > 0 && corner.id !== waivedCornerId) rows += distance - step + 1;
+    let charged = 0;
+    for (const { corner, rowsPast } of cornersPassed(track, ps.row, rowsCovered(track, ps, steps).max)) {
+        if (corner.stops - stops > 0 && corner.id !== waivedCornerId) charged += rowsPast;
         stops = 0;
     }
-    return rows;
+    return charged;
 }
 
 /** The end of a move that crosses the fewest slicks, breaking ties by lane. */
@@ -796,8 +809,8 @@ function planMove(state: IRaceCarsSpecificGameState, userId: string): RaceCarsCo
     const track = trackById(state.trackId);
     // `phase` is the authority and `roll` follows it (§23.4). A move phase with
     // no roll is a bug upstream; one row keeps this function total.
-    const roll = ps.roll ?? MIN_MOVE_ROWS;
-    const mostBrakes = Math.min(ps.brakes, Math.max(0, roll - MIN_MOVE_ROWS));
+    const roll = ps.roll ?? MIN_MOVE_STEPS;
+    const mostBrakes = Math.min(ps.brakes, Math.max(0, roll - MIN_MOVE_STEPS));
 
     // Crossing oil is the tie-break rather than a veto: a certain overshoot is
     // worse than a one-in-six chance of a spin.
@@ -822,8 +835,8 @@ function planTow(state: IRaceCarsSpecificGameState, userId: string): RaceCarsCon
     if (!slipstreamOffered(state, userId)) return { phase: 'slipstream', tow: null };
     const ps = requirePlayer(state, userId);
     const track = trackById(state.trackId);
-    const options = moveOptions(state, userId, SLIPSTREAM_ROWS);
-    const best = safestDestination(state, userId, SLIPSTREAM_ROWS);
+    const options = moveOptions(state, userId, SLIPSTREAM_STEPS);
+    const best = safestDestination(state, userId, SLIPSTREAM_STEPS);
     // §12's tow gets no waiver, so the plan is priced the way `resolveArrival`
     // will price it — otherwise the one board state where the two disagree is
     // the one where the cron takes a free tow into a corner and pays for it.

@@ -5,7 +5,7 @@ import MapLabelLayer, { type MapLabelSpec } from '@/components/ui/MapLabelLayer'
 import type { Rect } from '@/utils/ui/mapLabels';
 import { playerColourForId } from '@/utils/ui/playerColours';
 import type { IRaceCarsPlayerStateResponse, IRaceCarsSpecificGameStateResponse } from '@/games/RaceCars/apiModels';
-import { cornerAt, spaceKey, trackById, type RaceCarsGeometry, type RaceCarsTrack } from '@/games/RaceCars/board';
+import { cornerAt, spaceKey, spacesInRow, trackById, type RaceCarsGeometry, type RaceCarsTrack } from '@/games/RaceCars/board';
 
 // One lozenge per space, sized so the 214 of them tile into the road itself —
 // which is why this board draws no separate tarmac ribbon under them. Tuned to
@@ -121,7 +121,11 @@ export default function RaceCarsBoard({ gs, userIdList, validSpaces, unavoidable
     ]);
 
     const cornerLabels: MapLabelSpec[] = track.corners.flatMap(corner => {
-        const middle = geometry.get(spaceKey(Math.round((corner.from + corner.to) / 2), 1));
+        // The corner's middle row, in whichever lane the road actually has one
+        // there: the inside of a corner can skip a row entirely (§5.1), and a
+        // label hung off lane 1 alone would go missing on exactly those corners.
+        const mid = Math.round((corner.from + corner.to) / 2);
+        const middle = geometry.get(spaceKey(mid, spacesInRow(track, mid)[0]?.lane ?? 1));
         if (!middle) return [];
         return [{
             key: corner.id,
@@ -133,7 +137,9 @@ export default function RaceCarsBoard({ gs, userIdList, validSpaces, unavoidable
         }];
     });
 
-    const startLine = geometry.get(spaceKey(0, 1));
+    // Row 0 in whichever lane the road has one, for the same reason the corner
+    // names are placed that way.
+    const startLine = geometry.get(spaceKey(0, spacesInRow(track, 0)[0]?.lane ?? 1));
 
     return (
         <div className="ag-board-frame ag-racecars-frame">
