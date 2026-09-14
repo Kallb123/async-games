@@ -31,7 +31,9 @@ import { readStoredValue, writeStoredValue } from '@/utils/hooks/useStoredValue'
  * All the geometry, graph and printing live in `editorModel.ts` as pure
  * functions; this component owns only the pointer handling and the panels. The
  * work in progress is kept in `localStorage` (the app's one storage hook) so a
- * reload doesn't lose an afternoon's placing.
+ * reload doesn't lose an afternoon's placing — the traced-over backdrop is the
+ * one thing left out of that, because a multi-megabyte data URI would blow the
+ * storage quota and silently drop every later save with it.
  */
 
 const STORAGE_KEY = 'ag-racecars-track-editor';
@@ -50,6 +52,27 @@ interface PointerState {
     moved: boolean;
     /** Where on the art the background press landed, for a click-to-place. */
     at?: { x: number; y: number };
+}
+
+/**
+ * A saved draft, trusted only as far as its shape holds up. A value that parses
+ * but isn't the right shape — a hand-edited devtools entry, an older schema —
+ * would otherwise crash the first render that maps over `tiles`, before the
+ * in-page Clear button (inside that same crashed tree) could rescue it.
+ */
+function parseDraft(raw: string | null): EditorState {
+    if (!raw) return emptyState();
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return emptyState();
+        const merged = { ...emptyState(), ...parsed };
+        if (!Array.isArray(merged.tiles)) merged.tiles = [];
+        if (!merged.corners || typeof merged.corners !== 'object') merged.corners = {};
+        return merged;
+    } catch {
+        // A corrupt draft is no reason to wedge the editor — start clean.
+        return emptyState();
+    }
 }
 
 /** The (x, y) on the art under a pointer event, mapped through the SVG's CTM. */
@@ -72,23 +95,19 @@ export default function RaceCarsTrackEditor() {
     // This screen only mounts after the auth guard resolves, client-side, so a
     // draft can be read straight out of storage here rather than through the
     // hydration-safe hook — there is no server render of it to disagree with.
-    const [state, setState] = useState<EditorState>(() => {
-        const raw = readStoredValue(STORAGE_KEY);
-        if (raw) {
-            try {
-                return { ...emptyState(), ...JSON.parse(raw) };
-            } catch {
-                // A corrupt draft is no reason to wedge the editor — start clean.
-            }
-        }
-        return emptyState();
-    });
+    const [state, setState] = useState<EditorState>(() => parseDraft(readStoredValue(STORAGE_KEY)));
 
     // Keep the browser's copy in step. Writing to storage is exactly what an
     // effect is for — an external system, not React state.
     useEffect(() => {
         writeStoredValue(STORAGE_KEY, JSON.stringify(state));
     }, [state]);
+
+    // The traced-over backdrop lives here, not in `state`: it is a multi-megabyte
+    // data URI, and serialising it into every draft save would blow the storage
+    // quota (see the file comment). It is browser-only and never printed, so a
+    // reload starts it blank while the tiles and the typed art path persist.
+    const [backdrop, setBackdrop] = useState<string | null>(null);
 
     const [mode, setMode] = useState<Mode>('place');
     const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -150,6 +169,26 @@ export default function RaceCarsTrackEditor() {
         });
     }, []);
 
+    const deleteTile = useCallback((key: string) => {
+        setState(prev => {
+            const survivors = prev.tiles.filter(t => spaceKey(t.row, t.lane) !== key);
+            // Scrub any hand-drawn exit that pointed at the deleted tile, so its
+            // removal can't leave a dangling reference — the very graph error
+            // that would otherwise throw out of the export printer. An override
+            // emptied by the scrub falls back to §5.1's default rule.
+            return {
+                ...prev,
+                tiles: survivors.map(tile => {
+                    if (!tile.exits) return tile;
+                    const kept = tile.exits.filter(exit => spaceKey(exit.row, exit.lane) !== key);
+                    if (kept.length === tile.exits.length) return tile;
+                    return { ...tile, exits: kept.length > 0 ? kept : undefined };
+                }),
+            };
+        });
+        setSelectedKey(null);
+    }, []);
+
     const onTilePointerDown = useCallback((event: React.PointerEvent, key: string) => {
         event.stopPropagation();
         svgRef.current?.setPointerCapture(event.pointerId);
@@ -186,7 +225,7 @@ export default function RaceCarsTrackEditor() {
         }
     }, [patchTile]);
 
-    const onPointerUp = useCallback((event: React.PointerEvent) => {
+    const onPointerUp = useCallback(() => {
         const pointer = pointerRef.current;
         pointerRef.current = null;
         if (!pointer || pointer.moved) return;
@@ -207,6 +246,7 @@ export default function RaceCarsTrackEditor() {
         const track = TRACK_LIST.find(t => t.id === trackId);
         if (!track) return;
         setState(fromTrack(track));
+        setBackdrop(null);
         setSelectedKey(null);
         setMode('place');
     }, []);
@@ -214,26 +254,30 @@ export default function RaceCarsTrackEditor() {
     const clearAll = useCallback(() => {
         if (!window.confirm('Clear the whole editor and start a blank track?')) return;
         setState(emptyState());
+        setBackdrop(null);
         setSelectedKey(null);
         setNextRow(0);
         setNextLane(1);
     }, []);
 
+    const [uploadError, setUploadError] = useState<string | null>(null);
     const onUploadArt = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
+        setUploadError(null);
         const reader = new FileReader();
         reader.onload = () => {
             const href = typeof reader.result === 'string' ? reader.result : '';
+            if (!href) { setUploadError("Couldn't read that image."); return; }
             const image = new Image();
-            image.onload = () => setState(prev => ({
-                ...prev,
-                artHref: href,
-                viewBox: { width: image.naturalWidth, height: image.naturalHeight },
-            }));
-            image.onerror = () => setState(prev => ({ ...prev, artHref: href }));
+            image.onload = () => {
+                setBackdrop(href);
+                setState(prev => ({ ...prev, viewBox: { width: image.naturalWidth, height: image.naturalHeight } }));
+            };
+            image.onerror = () => { setBackdrop(href); };
             image.src = href;
         };
+        reader.onerror = () => setUploadError("Couldn't read that image.");
         reader.readAsDataURL(file);
     }, []);
 
@@ -241,6 +285,7 @@ export default function RaceCarsTrackEditor() {
         <>
             <TrackPanel
                 state={state}
+                uploadError={uploadError}
                 onPatch={patch => setState(prev => ({ ...prev, ...patch }))}
                 onLoadTrack={loadTrack}
                 onUploadArt={onUploadArt}
@@ -248,48 +293,52 @@ export default function RaceCarsTrackEditor() {
             />
 
             <Section label="Canvas" count={state.tiles.length}>
-                <div className="ag-btn-row" style={{ marginBottom: 10, flexWrap: 'wrap' }}>
-                    <button
-                        type="button"
-                        className={`ag-btn ${mode === 'place' ? 'ag-btn--dark' : 'ag-btn--light'}`}
-                        onClick={() => setMode('place')}
-                    >
-                        Place tiles
-                    </button>
-                    <button
-                        type="button"
-                        className={`ag-btn ${mode === 'exits' ? 'ag-btn--dark' : 'ag-btn--light'}`}
-                        onClick={() => setMode('exits')}
-                        disabled={!selected}
-                    >
-                        Draw exits
-                    </button>
-                    <span style={{ flex: 1 }} />
-                    <button type="button" className="ag-btn ag-btn--light" onClick={() => setZoom(z => Math.max(0.25, z - 0.25))}>−</button>
-                    <span className="ag-hint" style={{ alignSelf: 'center', minWidth: 44, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
-                    <button type="button" className="ag-btn ag-btn--light" onClick={() => setZoom(z => Math.min(4, z + 0.25))}>+</button>
+                <div className="ag-stack">
+                    <div className="ag-rcedit-toolbar">
+                        <button
+                            type="button"
+                            className={`ag-btn ${mode === 'place' ? 'ag-btn--dark' : 'ag-btn--light'}`}
+                            onClick={() => setMode('place')}
+                        >
+                            Place tiles
+                        </button>
+                        <button
+                            type="button"
+                            className={`ag-btn ${mode === 'exits' ? 'ag-btn--dark' : 'ag-btn--light'}`}
+                            onClick={() => setMode('exits')}
+                            disabled={!selected}
+                        >
+                            Draw exits
+                        </button>
+                        <div className="ag-rcedit-toolbar-zoom">
+                            <button type="button" className="ag-btn ag-btn--light" onClick={() => setZoom(z => Math.max(0.25, z - 0.25))}>−</button>
+                            <span className="ag-hint">{Math.round(zoom * 100)}%</span>
+                            <button type="button" className="ag-btn ag-btn--light" onClick={() => setZoom(z => Math.min(4, z + 0.25))}>+</button>
+                        </div>
+                    </div>
+
+                    <p className="ag-hint">
+                        {mode === 'place'
+                            ? `Click the art to drop the next tile (row ${nextRow}, lane ${nextLane}). Drag a tile to nudge its centre; click one to select it.`
+                            : selected
+                                ? `Click a tile to add or remove a step from ${selected.row}:${selected.lane}. Faint lines are §5.1's default; solid lines are overrides.`
+                                : 'Select a tile first.'}
+                    </p>
+
+                    <EditorCanvas
+                        svgRef={svgRef}
+                        state={state}
+                        backdropHref={backdrop ?? state.artHref}
+                        zoom={zoom}
+                        mode={mode}
+                        selectedKey={selectedKey}
+                        cornerRows={cornerRows}
+                        onTilePointerDown={onTilePointerDown}
+                        onBackgroundPointerDown={onBackgroundPointerDown}
+                        onPointerMove={onPointerMove}
+                        onPointerUp={onPointerUp}
+                    />
                 </div>
-
-                <p className="ag-hint" style={{ marginBottom: 8 }}>
-                    {mode === 'place'
-                        ? `Click the art to drop the next tile (row ${nextRow}, lane ${nextLane}). Drag a tile to nudge its centre; click one to select it.`
-                        : selected
-                            ? `Click a tile to add or remove a step from ${selected.row}:${selected.lane}. Faint lines are §5.1's default; solid lines are overrides.`
-                            : 'Select a tile first.'}
-                </p>
-
-                <EditorCanvas
-                    svgRef={svgRef}
-                    state={state}
-                    zoom={zoom}
-                    mode={mode}
-                    selectedKey={selectedKey}
-                    cornerRows={cornerRows}
-                    onTilePointerDown={onTilePointerDown}
-                    onBackgroundPointerDown={onBackgroundPointerDown}
-                    onPointerMove={onPointerMove}
-                    onPointerUp={onPointerUp}
-                />
             </Section>
 
             {selected && (
@@ -298,10 +347,7 @@ export default function RaceCarsTrackEditor() {
                     tile={selected}
                     onPatch={patch => patchTile(spaceKey(selected.row, selected.lane), patch)}
                     onResetExits={() => patchTile(spaceKey(selected.row, selected.lane), { exits: undefined })}
-                    onDelete={() => {
-                        setState(prev => ({ ...prev, tiles: prev.tiles.filter(t => spaceKey(t.row, t.lane) !== selectedKey) }));
-                        setSelectedKey(null);
-                    }}
+                    onDelete={() => deleteTile(spaceKey(selected.row, selected.lane))}
                 />
             )}
 
@@ -333,6 +379,8 @@ function cornerRowSet(bands: ReturnType<typeof buildCorners>): Set<number> {
 interface CanvasProps {
     svgRef: React.RefObject<SVGSVGElement | null>;
     state: EditorState;
+    /** The image drawn under the tiles — the traced backdrop, else the art path. */
+    backdropHref: string;
     zoom: number;
     mode: Mode;
     selectedKey: string | null;
@@ -343,8 +391,11 @@ interface CanvasProps {
     onPointerUp: (event: React.PointerEvent) => void;
 }
 
+// A plain scroll-and-zoom frame, deliberately not `BoardZoom`: that toggles
+// between two zoom states on click, which would fight click-to-place. Here zoom
+// is a continuous control and the container just scrolls to pan.
 function EditorCanvas(props: CanvasProps) {
-    const { svgRef, state, zoom, mode, selectedKey, cornerRows, onTilePointerDown, onBackgroundPointerDown, onPointerMove, onPointerUp } = props;
+    const { svgRef, state, backdropHref, zoom, mode, selectedKey, cornerRows, onTilePointerDown, onBackgroundPointerDown, onPointerMove, onPointerUp } = props;
     const { width, height } = state.viewBox;
 
     // Both lookups built once per render rather than a `.find` per exit: at 214
@@ -363,10 +414,10 @@ function EditorCanvas(props: CanvasProps) {
                 onPointerDown={onBackgroundPointerDown}
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
-                style={{ touchAction: 'none', display: 'block', background: 'var(--ag-surface, #efe7db)' }}
+                className="ag-rcedit-svg"
             >
-                {state.artHref && (
-                    <image href={state.artHref} x={0} y={0} width={width} height={height} preserveAspectRatio="xMidYMid slice" />
+                {backdropHref && (
+                    <image href={backdropHref} x={0} y={0} width={width} height={height} preserveAspectRatio="xMidYMid slice" />
                 )}
 
                 {/* Exit edges under the tiles: faint dashed for §5.1's default,
@@ -424,8 +475,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     );
 }
 
-function TrackPanel({ state, onPatch, onLoadTrack, onUploadArt, onClear }: {
+function TrackPanel({ state, uploadError, onPatch, onLoadTrack, onUploadArt, onClear }: {
     state: EditorState;
+    uploadError: string | null;
     onPatch: (patch: Partial<EditorState>) => void;
     onLoadTrack: (trackId: string) => void;
     onUploadArt: (event: React.ChangeEvent<HTMLInputElement>) => void;
@@ -433,45 +485,49 @@ function TrackPanel({ state, onPatch, onLoadTrack, onUploadArt, onClear }: {
 }) {
     return (
         <Section label="Track">
-            <div className="ag-rcedit-grid">
-                <Field label="Track id">
-                    <input className="ag-input" value={state.id} onChange={e => onPatch({ id: e.target.value })} placeholder="ashcombe" autoComplete="off" />
-                </Field>
-                <Field label="Track name">
-                    <input className="ag-input" value={state.name} onChange={e => onPatch({ name: e.target.value })} placeholder="Ashcombe Park" autoComplete="off" />
-                </Field>
-                <Field label="Art width">
-                    <input className="ag-input" type="number" value={state.viewBox.width} onChange={e => onPatch({ viewBox: { ...state.viewBox, width: Number(e.target.value) || 0 } })} />
-                </Field>
-                <Field label="Art height">
-                    <input className="ag-input" type="number" value={state.viewBox.height} onChange={e => onPatch({ viewBox: { ...state.viewBox, height: Number(e.target.value) || 0 } })} />
-                </Field>
-                <Field label="Max gear">
-                    <select className="ag-select" value={state.maxGear} onChange={e => onPatch({ maxGear: Number(e.target.value) as Exclude<RaceCarsGear, 0> })}>
-                        {[1, 2, 3, 4, 5, 6].map(gear => <option key={gear} value={gear}>{gear}</option>)}
+            <div className="ag-stack">
+                <div className="ag-rcedit-grid">
+                    <Field label="Track id">
+                        <input className="ag-input" value={state.id} onChange={e => onPatch({ id: e.target.value })} placeholder="ashcombe" autoComplete="off" />
+                    </Field>
+                    <Field label="Track name">
+                        <input className="ag-input" value={state.name} onChange={e => onPatch({ name: e.target.value })} placeholder="Ashcombe Park" autoComplete="off" />
+                    </Field>
+                    <Field label="Art width">
+                        <input className="ag-input" type="number" value={state.viewBox.width} onChange={e => onPatch({ viewBox: { ...state.viewBox, width: Number(e.target.value) || 0 } })} />
+                    </Field>
+                    <Field label="Art height">
+                        <input className="ag-input" type="number" value={state.viewBox.height} onChange={e => onPatch({ viewBox: { ...state.viewBox, height: Number(e.target.value) || 0 } })} />
+                    </Field>
+                    <Field label="Max gear">
+                        <select className="ag-select" value={state.maxGear} onChange={e => onPatch({ maxGear: Number(e.target.value) as Exclude<RaceCarsGear, 0> })}>
+                            {[1, 2, 3, 4, 5, 6].map(gear => <option key={gear} value={gear}>{gear}</option>)}
+                        </select>
+                    </Field>
+                    <Field label="Art path (served copy)">
+                        <input className="ag-input" value={state.artHref} onChange={e => onPatch({ artHref: e.target.value })} placeholder="/art/racecars/ashcombe.png" autoComplete="off" />
+                    </Field>
+                </div>
+
+                <p className="ag-hint">
+                    Set the art path to a file already under <code>public/</code>, or upload an image to trace against — an
+                    upload is held in this browser only, never printed into the track file and not saved with the draft, so
+                    still set the art path by hand.
+                </p>
+
+                {uploadError && <p className="ag-hint">{uploadError}</p>}
+
+                <div className="ag-btn-row ag-btn-row--wrap">
+                    <label className="ag-btn ag-btn--light">
+                        Upload backdrop
+                        <input type="file" accept="image/*" onChange={onUploadArt} hidden />
+                    </label>
+                    <select className="ag-select" defaultValue="" onChange={e => { if (e.target.value) onLoadTrack(e.target.value); e.target.value = ''; }}>
+                        <option value="">Load a shipped track…</option>
+                        {TRACK_LIST.map(track => <option key={track.id} value={track.id}>{track.name}</option>)}
                     </select>
-                </Field>
-                <Field label="Art path (served copy)">
-                    <input className="ag-input" value={state.artHref} onChange={e => onPatch({ artHref: e.target.value })} placeholder="/art/racecars/ashcombe.png" autoComplete="off" />
-                </Field>
-            </div>
-
-            <p className="ag-hint" style={{ marginTop: 10 }}>
-                Set the art path to a file already under <code>public/</code>, or upload an image to trace against — an
-                upload is held in this browser only and never printed into the track file, so still set the art path by hand.
-            </p>
-
-            <div className="ag-btn-row" style={{ marginTop: 10, flexWrap: 'wrap' }}>
-                <label className="ag-btn ag-btn--light">
-                    Upload backdrop
-                    <input type="file" accept="image/*" onChange={onUploadArt} style={{ display: 'none' }} />
-                </label>
-                <select className="ag-select" defaultValue="" onChange={e => { if (e.target.value) onLoadTrack(e.target.value); e.target.value = ''; }}>
-                    <option value="">Load a shipped track…</option>
-                    {TRACK_LIST.map(track => <option key={track.id} value={track.id}>{track.name}</option>)}
-                </select>
-                <span style={{ flex: 1 }} />
-                <button type="button" className="ag-btn ag-btn--danger" onClick={onClear}>Clear</button>
+                    <button type="button" className="ag-btn ag-btn--danger" onClick={onClear}>Clear</button>
+                </div>
             </div>
         </Section>
     );
@@ -488,39 +544,40 @@ function SelectedTilePanel({ state, tile, onPatch, onResetExits, onDelete }: {
     const autoHeading = tileHeading(state.tiles, { ...tile, heading: undefined });
     return (
         <Section label={`Tile ${tile.row}:${tile.lane}`}>
-            <div className="ag-rcedit-grid">
-                <Field label="Row">
-                    <input className="ag-input" type="number" value={tile.row} onChange={e => onPatch({ row: Number(e.target.value) || 0 })} />
-                </Field>
-                <Field label="Lane">
-                    <input className="ag-input" type="number" value={tile.lane} onChange={e => onPatch({ lane: Number(e.target.value) || 0 })} />
-                </Field>
-                <Field label={`Heading (auto ${autoHeading}°)`}>
-                    <input
-                        className="ag-input"
-                        type="number"
-                        value={tile.heading ?? ''}
-                        placeholder={`${autoHeading}`}
-                        onChange={e => onPatch({ heading: e.target.value === '' ? undefined : Number(e.target.value) })}
-                    />
-                </Field>
-                <Field label="Part of corner">
-                    <select className="ag-select" value={tile.cornerId ?? ''} onChange={e => onPatch({ cornerId: e.target.value || undefined })}>
-                        <option value="">— none —</option>
-                        {cornerIds.map(id => <option key={id} value={id}>{state.corners[id].name || id}</option>)}
-                    </select>
-                </Field>
-            </div>
+            <div className="ag-stack">
+                <div className="ag-rcedit-grid">
+                    <Field label="Row">
+                        <input className="ag-input" type="number" value={tile.row} onChange={e => onPatch({ row: Number(e.target.value) || 0 })} />
+                    </Field>
+                    <Field label="Lane">
+                        <input className="ag-input" type="number" value={tile.lane} onChange={e => onPatch({ lane: Number(e.target.value) || 0 })} />
+                    </Field>
+                    <Field label={`Heading (auto ${autoHeading}°)`}>
+                        <input
+                            className="ag-input"
+                            type="number"
+                            value={tile.heading ?? ''}
+                            placeholder={`${autoHeading}`}
+                            onChange={e => onPatch({ heading: e.target.value === '' ? undefined : Number(e.target.value) })}
+                        />
+                    </Field>
+                    <Field label="Part of corner">
+                        <select className="ag-select" value={tile.cornerId ?? ''} onChange={e => onPatch({ cornerId: e.target.value || undefined })}>
+                            <option value="">— none —</option>
+                            {cornerIds.map(id => <option key={id} value={id}>{state.corners[id].name || id}</option>)}
+                        </select>
+                    </Field>
+                </div>
 
-            <p className="ag-hint" style={{ marginTop: 10 }}>
-                Steps out: {effectiveExits(state.tiles, tile).map(e => `${e.row}:${e.lane}`).join(', ') || 'none'}
-                {tile.exits ? ' (overridden)' : ' (default §5.1 rule)'}.
-            </p>
+                <p className="ag-hint">
+                    Steps out: {effectiveExits(state.tiles, tile).map(e => `${e.row}:${e.lane}`).join(', ') || 'none'}
+                    {tile.exits ? ' (overridden)' : ' (default §5.1 rule)'}.
+                </p>
 
-            <div className="ag-btn-row" style={{ marginTop: 10 }}>
-                {tile.exits && <button type="button" className="ag-btn ag-btn--light" onClick={onResetExits}>Reset exits to default</button>}
-                <span style={{ flex: 1 }} />
-                <button type="button" className="ag-btn ag-btn--danger" onClick={onDelete}>Delete tile</button>
+                <div className="ag-btn-row ag-btn-row--wrap">
+                    {tile.exits && <button type="button" className="ag-btn ag-btn--light" onClick={onResetExits}>Reset exits to default</button>}
+                    <button type="button" className="ag-btn ag-btn--danger" onClick={onDelete}>Delete tile</button>
+                </div>
             </div>
         </Section>
     );
@@ -551,47 +608,45 @@ function CornersPanel({ state, onSetCorners, onTagRows }: {
 
     return (
         <Section label="Corners" count={ids.length}>
-            <p className="ag-hint" style={{ marginBottom: 10 }}>
-                A corner is a band of rows with a stop count (§10). Add one, then tag its rows — that is what marks the
-                tiles on it. Lane re-alignment after the corner needs no separate step: draw the inside line&apos;s last
-                tile straight onto the row it should merge back into, and the exit is the re-alignment.
-            </p>
+            <div className="ag-stack">
+                <p className="ag-hint">
+                    A corner is a band of rows with a stop count (§10). Add one, then tag its rows — that is what marks the
+                    tiles on it. Lane re-alignment after the corner needs no separate step: draw the inside line&apos;s last
+                    tile straight onto the row it should merge back into, and the exit is the re-alignment.
+                </p>
 
-            {ids.map(id => (
-                <div key={id} className="ag-rcedit-corner">
-                    <div className="ag-rcedit-grid">
-                        <Field label="Id"><input className="ag-input" value={id} disabled /></Field>
-                        <Field label="Name"><input className="ag-input" value={state.corners[id].name} onChange={e => patchCorner(id, { name: e.target.value })} /></Field>
-                        <Field label="Stops">
-                            <select className="ag-select" value={state.corners[id].stops} onChange={e => patchCorner(id, { stops: Number(e.target.value) as 1 | 2 })}>
-                                <option value={1}>1</option>
-                                <option value={2}>2</option>
-                            </select>
-                        </Field>
+                {ids.map(id => (
+                    <div key={id} className="ag-rcedit-corner ag-stack">
+                        <div className="ag-rcedit-grid">
+                            <Field label="Id"><input className="ag-input" value={id} disabled /></Field>
+                            <Field label="Name"><input className="ag-input" value={state.corners[id].name} onChange={e => patchCorner(id, { name: e.target.value })} /></Field>
+                            <Field label="Stops">
+                                <select className="ag-select" value={state.corners[id].stops} onChange={e => patchCorner(id, { stops: Number(e.target.value) as 1 | 2 })}>
+                                    <option value={1}>1</option>
+                                    <option value={2}>2</option>
+                                </select>
+                            </Field>
+                        </div>
+                        <RowTagger onTag={(from, to) => onTagRows(id, from, to)} onRemove={() => removeCorner(id)} />
                     </div>
-                    <RowTagger onTag={(from, to) => onTagRows(id, from, to)} />
-                    <div className="ag-btn-row" style={{ marginTop: 6 }}>
-                        <span style={{ flex: 1 }} />
-                        <button type="button" className="ag-btn ag-btn--light" onClick={() => removeCorner(id)}>Remove corner</button>
-                    </div>
+                ))}
+
+                <div className="ag-btn-row ag-btn-row--wrap">
+                    <input className="ag-input" value={newId} onChange={e => setNewId(e.target.value)} placeholder="new corner id, e.g. hairpin" autoComplete="off" />
+                    <button type="button" className="ag-btn ag-btn--dark" onClick={addCorner}>Add corner</button>
                 </div>
-            ))}
-
-            <div className="ag-btn-row" style={{ marginTop: 10 }}>
-                <input className="ag-input" value={newId} onChange={e => setNewId(e.target.value)} placeholder="new corner id, e.g. hairpin" autoComplete="off" />
-                <button type="button" className="ag-btn ag-btn--dark" onClick={addCorner}>Add corner</button>
             </div>
         </Section>
     );
 }
 
-function RowTagger({ onTag }: { onTag: (from: number, to: number) => void }) {
+function RowTagger({ onTag, onRemove }: { onTag: (from: number, to: number) => void; onRemove: () => void }) {
     const [from, setFrom] = useState('');
     const [to, setTo] = useState('');
     return (
-        <div className="ag-btn-row" style={{ marginTop: 6, flexWrap: 'wrap' }}>
-            <input className="ag-input" style={{ maxWidth: 90 }} type="number" value={from} onChange={e => setFrom(e.target.value)} placeholder="from row" />
-            <input className="ag-input" style={{ maxWidth: 90 }} type="number" value={to} onChange={e => setTo(e.target.value)} placeholder="to row" />
+        <div className="ag-btn-row ag-btn-row--wrap">
+            <input className="ag-input ag-rcedit-rownum" type="number" value={from} onChange={e => setFrom(e.target.value)} placeholder="from row" />
+            <input className="ag-input ag-rcedit-rownum" type="number" value={to} onChange={e => setTo(e.target.value)} placeholder="to row" />
             <button
                 type="button"
                 className="ag-btn ag-btn--light"
@@ -599,14 +654,18 @@ function RowTagger({ onTag }: { onTag: (from: number, to: number) => void }) {
             >
                 Tag rows
             </button>
+            <button type="button" className="ag-btn ag-btn--light" onClick={onRemove}>Remove corner</button>
         </div>
     );
 }
 
 function ExportPanel({ state, validation }: { state: EditorState; validation: ReturnType<typeof validateTrack> }) {
     const [copied, setCopied] = useState(false);
-    const source = useMemo(() => printTrackFile(state), [state]);
     const clean = validation.errors.length === 0 && state.tiles.length > 0;
+    // Only print a driveable track: `printTrackFile` runs the tiles through
+    // `assembleSpaces`, which throws on the very graph errors the banner above
+    // is already reporting — so printing an unclean track would crash the panel.
+    const source = useMemo(() => (clean ? printTrackFile(state) : ''), [clean, state]);
 
     const copy = async () => {
         try {
@@ -620,25 +679,33 @@ function ExportPanel({ state, validation }: { state: EditorState; validation: Re
 
     return (
         <Section label="Validate & export">
-            {validation.errors.length > 0 && (
-                <div className="ag-callout" style={{ marginBottom: 10 }}>
-                    <strong>Not driveable yet:</strong>
-                    <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
-                        {validation.errors.map(error => <li key={error}>{error}</li>)}
+            <div className="ag-stack">
+                {validation.errors.length > 0 && (
+                    <div className="ag-callout">
+                        <strong>Not driveable yet:</strong>
+                        <ul className="ag-rcedit-issues">
+                            {validation.errors.map(error => <li key={error}>{error}</li>)}
+                        </ul>
+                    </div>
+                )}
+                {validation.warnings.length > 0 && (
+                    <ul className="ag-hint ag-rcedit-issues">
+                        {validation.warnings.map(warning => <li key={warning}>{warning}</li>)}
                     </ul>
-                </div>
-            )}
-            {validation.warnings.length > 0 && (
-                <ul className="ag-hint" style={{ margin: '0 0 10px', paddingLeft: 18 }}>
-                    {validation.warnings.map(warning => <li key={warning}>{warning}</li>)}
-                </ul>
-            )}
-            {clean && <p className="ag-hint" style={{ marginBottom: 10 }}>Driveable. Save this as <code>src/games/RaceCars/tracks/{state.id || 'track'}.ts</code> and add it to <code>TRACK_LIST</code>.</p>}
+                )}
 
-            <div className="ag-btn-row" style={{ marginBottom: 10 }}>
-                <button type="button" className="ag-btn ag-btn--dark" onClick={copy}>{copied ? 'Copied!' : 'Copy track file'}</button>
+                {clean ? (
+                    <>
+                        <p className="ag-hint">Driveable. Save this as <code>src/games/RaceCars/tracks/{state.id || 'track'}.ts</code> and add it to <code>TRACK_LIST</code>.</p>
+                        <div className="ag-btn-row ag-btn-row--wrap">
+                            <button type="button" className="ag-btn ag-btn--dark" onClick={copy}>{copied ? 'Copied!' : 'Copy track file'}</button>
+                        </div>
+                        <textarea className="ag-input ag-rcedit-code" readOnly value={source} rows={16} />
+                    </>
+                ) : (
+                    <p className="ag-hint">Fix the issues above to print the track file.</p>
+                )}
             </div>
-            <textarea className="ag-input" readOnly value={source} rows={16} style={{ fontFamily: 'monospace', whiteSpace: 'pre', fontSize: 12 }} />
         </Section>
     );
 }

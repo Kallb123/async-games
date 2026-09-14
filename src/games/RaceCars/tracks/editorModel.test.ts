@@ -125,4 +125,13 @@ describe("the printed track file", () => {
         expect(source).toContain("{ row: 0, lane: 1 },");
         expect(effectiveExits(tinyState().tiles, tinyState().tiles[0])).toHaveLength(2);
     });
+
+    it("throws on an undriveable track — callers must validate first", () => {
+        // The contract the export panel relies on: it only prints when
+        // validateTrack is clean, because printTrackFile runs assembleSpaces.
+        const broken = tinyState();
+        broken.tiles[0] = { row: 0, lane: 1, x: 0, y: 0, exits: [{ row: 9, lane: 9 }] };
+        expect(validateTrack(broken).errors.length).toBeGreaterThan(0);
+        expect(() => printTrackFile(broken)).toThrow(/not a space/);
+    });
 });

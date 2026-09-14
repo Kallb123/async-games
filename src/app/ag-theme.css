@@ -619,6 +619,9 @@ a.ag-list-row, a.ag-list-row-main {
 /* A row of equal-width actions — two buttons or two CTA cards side by side. */
 .ag-btn-row { display: flex; gap: 10px; }
 .ag-btn-row > * { flex: 1; }
+/* Let a row wrap onto a second line rather than overflow when its buttons can't
+   all fit — a narrow admin screen, mostly. */
+.ag-btn-row--wrap { flex-wrap: wrap; }
 
 /* Small pill actions inside list rows */
 .ag-pill-action {
@@ -4562,8 +4565,17 @@ button.ag-tt-ticket { cursor: pointer; }
     border: 1px solid var(--ag-line);
     border-radius: 12px;
     padding: 10px;
-    margin-bottom: 10px;
 }
+/* The editor's own toolbar row: the mode buttons keep their natural width
+   (unlike .ag-btn-row, which stretches its children), and the zoom group is
+   pushed to the end. */
+.ag-rcedit-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.ag-rcedit-toolbar-zoom { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+/* The two row-band inputs on a corner, narrower than a full field. */
+.ag-rcedit-rownum { max-width: 110px; }
+/* The printed track file — a read-only code block, monospace and pre-wrapped. */
+.ag-rcedit-code { font-family: monospace; font-size: 12px; white-space: pre; }
+.ag-rcedit-issues { margin: 0; padding-left: 18px; }
 /* The image plus its tile overlay scrolls inside a fixed frame so a big circuit
    pans without pushing the panels off-screen; the SVG is sized in px for zoom. */
 .ag-rcedit-canvas {
@@ -4574,6 +4586,7 @@ button.ag-tt-ticket { cursor: pointer; }
     background: var(--ag-surface-2);
     touch-action: none;
 }
+.ag-rcedit-svg { display: block; background: var(--ag-surface); touch-action: none; }
 .ag-rcedit-tile {
     fill: color-mix(in oklch, var(--ag-terracotta) 65%, white);
     stroke: var(--ag-ink);

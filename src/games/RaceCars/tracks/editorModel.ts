@@ -123,22 +123,33 @@ export function allEffectiveExits(tiles: EditorTile[]): Map<string, RaceCarsSpac
 }
 
 /**
- * The screen bearing a car on this tile faces — the direction of travel toward
- * the mean of its exits, in the degrees-clockwise-from-increasing-rows that
- * `RaceCarsGeometry.heading` is measured in and `loopGeometry` writes. Used to
- * fill a tile's heading when the author hasn't set one by hand, so a fresh
- * track's cars point down the road without a heading being typed per tile.
+ * The screen bearing toward the mean of a set of exit tiles — the direction of
+ * travel, in the degrees-clockwise-from-increasing-rows that
+ * `RaceCarsGeometry.heading` is measured in and `loopGeometry` writes. Split
+ * from `tileHeading` so a caller placing every tile (`toTrack`) can pass the
+ * lookup and the exits it already has in hand rather than rebuild them per tile
+ * — the O(n²) trap the canvas edges already avoid (§23.4).
+ */
+function headingTowards(tile: EditorTile, exits: readonly RaceCarsSpace[], byKey: Map<string, EditorTile>): number {
+    const targets = exits
+        .map(exit => byKey.get(spaceKey(exit.row, exit.lane)))
+        .filter((exit): exit is EditorTile => exit !== undefined);
+    if (targets.length === 0) return 0;
+    const meanX = targets.reduce((sum, exit) => sum + exit.x, 0) / targets.length;
+    const meanY = targets.reduce((sum, exit) => sum + exit.y, 0) / targets.length;
+    return Math.round((Math.atan2(meanY - tile.y, meanX - tile.x) * 180) / Math.PI);
+}
+
+/**
+ * The heading a car on this tile faces: its own where the author set one, else
+ * pointed down the road toward its exits, so a fresh track's cars aim the right
+ * way without a heading typed per tile. Rebuilds the tile lookup itself — for
+ * the once-per-selection panel, not the per-tile loop (see `headingTowards`).
  */
 export function tileHeading(tiles: EditorTile[], tile: EditorTile): number {
     if (tile.heading !== undefined) return tile.heading;
     const byKey = new Map(tiles.map(other => [spaceKey(other.row, other.lane), other]));
-    const exits = effectiveExits(tiles, tile)
-        .map(exit => byKey.get(spaceKey(exit.row, exit.lane)))
-        .filter((exit): exit is EditorTile => exit !== undefined);
-    if (exits.length === 0) return 0;
-    const meanX = exits.reduce((sum, exit) => sum + exit.x, 0) / exits.length;
-    const meanY = exits.reduce((sum, exit) => sum + exit.y, 0) / exits.length;
-    return Math.round((Math.atan2(meanY - tile.y, meanX - tile.x) * 180) / Math.PI);
+    return headingTowards(tile, effectiveExits(tiles, tile), byKey);
 }
 
 /**
@@ -202,12 +213,21 @@ export function validateTrack(state: EditorState): EditorValidation {
 
     // A corner has to be one unbroken band of rows: `cornerAt` finds a car's
     // corner with `row >= from && row <= to`, so a gap in the middle would pull
-    // in the straight between two stretches an author meant to keep apart.
+    // in the straight between two stretches an author meant to keep apart. The
+    // rows are indexed in one pass rather than two `.some` scans per row, since
+    // this reruns on every drag frame (§23.4).
+    const rowsPresent = new Set(state.tiles.map(tile => tile.row));
+    const taggedRowsByCorner = new Map<string, Set<number>>();
+    for (const tile of state.tiles) {
+        if (!tile.cornerId) continue;
+        const set = taggedRowsByCorner.get(tile.cornerId) ?? new Set<number>();
+        set.add(tile.row);
+        taggedRowsByCorner.set(tile.cornerId, set);
+    }
     for (const corner of buildCorners(state)) {
+        const tagged = taggedRowsByCorner.get(corner.id) ?? new Set<number>();
         for (let row = corner.from; row <= corner.to; row++) {
-            const inBand = state.tiles.some(tile => tile.row === row);
-            const tagged = state.tiles.some(tile => tile.row === row && tile.cornerId === corner.id);
-            if (inBand && !tagged) {
+            if (rowsPresent.has(row) && !tagged.has(row)) {
                 warnings.push(`Corner "${corner.name}" skips row ${row} — its rows must be one unbroken band.`);
                 break;
             }
@@ -218,13 +238,23 @@ export function validateTrack(state: EditorState): EditorValidation {
 }
 
 /**
- * The editor's model as one `RaceCarsTrack`, for previewing the drawn circuit
- * through the real board component. Throws through `assembleSpaces` on an
- * undriveable track, so the caller previews only what `validateTrack` passed.
+ * The editor's model as one `RaceCarsTrack` — the single conversion `printTrackFile`
+ * reads its geometry off, so the printed `spaces`, `corners` and `geometry` are
+ * all one function's view of the drawn circuit rather than three that could
+ * drift. Throws through `assembleSpaces` on an undriveable track, so a caller
+ * runs `validateTrack` first (the export panel does, and only prints when it is
+ * clean).
+ *
+ * The lookup and the per-tile exits are built once and threaded into every
+ * heading, rather than rebuilt per tile: this runs on every keystroke and drag
+ * frame while a track is valid, so the O(n²) it would otherwise be is the same
+ * trap §23.4 fixed for the canvas edges.
  */
 export function toTrack(state: EditorState): RaceCarsTrack {
     const rows = rowCount(state.tiles);
     const tiles: SectionTile[] = state.tiles.map(tile => ({ row: tile.row, lane: tile.lane, exits: tile.exits }));
+    const byKey = new Map(state.tiles.map(tile => [spaceKey(tile.row, tile.lane), tile]));
+    const exitsByKey = allEffectiveExits(state.tiles);
     return {
         id: state.id || "draft",
         name: state.name || "Draft circuit",
@@ -239,7 +269,7 @@ export function toTrack(state: EditorState): RaceCarsTrack {
             lane: tile.lane,
             x: Math.round(tile.x),
             y: Math.round(tile.y),
-            heading: tileHeading(state.tiles, tile),
+            heading: tile.heading ?? headingTowards(tile, exitsByKey.get(spaceKey(tile.row, tile.lane)) ?? [], byKey),
         })),
     };
 }
