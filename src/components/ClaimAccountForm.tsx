@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useToast } from "@/components/ToastContext";
 import ActionButton from "@/components/ui/ActionButton";
+import PasswordField from "@/components/ui/PasswordField";
 
 // Adding an email and password to the guest account the player already is
 // (docs/account-less-play.md step 16). Nothing about the account's id
@@ -65,20 +66,15 @@ export default function ClaimAccountForm() {
                     required
                 />
             </div>
-            <div>
-                <label htmlFor="claim-password" className="ag-section-label ag-field-label">Password</label>
-                <input
-                    id="claim-password"
-                    className="ag-input"
-                    type="password"
-                    autoComplete="new-password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="At least 8 characters"
-                    minLength={8}
-                    required
-                />
-            </div>
+            <PasswordField
+                id="claim-password"
+                label="Password"
+                value={password}
+                onChange={setPassword}
+                autoComplete="new-password"
+                placeholder="At least 8 characters"
+                minLength={8}
+            />
             <ActionButton
                 type="submit"
                 className="ag-btn ag-btn--primary ag-btn--block"
