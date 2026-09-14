@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import { ASHCOMBE } from "./ashcombe";
 import {
     buildCorners,
+    connectByGeometry,
     effectiveExits,
     emptyState,
     fromTrack,
+    parseDraft,
     printTrackFile,
     sameExits,
     tileHeading,
@@ -47,14 +49,20 @@ describe("editor validation", () => {
         expect(validateTrack(broken).errors[0]).toMatch(/not a space/);
     });
 
-    it("warns when a corner band is not one unbroken run of rows", () => {
-        const gapped = tinyState();
-        // Tag rows 0 and 2 but leave row 1 out, leaving a hole in the band.
-        gapped.tiles[0].cornerId = "bend";
-        gapped.tiles[1].cornerId = "bend";
-        gapped.tiles[2].cornerId = undefined;
-        gapped.tiles[3].cornerId = undefined;
-        expect(validateTrack(gapped).warnings.some(w => /unbroken band/.test(w))).toBe(true);
+    it("does not force every tile in a corner's rows to be tagged", () => {
+        // A corner can span its rows in a strange way — only some lanes on a
+        // row — and that is not a problem to warn about.
+        const partial = tinyState();
+        partial.tiles[2].cornerId = undefined; // untag row 1 lane 1, keep lane 2
+        expect(validateTrack(partial).warnings.some(w => /unbroken|skips/.test(w))).toBe(false);
+        expect(validateTrack(partial).errors).toEqual([]);
+    });
+
+    it("warns about an exit that runs more than half a lap forward", () => {
+        // A backward-looking override — the row-numbering slip a sharp corner sets.
+        const backwards = tinyState();
+        backwards.tiles[5] = { row: 2, lane: 2, x: 20, y: 40, cornerId: "bend", exits: [{ row: 1, lane: 1 }] };
+        expect(validateTrack(backwards).warnings.some(w => /half a lap/.test(w))).toBe(true);
     });
 });
 
@@ -133,5 +141,65 @@ describe("the printed track file", () => {
         broken.tiles[0] = { row: 0, lane: 1, x: 0, y: 0, exits: [{ row: 9, lane: 9 }] };
         expect(validateTrack(broken).errors.length).toBeGreaterThan(0);
         expect(() => printTrackFile(broken)).toThrow(/not a space/);
+    });
+});
+
+describe("parseDraft trusts a saved draft only as far as its shape holds", () => {
+    it("round-trips a real draft", () => {
+        const state = tinyState();
+        expect(parseDraft(JSON.stringify(state)).tiles).toHaveLength(state.tiles.length);
+    });
+
+    it("falls back to a blank track on junk, wrong type, or a bad shape", () => {
+        expect(parseDraft(null).tiles).toEqual([]);
+        expect(parseDraft("not json{").tiles).toEqual([]);
+        expect(parseDraft("42").tiles).toEqual([]);
+        expect(parseDraft(JSON.stringify({ tiles: "nope", corners: 5 })).tiles).toEqual([]);
+    });
+});
+
+describe("connectByGeometry lines lanes up off the shape, not the row numbers", () => {
+    it("leaves an interior straight on the default rule", () => {
+        // Two lanes running straight down: on the interior rows geometry agrees
+        // with row+1, so no override is written. (The last row wraps to the
+        // first, whose forward direction on an open test strip points back up —
+        // a real loop closes that; here it is enough that the straight does.)
+        const straight = emptyState({
+            tiles: [
+                { row: 0, lane: 1, x: 0, y: 0 }, { row: 0, lane: 2, x: 20, y: 0 },
+                { row: 1, lane: 1, x: 0, y: 20 }, { row: 1, lane: 2, x: 20, y: 20 },
+                { row: 2, lane: 1, x: 0, y: 40 }, { row: 2, lane: 2, x: 20, y: 40 },
+            ],
+        });
+        const connected = connectByGeometry(straight.tiles);
+        for (const [row, lane] of [[0, 1], [0, 2], [1, 1], [1, 2]] as const) {
+            expect(connected.find(t => t.row === row && t.lane === lane)!.exits).toBeUndefined();
+        }
+    });
+
+    it("keeps a hand-drawn override untouched", () => {
+        const state = tinyState();
+        state.tiles[0] = { row: 0, lane: 1, x: 0, y: 0, exits: [{ row: 1, lane: 2 }] };
+        const connected = connectByGeometry(state.tiles);
+        expect(connected[0].exits).toEqual([{ row: 1, lane: 2 }]);
+    });
+
+    it("connects to the tile that is physically ahead when a lane skips a row", () => {
+        // A sharp inside line: lane 1 has no tile on row 1, so the tile that is
+        // actually in front of 0:1 is 2:1 — which the row+1 rule can't reach but
+        // geometry can.
+        const corner = emptyState({
+            tiles: [
+                { row: 0, lane: 1, x: 0, y: 0 },
+                { row: 0, lane: 2, x: 30, y: 0 },
+                { row: 1, lane: 2, x: 30, y: 20 },
+                { row: 2, lane: 1, x: 0, y: 40 },
+                { row: 2, lane: 2, x: 30, y: 40 },
+            ],
+        });
+        const connected = connectByGeometry(corner.tiles);
+        const inside = connected.find(t => t.row === 0 && t.lane === 1)!;
+        expect(inside.exits).toBeDefined();
+        expect(inside.exits!.some(e => e.row === 2 && e.lane === 1)).toBe(true);
     });
 });

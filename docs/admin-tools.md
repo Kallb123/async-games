@@ -157,27 +157,38 @@ be typed by hand:
    *Upload backdrop* an image to trace against (the upload is held in this
    browser only, never written into the printed track). Set the viewBox size —
    an upload fills it in from the image.
-2. **Place tiles.** In *Place tiles* mode, click the art to drop the next tile;
-   its row/lane auto-advance (lane 1 → 2 → 3 → next row). Drag a tile to nudge
-   its centre; click one to select it and edit its row, lane, heading or corner
-   in the *Tile* panel. Heading is computed from where a tile's exits point
-   unless you set it by hand.
+2. **Place tiles.** In *Place* mode, click the art to drop the next tile; its
+   row/lane auto-advance (lane 1 → 2 → 3 → next row). Drag a tile to nudge its
+   centre; click one to select it and edit its row, lane, heading or corner in
+   the *Tile* panel. Heading is computed from where a tile's exits point unless
+   you set it by hand.
 3. **Draw movement restriction.** Select a tile, switch to *Draw exits*, and
    click the tiles it may step to — each click adds or removes a step. Faint
    dashed edges are §5.1's default; solid edges are your overrides. An edit that
    lands back on the default drops the override, so ordinary straights stay
-   plain.
-4. **Band the corners.** In *Corners*, add a corner (id, name, stop count) and
-   *Tag rows* to mark every tile in a row range as part of it — that is what
-   "which tiles are a corner" means to the rules, and the band feeds §10.
-5. **Validate & export.** The panel runs the tiles through the game's own
+   plain. **Auto-connect exits from geometry** rebuilds every non-overridden
+   tile's steps from where the tiles actually sit rather than from row+1 — the
+   fix for a corner sharp enough that the lanes come out of it out of step (see
+   below). It leaves your hand-drawn exits alone.
+4. **Paint the corners.** In *Corners*, add a corner (id, name, stop count),
+   then switch to *Paint corners* and drag over the tiles that belong to it — a
+   corner need **not** take every lane of a row, and can span its rows however
+   the road does. The corner's row band (what §10 reads) follows the painted
+   tiles. Set the brush to *Erase* to clear tiles.
+5. **Save/resume.** The draft autosaves to this browser's `localStorage`;
+   *Save draft to file* / *Open draft file* move it to a `.json` you can keep or
+   carry to another machine. That draft is the working copy — separate from the
+   deployable track file the export panel prints.
+6. **Validate & export.** The panel runs the tiles through the game's own
    `assembleSpaces`, so "driveable in the editor" and "loads in the game" are
    the same check. Copy the printed file, save it as
    `src/games/RaceCars/tracks/<id>.ts`, and add it to `TRACK_LIST` in
    `board.ts`.
 
 Load a shipped track (Ashcombe, Anglet) to refine its placeholder geometry
-against the real art rather than placing every tile from nothing.
+against the real art rather than placing every tile from nothing. The whole
+screen stretches to a desktop's width — the canvas stays put on the left while
+the panels scroll on the right — and folds to a single column on a phone.
 
 ### Re-aligning lanes after a corner
 
@@ -187,6 +198,17 @@ again. There is **no separate re-alignment step, and none is needed** — the
 merge *is* an exit. Draw the inside line's last tile straight onto the row it
 should rejoin, and the graph carries the re-alignment; `assembleSpaces` then
 checks that every such exit lands on a real space and moves the car forward.
+
+The catch is the auto-generator: §5.1's default step rule (this lane or either
+beside it, in the *next row*) can't see that the inside line took fewer tiles,
+so past a sharp corner "the next row in this lane" is no longer the tile in
+front. *Auto-connect exits from geometry* solves it by connecting each tile to
+the tiles physically ahead of it — off the shape you drew, not off row+1 — so a
+tile whose true next space carries a lower row number than its neighbour (the
+inside line having spent fewer rows) still connects forward. If an exit ends up
+running more than half a lap "forward", the export panel warns: that is almost
+always a row-numbering slip, where the rows past the corner stopped counting up
+in step with the road.
 
 ### No "What's new" entry
 

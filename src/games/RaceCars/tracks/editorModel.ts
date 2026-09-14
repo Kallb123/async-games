@@ -69,6 +69,27 @@ export function emptyState(overrides: Partial<EditorState> = {}): EditorState {
     };
 }
 
+/**
+ * A saved draft, trusted only as far as its shape holds up — the editor's
+ * localStorage autosave and its "import a draft file" both come through here.
+ * A value that parses but is the wrong shape (a hand-edited entry, an older
+ * schema) would otherwise crash the first render that maps over `tiles`, so
+ * anything that isn't right falls back to a blank track rather than through.
+ */
+export function parseDraft(raw: string | null): EditorState {
+    if (!raw) return emptyState();
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object") return emptyState();
+        const merged = { ...emptyState(), ...parsed };
+        if (!Array.isArray(merged.tiles)) merged.tiles = [];
+        if (!merged.corners || typeof merged.corners !== "object") merged.corners = {};
+        return merged;
+    } catch {
+        return emptyState();
+    }
+}
+
 /** Lap length: one past the highest row any tile sits on, or 0 for a blank track. */
 export function rowCount(tiles: EditorTile[]): number {
     return tiles.reduce((max, tile) => Math.max(max, tile.row + 1), 0);
@@ -152,6 +173,63 @@ export function tileHeading(tiles: EditorTile[], tile: EditorTile): number {
     return headingTowards(tile, effectiveExits(tiles, tile), byKey);
 }
 
+/** How near a candidate has to be to count with the nearest one ahead. */
+const CONNECT_SPREAD = 1.6;
+/** How far off the heading a candidate may sit — a projection this fraction of
+ *  its distance keeps roughly-forward tiles and drops the ones off to the side. */
+const CONNECT_CONE = 0.3;
+/** No more steps than §5.1's "this lane or either beside it" ever offers. */
+const CONNECT_MAX_EXITS = 3;
+
+/**
+ * Exits redrawn from where the tiles actually sit, for the case §5.1's row+1
+ * rule can't line up on its own: a corner sharp enough that the inside line
+ * took fewer tiles round it, so past the corner "the same lane in the next row"
+ * is no longer the tile in front. Each tile is connected to the nearest tiles
+ * ahead of it — ahead by its heading, not by row arithmetic — which is what
+ * makes the lanes fall back into step off the shape the author drew rather than
+ * off a lane number that no longer means what it did before the corner.
+ *
+ * Non-destructive: a tile that already carries a hand-drawn override keeps it,
+ * and one whose geometry agrees with the default rule is left on the default so
+ * an ordinary straight stays a plain straight. A same-row (sideways) candidate
+ * is never connected — a car changes lane while moving, never on the spot.
+ */
+export function connectByGeometry(tiles: EditorTile[]): EditorTile[] {
+    const rows = rowCount(tiles);
+    const byRow = spacesByRow(tiles);
+    const byKey = new Map(tiles.map(tile => [spaceKey(tile.row, tile.lane), tile]));
+    const exitsByKey = allEffectiveExits(tiles);
+
+    return tiles.map(tile => {
+        if (tile.exits) return tile;
+        const heading = tile.heading ?? headingTowards(tile, exitsByKey.get(spaceKey(tile.row, tile.lane)) ?? [], byKey);
+        const radians = (heading * Math.PI) / 180;
+        const forwardX = Math.cos(radians);
+        const forwardY = Math.sin(radians);
+
+        const ahead = tiles
+            .filter(other => other !== tile && other.row !== tile.row)
+            .map(other => {
+                const dx = other.x - tile.x;
+                const dy = other.y - tile.y;
+                const dist = Math.hypot(dx, dy);
+                return { other, dist, along: dist > 0 ? dx * forwardX + dy * forwardY : 0 };
+            })
+            .filter(candidate => candidate.dist > 0 && candidate.along >= candidate.dist * CONNECT_CONE)
+            .sort((a, b) => a.dist - b.dist);
+
+        if (ahead.length === 0) return tile;
+        const nearest = ahead[0].dist;
+        const exits = ahead
+            .filter(candidate => candidate.dist <= nearest * CONNECT_SPREAD)
+            .slice(0, CONNECT_MAX_EXITS)
+            .map(candidate => ({ row: candidate.other.row, lane: candidate.other.lane }));
+
+        return sameExits(exits, defaultExits(rows, byRow, tile)) ? tile : { ...tile, exits };
+    });
+}
+
 /**
  * Each corner as the rules want it — id, name, stop count, and the inclusive
  * row band read off the tiles that carry its id. A corner with no tiles is
@@ -211,26 +289,23 @@ export function validateTrack(state: EditorState): EditorValidation {
         errors.push(error instanceof Error ? error.message.replace(/^Race Cars: /, "") : String(error));
     }
 
-    // A corner has to be one unbroken band of rows: `cornerAt` finds a car's
-    // corner with `row >= from && row <= to`, so a gap in the middle would pull
-    // in the straight between two stretches an author meant to keep apart. The
-    // rows are indexed in one pass rather than two `.some` scans per row, since
-    // this reruns on every drag frame (§23.4).
-    const rowsPresent = new Set(state.tiles.map(tile => tile.row));
-    const taggedRowsByCorner = new Map<string, Set<number>>();
-    for (const tile of state.tiles) {
-        if (!tile.cornerId) continue;
-        const set = taggedRowsByCorner.get(tile.cornerId) ?? new Set<number>();
-        set.add(tile.row);
-        taggedRowsByCorner.set(tile.cornerId, set);
-    }
-    for (const corner of buildCorners(state)) {
-        const tagged = taggedRowsByCorner.get(corner.id) ?? new Set<number>();
-        for (let row = corner.from; row <= corner.to; row++) {
-            if (rowsPresent.has(row) && !tagged.has(row)) {
-                warnings.push(`Corner "${corner.name}" skips row ${row} — its rows must be one unbroken band.`);
-                break;
+    // An exit that runs more than half a lap "forward" is almost always a
+    // backward step from a row-numbering slip — the trap a sharp corner sets,
+    // where the inside line took fewer tiles round and the rows past it no
+    // longer count up in step. A car crossing the start line steps forward a
+    // row or two, never half the lap, so the wrap itself never trips this.
+    if (rows > 0) {
+        let backwards = 0;
+        for (const [fromKey, exits] of allEffectiveExits(state.tiles)) {
+            const from = state.tiles.find(tile => spaceKey(tile.row, tile.lane) === fromKey);
+            if (!from) continue;
+            for (const exit of exits) {
+                const advance = ((exit.row - from.row) % rows + rows) % rows;
+                if (advance > rows / 2) backwards++;
             }
+        }
+        if (backwards > 0) {
+            warnings.push(`${backwards} exit${backwards === 1 ? '' : 's'} run more than half a lap forward — usually a row-numbering slip after a corner. Check the rows count up the way the road runs.`);
         }
     }
 

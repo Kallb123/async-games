@@ -4594,6 +4594,8 @@ button.ag-tt-ticket { cursor: pointer; }
     cursor: pointer;
 }
 .ag-rcedit-tile--corner { fill: var(--ag-gold); }
+/* A tile of the corner the paint brush is set to, so a drag reads as it lands. */
+.ag-rcedit-tile--brush { stroke: var(--ag-terracotta-deep); stroke-width: 2.4; }
 .ag-rcedit-tile--selected { fill: var(--ag-terracotta-deep); stroke-width: 2.4; }
 /* A candidate for the next exit while drawing steps: ringed, not filled, so the
    corner it belongs to still reads under the ring. */
@@ -4620,6 +4622,30 @@ button.ag-tt-ticket { cursor: pointer; }
     stroke-width: 1.6;
     stroke-dasharray: none;
     opacity: 0.9;
+}
+.ag-rcedit-corner--active { border-color: var(--ag-terracotta); box-shadow: 0 0 0 1px var(--ag-terracotta); }
+
+/* The editor stretches to use a desktop's width: the canvas takes the room it
+   wants on the left and stays put (sticky) while the panels scroll on the
+   right. On a phone it is the ordinary single column, canvas first. The page
+   opts the whole app column out of its 480px cap the way the home dashboard
+   does — see the `.ag-app:has(.ag-desk)` block below for the same trick. */
+@media (min-width: 900px) {
+    .ag-app:has(.ag-rcedit-page) {
+        max-width: none;
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+    .ag-rcedit-page {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 420px;
+        gap: 16px;
+        align-items: start;
+    }
+    .ag-rcedit-canvas-col { position: sticky; top: 12px; }
+    /* The canvas can use the taller viewport once it is beside the panels
+       rather than above them. */
+    .ag-rcedit-page .ag-rcedit-canvas { max-height: 80vh; }
 }
 
 /* ============================================================= *

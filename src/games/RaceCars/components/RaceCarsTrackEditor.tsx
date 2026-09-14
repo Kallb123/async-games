@@ -5,10 +5,11 @@ import Section from '@/components/ui/Section';
 import { spaceKey, TRACK_LIST, type RaceCarsGear, type RaceCarsSpace } from '@/games/RaceCars/board';
 import {
     allEffectiveExits,
-    buildCorners,
+    connectByGeometry,
     effectiveExits,
     emptyState,
     fromTrack,
+    parseDraft,
     printTrackFile,
     sameExits,
     tileDefaultExits,
@@ -22,7 +23,7 @@ import { readStoredValue, writeStoredValue } from '@/utils/hooks/useStoredValue'
 /**
  * The Race Cars track editor (docs/admin-tools.md): drop each tile onto a
  * circuit image to fix its centre point, draw the corner merges that break
- * §5.1's step rule, band the corners, and print a `tracks/` file. It is the
+ * §5.1's step rule, paint the corners, and print a `tracks/` file. It is the
  * interactive answer to §23.6's "214 hand-placed coordinates is not a thing to
  * type" — and to the same problem the new spaces-graph gave the corners: an
  * inside line that takes fewer tiles round a corner than the outside has to
@@ -31,9 +32,10 @@ import { readStoredValue, writeStoredValue } from '@/utils/hooks/useStoredValue'
  * All the geometry, graph and printing live in `editorModel.ts` as pure
  * functions; this component owns only the pointer handling and the panels. The
  * work in progress is kept in `localStorage` (the app's one storage hook) so a
- * reload doesn't lose an afternoon's placing — the traced-over backdrop is the
- * one thing left out of that, because a multi-megabyte data URI would blow the
- * storage quota and silently drop every later save with it.
+ * reload doesn't lose an afternoon's placing, and can be downloaded to a file
+ * for a longer-lived save/resume across browsers. The traced-over backdrop is
+ * the one thing left out of storage, because a multi-megabyte data URI would
+ * blow the quota and silently drop every later save with it.
  */
 
 const STORAGE_KEY = 'ag-racecars-track-editor';
@@ -41,38 +43,20 @@ const STORAGE_KEY = 'ag-racecars-track-editor';
 const TILE_RADIUS = 7;
 /** How far a pointer may travel before a click counts as a drag, in screen px. */
 const DRAG_SLOP = 4;
+/** How near the pointer must be to a tile centre to paint it, in art units. */
+const PAINT_HIT = TILE_RADIUS * 1.8;
 
-type Mode = 'place' | 'exits';
+type Mode = 'place' | 'exits' | 'paint';
 
 interface PointerState {
-    kind: 'tile' | 'background';
+    /** 'tile'/'background' are the place & exits gestures; 'paint' drags the brush. */
+    kind: 'tile' | 'background' | 'paint';
     key?: string;
     startX: number;
     startY: number;
     moved: boolean;
     /** Where on the art the background press landed, for a click-to-place. */
     at?: { x: number; y: number };
-}
-
-/**
- * A saved draft, trusted only as far as its shape holds up. A value that parses
- * but isn't the right shape — a hand-edited devtools entry, an older schema —
- * would otherwise crash the first render that maps over `tiles`, before the
- * in-page Clear button (inside that same crashed tree) could rescue it.
- */
-function parseDraft(raw: string | null): EditorState {
-    if (!raw) return emptyState();
-    try {
-        const parsed = JSON.parse(raw);
-        if (!parsed || typeof parsed !== 'object') return emptyState();
-        const merged = { ...emptyState(), ...parsed };
-        if (!Array.isArray(merged.tiles)) merged.tiles = [];
-        if (!merged.corners || typeof merged.corners !== 'object') merged.corners = {};
-        return merged;
-    } catch {
-        // A corrupt draft is no reason to wedge the editor — start clean.
-        return emptyState();
-    }
 }
 
 /** The (x, y) on the art under a pointer event, mapped through the SVG's CTM. */
@@ -110,10 +94,12 @@ export default function RaceCarsTrackEditor() {
     const [backdrop, setBackdrop] = useState<string | null>(null);
 
     const [mode, setMode] = useState<Mode>('place');
+    const [activeCorner, setActiveCorner] = useState<string>('');
     const [selectedKey, setSelectedKey] = useState<string | null>(null);
     const [nextRow, setNextRow] = useState(0);
     const [nextLane, setNextLane] = useState(1);
     const [zoom, setZoom] = useState(1);
+    const [fileError, setFileError] = useState<string | null>(null);
 
     const svgRef = useRef<SVGSVGElement>(null);
     const pointerRef = useRef<PointerState | null>(null);
@@ -125,8 +111,6 @@ export default function RaceCarsTrackEditor() {
     const selected = selectedKey ? tilesByKey.get(selectedKey) ?? null : null;
 
     const validation = useMemo(() => validateTrack(state), [state]);
-    const cornerBands = useMemo(() => buildCorners(state), [state]);
-    const cornerRows = useMemo(() => cornerRowSet(cornerBands), [cornerBands]);
 
     const patchTile = useCallback((key: string, patch: Partial<EditorTile>) => {
         setState(prev => ({
@@ -146,6 +130,24 @@ export default function RaceCarsTrackEditor() {
         setNextRow(row);
         setNextLane(lane);
     }, [nextRow, nextLane]);
+
+    // Paint the tile under a key into the active corner (or erase it, when the
+    // brush is set to "none"). The corner's row band follows the painted tiles.
+    const paint = useCallback((key: string) => {
+        setState(prev => ({
+            ...prev,
+            tiles: prev.tiles.map(tile => (spaceKey(tile.row, tile.lane) === key
+                ? { ...tile, cornerId: activeCorner || undefined }
+                : tile)),
+        }));
+    }, [activeCorner]);
+
+    const tileKeyAt = useCallback((at: { x: number; y: number }): string | null => {
+        for (const tile of state.tiles) {
+            if (Math.hypot(tile.x - at.x, tile.y - at.y) <= PAINT_HIT) return spaceKey(tile.row, tile.lane);
+        }
+        return null;
+    }, [state.tiles]);
 
     const toggleExit = useCallback((fromKey: string, target: RaceCarsSpace) => {
         setState(prev => {
@@ -192,13 +194,23 @@ export default function RaceCarsTrackEditor() {
     const onTilePointerDown = useCallback((event: React.PointerEvent, key: string) => {
         event.stopPropagation();
         svgRef.current?.setPointerCapture(event.pointerId);
+        if (mode === 'paint') {
+            paint(key);
+            pointerRef.current = { kind: 'paint', startX: event.clientX, startY: event.clientY, moved: false };
+            return;
+        }
         pointerRef.current = { kind: 'tile', key, startX: event.clientX, startY: event.clientY, moved: false };
-    }, []);
+    }, [mode, paint]);
 
     const onBackgroundPointerDown = useCallback((event: React.PointerEvent) => {
         const svg = svgRef.current;
         if (!svg) return;
         svg.setPointerCapture(event.pointerId);
+        if (mode === 'paint') {
+            pointerRef.current = { kind: 'paint', startX: event.clientX, startY: event.clientY, moved: false };
+            return;
+        }
+        if (mode === 'exits') { pointerRef.current = null; return; }
         pointerRef.current = {
             kind: 'background',
             startX: event.clientX,
@@ -206,12 +218,18 @@ export default function RaceCarsTrackEditor() {
             moved: false,
             at: artPoint(svg, event) ?? undefined,
         };
-    }, []);
+    }, [mode]);
 
     const onPointerMove = useCallback((event: React.PointerEvent) => {
         const pointer = pointerRef.current;
         const svg = svgRef.current;
         if (!pointer || !svg) return;
+        if (pointer.kind === 'paint') {
+            const at = artPoint(svg, event);
+            const key = at && tileKeyAt(at);
+            if (key) paint(key);
+            return;
+        }
         if (!pointer.moved) {
             const travelled = Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY);
             if (travelled < DRAG_SLOP) return;
@@ -219,16 +237,16 @@ export default function RaceCarsTrackEditor() {
         }
         // A moved press on a tile drags its centre; on the background it does
         // nothing (the container scrolls to pan).
-        if (pointer.kind === 'tile' && pointer.key) {
+        if (pointer.kind === 'tile' && pointer.key && mode === 'place') {
             const at = artPoint(svg, event);
             if (at) patchTile(pointer.key, { x: Math.round(at.x), y: Math.round(at.y) });
         }
-    }, [patchTile]);
+    }, [mode, paint, tileKeyAt, patchTile]);
 
     const onPointerUp = useCallback(() => {
         const pointer = pointerRef.current;
         pointerRef.current = null;
-        if (!pointer || pointer.moved) return;
+        if (!pointer || pointer.kind === 'paint' || pointer.moved) return;
         // A press that didn't travel is a click.
         if (pointer.kind === 'tile' && pointer.key) {
             if (mode === 'exits' && selectedKey && pointer.key !== selectedKey) {
@@ -241,6 +259,10 @@ export default function RaceCarsTrackEditor() {
             placeTile(pointer.at);
         }
     }, [mode, selectedKey, tilesByKey, toggleExit, placeTile]);
+
+    const autoConnect = useCallback(() => {
+        setState(prev => ({ ...prev, tiles: connectByGeometry(prev.tiles) }));
+    }, []);
 
     const loadTrack = useCallback((trackId: string) => {
         const track = TRACK_LIST.find(t => t.id === trackId);
@@ -260,15 +282,41 @@ export default function RaceCarsTrackEditor() {
         setNextLane(1);
     }, []);
 
-    const [uploadError, setUploadError] = useState<string | null>(null);
+    const downloadDraft = useCallback(() => {
+        const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `${state.id || 'racecars-track'}.draft.json`;
+        anchor.click();
+        URL.revokeObjectURL(url);
+    }, [state]);
+
+    const importDraft = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        setFileError(null);
+        const reader = new FileReader();
+        reader.onload = () => {
+            setState(parseDraft(typeof reader.result === 'string' ? reader.result : null));
+            setBackdrop(null);
+            setSelectedKey(null);
+            setMode('place');
+        };
+        reader.onerror = () => setFileError("Couldn't read that draft file.");
+        reader.readAsText(file);
+        // Let the same file be chosen again after an edit-and-reimport.
+        event.target.value = '';
+    }, []);
+
     const onUploadArt = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
-        setUploadError(null);
+        setFileError(null);
         const reader = new FileReader();
         reader.onload = () => {
             const href = typeof reader.result === 'string' ? reader.result : '';
-            if (!href) { setUploadError("Couldn't read that image."); return; }
+            if (!href) { setFileError("Couldn't read that image."); return; }
             const image = new Image();
             image.onload = () => {
                 setBackdrop(href);
@@ -277,101 +325,107 @@ export default function RaceCarsTrackEditor() {
             image.onerror = () => { setBackdrop(href); };
             image.src = href;
         };
-        reader.onerror = () => setUploadError("Couldn't read that image.");
+        reader.onerror = () => setFileError("Couldn't read that image.");
         reader.readAsDataURL(file);
+        event.target.value = '';
     }, []);
 
     return (
-        <>
-            <TrackPanel
-                state={state}
-                uploadError={uploadError}
-                onPatch={patch => setState(prev => ({ ...prev, ...patch }))}
-                onLoadTrack={loadTrack}
-                onUploadArt={onUploadArt}
-                onClear={clearAll}
-            />
-
-            <Section label="Canvas" count={state.tiles.length}>
-                <div className="ag-stack">
-                    <div className="ag-rcedit-toolbar">
-                        <button
-                            type="button"
-                            className={`ag-btn ${mode === 'place' ? 'ag-btn--dark' : 'ag-btn--light'}`}
-                            onClick={() => setMode('place')}
-                        >
-                            Place tiles
-                        </button>
-                        <button
-                            type="button"
-                            className={`ag-btn ${mode === 'exits' ? 'ag-btn--dark' : 'ag-btn--light'}`}
-                            onClick={() => setMode('exits')}
-                            disabled={!selected}
-                        >
-                            Draw exits
-                        </button>
-                        <div className="ag-rcedit-toolbar-zoom">
-                            <button type="button" className="ag-btn ag-btn--light" onClick={() => setZoom(z => Math.max(0.25, z - 0.25))}>−</button>
-                            <span className="ag-hint">{Math.round(zoom * 100)}%</span>
-                            <button type="button" className="ag-btn ag-btn--light" onClick={() => setZoom(z => Math.min(4, z + 0.25))}>+</button>
+        <div className="ag-rcedit-page">
+            <div className="ag-rcedit-canvas-col">
+                <Section label="Canvas" count={state.tiles.length}>
+                    <div className="ag-stack">
+                        <div className="ag-rcedit-toolbar">
+                            <button type="button" className={`ag-btn ${mode === 'place' ? 'ag-btn--dark' : 'ag-btn--light'}`} onClick={() => setMode('place')}>Place</button>
+                            <button type="button" className={`ag-btn ${mode === 'exits' ? 'ag-btn--dark' : 'ag-btn--light'}`} onClick={() => setMode('exits')} disabled={!selected}>Draw exits</button>
+                            <button type="button" className={`ag-btn ${mode === 'paint' ? 'ag-btn--dark' : 'ag-btn--light'}`} onClick={() => setMode('paint')}>Paint corners</button>
+                            <div className="ag-rcedit-toolbar-zoom">
+                                <button type="button" className="ag-btn ag-btn--light" onClick={() => setZoom(z => Math.max(0.25, z - 0.25))}>−</button>
+                                <span className="ag-hint">{Math.round(zoom * 100)}%</span>
+                                <button type="button" className="ag-btn ag-btn--light" onClick={() => setZoom(z => Math.min(4, z + 0.25))}>+</button>
+                            </div>
                         </div>
+
+                        {mode === 'paint' && (
+                            <div className="ag-rcedit-toolbar">
+                                <label className="ag-field-label" htmlFor="rcedit-brush">Painting</label>
+                                <select id="rcedit-brush" className="ag-select" value={activeCorner} onChange={e => setActiveCorner(e.target.value)}>
+                                    <option value="">Erase (no corner)</option>
+                                    {Object.keys(state.corners).map(id => <option key={id} value={id}>{state.corners[id].name || id}</option>)}
+                                </select>
+                            </div>
+                        )}
+
+                        <p className="ag-hint">
+                            {mode === 'place'
+                                ? `Click the art to drop the next tile (row ${nextRow}, lane ${nextLane}). Drag a tile to nudge its centre; click one to select it.`
+                                : mode === 'exits'
+                                    ? (selected
+                                        ? `Click a tile to add or remove a step from ${selected.row}:${selected.lane}. Faint lines are §5.1's default; solid lines are overrides.`
+                                        : 'Select a tile first.')
+                                    : activeCorner
+                                        ? `Click or drag over tiles to paint them into "${state.corners[activeCorner]?.name || activeCorner}".`
+                                        : 'Click or drag over tiles to clear their corner. Pick a corner above to paint one on.'}
+                        </p>
+
+                        <EditorCanvas
+                            svgRef={svgRef}
+                            state={state}
+                            backdropHref={backdrop ?? state.artHref}
+                            zoom={zoom}
+                            mode={mode}
+                            activeCorner={activeCorner}
+                            selectedKey={selectedKey}
+                            onTilePointerDown={onTilePointerDown}
+                            onBackgroundPointerDown={onBackgroundPointerDown}
+                            onPointerMove={onPointerMove}
+                            onPointerUp={onPointerUp}
+                        />
+
+                        <div className="ag-btn-row ag-btn-row--wrap">
+                            <button type="button" className="ag-btn ag-btn--light" onClick={autoConnect}>Auto-connect exits from geometry</button>
+                        </div>
+                        <p className="ag-hint">
+                            Auto-connect rebuilds each tile&apos;s steps from where the tiles sit, not from row+1 — the way a
+                            sharp corner&apos;s lanes fall back into step. It leaves your hand-drawn exits alone.
+                        </p>
                     </div>
+                </Section>
+            </div>
 
-                    <p className="ag-hint">
-                        {mode === 'place'
-                            ? `Click the art to drop the next tile (row ${nextRow}, lane ${nextLane}). Drag a tile to nudge its centre; click one to select it.`
-                            : selected
-                                ? `Click a tile to add or remove a step from ${selected.row}:${selected.lane}. Faint lines are §5.1's default; solid lines are overrides.`
-                                : 'Select a tile first.'}
-                    </p>
-
-                    <EditorCanvas
-                        svgRef={svgRef}
-                        state={state}
-                        backdropHref={backdrop ?? state.artHref}
-                        zoom={zoom}
-                        mode={mode}
-                        selectedKey={selectedKey}
-                        cornerRows={cornerRows}
-                        onTilePointerDown={onTilePointerDown}
-                        onBackgroundPointerDown={onBackgroundPointerDown}
-                        onPointerMove={onPointerMove}
-                        onPointerUp={onPointerUp}
-                    />
-                </div>
-            </Section>
-
-            {selected && (
-                <SelectedTilePanel
+            <div className="ag-rcedit-side-col">
+                <TrackPanel
                     state={state}
-                    tile={selected}
-                    onPatch={patch => patchTile(spaceKey(selected.row, selected.lane), patch)}
-                    onResetExits={() => patchTile(spaceKey(selected.row, selected.lane), { exits: undefined })}
-                    onDelete={() => deleteTile(spaceKey(selected.row, selected.lane))}
+                    fileError={fileError}
+                    onPatch={patch => setState(prev => ({ ...prev, ...patch }))}
+                    onLoadTrack={loadTrack}
+                    onUploadArt={onUploadArt}
+                    onImportDraft={importDraft}
+                    onDownloadDraft={downloadDraft}
+                    onClear={clearAll}
                 />
-            )}
 
-            <CornersPanel
-                state={state}
-                onSetCorners={corners => setState(prev => ({ ...prev, corners }))}
-                onTagRows={(cornerId, from, to) => setState(prev => ({
-                    ...prev,
-                    tiles: prev.tiles.map(tile => (tile.row >= from && tile.row <= to ? { ...tile, cornerId } : tile)),
-                }))}
-            />
+                {selected && (
+                    <SelectedTilePanel
+                        state={state}
+                        tile={selected}
+                        onPatch={patch => patchTile(spaceKey(selected.row, selected.lane), patch)}
+                        onResetExits={() => patchTile(spaceKey(selected.row, selected.lane), { exits: undefined })}
+                        onDelete={() => deleteTile(spaceKey(selected.row, selected.lane))}
+                    />
+                )}
 
-            <ExportPanel state={state} validation={validation} />
-        </>
+                <CornersPanel
+                    state={state}
+                    activeCorner={activeCorner}
+                    onSetActiveCorner={setActiveCorner}
+                    onSetCorners={corners => setState(prev => ({ ...prev, corners }))}
+                />
+
+                <ExportPanel state={state} validation={validation} />
+            </div>
+        </div>
     );
-}
-
-/** The rows any corner covers, so the canvas can tint corner tiles like the board. */
-function cornerRowSet(bands: ReturnType<typeof buildCorners>): Set<number> {
-    const rows = new Set<number>();
-    for (const corner of bands) {
-        for (let row = corner.from; row <= corner.to; row++) rows.add(row);
-    }
-    return rows;
 }
 
 // ─── The canvas ──────────────────────────────────────────────────────────────
@@ -383,8 +437,8 @@ interface CanvasProps {
     backdropHref: string;
     zoom: number;
     mode: Mode;
+    activeCorner: string;
     selectedKey: string | null;
-    cornerRows: Set<number>;
     onTilePointerDown: (event: React.PointerEvent, key: string) => void;
     onBackgroundPointerDown: (event: React.PointerEvent) => void;
     onPointerMove: (event: React.PointerEvent) => void;
@@ -395,7 +449,7 @@ interface CanvasProps {
 // between two zoom states on click, which would fight click-to-place. Here zoom
 // is a continuous control and the container just scrolls to pan.
 function EditorCanvas(props: CanvasProps) {
-    const { svgRef, state, backdropHref, zoom, mode, selectedKey, cornerRows, onTilePointerDown, onBackgroundPointerDown, onPointerMove, onPointerUp } = props;
+    const { svgRef, state, backdropHref, zoom, mode, activeCorner, selectedKey, onTilePointerDown, onBackgroundPointerDown, onPointerMove, onPointerUp } = props;
     const { width, height } = state.viewBox;
 
     // Both lookups built once per render rather than a `.find` per exit: at 214
@@ -442,11 +496,16 @@ function EditorCanvas(props: CanvasProps) {
                 {state.tiles.map(tile => {
                     const key = spaceKey(tile.row, tile.lane);
                     const isSelected = key === selectedKey;
-                    const isCorner = cornerRows.has(tile.row);
+                    // Corner membership is per tile, not per row — a corner can
+                    // take only some lanes of a row (§10 reads the row band, but
+                    // the author paints exactly the tiles that belong).
+                    const inCorner = tile.cornerId !== undefined;
+                    const isBrush = mode === 'paint' && activeCorner !== '' && tile.cornerId === activeCorner;
                     const isTarget = mode === 'exits' && selectedKey !== null && !isSelected;
                     const className = [
                         'ag-rcedit-tile',
-                        isCorner ? 'ag-rcedit-tile--corner' : '',
+                        inCorner ? 'ag-rcedit-tile--corner' : '',
+                        isBrush ? 'ag-rcedit-tile--brush' : '',
                         isSelected ? 'ag-rcedit-tile--selected' : '',
                         isTarget ? 'ag-rcedit-tile--target' : '',
                     ].filter(Boolean).join(' ');
@@ -475,12 +534,14 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     );
 }
 
-function TrackPanel({ state, uploadError, onPatch, onLoadTrack, onUploadArt, onClear }: {
+function TrackPanel({ state, fileError, onPatch, onLoadTrack, onUploadArt, onImportDraft, onDownloadDraft, onClear }: {
     state: EditorState;
-    uploadError: string | null;
+    fileError: string | null;
     onPatch: (patch: Partial<EditorState>) => void;
     onLoadTrack: (trackId: string) => void;
     onUploadArt: (event: React.ChangeEvent<HTMLInputElement>) => void;
+    onImportDraft: (event: React.ChangeEvent<HTMLInputElement>) => void;
+    onDownloadDraft: () => void;
     onClear: () => void;
 }) {
     return (
@@ -515,7 +576,7 @@ function TrackPanel({ state, uploadError, onPatch, onLoadTrack, onUploadArt, onC
                     still set the art path by hand.
                 </p>
 
-                {uploadError && <p className="ag-hint">{uploadError}</p>}
+                {fileError && <p className="ag-hint">{fileError}</p>}
 
                 <div className="ag-btn-row ag-btn-row--wrap">
                     <label className="ag-btn ag-btn--light">
@@ -526,6 +587,18 @@ function TrackPanel({ state, uploadError, onPatch, onLoadTrack, onUploadArt, onC
                         <option value="">Load a shipped track…</option>
                         {TRACK_LIST.map(track => <option key={track.id} value={track.id}>{track.name}</option>)}
                     </select>
+                </div>
+
+                <p className="ag-hint">
+                    Save a draft to a file to resume later or on another machine — this is the working copy, separate from the
+                    deployable track file the export panel prints.
+                </p>
+                <div className="ag-btn-row ag-btn-row--wrap">
+                    <button type="button" className="ag-btn ag-btn--light" onClick={onDownloadDraft}>Save draft to file</button>
+                    <label className="ag-btn ag-btn--light">
+                        Open draft file
+                        <input type="file" accept="application/json,.json" onChange={onImportDraft} hidden />
+                    </label>
                     <button type="button" className="ag-btn ag-btn--danger" onClick={onClear}>Clear</button>
                 </div>
             </div>
@@ -583,10 +656,11 @@ function SelectedTilePanel({ state, tile, onPatch, onResetExits, onDelete }: {
     );
 }
 
-function CornersPanel({ state, onSetCorners, onTagRows }: {
+function CornersPanel({ state, activeCorner, onSetActiveCorner, onSetCorners }: {
     state: EditorState;
+    activeCorner: string;
+    onSetActiveCorner: (id: string) => void;
     onSetCorners: (corners: EditorState['corners']) => void;
-    onTagRows: (cornerId: string, from: number, to: number) => void;
 }) {
     const [newId, setNewId] = useState('');
     const ids = Object.keys(state.corners);
@@ -595,12 +669,14 @@ function CornersPanel({ state, onSetCorners, onTagRows }: {
         const id = newId.trim();
         if (!id || state.corners[id]) return;
         onSetCorners({ ...state.corners, [id]: { name: id, stops: 1 } });
+        onSetActiveCorner(id);
         setNewId('');
     };
     const removeCorner = (id: string) => {
         const next = { ...state.corners };
         delete next[id];
         onSetCorners(next);
+        if (activeCorner === id) onSetActiveCorner('');
     };
     const patchCorner = (id: string, patch: Partial<EditorState['corners'][string]>) => {
         onSetCorners({ ...state.corners, [id]: { ...state.corners[id], ...patch } });
@@ -610,13 +686,14 @@ function CornersPanel({ state, onSetCorners, onTagRows }: {
         <Section label="Corners" count={ids.length}>
             <div className="ag-stack">
                 <p className="ag-hint">
-                    A corner is a band of rows with a stop count (§10). Add one, then tag its rows — that is what marks the
-                    tiles on it. Lane re-alignment after the corner needs no separate step: draw the inside line&apos;s last
-                    tile straight onto the row it should merge back into, and the exit is the re-alignment.
+                    A corner is a band of rows with a stop count (§10). Add one, then switch to <strong>Paint corners</strong>
+                    on the canvas and drag over the tiles that belong to it — a corner need not take every lane of a row.
+                    Lane re-alignment after the corner needs no separate step: draw the inside line&apos;s last tile straight
+                    onto the row it should merge back into, and the exit is the re-alignment.
                 </p>
 
                 {ids.map(id => (
-                    <div key={id} className="ag-rcedit-corner ag-stack">
+                    <div key={id} className={`ag-rcedit-corner ag-stack${activeCorner === id ? ' ag-rcedit-corner--active' : ''}`}>
                         <div className="ag-rcedit-grid">
                             <Field label="Id"><input className="ag-input" value={id} disabled /></Field>
                             <Field label="Name"><input className="ag-input" value={state.corners[id].name} onChange={e => patchCorner(id, { name: e.target.value })} /></Field>
@@ -627,7 +704,10 @@ function CornersPanel({ state, onSetCorners, onTagRows }: {
                                 </select>
                             </Field>
                         </div>
-                        <RowTagger onTag={(from, to) => onTagRows(id, from, to)} onRemove={() => removeCorner(id)} />
+                        <div className="ag-btn-row ag-btn-row--wrap">
+                            <button type="button" className="ag-btn ag-btn--light" onClick={() => onSetActiveCorner(id)}>{activeCorner === id ? 'Painting this' : 'Paint this'}</button>
+                            <button type="button" className="ag-btn ag-btn--light" onClick={() => removeCorner(id)}>Remove corner</button>
+                        </div>
                     </div>
                 ))}
 
@@ -637,25 +717,6 @@ function CornersPanel({ state, onSetCorners, onTagRows }: {
                 </div>
             </div>
         </Section>
-    );
-}
-
-function RowTagger({ onTag, onRemove }: { onTag: (from: number, to: number) => void; onRemove: () => void }) {
-    const [from, setFrom] = useState('');
-    const [to, setTo] = useState('');
-    return (
-        <div className="ag-btn-row ag-btn-row--wrap">
-            <input className="ag-input ag-rcedit-rownum" type="number" value={from} onChange={e => setFrom(e.target.value)} placeholder="from row" />
-            <input className="ag-input ag-rcedit-rownum" type="number" value={to} onChange={e => setTo(e.target.value)} placeholder="to row" />
-            <button
-                type="button"
-                className="ag-btn ag-btn--light"
-                onClick={() => { if (from !== '' && to !== '') onTag(Number(from), Number(to)); }}
-            >
-                Tag rows
-            </button>
-            <button type="button" className="ag-btn ag-btn--light" onClick={onRemove}>Remove corner</button>
-        </div>
     );
 }
 
