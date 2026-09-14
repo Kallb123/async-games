@@ -229,16 +229,18 @@ a statement about the race rather than an advantage in it.
 
 ## 6. Setup Procedure
 
-1. **The host picks the race distance:** Sprint (1 lap) or Grand Prix (2 laps).
+1. **The host picks the circuit** (§5, §20's `TRACKS` registry): Ashcombe
+   Park or Anglet Chambre d'Amour. Ashcombe is the default.
+2. **The host picks the race distance:** Sprint (1 lap) or Grand Prix (2 laps).
    Sprint is the default.
-2. **The host picks the spec** every car runs (§11's table). Balanced is the
+3. **The host picks the spec** every car runs (§11's table). Balanced is the
    default.
-3. **The host switches oil spills on or off** (§14). Off is the default.
-4. **Draw the grid.** Shuffle the field into the grid slots of §5.2, P1 first.
-   This is the only randomness in setup.
-5. **Every car starts in gear 0**, on full wear pools, with no corner stops
+4. **The host switches oil spills on or off** (§14). Off is the default.
+5. **Draw the grid.** Shuffle the field into the grid slots of the chosen
+   circuit, P1 first. This is the only randomness in setup.
+6. **Every car starts in gear 0**, on full wear pools, with no corner stops
    banked.
-6. **Turn order for round one is the grid order**, P1 first.
+7. **Turn order for round one is the grid order**, P1 first.
 
 ---
 
@@ -771,12 +773,18 @@ needed.
 
 Ordered by what each one buys against what it costs.
 
-1. **A second circuit.** The track is data (§23.4): rows, lane widths, corner
-   bands, stop counts, `maxGear`. A new layout is one file and one render.
-   Two worth building: **Bonneville Oval** — two enormous straights, two
-   one-stop corners, `maxGear: 6`, the circuit that exists to make sixth gear
-   real — and **Old Harbour**, a narrow two-lane street circuit with four
-   corners where blocking decides the race.
+1. **A second circuit — landed.** `tracks/anglet.ts`: **Anglet Chambre
+   d'Amour**, a seven-corner street course transcribed off a real board
+   (`art-masters/racecars/anglet.png`), two of whose chicanes require two
+   stops rather than one. Registered in `TRACKS`, and reachable in play: §6's
+   setup screen offers a Circuit picker built from `TRACK_LIST`, and
+   `trackId` travels through both creation paths the way `distance` and
+   `spec` already did (`readRaceSettings`, `RaceCarsInvitationRequest`, the
+   invitation schema). Its `geometry` is still a hand-traced straight-edged
+   approximation of the art rather than §23.6's generator's output — worth
+   fixing before a third track's own art arrives. Still worth building on the
+   same hook: **Bonneville Oval** — two enormous straights, two one-stop
+   corners, `maxGear: 6`, the circuit that exists to make sixth gear real.
 2. **Per-driver spec.** Let each driver split their own twelve tokens instead of
    racing the host's spec. The async cost is what kills it today: a setup phase
    is a whole extra round of turns before anything moves. It becomes free the
@@ -861,7 +869,7 @@ PR shape deliberately.
 | Persist and mutate board state | `GameData` discriminator + `specificGameState` |
 | A move that validates, mutates and logs | `IGameCommand.Execute` |
 | A turn made of several commands (shift → move → tow) | `turnOver: false` on the outcome, exactly as Outbreak's and Banned Islet's multi-command turns already do |
-| **Qualifying** | `rollOffTurnOrder()` (`src/utils/games/rollOff.ts`) — "everyone rolls, highest goes first, ties re-roll" is the grid draw of §6 step 4 with a different name. Five games share it; this is the sixth |
+| **Qualifying** | `rollOffTurnOrder()` (`src/utils/games/rollOff.ts`) — "everyone rolls, highest goes first, ties re-roll" is the grid draw of §6 step 5 with a different name. Five games share it; this is the sixth |
 | Rolling a gear's die | `DiceRoll(sides)` (`src/utils/games/DiceRoll.ts`) over the CSPRNG in `random.ts` |
 | A game-specific turn timeout | `registerTurnTimeoutAdapter` / `resolveStalledTurn` (`src/utils/games/turnTimeout.ts`) |
 | Running a command identically live, on replay and on timeout | `runCommand` (`src/utils/games/commandPipeline.ts`) |
@@ -1065,12 +1073,13 @@ interface RaceCarsTrack {
 ```
 
 **Two invariants belong on the track data rather than in Ashcombe's geometry,
-and `board.test.ts` asserts both.** §18 rules that a spin searches backwards
-along its corner for a free space, which is only total if **every corner holds
-at least `MAX_PLAYERS` cars** — true of Ashcombe's three corners of 10–12
-spaces, and not true of §20's proposed Old Harbour, whose "narrow two-lane
-street circuit" could hold four cars in a corner and seat six drivers. And a
-corner whose `from` is row 0 has nothing behind it to search. Assert
+and `board.test.ts` asserts both, against every registered track.** §18 rules
+that a spin searches backwards along its corner for a free space, which is
+only total if **every corner holds at least `MAX_PLAYERS` cars** — true of
+Ashcombe's three corners of 10–12 spaces and of Anglet's seven of 8–10, and
+the reason a "narrow two-lane street circuit" needs each corner a touch
+longer than the road alone would draw it, not just narrower. And a corner
+whose `from` is row 0 has nothing behind it to search. Assert
 `(to − from + 1) × laneWidth >= MAX_PLAYERS` and `from > 0` for every corner, so
 the second circuit fails a test rather than a race.
 

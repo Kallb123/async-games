@@ -19,7 +19,6 @@ import { clonePlayerStates, mongoMap } from "@/utils/games/mongoMaps";
 import { userToken } from "@/utils/games/history";
 import { pluralize } from "@/utils/ui/text";
 import {
-    DEFAULT_TRACK_ID,
     distanceDef,
     gearName,
     RaceCarsDistanceId,
@@ -46,12 +45,14 @@ import {
 // ─── Invitation ─────────────────────────────────────────────────────────────
 
 export interface RaceCarsInvitationRequest extends IInvitationRequest {
+    trackId: string;
     distance: RaceCarsDistanceId;
     spec: RaceCarsSpecId;
     oilSpills: boolean;
 }
 
 export interface IRaceCarsInvitationData extends IInvitationData {
+    trackId: string;
     distance: RaceCarsDistanceId;
     spec: RaceCarsSpecId;
     oilSpills: boolean;
@@ -62,6 +63,7 @@ export interface IRaceCarsInvitationDataDocument extends IRaceCarsInvitationData
 export interface IRaceCarsInvitationDataModel extends Model<IRaceCarsInvitationDataDocument> {}
 
 var RaceCarsInvitationSchema = new Schema<IRaceCarsInvitationDataDocument>({
+    trackId: String,
     distance: String,
     spec: String,
     oilSpills: Boolean,
@@ -74,8 +76,8 @@ RaceCarsInvitationSchema.methods.CreateGame = async function(
 
     const gameType = new RaceCarsGameType();
 
-    // §6 step 4: the field is drawn into the grid slots, which is the only
-    // randomness in setup — and, by step 6, also the running order for round
+    // §6 step 5: the field is drawn into the grid slots, which is the only
+    // randomness in setup — and, by step 7, also the running order for round
     // one, since turn order is track order and P1 leads. One draw, not two.
     const { turnOrder, history } = rollOffTurnOrder(userIdList);
     const specificGameState = buildInitialRaceCarsState(turnOrder, this as IRaceCarsInvitationData);
@@ -149,7 +151,7 @@ function clonePlayerState(ps: IRaceCarsPlayerState): IRaceCarsPlayerState {
  * Deep-clones a Race Cars state into independent plain objects, rebuilding the
  * player map in `userIdList` order (see `clonePlayerStates`).
  *
- * The grid draw of §6 step 4 is randomised at creation and is gone from the
+ * The grid draw of §6 step 5 is randomised at creation and is gone from the
  * live state the moment the first car moves, so — like every other multiplayer
  * game here — turn recap replays from a snapshot of it rather than re-deriving
  * it (§23.4, "Recorded randomness").
@@ -173,23 +175,23 @@ export function cloneRaceCarsState(
 
 /**
  * The grid of §6, with `turnOrder` already drawn: P1 first, so the running
- * order for round one *is* the grid order (step 6).
+ * order for round one *is* the grid order (step 7).
  *
  * Every car is identical (§5.3) — same spec, same full wear pools, gear 0, no
  * corner stops banked — so the only thing that separates two drivers at the
  * start line is which of §5.2's six staggered spaces they were dealt and who
  * moves first.
  *
- * The three settings are normalised rather than trusted: `POST /api/lobby`
+ * The four settings are normalised rather than trusted: `POST /api/lobby`
  * spreads a host's per-game settings into the invitation unchecked, so this is
  * the one place both creation paths reach (§23.4). See `readRaceSettings`.
  */
 export function buildInitialRaceCarsState(
     turnOrder: string[],
-    raw: { distance?: unknown; spec?: unknown; oilSpills?: unknown },
+    raw: { trackId?: unknown; distance?: unknown; spec?: unknown; oilSpills?: unknown },
 ): IRaceCarsSpecificGameState {
     const { settings } = readRaceSettings(raw);
-    const track = trackById(DEFAULT_TRACK_ID);
+    const track = trackById(settings.trackId);
     const spec = specDef(settings.spec);
 
     // Unreachable by either creation path — both bound the party against
@@ -237,7 +239,7 @@ export function buildInitialRaceCarsState(
 /**
  * Rebuilds the starting grid for turn recap from the persisted snapshot,
  * with the player map in `gameState.turnOrder` order — the order it was dealt
- * in, which is the grid order (§6 step 6).
+ * in, which is the grid order (§6 step 7).
  */
 export function buildInitialRaceCarsStateFromGameData(gameData: IRaceCarsGameData): IRaceCarsSpecificGameState {
     return cloneRaceCarsState(gameData.initialSpecificGameState, gameData.gameState.turnOrder);

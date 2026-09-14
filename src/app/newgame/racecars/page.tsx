@@ -15,21 +15,31 @@ import usePlayerList from "@/utils/hooks/usePlayerList";
 import { useCreateLobbyOrInvite } from "@/utils/hooks/useCreateLobbyOrInvite";
 import { GAME_META } from "@/utils/ui/games";
 import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
+import { pluralize } from "@/utils/ui/text";
 import { RaceCarsInvitationRequest } from "@/games/RaceCars/RaceCarsModels";
 import {
   DEFAULT_DISTANCE,
   DEFAULT_SPEC,
+  DEFAULT_TRACK_ID,
+  gearName,
   RACE_DISTANCES,
   RaceCarsDistanceId,
   RaceCarsSpecId,
   SPECS,
+  TRACK_LIST,
   WEAR_TOKENS_PER_CAR,
 } from "@/games/RaceCars/board";
 
-// §6's first two choices, in the shape OptionChoiceSection takes. Built once
-// at module scope: both tables are static, and a spec's three pools are the
-// whole of what the choice means, so they read on the row rather than in a
-// footnote underneath it.
+// §6's four choices, in the shape OptionChoiceSection takes. Built once at
+// module scope: every table is static, and a spec's three pools (or a
+// track's corners and top gear) are the whole of what the choice means, so
+// they read on the row rather than in a footnote underneath it.
+const TRACK_CHOICES = TRACK_LIST.map(track => ({
+  id: track.id,
+  label: track.name,
+  description: `${pluralize(track.corners.length, 'corner')} · top gear ${gearName(track.maxGear)}`,
+}));
+
 const DISTANCE_CHOICES = RACE_DISTANCES.map(distance => ({
   id: distance.id,
   label: distance.name,
@@ -49,6 +59,7 @@ function NewGameRaceCarsForm() {
   const searchParams = useSearchParams();
   const { userList, setItem, players } = usePlayerList(readRematchPlayers(searchParams));
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
+  const [trackId, setTrackId] = useState<string>(DEFAULT_TRACK_ID);
   const [distance, setDistance] = useState<RaceCarsDistanceId>(DEFAULT_DISTANCE);
   const [spec, setSpec] = useState<RaceCarsSpecId>(DEFAULT_SPEC);
   const [oilSpills, setOilSpills] = useState(false);
@@ -66,6 +77,7 @@ function NewGameRaceCarsForm() {
     const data: RaceCarsInvitationRequest = {
       userList: players,
       turnTimer,
+      trackId,
       distance,
       spec,
       oilSpills,
@@ -85,6 +97,13 @@ function NewGameRaceCarsForm() {
       <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxSeats} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
       <PartySizeHint meta={gameMeta} total={partySize} />
+
+      <OptionChoiceSection
+        label="Circuit"
+        value={trackId}
+        onChange={setTrackId}
+        choices={TRACK_CHOICES}
+      />
 
       <OptionChoiceSection
         label="Race distance"
