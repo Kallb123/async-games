@@ -45,6 +45,11 @@ const TILE_RADIUS = 7;
 const DRAG_SLOP = 4;
 /** How near the pointer must be to a tile centre to paint it, in art units. */
 const PAINT_HIT = TILE_RADIUS * 1.8;
+/** File-size ceilings: a big track's draft JSON is far under the first, and a
+ *  traced backdrop far under the second — enough to turn a wrong huge file into
+ *  the same error message a parse failure gives rather than a frozen tab. */
+const MAX_DRAFT_BYTES = 8 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 
 type Mode = 'place' | 'exits' | 'paint';
 
@@ -73,6 +78,12 @@ function artPoint(svg: SVGSVGElement, event: React.PointerEvent): { x: number; y
 /** The next lane to place after this one: 1 → 2 → 3 → wrap to the next row. */
 function advance(row: number, lane: number): { row: number; lane: number } {
     return lane >= 3 ? { row: row + 1, lane: 1 } : { row, lane: lane + 1 };
+}
+
+/** The pointer state a paint drag starts in — shared by the tile and background
+ *  press so a fourth field wouldn't need adding in two places. */
+function paintPointer(event: React.PointerEvent): PointerState {
+    return { kind: 'paint', startX: event.clientX, startY: event.clientY, moved: false };
 }
 
 export default function RaceCarsTrackEditor() {
@@ -132,14 +143,19 @@ export default function RaceCarsTrackEditor() {
     }, [nextRow, nextLane]);
 
     // Paint the tile under a key into the active corner (or erase it, when the
-    // brush is set to "none"). The corner's row band follows the painted tiles.
+    // brush is set to "none"). A no-op when the tile already carries that corner,
+    // so dragging the brush back over painted ground doesn't stringify the whole
+    // draft to localStorage on every pointermove frame (§23.4).
     const paint = useCallback((key: string) => {
-        setState(prev => ({
-            ...prev,
-            tiles: prev.tiles.map(tile => (spaceKey(tile.row, tile.lane) === key
-                ? { ...tile, cornerId: activeCorner || undefined }
-                : tile)),
-        }));
+        setState(prev => {
+            const target = activeCorner || undefined;
+            const tile = prev.tiles.find(t => spaceKey(t.row, t.lane) === key);
+            if (!tile || tile.cornerId === target) return prev;
+            return {
+                ...prev,
+                tiles: prev.tiles.map(t => (spaceKey(t.row, t.lane) === key ? { ...t, cornerId: target } : t)),
+            };
+        });
     }, [activeCorner]);
 
     const tileKeyAt = useCallback((at: { x: number; y: number }): string | null => {
@@ -196,7 +212,7 @@ export default function RaceCarsTrackEditor() {
         svgRef.current?.setPointerCapture(event.pointerId);
         if (mode === 'paint') {
             paint(key);
-            pointerRef.current = { kind: 'paint', startX: event.clientX, startY: event.clientY, moved: false };
+            pointerRef.current = paintPointer(event);
             return;
         }
         pointerRef.current = { kind: 'tile', key, startX: event.clientX, startY: event.clientY, moved: false };
@@ -207,7 +223,7 @@ export default function RaceCarsTrackEditor() {
         if (!svg) return;
         svg.setPointerCapture(event.pointerId);
         if (mode === 'paint') {
-            pointerRef.current = { kind: 'paint', startX: event.clientX, startY: event.clientY, moved: false };
+            pointerRef.current = paintPointer(event);
             return;
         }
         if (mode === 'exits') { pointerRef.current = null; return; }
@@ -225,6 +241,11 @@ export default function RaceCarsTrackEditor() {
         const svg = svgRef.current;
         if (!pointer || !svg) return;
         if (pointer.kind === 'paint') {
+            // Gate on the live mode, not just the captured kind: switching off
+            // Paint mid-drag (a keyboard press on a focused mode button while the
+            // button is still held) must stop the brush, or it paints on under a
+            // toolbar that says it isn't.
+            if (mode !== 'paint') return;
             const at = artPoint(svg, event);
             const key = at && tileKeyAt(at);
             if (key) paint(key);
@@ -296,6 +317,7 @@ export default function RaceCarsTrackEditor() {
         const file = event.target.files?.[0];
         if (!file) return;
         setFileError(null);
+        if (file.size > MAX_DRAFT_BYTES) { setFileError("That draft file is too big to be one of ours."); event.target.value = ''; return; }
         const reader = new FileReader();
         reader.onload = () => {
             setState(parseDraft(typeof reader.result === 'string' ? reader.result : null));
@@ -313,6 +335,7 @@ export default function RaceCarsTrackEditor() {
         const file = event.target.files?.[0];
         if (!file) return;
         setFileError(null);
+        if (file.size > MAX_IMAGE_BYTES) { setFileError("That image is too big to trace against."); event.target.value = ''; return; }
         const reader = new FileReader();
         reader.onload = () => {
             const href = typeof reader.result === 'string' ? reader.result : '';

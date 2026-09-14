@@ -69,22 +69,81 @@ export function emptyState(overrides: Partial<EditorState> = {}): EditorState {
     };
 }
 
+function isNumber(value: unknown): value is number {
+    return typeof value === "number" && Number.isFinite(value);
+}
+
+/** A space literal `{ row, lane }`, kept only if both are numbers. */
+function cleanSpace(value: unknown): RaceCarsSpace | null {
+    if (!value || typeof value !== "object") return null;
+    const space = value as Record<string, unknown>;
+    return isNumber(space.row) && isNumber(space.lane) ? { row: space.row, lane: space.lane } : null;
+}
+
+/** One tile of an imported draft, or null if its shape can't be trusted. */
+function cleanTile(value: unknown): EditorTile | null {
+    if (!value || typeof value !== "object") return null;
+    const tile = value as Record<string, unknown>;
+    if (!isNumber(tile.row) || !isNumber(tile.lane) || !isNumber(tile.x) || !isNumber(tile.y)) return null;
+    const cleaned: EditorTile = { row: tile.row, lane: tile.lane, x: tile.x, y: tile.y };
+    if (isNumber(tile.heading)) cleaned.heading = tile.heading;
+    if (typeof tile.cornerId === "string") cleaned.cornerId = tile.cornerId;
+    if (Array.isArray(tile.exits)) {
+        const exits = tile.exits.map(cleanSpace).filter((exit): exit is RaceCarsSpace => exit !== null);
+        if (exits.length > 0) cleaned.exits = exits;
+    }
+    return cleaned;
+}
+
 /**
  * A saved draft, trusted only as far as its shape holds up — the editor's
- * localStorage autosave and its "import a draft file" both come through here.
- * A value that parses but is the wrong shape (a hand-edited entry, an older
- * schema) would otherwise crash the first render that maps over `tiles`, so
- * anything that isn't right falls back to a blank track rather than through.
+ * localStorage autosave and its "open a draft file" both come through here, and
+ * the file is arbitrary local content: a wrong file, a stale copy, a hand-edit
+ * with one bad find/replace. Every entry is shape-checked, not just the top
+ * level: a tiles array carrying a `null`, or a corner whose value isn't an
+ * object, would otherwise crash the first render that reads `tile.row` or
+ * `corner.name`. Bad entries are dropped rather than trusted, and anything that
+ * isn't an object at all falls back to a blank track.
  */
 export function parseDraft(raw: string | null): EditorState {
     if (!raw) return emptyState();
     try {
         const parsed = JSON.parse(raw);
         if (!parsed || typeof parsed !== "object") return emptyState();
-        const merged = { ...emptyState(), ...parsed };
-        if (!Array.isArray(merged.tiles)) merged.tiles = [];
-        if (!merged.corners || typeof merged.corners !== "object") merged.corners = {};
-        return merged;
+        const source = parsed as Record<string, unknown>;
+        const base = emptyState();
+
+        const tiles = Array.isArray(source.tiles)
+            ? source.tiles.map(cleanTile).filter((tile): tile is EditorTile => tile !== null)
+            : [];
+
+        const corners: EditorState["corners"] = {};
+        if (source.corners && typeof source.corners === "object") {
+            for (const [id, value] of Object.entries(source.corners as Record<string, unknown>)) {
+                if (!value || typeof value !== "object") continue;
+                const meta = value as Record<string, unknown>;
+                corners[id] = {
+                    name: typeof meta.name === "string" ? meta.name : id,
+                    stops: meta.stops === 2 ? 2 : 1,
+                };
+            }
+        }
+
+        const viewBox = source.viewBox && typeof source.viewBox === "object" ? source.viewBox as Record<string, unknown> : {};
+        const gear = source.maxGear;
+
+        return {
+            id: typeof source.id === "string" ? source.id : base.id,
+            name: typeof source.name === "string" ? source.name : base.name,
+            artHref: typeof source.artHref === "string" ? source.artHref : base.artHref,
+            viewBox: {
+                width: isNumber(viewBox.width) ? viewBox.width : base.viewBox.width,
+                height: isNumber(viewBox.height) ? viewBox.height : base.viewBox.height,
+            },
+            maxGear: (gear === 1 || gear === 2 || gear === 3 || gear === 4 || gear === 5 || gear === 6) ? gear : base.maxGear,
+            tiles,
+            corners,
+        };
     } catch {
         return emptyState();
     }

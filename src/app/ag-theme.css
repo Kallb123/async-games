@@ -1858,7 +1858,8 @@ a.ag-list-row, a.ag-list-row-main {
     font-family: var(--ag-font);
     color: var(--ag-ink);
 }
-.ag-build-row--active { border-color: var(--ag-terracotta); box-shadow: 0 0 0 1px var(--ag-terracotta); }
+.ag-build-row--active,
+.ag-rcedit-corner--active { border-color: var(--ag-terracotta); box-shadow: 0 0 0 1px var(--ag-terracotta); }
 .ag-build-row--disabled { background: var(--ag-surface-2); opacity: 0.6; cursor: not-allowed; }
 .ag-build-main { flex: 1; min-width: 0; }
 .ag-build-name { display: block; font: 800 14px var(--ag-font); }
@@ -4623,13 +4624,13 @@ button.ag-tt-ticket { cursor: pointer; }
     stroke-dasharray: none;
     opacity: 0.9;
 }
-.ag-rcedit-corner--active { border-color: var(--ag-terracotta); box-shadow: 0 0 0 1px var(--ag-terracotta); }
-
 /* The editor stretches to use a desktop's width: the canvas takes the room it
    wants on the left and stays put (sticky) while the panels scroll on the
    right. On a phone it is the ordinary single column, canvas first. The page
-   opts the whole app column out of its 480px cap the way the home dashboard
-   does — see the `.ag-app:has(.ag-desk)` block below for the same trick. */
+   opts the whole app column out of its 480px cap with the same `:has()` trick
+   the home dashboard uses (see `.ag-app:has(.ag-desk)` below) — but adds its
+   own side padding, which that block deliberately does not, because the rail
+   there sits flush to the window edge and this content should not. */
 @media (min-width: 900px) {
     .ag-app:has(.ag-rcedit-page) {
         max-width: none;
