@@ -20,10 +20,12 @@ import { mongoMap } from "@/utils/games/mongoMaps";
 import { randomInt } from "@/utils/games/random";
 import {
     cornerAt,
-    cornerExits,
+    cornerCrossings,
+    cornersPassed,
+    crossesStartLine,
+    driveableSteps,
     gearDef,
-    laneWidthAt,
-    MIN_MOVE_ROWS,
+    MIN_MOVE_STEPS,
     OIL_DIE_SIDES,
     OIL_SPIN_FACE,
     RaceCarsCorner,
@@ -32,10 +34,12 @@ import {
     RaceCarsSpecId,
     RaceCarsTrack,
     rowsBetween,
+    rowSpan,
     shiftDownCost,
     SLIPSTREAM_GAP_ROWS,
-    SLIPSTREAM_ROWS,
+    SLIPSTREAM_STEPS,
     spaceKey,
+    spacesInRow,
     stepsFrom,
     trackById,
     waivedCornerIdAt,
@@ -181,21 +185,6 @@ interface RaceCarsWalk {
     levels: Map<string, WalkNode>[];
 }
 
-/**
- * A distance this board can actually be asked to walk: a whole number of rows,
- * never negative, never longer than a lap.
- *
- * Both halves earn their place. A **fractional** distance would floor itself
- * against the loop bound and then read as short of what was asked — reporting a
- * move as blocked by traffic that nothing blocked, and charging a tyre for it.
- * An **oversized** one is work and memory proportional to a number chosen
- * off-board rather than to the circuit, and no gear can roll past a lap anyway.
- */
-function driveableDistance(track: RaceCarsTrack, distance: number): number {
-    if (!Number.isFinite(distance) || distance < 1) return 0;
-    return Math.min(Math.floor(distance), track.rows);
-}
-
 function occupiedBy(state: IRaceCarsSpecificGameState, exceptUserId: string): Set<string> {
     const occupied = new Set<string>();
     for (const [userId, ps] of playerStates(state)) {
@@ -232,7 +221,7 @@ function walk(state: IRaceCarsSpecificGameState, userId: string, distance: numbe
         new Map([[spaceKey(start.row, start.lane), { space: start, slicks: 0, parent: null }]]),
     ];
 
-    const requested = driveableDistance(track, distance);
+    const requested = driveableSteps(track, distance);
     for (let step = 1; step <= requested; step++) {
         const previous = levels[step - 1];
         const next = new Map<string, WalkNode>();
@@ -279,7 +268,7 @@ export function reachableSpaces(
 export interface RaceCarsMoveOptions {
     /** Where this move may finish. Never empty: it is the car's own space when boxed in. */
     spaces: RaceCarsSpace[];
-    /** Rows the car will actually travel, which is short of the roll when blocked. */
+    /** Steps the car will actually travel, which is short of the roll when blocked. */
     distance: number;
     /** §9: no space reachable in exactly `distance` — stop on the furthest, 1 tyre. */
     blockedShort: boolean;
@@ -415,6 +404,25 @@ export interface RaceCarsArrivalOptions {
 }
 
 /**
+ * §10 on one corner a move leaves behind: which of its three outcomes this is,
+ * and the rows it is past the corner.
+ *
+ * One reading of the rule for the resolver that charges it and the line that
+ * plans against it (§23.7 PR 6) alike — two readings are two things to keep in
+ * lockstep, and the state where they disagree is the one where the cron takes a
+ * move it priced as free and then pays for it.
+ */
+function settleCorner(
+    corner: RaceCarsCorner,
+    stops: number,
+    waivedCornerId: string | null,
+    rowsPast: number,
+): { outcome: 'cleared' | 'waived' | 'charged'; rows: number } {
+    if (corner.stops - stops <= 0) return { outcome: 'cleared', rows: 0 };
+    return { outcome: corner.id === waivedCornerId ? 'waived' : 'charged', rows: rowsPast };
+}
+
+/**
  * Where a spin comes to rest: the corner's last row, first free lane, searching
  * backwards along the corner for a free space (§13, §18).
  *
@@ -428,8 +436,8 @@ export interface RaceCarsArrivalOptions {
  */
 function spinLanding(track: RaceCarsTrack, occupied: Set<string>, corner: RaceCarsCorner): RaceCarsSpace {
     for (let row = corner.to; row >= corner.from; row--) {
-        for (let lane = 1; lane <= laneWidthAt(track, row); lane++) {
-            if (!occupied.has(spaceKey(row, lane))) return { row, lane };
+        for (const space of spacesInRow(track, row)) {
+            if (!occupied.has(spaceKey(space.row, space.lane))) return { row, lane: space.lane };
         }
     }
     return { row: corner.to, lane: 1 };
@@ -553,10 +561,13 @@ export function resolveArrival(
     }
 
     const waivedCornerId = (options.waiveUnavoidableCorner ?? true)
-        ? waivedCornerIdAt(track, start.row)
+        ? waivedCornerIdAt(track, start.row, start.lane)
         : null;
 
-    const exits = new Map(cornerExits(track, start.row, distance).map(exit => [exit.step, exit.corner]));
+    // Keyed by the step each corner falls behind at, and carrying the rows the
+    // move ends up past it — which is what §10 charges, and is not the count of
+    // steps left in the path once a lane can cover two rows in one (§5.1).
+    const exits = new Map(cornerCrossings(track, path).map(crossing => [crossing.step, crossing]));
 
     for (let step = 1; step <= distance; step++) {
         const to = path[step];
@@ -565,7 +576,7 @@ export function resolveArrival(
         // row to row 0, and the race ends the instant a car completes the
         // distance — distance past the line is not measured, so nothing
         // further along the path is resolved or charged (§4.1, §18).
-        if (to.row === 0) {
+        if (crossesStartLine(track, path[step - 1].row, to.row)) {
             lapsCompleted += 1;
             events.push({ type: 'lap', lapsCompleted });
             if (lapsCompleted >= state.laps) {
@@ -587,23 +598,23 @@ export function resolveArrival(
             }
         }
 
-        const corner = exits.get(step);
-        if (corner) {
-            const owed = corner.stops - stops;
-            if (owed <= 0) {
+        const crossing = exits.get(step);
+        if (crossing) {
+            const corner = crossing.corner;
+            const { outcome, rows } = settleCorner(corner, stops, waivedCornerId, crossing.rowsPast);
+            if (outcome === 'cleared') {
                 events.push({ type: 'cornerCleared', cornerId: corner.id });
-            } else if (corner.id === waivedCornerId) {
-                events.push({ type: 'overshoot', cornerId: corner.id, rows: distance - step + 1, waived: true });
             } else {
-                const rows = distance - step + 1;
-                events.push({ type: 'overshoot', cornerId: corner.id, rows, waived: false });
-                if (tyres >= rows) {
-                    tyres -= rows;
-                } else {
-                    // §10: you do not pay what you can and spin for the rest.
-                    // You pay nothing, and the car is placed back in the corner.
-                    events.push({ type: 'spin', cause: 'overshoot', cornerId: corner.id });
-                    return rest(spinLanding(track, occupied, corner), 0, true, true);
+                events.push({ type: 'overshoot', cornerId: corner.id, rows, waived: outcome === 'waived' });
+                if (outcome === 'charged') {
+                    if (tyres >= rows) {
+                        tyres -= rows;
+                    } else {
+                        // §10: you do not pay what you can and spin for the rest.
+                        // You pay nothing, and the car is placed back in the corner.
+                        events.push({ type: 'spin', cause: 'overshoot', cornerId: corner.id });
+                        return rest(spinLanding(track, occupied, corner), 0, true, true);
+                    }
                 }
             }
             // Banked stops reset the moment the corner is legally left (§10).
@@ -652,7 +663,7 @@ export function slipstreamOffered(state: IRaceCarsSpecificGameState, userId: str
         otherId !== userId && SLIPSTREAM_GAP_ROWS.includes(rowsBetween(track, ps.row, other.row)));
     if (!ahead) return false;
 
-    return !moveOptions(state, userId, SLIPSTREAM_ROWS).boxedIn;
+    return !moveOptions(state, userId, SLIPSTREAM_STEPS).boxedIn;
 }
 
 // ─── Turn order (§15) ───────────────────────────────────────────────────────
@@ -721,24 +732,31 @@ export type RaceCarsConservativeTurn =
     | { phase: 'slipstream'; tow: RaceCarsSpace | null };
 
 /**
- * Rows of overshoot a move of `distance` would be charged, ignoring traffic and
- * oil — what the timeout driver plans against. Traffic can only make a move
- * shorter, so a distance this says is clean is clean however it is blocked.
+ * Rows of overshoot a move of `steps` steps would be charged, ignoring traffic
+ * and oil — what the timeout driver plans against.
+ *
+ * Priced against the **furthest** the road can carry that many steps, for the
+ * same reason it ignores traffic: the plan has to be safe whichever line the
+ * move ends up taking, and where a corner's lanes run out of step (§5.1) the
+ * same roll covers a different number of rows depending on which one it takes.
+ * Traffic and a shorter line can only make a move cover fewer rows, so a roll
+ * this says is clean is clean however it is driven.
  */
 function plannedOvershoot(
     track: RaceCarsTrack,
     ps: IRaceCarsPlayerState,
-    distance: number,
+    steps: number,
     waiveUnavoidableCorner = true,
 ): number {
-    const waivedCornerId = waiveUnavoidableCorner ? waivedCornerIdAt(track, ps.row) : null;
+    const waivedCornerId = waiveUnavoidableCorner ? waivedCornerIdAt(track, ps.row, ps.lane) : null;
     let stops = ps.cornerStops;
-    let rows = 0;
-    for (const { corner, step } of cornerExits(track, ps.row, distance)) {
-        if (corner.stops - stops > 0 && corner.id !== waivedCornerId) rows += distance - step + 1;
+    let charged = 0;
+    for (const { corner, rowsPast } of cornersPassed(track, ps.row, rowSpan(track, ps, steps).max)) {
+        const settled = settleCorner(corner, stops, waivedCornerId, rowsPast);
+        if (settled.outcome === 'charged') charged += settled.rows;
         stops = 0;
     }
-    return rows;
+    return charged;
 }
 
 /** The end of a move that crosses the fewest slicks, breaking ties by lane. */
@@ -796,8 +814,8 @@ function planMove(state: IRaceCarsSpecificGameState, userId: string): RaceCarsCo
     const track = trackById(state.trackId);
     // `phase` is the authority and `roll` follows it (§23.4). A move phase with
     // no roll is a bug upstream; one row keeps this function total.
-    const roll = ps.roll ?? MIN_MOVE_ROWS;
-    const mostBrakes = Math.min(ps.brakes, Math.max(0, roll - MIN_MOVE_ROWS));
+    const roll = ps.roll ?? MIN_MOVE_STEPS;
+    const mostBrakes = Math.min(ps.brakes, Math.max(0, roll - MIN_MOVE_STEPS));
 
     // Crossing oil is the tie-break rather than a veto: a certain overshoot is
     // worse than a one-in-six chance of a spin.
@@ -822,8 +840,8 @@ function planTow(state: IRaceCarsSpecificGameState, userId: string): RaceCarsCon
     if (!slipstreamOffered(state, userId)) return { phase: 'slipstream', tow: null };
     const ps = requirePlayer(state, userId);
     const track = trackById(state.trackId);
-    const options = moveOptions(state, userId, SLIPSTREAM_ROWS);
-    const best = safestDestination(state, userId, SLIPSTREAM_ROWS);
+    const options = moveOptions(state, userId, SLIPSTREAM_STEPS);
+    const best = safestDestination(state, userId, SLIPSTREAM_STEPS);
     // §12's tow gets no waiver, so the plan is priced the way `resolveArrival`
     // will price it — otherwise the one board state where the two disagree is
     // the one where the cron takes a free tow into a corner and pays for it.

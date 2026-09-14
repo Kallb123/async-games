@@ -15,7 +15,7 @@ const SECTIONS: TrackSection[] = [
     { name: 'Run to the Line', from: 66, to: 77, lanes: 3, corner: null },
 ];
 
-const { rows: ROWS, laneWidth: LANE_WIDTH, corners: CORNERS } = deriveTrack(SECTIONS);
+const { rows: ROWS, spaces: SPACES, corners: CORNERS } = deriveTrack(SECTIONS);
 
 // Placeholder geometry (§23.7 PR 1): the circuit drawn as a plain
 // rounded-rectangle loop (`loopGeometry.ts`), the 78 rows spaced evenly round
@@ -40,7 +40,8 @@ const LANE_PITCH = 22;
 const MARGIN = 64;
 
 const GEOMETRY = roundedRectGeometry(
-    LANE_WIDTH,
+    ROWS,
+    SPACES,
     { width: TRACK_WIDTH, height: TRACK_HEIGHT, radius: TRACK_RADIUS, margin: MARGIN },
     LANE_PITCH,
 );
@@ -49,7 +50,7 @@ export const ASHCOMBE: RaceCarsTrack = {
     id: 'ashcombe',
     name: 'Ashcombe Park',
     rows: ROWS,
-    laneWidth: LANE_WIDTH,
+    spaces: SPACES,
     corners: CORNERS,
     grid: STAGGERED_SIX_GRID,
     // Five, not six, and deliberately (§8.3): sixth needs roughly seventy

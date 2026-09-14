@@ -212,7 +212,7 @@ describe("RaceCarsMove (§7 step 2, §9-§11)", () => {
         expect(seat(game, 'a').brakes).toBe(1);
         // §14's three-or-more slick source reads this in PR 7.
         expect(seat(game, 'a').brakeSpent).toBe(3);
-        expect(log(game)).toContain('after braking 3 rows off the roll');
+        expect(log(game)).toContain('after braking 3 spaces off the roll');
     });
 
     it("refuses a brake that is negative, oversized, fractional, or would stop the car", async () => {
