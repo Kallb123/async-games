@@ -368,6 +368,15 @@ export function validateTrack(state: EditorState): EditorValidation {
         }
     }
 
+    // A tile painted with a corner that no longer exists — a corner removed, or
+    // a stale id in an imported draft. `cornerAt` reads it as no corner at all,
+    // so §10's stops go silently unenforced on that tile; surface it rather than
+    // print a track whose spaces name a corner missing from its own list.
+    const cornerIds = new Set(Object.keys(state.corners));
+    if (state.tiles.some(tile => tile.cornerId !== undefined && !cornerIds.has(tile.cornerId))) {
+        warnings.push("Some tiles are painted with a corner that no longer exists — clear them, or add the corner back.");
+    }
+
     return { errors, warnings };
 }
 

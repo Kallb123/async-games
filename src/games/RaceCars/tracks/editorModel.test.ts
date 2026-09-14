@@ -59,6 +59,12 @@ describe("editor validation", () => {
         expect(validateTrack(inside).warnings.some(w => /cover|lane|gap/.test(w))).toBe(false);
     });
 
+    it("warns about a tile painted with a corner that no longer exists", () => {
+        const orphan = tinyState();
+        delete orphan.corners.bend; // corner removed, tiles still carry its id
+        expect(validateTrack(orphan).warnings.some(w => /no longer exists/.test(w))).toBe(true);
+    });
+
     it("warns about an exit that runs more than half a lap forward", () => {
         // A backward-looking override — the row-numbering slip a sharp corner sets.
         const backwards = tinyState();

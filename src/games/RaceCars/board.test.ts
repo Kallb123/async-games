@@ -324,6 +324,22 @@ describe("corner geometry (§10)", () => {
         expect(cornerAt(track, 2, 2)?.id).toBe('bend');
     });
 
+    it("lets a space in a section corner opt out with an explicit cornerId: undefined", () => {
+        // The inside line rejoining the road one row before the outside: it drops
+        // out of the section's corner past its apex, while omitting the key still
+        // inherits the section corner.
+        const track = testTrack([
+            { name: 'S/F', from: 0, to: 2, lanes: 3, corner: null },
+            { name: 'Bend', from: 3, to: 4, lanes: 2, corner: { id: 'bend', stops: 1 }, tiles: [
+                { row: 3, lane: 1 }, { row: 3, lane: 2 },
+                { row: 4, lane: 1, cornerId: undefined }, { row: 4, lane: 2 },
+            ] },
+        ]);
+        expect(cornerAt(track, 3, 1)?.id).toBe('bend');
+        expect(cornerAt(track, 4, 1)).toBeNull();
+        expect(cornerAt(track, 4, 2)?.id).toBe('bend');
+    });
+
     it("reports each corner left behind, in path order, with the rows past it", () => {
         // Row 46 to row 66 crosses Gravel Bend and then The Kink.
         expect(cornersPassed(ASHCOMBE, 46, 20).map(pass => [pass.corner.id, pass.rowsPast])).toEqual([

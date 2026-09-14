@@ -199,10 +199,12 @@ export function deriveTrack(sections: TrackSection[]): {
         if (tile.lane < 1 || tile.lane > section.lanes) {
             throw new Error(`Race Cars: section "${section.name}" has a space in lane ${tile.lane} on a ${section.lanes}-lane road`);
         }
-        // A section corner tags every space in the band; a space that lists its
-        // own cornerId keeps it, so a hand-cut band can drop the inside line out
-        // of the corner past its apex (§10, per-space membership).
-        return { ...tile, cornerId: tile.cornerId ?? section.corner?.id };
+        // A section corner tags every space in the band; a space that names its
+        // own cornerId keeps it — including an explicit `cornerId: undefined`,
+        // which drops the inside line out of the corner past its apex (§10,
+        // per-space membership). "Key present" is what distinguishes that opt-out
+        // from a space that simply didn't mention a corner.
+        return { ...tile, cornerId: 'cornerId' in tile ? tile.cornerId : section.corner?.id };
     }));
 
     const spaces = assembleSpaces(tiles, rows);

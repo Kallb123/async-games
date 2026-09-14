@@ -1221,11 +1221,14 @@ is still where on the road the car is, and the lane is still which line it is
 taking.
 
 **Which corner a car is in is derived, not stored**, by the same argument one
-paragraph later. It is `cornerAt(track, row)` — a scan of three bands — and
-storing it beside `row` is a second source of truth that a move can forget to
-update, with a bug that stays invisible until a car banks a stop in a corner it
-has already left. The stop-reset of §10 needs only
-`cornerAt(oldRow) !== cornerAt(newRow)`, and `resolveArrival` holds both rows.
+paragraph later. It is `cornerAt(track, row, lane)` — the space's own `cornerId`
+looked up off the track index (§5.1: membership is per space, since the inside
+line is in a corner for fewer rows than the outside) — and storing it beside
+`row` is a second source of truth that a move can forget to update, with a bug
+that stays invisible until a car banks a stop in a corner it has already left.
+The stop-reset of §10 needs only
+`cornerAt(oldRow, oldLane) !== cornerAt(newRow, newLane)`, and `resolveArrival`
+holds both spaces.
 For the same reason **`phase` is the authority and `roll` follows it**, not the
 other way round: `phase === 'shift'` and `roll === null` are the same fact, and
 only one of them can be the one `CheckEndTurn` maintains.

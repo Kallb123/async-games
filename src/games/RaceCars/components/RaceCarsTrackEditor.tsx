@@ -445,6 +445,21 @@ export default function RaceCarsTrackEditor() {
                     activeCorner={activeCorner}
                     onSetActiveCorner={setActiveCorner}
                     onSetCorners={corners => setState(prev => ({ ...prev, corners }))}
+                    onRemoveCorner={id => {
+                        // Drop the corner and scrub it off every tile that carried
+                        // it, so no tile is left painted with a corner that no
+                        // longer exists (cornerAt would read it as no corner).
+                        setState(prev => {
+                            const corners = { ...prev.corners };
+                            delete corners[id];
+                            return {
+                                ...prev,
+                                corners,
+                                tiles: prev.tiles.map(tile => (tile.cornerId === id ? { ...tile, cornerId: undefined } : tile)),
+                            };
+                        });
+                        if (activeCorner === id) setActiveCorner('');
+                    }}
                 />
 
                 <ExportPanel state={state} validation={validation} />
@@ -681,11 +696,12 @@ function SelectedTilePanel({ state, tile, onPatch, onResetExits, onDelete }: {
     );
 }
 
-function CornersPanel({ state, activeCorner, onSetActiveCorner, onSetCorners }: {
+function CornersPanel({ state, activeCorner, onSetActiveCorner, onSetCorners, onRemoveCorner }: {
     state: EditorState;
     activeCorner: string;
     onSetActiveCorner: (id: string) => void;
     onSetCorners: (corners: EditorState['corners']) => void;
+    onRemoveCorner: (id: string) => void;
 }) {
     const [newId, setNewId] = useState('');
     const ids = Object.keys(state.corners);
@@ -696,12 +712,6 @@ function CornersPanel({ state, activeCorner, onSetActiveCorner, onSetCorners }: 
         onSetCorners({ ...state.corners, [id]: { name: id, stops: 1 } });
         onSetActiveCorner(id);
         setNewId('');
-    };
-    const removeCorner = (id: string) => {
-        const next = { ...state.corners };
-        delete next[id];
-        onSetCorners(next);
-        if (activeCorner === id) onSetActiveCorner('');
     };
     const patchCorner = (id: string, patch: Partial<EditorState['corners'][string]>) => {
         onSetCorners({ ...state.corners, [id]: { ...state.corners[id], ...patch } });
@@ -732,7 +742,7 @@ function CornersPanel({ state, activeCorner, onSetActiveCorner, onSetCorners }: 
                         </div>
                         <div className="ag-btn-row ag-btn-row--wrap">
                             <button type="button" className="ag-btn ag-btn--light" onClick={() => onSetActiveCorner(id)}>{activeCorner === id ? 'Painting this' : 'Paint this'}</button>
-                            <button type="button" className="ag-btn ag-btn--light" onClick={() => removeCorner(id)}>Remove corner</button>
+                            <button type="button" className="ag-btn ag-btn--light" onClick={() => onRemoveCorner(id)}>Remove corner</button>
                         </div>
                     </div>
                 ))}
