@@ -44,8 +44,10 @@ const { rows: ROWS, laneWidth: LANE_WIDTH, corners: CORNERS } = deriveTrack(SECT
 
 // The art is a real 2835×1843 illustration (art-masters/racecars/anglet.png),
 // not a park drawn for this game, so there is a real centre line to read
-// waypoints off by eye — one per named section above, in art-pixel
-// coordinates scaled down by ~0.292 to sit at Ashcombe's own coordinate scale
+// waypoints off by eye — one per corner above, plus a few more where a
+// straight line between corners would cut across ground the road doesn't
+// cover (see the harbour hook below) — in art-pixel coordinates scaled down
+// by ~0.292 to sit at Ashcombe's own coordinate scale
 // (order of magnitude ~800×500), which is load-bearing: RaceCarsBoard.tsx's
 // SPACE_LENGTH/SPACE_WIDTH/CAR_LENGTH and the corner-pip sizing are constants
 // tuned to that scale and shared by every track, so a track drawn ten times
