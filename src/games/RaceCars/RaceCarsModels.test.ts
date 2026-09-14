@@ -21,7 +21,7 @@ import type { IRaceCarsPlayerState } from "./rules";
 
 const NAMES = { u1: "Alice", u2: "Bob", u3: "Carol" };
 const TURN_ORDER = ["u1", "u2", "u3"];
-const SPRINT = { distance: "sprint", spec: "balanced", oilSpills: false } as const;
+const SPRINT = { trackId: DEFAULT_TRACK_ID, distance: "sprint", spec: "balanced", oilSpills: false } as const;
 const TRACK = trackById(DEFAULT_TRACK_ID);
 
 describe("buildInitialRaceCarsState — the grid (§6)", () => {
@@ -85,6 +85,15 @@ describe("buildInitialRaceCarsState — the grid (§6)", () => {
         expect(buildInitialRaceCarsState(TURN_ORDER, SPRINT).oilSpills).toBe(false);
     });
 
+    it("deals the field into the circuit the host chose, not always the default (§6)", () => {
+        const state = buildInitialRaceCarsState(TURN_ORDER, { ...SPRINT, trackId: "anglet" });
+        const anglet = trackById("anglet");
+
+        expect(state.trackId).toBe("anglet");
+        const cars = TURN_ORDER.map(userId => mongoMap(state.players).get(userId)!);
+        expect(cars.map(ps => ({ row: ps.row, lane: ps.lane }))).toEqual(anglet.grid.slice(0, TURN_ORDER.length));
+    });
+
     it("normalises settings that were never validated rather than storing them", () => {
         // POST /api/lobby spreads a host's per-game settings into the
         // invitation unchecked, so anything at all can reach here — and a spec
@@ -113,20 +122,21 @@ describe("buildInitialRaceCarsState — the grid (§6)", () => {
 
 describe("readRaceSettings — the check both creation paths reach (§23.4)", () => {
     it("accepts a race the rules can run, and reports nothing to refuse", () => {
-        expect(readRaceSettings({ distance: "grandPrix", spec: "sticky", oilSpills: true })).toEqual({
-            settings: { distance: "grandPrix", spec: "sticky", oilSpills: true },
+        expect(readRaceSettings({ trackId: "anglet", distance: "grandPrix", spec: "sticky", oilSpills: true })).toEqual({
+            settings: { trackId: "anglet", distance: "grandPrix", spec: "sticky", oilSpills: true },
             rejection: null,
         });
     });
 
     it.each([
+        ["track", { ...SPRINT, trackId: "nurburgring" }, "Unknown track"],
         ["distance", { ...SPRINT, distance: "marathon" }, "Unknown race distance"],
         ["spec", { ...SPRINT, spec: "unobtanium" }, "Unknown car spec"],
         ["oil spills", { ...SPRINT, oilSpills: "false" }, "Oil spills must be on or off"],
     ])("names the %s the route should answer 400 for, while still returning a runnable race", (_field, raw, rejection) => {
         const read = readRaceSettings(raw);
         expect(read.rejection).toBe(rejection);
-        expect(read.settings).toEqual({ distance: DEFAULT_DISTANCE, spec: DEFAULT_SPEC, oilSpills: false });
+        expect(read.settings).toEqual({ trackId: DEFAULT_TRACK_ID, distance: DEFAULT_DISTANCE, spec: DEFAULT_SPEC, oilSpills: false });
     });
 
     it("refuses `\"false\"` rather than coercing it — a truthy string is not a setting", () => {

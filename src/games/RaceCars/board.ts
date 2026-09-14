@@ -65,10 +65,12 @@ export interface RaceCarsTrack {
     geometry: RaceCarsGeometry[];
 }
 
-export const TRACKS: Record<string, RaceCarsTrack> = {
-    [ASHCOMBE.id]: ASHCOMBE,
-    [ANGLET.id]: ANGLET,
-};
+/** Every circuit, in the order the setup screen offers them. */
+export const TRACK_LIST: RaceCarsTrack[] = [ASHCOMBE, ANGLET];
+
+export const TRACKS: Record<string, RaceCarsTrack> = Object.fromEntries(
+    TRACK_LIST.map(track => [track.id, track]),
+);
 
 export const DEFAULT_TRACK_ID = ASHCOMBE.id;
 
@@ -219,15 +221,16 @@ export function distanceDef(distanceId: string): RaceCarsDistanceDef {
 
 // ─── The race the host chose (§6) ───────────────────────────────────────────
 
-/** The three settings of §6 — everything a host picks, and the whole of it. */
+/** The four settings of §6 — everything a host picks, and the whole of it. */
 export interface IRaceCarsSettings {
+    trackId: string;
     distance: RaceCarsDistanceId;
     spec: RaceCarsSpecId;
     oilSpills: boolean;
 }
 
 /**
- * §6's three settings read off whatever was sent: each snapped to a value the
+ * §6's four settings read off whatever was sent: each snapped to a value the
  * rules can actually run, plus the reason to refuse the request outright if
  * one of them was not a value at all.
  *
@@ -245,10 +248,12 @@ export interface IRaceCarsSettings {
  * that was forgotten.
  */
 export function readRaceSettings(raw: {
+    trackId?: unknown;
     distance?: unknown;
     spec?: unknown;
     oilSpills?: unknown;
 }): { settings: IRaceCarsSettings; rejection: string | null } {
+    const track = typeof raw.trackId === 'string' ? TRACKS[raw.trackId] : undefined;
     const distance = RACE_DISTANCES.find(option => option.id === raw.distance);
     const spec = SPECS.find(option => option.id === raw.spec);
     // Not `!!raw.oilSpills`: `"false"` is truthy, and a setting the whole
@@ -257,11 +262,13 @@ export function readRaceSettings(raw: {
 
     return {
         settings: {
+            trackId: track?.id ?? DEFAULT_TRACK_ID,
             distance: distance?.id ?? DEFAULT_DISTANCE,
             spec: spec?.id ?? DEFAULT_SPEC,
             oilSpills: oilSpills ?? false,
         },
-        rejection: !distance ? "Unknown race distance"
+        rejection: !track ? "Unknown track"
+            : !distance ? "Unknown race distance"
             : !spec ? "Unknown car spec"
             : oilSpills === null ? "Oil spills must be on or off"
             : null,

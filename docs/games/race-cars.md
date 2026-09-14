@@ -229,16 +229,18 @@ a statement about the race rather than an advantage in it.
 
 ## 6. Setup Procedure
 
-1. **The host picks the race distance:** Sprint (1 lap) or Grand Prix (2 laps).
+1. **The host picks the circuit** (§5, §20's `TRACKS` registry): Ashcombe
+   Park or Anglet Chambre d'Amour. Ashcombe is the default.
+2. **The host picks the race distance:** Sprint (1 lap) or Grand Prix (2 laps).
    Sprint is the default.
-2. **The host picks the spec** every car runs (§11's table). Balanced is the
+3. **The host picks the spec** every car runs (§11's table). Balanced is the
    default.
-3. **The host switches oil spills on or off** (§14). Off is the default.
-4. **Draw the grid.** Shuffle the field into the grid slots of §5.2, P1 first.
-   This is the only randomness in setup.
-5. **Every car starts in gear 0**, on full wear pools, with no corner stops
+4. **The host switches oil spills on or off** (§14). Off is the default.
+5. **Draw the grid.** Shuffle the field into the grid slots of the chosen
+   circuit, P1 first. This is the only randomness in setup.
+6. **Every car starts in gear 0**, on full wear pools, with no corner stops
    banked.
-6. **Turn order for round one is the grid order**, P1 first.
+7. **Turn order for round one is the grid order**, P1 first.
 
 ---
 
@@ -774,11 +776,14 @@ Ordered by what each one buys against what it costs.
 1. **A second circuit — landed.** `tracks/anglet.ts`: **Anglet Chambre
    d'Amour**, a seven-corner street course transcribed off a real board
    (`art-masters/racecars/anglet.png`), two of whose chicanes require two
-   stops rather than one. Registered in `TRACKS`; not yet reachable in play,
-   since nothing lets a host choose a track (§6's settings have no `trackId`),
-   and its `geometry` is still a hand-traced straight-edged approximation of
-   the art rather than §23.6's generator's output. Still worth building on
-   the same hook: **Bonneville Oval** — two enormous straights, two one-stop
+   stops rather than one. Registered in `TRACKS`, and reachable in play: §6's
+   setup screen offers a Circuit picker built from `TRACK_LIST`, and
+   `trackId` travels through both creation paths the way `distance` and
+   `spec` already did (`readRaceSettings`, `RaceCarsInvitationRequest`, the
+   invitation schema). Its `geometry` is still a hand-traced straight-edged
+   approximation of the art rather than §23.6's generator's output — worth
+   fixing before a third track's own art arrives. Still worth building on the
+   same hook: **Bonneville Oval** — two enormous straights, two one-stop
    corners, `maxGear: 6`, the circuit that exists to make sixth gear real.
 2. **Per-driver spec.** Let each driver split their own twelve tokens instead of
    racing the host's spec. The async cost is what kills it today: a setup phase
@@ -864,7 +869,7 @@ PR shape deliberately.
 | Persist and mutate board state | `GameData` discriminator + `specificGameState` |
 | A move that validates, mutates and logs | `IGameCommand.Execute` |
 | A turn made of several commands (shift → move → tow) | `turnOver: false` on the outcome, exactly as Outbreak's and Banned Islet's multi-command turns already do |
-| **Qualifying** | `rollOffTurnOrder()` (`src/utils/games/rollOff.ts`) — "everyone rolls, highest goes first, ties re-roll" is the grid draw of §6 step 4 with a different name. Five games share it; this is the sixth |
+| **Qualifying** | `rollOffTurnOrder()` (`src/utils/games/rollOff.ts`) — "everyone rolls, highest goes first, ties re-roll" is the grid draw of §6 step 5 with a different name. Five games share it; this is the sixth |
 | Rolling a gear's die | `DiceRoll(sides)` (`src/utils/games/DiceRoll.ts`) over the CSPRNG in `random.ts` |
 | A game-specific turn timeout | `registerTurnTimeoutAdapter` / `resolveStalledTurn` (`src/utils/games/turnTimeout.ts`) |
 | Running a command identically live, on replay and on timeout | `runCommand` (`src/utils/games/commandPipeline.ts`) |

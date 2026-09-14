@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
     senderId: userId,
     userIdList: seatsFor(invitees),
     turnTimer,
+    trackId: settings.trackId,
     distance: settings.distance,
     spec: settings.spec,
     oilSpills: settings.oilSpills,
