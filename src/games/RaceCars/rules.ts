@@ -524,7 +524,7 @@ export function resolveArrival(
     // A turn that ends inside a corner banks a stop, however it ended there —
     // including standing still while boxed in (§18).
     const rest = (space: RaceCarsSpace, gear: RaceCarsGear, spun: boolean, banks: boolean): RaceCarsArrival => {
-        const corner = cornerAt(track, space.row);
+        const corner = cornerAt(track, space.row, space.lane);
         if (corner && banks) {
             stops += 1;
             events.push({ type: 'cornerStop', cornerId: corner.id, banked: stops, owed: corner.stops });

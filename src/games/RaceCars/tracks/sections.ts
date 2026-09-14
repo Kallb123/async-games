@@ -53,6 +53,14 @@ export const STAGGERED_SIX_GRID: RaceCarsSpace[] = [
  */
 export interface SectionTile extends RaceCarsSpace {
     exits?: RaceCarsSpace[];
+    /**
+     * The corner this space is in, overriding the section's own `corner` for
+     * this space alone. A section corner tags all its spaces; a space that is
+     * physically outside the painted corner even though it sits in the band —
+     * the inside line past its own apex — carries `cornerId: undefined` to opt
+     * out (§10, per-space membership).
+     */
+    cornerId?: string;
 }
 
 export interface TrackSection {
@@ -140,6 +148,7 @@ export function assembleSpaces(tiles: SectionTile[], rows: number): RaceCarsTrac
         row: tile.row,
         lane: tile.lane,
         exits: tile.exits ?? defaultExits(rows, spacesByRow, tile),
+        cornerId: tile.cornerId,
     }));
 
     for (const space of spaces) {
@@ -190,7 +199,10 @@ export function deriveTrack(sections: TrackSection[]): {
         if (tile.lane < 1 || tile.lane > section.lanes) {
             throw new Error(`Race Cars: section "${section.name}" has a space in lane ${tile.lane} on a ${section.lanes}-lane road`);
         }
-        return tile;
+        // A section corner tags every space in the band; a space that lists its
+        // own cornerId keeps it, so a hand-cut band can drop the inside line out
+        // of the corner past its apex (§10, per-space membership).
+        return { ...tile, cornerId: tile.cornerId ?? section.corner?.id };
     }));
 
     const spaces = assembleSpaces(tiles, rows);

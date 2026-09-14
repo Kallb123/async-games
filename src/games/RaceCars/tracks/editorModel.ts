@@ -368,22 +368,6 @@ export function validateTrack(state: EditorState): EditorValidation {
         }
     }
 
-    // A corner covers every lane of its rows — that is what the rules honour
-    // (`cornerAt` reads the row, never the lane; §10 / GDD "corners are rows").
-    // So within a corner's row band every tile must carry its id: a bare row
-    // pulls the straight between two stretches into the corner, and a half-tagged
-    // row is a lane the paint missed but the rules will still charge.
-    const cornerIdByTile = new Map(state.tiles.map(tile => [spaceKey(tile.row, tile.lane), tile.cornerId]));
-    for (const corner of buildCorners(state)) {
-        for (const tile of state.tiles) {
-            if (tile.row < corner.from || tile.row > corner.to) continue;
-            if (cornerIdByTile.get(spaceKey(tile.row, tile.lane)) !== corner.id) {
-                warnings.push(`Corner "${corner.name}" doesn't cover every tile between rows ${corner.from} and ${corner.to} — a corner takes all lanes of its rows.`);
-                break;
-            }
-        }
-    }
-
     return { errors, warnings };
 }
 
@@ -402,7 +386,7 @@ export function validateTrack(state: EditorState): EditorValidation {
  */
 export function toTrack(state: EditorState): RaceCarsTrack {
     const rows = rowCount(state.tiles);
-    const tiles: SectionTile[] = state.tiles.map(tile => ({ row: tile.row, lane: tile.lane, exits: tile.exits }));
+    const tiles: SectionTile[] = state.tiles.map(tile => ({ row: tile.row, lane: tile.lane, exits: tile.exits, cornerId: tile.cornerId }));
     const byKey = new Map(state.tiles.map(tile => [spaceKey(tile.row, tile.lane), tile]));
     const exitsByKey = allEffectiveExits(state.tiles);
     return {
@@ -445,7 +429,6 @@ export function fromTrack(track: RaceCarsTrack): EditorState {
     const tiles: EditorTile[] = track.spaces.map(space => {
         const geometry = geometryByKey.get(spaceKey(space.row, space.lane));
         const fallback = defaultExits(track.rows, byRow, { row: space.row, lane: space.lane });
-        const corner = track.corners.find(c => space.row >= c.from && space.row <= c.to);
         return {
             row: space.row,
             lane: space.lane,
@@ -453,7 +436,10 @@ export function fromTrack(track: RaceCarsTrack): EditorState {
             y: geometry?.y ?? 0,
             heading: geometry?.heading,
             exits: sameExits(space.exits, fallback) ? undefined : space.exits.map(e => ({ row: e.row, lane: e.lane })),
-            cornerId: corner?.id,
+            // Per space, read straight off the space — not derived from the row
+            // band, which would pull the inside line back into the corner it
+            // already left (§10).
+            cornerId: space.cornerId,
         };
     });
 
@@ -476,11 +462,11 @@ function spaceLiteral(space: RaceCarsSpace): string {
     return `{ row: ${space.row}, lane: ${space.lane} }`;
 }
 
-function tileLiteral(tiles: EditorTile[], tile: EditorTile): string {
-    const base = `{ row: ${tile.row}, lane: ${tile.lane}`;
-    if (!tile.exits) return `${base} },`;
-    const exits = tile.exits.map(spaceLiteral).join(", ");
-    return `${base}, exits: [${exits}] },`;
+function tileLiteral(tile: EditorTile): string {
+    const parts = [`row: ${tile.row}`, `lane: ${tile.lane}`];
+    if (tile.exits) parts.push(`exits: [${tile.exits.map(spaceLiteral).join(", ")}]`);
+    if (tile.cornerId) parts.push(`cornerId: ${JSON.stringify(tile.cornerId)}`);
+    return `{ ${parts.join(", ")} },`;
 }
 
 /**
@@ -499,7 +485,7 @@ export function printTrackFile(state: EditorState): string {
     const corners = buildCorners(state);
     const constName = (state.id || "track").toUpperCase().replace(/[^A-Z0-9]/g, "_");
 
-    const tileLines = state.tiles.map(tile => `    ${tileLiteral(state.tiles, tile)}`).join("\n");
+    const tileLines = state.tiles.map(tile => `    ${tileLiteral(tile)}`).join("\n");
     const cornerLines = corners
         .map(c => `    { id: ${JSON.stringify(c.id)}, name: ${JSON.stringify(c.name)}, from: ${c.from}, to: ${c.to}, stops: ${c.stops} },`)
         .join("\n");

@@ -31,7 +31,7 @@ import {
     WEAR_TOKENS_PER_CAR,
 } from "./board";
 import { ASHCOMBE } from "./tracks/ashcombe";
-import type { TrackSection } from "./tracks/sections";
+import { assembleSpaces, type SectionTile, type TrackSection } from "./tracks/sections";
 import { KETTLE_CORNER, testTrack } from "./testFixtures";
 
 const TRACK_LIST: RaceCarsTrack[] = Object.values(TRACKS);
@@ -295,12 +295,33 @@ describe("stepsFrom (§5.1)", () => {
 });
 
 describe("corner geometry (§10)", () => {
-    it("names the corner a row is inside, and nothing on a straight", () => {
-        expect(cornerAt(ASHCOMBE, 10)?.id).toBe('hairpin');
-        expect(cornerAt(ASHCOMBE, 14)?.id).toBe('hairpin');
-        expect(cornerAt(ASHCOMBE, 15)).toBeNull();
-        expect(cornerAt(ASHCOMBE, 51)?.id).toBe('gravel');
-        expect(cornerAt(ASHCOMBE, 52)).toBeNull();
+    it("names the corner a space is inside, and nothing on a straight", () => {
+        // Ashcombe's corners are whole-band (every lane of their rows), so any
+        // lane of a corner row answers with the corner.
+        expect(cornerAt(ASHCOMBE, 10, 1)?.id).toBe('hairpin');
+        expect(cornerAt(ASHCOMBE, 14, 2)?.id).toBe('hairpin');
+        expect(cornerAt(ASHCOMBE, 15, 1)).toBeNull();
+        expect(cornerAt(ASHCOMBE, 51, 1)?.id).toBe('gravel');
+        expect(cornerAt(ASHCOMBE, 52, 1)).toBeNull();
+    });
+
+    it("membership is per space — one lane can be in a corner while another on the same row is not", () => {
+        // The inside line is in the corner for fewer rows than the outside
+        // (§5.1): here row 1 lane 2 has left the corner while lane 1 is still in.
+        const tiles: SectionTile[] = [
+            { row: 0, lane: 1 }, { row: 0, lane: 2 },
+            { row: 1, lane: 1, cornerId: 'bend' }, { row: 1, lane: 2 },
+            { row: 2, lane: 1, cornerId: 'bend' }, { row: 2, lane: 2, cornerId: 'bend' },
+        ];
+        const track: RaceCarsTrack = {
+            id: 'pt', name: 'Per-tile', rows: 3,
+            spaces: assembleSpaces(tiles, 3),
+            corners: [{ id: 'bend', name: 'Bend', from: 1, to: 2, stops: 1 }],
+            grid: [], maxGear: 5, art: { href: '', viewBox: { width: 0, height: 0 } }, geometry: [],
+        };
+        expect(cornerAt(track, 1, 1)?.id).toBe('bend');
+        expect(cornerAt(track, 1, 2)).toBeNull();
+        expect(cornerAt(track, 2, 2)?.id).toBe('bend');
     });
 
     it("reports each corner left behind, in path order, with the rows past it", () => {

@@ -213,6 +213,16 @@ to go if it arrives too fast.
 rows with a **stop count** attached (§10). Corners are narrower than the
 straights they join, which is what makes them block.
 
+**Which spaces are in a corner is per space, not per row.** A corner covers all
+of its lanes, but not every lane on every one of its rows: the inside line is
+the short way round and takes fewer spaces through the corner than the outside
+does (above), so it is in the corner for fewer rows. Its band `from`/`to` is the
+outside line's extent — what §10 charges overshoot against — while membership,
+banking a stop and the waiver all read the space a car is actually on. On the
+two circuits that ship every corner is a plain band with all its lanes in it on
+every row; the per-space rule is what lets a hand-cut corner drop the inside
+line out once it has rounded its own apex.
+
 ### 5.2 Ashcombe Park
 
 The circuit that ships. 78 rows, three corners, one very long straight.
@@ -418,7 +428,9 @@ the field up, and a car that wants to go slower has to pay for it.
 A corner is a band of rows with a **stop count** — the number of separate turns
 you must **end inside it** before you are allowed past its last row.
 
-- Ending a turn on any space whose row is inside the corner **banks one stop**.
+- Ending a turn on any space **that is in the corner** (§5.1 — membership is per
+  space, so a lane that has already left the corner does not count even on a row
+  the corner's band still spans) **banks one stop**.
 - Your banked stops **reset to zero** the moment you legally leave the corner.
 - Ending a turn past the corner's last row with fewer stops banked than it owes
   is an **overshoot**.
@@ -1113,8 +1125,11 @@ interface RaceCarsTrack {
   // Every space, and the spaces each one may be driven to (§5.1). The graph is
   // the track: a straight's spaces carry the three above them, a painted corner
   // carries the one in front, and a lane that skips a row simply has no space
-  // on it.
-  spaces: { row: number, lane: number, exits: { row: number, lane: number }[] }[],
+  // on it. `cornerId` marks the spaces in a corner — per space, not per row, so
+  // the inside line can be in it for fewer rows than the outside (§5.1, §10).
+  spaces: { row: number, lane: number, exits: { row: number, lane: number }[], cornerId?: string }[],
+  // A corner's row band is the outside line's extent (§10 charges overshoot in
+  // rows past `to`); which spaces are in it lives on the spaces above.
   corners: { id: string, name: string, from: number, to: number, stops: 1 | 2 }[],
   grid: { row: number, lane: number }[],   // P1 first
   maxGear: 1 | 2 | 3 | 4 | 5 | 6,     // 5 at Ashcombe (§8.3)

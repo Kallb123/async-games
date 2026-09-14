@@ -49,24 +49,14 @@ describe("editor validation", () => {
         expect(validateTrack(broken).errors[0]).toMatch(/not a space/);
     });
 
-    it("passes a corner that covers every lane of its rows", () => {
-        expect(validateTrack(tinyState()).warnings.some(w => /cover every tile/.test(w))).toBe(false);
-    });
-
-    it("warns when a corner row is missing a lane — a corner takes all lanes", () => {
-        const partial = tinyState();
-        partial.tiles[2].cornerId = undefined; // untag row 1 lane 1, keep lane 2
-        expect(validateTrack(partial).warnings.some(w => /cover every tile/.test(w))).toBe(true);
-    });
-
-    it("warns when a corner's row band has a bare interior row (a gap)", () => {
-        const gapped = tinyState();
-        // Tag rows 0 and 2 into the corner but leave row 1 out entirely.
-        gapped.tiles[0].cornerId = "bend";
-        gapped.tiles[1].cornerId = "bend";
-        gapped.tiles[2].cornerId = undefined;
-        gapped.tiles[3].cornerId = undefined;
-        expect(validateTrack(gapped).warnings.some(w => /cover every tile/.test(w))).toBe(true);
+    it("accepts a corner that takes only some lanes of a row (the inside line)", () => {
+        // The inside line is in the corner for fewer rows than the outside:
+        // untag row 1 lane 1 but keep it on lane 2 and both of row 2. Valid,
+        // no error, no warning about coverage.
+        const inside = tinyState();
+        inside.tiles[2].cornerId = undefined; // row 1 lane 1 leaves the corner early
+        expect(validateTrack(inside).errors).toEqual([]);
+        expect(validateTrack(inside).warnings.some(w => /cover|lane|gap/.test(w))).toBe(false);
     });
 
     it("warns about an exit that runs more than half a lap forward", () => {
@@ -88,6 +78,23 @@ describe("corners are read off the tiles that carry them", () => {
         const state = tinyState();
         state.corners.ghost = { name: "Ghost", stops: 2 };
         expect(buildCorners(state).map(c => c.id)).toEqual(["bend"]);
+    });
+});
+
+describe("per-tile corner membership survives the round trip", () => {
+    it("carries cornerId onto the spaces and reads it straight back", () => {
+        const inside = tinyState();
+        inside.tiles[2].cornerId = undefined; // row 1 lane 1 leaves the corner early
+        const track = toTrack(inside);
+        expect(track.spaces.find(s => s.row === 1 && s.lane === 1)!.cornerId).toBeUndefined();
+        expect(track.spaces.find(s => s.row === 1 && s.lane === 2)!.cornerId).toBe("bend");
+        const reloaded = fromTrack(track);
+        expect(reloaded.tiles.find(t => t.row === 1 && t.lane === 1)!.cornerId).toBeUndefined();
+        expect(reloaded.tiles.find(t => t.row === 1 && t.lane === 2)!.cornerId).toBe("bend");
+    });
+
+    it("prints cornerId in the track file", () => {
+        expect(printTrackFile(tinyState())).toContain('cornerId: "bend"');
     });
 });
 
