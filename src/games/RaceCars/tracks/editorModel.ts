@@ -256,13 +256,14 @@ export const NO_EXITS: Pick<EditorTile, "exits" | "autoExits"> = { exits: undefi
 const CONNECT_CONE = 0.3;
 
 /**
- * Exits redrawn from where the tiles actually sit, for the case §5.1's row+1
- * rule can't line up on its own: a corner sharp enough that the inside line
- * took fewer tiles round it, so past the corner "the same lane in the next row"
- * is no longer the tile in front. Each tile is connected to the nearest tile
- * ahead of it — ahead by its heading, not by row arithmetic — which is what
- * makes the lanes fall back into step off the shape the author drew rather than
- * off a lane number that no longer means what it did before the corner.
+ * Exits redrawn from where the tiles actually sit rather than assumed from
+ * their row numbers — the plain remaining job here once every corner sharp
+ * enough to need a real lane realignment is drawn by hand instead (its
+ * `exits` a genuine override, never `autoExits`): the tiles this function
+ * still touches are an ordinary straight or gentle bend, where row+1 already
+ * names the right row and the only question worth asking geometrically is
+ * *which* tile on it — the nearest one ahead, not necessarily the one at the
+ * same x the road happened to wander to.
  *
  * The nearest tile is picked once per lane — this lane and the one either
  * side, exactly what §5.1's own rule allows (`defaultExits`) — rather than
@@ -275,37 +276,52 @@ const CONNECT_CONE = 0.3;
  * either exists ahead or it doesn't; there is nothing to rank it against.
  * Limiting candidates to this lane or the one either side of it also keeps
  * geometry from ever connecting lane 1 straight to lane 3, a step no car may
- * take, however close that tile happens to sit.
- *
- * A tile that already carries a hand-drawn override keeps it untouched. One
- * this function wrote itself last time (`autoExits`) is redrawn rather than
- * frozen, so a later pass — after tiles move, or a corner is redrawn — can fix
- * a lane it got wrong instead of it looking identical to a real hand-drawn
- * exit and refusing to change. Geometry that lands back on the default rule
- * clears any stale auto exit rather than leaving it stuck. A same-row
- * (sideways) candidate is never connected — a car changes lane while moving,
+ * take, however close that tile happens to sit. A same-row (sideways)
+ * candidate is never connected either — a car changes lane while moving,
  * never on the spot.
  *
- * Nor is a candidate that already has an exit *into* this tile, generated or
- * hand-drawn — that line has a direction, and retracing it backwards would
- * connect two tiles both ways, however well the nearer one otherwise fits the
- * heading. The next-nearest tile in that lane is offered instead, the same as
- * when the nearest candidate fails the heading cone. Only an explicit exit
- * blocks a reversal this way; §5.1's own row+1 default is not "an exit" in
- * this sense; every tile on an ordinary straight defaults forward without one,
- * and short test loops wrap an unrelated default edge back round almost
- * immediately, so counting it here would refuse real connections it was never
- * meant to guard.
+ * A tile that already carries a hand-drawn override keeps it untouched. One
+ * this function wrote itself on an earlier run (`autoExits`) is *always*
+ * redrawn from scratch rather than trusted as a starting point: reasoning
+ * from last run's guess — its heading, or which tiles it already reached —
+ * is exactly what let a second run drift to a different, sometimes wrong,
+ * target instead of settling on the one the tiles actually call for. Both
+ * the heading used to aim the search and the record of what is "already
+ * connected" (below) come only from this run's own tile positions and
+ * hand-drawn exits, never from a tile's own previous auto-connect result.
+ *
+ * Tiles are worked in row order — the direction of travel, now that every
+ * sharp lane change is hand-drawn rather than something this function has to
+ * infer — so that a candidate behind a tile has already been resolved by the
+ * time that tile searches, and a candidate this very run has already pointed
+ * the other way is never offered back: that line has a direction, and
+ * retracing it would connect two tiles both ways however well the nearer one
+ * otherwise fits the heading. The next-nearest tile in that lane is offered
+ * instead, the same as when the nearest candidate fails the heading cone —
+ * or no exit at all for that lane, if nothing else is ahead.
  */
 export function connectByGeometry(tiles: EditorTile[]): EditorTile[] {
     const rows = rowCount(tiles);
     const byRow = spacesByRow(tiles);
     const byKey = new Map(tiles.map(tile => [spaceKey(tile.row, tile.lane), tile]));
-    const exitsByKey = allEffectiveExits(tiles);
 
-    return tiles.map(tile => {
-        if (tile.exits && !tile.autoExits) return tile;
-        const heading = tile.heading ?? headingTowards(tile, exitsByKey.get(spaceKey(tile.row, tile.lane)) ?? [], byKey);
+    // What this run has resolved so far — a hand-drawn override from the
+    // start, an auto tile's the moment the loop below (re)computes it. Never
+    // a tile's own previous `exits` when those were auto-written: that is
+    // exactly the stale guess this function stops trusting.
+    const results = new Map<string, EditorTile>();
+    for (const tile of tiles) {
+        if (tile.exits && !tile.autoExits) results.set(spaceKey(tile.row, tile.lane), tile);
+    }
+
+    // Row order is the direction of travel, now that every sharp lane change
+    // is hand-drawn rather than something this function has to infer.
+    for (const tile of [...tiles].sort((a, b) => a.row - b.row)) {
+        const tileKey = spaceKey(tile.row, tile.lane);
+        if (results.has(tileKey)) continue; // hand-drawn, seeded above
+
+        const fallback = defaultExits(rows, byRow, tile);
+        const heading = tile.heading ?? headingTowards(tile, fallback, byKey);
         const radians = (heading * Math.PI) / 180;
         const forwardX = Math.cos(radians);
         const forwardY = Math.sin(radians);
@@ -315,9 +331,14 @@ export function connectByGeometry(tiles: EditorTile[]): EditorTile[] {
             let nearest: { other: EditorTile; dist: number } | null = null;
             for (const other of tiles) {
                 if (other === tile || other.row === tile.row || other.lane !== lane) continue;
-                // Skip a candidate that already has its own exit into this
-                // tile — reversing it would connect the two both ways.
-                if (other.exits?.some(exit => exit.row === tile.row && exit.lane === tile.lane)) continue;
+                // A candidate this run has already resolved with an exit
+                // back into this tile is never offered — that line has a
+                // direction, and retracing it would connect the two both
+                // ways. Not yet resolved (still ahead in row order) means
+                // not yet a reason to exclude it.
+                const otherResult = results.get(spaceKey(other.row, other.lane));
+                const alreadyExits = otherResult && (otherResult.exits ?? defaultExits(rows, byRow, otherResult));
+                if (alreadyExits?.some(exit => exit.row === tile.row && exit.lane === tile.lane)) continue;
                 const dx = other.x - tile.x;
                 const dy = other.y - tile.y;
                 const dist = Math.hypot(dx, dy);
@@ -327,13 +348,14 @@ export function connectByGeometry(tiles: EditorTile[]): EditorTile[] {
             if (nearest) exits.push({ row: nearest.other.row, lane: nearest.other.lane });
         }
 
-        const clearStale = tile.exits ? { ...tile, ...NO_EXITS } : tile;
-        if (exits.length === 0) return clearStale;
+        const result = exits.length > 0 && !sameExits(exits, fallback)
+            ? { ...tile, exits, autoExits: true }
+            : (tile.exits ? { ...tile, ...NO_EXITS } : tile);
 
-        return sameExits(exits, defaultExits(rows, byRow, tile))
-            ? clearStale
-            : { ...tile, exits, autoExits: true };
-    });
+        results.set(tileKey, result);
+    }
+
+    return tiles.map(tile => results.get(spaceKey(tile.row, tile.lane))!);
 }
 
 /**
