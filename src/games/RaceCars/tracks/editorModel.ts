@@ -34,6 +34,13 @@ export interface EditorTile {
     y: number;
     heading?: number;
     exits?: RaceCarsSpace[];
+    /**
+     * Set alongside `exits` when `connectByGeometry` wrote them, not an author's
+     * hand — so a later pass may redraw them (a moved tile, a redrawn corner) the
+     * way a hand-drawn override never is. Absent (or false) on any `exits` an
+     * author drew themselves, which stays untouched forever.
+     */
+    autoExits?: boolean;
     cornerId?: string;
 }
 
@@ -90,7 +97,10 @@ function cleanTile(value: unknown): EditorTile | null {
     if (typeof tile.cornerId === "string") cleaned.cornerId = tile.cornerId;
     if (Array.isArray(tile.exits)) {
         const exits = tile.exits.map(cleanSpace).filter((exit): exit is RaceCarsSpace => exit !== null);
-        if (exits.length > 0) cleaned.exits = exits;
+        if (exits.length > 0) {
+            cleaned.exits = exits;
+            if (tile.autoExits === true) cleaned.autoExits = true;
+        }
     }
     return cleaned;
 }
@@ -232,6 +242,15 @@ export function tileHeading(tiles: EditorTile[], tile: EditorTile): number {
     return headingTowards(tile, effectiveExits(tiles, tile), byKey);
 }
 
+/**
+ * A tile with no exit override at all — spread this onto a tile to wipe both
+ * `exits` and `autoExits` together, rather than retyping the pair at each of
+ * the few call sites (geometry falling back to the default rule, a deleted
+ * tile's last remaining exit, "reset to default") that need to clear one
+ * without silently leaving the other stale.
+ */
+export const NO_EXITS: Pick<EditorTile, "exits" | "autoExits"> = { exits: undefined, autoExits: undefined };
+
 /** How near a candidate has to be to count with the nearest one ahead. */
 const CONNECT_SPREAD = 1.6;
 /** How far off the heading a candidate may sit — a projection this fraction of
@@ -249,10 +268,19 @@ const CONNECT_MAX_EXITS = 3;
  * makes the lanes fall back into step off the shape the author drew rather than
  * off a lane number that no longer means what it did before the corner.
  *
- * Non-destructive: a tile that already carries a hand-drawn override keeps it,
- * and one whose geometry agrees with the default rule is left on the default so
- * an ordinary straight stays a plain straight. A same-row (sideways) candidate
- * is never connected — a car changes lane while moving, never on the spot.
+ * Candidates are limited to this lane or the one either side of it, exactly
+ * what §5.1's own rule allows (`defaultExits`) — geometry alone, on a tight
+ * enough corner, would otherwise happily draw the nearest tile regardless of
+ * lane and connect lane 1 straight to lane 3, a step no car may take.
+ *
+ * A tile that already carries a hand-drawn override keeps it untouched. One
+ * this function wrote itself last time (`autoExits`) is redrawn rather than
+ * frozen, so a later pass — after tiles move, or a corner is redrawn — can fix
+ * a lane it got wrong instead of it looking identical to a real hand-drawn
+ * exit and refusing to change. Geometry that lands back on the default rule
+ * clears any stale auto exit rather than leaving it stuck. A same-row
+ * (sideways) candidate is never connected — a car changes lane while moving,
+ * never on the spot.
  */
 export function connectByGeometry(tiles: EditorTile[]): EditorTile[] {
     const rows = rowCount(tiles);
@@ -261,14 +289,14 @@ export function connectByGeometry(tiles: EditorTile[]): EditorTile[] {
     const exitsByKey = allEffectiveExits(tiles);
 
     return tiles.map(tile => {
-        if (tile.exits) return tile;
+        if (tile.exits && !tile.autoExits) return tile;
         const heading = tile.heading ?? headingTowards(tile, exitsByKey.get(spaceKey(tile.row, tile.lane)) ?? [], byKey);
         const radians = (heading * Math.PI) / 180;
         const forwardX = Math.cos(radians);
         const forwardY = Math.sin(radians);
 
         const ahead = tiles
-            .filter(other => other !== tile && other.row !== tile.row)
+            .filter(other => other !== tile && other.row !== tile.row && Math.abs(other.lane - tile.lane) <= 1)
             .map(other => {
                 const dx = other.x - tile.x;
                 const dy = other.y - tile.y;
@@ -278,14 +306,17 @@ export function connectByGeometry(tiles: EditorTile[]): EditorTile[] {
             .filter(candidate => candidate.dist > 0 && candidate.along >= candidate.dist * CONNECT_CONE)
             .sort((a, b) => a.dist - b.dist);
 
-        if (ahead.length === 0) return tile;
+        const clearStale = tile.exits ? { ...tile, ...NO_EXITS } : tile;
+        if (ahead.length === 0) return clearStale;
         const nearest = ahead[0].dist;
         const exits = ahead
             .filter(candidate => candidate.dist <= nearest * CONNECT_SPREAD)
             .slice(0, CONNECT_MAX_EXITS)
             .map(candidate => ({ row: candidate.other.row, lane: candidate.other.lane }));
 
-        return sameExits(exits, defaultExits(rows, byRow, tile)) ? tile : { ...tile, exits };
+        return sameExits(exits, defaultExits(rows, byRow, tile))
+            ? clearStale
+            : { ...tile, exits, autoExits: true };
     });
 }
 

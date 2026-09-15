@@ -13,6 +13,7 @@ import {
     toTrack,
     validateTrack,
     type EditorState,
+    type EditorTile,
 } from "./editorModel";
 
 // A tiny driveable circuit: three rows of two lanes, wrapping row 2 → row 0,
@@ -225,5 +226,69 @@ describe("connectByGeometry lines lanes up off the shape, not the row numbers", 
         const inside = connected.find(t => t.row === 0 && t.lane === 1)!;
         expect(inside.exits).toBeDefined();
         expect(inside.exits!.some(e => e.row === 2 && e.lane === 1)).toBe(true);
+    });
+
+    it("never connects across more than one lane, even when that tile is the closest", () => {
+        // Lane 3 sits physically nearest 0:1 on the next row — a three-lane road
+        // pinched into a sharp bend — but a car may only ever step into this lane
+        // or the one next to it (§5.1), so geometry must not offer lane 3 however
+        // close it is.
+        const pinched = emptyState({
+            tiles: [
+                { row: 0, lane: 1, x: 0, y: 0 },
+                { row: 0, lane: 2, x: 20, y: 0 },
+                { row: 0, lane: 3, x: 40, y: 0 },
+                { row: 1, lane: 3, x: 2, y: 20 },
+                { row: 1, lane: 2, x: 20, y: 20 },
+                { row: 1, lane: 1, x: 40, y: 20 },
+            ],
+        });
+        const connected = connectByGeometry(pinched.tiles);
+        const fromLane1 = connected.find(t => t.row === 0 && t.lane === 1)!;
+        expect((fromLane1.exits ?? []).every(e => Math.abs(e.lane - 1) <= 1)).toBe(true);
+    });
+
+    it("marks what it writes as auto so a later pass may redraw it", () => {
+        const corner = emptyState({
+            tiles: [
+                { row: 0, lane: 1, x: 0, y: 0 },
+                { row: 0, lane: 2, x: 30, y: 0 },
+                { row: 1, lane: 2, x: 30, y: 20 },
+                { row: 2, lane: 1, x: 0, y: 40 },
+                { row: 2, lane: 2, x: 30, y: 40 },
+            ],
+        });
+        const connected = connectByGeometry(corner.tiles);
+        const inside = connected.find(t => t.row === 0 && t.lane === 1)!;
+        expect(inside.autoExits).toBe(true);
+    });
+
+    it("redraws its own auto exits on a second pass instead of freezing them", () => {
+        // First pass draws 0:1 -> 2:1 off the gap on row 1. Move 2:1 so it is no
+        // longer reachable and add a real 1:1 in its place — a second pass must
+        // follow the tiles, not keep repeating what it wrote before.
+        let tiles: EditorTile[] = [
+            { row: 0, lane: 1, x: 0, y: 0 },
+            { row: 0, lane: 2, x: 30, y: 0 },
+            { row: 1, lane: 2, x: 30, y: 20 },
+            { row: 2, lane: 1, x: 0, y: 40 },
+            { row: 2, lane: 2, x: 30, y: 40 },
+        ];
+        tiles = connectByGeometry(tiles);
+        expect(tiles.find(t => t.row === 0 && t.lane === 1)!.autoExits).toBe(true);
+
+        tiles = [...tiles, { row: 1, lane: 1, x: 0, y: 20 }];
+        tiles = connectByGeometry(tiles);
+        const redrawn = tiles.find(t => t.row === 0 && t.lane === 1)!;
+        expect(redrawn.exits).toEqual([{ row: 1, lane: 1 }]);
+    });
+
+    it("never touches a hand-drawn exit, even one that could be redrawn", () => {
+        const state = tinyState();
+        state.tiles[0] = { row: 0, lane: 1, x: 0, y: 0, exits: [{ row: 1, lane: 2 }] };
+        const connected = connectByGeometry(state.tiles);
+        const tile = connected.find(t => t.row === 0 && t.lane === 1)!;
+        expect(tile.exits).toEqual([{ row: 1, lane: 2 }]);
+        expect(tile.autoExits).toBeUndefined();
     });
 });
