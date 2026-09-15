@@ -251,27 +251,31 @@ export function tileHeading(tiles: EditorTile[], tile: EditorTile): number {
  */
 export const NO_EXITS: Pick<EditorTile, "exits" | "autoExits"> = { exits: undefined, autoExits: undefined };
 
-/** How near a candidate has to be to count with the nearest one ahead. */
-const CONNECT_SPREAD = 1.6;
 /** How far off the heading a candidate may sit — a projection this fraction of
  *  its distance keeps roughly-forward tiles and drops the ones off to the side. */
 const CONNECT_CONE = 0.3;
-/** No more steps than §5.1's "this lane or either beside it" ever offers. */
-const CONNECT_MAX_EXITS = 3;
 
 /**
  * Exits redrawn from where the tiles actually sit, for the case §5.1's row+1
  * rule can't line up on its own: a corner sharp enough that the inside line
  * took fewer tiles round it, so past the corner "the same lane in the next row"
- * is no longer the tile in front. Each tile is connected to the nearest tiles
+ * is no longer the tile in front. Each tile is connected to the nearest tile
  * ahead of it — ahead by its heading, not by row arithmetic — which is what
  * makes the lanes fall back into step off the shape the author drew rather than
  * off a lane number that no longer means what it did before the corner.
  *
- * Candidates are limited to this lane or the one either side of it, exactly
- * what §5.1's own rule allows (`defaultExits`) — geometry alone, on a tight
- * enough corner, would otherwise happily draw the nearest tile regardless of
- * lane and connect lane 1 straight to lane 3, a step no car may take.
+ * The nearest tile is picked once per lane — this lane and the one either
+ * side, exactly what §5.1's own rule allows (`defaultExits`) — rather than
+ * once across every candidate pooled together with a distance cutoff. A lane
+ * change can sit much farther away than staying in lane (the lane offset on a
+ * wide or staggered road), so a single "close enough to the closest" cutoff
+ * across lanes was dropping a real, and often the only, tile ahead in the
+ * next lane over just because the same-lane tile happened to be nearer — a
+ * wide road never got its 1↔2 or 2↔3 merge drawn. Per lane, one candidate
+ * either exists ahead or it doesn't; there is nothing to rank it against.
+ * Limiting candidates to this lane or the one either side of it also keeps
+ * geometry from ever connecting lane 1 straight to lane 3, a step no car may
+ * take, however close that tile happens to sit.
  *
  * A tile that already carries a hand-drawn override keeps it untouched. One
  * this function wrote itself last time (`autoExits`) is redrawn rather than
@@ -281,6 +285,17 @@ const CONNECT_MAX_EXITS = 3;
  * clears any stale auto exit rather than leaving it stuck. A same-row
  * (sideways) candidate is never connected — a car changes lane while moving,
  * never on the spot.
+ *
+ * Nor is a candidate that already has an exit *into* this tile, generated or
+ * hand-drawn — that line has a direction, and retracing it backwards would
+ * connect two tiles both ways, however well the nearer one otherwise fits the
+ * heading. The next-nearest tile in that lane is offered instead, the same as
+ * when the nearest candidate fails the heading cone. Only an explicit exit
+ * blocks a reversal this way; §5.1's own row+1 default is not "an exit" in
+ * this sense; every tile on an ordinary straight defaults forward without one,
+ * and short test loops wrap an unrelated default edge back round almost
+ * immediately, so counting it here would refuse real connections it was never
+ * meant to guard.
  */
 export function connectByGeometry(tiles: EditorTile[]): EditorTile[] {
     const rows = rowCount(tiles);
@@ -295,24 +310,25 @@ export function connectByGeometry(tiles: EditorTile[]): EditorTile[] {
         const forwardX = Math.cos(radians);
         const forwardY = Math.sin(radians);
 
-        const ahead = tiles
-            .filter(other => other !== tile && other.row !== tile.row && Math.abs(other.lane - tile.lane) <= 1)
-            .map(other => {
+        const exits: RaceCarsSpace[] = [];
+        for (const lane of [tile.lane - 1, tile.lane, tile.lane + 1]) {
+            let nearest: { other: EditorTile; dist: number } | null = null;
+            for (const other of tiles) {
+                if (other === tile || other.row === tile.row || other.lane !== lane) continue;
+                // Skip a candidate that already has its own exit into this
+                // tile — reversing it would connect the two both ways.
+                if (other.exits?.some(exit => exit.row === tile.row && exit.lane === tile.lane)) continue;
                 const dx = other.x - tile.x;
                 const dy = other.y - tile.y;
                 const dist = Math.hypot(dx, dy);
-                return { other, dist, along: dist > 0 ? dx * forwardX + dy * forwardY : 0 };
-            })
-            .filter(candidate => candidate.dist > 0 && candidate.along >= candidate.dist * CONNECT_CONE)
-            .sort((a, b) => a.dist - b.dist);
+                if (dist <= 0 || dx * forwardX + dy * forwardY < dist * CONNECT_CONE) continue;
+                if (!nearest || dist < nearest.dist) nearest = { other, dist };
+            }
+            if (nearest) exits.push({ row: nearest.other.row, lane: nearest.other.lane });
+        }
 
         const clearStale = tile.exits ? { ...tile, ...NO_EXITS } : tile;
-        if (ahead.length === 0) return clearStale;
-        const nearest = ahead[0].dist;
-        const exits = ahead
-            .filter(candidate => candidate.dist <= nearest * CONNECT_SPREAD)
-            .slice(0, CONNECT_MAX_EXITS)
-            .map(candidate => ({ row: candidate.other.row, lane: candidate.other.lane }));
+        if (exits.length === 0) return clearStale;
 
         return sameExits(exits, defaultExits(rows, byRow, tile))
             ? clearStale

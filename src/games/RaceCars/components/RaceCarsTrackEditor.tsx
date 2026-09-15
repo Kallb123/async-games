@@ -41,6 +41,19 @@ import { readStoredValue, writeStoredValue } from '@/utils/hooks/useStoredValue'
 
 const STORAGE_KEY = 'ag-racecars-track-editor';
 
+/**
+ * Bumped whenever a fix to the editor itself (not a track) ships, so an admin
+ * mid-track can tell which of them are live without digging through commits —
+ * shown as a small footer, its tooltip naming what changed.
+ */
+const TOOL_VERSION = 4;
+const TOOL_CHANGES = [
+    'v4 — auto-connect never reverses an existing exit (generated or hand-drawn); it falls through to the next-nearest tile in that lane instead of connecting two tiles both ways.',
+    'v3 — auto-connect picks the nearest tile per lane rather than one distance cutoff shared across lanes, so a wide road\'s lane change is no longer dropped for sitting farther off than staying in lane.',
+    'v2 — auto-connect never skips a lane (no lane 1 straight to lane 3), and tags what it writes so a later pass can redraw it instead of freezing on the first run.',
+    'v1 — corner painting, save/resume to a file, and connecting exits from the drawn geometry.',
+].join('\n');
+
 const TILE_RADIUS = 7;
 /** How far a pointer may travel before a click counts as a drag, in screen px. */
 const DRAG_SLOP = 4;
@@ -418,9 +431,11 @@ export default function RaceCarsTrackEditor() {
                         </div>
                         <p className="ag-hint">
                             Auto-connect rebuilds each tile&apos;s steps from where the tiles sit, not from row+1 — the way a
-                            sharp corner&apos;s lanes fall back into step. It only connects to the closest tile in the same
-                            lane or one lane over, never skipping a lane, and leaves your hand-drawn exits alone — run it
-                            again after moving tiles and it will redraw only what it drew itself last time.
+                            sharp corner&apos;s lanes fall back into step. For each of the same lane and the two either side of
+                            it, it draws the closest tile ahead in that lane alone — so a wide road&apos;s lane change still
+                            gets drawn even when it sits much farther off than staying in lane — and never skips a lane. It
+                            leaves your hand-drawn exits alone — run it again after moving tiles and it will redraw only what
+                            it drew itself last time.
                         </p>
                     </div>
                 </Section>
@@ -471,6 +486,8 @@ export default function RaceCarsTrackEditor() {
                 />
 
                 <ExportPanel state={state} validation={validation} />
+
+                <p className="ag-hint ag-hint--center" title={TOOL_CHANGES}>Track editor v{TOOL_VERSION}</p>
             </div>
         </div>
     );
