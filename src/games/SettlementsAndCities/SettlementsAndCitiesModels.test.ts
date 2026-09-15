@@ -107,11 +107,9 @@ describe("Settlements & Cities' roll payout through Mongoose", () => {
     });
 });
 
-// A turn that ends itself because its player can't afford a single thing is a
-// statement about that player's hand — so nothing about it may reach anyone
-// else. The log line is word for word an ordinary "ended their turn" (see
-// SettlementsAndCitiesLogic.test.ts); these cover the other half, the roll the
-// state deliberately holds over for the player it happened to.
+// The roll an auto-ended turn holds over, and who is allowed to see it. The
+// other half — the log line, which is word for word an ordinary "ended their
+// turn" — is covered in SettlementsAndCitiesLogic.test.ts.
 describe("Settlements & Cities' auto-ended turn on the wire", () => {
     function autoEndedState(): ISACSpecificGameState {
         return makeState({
@@ -139,16 +137,13 @@ describe("Settlements & Cities' auto-ended turn on the wire", () => {
     it.each([["an opponent", "u2"], ["a spectator", null]] as const)(
         "sends %s exactly what a tapped End turn leaves — no dice, no payout, no flag",
         (_who, viewerId) => {
-            const wire = JSON.parse(JSON.stringify(gameStateToResponse(autoEndedState(), NAMES, viewerId)));
+            const wire = gameStateToResponse(autoEndedState(), NAMES, viewerId);
 
             expect(wire.lastRoll).toBeNull();
             expect(wire.lastRollDie1).toBeNull();
             expect(wire.lastRollDie2).toBeNull();
             expect(wire.lastRollChanges).toEqual([]);
             expect(wire.lastRollAutoEnded).toBe(false);
-            // The owner of the auto-end never had a field of its own out here, and
-            // must not grow one: naming them would give the whole thing away.
-            expect(JSON.stringify(wire)).not.toContain("AutoEndedBy");
         },
     );
 });

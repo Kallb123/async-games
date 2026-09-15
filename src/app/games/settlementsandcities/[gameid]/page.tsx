@@ -299,20 +299,14 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
 
     // ── This turn's roll ─────────────────────────────────────────────────────
     // The dice and what they paid, as a panel under the board. `lastRoll` is
-    // cleared when the turn passes (sacAdvanceMainTurn) — unless the roll left
-    // the roller nothing to build, buy or trade, in which case it rides into
-    // the next turn (`lastRollAutoEnded`) so it isn't hidden the instant the
-    // turn ends itself. It's read off the shared game state rather than the
-    // roller's own command response, so an opponent looking in sees the same
-    // dice and the same payout while it's genuinely still live. Once an
-    // auto-end has happened the server keeps the held-over roll, and the flag
-    // explaining it, for that one player — everyone else is sent the state an
-    // ordinary end turn leaves, so there's nothing here to narrow.
+    // cleared when the turn passes — unless the roll auto-ended the turn, in
+    // which case it rides into the next one so it isn't hidden the instant it
+    // happens. Which viewer is allowed to see any of that is decided on the
+    // server (gameStateToResponse), so there's nothing to check for here.
     //
     // The payout line is left off entirely when nothing is recorded against the
     // roll: a game whose last roll predates `lastRollChanges` has none, and
     // "Rolled 8" on its own is true where "nobody collected" would not be.
-    const showRoll = gs?.lastRoll !== null;
     const rollParts = sacRollChangeParts(gs?.lastRollChanges, (userId) =>
         userId === myUserId ? 'You' : playerName(userId));
     const rollSubline = [
@@ -413,7 +407,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                         />
                     </div>
 
-                    {showRoll && gs.lastRoll !== null && gs.lastRollDie1 !== null && gs.lastRollDie2 !== null && (
+                    {gs.lastRoll !== null && gs.lastRollDie1 !== null && gs.lastRollDie2 !== null && (
                         <RollReadout
                             className="ag-roll--spaced"
                             values={[gs.lastRollDie1, gs.lastRollDie2]}

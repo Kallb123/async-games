@@ -135,22 +135,15 @@ export interface ISACSpecificGameState {
     // with `?? []` and simply show no payout, rather than claiming a roll paid
     // nobody.
     lastRollChanges?: ISACRollChange[];
-    // True once `sacFinishTurn` has ended the turn on its own — nothing left to
-    // build, buy or trade — rather than the player tapping "End turn". The dice
-    // and payout above are left in place rather than cleared so the roll that
-    // caused it isn't hidden the instant it happens, and the UI reads this to
-    // add the "no actions were possible" note. Reset to false as soon as the
-    // next roll lands (`SACRollDice`), so it never outlives the roll it
-    // explains. Server-side only in effect: both this and the roll it holds
-    // over are redacted out of everyone else's response (lastRollForViewer),
-    // since an auto-end is a statement about the roller's hand.
+    // Set once `sacFinishTurn` has ended the turn on its own — nothing left to
+    // build, buy or trade — rather than the player tapping "End turn", naming the
+    // player it happened to. The dice and payout above are left in place rather
+    // than cleared so the roll that caused it isn't hidden the instant it
+    // happens, and the UI reads the flag to add the "no actions were possible"
+    // note. Both reset as soon as the next roll lands (`SACRollDice`), so
+    // neither outlives the roll it explains. Only the named player is sent any
+    // of it — see `hideAutoEndedRoll` in gameStateToResponse.
     lastRollAutoEnded: boolean;
-    // Who that roll belonged to — the only viewer the preserved roll and note
-    // above are sent to. Once the turn has moved on, showing it to anyone
-    // else (the new current player included) would both read as "you already
-    // rolled this", which isn't true, and give away that the roller could not
-    // afford a single thing. Never leaves the server; reset alongside
-    // `lastRollAutoEnded`.
     lastRollAutoEndedBy: string | null;
     pendingRobber: boolean;
     longestRoadOwner: string | null;

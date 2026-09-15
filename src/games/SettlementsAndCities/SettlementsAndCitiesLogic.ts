@@ -200,11 +200,10 @@ function sacHasAnyAction(gs: ISettlementsAndCitiesGameData['specificGameState'],
 
 // The one history line a turn ending writes — whether the player tapped "End
 // turn" or the check below ended it for them. The two read identically on
-// purpose: a line saying someone *ran out* of things to do tells the whole
-// table they can't afford a road and hold under four of every resource, which
-// is exactly the hand they're entitled to keep to themselves. An auto-end is
-// therefore indistinguishable from a hand-off in the log, in the push
-// notification built from it, and in the match review that replays it.
+// purpose: a line saying someone *ran out* of things to do tells the whole table
+// they can't afford a road and hold under four of every resource. The same goes
+// for the push notification built from history[0], and for the match review that
+// replays the log.
 function sacTurnEndedText(specialBuildActive: boolean): string {
     return specialBuildActive ? `finished their special build` : `ended their turn`;
 }
@@ -228,9 +227,8 @@ function sacFinishTurn(sacData: ISettlementsAndCitiesGameData, userId: string): 
     outcome.turnOver = true;
     // Flagged only for an ordinary main turn — a Special Build player running
     // dry closes their own slot (sacAdvanceSpecialBuild), which never touches
-    // the dice display, so there's nothing here for it to mark. The flag is
-    // for the roller alone: gameStateToResponse hands it, and the roll it
-    // preserves, to nobody else.
+    // the dice display, so there's nothing here for it to mark. The flag and the
+    // roll it preserves go to `userId` alone (gameStateToResponse).
     if (!gs.specialBuildActive) {
         gs.lastRollAutoEnded = true;
         gs.lastRollAutoEndedBy = userId;

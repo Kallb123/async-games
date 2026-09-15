@@ -407,34 +407,6 @@ SettlementsAndCitiesGameDataSchema.methods.CreateDataResponse = async function(v
     };
 };
 
-// The last-roll fields as `viewerId` is allowed to see them.
-//
-// An auto-ended turn keeps its roll on the state (sacAdvanceMainTurn skips the
-// usual clear) so the player it happened to still gets to see what they rolled.
-// That retained roll — and the flag explaining it — is theirs alone: to anyone
-// else, a turn that ended because its player could not afford anything looks
-// exactly like one they ended by tapping "End turn", because the difference is
-// a statement about that player's hand. So every other viewer is handed the
-// state a manual end turn would have left: no dice, no payout, no flag.
-function lastRollForViewer(
-    gs: ISACSpecificGameState,
-    viewerId: string | null,
-): Pick<ISACSpecificGameStateResponse, 'lastRoll' | 'lastRollDie1' | 'lastRollDie2' | 'lastRollChanges' | 'lastRollAutoEnded'> {
-    if (gs.lastRollAutoEnded && gs.lastRollAutoEndedBy !== viewerId) {
-        return { lastRoll: null, lastRollDie1: null, lastRollDie2: null, lastRollChanges: [], lastRollAutoEnded: false };
-    }
-    return {
-        lastRoll: gs.lastRoll,
-        lastRollDie1: gs.lastRollDie1,
-        lastRollDie2: gs.lastRollDie2,
-        // Field by field, rather than by reference: these come off a live
-        // Mongoose document, and sending the subdocuments as they are would ship
-        // their internals (and an `_id` per row) along with them.
-        lastRollChanges: cloneRollChanges(gs.lastRollChanges),
-        lastRollAutoEnded: gs.lastRollAutoEnded ?? false,
-    };
-}
-
 export function gameStateToResponse(
     gs: ISACSpecificGameState,
     userIdNameMap: { [key: string]: string },
@@ -480,6 +452,14 @@ export function gameStateToResponse(
         owner: e.owner ?? null,
     }));
 
+    // An auto-ended turn keeps its roll on the state (sacAdvanceMainTurn skips the
+    // usual clear) so the player it happened to still sees what they rolled. That
+    // held-over roll is theirs alone: a turn that ended because its player could
+    // afford nothing says what they hold, so everyone else is handed exactly what
+    // a tapped "End turn" leaves — no dice, no payout, no flag. `lastRollAutoEndedBy`
+    // is the server's own bookkeeping and never goes out at all.
+    const hideAutoEndedRoll = gs.lastRollAutoEnded && gs.lastRollAutoEndedBy !== viewerId;
+
     const longestRoadOwner = gs.longestRoadOwner ?? null;
     const largestArmyOwner = gs.largestArmyOwner ?? null;
 
@@ -500,7 +480,14 @@ export function gameStateToResponse(
         pendingRoadSetup: gs.pendingRoadSetup,
         lastSetupSettlementVertex: gs.lastSetupSettlementVertex,
         hasRolled: gs.hasRolled,
-        ...lastRollForViewer(gs, viewerId),
+        lastRoll: hideAutoEndedRoll ? null : gs.lastRoll,
+        lastRollDie1: hideAutoEndedRoll ? null : gs.lastRollDie1,
+        lastRollDie2: hideAutoEndedRoll ? null : gs.lastRollDie2,
+        // Field by field rather than by reference: these come off a live Mongoose
+        // document, and sending the subdocuments as they are would ship their
+        // internals (and an `_id` per row) along with them.
+        lastRollChanges: hideAutoEndedRoll ? [] : cloneRollChanges(gs.lastRollChanges),
+        lastRollAutoEnded: !hideAutoEndedRoll && (gs.lastRollAutoEnded ?? false),
         pendingRobber: gs.pendingRobber,
         longestRoadOwner,
         largestArmyOwner,
