@@ -95,10 +95,13 @@ describe("Ashcombe Park", () => {
 describe("every track", () => {
     it.each(TRACK_LIST.map(track => [track.id, track] as const))("%s holds a full field in every corner", (_id, track) => {
         for (const corner of track.corners) {
-            const spaces = track.spaces.filter(space => space.row >= corner.from && space.row <= corner.to).length;
-            // A spin searches backwards along its corner for a free space, which
-            // is only total if the corner can hold everybody at once.
-            expect(spaces).toBeGreaterThanOrEqual(MAX_PLAYERS);
+            // Read off the corner's own spaces rather than its row band: they
+            // are the same set now that a corner is a section (§10), and this
+            // is the set a spin actually searches — which is only total if the
+            // corner can hold everybody at once. A corner drawn with a short
+            // inside line has fewer spaces than its rows suggest, and this is
+            // the number that matters.
+            expect(spacesInCorner(track, corner.id).length).toBeGreaterThanOrEqual(MAX_PLAYERS);
         }
     });
 
@@ -118,9 +121,18 @@ describe("every track", () => {
         expect(new Set(track.corners.map(corner => corner.id)).size).toBe(track.corners.length);
     });
 
-    it.each(TRACK_LIST.map(track => [track.id, track] as const))("%s is 2 or 3 lanes wide on every row", (_id, track) => {
+    it.each(TRACK_LIST.map(track => [track.id, track] as const))("%s has road on every row, and never more than three lanes of it", (_id, track) => {
+        // Not "two or three lanes wide on every row", which was true only while
+        // every circuit ran its lanes in step. A corner drawn with one tile on
+        // the inside against five on the outside has rows the inside line
+        // simply is not on — that is the shape §5.1 exists to hold, and the
+        // rows it skips are the ones it saved. What must still hold is that the
+        // road is somewhere on every row (a row nothing is on is a rank nothing
+        // can be level with) and never wider than the widest road there is.
         for (let row = 0; row < track.rows; row++) {
-            expect([2, 3]).toContain(spacesInRow(track, row).length);
+            const width = spacesInRow(track, row).length;
+            expect(width).toBeGreaterThan(0);
+            expect(width).toBeLessThanOrEqual(3);
         }
     });
 
@@ -581,6 +593,17 @@ describe("a corner of one tile inside and five outside (§5.1)", () => {
         // And there is nowhere to go from there but out, which is §10's waiver.
         expect(waivedCornerIdAt(RIGHT_HANDER, 5, 1)).toBe('bend');
         expect(waivedCornerIdAt(RIGHT_HANDER, 5, 3)).toBeNull();
+    });
+
+    it("keeps the invariants a shipped circuit is held to", () => {
+        // The two that a corner like this used to break: every row has road on
+        // it somewhere (rows 3 and 7 have only the outside line, which is the
+        // point), and the corner still holds a full field for a spin to be put
+        // back into.
+        for (let row = 0; row < RIGHT_HANDER.rows; row++) {
+            expect(spacesInRow(RIGHT_HANDER, row).length).toBeGreaterThan(0);
+        }
+        expect(spacesInCorner(RIGHT_HANDER, 'bend').length).toBeGreaterThanOrEqual(MAX_PLAYERS);
     });
 
     it("charges the inside line for the spaces it is past, not the rows", () => {
