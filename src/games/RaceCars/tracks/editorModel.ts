@@ -285,6 +285,17 @@ const CONNECT_CONE = 0.3;
  * clears any stale auto exit rather than leaving it stuck. A same-row
  * (sideways) candidate is never connected — a car changes lane while moving,
  * never on the spot.
+ *
+ * Nor is a candidate that already has an exit *into* this tile, generated or
+ * hand-drawn — that line has a direction, and retracing it backwards would
+ * connect two tiles both ways, however well the nearer one otherwise fits the
+ * heading. The next-nearest tile in that lane is offered instead, the same as
+ * when the nearest candidate fails the heading cone. Only an explicit exit
+ * blocks a reversal this way; §5.1's own row+1 default is not "an exit" in
+ * this sense; every tile on an ordinary straight defaults forward without one,
+ * and short test loops wrap an unrelated default edge back round almost
+ * immediately, so counting it here would refuse real connections it was never
+ * meant to guard.
  */
 export function connectByGeometry(tiles: EditorTile[]): EditorTile[] {
     const rows = rowCount(tiles);
@@ -292,9 +303,23 @@ export function connectByGeometry(tiles: EditorTile[]): EditorTile[] {
     const byKey = new Map(tiles.map(tile => [spaceKey(tile.row, tile.lane), tile]));
     const exitsByKey = allEffectiveExits(tiles);
 
+    const reachedBy = new Map<string, Set<string>>();
+    for (const other of tiles) {
+        if (!other.exits) continue;
+        const fromKey = spaceKey(other.row, other.lane);
+        for (const exit of other.exits) {
+            const toKey = spaceKey(exit.row, exit.lane);
+            const sources = reachedBy.get(toKey);
+            if (sources) sources.add(fromKey);
+            else reachedBy.set(toKey, new Set([fromKey]));
+        }
+    }
+
     return tiles.map(tile => {
         if (tile.exits && !tile.autoExits) return tile;
-        const heading = tile.heading ?? headingTowards(tile, exitsByKey.get(spaceKey(tile.row, tile.lane)) ?? [], byKey);
+        const tileKey = spaceKey(tile.row, tile.lane);
+        const incoming = reachedBy.get(tileKey);
+        const heading = tile.heading ?? headingTowards(tile, exitsByKey.get(tileKey) ?? [], byKey);
         const radians = (heading * Math.PI) / 180;
         const forwardX = Math.cos(radians);
         const forwardY = Math.sin(radians);
@@ -304,6 +329,7 @@ export function connectByGeometry(tiles: EditorTile[]): EditorTile[] {
             let nearest: { other: EditorTile; dist: number } | null = null;
             for (const other of tiles) {
                 if (other === tile || other.row === tile.row || other.lane !== lane) continue;
+                if (incoming?.has(spaceKey(other.row, other.lane))) continue;
                 const dx = other.x - tile.x;
                 const dy = other.y - tile.y;
                 const dist = Math.hypot(dx, dy);

@@ -212,7 +212,11 @@ describe("connectByGeometry lines lanes up off the shape, not the row numbers", 
     it("connects to the tile that is physically ahead when a lane skips a row", () => {
         // A sharp inside line: lane 1 has no tile on row 1, so the tile that is
         // actually in front of 0:1 is 2:1 — which the row+1 rule can't reach but
-        // geometry can.
+        // geometry can. On this 3-row wrap 2:1's own untouched default happens
+        // to point straight back to 0:1, which also guards the "only an
+        // explicit exit blocks a reversal" rule below: if a plain row+1
+        // default counted as "already connected", it would wrongly exclude
+        // 2:1 here and this would fail.
         const corner = emptyState({
             tiles: [
                 { row: 0, lane: 1, x: 0, y: 0 },
@@ -312,6 +316,31 @@ describe("connectByGeometry lines lanes up off the shape, not the row numbers", 
         expect(exits.some(e => e.row === 8 && e.lane === 3)).toBe(true);
         expect(exits.some(e => e.row === 8 && e.lane === 2)).toBe(true);
         expect(exits.every(e => e.row !== 7)).toBe(true);
+    });
+
+    it("never reverses an existing exit, picking the next-nearest tile in that lane instead", () => {
+        // X already steps to Y (hand-drawn). Y's own forward search is aimed
+        // (via an explicit heading, to make the test deterministic) straight
+        // back at X — the nearest candidate in lane 1 — with W a little
+        // farther beyond it in the same direction. Y must not retrace X's
+        // line backwards; it should fall through to W instead.
+        const x: EditorTile = { row: 5, lane: 1, x: 0, y: 0, exits: [{ row: 6, lane: 1 }] };
+        const y: EditorTile = { row: 6, lane: 1, x: 0, y: 10, heading: -90 };
+        const w: EditorTile = { row: 4, lane: 1, x: 0, y: -20 };
+        const connected = connectByGeometry([x, y, w]);
+        const fromY = connected.find(t => t.row === 6 && t.lane === 1)!;
+        expect(fromY.exits).toEqual([{ row: 4, lane: 1 }]);
+        expect(fromY.exits!.some(e => e.row === 5 && e.lane === 1)).toBe(false);
+    });
+
+    it("drops the lane rather than reversing an exit when nothing else is ahead", () => {
+        // Same as above but without W to fall back on: Y must end up with no
+        // step in lane 1 at all, not a reversal of X's line.
+        const x: EditorTile = { row: 5, lane: 1, x: 0, y: 0, exits: [{ row: 6, lane: 1 }] };
+        const y: EditorTile = { row: 6, lane: 1, x: 0, y: 10, heading: -90 };
+        const connected = connectByGeometry([x, y]);
+        const fromY = connected.find(t => t.row === 6 && t.lane === 1)!;
+        expect(fromY.exits).toBeUndefined();
     });
 
     it("never touches a hand-drawn exit, even one that could be redrawn", () => {
