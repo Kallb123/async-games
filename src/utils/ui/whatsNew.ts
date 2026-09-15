@@ -67,6 +67,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Add or change your password from Settings",
+                detail: "Signed in with Google or Microsoft? You can now add a password too, so you're never locked out if that account changes. Already have one? Change it from the same place — under Settings › Password.",
+            },
+            {
                 title: "Settlements & Cities ends your turn for you when there's nothing left to do",
                 detail: "Once you can't afford a settlement, road or city, can't buy or play a development card, and don't have enough of any resource to trade with the bank, your turn ends on its own instead of waiting for you to tap End turn. The End turn (and Special Build's Done building) button also moved to the top of the list, above the build options, so it's the first thing you see.",
                 game: "settlementsandcities",
@@ -106,10 +110,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Send a GIF in a game's chat",
                 detail: "There's a GIF button beside the message box now: tap it, search for what you're after, and tap a result to send it. Type a line first and it goes underneath as a caption. GIFs play in the thread, or sit still with a play button if you've asked your phone for less motion, and if they can't be reached you can still send a message as normal.",
-            },
-            {
-                title: "Chat says who's talking with their avatar",
-                detail: "Every message in a game's chat now leads with the sender's avatar, ringed in the colour they're playing as, instead of the small colour dot that used to sit beside it — so a glance down the thread tells you who said what.",
             },
         ],
     },

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useToast } from "@/components/ToastContext";
 import ActionButton from "@/components/ui/ActionButton";
+import PasswordField from "@/components/ui/PasswordField";
 
 export default function PasswordForm() {
     const [password, setPassword] = useState('');
@@ -48,18 +49,14 @@ export default function PasswordForm() {
 
     return (
         <form onSubmit={handleSubmit} className="ag-card ag-form-card">
-            <div>
-                <label htmlFor="access-password" className="ag-section-label ag-field-label">Access password</label>
-                <input
-                    id="access-password"
-                    className="ag-input"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter password"
-                    required
-                />
-            </div>
+            <PasswordField
+                id="access-password"
+                label="Access password"
+                value={password}
+                onChange={setPassword}
+                autoComplete="current-password"
+                placeholder="Enter password"
+            />
             <ActionButton
                 type="submit"
                 className="ag-btn ag-btn--primary ag-btn--block"

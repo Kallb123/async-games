@@ -16,6 +16,7 @@ import NotificationHelp from "@/components/ui/NotificationHelp";
 import NotificationStatus from "@/components/ui/NotificationStatus";
 import NotificationTestButton from "@/components/ui/NotificationTestButton";
 import ClaimAccountForm from "@/components/ClaimAccountForm";
+import PasswordSettingsForm from "@/components/PasswordSettingsForm";
 import { isGuest } from "@/utils/ui/players";
 import { NotificationChannel, NOTIFICATION_CHANNELS } from "@/utils/firebase/notificationPreferences";
 import { notificationBlockerLine } from "@/utils/ui/notifications";
@@ -246,6 +247,18 @@ export default function Settings() {
                         stays yours, under the same account.
                     </div>
                     <ClaimAccountForm />
+                </Section>
+            )}
+
+            {/* A guest has no real credentials yet — ClaimAccountForm above is
+                how they get their first password, alongside the email that
+                makes the account theirs to keep. Everyone else can already
+                sign in, so this is either their first password (signing in
+                with Google or Microsoft sets none) or a change to the one
+                they have. */}
+            {user && !isGuest(user) && (
+                <Section label="Password">
+                    <PasswordSettingsForm />
                 </Section>
             )}
 
