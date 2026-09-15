@@ -242,6 +242,15 @@ export function tileHeading(tiles: EditorTile[], tile: EditorTile): number {
     return headingTowards(tile, effectiveExits(tiles, tile), byKey);
 }
 
+/**
+ * A tile with no exit override at all — spread this onto a tile to wipe both
+ * `exits` and `autoExits` together, rather than retyping the pair at each of
+ * the few call sites (geometry falling back to the default rule, a deleted
+ * tile's last remaining exit, "reset to default") that need to clear one
+ * without silently leaving the other stale.
+ */
+export const NO_EXITS: Pick<EditorTile, "exits" | "autoExits"> = { exits: undefined, autoExits: undefined };
+
 /** How near a candidate has to be to count with the nearest one ahead. */
 const CONNECT_SPREAD = 1.6;
 /** How far off the heading a candidate may sit — a projection this fraction of
@@ -297,7 +306,7 @@ export function connectByGeometry(tiles: EditorTile[]): EditorTile[] {
             .filter(candidate => candidate.dist > 0 && candidate.along >= candidate.dist * CONNECT_CONE)
             .sort((a, b) => a.dist - b.dist);
 
-        const clearStale = tile.exits ? { ...tile, exits: undefined, autoExits: undefined } : tile;
+        const clearStale = tile.exits ? { ...tile, ...NO_EXITS } : tile;
         if (ahead.length === 0) return clearStale;
         const nearest = ahead[0].dist;
         const exits = ahead

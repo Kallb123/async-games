@@ -9,6 +9,7 @@ import {
     effectiveExits,
     emptyState,
     fromTrack,
+    NO_EXITS,
     parseDraft,
     printTrackFile,
     sameExits,
@@ -207,7 +208,7 @@ export default function RaceCarsTrackEditor() {
                     if (kept.length === tile.exits.length) return tile;
                     return kept.length > 0
                         ? { ...tile, exits: kept }
-                        : { ...tile, exits: undefined, autoExits: undefined };
+                        : { ...tile, ...NO_EXITS };
                 }),
             };
         });
@@ -442,7 +443,7 @@ export default function RaceCarsTrackEditor() {
                         state={state}
                         tile={selected}
                         onPatch={patch => patchTile(spaceKey(selected.row, selected.lane), patch)}
-                        onResetExits={() => patchTile(spaceKey(selected.row, selected.lane), { exits: undefined, autoExits: undefined })}
+                        onResetExits={() => patchTile(spaceKey(selected.row, selected.lane), NO_EXITS)}
                         onDelete={() => deleteTile(spaceKey(selected.row, selected.lane))}
                     />
                 )}
