@@ -141,13 +141,16 @@ export interface ISACSpecificGameState {
     // caused it isn't hidden the instant it happens, and the UI reads this to
     // add the "no actions were possible" note. Reset to false as soon as the
     // next roll lands (`SACRollDice`), so it never outlives the roll it
-    // explains.
+    // explains. Server-side only in effect: both this and the roll it holds
+    // over are redacted out of everyone else's response (lastRollForViewer),
+    // since an auto-end is a statement about the roller's hand.
     lastRollAutoEnded: boolean;
     // Who that roll belonged to — the only viewer the preserved roll and note
-    // above are shown to. Once the turn has moved on, showing it to anyone
-    // else (the new current player included) reads as "you already rolled
-    // this", which isn't true; the player it actually happened to is the one
-    // person who should still see it. Reset alongside `lastRollAutoEnded`.
+    // above are sent to. Once the turn has moved on, showing it to anyone
+    // else (the new current player included) would both read as "you already
+    // rolled this", which isn't true, and give away that the roller could not
+    // afford a single thing. Never leaves the server; reset alongside
+    // `lastRollAutoEnded`.
     lastRollAutoEndedBy: string | null;
     pendingRobber: boolean;
     longestRoadOwner: string | null;

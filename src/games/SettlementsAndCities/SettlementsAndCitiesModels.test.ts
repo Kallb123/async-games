@@ -107,6 +107,52 @@ describe("Settlements & Cities' roll payout through Mongoose", () => {
     });
 });
 
+// A turn that ends itself because its player can't afford a single thing is a
+// statement about that player's hand — so nothing about it may reach anyone
+// else. The log line is word for word an ordinary "ended their turn" (see
+// SettlementsAndCitiesLogic.test.ts); these cover the other half, the roll the
+// state deliberately holds over for the player it happened to.
+describe("Settlements & Cities' auto-ended turn on the wire", () => {
+    function autoEndedState(): ISACSpecificGameState {
+        return makeState({
+            hasRolled: false,
+            lastRoll: 8,
+            lastRollDie1: 5,
+            lastRollDie2: 3,
+            lastRollChanges: [gain("u1", { lumber: 1 })],
+            lastRollAutoEnded: true,
+            lastRollAutoEndedBy: "u1",
+            playerStates: new Map([["u1", player()], ["u2", player()]]),
+        });
+    }
+
+    it("keeps the held-over roll and its note for the player it happened to", () => {
+        const wire = gameStateToResponse(autoEndedState(), NAMES, "u1");
+
+        expect(wire.lastRoll).toBe(8);
+        expect(wire.lastRollDie1).toBe(5);
+        expect(wire.lastRollDie2).toBe(3);
+        expect(wire.lastRollChanges).toHaveLength(1);
+        expect(wire.lastRollAutoEnded).toBe(true);
+    });
+
+    it.each([["an opponent", "u2"], ["a spectator", null]] as const)(
+        "sends %s exactly what a tapped End turn leaves — no dice, no payout, no flag",
+        (_who, viewerId) => {
+            const wire = JSON.parse(JSON.stringify(gameStateToResponse(autoEndedState(), NAMES, viewerId)));
+
+            expect(wire.lastRoll).toBeNull();
+            expect(wire.lastRollDie1).toBeNull();
+            expect(wire.lastRollDie2).toBeNull();
+            expect(wire.lastRollChanges).toEqual([]);
+            expect(wire.lastRollAutoEnded).toBe(false);
+            // The owner of the auto-end never had a field of its own out here, and
+            // must not grow one: naming them would give the whole thing away.
+            expect(JSON.stringify(wire)).not.toContain("AutoEndedBy");
+        },
+    );
+});
+
 // A roll's total (2-12) is tallied straight off SACRollDice's own recorded
 // dice in commandHistory, not replayed - see computeSACRollFrequency. These
 // prove the tally against the shape commandHistory actually stores rolls in,

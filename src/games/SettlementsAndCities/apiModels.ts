@@ -80,16 +80,14 @@ export interface ISACSpecificGameStateResponse {
     // for a game whose last roll predates the field.
     lastRollChanges?: ISACRollChange[];
     // True when the roll above ended the turn on its own — nothing left to
-    // build, buy or trade — rather than the player tapping "End turn". The
-    // board shows the roll with a "no actions were possible" note instead of
-    // hiding it the instant the turn moves on — but only to `lastRollAutoEndedBy`;
-    // to everyone else the turn has simply passed, the same as any other
-    // hand-off, so they read this without the roll it explains.
+    // build, buy or trade — rather than the player tapping "End turn". Only ever
+    // true for the one player it happened to, who gets the roll held over with a
+    // "no actions were possible" note rather than having it vanish the instant
+    // the turn moves on. Everyone else is sent `false` and no roll at all: that
+    // a turn ended because its player couldn't afford anything is a statement
+    // about their hand, so to the rest of the table it reads as an ordinary
+    // hand-off, exactly like tapping "End turn" (see lastRollForViewer).
     lastRollAutoEnded: boolean;
-    // The one userId shown the roll above once `lastRollAutoEnded` is true —
-    // the player it happened to. Nobody else gets it, the new current player
-    // included: they didn't roll it, and seeing it reads as though they had.
-    lastRollAutoEndedBy: string | null;
     pendingRobber: boolean;
     // Bonus holders, as stable Clerk userIds (resolve a name via playerStates).
     longestRoadOwner: string | null;

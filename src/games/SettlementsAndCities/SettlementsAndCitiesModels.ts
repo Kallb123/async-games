@@ -407,6 +407,34 @@ SettlementsAndCitiesGameDataSchema.methods.CreateDataResponse = async function(v
     };
 };
 
+// The last-roll fields as `viewerId` is allowed to see them.
+//
+// An auto-ended turn keeps its roll on the state (sacAdvanceMainTurn skips the
+// usual clear) so the player it happened to still gets to see what they rolled.
+// That retained roll — and the flag explaining it — is theirs alone: to anyone
+// else, a turn that ended because its player could not afford anything looks
+// exactly like one they ended by tapping "End turn", because the difference is
+// a statement about that player's hand. So every other viewer is handed the
+// state a manual end turn would have left: no dice, no payout, no flag.
+function lastRollForViewer(
+    gs: ISACSpecificGameState,
+    viewerId: string | null,
+): Pick<ISACSpecificGameStateResponse, 'lastRoll' | 'lastRollDie1' | 'lastRollDie2' | 'lastRollChanges' | 'lastRollAutoEnded'> {
+    if (gs.lastRollAutoEnded && gs.lastRollAutoEndedBy !== viewerId) {
+        return { lastRoll: null, lastRollDie1: null, lastRollDie2: null, lastRollChanges: [], lastRollAutoEnded: false };
+    }
+    return {
+        lastRoll: gs.lastRoll,
+        lastRollDie1: gs.lastRollDie1,
+        lastRollDie2: gs.lastRollDie2,
+        // Field by field, rather than by reference: these come off a live
+        // Mongoose document, and sending the subdocuments as they are would ship
+        // their internals (and an `_id` per row) along with them.
+        lastRollChanges: cloneRollChanges(gs.lastRollChanges),
+        lastRollAutoEnded: gs.lastRollAutoEnded ?? false,
+    };
+}
+
 export function gameStateToResponse(
     gs: ISACSpecificGameState,
     userIdNameMap: { [key: string]: string },
@@ -472,15 +500,7 @@ export function gameStateToResponse(
         pendingRoadSetup: gs.pendingRoadSetup,
         lastSetupSettlementVertex: gs.lastSetupSettlementVertex,
         hasRolled: gs.hasRolled,
-        lastRoll: gs.lastRoll,
-        lastRollDie1: gs.lastRollDie1,
-        lastRollDie2: gs.lastRollDie2,
-        // Field by field, the same as the board arrays above: these come off a
-        // live Mongoose document, and sending the subdocuments as they are would
-        // ship their internals (and an `_id` per row) along with them.
-        lastRollChanges: cloneRollChanges(gs.lastRollChanges),
-        lastRollAutoEnded: gs.lastRollAutoEnded ?? false,
-        lastRollAutoEndedBy: gs.lastRollAutoEndedBy ?? null,
+        ...lastRollForViewer(gs, viewerId),
         pendingRobber: gs.pendingRobber,
         longestRoadOwner,
         largestArmyOwner,

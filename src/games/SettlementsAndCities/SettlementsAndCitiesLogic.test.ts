@@ -307,8 +307,8 @@ describe("Settlements & Cities — a roll that auto-ends the turn stays on scree
 
         // The turn has already moved on to u2 …
         expect(game.currentTurn).toBe("u2");
-        // … but the roll that ended it is still there, tagged as u1's — the
-        // UI reads `lastRollAutoEndedBy` to show it only to u1, not to u2
+        // … but the roll that ended it is still there, tagged as u1's —
+        // gameStateToResponse sends it (and the flag) to u1 alone, not to u2
         // (whose turn it now is) or anyone else.
         expect(gs.lastRoll).toBe(8);
         expect(gs.lastRollDie1).toBe(5);
@@ -364,9 +364,9 @@ describe("Settlements & Cities — auto-ending a turn with nothing left to do", 
         // No dev cards in the deck, no resources left for another build or
         // trade — there's nothing left to decide, so the turn ends for them.
         expect(outcome.turnOver).toBe(true);
-        expect(game.gameState.history[0].text).toBe(
-            "{{u1}} had nothing left to build, buy or trade, so their turn ended automatically",
-        );
+        // Word for word what tapping "End turn" writes: the log must not tell the
+        // table that this player ran out of things they could afford.
+        expect(game.gameState.history[0].text).toBe("{{u1}} ended their turn");
     });
 
     it("leaves the turn open when the player can still trade again", async () => {

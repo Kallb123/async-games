@@ -304,16 +304,15 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     // the next turn (`lastRollAutoEnded`) so it isn't hidden the instant the
     // turn ends itself. It's read off the shared game state rather than the
     // roller's own command response, so an opponent looking in sees the same
-    // dice and the same payout while it's genuinely still live — i.e. before
-    // an auto-end has happened. Once it has, showing it to anyone but the
-    // player it happened to reads as "you already rolled this" for whoever's
-    // turn it now is, so `lastRollAutoEndedBy` narrows it to that one viewer.
+    // dice and the same payout while it's genuinely still live. Once an
+    // auto-end has happened the server keeps the held-over roll, and the flag
+    // explaining it, for that one player — everyone else is sent the state an
+    // ordinary end turn leaves, so there's nothing here to narrow.
     //
     // The payout line is left off entirely when nothing is recorded against the
     // roll: a game whose last roll predates `lastRollChanges` has none, and
     // "Rolled 8" on its own is true where "nobody collected" would not be.
-    const showRoll = gs?.lastRoll !== null
-        && !(gs?.lastRollAutoEnded && gs?.lastRollAutoEndedBy !== myUserId);
+    const showRoll = gs?.lastRoll !== null;
     const rollParts = sacRollChangeParts(gs?.lastRollChanges, (userId) =>
         userId === myUserId ? 'You' : playerName(userId));
     const rollSubline = [
