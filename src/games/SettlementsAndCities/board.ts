@@ -170,10 +170,10 @@ export interface ISACSpecificGameState {
     specialBuildMainPlayer: string | null;
     // Whether this game's numbers were laid out under the balanced-board rule
     // (no two red 6/8 hexes touching). Nothing after creation reads it to
-    // decide a rule — the board is already dealt — but it rides along so the
-    // screens can say which kind of island this is and a rematch can ask for
-    // the same one. Absent on a game created before the option existed, which
-    // readers answer with `?? false`: those boards were dealt at random.
+    // decide a rule — the board is already dealt — but it rides along, and out
+    // to the client, so a rematch link can ask for the same kind of island.
+    // Absent on a game created before the option existed, which readers answer
+    // with `?? false`: those boards were dealt at random.
     balancedSetup?: boolean;
     // Which optional expansions are active for this game (design doc §8).
     expansions: SACExpansions;
@@ -390,7 +390,9 @@ export interface GeneratedBoard {
  */
 const RED_NUMBERS: readonly number[] = [6, 8];
 
-function isRedNumber(token: number | null): boolean {
+/** True for a red number token — what the board draws in red, and what the
+ *  balanced setup below keeps off its own neighbours. */
+export function isRedNumber(token: number | null): boolean {
     return token !== null && RED_NUMBERS.includes(token);
 }
 
@@ -417,11 +419,12 @@ function dealNumberTokens(terrains: SAC_Terrain[]): ISACHex[] {
 }
 
 // How many deals a balanced board will ask for before it plays the last one
-// anyway. Roughly one deal in four already satisfies the rule, so running out
-// is a fantastically unlikely event (0.75^40 ≈ 1 in 100,000) rather than a case
-// worth designing around — the cap is what stops a board shape that *can't*
-// satisfy the rule from looping forever.
-const MAX_BALANCED_DEALS = 40;
+// anyway. Roughly one deal in four already satisfies the rule on this island,
+// so a run this long never happens (0.75^200 is one in 10^25) — the cap is only
+// what stops a board shape that *can't* satisfy the rule from looping forever,
+// and it is set far enough out that the history line promising a balanced board
+// isn't writing a cheque the deal can realistically fail to honour.
+const MAX_BALANCED_DEALS = 200;
 
 /**
  * Lays out an island.
