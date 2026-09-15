@@ -10,9 +10,9 @@ import {
 // fail here: a random deal breaks it about three times in four.
 const SAMPLE_BOARDS = 60;
 
-function boardsWith(randomTiles: boolean) {
-    return Array.from({ length: SAMPLE_BOARDS }, () => generateBoard(randomTiles));
-}
+// Called the way the app calls them: the balanced deal is the bare default.
+const balancedBoards = () => Array.from({ length: SAMPLE_BOARDS }, () => generateBoard());
+const randomBoards = () => Array.from({ length: SAMPLE_BOARDS }, () => generateBoard(true));
 
 describe("hex adjacency", () => {
     it("pairs every neighbour both ways and nobody with themselves", () => {
@@ -40,16 +40,13 @@ describe("hex adjacency", () => {
 
 describe("generateBoard", () => {
     it("deals a balanced board by default — no two red numbers touching", () => {
-        for (const board of boardsWith(false)) {
+        for (const board of balancedBoards()) {
             expect(hasAdjacentRedNumbers(board.hexes)).toBe(false);
         }
-        // And the same with no argument at all, which is what CreateGame's
-        // default and every other caller get.
-        expect(hasAdjacentRedNumbers(generateBoard().hexes)).toBe(false);
     });
 
     it("still deals the same pool of terrain and numbers when balanced", () => {
-        for (const board of boardsWith(false)) {
+        for (const board of balancedBoards()) {
             const numbers = board.hexes.map(h => h.numberToken).filter((n): n is number => n !== null);
             expect([...numbers].sort((a, b) => a - b)).toEqual(
                 [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12],
@@ -62,12 +59,12 @@ describe("generateBoard", () => {
     });
 
     it("shuffles the terrain on a balanced board rather than fixing it", () => {
-        const layouts = new Set(boardsWith(false).map(b => b.hexes.map(h => h.terrain).join(',')));
+        const layouts = new Set(balancedBoards().map(b => b.hexes.map(h => h.terrain).join(',')));
         expect(layouts.size).toBeGreaterThan(1);
     });
 
     it("drops the rule entirely for totally random tiles", () => {
-        const boards = boardsWith(true);
+        const boards = randomBoards();
         expect(boards.some(b => hasAdjacentRedNumbers(b.hexes))).toBe(true);
     });
 });

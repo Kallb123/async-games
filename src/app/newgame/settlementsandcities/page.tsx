@@ -131,7 +131,7 @@ function NewGameSettlementsAndCitiesForm() {
       >
         <OptionToggleRow
           title="Totally random tiles"
-          description="Deal the number tokens with no rules at all. The 6s and 8s can land side by side, which can leave one corner of the map worth far more than the rest — an unbalanced map, and a very swingy game."
+          description="Deal the numbers with no constraint, so the 6s and 8s may touch — one corner of the map can end up worth far more than the rest."
           on={randomTiles}
           onToggle={() => setRandomTiles(v => !v)}
         />
