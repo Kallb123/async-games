@@ -418,9 +418,11 @@ export default function RaceCarsTrackEditor() {
                         </div>
                         <p className="ag-hint">
                             Auto-connect rebuilds each tile&apos;s steps from where the tiles sit, not from row+1 — the way a
-                            sharp corner&apos;s lanes fall back into step. It only connects to the closest tile in the same
-                            lane or one lane over, never skipping a lane, and leaves your hand-drawn exits alone — run it
-                            again after moving tiles and it will redraw only what it drew itself last time.
+                            sharp corner&apos;s lanes fall back into step. For each of the same lane and the two either side of
+                            it, it draws the closest tile ahead in that lane alone — so a wide road&apos;s lane change still
+                            gets drawn even when it sits much farther off than staying in lane — and never skips a lane. It
+                            leaves your hand-drawn exits alone — run it again after moving tiles and it will redraw only what
+                            it drew itself last time.
                         </p>
                     </div>
                 </Section>

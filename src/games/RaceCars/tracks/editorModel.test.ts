@@ -264,9 +264,11 @@ describe("connectByGeometry lines lanes up off the shape, not the row numbers", 
     });
 
     it("redraws its own auto exits on a second pass instead of freezing them", () => {
-        // First pass draws 0:1 -> 2:1 off the gap on row 1. Move 2:1 so it is no
-        // longer reachable and add a real 1:1 in its place — a second pass must
-        // follow the tiles, not keep repeating what it wrote before.
+        // First pass draws 0:1 -> 2:1 off the gap on row 1 (no lane-1 tile
+        // there yet). Add a real 1:1 to close that gap — a second pass must
+        // follow the tiles rather than keep repeating what it wrote before,
+        // and since row+1 now lines up on its own the stale override is
+        // dropped entirely rather than left pointing at the old target.
         let tiles: EditorTile[] = [
             { row: 0, lane: 1, x: 0, y: 0 },
             { row: 0, lane: 2, x: 30, y: 0 },
@@ -275,12 +277,41 @@ describe("connectByGeometry lines lanes up off the shape, not the row numbers", 
             { row: 2, lane: 2, x: 30, y: 40 },
         ];
         tiles = connectByGeometry(tiles);
-        expect(tiles.find(t => t.row === 0 && t.lane === 1)!.autoExits).toBe(true);
+        const firstPass = tiles.find(t => t.row === 0 && t.lane === 1)!;
+        expect(firstPass.autoExits).toBe(true);
+        expect(firstPass.exits!.some(e => e.row === 2 && e.lane === 1)).toBe(true);
 
         tiles = [...tiles, { row: 1, lane: 1, x: 0, y: 20 }];
         tiles = connectByGeometry(tiles);
         const redrawn = tiles.find(t => t.row === 0 && t.lane === 1)!;
-        expect(redrawn.exits).toEqual([{ row: 1, lane: 1 }]);
+        expect(redrawn.exits).toBeUndefined();
+        expect(redrawn.autoExits).toBeUndefined();
+    });
+
+    it("connects a wide road's lane change even when it sits farther off than staying in lane", () => {
+        // The lane-2 tile ahead of 7:3 sits noticeably farther away than the
+        // lane-3 tile ahead of it does — the lane offset a wide road draws —
+        // at close to the ~1.64x ratio that used to fall just outside a single
+        // "close enough to the nearest tile overall" cutoff shared across
+        // lanes, and so dropped the lane change entirely: exactly the bug
+        // report, a three-lane row that only ever connected straight ahead,
+        // never to the lane beside it. 7:2 sits on 7:3's own row and must
+        // never be offered — same row is never a valid step (a car changes
+        // lane while moving, never on the spot).
+        const wide = emptyState({
+            tiles: [
+                { row: 7, lane: 3, x: 390, y: 180 },
+                { row: 8, lane: 3, x: 270, y: 180 },
+                { row: 8, lane: 2, x: 210, y: 100 },
+                { row: 7, lane: 2, x: 320, y: 100 },
+            ],
+        });
+        const connected = connectByGeometry(wide.tiles);
+        const from = connected.find(t => t.row === 7 && t.lane === 3)!;
+        const exits = effectiveExits(connected, from);
+        expect(exits.some(e => e.row === 8 && e.lane === 3)).toBe(true);
+        expect(exits.some(e => e.row === 8 && e.lane === 2)).toBe(true);
+        expect(exits.every(e => e.row !== 7)).toBe(true);
     });
 
     it("never touches a hand-drawn exit, even one that could be redrawn", () => {
