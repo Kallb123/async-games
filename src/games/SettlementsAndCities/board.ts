@@ -129,26 +129,20 @@ export interface ISACSpecificGameState {
     lastRollDie2: number | null;
     // What that roll moved, per player, in turn order — only the players it
     // touched. Cleared with the rest of the last-roll fields when the turn
-    // passes — unless `lastRollAutoEnded` says the turn passed on its own, in
+    // passes — unless `lastRollHeldOver` says the turn passed on its own, in
     // which case they ride into the next turn so the roll stays visible.
     // Absent on a game whose last roll predates the field; readers answer that
     // with `?? []` and simply show no payout, rather than claiming a roll paid
     // nobody.
     lastRollChanges?: ISACRollChange[];
     // Set by `SACEndTurn` when the main turn it ends had nothing left to build,
-    // buy or trade, naming the player it happened to. The dice and payout above
-    // are then left in place rather than cleared, so the roll isn't hidden in the
-    // same instant the turn goes, and the UI reads the flag to add the "no
-    // actions were possible" note. Both reset as soon as the next roll lands
-    // (`SACRollDice`), so neither outlives the roll it explains.
-    //
-    // Deliberately derived from the hand the turn ended on rather than from what
-    // ended it: a turn `sacFinishTurn` ended for its player and one they tapped
-    // "End turn" on leave identical state, so there is no "that was automatic"
-    // bit to find. Only the named player is sent any of it either way — see
-    // `hideAutoEndedRoll` in gameStateToResponse.
-    lastRollAutoEnded: boolean;
-    lastRollAutoEndedBy: string | null;
+    // buy or trade, naming the player it ended for. The dice and payout above are
+    // then left in place rather than cleared, so the roll isn't hidden in the
+    // same instant the turn goes. Both reset as soon as the next roll lands
+    // (`SACRollDice`), so neither outlives the roll it belongs to, and only the
+    // named player is sent either — see `hideHeldOverRoll` in gameStateToResponse.
+    lastRollHeldOver: boolean;
+    lastRollHeldOverFor: string | null;
     pendingRobber: boolean;
     longestRoadOwner: string | null;
     largestArmyOwner: string | null;

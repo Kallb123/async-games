@@ -1,23 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { buildTimeline } from "@/utils/games/replay";
 import type { ITurnSnapshot } from "@/utils/games/replay";
-import { SACRollDice, SACEndTurn, SettlementsAndCitiesGameType } from "./SettlementsAndCitiesLogic";
-import { makeState, player } from "./testFixtures";
+import { runCommand } from "@/utils/games/commandPipeline";
+import type { IGameData } from "@/utils/mongodb/GameData";
+import { SACEndTurn, SettlementsAndCitiesGameType } from "./SettlementsAndCitiesLogic";
+import { cmd, makeGame, makeState, player, rollOf } from "./testFixtures";
 import { BOARD_TOPOLOGY } from "./board";
 import type { ISACPlayerState, ISACSpecificGameState } from "./board";
 import type { ISACSpecificGameStateResponse } from "./apiModels";
-import type { ISettlementsAndCitiesGameData } from "./SettlementsAndCitiesModels";
+import { resolveTokens } from "@/utils/games/history";
 
 // A turn that ends because its player can afford nothing is a statement about
 // their hand: it says they can't buy a road and hold under four of every
 // resource. So it has to be indistinguishable, to everybody else, from a turn
 // its player chose to end — and the match-review timeline is the strictest test
-// of that, because it hands an opponent a snapshot per command played.
+// of that, because it hands an opponent a snapshot per command played, each
+// carrying the log as it stood, the command that produced it, and every id and
+// timestamp on both.
 //
 // The two games below differ in one thing only: whether u1 holds four ore. With
 // it, u1 rolls and taps "End turn"; without it, the roll leaves them nothing to
-// do and the game ends the turn for them. Every byte u2 can see of the two
-// replays has to match.
+// do and the game sends the end turn for them.
 const NAMES = { u1: "Alice", u2: "Bob" };
 
 function boardWithOneForest(u1: ISACPlayerState): ISACSpecificGameState {
@@ -35,105 +38,160 @@ function boardWithOneForest(u1: ISACPlayerState): ISACSpecificGameState {
     return gs;
 }
 
-// commandHistory holds commands as they were persisted — plain JSON, not live
-// instances — which is also what keeps this honest: a follow-up the game
-// generates is never recorded, so the auto-ended game's history is the roll and
-// nothing else.
-function persisted(command: object): unknown {
-    return JSON.parse(JSON.stringify(command));
+// u1 collects one lumber from the 8 and holds nothing else: no build is
+// affordable, no dev card, and one lumber is short of even a 4:1 trade.
+const brokeAfterTheRoll = () => player();
+// The same roll, but u1 can still trade four ore for anything they like.
+const canStillTrade = () => player({ resources: { ore: 4 } });
+
+/**
+ * Plays u1's turn for real — through the same pipeline the command route uses —
+ * and returns the game it left behind, commandHistory and all. Deliberately not
+ * a hand-written command list: what gets *recorded* is half of what this file is
+ * testing, and a fixture that assumes it would hide a difference rather than
+ * catch one.
+ */
+async function playTurn(u1: ISACPlayerState, alsoTapEndTurn: boolean) {
+    const game = makeGame(boardWithOneForest(u1));
+    const gameType = new SettlementsAndCitiesGameType();
+    await runCommand(game as unknown as IGameData, gameType, rollOf(5, 3));
+    if (alsoTapEndTurn) {
+        await runCommand(game as unknown as IGameData, gameType, cmd(new SACEndTurn()));
+    }
+    return game;
 }
 
-function rollOf5And3(): unknown {
-    const roll = new SACRollDice();
-    roll.senderId = "u1";
-    roll.senderUsername = "Alice";
-    roll.recordedRoll1 = 5;
-    roll.recordedRoll2 = 3;
-    return persisted(roll);
-}
-
-function endTurn(): unknown {
-    const end = new SACEndTurn();
-    end.senderId = "u1";
-    end.senderUsername = "Alice";
-    return persisted(end);
-}
-
-function gameOf(gs: ISACSpecificGameState, commandHistory: unknown[]): ISettlementsAndCitiesGameData {
-    return {
-        gameId: "11111111-1111-1111-1111-111111111111",
-        gameType: new SettlementsAndCitiesGameType(),
-        userIdList: ["u1", "u2"],
-        turnTimer: "1d",
-        currentTurn: "u2",
-        lastTurnTimestamp: "2026-01-01T00:00:00.000Z",
-        gameState: { turnOrder: ["u1", "u2"], history: [], commandHistory },
-        complete: false,
-        winner: "",
-        specificGameState: gs,
-        initialSpecificGameState: gs,
-    } as unknown as ISettlementsAndCitiesGameData;
-}
-
-/** Everything a snapshot shows about who is on and what has happened. */
-function visible(snapshots: ITurnSnapshot[]) {
-    return snapshots.map(snapshot => {
-        const state = snapshot.specificGameState as ISACSpecificGameStateResponse;
-        return {
-            currentTurn: snapshot.currentTurn,
-            summary: snapshot.command?.summary ?? null,
-            history: snapshot.history.map(entry => entry.text),
-            hasRolled: state.hasRolled,
-            lastRoll: state.lastRoll,
-            lastRollAutoEnded: state.lastRollAutoEnded,
-        };
-    });
+async function replayFor(u1: ISACPlayerState, alsoTapEndTurn: boolean, viewerId: string) {
+    const played = await playTurn(u1, alsoTapEndTurn);
+    return (await buildTimeline(played, NAMES, [], undefined, viewerId)).snapshots;
 }
 
 describe("Settlements & Cities — a turn the game ends for you", () => {
-    async function timelineFor(u1: ISACPlayerState, commandHistory: unknown[], viewerId: string) {
-        const timeline = await buildTimeline(gameOf(boardWithOneForest(u1), commandHistory), NAMES, [], undefined, viewerId);
-        return timeline.snapshots;
-    }
+    it("records it as an ordinary end turn, so replay reads it back rather than repeating it", async () => {
+        const automatic = await playTurn(brokeAfterTheRoll(), false);
+        const chosen = await playTurn(canStillTrade(), true);
 
-    // u1 collects one lumber from the 8 and holds nothing else: no build is
-    // affordable, no dev card, and one lumber is short of even a 4:1 trade.
-    const brokeAfterTheRoll = () => player();
-    // The same roll, but u1 can still trade four ore for anything they like.
-    const canStillTrade = () => player({ resources: { ore: 4 } });
+        const classNames = (game: typeof automatic) =>
+            game.gameState.commandHistory.map(c => (c as { className: string }).className);
+        expect(classNames(automatic)).toEqual(["SACRollDice", "SACEndTurn"]);
+        expect(classNames(automatic)).toEqual(classNames(chosen));
 
-    it("replays to an opponent exactly like a turn its player chose to end", async () => {
-        const automatic = await timelineFor(brokeAfterTheRoll(), [rollOf5And3()], "u2");
-        const chosen = await timelineFor(canStillTrade(), [rollOf5And3(), endTurn()], "u2");
+        // Its own id and timestamp, not the roll's. Sharing either would put the
+        // same commandId (and the same createdAt) on both history lines, which is
+        // an exact test for a turn that ended itself — and the log is public.
+        const lines = automatic.gameState.history;
+        expect(lines.map(line => line.text)).toEqual([
+            "{{u1}} ended their turn",
+            "{{u1}} rolled a 8 — {{u1}} +1🪵",
+        ]);
+        expect(lines[0].commandId).not.toBe(lines[1].commandId);
+    });
 
-        // Two steps either way — the roll, then the hand-off — with the same
-        // summaries, the same log and the same dice on screen at each point.
-        // An auto-end that rode on the roll command would show as a single step
-        // whose currentTurn had already moved on, which is the whole giveaway.
-        expect(visible(automatic)).toEqual(visible(chosen));
-        expect(visible(automatic).map(step => step.summary)).toEqual([
+    it("replays to an opponent byte for byte like a turn its player chose to end", async () => {
+        const automatic = await replayFor(brokeAfterTheRoll(), false, "u2");
+        const chosen = await replayFor(canStillTrade(), true, "u2");
+
+        // Two steps either way — the roll, then the hand-off. An ending folded
+        // into the roll command would replay as one step whose currentTurn had
+        // already moved on, which is the giveaway.
+        expect(automatic.map(step => step.command?.summary ?? null)).toEqual([
             null,
             "rolled a 8 — Alice +1🪵",
             "ended their turn",
         ]);
+        expect(scrubbed(comparable(automatic))).toEqual(scrubbed(comparable(chosen)));
     });
 
-    it("still holds the roll on screen for the player it happened to", async () => {
-        const automatic = await timelineFor(brokeAfterTheRoll(), [rollOf5And3()], "u1");
+    it("doesn't replay twice where the Special Build phase would let it", async () => {
+        // The one shape that hides a double-apply: with the 5-6 extension on, the
+        // end turn opens a Special Build phase in which a *second* end turn is
+        // perfectly legal. A replay that regenerated the follow-up as well as
+        // reading the recorded one would close Bob's special build for him, put
+        // a "finished their special build" line in the log that never happened,
+        // and leave the rest of the replay a seat ahead of the real game.
+        const state = boardWithOneForest(brokeAfterTheRoll());
+        state.expansions = { ...state.expansions, fiveSixPlayerExtension: true };
+        const game = makeGame(state);
+        await runCommand(game as unknown as IGameData, new SettlementsAndCitiesGameType(), rollOf(5, 3));
+
+        const live = game.gameState.history.map(line => resolveTokens(line.text, NAMES));
+        const replayed = (await buildTimeline(game, NAMES, [], undefined, "u2")).snapshots;
+
+        expect(replayed[replayed.length - 1].history.map(line => line.text)).toEqual(live);
+        expect(replayed[replayed.length - 1].currentTurn).toBe(game.currentTurn);
+        expect(replayed.map(step => step.command?.summary ?? null))
+            .toEqual([null, "rolled a 8 — Alice +1🪵", "ended their turn"]);
+    });
+
+    it("still holds the roll on screen for the player the turn ended for", async () => {
+        const automatic = await replayFor(brokeAfterTheRoll(), false, "u1");
         const final = automatic[automatic.length - 1].specificGameState as ISACSpecificGameStateResponse;
 
         expect(final.lastRoll).toBe(8);
-        expect(final.lastRollAutoEnded).toBe(true);
+        expect(final.lastRollHeldOver).toBe(true);
     });
 
     it("holds it for a player who taps End turn with nothing left to do, too", async () => {
-        // The held-over roll is derived from the hand the turn ended on, not from
-        // what ended it — so there is no "this one was automatic" bit anywhere in
-        // the state for an opponent to find.
-        const chosen = await timelineFor(brokeAfterTheRoll(), [rollOf5And3(), endTurn()], "u1");
+        // Held over because of the hand the turn ended on, not because of what
+        // ended it — so there is no "that one was automatic" bit in the state
+        // either, for an opponent to find.
+        const chosen = await replayFor(brokeAfterTheRoll(), true, "u1");
         const final = chosen[chosen.length - 1].specificGameState as ISACSpecificGameStateResponse;
 
         expect(final.lastRoll).toBe(8);
-        expect(final.lastRollAutoEnded).toBe(true);
+        expect(final.lastRollHeldOver).toBe(true);
     });
 });
+
+/**
+ * Everything a snapshot says about how the turn went, which is everything except
+ * the hands: those differ between the two games by construction (four ore is the
+ * only difference between them), and hand sizes are public anyway.
+ *
+ * History entries and command metadata go in whole rather than picked over. The
+ * tell this is guarding against lives in exactly the fields a summary would drop:
+ * two log lines carrying the same commandId, or the same createdAt to the
+ * millisecond, say "one command wrote both of these" — and only an ending the
+ * game sent does that.
+ */
+function comparable(snapshots: ITurnSnapshot[]) {
+    return snapshots.map(snapshot => {
+        const state = snapshot.specificGameState as ISACSpecificGameStateResponse;
+        return {
+            index: snapshot.index,
+            currentTurn: snapshot.currentTurn,
+            complete: snapshot.complete,
+            winner: snapshot.winner,
+            planned: snapshot.planned,
+            history: snapshot.history,
+            command: snapshot.command,
+            roll: {
+                hasRolled: state.hasRolled,
+                lastRoll: state.lastRoll,
+                lastRollDie1: state.lastRollDie1,
+                lastRollDie2: state.lastRollDie2,
+                lastRollChanges: state.lastRollChanges,
+                lastRollHeldOver: state.lastRollHeldOver,
+            },
+        };
+    });
+}
+
+/**
+ * The above as JSON, with every id and timestamp replaced by a marker
+ * that says *which* id or timestamp it was. Two ids that were equal stay equal
+ * and two that differed stay different, so the comparison keeps the correlations
+ * an opponent could actually exploit while dropping the values, which are random
+ * per run.
+ */
+function scrubbed(snapshots: unknown): string {
+    const seen = new Map<string, string>();
+    const marker = (value: string) => {
+        if (!seen.has(value)) seen.set(value, `<${seen.size}>`);
+        return seen.get(value)!;
+    };
+    return JSON.stringify(snapshots).replace(
+        /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\d{4}-\d{2}-\d{2}T[\d:.]+Z/g,
+        marker,
+    );
+}

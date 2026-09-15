@@ -118,8 +118,8 @@ describe("Settlements & Cities' auto-ended turn on the wire", () => {
             lastRollDie1: 5,
             lastRollDie2: 3,
             lastRollChanges: [gain("u1", { lumber: 1 })],
-            lastRollAutoEnded: true,
-            lastRollAutoEndedBy: "u1",
+            lastRollHeldOver: true,
+            lastRollHeldOverFor: "u1",
             playerStates: new Map([["u1", player()], ["u2", player()]]),
         });
     }
@@ -131,7 +131,7 @@ describe("Settlements & Cities' auto-ended turn on the wire", () => {
         expect(wire.lastRollDie1).toBe(5);
         expect(wire.lastRollDie2).toBe(3);
         expect(wire.lastRollChanges).toHaveLength(1);
-        expect(wire.lastRollAutoEnded).toBe(true);
+        expect(wire.lastRollHeldOver).toBe(true);
     });
 
     it.each([["an opponent", "u2"], ["a spectator", null]] as const)(
@@ -143,7 +143,7 @@ describe("Settlements & Cities' auto-ended turn on the wire", () => {
             expect(wire.lastRollDie1).toBeNull();
             expect(wire.lastRollDie2).toBeNull();
             expect(wire.lastRollChanges).toEqual([]);
-            expect(wire.lastRollAutoEnded).toBe(false);
+            expect(wire.lastRollHeldOver).toBe(false);
         },
     );
 
@@ -152,7 +152,7 @@ describe("Settlements & Cities' auto-ended turn on the wire", () => {
         // "not the owner" — matching a null owner against a null viewer would
         // hand the roll to a reaction feed every player can read.
         const state = autoEndedState();
-        state.lastRollAutoEndedBy = null;
+        state.lastRollHeldOverFor = null;
 
         expect(gameStateToResponse(state, NAMES, null).lastRoll).toBeNull();
     });

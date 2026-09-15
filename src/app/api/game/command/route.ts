@@ -10,7 +10,7 @@ import { IGameData, IGameDataDocument, trySave } from '@/utils/mongodb/GameData'
 import { requireLiveGame } from '@/utils/games/liveGame';
 import { isCommandForGameType } from '@/utils/games/gameCommands';
 import { finishGame } from '@/utils/games/finishGame';
-import { runCommandChain } from '@/utils/games/commandPipeline';
+import { runCommand } from '@/utils/games/commandPipeline';
 import { deserializeJSON } from '@/utils/apiModels/Serialisable';
 import { IGameDataResponse } from '@/utils/apiModels/GameDataApi';
 import { attachHistoryReactions } from '@/utils/games/historyReactions';
@@ -156,7 +156,7 @@ export async function POST(request: NextRequest) {
 
   // Checks whether the turn should be progressed and actions it if so
   const gameType: IGameType = deserializeJSON(JSON.stringify(gameData.gameType));
-  const { outcome: commandOutcome, gameOver } = await runCommandChain(gameData, gameType, commandRequest);
+  const { outcome: commandOutcome, gameOver } = await runCommand(gameData, gameType, commandRequest);
   if (!commandOutcome.validMove) {
     return NextResponse.json({}, {status: 401, statusText: "Not a valid move"});
   }

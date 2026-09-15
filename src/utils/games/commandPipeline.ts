@@ -1,8 +1,25 @@
 import { IGameData } from "../mongodb/GameData";
 import { ICommandOutcome, IGameCommand, IGameType } from "../apiModels/gameCommand";
 
-/** A guard on runCommandChain, not a limit anyone is expected to reach. */
-const MAX_FOLLOW_UP_COMMANDS = 8;
+export interface RunCommandOptions {
+    /**
+     * Called once per command actually *applied* — the given one, then any
+     * follow-up — after that command's own `CheckEndTurn`. A caller that records
+     * a step per command (`buildTimeline`) uses this so a follow-up gets a step
+     * of its own rather than being folded into its trigger's.
+     */
+    onStep?: (applied: IGameCommand, appliedOutcome: ICommandOutcome) => void;
+    /**
+     * Last word on the follow-up a game asked for: return it, return the command
+     * to run in its place, or return null to run none.
+     *
+     * Only a replay needs this. A follow-up is recorded on `commandHistory` like
+     * any other command, so the list `buildTimeline` is walking already holds the
+     * one that really ran — with the id and timestamp that stamped its history
+     * line. Regenerating it would apply the same command twice.
+     */
+    resolveFollowUp?: (generated: IGameCommand) => IGameCommand | null;
+}
 
 /** What running one command against a game turned out to mean. */
 export interface RunCommandResult {
@@ -14,7 +31,19 @@ export interface RunCommandResult {
 /**
  * Runs one command against `gameData`: `Execute` it, and — only for a valid
  * move — record it on `commandHistory`, then let the game type decide whether
- * the game just ended or whose turn it is now.
+ * the game just ended or whose turn it is now. Then the same again for any
+ * `followUpCommand` the outcome named (see `ICommandOutcome`), which is why
+ * `onStep` exists: a caller that records a move per command (`buildTimeline`)
+ * gets one call per command actually applied, not per command handed in.
+ *
+ * A follow-up is recorded exactly like the command that asked for it, so a
+ * replay reads it back off `commandHistory` rather than minting a second copy —
+ * which is what `resolveFollowUp` is for.
+ *
+ * The returned outcome is the one the *given* command produced, minus the
+ * follow-up it has now spent, with `turnOver`/`timerRestarts` widened to
+ * whatever the whole run did — a caller deciding whether to restart the timer
+ * or push "your move" cares that the turn passed, not which command passed it.
  *
  * This is the one pipeline every command goes through, whichever of three
  * places is driving it: a live player's request (`POST /api/game/command`), a
@@ -28,7 +57,9 @@ export async function runCommand(
     gameData: IGameData,
     gameType: IGameType,
     command: IGameCommand,
+    options: RunCommandOptions = {},
 ): Promise<RunCommandResult> {
+    const { onStep, resolveFollowUp } = options;
     const historyCountBefore = gameData.gameState.history.length;
     const outcome = await command.Execute(gameData);
     if (!outcome.validMove) {
@@ -60,60 +91,34 @@ export async function runCommand(
 
     gameData.gameState.commandHistory.push(command);
 
-    if (gameType.CheckGameOver(gameData)) {
-        return { outcome, gameOver: true };
+    const gameOver = gameType.CheckGameOver(gameData);
+    if (!gameOver) {
+        gameType.CheckEndTurn(gameData, outcome);
     }
 
-    gameType.CheckEndTurn(gameData, outcome);
-    return { outcome, gameOver: false };
+    // `followUpCommand` is spent here and never handed on: it has been dealt
+    // with, and a caller passing the outcome further (the route sends it to the
+    // client, buildTimeline hands it to the recap adapters) has no use for a
+    // command object on it.
+    const { followUpCommand, ...spent } = outcome;
+    onStep?.(command, spent);
+    if (!followUpCommand || gameOver) return { outcome: spent, gameOver };
+
+    const toRun = resolveFollowUp ? resolveFollowUp(followUpCommand) : followUpCommand;
+    if (!toRun) return { outcome: spent, gameOver };
+
+    const follow = await runCommand(gameData, gameType, toRun, options);
+    // A follow-up the game generated from its own state should never be refused.
+    // If one is, the command that asked for it still stands — it was recorded and
+    // its effects are real — so stop rather than pretend the rest happened.
+    if (!follow.outcome.validMove) return { outcome: spent, gameOver };
+
+    return {
+        outcome: {
+            ...spent,
+            turnOver: spent.turnOver || follow.outcome.turnOver,
+            timerRestarts: spent.timerRestarts || follow.outcome.timerRestarts,
+        },
+        gameOver: follow.gameOver,
+    };
 }
-
-/**
- * `runCommand`, plus any follow-up command the outcome asks for (see
- * `ICommandOutcome.followUpCommand`) — each run through the same pipeline, in
- * order, until one of them stops asking for another or the game ends.
- *
- * `onStep` is called once per command actually applied, after its own run, so a
- * caller that snapshots per command (`buildTimeline`) records the follow-up as
- * its own step rather than folding it into the trigger's. That is what keeps a
- * turn the game ended for a player indistinguishable from one they ended
- * themselves: two steps either way.
- *
- * The returned outcome is the *trigger's*, with `turnOver`/`timerRestarts`
- * widened to whatever the chain as a whole did — a caller deciding whether to
- * restart the timer or push "your move" cares that the turn passed, not which
- * link passed it. `followUpCommand` is stripped off it, having been run.
- */
-export async function runCommandChain(
-    gameData: IGameData,
-    gameType: IGameType,
-    command: IGameCommand,
-    onStep?: (command: IGameCommand, outcome: ICommandOutcome) => void,
-): Promise<RunCommandResult> {
-    const first = await runCommand(gameData, gameType, command);
-    if (!first.outcome.validMove) return first;
-    onStep?.(command, first.outcome);
-
-    const outcome: ICommandOutcome = { ...first.outcome };
-    delete outcome.followUpCommand;
-    let gameOver = first.gameOver;
-
-    // Today the only follow-up any game asks for is an end turn, which asks for
-    // nothing further.
-    let next = gameOver ? undefined : first.outcome.followUpCommand;
-    for (let i = 0; next && i < MAX_FOLLOW_UP_COMMANDS; i++) {
-        const step = await runCommand(gameData, gameType, next);
-        // A follow-up the game itself generated should never be refused, but if
-        // one is, the trigger still stands: it was recorded and its effects are
-        // real. Stop the chain rather than pretending the rest of it happened.
-        if (!step.outcome.validMove) break;
-        onStep?.(next, step.outcome);
-        outcome.turnOver = outcome.turnOver || step.outcome.turnOver;
-        if (step.outcome.timerRestarts) outcome.timerRestarts = true;
-        gameOver = step.gameOver;
-        next = gameOver ? undefined : step.outcome.followUpCommand;
-    }
-
-    return { outcome, gameOver };
-}
-

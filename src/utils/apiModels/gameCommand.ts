@@ -27,18 +27,19 @@ export interface ICommandOutcome {
     timerRestarts?: boolean,
     /**
      * A command the game wants run straight after this one, exactly as if the
-     * player had sent it themselves — `runCommandChain` executes it through the
-     * same pipeline, and it is *not* recorded on `commandHistory`.
+     * player had sent it themselves. `runCommand` puts it through the whole
+     * pipeline — its own id and timestamp, its own history line, `CheckGameOver`,
+     * `CheckEndTurn`, its own entry on `commandHistory` and its own step in a
+     * replay — so it is an ordinary command in every way, which is the point: it
+     * stays indistinguishable from the same command sent by hand. Settlements &
+     * Cities ends a turn this way when its player can no longer afford anything
+     * (see `sacFinishTurn`), and telling the table *that* is telling them what
+     * that player holds.
      *
-     * That last part is the point. It exists so a game can end a turn on the
-     * player's behalf without the ending being a distinguishable event:
-     * Settlements & Cities passes back an ordinary `SACEndTurn` when a roll or
-     * trade leaves its player unable to afford anything, so the log line, the
-     * push notification and the match-review timeline all read exactly as they
-     * do when that player taps "End turn". A follow-up must therefore be a
-     * *deterministic* function of the state the triggering command left behind:
-     * replaying the trigger regenerates it, which is why there is nothing to
-     * record — and why a recorded one would replay twice.
+     * Because it is recorded, a replay reads the one that really ran instead of
+     * minting another — `RunCommandOptions.resolveFollowUp` is how `buildTimeline`
+     * says so. Generate it fresh each time the trigger runs and leave the
+     * recorded-versus-regenerated choice to that.
      */
     followUpCommand?: IGameCommand
 }

@@ -567,22 +567,20 @@ regardless of game:
 14. return { outcome, gameData: CreateDataResponse() }
 ```
 
-Steps 5–10 are `runCommandChain` in `src/utils/games/commandPipeline.ts`, shared
-with the replay engine and the turn-timer cron so all three run a move the same
-way. Step 10 is how a game acts on the player's behalf: an outcome can name a
-`followUpCommand`, which runs immediately as if the player had sent it. It is
-**not** recorded on `commandHistory` — a follow-up must be a deterministic
-function of the state its trigger left behind, so replaying the trigger
-regenerates it (recording one would replay it twice).
+Steps 5–10 are `runCommand` in `src/utils/games/commandPipeline.ts`, shared with
+the replay engine and the turn-timer cron so all three run a move the same way.
+Step 10 is how a game acts on the player's behalf: an outcome can name a
+`followUpCommand`, which runs immediately as if the player had sent it — its own
+id, its own history line, its own entry on `commandHistory`, its own step in a
+replay. Because it is recorded, `buildTimeline` replays the one that really ran
+rather than regenerating it (`RunCommandOptions.resolveFollowUp`).
 
-The point of doing it that way rather than folding the effect into the trigger is
-that the follow-up stays an ordinary command: it writes the history line it
-always writes, and the replay engine snapshots it as its own step. Settlements &
-Cities uses it to end a turn whose player can no longer afford anything, which
-must be indistinguishable from that player tapping "End turn" — an auto-end that
-rode on the roll command would show up in every opponent's match review as a
-single step whose `currentTurn` had already moved on, which says plainly that the
-roller was left with nothing.
+The point of a command rather than an effect folded into the trigger is that it
+stays indistinguishable from the same command sent by hand. Settlements & Cities
+uses it to end a turn whose player can no longer afford anything, which must look
+exactly like that player tapping "End turn" — otherwise every opponent's match
+review shows the turn ending on the roll command itself, which says plainly that
+the roller was left with nothing.
 
 The route checks the deserialised command against `COMMANDS_BY_GAME_TYPE` in
 `src/utils/games/gameCommands.ts` before executing it: every `Execute` casts the

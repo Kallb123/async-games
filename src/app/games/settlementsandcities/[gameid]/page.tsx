@@ -299,10 +299,11 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
 
     // ── This turn's roll ─────────────────────────────────────────────────────
     // The dice and what they paid, as a panel under the board. `lastRoll` is
-    // cleared when the turn passes — unless the roll auto-ended the turn, in
-    // which case it rides into the next one so it isn't hidden the instant it
-    // happens. Which viewer is allowed to see any of that is decided on the
-    // server (gameStateToResponse), so there's nothing to check for here.
+    // cleared when the turn passes — unless the turn ended with nothing its
+    // player could have done, in which case it rides into the next one rather
+    // than vanishing in the same instant. Which viewer is allowed to see that is
+    // decided on the server (gameStateToResponse), so there's nothing to check
+    // for here.
     //
     // The payout line is left off entirely when nothing is recorded against the
     // roll: a game whose last roll predates `lastRollChanges` has none, and
@@ -313,7 +314,10 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
         gs?.lastRoll === 7
             ? ['the robber is on the move', ...rollParts].join(' · ')
             : rollParts.join(', '),
-        gs?.lastRollAutoEnded ? 'no actions were possible, so the turn ended automatically' : null,
+        // True of a turn the game ended and one its player tapped End turn on —
+        // the roll is held over for the same reason either way, and saying
+        // "ended automatically" would be wrong for half of them.
+        gs?.lastRollHeldOver ? 'there was nothing left to build, buy or trade' : null,
     ].filter(Boolean).join(' · ');
 
     // ── Your hand ────────────────────────────────────────────────────────────

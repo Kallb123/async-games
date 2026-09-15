@@ -79,12 +79,12 @@ export interface ISACSpecificGameStateResponse {
     // nothing to re-declare: the state's own shape goes straight out. Undefined
     // for a game whose last roll predates the field.
     lastRollChanges?: ISACRollChange[];
-    // True when the roll above ended the turn on its own — nothing left to build,
-    // buy or trade — rather than the player tapping "End turn", so the board can
-    // note why. Only ever true for the one player it happened to; everyone else
-    // gets `false` and no roll at all, and the state's record of *who* it was
-    // never leaves the server (see `hideAutoEndedRoll` in gameStateToResponse).
-    lastRollAutoEnded: boolean;
+    // True when the roll above is being held past the end of its turn, because
+    // its player had nothing left to build, buy or trade — the board notes as
+    // much beside the dice. Only ever true for that one player; everyone else
+    // gets `false` and no roll at all (see `hideHeldOverRoll` in
+    // gameStateToResponse), and the state's record of who it was stays server-side.
+    lastRollHeldOver: boolean;
     pendingRobber: boolean;
     // Bonus holders, as stable Clerk userIds (resolve a name via playerStates).
     longestRoadOwner: string | null;

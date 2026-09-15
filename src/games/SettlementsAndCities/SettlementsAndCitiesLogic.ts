@@ -214,21 +214,21 @@ function sacFinishTurn(sacData: ISettlementsAndCitiesGameData, userId: string, t
     if (!gs.specialBuildActive && !gs.hasRolled) return outcome;
     const ps = gs.playerStates.get(userId);
     if (!ps || sacHasAnyAction(gs, userId, ps)) return outcome;
-    // The ending itself is an ordinary SACEndTurn, run straight after this
-    // command by runCommandChain — not a turnOver flag on the command that
-    // happened to be in flight. That is what makes it invisible: the log line,
-    // the push notification built from it and the step the match-review
-    // timeline draws are the ones a tapped "End turn" produces, because they
-    // are produced by the same command. A turn ending because its player can
-    // afford nothing would otherwise say so — it says they can't buy a road
-    // and hold under four of every resource — to everyone at the table.
+    // The ending itself is an ordinary SACEndTurn, run and recorded straight
+    // after this command (see ICommandOutcome.followUpCommand) — not a turnOver
+    // flag on whatever command was in flight. That is what makes it invisible:
+    // the log line, the push notification built from it and the step the
+    // match-review timeline draws are the ones a tapped "End turn" produces,
+    // because the same command produces them. A turn ending because its player
+    // can afford nothing would otherwise announce it — and it says they can't
+    // buy a road and hold under four of every resource.
     //
-    // It carries the trigger's own id and timestamp rather than fresh ones:
-    // buildTimeline regenerates this command on every replay (nothing records
-    // it), and those two are what stamp the history line it writes.
+    // It keeps the fresh id and timestamp of its own that every command is born
+    // with, and takes only the trigger's game and sender. Copying the trigger's
+    // would be the giveaway all over again: the two history lines are stamped
+    // with the command that wrote them, so a shared commandId (or a createdAt
+    // equal to the millisecond) is an exact test for "that turn ended itself".
     const endTurn = new SACEndTurn();
-    endTurn.id = trigger.id;
-    endTurn.timestamp = trigger.timestamp;
     endTurn.gameId = trigger.gameId;
     endTurn.senderId = userId;
     endTurn.senderUsername = trigger.senderUsername;
@@ -238,13 +238,13 @@ function sacFinishTurn(sacData: ISettlementsAndCitiesGameData, userId: string, t
 
 // Ends a regular main turn: reset per-turn flags, promote freshly-bought dev
 // cards to playable, and pass the dice to the next seat in turn order. When
-// `lastRollAutoEnded` is set the turn ended on its own rather than a player
+// `lastRollHeldOver` is set the turn ended on its own rather than a player
 // tapping "End turn", so the roll that caused it is left in place — cleared,
 // like the flag itself, only once the next roll lands and overwrites both.
 function sacAdvanceMainTurn(sacData: ISettlementsAndCitiesGameData): void {
     const gs = sacData.specificGameState;
     gs.hasRolled = false;
-    if (!gs.lastRollAutoEnded) {
+    if (!gs.lastRollHeldOver) {
         gs.lastRoll = null;
         gs.lastRollDie1 = null;
         gs.lastRollDie2 = null;
@@ -568,8 +568,8 @@ export class SACRollDice implements IGameCommand {
         gs.lastRollDie2 = die2;
         // This roll's own outcome decides whether the note belongs — never the
         // stale flag (or stale owner) from whatever ended the previous turn.
-        gs.lastRollAutoEnded = false;
-        gs.lastRollAutoEndedBy = null;
+        gs.lastRollHeldOver = false;
+        gs.lastRollHeldOverFor = null;
 
         // What this roll moved, per player, built up as it resolves and then
         // parked on the state: the board screen, the turn recap and the history
@@ -1121,8 +1121,8 @@ export class SACEndTurn implements IGameCommand {
         // byte-identical state — there is no "this one was automatic" to leak.
         const ps = gs.playerStates.get(this.senderId);
         if (!gs.specialBuildActive && ps && !sacHasAnyAction(gs, this.senderId, ps)) {
-            gs.lastRollAutoEnded = true;
-            gs.lastRollAutoEndedBy = this.senderId;
+            gs.lastRollHeldOver = true;
+            gs.lastRollHeldOverFor = this.senderId;
         }
         sacData.gameState.history.unshift(playerHistory(
             this.senderId,

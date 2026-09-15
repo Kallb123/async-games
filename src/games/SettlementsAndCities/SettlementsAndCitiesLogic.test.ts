@@ -12,35 +12,14 @@ import {
     SACMaritimeTrade,
 } from "./SettlementsAndCitiesLogic";
 import * as SACLogic from "./SettlementsAndCitiesLogic";
-import { makeState, player } from "./testFixtures";
+import { cmd, makeGame, makeState, player, rollOf } from "./testFixtures";
 import { BOARD_TOPOLOGY, NO_RESOURCES } from "./board";
 import type { ISACSpecificGameState, ISACPlayerState, SAC_DevCard } from "./board";
 import type { ISettlementsAndCitiesGameData } from "./SettlementsAndCitiesModels";
 import type { IGameData } from "@/utils/mongodb/GameData";
 import type { IGameCommand } from "@/utils/apiModels/GameLogic";
 import { resolveTokens } from "@/utils/games/history";
-import { runCommandChain } from "@/utils/games/commandPipeline";
-
-// ─── Minimal in-memory game harness ───────────────────────────────────────────
-// The dev-card commands only touch playerStates + a handful of scalar flags, so
-// we build a bare main-phase state rather than a full board.
-
-function makeGame(gs: ISACSpecificGameState, currentTurn = "u1"): ISettlementsAndCitiesGameData {
-    return {
-        currentTurn,
-        userIdList: ["u1", "u2"],
-        gameState: { turnOrder: ["u1", "u2"], history: [], commandHistory: [] },
-        specificGameState: gs,
-        complete: false,
-        winner: "",
-    } as unknown as ISettlementsAndCitiesGameData;
-}
-
-function cmd<T extends { senderId: string; senderUsername: string }>(c: T, sender = "u1"): T {
-    c.senderId = sender;
-    c.senderUsername = sender === "u1" ? "Alice" : "Bob";
-    return c;
-}
+import { runCommand } from "@/utils/games/commandPipeline";
 
 // The real pipeline, for the tests that care about a turn passing: Execute, then
 // any follow-up command the outcome asks for, then the game type's end-of-turn
@@ -48,7 +27,7 @@ function cmd<T extends { senderId: string; senderUsername: string }>(c: T, sende
 // than a flag on whatever command was in flight, so calling Execute() alone no
 // longer ends anything.
 function run(game: ISettlementsAndCitiesGameData, command: IGameCommand) {
-    return runCommandChain(game as unknown as IGameData, new SettlementsAndCitiesGameType(), command);
+    return runCommand(game as unknown as IGameData, new SettlementsAndCitiesGameType(), command);
 }
 
 describe("Settlements & Cities — development cards", () => {
@@ -187,13 +166,6 @@ describe("Settlements & Cities — the dice roll", () => {
         return gs;
     }
 
-    function rollOf(die1: number, die2: number): SACRollDice {
-        const command = cmd(new SACRollDice());
-        command.recordedRoll1 = die1;
-        command.recordedRoll2 = die2;
-        return command;
-    }
-
     it("records what each player collected, and says so in the history", async () => {
         const gs = boardWithOneForest(8);
         const [aliceVertex, bobVertex] = BOARD_TOPOLOGY.hexVertices[0];
@@ -323,8 +295,8 @@ describe("Settlements & Cities — a roll that auto-ends the turn stays on scree
         expect(gs.lastRollDie1).toBe(5);
         expect(gs.lastRollDie2).toBe(3);
         expect(gs.lastRollChanges).toHaveLength(1);
-        expect(gs.lastRollAutoEnded).toBe(true);
-        expect(gs.lastRollAutoEndedBy).toBe("u1");
+        expect(gs.lastRollHeldOver).toBe(true);
+        expect(gs.lastRollHeldOverFor).toBe("u1");
     });
 
     it("clears the note, the dice and its owner as soon as the next roll lands", async () => {
@@ -338,8 +310,8 @@ describe("Settlements & Cities — a roll that auto-ends the turn stays on scree
         firstRoll.recordedRoll1 = 5;
         firstRoll.recordedRoll2 = 3;
         await run(game, firstRoll);
-        expect(gs.lastRollAutoEnded).toBe(true);
-        expect(gs.lastRollAutoEndedBy).toBe("u1");
+        expect(gs.lastRollHeldOver).toBe(true);
+        expect(gs.lastRollHeldOverFor).toBe("u1");
 
         // u2 rolls a 3 — the board's only hex needs an 8 to pay out, so this
         // roll pays no one, but u2 still has ore to trade with, so their turn
@@ -349,8 +321,8 @@ describe("Settlements & Cities — a roll that auto-ends the turn stays on scree
         secondRoll.recordedRoll2 = 2;
         const { outcome: secondOutcome } = await run(game, secondRoll);
         expect(secondOutcome.turnOver).toBe(false);
-        expect(gs.lastRollAutoEnded).toBe(false);
-        expect(gs.lastRollAutoEndedBy).toBeNull();
+        expect(gs.lastRollHeldOver).toBe(false);
+        expect(gs.lastRollHeldOverFor).toBeNull();
         expect(gs.lastRoll).toBe(3);
     });
 });
@@ -427,7 +399,7 @@ describe("Settlements & Cities — victory-point cards", () => {
         });
         const gs = makeState({ victoryTarget: 6 });
         gs.playerStates.set("u1", p);
-        const game = makeGame(gs, "u1");
+        const game = makeGame(gs, { currentTurn: "u1" });
 
         const won = new SettlementsAndCitiesGameType().CheckGameOver(game as unknown as IGameData);
         expect(won).toBe(true);
@@ -443,7 +415,7 @@ describe("Settlements & Cities — victory-point cards", () => {
         const gs = makeState({ victoryTarget: 1 });
         gs.playerStates.set("u1", player());
         gs.playerStates.set("u2", bob);
-        const game = makeGame(gs, "u1"); // Alice's turn, not Bob's
+        const game = makeGame(gs, { currentTurn: "u1" }); // Alice's turn, not Bob's
 
         const won = new SettlementsAndCitiesGameType().CheckGameOver(game as unknown as IGameData);
         expect(won).toBe(false);

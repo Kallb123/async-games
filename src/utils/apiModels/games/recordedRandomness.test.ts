@@ -76,7 +76,7 @@ describe("stripRecordedRandomness", () => {
 });
 
 // A source-scan guard rather than an assertion about one game: the command
-// route is the only client-facing entry to runCommandChain (src/utils/games/
+// route is the only client-facing entry to runCommand (src/utils/games/
 // commandPipeline.ts), which is what actually calls Execute — shared with
 // buildTimeline() and the turn-timer cron's resolveStalledTurn, neither of
 // which is client-facing and so neither of which strips. So if a refactor
@@ -94,7 +94,7 @@ describe("the command route", () => {
         // Anchored to the start of a line so a commented-out call doesn't
         // satisfy the guard.
         const strip = /^[ \t]*stripRecordedRandomness\(commandRequest\);/m.exec(routeSource);
-        const run = /^[ \t]*(?:const .*= )?await runCommandChain\(/m.exec(routeSource);
+        const run = /^[ \t]*(?:const .*= )?await runCommand\(/m.exec(routeSource);
 
         expect(strip).not.toBeNull();
         expect(run).not.toBeNull();

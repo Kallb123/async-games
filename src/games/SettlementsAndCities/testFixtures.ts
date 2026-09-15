@@ -11,6 +11,9 @@
 
 import { createInitialPlayerState } from "./board";
 import type { ISACDevCards, ISACPlayerState, ISACResources, ISACSpecificGameState } from "./board";
+import { SACRollDice, SettlementsAndCitiesGameType } from "./SettlementsAndCitiesLogic";
+import { cloneSACState } from "./SettlementsAndCitiesModels";
+import type { ISettlementsAndCitiesGameData } from "./SettlementsAndCitiesModels";
 
 // The three card records are merged rather than replaced, so a test names only
 // the resource or card it cares about — hence the partial sub-records, which a
@@ -49,8 +52,8 @@ export function makeState(overrides: Partial<ISACSpecificGameState> = {}): ISACS
         lastRollDie1: 5,
         lastRollDie2: 3,
         lastRollChanges: [],
-        lastRollAutoEnded: false,
-        lastRollAutoEndedBy: null,
+        lastRollHeldOver: false,
+        lastRollHeldOverFor: null,
         pendingRobber: false,
         longestRoadOwner: null,
         largestArmyOwner: null,
@@ -71,4 +74,47 @@ export function makeState(overrides: Partial<ISACSpecificGameState> = {}): ISACS
         victoryTarget: 10,
         ...overrides,
     };
+}
+
+// A whole game around one of those states, for the tests that run commands
+// rather than poking at state directly. Same reasoning as makeState: the shell
+// is a dozen fields and every copy of it needs an `as unknown as` cast, which
+// is the tell that it's a copy.
+export function makeGame(
+    specificGameState: ISACSpecificGameState,
+    overrides: Partial<ISettlementsAndCitiesGameData> = {},
+): ISettlementsAndCitiesGameData {
+    return {
+        gameId: "11111111-1111-1111-1111-111111111111",
+        gameType: new SettlementsAndCitiesGameType(),
+        userIdList: ["u1", "u2"],
+        turnTimer: "1d",
+        currentTurn: "u1",
+        lastTurnTimestamp: "2026-01-01T00:00:00.000Z",
+        gameState: { turnOrder: ["u1", "u2"], history: [], commandHistory: [] },
+        complete: false,
+        winner: "",
+        specificGameState,
+        // A *copy*, the way a real game stores it at creation: buildTimeline
+        // replays from this, and sharing the live object would have the replay
+        // start from wherever the commands under test had already left it.
+        initialSpecificGameState: cloneSACState(specificGameState, ["u1", "u2"]),
+        ...overrides,
+    } as unknown as ISettlementsAndCitiesGameData;
+}
+
+// u1 is Alice and u2 is Bob throughout, matching the names the response tests
+// resolve tokens against.
+export function cmd<T extends { senderId: string; senderUsername: string }>(command: T, sender = "u1"): T {
+    command.senderId = sender;
+    command.senderUsername = sender === "u1" ? "Alice" : "Bob";
+    return command;
+}
+
+/** A roll with its dice already decided, the way a replayed one arrives. */
+export function rollOf(die1: number, die2: number, sender = "u1"): SACRollDice {
+    const roll = cmd(new SACRollDice(), sender);
+    roll.recordedRoll1 = die1;
+    roll.recordedRoll2 = die2;
+    return roll;
 }
