@@ -303,23 +303,9 @@ export function connectByGeometry(tiles: EditorTile[]): EditorTile[] {
     const byKey = new Map(tiles.map(tile => [spaceKey(tile.row, tile.lane), tile]));
     const exitsByKey = allEffectiveExits(tiles);
 
-    const reachedBy = new Map<string, Set<string>>();
-    for (const other of tiles) {
-        if (!other.exits) continue;
-        const fromKey = spaceKey(other.row, other.lane);
-        for (const exit of other.exits) {
-            const toKey = spaceKey(exit.row, exit.lane);
-            const sources = reachedBy.get(toKey);
-            if (sources) sources.add(fromKey);
-            else reachedBy.set(toKey, new Set([fromKey]));
-        }
-    }
-
     return tiles.map(tile => {
         if (tile.exits && !tile.autoExits) return tile;
-        const tileKey = spaceKey(tile.row, tile.lane);
-        const incoming = reachedBy.get(tileKey);
-        const heading = tile.heading ?? headingTowards(tile, exitsByKey.get(tileKey) ?? [], byKey);
+        const heading = tile.heading ?? headingTowards(tile, exitsByKey.get(spaceKey(tile.row, tile.lane)) ?? [], byKey);
         const radians = (heading * Math.PI) / 180;
         const forwardX = Math.cos(radians);
         const forwardY = Math.sin(radians);
@@ -329,7 +315,9 @@ export function connectByGeometry(tiles: EditorTile[]): EditorTile[] {
             let nearest: { other: EditorTile; dist: number } | null = null;
             for (const other of tiles) {
                 if (other === tile || other.row === tile.row || other.lane !== lane) continue;
-                if (incoming?.has(spaceKey(other.row, other.lane))) continue;
+                // Skip a candidate that already has its own exit into this
+                // tile — reversing it would connect the two both ways.
+                if (other.exits?.some(exit => exit.row === tile.row && exit.lane === tile.lane)) continue;
                 const dx = other.x - tile.x;
                 const dy = other.y - tile.y;
                 const dist = Math.hypot(dx, dy);
