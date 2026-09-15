@@ -1,6 +1,6 @@
 'use client'
-import React, { useState } from 'react';
-import Collapse from '@/components/ui/Collapse';
+import React, { useEffect, useRef, useState } from 'react';
+import Collapse, { ANIM_MS } from '@/components/ui/Collapse';
 
 export interface ScoreEntry {
     /** Stable key (usually the username). */
@@ -10,8 +10,8 @@ export interface ScoreEntry {
     /** Player colour swatch. */
     color: string;
     /** Small status under the name (e.g. "5 cards - 🛣️ LR - ⚔️ LA"). Whose turn it
-     *  is comes from `isActive` — don't spell it out here too. Hidden while
-     *  `detail` is showing (see below) rather than sitting above it — it's a
+     *  is comes from `isActive` — don't spell it out here too. Swapped out for
+     *  `detail` while the strip is expanded rather than sitting above it — it's a
      *  summary of exactly the figures `detail` spells out in full, so
      *  showing both at once would just repeat the same line twice. */
     sub?: React.ReactNode;
@@ -53,9 +53,28 @@ export interface ScoreEntry {
  */
 export default function GameScoreboard({ entries }: { entries: ScoreEntry[] }) {
     const [expanded, setExpanded] = useState(false);
+    // Each pill has one status row that swaps `sub` for `detail` rather than
+    // hiding one and growing the other — two rows moving at once made the strip
+    // dip by the summary's height before the detail had grown into its place.
+    // Swapping content in a single step is the hand-over `Collapse` takes a
+    // `from` height for, so the row is handed the height it was standing at and
+    // transitions to whatever the new content needs.
+    const heights = useRef(new Map<string, number>());
+    const [swapFrom, setSwapFrom] = useState<Map<string, number> | null>(null);
+    // Held only while the rows are moving: an inline height outliving the move
+    // would pin a row at a size its content has since outgrown.
+    useEffect(() => {
+        if (!swapFrom) return;
+        const timer = setTimeout(() => setSwapFrom(null), ANIM_MS);
+        return () => clearTimeout(timer);
+    }, [swapFrom]);
+
     if (!entries.length) return null;
     const expandable = entries.some((e) => e.detail != null);
-    const toggle = () => setExpanded((v) => !v);
+    const toggle = () => {
+        setSwapFrom(new Map(heights.current));
+        setExpanded((v) => !v);
+    };
     return (
         <div
             className={`ag-scorestrip${expandable ? ' ag-scorestrip--expandable' : ''}`}
@@ -83,13 +102,24 @@ export default function GameScoreboard({ entries }: { entries: ScoreEntry[] }) {
                             {e.isActive && <span className="ag-score-turn" aria-hidden="true">▶</span>}
                             {e.name}
                         </div>
-                        {/* The collapsed status line is a summary of the same
-                            figures `detail` spells out — hidden once this
-                            pill's detail is showing instead of stacking both. */}
-                        {e.sub != null && !(expanded && e.detail != null) && <div className="ag-score-sub">{e.sub}</div>}
-                        {expandable && (
-                            <Collapse phase={expanded ? undefined : 'exit'}>
-                                <div className="ag-score-detail">{e.detail}</div>
+                        {/* One status row, whatever it is currently saying: the
+                            collapsed summary is a shorthand for the same figures
+                            the detail spells out, so the expanded strip prints
+                            the detail here instead of stacking both. */}
+                        {(e.sub != null || e.detail != null) && (
+                            <Collapse
+                                from={swapFrom?.get(e.id)}
+                                // Only while a swap could still be coming: a row
+                                // caught mid-move would hand back the height it
+                                // was passing through rather than the one it
+                                // settled at.
+                                onMeasure={expandable && !swapFrom
+                                    ? (height) => heights.current.set(e.id, height)
+                                    : undefined}
+                            >
+                                {expanded && e.detail != null
+                                    ? <div className="ag-score-detail">{e.detail}</div>
+                                    : e.sub != null && <div className="ag-score-sub">{e.sub}</div>}
                             </Collapse>
                         )}
                     </div>
