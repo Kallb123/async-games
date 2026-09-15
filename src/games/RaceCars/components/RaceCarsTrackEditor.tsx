@@ -46,8 +46,9 @@ const STORAGE_KEY = 'ag-racecars-track-editor';
  * mid-track can tell which of them are live without digging through commits —
  * shown as a small footer, its tooltip naming what changed.
  */
-const TOOL_VERSION = 4;
+const TOOL_VERSION = 5;
 const TOOL_CHANGES = [
+    'v5 — auto-connect never reasons from its own previous run: heading and "already connected" are worked out fresh from where the tiles sit and in row order each time, so a second run settles rather than drifting to a different tile.',
     'v4 — auto-connect never reverses an existing exit (generated or hand-drawn); it falls through to the next-nearest tile in that lane instead of connecting two tiles both ways.',
     'v3 — auto-connect picks the nearest tile per lane rather than one distance cutoff shared across lanes, so a wide road\'s lane change is no longer dropped for sitting farther off than staying in lane.',
     'v2 — auto-connect never skips a lane (no lane 1 straight to lane 3), and tags what it writes so a later pass can redraw it instead of freezing on the first run.',
@@ -430,12 +431,13 @@ export default function RaceCarsTrackEditor() {
                             <button type="button" className="ag-btn ag-btn--light" onClick={autoConnect}>Auto-connect exits from geometry</button>
                         </div>
                         <p className="ag-hint">
-                            Auto-connect rebuilds each tile&apos;s steps from where the tiles sit, not from row+1 — the way a
-                            sharp corner&apos;s lanes fall back into step. For each of the same lane and the two either side of
-                            it, it draws the closest tile ahead in that lane alone — so a wide road&apos;s lane change still
-                            gets drawn even when it sits much farther off than staying in lane — and never skips a lane. It
-                            leaves your hand-drawn exits alone — run it again after moving tiles and it will redraw only what
-                            it drew itself last time.
+                            Auto-connect is for straights and gentle bends: it finds the closest tile physically ahead in
+                            each of this lane and the two either side of it, rather than assuming row+1 is the right tile —
+                            so a wide road&apos;s lane change still gets drawn even when it sits much farther off than
+                            staying in lane — and never skips a lane. Draw a sharp corner&apos;s lane realignment by hand
+                            instead; auto-connect leaves any hand-drawn exit alone. It never trusts what it drew on an
+                            earlier run either — every run reasons only from where the tiles sit now, so moving tiles and
+                            running it again redraws cleanly rather than drifting from a stale guess.
                         </p>
                     </div>
                 </Section>

@@ -212,11 +212,12 @@ describe("connectByGeometry lines lanes up off the shape, not the row numbers", 
     it("connects to the tile that is physically ahead when a lane skips a row", () => {
         // A sharp inside line: lane 1 has no tile on row 1, so the tile that is
         // actually in front of 0:1 is 2:1 — which the row+1 rule can't reach but
-        // geometry can. On this 3-row wrap 2:1's own untouched default happens
-        // to point straight back to 0:1, which also guards the "only an
-        // explicit exit blocks a reversal" rule below: if a plain row+1
-        // default counted as "already connected", it would wrongly exclude
-        // 2:1 here and this would fail.
+        // geometry can. 0:1 is resolved first (row order), so this also guards
+        // the "no reversal" rule below: 2:1's own default forward step happens
+        // to point straight back at 0:1 on this 3-row wrap, but since 2:1 has
+        // not been resolved yet when 0:1 searches, it is not excluded — a
+        // candidate only ever blocks a reversal once this run has actually
+        // resolved it, not merely because it exists.
         const corner = emptyState({
             tiles: [
                 { row: 0, lane: 1, x: 0, y: 0 },
@@ -290,6 +291,42 @@ describe("connectByGeometry lines lanes up off the shape, not the row numbers", 
         const redrawn = tiles.find(t => t.row === 0 && t.lane === 1)!;
         expect(redrawn.exits).toBeUndefined();
         expect(redrawn.autoExits).toBeUndefined();
+    });
+
+    it("ignores a stale auto exit from a previous run when aiming the search", () => {
+        // A's exits claim (wrongly, as if left over from an earlier, buggy
+        // run) that it only reaches the far tile C. If that stale exit fed
+        // this run's heading, the search would aim toward C alone and miss
+        // B — the close, straight-ahead, same-lane tile — entirely. A fresh
+        // run must derive A's heading from where the tiles actually sit and
+        // find both.
+        const a: EditorTile = { row: 0, lane: 1, x: 0, y: 0, exits: [{ row: 1, lane: 2 }], autoExits: true };
+        const b: EditorTile = { row: 1, lane: 1, x: 0, y: 10 };
+        const c: EditorTile = { row: 1, lane: 2, x: 50, y: 10 };
+        const connected = connectByGeometry([a, b, c]);
+        const fromA = connected.find(t => t.row === 0 && t.lane === 1)!;
+        const exits = effectiveExits(connected, fromA);
+        expect(exits.some(e => e.row === 1 && e.lane === 1)).toBe(true);
+        expect(exits.some(e => e.row === 1 && e.lane === 2)).toBe(true);
+    });
+
+    it("is stable across repeated runs — a second pass matches the first when nothing moved", () => {
+        // Same fixture as "connects to the tile that is physically ahead...":
+        // running it again must not drift to a different guess just because
+        // it is now reasoning about its own prior output rather than a blank
+        // tile — the whole point of never trusting a tile's own last exits.
+        const corner = emptyState({
+            tiles: [
+                { row: 0, lane: 1, x: 0, y: 0 },
+                { row: 0, lane: 2, x: 30, y: 0 },
+                { row: 1, lane: 2, x: 30, y: 20 },
+                { row: 2, lane: 1, x: 0, y: 40 },
+                { row: 2, lane: 2, x: 30, y: 40 },
+            ],
+        });
+        const once = connectByGeometry(corner.tiles);
+        const twice = connectByGeometry(once);
+        expect(twice).toEqual(once);
     });
 
     it("connects a wide road's lane change even when it sits farther off than staying in lane", () => {
