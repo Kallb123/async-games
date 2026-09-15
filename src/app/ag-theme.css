@@ -2467,21 +2467,41 @@ button.ag-chat-gif { cursor: pointer; }
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: flex-end;
     height: 100%;
     min-width: 0;
 }
-.ag-barchart-value {
-    font: 700 10px var(--ag-font);
-    color: var(--ag-ink-soft);
-    margin-bottom: 3px;
+/* The bar's height is a percentage, so it needs a track of its own to measure
+   against: the column's height less the category label's and less the padding
+   that holds the value riding on top of the tallest bar. Sized against the
+   whole column instead, a tall bar asks for more room than is left over and is
+   shrunk back to the gap — which flattens every bar near the maximum to the
+   same height. */
+.ag-barchart-track {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    padding-top: 16px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
 }
 .ag-barchart-bar {
+    position: relative;
+    flex: none;
     width: 100%;
     max-width: 22px;
     min-height: 2px;
     background: var(--ag-terracotta);
     border-radius: 4px 4px 0 0;
+}
+.ag-barchart-value {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 3px;
+    font: 700 10px var(--ag-font);
+    color: var(--ag-ink-soft);
 }
 .ag-barchart-label {
     margin-top: 6px;
