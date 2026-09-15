@@ -118,6 +118,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "The dice roll chart's tallest bars are the right height again",
+                detail: "On a Settlements & Cities result page, every bar near the top of the roll frequency chart was drawn at the same height — a 7 rolled sixteen times looked no more common than a 5 rolled thirteen times, so the shape the chart exists to show was flattened out. The bars are back in proportion, with the count still sitting on top of each one.",
+                game: "settlementsandcities",
+            },
+            {
                 title: "Settlements & Cities shows the roll that ended your turn",
                 detail: "When a roll left you nothing to build, buy or trade, your turn ended itself before you ever saw what you rolled — the dice vanished in the same instant the turn moved on. Your roll and its payout now stay on screen for you, with a note that there was nothing left to do, until your next roll — without making it look to whoever plays next like they'd already rolled.",
                 game: "settlementsandcities",
@@ -159,10 +164,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Solitaire's Hint stops repeating a move that goes nowhere",
                 detail: "When the only card that could move was a run bouncing between two columns forever, Hint kept recommending that same swap instead of anything else — even with cards still sitting in the stock. It now tells you to draw or recycle the stock instead whenever a real move isn't available.",
                 game: "solitaire",
-            },
-            {
-                title: "No more “Alarms and reminders” prompt on Android",
-                detail: "The Android app asked for permission to set alarms and reminders even though it never actually schedules one — a notification's plugin quietly carried the request along. It's gone for good now.",
             },
         ],
     },
