@@ -115,6 +115,10 @@ export interface ISACSpecificGameStateResponse {
     specialBuildActive: boolean;
     specialBuildQueue: string[];
     specialBuildMainPlayer: string | null;
+    // Whether the numbers were laid out under the balanced-board rule — public,
+    // like the board it describes, and false for every game dealt before the
+    // option existed.
+    balancedSetup: boolean;
     // Active expansions and the VP target they imply (design doc §8).
     expansions: SACExpansions;
     victoryTarget: number;

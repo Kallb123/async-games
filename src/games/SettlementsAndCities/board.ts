@@ -168,6 +168,13 @@ export interface ISACSpecificGameState {
     specialBuildActive: boolean;
     specialBuildQueue: string[];
     specialBuildMainPlayer: string | null;
+    // Whether this game's numbers were laid out under the balanced-board rule
+    // (no two red 6/8 hexes touching). Nothing after creation reads it to
+    // decide a rule — the board is already dealt — but it rides along so the
+    // screens can say which kind of island this is and a rematch can ask for
+    // the same one. Absent on a game created before the option existed, which
+    // readers answer with `?? false`: those boards were dealt at random.
+    balancedSetup?: boolean;
     // Which optional expansions are active for this game (design doc §8).
     expansions: SACExpansions;
     // VP needed to win. Base game is 10; expansions can raise it (§7, §8).
@@ -209,6 +216,8 @@ export interface BoardTopology {
     vertexEdges: number[][];
     /** vertexAdjacent[vertexId] = adjacent vertex IDs */
     vertexAdjacent: number[][];
+    /** hexAdjacent[hexId] = hex IDs sharing a side with this hex */
+    hexAdjacent: number[][];
     /** edges[edgeId] = [vertexId1, vertexId2] */
     edges: [number, number][];
     /** Integer (xi, yi) used for computing pixel positions via
@@ -282,6 +291,21 @@ function computeBoardTopology(): BoardTopology {
         vertexAdjacent[v2].push(v1);
     }
 
+    // Two hexes are neighbours exactly when they share a side, so the edge ids
+    // already computed above are the adjacency — no second coordinate walk.
+    const hexesByEdge: number[][] = Array.from({ length: numEdges }, () => []);
+    for (let h = 0; h < HEX_POSITIONS.length; h++) {
+        for (const eid of hexEdges[h]) hexesByEdge[eid].push(h);
+    }
+    const hexAdjacent: number[][] = Array.from({ length: HEX_POSITIONS.length }, () => []);
+    for (const touching of hexesByEdge) {
+        // An outer (sea-facing) edge belongs to one hex and joins nothing.
+        if (touching.length !== 2) continue;
+        const [h1, h2] = touching;
+        hexAdjacent[h1].push(h2);
+        hexAdjacent[h2].push(h1);
+    }
+
     const hexIntCoords = HEX_POSITIONS.map(({ q, r }) => ({ x: 2 * q + r, y: 3 * r }));
 
     return {
@@ -292,6 +316,7 @@ function computeBoardTopology(): BoardTopology {
         vertexHexes,
         vertexEdges,
         vertexAdjacent,
+        hexAdjacent,
         edges: edgesList,
         vertexIntCoords,
         hexIntCoords,
@@ -358,15 +383,63 @@ export interface GeneratedBoard {
     desertHexIndex: number;
 }
 
-export function generateBoard(): GeneratedBoard {
-    const terrains = shuffleArray(TERRAIN_POOL);
-    const tokens   = shuffleArray(NUMBER_TOKEN_POOL);
+/**
+ * The red numbers. 6 and 8 are printed in red on the real tiles because they
+ * are the likeliest rolls after 7 (which pays nobody), so a corner touching two
+ * of them out-produces the rest of the island from the first turn.
+ */
+const RED_NUMBERS: readonly number[] = [6, 8];
 
+function isRedNumber(token: number | null): boolean {
+    return token !== null && RED_NUMBERS.includes(token);
+}
+
+/**
+ * True if any two red hexes share a side — the one thing Catan's own setup
+ * rules forbid when the numbers are laid out at random, and so the only thing
+ * the balanced board option below rules out.
+ */
+export function hasAdjacentRedNumbers(hexes: ISACHex[]): boolean {
+    return hexes.some((hex, hexId) =>
+        isRedNumber(hex.numberToken)
+        && BOARD_TOPOLOGY.hexAdjacent[hexId].some(other => isRedNumber(hexes[other].numberToken)));
+}
+
+/** One random deal of the number tokens onto the (already shuffled) terrain. */
+function dealNumberTokens(terrains: SAC_Terrain[]): ISACHex[] {
+    const tokens = shuffleArray(NUMBER_TOKEN_POOL);
     let tokenIdx = 0;
-    const hexes: ISACHex[] = terrains.map(terrain => {
+    return terrains.map(terrain => {
+        // The desert produces nothing, so it takes no token and can't be red.
         if (terrain === 'desert') return { terrain, numberToken: null };
         return { terrain, numberToken: tokens[tokenIdx++] };
     });
+}
+
+// How many deals a balanced board will ask for before it plays the last one
+// anyway. Roughly one deal in four already satisfies the rule, so running out
+// is a fantastically unlikely event (0.75^40 ≈ 1 in 100,000) rather than a case
+// worth designing around — the cap is what stops a board shape that *can't*
+// satisfy the rule from looping forever.
+const MAX_BALANCED_DEALS = 40;
+
+/**
+ * Lays out an island.
+ *
+ * `balancedSetup` keeps the two 6s and the two 8s off each other's sides, the
+ * way Catan's variable setup asks. Only the numbers are constrained: the
+ * terrain is shuffled exactly as it always was, so a balanced board is still a
+ * different island every game.
+ */
+export function generateBoard(balancedSetup = false): GeneratedBoard {
+    const terrains = shuffleArray(TERRAIN_POOL);
+
+    let hexes = dealNumberTokens(terrains);
+    if (balancedSetup) {
+        for (let deal = 1; deal < MAX_BALANCED_DEALS && hasAdjacentRedNumbers(hexes); deal++) {
+            hexes = dealNumberTokens(terrains);
+        }
+    }
 
     const harborTypes = shuffleArray(HARBOR_TYPE_POOL);
     const harbors: ISACHarbor[] = HARBOR_HEX_EDGES.map(({ hexIdx, edgeIdx }, i) => {

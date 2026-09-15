@@ -38,10 +38,13 @@ import {
 
 export interface SettlementsAndCitiesInvitationRequest extends IInvitationRequest {
     expansions: SACExpansions;
+    /** Lay the numbers out so no two red 6/8 hexes touch (see board.ts). */
+    balancedSetup: boolean;
 }
 
 export interface ISettlementsAndCitiesInvitationData extends IInvitationData {
     expansions: SACExpansions;
+    balancedSetup: boolean;
 }
 
 export interface ISettlementsAndCitiesInvitationDataDocument
@@ -132,6 +135,7 @@ export function cloneSACState(
         specialBuildActive: gs.specialBuildActive ?? false,
         specialBuildQueue: [...(gs.specialBuildQueue ?? [])],
         specialBuildMainPlayer: gs.specialBuildMainPlayer ?? null,
+        balancedSetup: gs.balancedSetup ?? false,
         expansions: normaliseExpansions(gs.expansions),
         victoryTarget: gs.victoryTarget ?? 10,
     };
@@ -162,6 +166,7 @@ const expansionsSubSchema = {
 var SettlementsAndCitiesInvitationSchema = new Schema<ISettlementsAndCitiesInvitationDataDocument>(
     {
         expansions: expansionsSubSchema,
+        balancedSetup: Boolean,
     },
     { discriminatorKey: 'kind' },
 );
@@ -175,6 +180,9 @@ SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
 
     const expansions = normaliseExpansions(this.expansions);
     const victoryTarget = computeVictoryTarget(expansions);
+    // An invite sent before the option existed has no field at all, which is
+    // the board everyone got until now: dealt at random.
+    const balancedSetup = this.balancedSetup === true;
 
     const { turnOrder, history } = rollOffTurnOrder(userIdList);
 
@@ -183,8 +191,11 @@ SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
         history.push({ text: `Setup: expansions enabled — ${enabledNames.join(', ')}` });
     }
     history.push({ text: `Setup: first to ${victoryTarget} victory points wins` });
+    if (balancedSetup) {
+        history.push({ text: 'Setup: balanced board — no two red numbers (6 or 8) touch' });
+    }
 
-    const { hexes, harbors, desertHexIndex } = generateBoard();
+    const { hexes, harbors, desertHexIndex } = generateBoard(balancedSetup);
 
     const playerStates = new Map<string, ISACPlayerState>();
     for (const userId of userIdList) {
@@ -234,6 +245,7 @@ SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
         specialBuildActive: false,
         specialBuildQueue: [],
         specialBuildMainPlayer: null,
+        balancedSetup,
         expansions,
         victoryTarget,
     };
@@ -352,6 +364,7 @@ function makeSACStateSchemaDef() {
         specialBuildActive: Boolean,
         specialBuildQueue: [String],
         specialBuildMainPlayer: { type: String, default: null },
+        balancedSetup: Boolean,
         expansions: expansionsSubSchema,
         victoryTarget: Number,
     };
@@ -475,6 +488,7 @@ export function gameStateToResponse(
         specialBuildActive: gs.specialBuildActive ?? false,
         specialBuildQueue,
         specialBuildMainPlayer,
+        balancedSetup: gs.balancedSetup ?? false,
         expansions: normaliseExpansions(gs.expansions),
         victoryTarget: gs.victoryTarget ?? 10,
     };

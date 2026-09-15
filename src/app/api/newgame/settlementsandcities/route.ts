@@ -42,6 +42,9 @@ export async function POST(request: NextRequest) {
     gameType: 'SettlementsAndCities',
     gameFriendlyName: 'Settlements and Cities',
     expansions,
+    // A board-generation option, so it's read off the body the same way the
+    // expansions are — and anything that isn't `true` is the random board.
+    balancedSetup: body.balancedSetup === true,
   });
 
   await invite.save();
