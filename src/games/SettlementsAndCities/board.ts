@@ -168,13 +168,15 @@ export interface ISACSpecificGameState {
     specialBuildActive: boolean;
     specialBuildQueue: string[];
     specialBuildMainPlayer: string | null;
-    // Whether this game's numbers were laid out under the balanced-board rule
-    // (no two red 6/8 hexes touching). Nothing after creation reads it to
-    // decide a rule — the board is already dealt — but it rides along, and out
-    // to the client, so a rematch link can ask for the same kind of island.
-    // Absent on a game created before the option existed, which readers answer
-    // with `?? false`: those boards were dealt at random.
-    balancedSetup?: boolean;
+    // Whether this game's host asked for totally random tiles — the numbers
+    // dealt with no constraint at all, red 6s and 8s allowed to touch — rather
+    // than the balanced layout every game gets by default. Nothing after
+    // creation reads it to decide a rule (the board is already dealt), but it
+    // rides along, and out to the client, so a rematch link can ask for the
+    // same kind of island. Absent on a game created before the option existed,
+    // which readers answer with `?? true`: every one of those boards was dealt
+    // at random.
+    randomTiles?: boolean;
     // Which optional expansions are active for this game (design doc §8).
     expansions: SACExpansions;
     // VP needed to win. Base game is 10; expansions can raise it (§7, §8).
@@ -391,15 +393,14 @@ export interface GeneratedBoard {
 const RED_NUMBERS: readonly number[] = [6, 8];
 
 /** True for a red number token — what the board draws in red, and what the
- *  balanced setup below keeps off its own neighbours. */
+ *  balanced deal below keeps off its own neighbours. */
 export function isRedNumber(token: number | null): boolean {
     return token !== null && RED_NUMBERS.includes(token);
 }
 
 /**
  * True if any two red hexes share a side — the one thing Catan's own setup
- * rules forbid when the numbers are laid out at random, and so the only thing
- * the balanced board option below rules out.
+ * rules forbid, and so the only thing the balanced deal below rules out.
  */
 export function hasAdjacentRedNumbers(hexes: ISACHex[]): boolean {
     return hexes.some((hex, hexId) =>
@@ -422,23 +423,26 @@ function dealNumberTokens(terrains: SAC_Terrain[]): ISACHex[] {
 // anyway. Roughly one deal in four already satisfies the rule on this island,
 // so a run this long never happens (0.75^200 is one in 10^25) — the cap is only
 // what stops a board shape that *can't* satisfy the rule from looping forever,
-// and it is set far enough out that the history line promising a balanced board
-// isn't writing a cheque the deal can realistically fail to honour.
+// and it is set far enough out that the board a game says it dealt isn't a
+// cheque the deal can realistically fail to honour.
 const MAX_BALANCED_DEALS = 200;
 
 /**
  * Lays out an island.
  *
- * `balancedSetup` keeps the two 6s and the two 8s off each other's sides, the
- * way Catan's variable setup asks. Only the numbers are constrained: the
- * terrain is shuffled exactly as it always was, so a balanced board is still a
- * different island every game.
+ * By default the numbers are dealt the way Catan's own setup asks: the two 6s
+ * and the two 8s never share a side. Only the numbers are constrained — the
+ * terrain is shuffled either way, so a balanced board is still a different
+ * island every game.
+ *
+ * `randomTiles` drops that one constraint for a host who wants the raw deal,
+ * runaway corners and all.
  */
-export function generateBoard(balancedSetup = false): GeneratedBoard {
+export function generateBoard(randomTiles = false): GeneratedBoard {
     const terrains = shuffleArray(TERRAIN_POOL);
 
     let hexes = dealNumberTokens(terrains);
-    if (balancedSetup) {
+    if (!randomTiles) {
         for (let deal = 1; deal < MAX_BALANCED_DEALS && hasAdjacentRedNumbers(hexes); deal++) {
             hexes = dealNumberTokens(terrains);
         }

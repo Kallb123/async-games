@@ -7,7 +7,7 @@ import { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ISACGameDataResponse, ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
 import { BOARD_TOPOLOGY, NO_RESOURCES, SAC_RESOURCES, calculateLongestRoad, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
 import { SAC_EXPANSION_IDS, enabledExpansionNames, normaliseExpansions } from "@/games/SettlementsAndCities/expansions";
-import { SAC_BALANCED_PARAM, SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER, SAC_RESOURCE_EMOJI, sacRollChangeParts, type SACSpotKind } from "@/games/SettlementsAndCities/ui";
+import { SAC_RANDOM_TILES_PARAM, SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER, SAC_RESOURCE_EMOJI, sacRollChangeParts, type SACSpotKind } from "@/games/SettlementsAndCities/ui";
 import SettlementsAndCitiesBoard from "@/games/SettlementsAndCities/components/SettlementsAndCitiesBoard";
 import SettlementsAndCitiesActions, { SACBoardMode } from "@/games/SettlementsAndCities/components/SettlementsAndCitiesActions";
 import GameShell from "@/components/ui/GameShell";
@@ -388,7 +388,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                     turnTimer={gameData?.turnTimer}
                     extraParams={{
                         expansions: enabledExpansionIds.join(','),
-                        ...rematchFlag(SAC_BALANCED_PARAM, gs?.balancedSetup === true),
+                        ...rematchFlag(SAC_RANDOM_TILES_PARAM, gs?.randomTiles === true),
                     }}
                 />
             )}

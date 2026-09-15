@@ -67,8 +67,8 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
-                title: "Deal a balanced Settlements & Cities board",
-                detail: "Switch Balanced board on when you set up a game and the numbers are laid out the way Catan's own rules ask: no two red tokens — the 6s and 8s, the likeliest rolls on the board — on hexes that touch, so nobody's first settlement lands on a corner that runs away with the game. The terrain is shuffled either way, so the island is still different every time. Leave it off for the free-for-all board you've always had.",
+                title: "Settlements & Cities boards are balanced now",
+                detail: "The numbers are dealt the way Catan's own rules ask: no two red tokens — the 6s and 8s, the likeliest rolls on the board — on hexes that touch, so nobody's first settlement lands on a corner that runs away with the game. The terrain is still shuffled, so the island is different every time. Want the old free-for-all? Switch Totally random tiles on when you set up a game and the numbers are dealt with no rules at all, unbalanced map and all.",
                 game: "settlementsandcities",
             },
             {

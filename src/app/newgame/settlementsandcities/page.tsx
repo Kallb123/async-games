@@ -22,7 +22,7 @@ import {
   normaliseExpansions,
   validateExpansions,
 } from "@/games/SettlementsAndCities/expansions";
-import { SAC_BALANCED_PARAM } from "@/games/SettlementsAndCities/ui";
+import { SAC_RANDOM_TILES_PARAM } from "@/games/SettlementsAndCities/ui";
 import { useToast } from "@/components/ToastContext";
 
 // A rematch link carries enabled expansion ids as a comma-separated list
@@ -74,7 +74,7 @@ function NewGameSettlementsAndCitiesForm() {
   const { userList, setItem, players } = usePlayerList(readRematchPlayers(searchParams));
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
   const [expansions, setExpansions] = useState(() => expansionsFromParam(searchParams.get('expansions')));
-  const [balancedSetup, setBalancedSetup] = useState(() => readRematchFlag(searchParams, SAC_BALANCED_PARAM));
+  const [randomTiles, setRandomTiles] = useState(() => readRematchFlag(searchParams, SAC_RANDOM_TILES_PARAM));
   const { showToast } = useToast();
   const gameMeta = GAME_META.settlementsandcities;
   const { seatCount, setSeatCount, maxSeats, partySize, canSubmit, actionLabel, footnote, submit } = useCreateLobbyOrInvite({
@@ -104,7 +104,7 @@ function NewGameSettlementsAndCitiesForm() {
       userList: players,
       turnTimer,
       expansions,
-      balancedSetup,
+      randomTiles,
     };
     await submit(data);
   };
@@ -121,12 +121,19 @@ function NewGameSettlementsAndCitiesForm() {
       <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxSeats} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
 
-      <OptionSection label="Board setup">
+      <OptionSection
+        label="Board setup"
+        footer={<p className="ag-hint">
+          Boards are balanced by default: the red numbers — the 6s and 8s, the likeliest
+          rolls on the board — never end up on hexes that touch. The terrain is shuffled
+          either way, so the island is different every game.
+        </p>}
+      >
         <OptionToggleRow
-          title="Balanced board"
-          description="Deal the number tokens so no two red numbers — the 6s and 8s, the likeliest rolls on the board — end up on hexes that touch. The terrain is still shuffled, so the island is different every game."
-          on={balancedSetup}
-          onToggle={() => setBalancedSetup(v => !v)}
+          title="Totally random tiles"
+          description="Deal the number tokens with no rules at all. The 6s and 8s can land side by side, which can leave one corner of the map worth far more than the rest — an unbalanced map, and a very swingy game."
+          on={randomTiles}
+          onToggle={() => setRandomTiles(v => !v)}
         />
       </OptionSection>
 
