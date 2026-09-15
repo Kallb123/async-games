@@ -267,21 +267,24 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             const isLongestRoad = gs.longestRoadOwner === userId;
             const isLargestArmy = gs.largestArmyOwner === userId;
             const roadLength = calculateLongestRoad(userId, gs.vertices, gs.edges);
-            // Collapsed: total card count plus whichever bonus tags this
-            // player holds, each carrying its own emoji. `GameScoreboard`
-            // swaps this out for `detail` once expanded, so all four figures
-            // below still belong here too.
+            // A held bonus is its emoji alone, here and in the breakdown below:
+            // the pill is a fixed width, and "🛣️ LR - ⚔️ LA" spelled out was the
+            // one line too long for it. What each mark means is on the figure it
+            // sits beside once expanded — "4 Knights ⚔️", "9 Segments 🛣️".
+            const bonuses = `${isLongestRoad ? '🛣️' : ''}${isLargestArmy ? '⚔️' : ''}`;
+            // Collapsed: total card count plus whichever bonuses this player
+            // holds. `GameScoreboard` swaps this out for `detail` once expanded,
+            // so all four figures below still belong here too.
             const sub = [
                 `${totalCards} card${totalCards === 1 ? '' : 's'}`,
-                isLongestRoad ? '🛣️ LR' : null,
-                isLargestArmy ? '⚔️ LA' : null,
+                bonuses,
             ].filter(Boolean).join(' - ');
             const detail = (
                 <>
                     <div>{ps.resourceCount} Res Card{ps.resourceCount === 1 ? '' : 's'}</div>
                     <div>{ps.devCardCount} Dev Card{ps.devCardCount === 1 ? '' : 's'}</div>
-                    <div>{ps.knightsPlayed} Knight{ps.knightsPlayed === 1 ? '' : 's'}{isLargestArmy ? ' - ⚔️ LA' : ''}</div>
-                    <div>{roadLength} Segment{roadLength === 1 ? '' : 's'}{isLongestRoad ? ' - 🛣️ LR' : ''}</div>
+                    <div>{ps.knightsPlayed} Knight{ps.knightsPlayed === 1 ? '' : 's'}{isLargestArmy ? ' ⚔️' : ''}</div>
+                    <div>{roadLength} Segment{roadLength === 1 ? '' : 's'}{isLongestRoad ? ' 🛣️' : ''}</div>
                 </>
             );
             return [{

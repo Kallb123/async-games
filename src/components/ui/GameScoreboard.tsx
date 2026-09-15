@@ -9,7 +9,7 @@ export interface ScoreEntry {
     name: string;
     /** Player colour swatch. */
     color: string;
-    /** Small status under the name (e.g. "5 cards - 🛣️ LR - ⚔️ LA"). Whose turn it
+    /** Small status under the name (e.g. "5 cards - 🛣️⚔️"). Whose turn it
      *  is comes from `isActive` — don't spell it out here too. Swapped out for
      *  `detail` while the strip is expanded rather than sitting above it — it's a
      *  summary of exactly the figures `detail` spells out in full, so
