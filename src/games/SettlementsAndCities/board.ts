@@ -135,19 +135,21 @@ export interface ISACSpecificGameState {
     // with `?? []` and simply show no payout, rather than claiming a roll paid
     // nobody.
     lastRollChanges?: ISACRollChange[];
-    // True once `sacFinishTurn` has ended the turn on its own — nothing left to
-    // build, buy or trade — rather than the player tapping "End turn". The dice
-    // and payout above are left in place rather than cleared so the roll that
-    // caused it isn't hidden the instant it happens, and the UI reads this to
-    // add the "no actions were possible" note. Reset to false as soon as the
-    // next roll lands (`SACRollDice`), so it never outlives the roll it
-    // explains.
+    // Set by `SACEndTurn` when the main turn it ends had nothing left to build,
+    // buy or trade, naming the player it ended for. The dice and payout above are
+    // then left in place rather than cleared, so the roll isn't hidden in the
+    // same instant the turn goes. Both reset as soon as the next roll lands
+    // (`SACRollDice`), so neither outlives the roll it belongs to, and only the
+    // named player is sent either — see `hideAutoEndedRoll` in gameStateToResponse.
+    //
+    // Read it as "the roll is held over", not "the game ended this turn": it is
+    // derived from the hand the turn ended on, so a player who taps "End turn"
+    // with nothing affordable sets it too. That is deliberate — it is what leaves
+    // no "this one was automatic" bit in the state for an opponent to find. (The
+    // names are the ones already in the database; renaming a persisted field
+    // would make every game mid-hand-off at deploy read it as false and hand the
+    // held-over roll to the table, which is the leak this all exists to close.)
     lastRollAutoEnded: boolean;
-    // Who that roll belonged to — the only viewer the preserved roll and note
-    // above are shown to. Once the turn has moved on, showing it to anyone
-    // else (the new current player included) reads as "you already rolled
-    // this", which isn't true; the player it actually happened to is the one
-    // person who should still see it. Reset alongside `lastRollAutoEnded`.
     lastRollAutoEndedBy: string | null;
     pendingRobber: boolean;
     longestRoadOwner: string | null;

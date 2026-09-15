@@ -107,6 +107,57 @@ describe("Settlements & Cities' roll payout through Mongoose", () => {
     });
 });
 
+// The roll an auto-ended turn holds over, and who is allowed to see it. The
+// other half — the log line, which is word for word an ordinary "ended their
+// turn" — is covered in SettlementsAndCitiesLogic.test.ts.
+describe("Settlements & Cities' auto-ended turn on the wire", () => {
+    function autoEndedState(): ISACSpecificGameState {
+        return makeState({
+            hasRolled: false,
+            lastRoll: 8,
+            lastRollDie1: 5,
+            lastRollDie2: 3,
+            lastRollChanges: [gain("u1", { lumber: 1 })],
+            lastRollAutoEnded: true,
+            lastRollAutoEndedBy: "u1",
+            playerStates: new Map([["u1", player()], ["u2", player()]]),
+        });
+    }
+
+    it("keeps the held-over roll and its note for the player it happened to", () => {
+        const wire = gameStateToResponse(autoEndedState(), NAMES, "u1");
+
+        expect(wire.lastRoll).toBe(8);
+        expect(wire.lastRollDie1).toBe(5);
+        expect(wire.lastRollDie2).toBe(3);
+        expect(wire.lastRollChanges).toHaveLength(1);
+        expect(wire.lastRollAutoEnded).toBe(true);
+    });
+
+    it.each([["an opponent", "u2"], ["a spectator", null]] as const)(
+        "sends %s exactly what a tapped End turn leaves — no dice, no payout, no flag",
+        (_who, viewerId) => {
+            const wire = gameStateToResponse(autoEndedState(), NAMES, viewerId);
+
+            expect(wire.lastRoll).toBeNull();
+            expect(wire.lastRollDie1).toBeNull();
+            expect(wire.lastRollDie2).toBeNull();
+            expect(wire.lastRollChanges).toEqual([]);
+            expect(wire.lastRollAutoEnded).toBe(false);
+        },
+    );
+
+    it("keeps it from a viewerless response even when nobody is named as the owner", () => {
+        // buildAllEvents replays with viewerId null. "Nobody" must read as
+        // "not the owner" — matching a null owner against a null viewer would
+        // hand the roll to a reaction feed every player can read.
+        const state = autoEndedState();
+        state.lastRollAutoEndedBy = null;
+
+        expect(gameStateToResponse(state, NAMES, null).lastRoll).toBeNull();
+    });
+});
+
 // A roll's total (2-12) is tallied straight off SACRollDice's own recorded
 // dice in commandHistory, not replayed - see computeSACRollFrequency. These
 // prove the tally against the shape commandHistory actually stores rolls in,

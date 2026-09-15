@@ -77,6 +77,21 @@ export function resolveTokens(text: string, userIdNameMap: { [key: string]: stri
 }
 
 /** Swaps every `{{userId}}` token across a whole history log for that player's name. */
+/**
+ * A stamp truncated to the minute it fell in. Every reader of one of these
+ * renders it through formatRelativeTime — "just now", "5m ago" — so nothing on
+ * screen can tell the difference, and the seconds are worth dropping: the gap
+ * between a command and the one a game generated in answer to it is a few
+ * milliseconds, where the gap to a command a person tapped is however long they
+ * took to tap it. Sent whole, that gap says which of the two just happened.
+ */
+export function toTheMinute(iso: string): string {
+    const at = new Date(iso);
+    if (Number.isNaN(at.getTime())) return iso;
+    at.setUTCSeconds(0, 0);
+    return at.toISOString();
+}
+
 export function resolveHistory(
     history: IHistoryEntry[],
     userIdNameMap: { [key: string]: string },
@@ -90,7 +105,7 @@ export function resolveHistory(
         const resolved: IHistoryEntry = { text };
         if (entry.actorId) resolved.actorId = entry.actorId;
         if (entry.commandId) resolved.commandId = entry.commandId;
-        if (entry.createdAt) resolved.createdAt = entry.createdAt;
+        if (entry.createdAt) resolved.createdAt = toTheMinute(entry.createdAt);
         return resolved;
     });
 }

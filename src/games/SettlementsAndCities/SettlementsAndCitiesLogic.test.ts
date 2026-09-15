@@ -12,33 +12,22 @@ import {
     SACMaritimeTrade,
 } from "./SettlementsAndCitiesLogic";
 import * as SACLogic from "./SettlementsAndCitiesLogic";
-import { makeState, player } from "./testFixtures";
+import { cmd, makeGame, makeState, player, rollOf } from "./testFixtures";
 import { BOARD_TOPOLOGY, NO_RESOURCES } from "./board";
 import type { ISACSpecificGameState, ISACPlayerState, SAC_DevCard } from "./board";
 import type { ISettlementsAndCitiesGameData } from "./SettlementsAndCitiesModels";
 import type { IGameData } from "@/utils/mongodb/GameData";
 import type { IGameCommand } from "@/utils/apiModels/GameLogic";
 import { resolveTokens } from "@/utils/games/history";
+import { runCommand } from "@/utils/games/commandPipeline";
 
-// ─── Minimal in-memory game harness ───────────────────────────────────────────
-// The dev-card commands only touch playerStates + a handful of scalar flags, so
-// we build a bare main-phase state rather than a full board.
-
-function makeGame(gs: ISACSpecificGameState, currentTurn = "u1"): ISettlementsAndCitiesGameData {
-    return {
-        currentTurn,
-        userIdList: ["u1", "u2"],
-        gameState: { turnOrder: ["u1", "u2"], history: [], commandHistory: [] },
-        specificGameState: gs,
-        complete: false,
-        winner: "",
-    } as unknown as ISettlementsAndCitiesGameData;
-}
-
-function cmd<T extends { senderId: string; senderUsername: string }>(c: T, sender = "u1"): T {
-    c.senderId = sender;
-    c.senderUsername = sender === "u1" ? "Alice" : "Bob";
-    return c;
+// The real pipeline, for the tests that care about a turn passing: Execute, then
+// any follow-up command the outcome asks for, then the game type's end-of-turn
+// handling. Auto-ending is an ordinary SACEndTurn run as that follow-up rather
+// than a flag on whatever command was in flight, so calling Execute() alone no
+// longer ends anything.
+function run(game: ISettlementsAndCitiesGameData, command: IGameCommand) {
+    return runCommand(game as unknown as IGameData, new SettlementsAndCitiesGameType(), command);
 }
 
 describe("Settlements & Cities — development cards", () => {
@@ -177,13 +166,6 @@ describe("Settlements & Cities — the dice roll", () => {
         return gs;
     }
 
-    function rollOf(die1: number, die2: number): SACRollDice {
-        const command = cmd(new SACRollDice());
-        command.recordedRoll1 = die1;
-        command.recordedRoll2 = die2;
-        return command;
-    }
-
     it("records what each player collected, and says so in the history", async () => {
         const gs = boardWithOneForest(8);
         const [aliceVertex, bobVertex] = BOARD_TOPOLOGY.hexVertices[0];
@@ -194,7 +176,7 @@ describe("Settlements & Cities — the dice roll", () => {
         const game = makeGame(gs);
 
         const roll = rollOf(5, 3);
-        const outcome = await roll.Execute(game as unknown as IGameData);
+        const { outcome } = await run(game, roll);
         expect(outcome.validMove).toBe(true);
         // A city pays two, a settlement one.
         expect(gs.playerStates.get("u1")!.resources.lumber).toBe(2);
@@ -219,7 +201,7 @@ describe("Settlements & Cities — the dice roll", () => {
         gs.playerStates.set("u1", player());
         const game = makeGame(gs);
 
-        await rollOf(5, 3).Execute(game as unknown as IGameData);
+        await run(game, rollOf(5, 3));
         expect(gs.lastRollChanges).toEqual([]);
         // Nobody collected and u1 had nothing to begin with — again nothing left
         // to decide, so the turn auto-ends on top of the roll's own line.
@@ -301,14 +283,13 @@ describe("Settlements & Cities — a roll that auto-ends the turn stays on scree
         const roll = cmd(new SACRollDice());
         roll.recordedRoll1 = 5;
         roll.recordedRoll2 = 3;
-        const outcome = await roll.Execute(game as unknown as IGameData);
+        const { outcome } = await run(game, roll);
         expect(outcome.turnOver).toBe(true);
-        new SettlementsAndCitiesGameType().CheckEndTurn(game as unknown as IGameData, outcome);
 
         // The turn has already moved on to u2 …
         expect(game.currentTurn).toBe("u2");
-        // … but the roll that ended it is still there, tagged as u1's — the
-        // UI reads `lastRollAutoEndedBy` to show it only to u1, not to u2
+        // … but the roll that ended it is still there, tagged as u1's —
+        // gameStateToResponse sends it (and the flag) to u1 alone, not to u2
         // (whose turn it now is) or anyone else.
         expect(gs.lastRoll).toBe(8);
         expect(gs.lastRollDie1).toBe(5);
@@ -328,8 +309,7 @@ describe("Settlements & Cities — a roll that auto-ends the turn stays on scree
         const firstRoll = cmd(new SACRollDice());
         firstRoll.recordedRoll1 = 5;
         firstRoll.recordedRoll2 = 3;
-        const firstOutcome = await firstRoll.Execute(game as unknown as IGameData);
-        new SettlementsAndCitiesGameType().CheckEndTurn(game as unknown as IGameData, firstOutcome);
+        await run(game, firstRoll);
         expect(gs.lastRollAutoEnded).toBe(true);
         expect(gs.lastRollAutoEndedBy).toBe("u1");
 
@@ -339,7 +319,7 @@ describe("Settlements & Cities — a roll that auto-ends the turn stays on scree
         const secondRoll = cmd(new SACRollDice(), "u2");
         secondRoll.recordedRoll1 = 1;
         secondRoll.recordedRoll2 = 2;
-        const secondOutcome = await secondRoll.Execute(game as unknown as IGameData);
+        const { outcome: secondOutcome } = await run(game, secondRoll);
         expect(secondOutcome.turnOver).toBe(false);
         expect(gs.lastRollAutoEnded).toBe(false);
         expect(gs.lastRollAutoEndedBy).toBeNull();
@@ -357,16 +337,16 @@ describe("Settlements & Cities — auto-ending a turn with nothing left to do", 
         const trade = cmd(new SACMaritimeTrade());
         trade.offerResource = "lumber";
         trade.wantResource = "wool";
-        const outcome = await trade.Execute(game as unknown as IGameData);
+        const { outcome } = await run(game, trade);
 
         expect(outcome.validMove).toBe(true);
         expect(gs.playerStates.get("u1")!.resources).toEqual({ ...NO_RESOURCES, wool: 1 });
         // No dev cards in the deck, no resources left for another build or
         // trade — there's nothing left to decide, so the turn ends for them.
         expect(outcome.turnOver).toBe(true);
-        expect(game.gameState.history[0].text).toBe(
-            "{{u1}} had nothing left to build, buy or trade, so their turn ended automatically",
-        );
+        // Word for word what tapping "End turn" writes: the log must not tell the
+        // table that this player ran out of things they could afford.
+        expect(game.gameState.history[0].text).toBe("{{u1}} ended their turn");
     });
 
     it("leaves the turn open when the player can still trade again", async () => {
@@ -419,7 +399,7 @@ describe("Settlements & Cities — victory-point cards", () => {
         });
         const gs = makeState({ victoryTarget: 6 });
         gs.playerStates.set("u1", p);
-        const game = makeGame(gs, "u1");
+        const game = makeGame(gs, { currentTurn: "u1" });
 
         const won = new SettlementsAndCitiesGameType().CheckGameOver(game as unknown as IGameData);
         expect(won).toBe(true);
@@ -435,7 +415,7 @@ describe("Settlements & Cities — victory-point cards", () => {
         const gs = makeState({ victoryTarget: 1 });
         gs.playerStates.set("u1", player());
         gs.playerStates.set("u2", bob);
-        const game = makeGame(gs, "u1"); // Alice's turn, not Bob's
+        const game = makeGame(gs, { currentTurn: "u1" }); // Alice's turn, not Bob's
 
         const won = new SettlementsAndCitiesGameType().CheckGameOver(game as unknown as IGameData);
         expect(won).toBe(false);

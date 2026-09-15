@@ -452,6 +452,15 @@ export function gameStateToResponse(
         owner: e.owner ?? null,
     }));
 
+    // A roll held past the end of its turn is for the player it was held for and
+    // nobody else: it is only ever held because that player could afford nothing,
+    // so putting it in front of the table says so. Everyone else gets what an
+    // ordinary hand-off leaves — no dice, no payout, no flag — and a viewerless
+    // response (buildAllEvents) counts as everyone else rather than matching a
+    // `lastRollAutoEndedBy` that has yet to be written.
+    const hideAutoEndedRoll = gs.lastRollAutoEnded
+        && (viewerId === null || gs.lastRollAutoEndedBy !== viewerId);
+
     const longestRoadOwner = gs.longestRoadOwner ?? null;
     const largestArmyOwner = gs.largestArmyOwner ?? null;
 
@@ -472,15 +481,14 @@ export function gameStateToResponse(
         pendingRoadSetup: gs.pendingRoadSetup,
         lastSetupSettlementVertex: gs.lastSetupSettlementVertex,
         hasRolled: gs.hasRolled,
-        lastRoll: gs.lastRoll,
-        lastRollDie1: gs.lastRollDie1,
-        lastRollDie2: gs.lastRollDie2,
-        // Field by field, the same as the board arrays above: these come off a
-        // live Mongoose document, and sending the subdocuments as they are would
-        // ship their internals (and an `_id` per row) along with them.
-        lastRollChanges: cloneRollChanges(gs.lastRollChanges),
-        lastRollAutoEnded: gs.lastRollAutoEnded ?? false,
-        lastRollAutoEndedBy: gs.lastRollAutoEndedBy ?? null,
+        lastRoll: hideAutoEndedRoll ? null : gs.lastRoll,
+        lastRollDie1: hideAutoEndedRoll ? null : gs.lastRollDie1,
+        lastRollDie2: hideAutoEndedRoll ? null : gs.lastRollDie2,
+        // Field by field rather than by reference: these come off a live Mongoose
+        // document, and sending the subdocuments as they are would ship their
+        // internals (and an `_id` per row) along with them.
+        lastRollChanges: hideAutoEndedRoll ? [] : cloneRollChanges(gs.lastRollChanges),
+        lastRollAutoEnded: !hideAutoEndedRoll && (gs.lastRollAutoEnded ?? false),
         pendingRobber: gs.pendingRobber,
         longestRoadOwner,
         largestArmyOwner,

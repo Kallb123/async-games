@@ -153,6 +153,14 @@ export async function POST(request: NextRequest) {
   // the authenticated caller instead, the same way the game's usernameList
   // resolves them.
   commandRequest.senderUsername = await senderName(gameData, userId);
+  // And the clock is ours too. `timestamp` is a field initialiser, so a command
+  // built in a browser arrives carrying *that device's* clock — which orders the
+  // player's own history lines, and disagrees with the server's on any phone
+  // that isn't in sync. A command the game generates for itself (see
+  // ICommandOutcome.followUpCommand) is necessarily stamped here, so leaving the
+  // hand-played ones on their own clocks would make "which clock stamped this"
+  // a way of telling the two apart.
+  commandRequest.timestamp = new Date().toISOString();
 
   // Checks whether the turn should be progressed and actions it if so
   const gameType: IGameType = deserializeJSON(JSON.stringify(gameData.gameType));

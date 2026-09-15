@@ -321,7 +321,7 @@ export async function resolveStalledTurn(
         command.senderId = userId;
         command.senderUsername = senderUsername;
 
-        const { outcome, gameOver } = await runCommand(gameData, gameType, command);
+        const { outcome, gameOver, followUpRefused } = await runCommand(gameData, gameType, command);
         // A refused command is recorded nowhere (commandPipeline), so nothing
         // it may have touched on the way to refusing is accounted for either.
         // With nothing accepted before it that is still 'declined': the only
@@ -336,6 +336,12 @@ export async function resolveStalledTurn(
 
         if (gameOver) return 'gameOver';
         if (outcome.turnOver) return 'advanced';
+        // The game wanted to follow this command with another and its own rules
+        // said no. The turn is in a state the game didn't expect, so asking the
+        // adapter for the next command would walk into the same refusal until
+        // the budget runs out. Report it now — same verdict, twenty fewer
+        // commands run against a board nobody meant to leave that way.
+        if (followUpRefused) return unresolved(accepted);
     }
 
     return 'stuck';

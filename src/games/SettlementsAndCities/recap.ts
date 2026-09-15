@@ -82,11 +82,10 @@ function toEvents(
             // The dice command itself always carries what it actually rolled and
             // paid out, so read from there first — falling back to state only for
             // a roll replayed before these fields existed on the command. State
-            // usually agrees, but not always: a roll that leaves the player with
-            // nothing left to build, buy or trade auto-ends the turn in this same
-            // command (sacFinishTurn -> CheckEndTurn -> sacAdvanceMainTurn), and a
-            // *manual* end turn later in the same replay still clears state's
-            // lastRoll / lastRollChanges — the command's own copy doesn't move.
+            // usually agrees, but not always: an end turn later in the replay
+            // clears state's lastRoll / lastRollChanges, whether the player tapped
+            // it or the roll left them nothing to do and the game sent it for them
+            // (sacFinishTurn) — the command's own copy doesn't move.
             const diceCommand = command as unknown as {
                 recordedRoll1?: number;
                 recordedRoll2?: number;

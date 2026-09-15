@@ -24,7 +24,30 @@ export interface ICommandOutcome {
      * Deliberately not "any accepted command": in a crew game that would let
      * one player hold the table indefinitely by nudging one action a period.
      */
-    timerRestarts?: boolean
+    timerRestarts?: boolean,
+    /**
+     * A command the game wants run straight after this one, exactly as if the
+     * player had sent it themselves. `runCommand` puts it through the whole
+     * pipeline — its own id and timestamp, its own history line, `CheckGameOver`,
+     * `CheckEndTurn`, its own entry on `commandHistory` and its own step in a
+     * replay — so it is an ordinary command in every way, which is the point: it
+     * stays indistinguishable from the same command sent by hand. Settlements &
+     * Cities ends a turn this way when its player can no longer afford anything
+     * (see `sacFinishTurn`), and telling the table *that* is telling them what
+     * that player holds.
+     *
+     * Because it is recorded, a replay reads the one that really ran instead of
+     * minting another — `RunCommandOptions.resolveFollowUp` is how `buildTimeline`
+     * says so, matching on the `recordedFollowUpToId` the pipeline stamps. Generate
+     * it fresh each time the trigger runs and leave the recorded-versus-regenerated
+     * choice to that.
+     *
+     * Two things the pipeline will not do, so don't rely on them: it ignores a
+     * follow-up from a command that already reported `turnOver` (the turn has
+     * moved on, and the follow-up would land on the next player), and it ignores
+     * one asked for *by* a follow-up. One command, one answer.
+     */
+    followUpCommand?: IGameCommand
 }
 
 export interface IGameCommand {
@@ -64,6 +87,13 @@ export interface IGameType {
 // commands either from persisted commandHistory (already trusted) or from a
 // player's own hypothetical planned moves (never saved, and only ever shown
 // back to that player), so it deliberately does not call this.
+// The same `recorded…` prefix, and stripped by the same pass below, for the same
+// reason: `recordedFollowUpToId` marks a command as the follow-up the pipeline
+// ran for the command of that id, which is how a replay tells the recorded copy
+// apart from the one it would regenerate. The server writes it; a client that
+// supplied one could make a replay drop a follow-up that really happened.
+export const RECORDED_FOLLOW_UP_TO_ID = "recordedFollowUpToId";
+
 export function stripRecordedRandomness(command: IGameCommand): void {
     const fields = command as unknown as Record<string, unknown>;
     for (const key of Object.keys(fields)) {

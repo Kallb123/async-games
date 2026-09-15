@@ -81,7 +81,9 @@ describe("stripRecordedRandomness", () => {
 // buildTimeline() and the turn-timer cron's resolveStalledTurn, neither of
 // which is client-facing and so neither of which strips. So if a refactor
 // drops the strip before that call, every game's recorded RNG becomes
-// client-suppliable at once and no per-game test would notice.
+// client-suppliable at once and no per-game test would notice. (A follow-up
+// command the chain runs after it is built by the game from server state, never
+// deserialised from the request, so it has no client-supplied RNG to strip.)
 describe("the command route", () => {
     const routeSource = readFileSync(
         path.join(srcRoot, "app/api/game/command/route.ts"),
@@ -97,6 +99,20 @@ describe("the command route", () => {
         expect(strip).not.toBeNull();
         expect(run).not.toBeNull();
         expect(strip!.index).toBeLessThan(run!.index);
+    });
+
+    // `timestamp` is a field initialiser on every command, so one built in a
+    // browser arrives carrying that device's clock — and that value is what
+    // stamps the player's own history lines. A command the game generates for
+    // itself (ICommandOutcome.followUpCommand) is necessarily stamped on the
+    // server, so leaving the hand-played ones alone would make "which clock
+    // stamped this" a way of telling a turn a game ended from one a player did.
+    it("stamps the command with the server's clock before running it", () => {
+        const stamp = /^[ \t]*commandRequest\.timestamp = new Date\(\)\.toISOString\(\);/m.exec(routeSource);
+        const run = /^[ \t]*(?:const .*= )?await runCommand\(/m.exec(routeSource);
+
+        expect(stamp).not.toBeNull();
+        expect(stamp!.index).toBeLessThan(run!.index);
     });
 
     // Execute is not the first thing to read the command: the route logs

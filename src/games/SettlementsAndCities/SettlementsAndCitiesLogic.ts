@@ -207,27 +207,32 @@ function sacHasAnyAction(gs: ISettlementsAndCitiesGameData['specificGameState'],
 // turn): one still mid-sequence (a pending robber move, free roads yet to
 // place) never auto-ends, since the check only fires once
 // `hasRolled`/`specialBuildActive` holds and both of those have cleared.
-function sacFinishTurn(sacData: ISettlementsAndCitiesGameData, userId: string): ICommandOutcome {
+function sacFinishTurn(sacData: ISettlementsAndCitiesGameData, userId: string, trigger: IGameCommand): ICommandOutcome {
     const outcome: ICommandOutcome = { validMove: true, turnOver: false };
     const gs = sacData.specificGameState;
     if (gs.phase !== 'main' || gs.pendingRobber || gs.pendingRoadBuilding > 0) return outcome;
     if (!gs.specialBuildActive && !gs.hasRolled) return outcome;
     const ps = gs.playerStates.get(userId);
     if (!ps || sacHasAnyAction(gs, userId, ps)) return outcome;
-    outcome.turnOver = true;
-    // Flagged only for an ordinary main turn — a Special Build player running
-    // dry closes their own slot (sacAdvanceSpecialBuild), which never touches
-    // the dice display, so there's nothing here for it to mark.
-    if (!gs.specialBuildActive) {
-        gs.lastRollAutoEnded = true;
-        gs.lastRollAutoEndedBy = userId;
-    }
-    sacData.gameState.history.unshift(playerHistory(
-        userId,
-        gs.specialBuildActive
-            ? `had nothing left to build or trade, so their special build ended automatically`
-            : `had nothing left to build, buy or trade, so their turn ended automatically`,
-    ));
+    // The ending itself is an ordinary SACEndTurn, run and recorded straight
+    // after this command (see ICommandOutcome.followUpCommand) — not a turnOver
+    // flag on whatever command was in flight. That is what makes it invisible:
+    // the log line, the push notification built from it and the step the
+    // match-review timeline draws are the ones a tapped "End turn" produces,
+    // because the same command produces them. A turn ending because its player
+    // can afford nothing would otherwise announce it — and it says they can't
+    // buy a road and hold under four of every resource.
+    //
+    // It keeps the fresh id and timestamp of its own that every command is born
+    // with, and takes only the trigger's game and sender. Copying the trigger's
+    // would be the giveaway all over again: the two history lines are stamped
+    // with the command that wrote them, so a shared commandId (or a createdAt
+    // equal to the millisecond) is an exact test for "that turn ended itself".
+    const endTurn = new SACEndTurn();
+    endTurn.gameId = trigger.gameId;
+    endTurn.senderId = userId;
+    endTurn.senderUsername = trigger.senderUsername;
+    outcome.followUpCommand = endTurn;
     return outcome;
 }
 
@@ -632,7 +637,7 @@ export class SACRollDice implements IGameCommand {
         ));
 
         gs.hasRolled = true;
-        return sacFinishTurn(sacData, this.senderId);
+        return sacFinishTurn(sacData, this.senderId, this);
     }
 
     Undo(gameData: IGameData): void {
@@ -715,7 +720,7 @@ export class SACMoveRobber implements IGameCommand {
 
         gs.robberHexIndex = this.hexId;
         gs.pendingRobber = false;
-        return sacFinishTurn(sacData, this.senderId);
+        return sacFinishTurn(sacData, this.senderId, this);
     }
 
     Undo(gameData: IGameData): void {
@@ -771,7 +776,7 @@ export class SACBuildRoad implements IGameCommand {
 
         sacUpdateLongestRoad(sacData);
         sacData.gameState.history.unshift(playerHistory(this.senderId, `built a road`));
-        return sacFinishTurn(sacData, this.senderId);
+        return sacFinishTurn(sacData, this.senderId, this);
     }
 
     Undo(gameData: IGameData): void {
@@ -825,7 +830,7 @@ export class SACBuildSettlement implements IGameCommand {
         gs.vertices[this.vertexId].owner = this.senderId;
 
         sacData.gameState.history.unshift(playerHistory(this.senderId, `built a settlement`));
-        return sacFinishTurn(sacData, this.senderId);
+        return sacFinishTurn(sacData, this.senderId, this);
     }
 
     Undo(gameData: IGameData): void {
@@ -871,7 +876,7 @@ export class SACBuildCity implements IGameCommand {
         gs.vertices[this.vertexId].building = 'city';
 
         sacData.gameState.history.unshift(playerHistory(this.senderId, `built a city`));
-        return sacFinishTurn(sacData, this.senderId);
+        return sacFinishTurn(sacData, this.senderId, this);
     }
 
     Undo(gameData: IGameData): void {
@@ -914,7 +919,7 @@ export class SACBuyDevCard implements IGameCommand {
         ps.devCardsBought++;
 
         sacData.gameState.history.unshift(playerHistory(this.senderId, `bought a development card`));
-        return sacFinishTurn(sacData, this.senderId);
+        return sacFinishTurn(sacData, this.senderId, this);
     }
 
     Undo(gameData: IGameData): void {
@@ -988,7 +993,7 @@ export class SACPlayYearOfPlenty implements IGameCommand {
         ps.resourcesGathered += 2;
 
         sacData.gameState.history.unshift(playerHistory(this.senderId, `played Year of Plenty (+${this.resource1}, +${this.resource2})`));
-        return sacFinishTurn(sacData, this.senderId);
+        return sacFinishTurn(sacData, this.senderId, this);
     }
 
     Undo(gameData: IGameData): void {
@@ -1032,7 +1037,7 @@ export class SACPlayMonopoly implements IGameCommand {
         ps.resourcesGathered += total;
 
         sacData.gameState.history.unshift(playerHistory(this.senderId, `played Monopoly on ${this.resource} (+${total})`));
-        return sacFinishTurn(sacData, this.senderId);
+        return sacFinishTurn(sacData, this.senderId, this);
     }
 
     Undo(gameData: IGameData): void {
@@ -1076,7 +1081,7 @@ export class SACMaritimeTrade implements IGameCommand {
         ps.resources[this.wantResource]++;
 
         sacData.gameState.history.unshift(playerHistory(this.senderId, `traded ${ratio}x ${this.offerResource} → 1x ${this.wantResource}`));
-        return sacFinishTurn(sacData, this.senderId);
+        return sacFinishTurn(sacData, this.senderId, this);
     }
 
     Undo(gameData: IGameData): void {
@@ -1107,6 +1112,18 @@ export class SACEndTurn implements IGameCommand {
         // Main turn requires a roll first; a special-build turn does not.
         if (!gs.specialBuildActive && !gs.hasRolled) return { validMove: false, turnOver: false };
 
+        // A main turn that ends with nothing its player could have done keeps its
+        // roll on screen for them: sacAdvanceMainTurn reads this and skips the
+        // usual clear, so the dice don't vanish in the same instant the turn
+        // does. Derived from the state here rather than carried in by whatever
+        // ended the turn, which is what lets an ending the game decided on
+        // (sacFinishTurn's follow-up) and one the player tapped produce
+        // byte-identical state — there is no "this one was automatic" to leak.
+        const ps = gs.playerStates.get(this.senderId);
+        if (!gs.specialBuildActive && ps && !sacHasAnyAction(gs, this.senderId, ps)) {
+            gs.lastRollAutoEnded = true;
+            gs.lastRollAutoEndedBy = this.senderId;
+        }
         sacData.gameState.history.unshift(playerHistory(
             this.senderId,
             gs.specialBuildActive ? `finished their special build` : `ended their turn`,

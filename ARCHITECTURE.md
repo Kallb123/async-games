@@ -560,11 +560,27 @@ regardless of game:
 8. if gameType.CheckGameOver(gameData):  save, record GameResult, push win/lose
    notifications, return
 9. gameType.CheckEndTurn(gameData, outcome)
-10. if turnOver: bump lastTurnTimestamp, reset warning flag
-11. save
-12. if turnOver: push 'YourTurn' to the next player
-13. return { outcome, gameData: CreateDataResponse() }
+10. if outcome.followUpCommand: run it through 5–9 as well, and repeat
+11. if turnOver: bump lastTurnTimestamp, reset warning flag
+12. save
+13. if turnOver: push 'YourTurn' to the next player
+14. return { outcome, gameData: CreateDataResponse() }
 ```
+
+Steps 5–10 are `runCommand` in `src/utils/games/commandPipeline.ts`, shared with
+the replay engine and the turn-timer cron so all three run a move the same way.
+Step 10 is how a game acts on the player's behalf: an outcome can name a
+`followUpCommand`, which runs immediately as if the player had sent it — its own
+id, its own history line, its own entry on `commandHistory`, its own step in a
+replay. Because it is recorded, `buildTimeline` replays the one that really ran
+rather than regenerating it (`RunCommandOptions.resolveFollowUp`).
+
+The point of a command rather than an effect folded into the trigger is that it
+stays indistinguishable from the same command sent by hand. Settlements & Cities
+uses it to end a turn whose player can no longer afford anything, which must look
+exactly like that player tapping "End turn" — otherwise every opponent's match
+review shows the turn ending on the roll command itself, which says plainly that
+the roller was left with nothing.
 
 The route checks the deserialised command against `COMMANDS_BY_GAME_TYPE` in
 `src/utils/games/gameCommands.ts` before executing it: every `Execute` casts the
