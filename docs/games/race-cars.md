@@ -195,33 +195,46 @@ does two things that rule cannot say, and both of them live on a corner:
   each other again, but the number of spaces behind them is not.
 
 ```
-             ■ ■ ■ ■ ■ ■ ■ ■      lane 2, the outside: eight spaces
-row 6 ──▶ ■   ■   ■   ■           lane 1, the inside: four
-          6 7 8 9 …               same eight rows of road
+lane 2, the outside:  ■ ■ ■ ■ ■ ■ ■ ■     rows 6 7 8 9 10 11 12 13
+lane 1, the inside:       ■ ■ ■ ■         rows     8 9 10 11
+                      ╰── one stretch of road, two lanes, level at both ends ──╯
 ```
 
-**Rows are places on the road, not steps along it.** That is what keeps the two
-lines above comparable: a corner's band, the finish line, who leads, and how far
-you are past a corner are all measured in rows, while a roll is spent in spaces.
-On a circuit whose lanes all run in step — both of the ones that ship today —
-they are the same number, which is why the rest of this document can say "a roll
-of 8" and "eight rows" in the same breath. Where they part, the inside line is
-the one that covers more road for the same roll, and it is the one with nowhere
-to go if it arrives too fast.
+**Rows rank the road; they never measure it.** A row says how far round the lap
+a space is, and nothing else. That is what keeps the two lines above comparable
+— who leads, which corner a space is in, and where the finish line falls are all
+read off rows — while **everything a rule charges is counted in spaces**: the
+roll, the brake, the overshoot, the tow. The inside line of a corner covers the
+same stretch of road in half the tiles, so "rows past the corner" would charge
+the two lines differently for the same overrun, and "eight rows" and "a roll of
+8" are not the same sentence.
 
-**Corners are rows, not turns of the wheel.** A corner is a contiguous band of
-rows with a **stop count** attached (§10). Corners are narrower than the
-straights they join, which is what makes them block.
+**Sections and sync lines: where a row number comes from.** A lap is cut into
+**sections** — a straight, an esse, a corner — and each boundary between two of
+them is a **sync line**, a line across the road where every lane is level with
+every other. Rows are then *derived* inside each section from the steps
+themselves, never counted along a lane:
 
-**Which spaces are in a corner is per space, not per row.** A corner covers all
-of its lanes, but not every lane on every one of its rows: the inside line is
-the short way round and takes fewer spaces through the corner than the outside
-does (above), so it is in the corner for fewer rows. Its band `from`/`to` is the
-outside line's extent — what §10 charges overshoot against — while membership,
-banking a stop and the waiver all read the space a car is actually on. On the
-two circuits that ship every corner is a plain band with all its lanes in it on
-every row; the per-space rule is what lets a hand-cut corner drop the inside
-line out once it has rounded its own apex.
+- every step advances at least one row, so no step can quietly fail to move a
+  car forward;
+- two spaces level across the road land on the same row;
+- a lane taking the short way round a corner skips the rows it saved, and both
+  lanes are level again at the section's far sync line.
+
+Counting rows along a lane instead is what a corner like the one above breaks:
+the inside line ends four tiles short of the outside, so every row past it is
+one lane's count against another's, and by the second corner two spaces drawn
+side by side carry numbers a lap apart. A corner's own edges are the worst place
+to draw a sync line — its ends are usually skewed — so the boundary goes a tile
+or two clear of it, on road that is square.
+
+**Corners are stretches of road, not turns of the wheel.** A corner is a
+section, with a **stop count** attached (§10), and every space in it is in it
+for as long as the road is. Corners are narrower than the straights they join,
+which is what makes them block. A corner's row band is what the screen labels
+and where a spun car is put back; what §10 charges is spaces past the corner,
+read off the space the car actually left it from — which is why the inside line
+leaving four tiles early costs it nothing extra.
 
 ### 5.2 Ashcombe Park
 
@@ -295,7 +308,7 @@ exactly that many spaces, choosing your destination from the ones the roll can
 legally reach (§9). Corner stops, overshoots, blocking and — if it is on — oil
 are all resolved by arriving.
 
-**Step 3 — Slipstream.** If your move ended one or two rows behind another car,
+**Step 3 — Slipstream.** If your move ended one or two spaces behind another car,
 you may take a three-space tow (§12), or decline it. Either way the turn ends.
 
 The shape of the turn matters as much as its content: **the roll happens in
@@ -384,18 +397,22 @@ the permission lives in the track data.
 
 ## 9. Movement, Lanes and Blocking
 
-A move of *N* rows is **exactly *N* steps** of the (r → r+1, lane ±1) rule in
-§5.1. You may not move fewer, and you may not move more.
+A move of *N* is **exactly *N* steps** of §5.1's rule — the next tile along,
+this lane or either lane beside it. You may not move fewer, and you may not move
+more.
 
 **You choose a destination, not a path.** The game computes every space
 reachable in exactly *N* steps without passing through an occupied space, marks
 them on the board, and you tap one. The path itself is then derived, and it
 matters for exactly one thing: **which oil slicks you crossed** (§14), which
-the derivation minimises. Which *corners* you crossed is not a choice at all —
-every path to the **same destination** covers the same rows of road, whichever
-line it takes to get there, and a corner is a band of rows — so there is one
-objective here, not two, and nothing to search. (Two *different* destinations
-the same number of spaces away can be a different number of rows apart, where a
+the derivation minimises. What the corners cost is not a second choice inside
+that one: **every route of the same length to the same space leaves each corner
+at the same step**, so it is charged the same whichever line it took, and there
+is one objective to search on rather than two. That is a property of the board
+rather than of arithmetic now that a corner is a set of tiles, so it is asserted
+over every route of every length through a corner whose lanes run out of step
+(`board.test.ts`) rather than argued for here. (Two *different* destinations the
+same number of spaces away can be a different distance round the lap, where a
 corner runs its lanes out of step (§5.1). That is the choice the destination
 already is, not a second search inside one.)
 
@@ -409,10 +426,10 @@ manoeuvre and no contact model: a car is a wall.
 
 **Blocked short.** If no space is reachable in exactly *N* steps, you stop on
 the **furthest** space you can reach — you choose among the furthest if there is
-more than one — and take **1 tyre** of wear. One, regardless of how many rows
+more than one — and take **1 tyre** of wear. One, regardless of how many spaces
 you lost: the scuff is for having to lift, not for the distance.
 
-**Boxed in.** If you cannot move even one row, you stay where you are, take no
+**Boxed in.** If you cannot move even one space, you stay where you are, take no
 damage, and your gear drops to 1. This is possible only in the two-lane Esses
 and inside a corner, which is exactly where a leader would want it to be
 possible.
@@ -425,33 +442,34 @@ the field up, and a car that wants to go slower has to pay for it.
 
 ## 10. Corners and the Stop Rule
 
-A corner is a band of rows with a **stop count** — the number of separate turns
-you must **end inside it** before you are allowed past its last row.
+A corner is a **section of road** with a **stop count** — the number of separate
+turns you must **end inside it** before you are allowed to leave it (§5.1).
 
-- Ending a turn on any space **that is in the corner** (§5.1 — membership is per
-  space, so a lane that has already left the corner does not count even on a row
-  the corner's band still spans) **banks one stop**.
+- Ending a turn on any space **that is in the corner** (§5.1 — the corner is a
+  section of road, and its spaces are the ones drawn into it) **banks one stop**.
 - Your banked stops **reset to zero** the moment you legally leave the corner.
-- Ending a turn past the corner's last row with fewer stops banked than it owes
-  is an **overshoot**.
+- Ending a turn past the corner with fewer stops banked than it owes is an
+  **overshoot**.
 
-**Overshoot cost: 1 tyre per row past the corner's last row.** A car that blows
-through Gravel Bend (last row 51) and lands on row 55 pays 4 tyres.
+**Overshoot cost: 1 tyre per space past the corner.** The spaces counted are the
+ones driven after the step that left it: a car that blows through Gravel Bend
+and comes to rest four spaces past its last one pays 4 tyres.
 
-**Overshoot is counted along the path, not by subtracting row numbers.** Rows
-wrap at the finish line, so a car on row 60 that moves 20 ends on row 2 of the
-next lap having crossed The Kink, and `2 − 65` is not the answer. Every corner
-crossing — and the finish line itself — is an event resolved **in path order**,
-which is also what keeps §13's "nothing further on the path is resolved" from
-moving a spun car backwards over a line it had already crossed.
+**Overshoot is counted along the path, never by subtracting row numbers.** The
+corner is left at the step that lands on a space outside it, and what is charged
+is the spaces driven from there on. Nothing subtracts one row from another, so a
+move that wraps the finish line needs no special case, and a corner behind the
+car is not "almost a lap ahead". Every corner crossing — and the finish line
+itself — is an event resolved **in path order**, which is also what keeps §13's
+"nothing further on the path is resolved" from moving a spun car backwards over
+a line it had already crossed.
 
-**It is counted in rows of road, not in spaces driven.** The two are the same
-number until a corner's lanes run out of step (§5.1), and then they are not: a
-car that takes five spaces down the inside of an eight-space corner is nine rows
-further on than it started, and the tyre bill is read off the road it is past
-rather than off how few spaces it took to get there. The inside line is the fast
-way round and the expensive way to get it wrong, which is the trade the shape
-exists to offer.
+**Spaces driven, not rows of road.** A corner's inside line covers the same
+stretch in half the tiles, so a bill read in rows would charge it twice over for
+the same overrun. Read in spaces, both lines are charged for the same thing: how
+far past the corner the car came to rest. The inside line is still the fast way
+round — it reaches the corner's exit in fewer spaces, and arrives with nowhere
+left inside it — which is the trade the shape exists to offer.
 
 **An overshoot you could not have avoided is free.** If, when your turn begins,
 no legal move can keep you inside the corner — every space the road offers you
@@ -503,8 +521,8 @@ choice at setup and everybody races it.
 
 | Pool | Spent on | Spent when |
 |---|---|---|
-| **Tyres** | Overshooting a corner (1 per row, §10) · being blocked short (1, §9) | Automatically, on arrival |
-| **Brakes** | Shortening this turn's roll by 1 row each | Declared with the move, after the roll |
+| **Tyres** | Overshooting a corner (1 per space, §10) · being blocked short (1, §9) | Automatically, on arrival |
+| **Brakes** | Shortening this turn's roll by 1 space each | Declared with the move, after the roll |
 | **Gearbox** | Dropping more than one gear (§8.2's table) | Declared with the shift, before the roll |
 
 **Braking is the only pool you spend on purpose, with the number in front of
@@ -525,9 +543,13 @@ that alone changes which spec is correct.
 
 ## 12. Slipstream
 
-If your move ends **one or two rows behind another car — in any lane** — you may
-take a tow: a second move of exactly **3 spaces**, immediately, resolved under
-every rule a normal move follows.
+If your move ends **one or two spaces behind another car — in any lane you could
+tuck into** — you may take a tow: a second move of exactly **3 spaces**,
+immediately, resolved under every rule a normal move follows.
+
+"One or two spaces behind" is a question about the road between the two cars,
+walked the way a car drives it (§5.1): a row is a rank rather than a distance,
+and being one row up and two lanes over is alongside, not in front.
 
 - You may **decline**. Declining costs nothing.
 - The tow obeys blocking (§9), corners (§10) and oil (§14) exactly as the first
@@ -535,7 +557,7 @@ every rule a normal move follows.
   the overshoot is charged in full.
 - **One tow per turn.** Ending the tow behind a third car does not earn another.
 - A tow that is blocked short takes the same 1 tyre a blocked move does. A tow
-  with **nothing reachable at all** — both lanes of the Esses occupied one row
+  with **nothing reachable at all** — both lanes of the Esses occupied one space
   ahead — is simply **not offered**, rather than offered and then punished. The
   check belongs in `slipstreamOffered`, not in the command that accepts it: a
   player should never be able to accept an offer that costs them for accepting
@@ -544,7 +566,7 @@ every rule a normal move follows.
 Slipstream is the game's rubber band, and it is pointed the right way round: it
 only ever helps the car behind, it is strongest where the field is closest, and
 it is most dangerous exactly where the field is closest — in the braking zone
-for a corner, where three free spaces are three rows of overshoot.
+for a corner, where three free spaces are three spaces of overshoot.
 
 ---
 
@@ -725,12 +747,12 @@ like a cliff.
 | A spin happens on the last row of a corner | The car is already there; it stays, drops to gear 0 and misses its turn |
 | An oil spin inside a corner | The car rests on the slick's space, not the corner's last row. Its banked stops are untouched |
 | Overshoot cost exactly equals tyres remaining | It is payable. Tyres reach 0 and the car continues (§4.3) |
-| Blocked short *and* the short landing is an overshoot | Both apply: 1 tyre for the block, plus 1 per row past the corner |
+| Blocked short *and* the short landing is an overshoot | Both apply: 1 tyre for the block, plus 1 per space past the corner |
 | Blocked short with 0 tyres | The block's scuff is a debt that cannot be paid, and an unpayable *block* does not spin — only an unpayable overshoot does. The car stops and takes nothing |
 | Boxed in inside a corner owing stops | Staying put ends the turn inside the corner, so it **banks a stop** |
 | On a corner's last row, still owing a stop | No legal move keeps you inside it, so the remaining stops are waived and leaving is free (§10). The one overshoot in the game that costs nothing |
 | A tow with no reachable space | Not offered at all (§12), rather than offered and charged |
-| A spun car is 1–2 rows behind another | A spin ends the turn outright. No tow is offered, to a car that has just been told it is missing its next turn |
+| A spun car is 1–2 spaces behind another | A spin ends the turn outright. No tow is offered, to a car that has just been told it is missing its next turn |
 | Two slicks on one space | Impossible: the second refreshes the first (§14) |
 | A car is lapped | Nothing special happens. A lapped car blocks, tows and corners exactly as any other; §4.2 classifies by laps first, so it is simply behind |
 | The last free lane of a corner is taken when a spin needs it | The spin resolves onto the last *available* space searching backwards along the corner; a corner is never fully occupied by fewer than six cars |
@@ -881,7 +903,7 @@ Ordered by what each one buys against what it costs.
 | **Space** | One (row, lane) pair — where a car stands, and what a roll is spent in. 214 at Ashcombe. A lane need not have one on every row (§5.1) |
 | **Band** | The range of spaces a gear can travel (§8.1) |
 | **Stop** | A turn ended inside a corner. Corners owe 1 or 2 |
-| **Overshoot** | Ending past a corner's last row without its stops banked. Costs 1 tyre a row |
+| **Overshoot** | Ending past a corner without its stops banked. Costs 1 tyre a space |
 | **Spin** | The unpayable-overshoot or lost-control result: gear 0 and a missed turn (§13) |
 | **Tow** | The three free spaces a slipstream grants (§12) |
 | **Scuff** | The 1 tyre a blocked-short move costs (§9) |
@@ -897,13 +919,13 @@ Ordered by what each one buys against what it costs.
 1. **Shift** — up one, or down as many as the gearbox pays for. Roll the gear's die.
 2. **Brake** *(optional)* — 1 point = 1 space less, never below one space.
 3. **Move** — exactly that many spaces. Tap a highlighted space.
-4. **Tow** *(optional)* — 3 more spaces if you ended 1–2 rows behind a car.
+4. **Tow** *(optional)* — 3 more spaces if you ended 1–2 spaces behind a car.
 
 **Gears** · 1: 1–2 · 2: 2–4 · 3: 4–8 · 4: 7–12 · 5: 11–20 · 6: 21–30
 
 **Shifting down** · 2 gears = 1 gearbox · 3 = 3 · 4 = 6 · 5 = illegal
 
-**Costs** · overshoot 1 tyre/row · blocked short 1 tyre · brake 1/space · can't pay an overshoot → spin
+**Costs** · overshoot 1 tyre/space · blocked short 1 tyre · brake 1/space · can't pay an overshoot → spin
 
 **Ashcombe Park** · Hairpin (10–14) 2 stops · Gravel Bend (47–51) 1 · The Kink (62–65) 1 · fifth gear is the top of this circuit
 
@@ -1121,15 +1143,14 @@ which is what makes §20's first hook one file:
 interface RaceCarsTrack {
   id: 'ashcombe',
   name: 'Ashcombe Park',
-  rows: number,                       // 78 — positions round a lap, not steps
+  rows: number,                       // 78 — ranks round a lap, derived, never a distance
   // Every space, and the spaces each one may be driven to (§5.1). The graph is
   // the track: a straight's spaces carry the three above them, a painted corner
   // carries the one in front, and a lane that skips a row simply has no space
-  // on it. `cornerId` marks the spaces in a corner — per space, not per row, so
-  // the inside line can be in it for fewer rows than the outside (§5.1, §10).
+  // on it. `cornerId` names the section a space was drawn into (§10).
   spaces: { row: number, lane: number, exits: { row: number, lane: number }[], cornerId?: string }[],
-  // A corner's row band is the outside line's extent (§10 charges overshoot in
-  // rows past `to`); which spaces are in it lives on the spaces above.
+  // A corner's row band labels it on screen and places a spun car; §10 charges
+  // overshoot in spaces past the corner, read off the path (`cornerExits`).
   corners: { id: string, name: string, from: number, to: number, stops: 1 | 2 }[],
   grid: { row: number, lane: number }[],   // P1 first
   maxGear: 1 | 2 | 3 | 4 | 5 | 6,     // 5 at Ashcombe (§8.3)
@@ -1142,20 +1163,29 @@ interface RaceCarsTrack {
 }
 ```
 
-**Nobody writes 214 spaces by hand.** A circuit is authored as the table of
-sections §5.2 prints — a name, a row band, a lane count and a corner's stop
-count — and `deriveTrack` writes §5.1's own step rule onto every space of it. A
-band that needs something else lists its own `tiles` instead: the spaces it
-actually has, and, for any of them, the exits that replace the rule. That is
-where a corner's painted outside and its short inside line are said, and it is
-said about one band rather than about the circuit.
+**Nobody writes 214 spaces by hand, and nobody writes a row number at all.** A
+circuit is authored as a table of **sections** (§5.1) — an id, a name, a lane
+count, a corner's stop count, and either a plain `length` in tiles or the tiles
+it actually holds — and `deriveTrack` builds the graph, writes §5.1's own step
+rule onto every ordinary tile, and *derives the rows* from the steps. A band
+whose lanes run out of step lists its own `tiles` and names every step out of
+them: that is where a corner's painted outside and its short inside line are
+said, and it is said about one section rather than about the circuit.
+
+Rows come out of a longest-path layering inside each section, each tile centred
+between the section's two sync lines. Three properties fall out of that and are
+the reason it is done this way: every step advances at least one row, tiles that
+are level land on the same row, and a section's rows can never leak into the one
+after it. A row number typed by hand has none of them.
 
 **`deriveTrack` throws rather than shipping a circuit that cannot be driven.** A
 track is static data read at module load and asserted by `board.test.ts`, so the
 only way to reach one of these is to be writing a circuit — and each is a hole a
-race would fall into silently: a space nothing steps off, a step onto a space
-that isn't there, a row the road skips entirely, a step sideways, a lane wider
-than the road, or a gap between two sections.
+race would fall into silently: a space nothing steps off, a step onto a tile
+that isn't there, a section with no tiles, a lane wider than the road, two tiles
+sharing an id, steps that loop back on themselves, a band whose lanes run out of
+step without naming their own steps, or a lap of one section — whose wrap back
+to the start line would be held inside the section it is ranked from.
 
 **Three invariants belong on the track data rather than in Ashcombe's geometry,
 and `board.test.ts` asserts all three, against every registered track.** §18
@@ -1308,10 +1338,10 @@ opens with all of these:
 |---|---|
 | `userId === roundOrder[roundIndex]` | A driver acting out of race order — `currentTurn` alone is not proof, because `taketurn` and the cron's fallback both move it along `turnOrder` without touching `roundIndex` |
 | `ps.phase === 'shift' \| 'move' \| 'slipstream'` as the command requires, and `RaceCarsShift` additionally `ps.roll === null` | **Re-rolling the dice.** `RaceCarsShift` returns `turnOver: false`, so `currentTurn` never moves: without this guard a driver re-sends the same body until the d20 comes up 20, and every gate on the command route still passes |
-| `Number.isInteger(brake) && brake >= 0 && brake <= ps.brakes && brake <= ps.roll - 1` | A negative brake (extra rows *and* extra tokens), a brake larger than the pool, and a free slick laid by a driver with nothing to spend (§14) |
+| `Number.isInteger(brake) && brake >= 0 && brake <= ps.brakes && brake <= ps.roll - 1` | A negative brake (extra spaces *and* extra tokens), a brake larger than the pool, and a free slick laid by a driver with nothing to spend (§14) |
 | `reachableSpaces(...).some(s => s.row === row && s.lane === lane)` — a **membership test**, with the distance computed from the persisted `ps.roll` and the validated `brake`, never from the command | Teleporting. Deriving a path *to* a submitted destination rather than checking it is in the server's set accepts `{ row: 77, lane: 1 }` and wins the race from the grid. Lane 3 on a two-lane row, lane 0 and a fractional row die here too |
 | §9's blocked-short set as its **own** explicit set | A driver stopping wherever they like, which is §9's "you can never choose to stop" dressed as a block |
-| `slipstreamOffered(state, userId)` re-run server-side | Three free rows claimed by a driver who earned no tow. The offer is the gate in both directions — a `decline` flag cannot be trusted to decide anything, not least because `"false"` is truthy |
+| `slipstreamOffered(state, userId)` re-run server-side | Three free spaces claimed by a driver who earned no tow. The offer is the gate in both directions — a `decline` flag cannot be trusted to decide anything, not least because `"false"` is truthy |
 
 **`rules.ts` is pure and isomorphic**, imported by the command classes and by
 the board alike (`docs/new-game.md`, "Isomorphic rules modules"). It is where
@@ -1446,11 +1476,13 @@ persuasive, wrong picture. It is the same failure mode as
 invented randomness is worse than no plan.
 
 What ships instead is the **reach band**, and it is the actual decision support:
-for every gear the driver may legally select, show the *span* of rows it can
-reach, whether that span can stop in the next corner, whether any of it
-overshoots and what the overshoot would cost. It is `reachableSpaces()` called
-once per legal gear — pure, client-side, no server round trip, no timeline
-route — and it tells the truth about a range instead of lying about a number.
+for every gear the driver may legally select, show the *span it rolls in spaces*,
+how many spaces out the next corner is, whether that span can stop in it, and
+what an overshoot would cost. Spaces throughout, because that is the currency
+the die is thrown in and the one §10 charges in — one walk of the road per
+render (`cornerReaches`), pure, client-side, no server round trip and no
+timeline route, telling the truth about a range instead of lying about a
+number.
 
 `plannableCommands` therefore stays `[]`, which is the default-deny the shared
 doc asks for, and `canPlan` stays `false` on `TurnNavControls`.
@@ -1526,7 +1558,7 @@ can be clicked.
 - `board.test.ts` / `rules.test.ts`: a lap is 78 rows and 214 spaces; a move of
   N reaches exactly the spaces N steps away; an occupied space blocks every path
   through it; a two-stop corner cannot be cleared in fewer than two turn-ends; an
-  overshoot costs one tyre a row; a move crossing two corners charges both.
+  overshoot costs one tyre a space; a move crossing two corners charges both.
 
 **PR 2 — Setup, wiring and the game type.** After this PR a race can be created
 and its grid inspected in the API response.

@@ -113,11 +113,11 @@ describe("Race Cars recap adapter", () => {
             snap(state({ playerStates: { u1: alice() } })),
             snap(state({ playerStates: { u1: alice({ row: 55, tyres: 1 }) } })),
             cmd({ className: "RaceCarsMove" }),
-            arrivalOutcome({ events: [{ type: 'overshoot', cornerId: 'gravel', rows: 4, waived: false }], row: 55, tyresSpent: 4 }),
+            arrivalOutcome({ events: [{ type: 'overshoot', cornerId: 'gravel', spaces: 4, waived: false }], row: 55, tyresSpent: 4 }),
         );
         expect(events).toHaveLength(1);
         expect(events[0].type).toBe("rc_overshoot");
-        expect(events[0].title).toBe("Alice overshot Gravel Bend by 4 rows");
+        expect(events[0].title).toBe("Alice overshot Gravel Bend by 4 spaces");
     });
 
     it("distinguishes an overshoot spin from an oil spin, the same row-list entry either way", () => {
@@ -129,7 +129,7 @@ describe("Race Cars recap adapter", () => {
         );
         expect(overshootSpin).toHaveLength(1);
         expect(overshootSpin[0].type).toBe("rc_spin");
-        expect(overshootSpin[0].title).toBe("Alice spun back to row 51 and misses their next turn");
+        expect(overshootSpin[0].title).toBe("Alice spun back into Gravel Bend and misses their next turn");
 
         const oilSpin = raceCarsRecapAdapter.toEvents(
             snap(state({ playerStates: { u1: alice() } })),
@@ -137,7 +137,8 @@ describe("Race Cars recap adapter", () => {
             cmd({ className: "RaceCarsMove" }),
             arrivalOutcome({ events: [{ type: 'spin', cause: 'oil', cornerId: null }], row: 30, spun: true }),
         );
-        expect(oilSpin[0].title).toBe("Alice hit a slick and spun back to row 30 and misses their next turn");
+        // An oil spin names no corner: the car stops on the slick, wherever it lies.
+        expect(oilSpin[0].title).toBe("Alice hit a slick and spun and misses their next turn");
     });
 
     it("gives a taken tow its own row, and stays silent on a declined one", () => {

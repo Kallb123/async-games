@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { ASHCOMBE } from "./ashcombe";
 import {
-    buildCorners,
     connectByGeometry,
+    derivedRows,
     effectiveExits,
     emptyState,
     fromTrack,
+    nextTileId,
     parseDraft,
     printTrackFile,
     sameExits,
@@ -16,22 +17,37 @@ import {
     type EditorTile,
 } from "./editorModel";
 
-// A tiny driveable circuit: three rows of two lanes, wrapping row 2 → row 0,
-// with a one-stop corner painted on rows 1-2.
+/**
+ * A tiny driveable circuit: a one-tile start/finish line and a two-tile
+ * one-stop corner, two lanes wide, wrapping back to the line. Rows are derived
+ * — row 0 is the line, 1-2 the corner — and never written here.
+ */
 function tinyState(): EditorState {
     return emptyState({
         id: "tiny",
         name: "Tiny",
-        tiles: [
-            { row: 0, lane: 1, x: 0, y: 0 },
-            { row: 0, lane: 2, x: 20, y: 0 },
-            { row: 1, lane: 1, x: 0, y: 20, cornerId: "bend" },
-            { row: 1, lane: 2, x: 20, y: 20, cornerId: "bend" },
-            { row: 2, lane: 1, x: 0, y: 40, cornerId: "bend" },
-            { row: 2, lane: 2, x: 20, y: 40, cornerId: "bend" },
+        sections: [
+            { id: "sf", name: "Start / Finish", lanes: 2, stops: 0 },
+            { id: "bend", name: "The Bend", lanes: 2, stops: 1 },
         ],
-        corners: { bend: { name: "The Bend", stops: 1 } },
+        tiles: [
+            { id: "sf.1.0", section: "sf", lane: 1, x: 0, y: 0 },
+            { id: "sf.2.0", section: "sf", lane: 2, x: 20, y: 0 },
+            { id: "bend.1.0", section: "bend", lane: 1, x: 0, y: 20 },
+            { id: "bend.2.0", section: "bend", lane: 2, x: 20, y: 20 },
+            { id: "bend.1.1", section: "bend", lane: 1, x: 0, y: 40 },
+            { id: "bend.2.1", section: "bend", lane: 2, x: 20, y: 40 },
+        ],
     });
+}
+
+/** One tile, for the geometry fixtures below — all in one unnamed section. */
+function tile(id: string, lane: number, x: number, y: number, extra: Partial<EditorTile> = {}): EditorTile {
+    return { id, section: "sf", lane, x, y, ...extra };
+}
+
+function loose(tiles: EditorTile[], lanes: 2 | 3 = 3): EditorState {
+    return emptyState({ sections: [{ id: "sf", name: "Straight", lanes, stops: 0 }], tiles });
 }
 
 describe("editor validation", () => {
@@ -43,80 +59,96 @@ describe("editor validation", () => {
         expect(validateTrack(emptyState()).errors[0]).toMatch(/Nothing drawn/);
     });
 
-    it("surfaces an undriveable graph as an error, not a crash", () => {
+    it("surfaces an underivable graph as an error, not a crash", () => {
         const broken = tinyState();
-        // A hand-drawn exit onto a space that isn't there.
-        broken.tiles[0] = { row: 0, lane: 1, x: 0, y: 0, exits: [{ row: 1, lane: 3 }] };
-        expect(validateTrack(broken).errors[0]).toMatch(/not a space/);
+        // A hand-drawn step onto a tile that isn't there.
+        broken.tiles[0] = { ...broken.tiles[0], exits: ["bend.3.0"] };
+        expect(validateTrack(broken).errors[0]).toMatch(/not a tile/);
     });
 
-    it("accepts a corner that takes only some lanes of a row (the inside line)", () => {
-        // The inside line is in the corner for fewer rows than the outside:
-        // untag row 1 lane 1 but keep it on lane 2 and both of row 2. Valid,
-        // no error, no warning about coverage.
-        const inside = tinyState();
-        inside.tiles[2].cornerId = undefined; // row 1 lane 1 leaves the corner early
-        expect(validateTrack(inside).errors).toEqual([]);
-        expect(validateTrack(inside).warnings.some(w => /cover|lane|gap/.test(w))).toBe(false);
+    it("refuses a band whose lanes run out of step without steps of their own", () => {
+        // The mistake sections exist to catch: an inside line drawn shorter
+        // than its outside cannot take the "next tile along" rule, because
+        // that rule is a statement about lanes that run in step (§5.1).
+        const skewed = tinyState();
+        skewed.tiles = skewed.tiles.filter(candidate => candidate.id !== "bend.1.1");
+        expect(validateTrack(skewed).errors[0]).toMatch(/out of step/);
     });
 
-    it("warns about a tile painted with a corner that no longer exists", () => {
+    it("warns about a section with no tiles on it", () => {
+        const empty = tinyState();
+        empty.sections = [...empty.sections, { id: "later", name: "Later", lanes: 3, stops: 0 }];
+        expect(validateTrack(empty).warnings.some(warning => /no tiles/.test(warning))).toBe(true);
+    });
+
+    it("warns about tiles left behind by a deleted section", () => {
         const orphan = tinyState();
-        delete orphan.corners.bend; // corner removed, tiles still carry its id
-        expect(validateTrack(orphan).warnings.some(w => /no longer exists/.test(w))).toBe(true);
-    });
-
-    it("warns about an exit that runs more than half a lap forward", () => {
-        // A backward-looking override — the row-numbering slip a sharp corner sets.
-        const backwards = tinyState();
-        backwards.tiles[5] = { row: 2, lane: 2, x: 20, y: 40, cornerId: "bend", exits: [{ row: 1, lane: 1 }] };
-        expect(validateTrack(backwards).warnings.some(w => /half a lap/.test(w))).toBe(true);
+        orphan.sections = orphan.sections.filter(section => section.id !== "bend");
+        expect(validateTrack(orphan).warnings.some(warning => /no longer exists/.test(warning))).toBe(true);
     });
 });
 
-describe("corners are read off the tiles that carry them", () => {
-    it("bands a corner by the rows of its tiles", () => {
-        expect(buildCorners(tinyState())).toEqual([
+describe("rows are derived from the steps, never typed", () => {
+    it("numbers each section from where the one before it ended", () => {
+        expect([...derivedRows(validateTrack(tinyState()).derived).entries()]).toEqual([
+            ["sf.1.0", 0],
+            ["sf.2.0", 0],
+            ["bend.1.0", 1],
+            ["bend.1.1", 2],
+            ["bend.2.0", 1],
+            ["bend.2.1", 2],
+        ]);
+    });
+
+    it("bands a corner by the rows its own section landed on", () => {
+        expect(validateTrack(tinyState()).derived!.corners).toEqual([
             { id: "bend", name: "The Bend", from: 1, to: 2, stops: 1 },
         ]);
     });
 
-    it("drops a corner nothing is tagged with", () => {
-        const state = tinyState();
-        state.corners.ghost = { name: "Ghost", stops: 2 };
-        expect(buildCorners(state).map(c => c.id)).toEqual(["bend"]);
-    });
-});
-
-describe("per-tile corner membership survives the round trip", () => {
-    it("carries cornerId onto the spaces and reads it straight back", () => {
-        const inside = tinyState();
-        inside.tiles[2].cornerId = undefined; // row 1 lane 1 leaves the corner early
-        const track = toTrack(inside);
-        expect(track.spaces.find(s => s.row === 1 && s.lane === 1)!.cornerId).toBeUndefined();
-        expect(track.spaces.find(s => s.row === 1 && s.lane === 2)!.cornerId).toBe("bend");
-        const reloaded = fromTrack(track);
-        expect(reloaded.tiles.find(t => t.row === 1 && t.lane === 1)!.cornerId).toBeUndefined();
-        expect(reloaded.tiles.find(t => t.row === 1 && t.lane === 2)!.cornerId).toBe("bend");
-    });
-
-    it("prints cornerId in the track file", () => {
-        expect(printTrackFile(tinyState())).toContain('cornerId: "bend"');
+    it("spreads a lane that takes fewer tiles across the rows it saved", () => {
+        // The shape the old model could not hold: an inside line of two tiles
+        // where the outside takes four. Both lanes are level again at the sync
+        // line, and no step fails to move the car forward.
+        const kettle = emptyState({
+            id: "k",
+            sections: [
+                { id: "sf", name: "Line", lanes: 2, stops: 0 },
+                { id: "bend", name: "Bend", lanes: 2, stops: 1 },
+            ],
+            tiles: [
+                tile("sf.1.0", 1, 0, 0),
+                tile("sf.2.0", 2, 20, 0),
+                { id: "bend.2.0", section: "bend", lane: 2, x: 20, y: 10, exits: ["bend.2.1"] },
+                { id: "bend.2.1", section: "bend", lane: 2, x: 20, y: 20, exits: ["bend.2.2"] },
+                { id: "bend.2.2", section: "bend", lane: 2, x: 20, y: 30, exits: ["bend.2.3"] },
+                { id: "bend.2.3", section: "bend", lane: 2, x: 20, y: 40, exits: ["sf.1.0", "sf.2.0"] },
+                { id: "bend.1.0", section: "bend", lane: 1, x: 0, y: 15, exits: ["bend.1.1"] },
+                { id: "bend.1.1", section: "bend", lane: 1, x: 0, y: 35, exits: ["sf.1.0", "sf.2.0"] },
+            ],
+        });
+        const rows = derivedRows(validateTrack(kettle).derived);
+        expect(rows.get("bend.2.0")).toBe(1);
+        expect(rows.get("bend.2.3")).toBe(4);
+        // Two tiles centred in the same four rows rather than bunched at one end.
+        expect(rows.get("bend.1.0")).toBe(2);
+        expect(rows.get("bend.1.1")).toBe(3);
+        expect(validateTrack(kettle).errors).toEqual([]);
     });
 });
 
 describe("headings follow the exits when not set by hand", () => {
     it("points straight down a lane", () => {
         const state = tinyState();
-        // row 0 lane 1 → row 1 lane 1/2; mean is down and slightly across.
-        expect(tileHeading(state.tiles, state.tiles[0])).toBeGreaterThan(45);
-        expect(tileHeading(state.tiles, state.tiles[0])).toBeLessThan(90);
+        // sf.1.0 → bend.1.0 / bend.2.0; the mean is down and slightly across.
+        expect(tileHeading(state, state.tiles[0])).toBeGreaterThan(45);
+        expect(tileHeading(state, state.tiles[0])).toBeLessThan(90);
     });
 
     it("honours a hand-set heading", () => {
         const state = tinyState();
         state.tiles[0].heading = 123;
-        expect(tileHeading(state.tiles, state.tiles[0])).toBe(123);
+        expect(tileHeading(state, state.tiles[0])).toBe(123);
     });
 });
 
@@ -127,19 +159,34 @@ describe("round-tripping a shipped track", () => {
         expect(validateTrack(state).errors).toEqual([]);
     });
 
-    it("rebuilds the same graph it came from", () => {
+    it("reads its corners back as sections, with the straights between them", () => {
+        expect(fromTrack(ASHCOMBE).sections.map(section => [section.id, section.stops])).toEqual([
+            ["straight1", 0],
+            ["hairpin", 2],
+            ["straight2", 0],
+            ["gravel", 1],
+            ["straight3", 0],
+            ["kink", 1],
+            ["straight4", 0],
+        ]);
+    });
+
+    it("rebuilds the same graph it came from, rows included", () => {
         const rebuilt = toTrack(fromTrack(ASHCOMBE));
         expect(rebuilt.rows).toBe(ASHCOMBE.rows);
         expect(rebuilt.spaces).toHaveLength(ASHCOMBE.spaces.length);
-        // Ordinary straights keep §5.1's default rather than becoming overrides.
         for (const space of rebuilt.spaces) {
-            const original = ASHCOMBE.spaces.find(s => s.row === space.row && s.lane === space.lane)!;
-            expect(sameExits(space.exits, original.exits)).toBe(true);
+            const original = ASHCOMBE.spaces.find(other => other.row === space.row && other.lane === space.lane)!;
+            expect(original).toBeDefined();
+            expect(sameExits(
+                space.exits.map(exit => `${exit.row}:${exit.lane}`),
+                original.exits.map(exit => `${exit.row}:${exit.lane}`),
+            )).toBe(true);
         }
     });
 
     it("keeps Ashcombe's corner bands", () => {
-        expect(buildCorners(fromTrack(ASHCOMBE))).toEqual(ASHCOMBE.corners);
+        expect(validateTrack(fromTrack(ASHCOMBE)).derived!.corners).toEqual(ASHCOMBE.corners);
     });
 });
 
@@ -147,245 +194,186 @@ describe("the printed track file", () => {
     it("prints a compilable-looking module that names the const after the id", () => {
         const source = printTrackFile(tinyState());
         expect(source).toContain("export const TINY: RaceCarsTrack");
-        expect(source).toContain("assembleSpaces(TILES, ROWS)");
-        expect(source).toContain("const ROWS = 3;");
+        expect(source).toContain("deriveTrack(SECTIONS)");
         expect(source).toContain('id: "bend"');
+        expect(source).toContain("corner: { stops: 1 }");
+    });
+
+    it("prints no row numbers at all — the derivation is the only thing that knows them", () => {
+        const source = printTrackFile(tinyState());
+        expect(source).not.toMatch(/\brow: \d/);
+        expect(source).toContain('id: "bend.1.0", lane: 1');
     });
 
     it("only prints exits where they override the default rule", () => {
         const source = printTrackFile(tinyState());
-        // A tidy straight tile has no exits array printed.
-        expect(source).toContain("{ row: 0, lane: 1 },");
-        expect(effectiveExits(tinyState().tiles, tinyState().tiles[0])).toHaveLength(2);
+        expect(source).not.toContain("exits:");
+        expect(effectiveExits(tinyState(), tinyState().tiles[0])).toHaveLength(2);
     });
 
-    it("throws on an undriveable track — callers must validate first", () => {
+    it("throws on an underivable track — callers must validate first", () => {
         // The contract the export panel relies on: it only prints when
-        // validateTrack is clean, because printTrackFile runs assembleSpaces.
+        // validateTrack is clean, because printTrackFile runs deriveTrack.
         const broken = tinyState();
-        broken.tiles[0] = { row: 0, lane: 1, x: 0, y: 0, exits: [{ row: 9, lane: 9 }] };
+        broken.tiles[0] = { ...broken.tiles[0], exits: ["nowhere"] };
         expect(validateTrack(broken).errors.length).toBeGreaterThan(0);
-        expect(() => printTrackFile(broken)).toThrow(/not a space/);
+        expect(() => printTrackFile(broken)).toThrow(/not a tile/);
+    });
+});
+
+describe("placing tiles", () => {
+    it("names the next tile after its section, lane and place in the run", () => {
+        const state = tinyState();
+        expect(nextTileId(state, "sf", 1)).toBe("sf.1.1");
+        expect(nextTileId(state, "bend", 2)).toBe("bend.2.2");
     });
 });
 
 describe("parseDraft trusts a saved draft only as far as its shape holds", () => {
     it("round-trips a real draft", () => {
         const state = tinyState();
-        expect(parseDraft(JSON.stringify(state)).tiles).toHaveLength(state.tiles.length);
+        const reloaded = parseDraft(JSON.stringify(state));
+        expect(reloaded.tiles).toHaveLength(state.tiles.length);
+        expect(reloaded.sections.map(section => section.id)).toEqual(["sf", "bend"]);
     });
 
     it("falls back to a blank track on junk, wrong type, or a bad shape", () => {
         expect(parseDraft(null).tiles).toEqual([]);
         expect(parseDraft("not json{").tiles).toEqual([]);
         expect(parseDraft("42").tiles).toEqual([]);
-        expect(parseDraft(JSON.stringify({ tiles: "nope", corners: 5 })).tiles).toEqual([]);
+        expect(parseDraft(JSON.stringify({ tiles: "nope", sections: 5 })).tiles).toEqual([]);
+        // A draft with no readable sections still has somewhere to draw.
+        expect(parseDraft(JSON.stringify({ tiles: [] })).sections).toHaveLength(1);
     });
 });
 
-describe("connectByGeometry lines lanes up off the shape, not the row numbers", () => {
-    it("leaves an interior straight on the default rule", () => {
-        // Two lanes running straight down: on the interior rows geometry agrees
-        // with row+1, so no override is written. (The last row wraps to the
-        // first, whose forward direction on an open test strip points back up —
-        // a real loop closes that; here it is enough that the straight does.)
-        const straight = emptyState({
-            tiles: [
-                { row: 0, lane: 1, x: 0, y: 0 }, { row: 0, lane: 2, x: 20, y: 0 },
-                { row: 1, lane: 1, x: 0, y: 20 }, { row: 1, lane: 2, x: 20, y: 20 },
-                { row: 2, lane: 1, x: 0, y: 40 }, { row: 2, lane: 2, x: 20, y: 40 },
-            ],
-        });
-        const connected = connectByGeometry(straight.tiles);
-        for (const [row, lane] of [[0, 1], [0, 2], [1, 1], [1, 2]] as const) {
-            expect(connected.find(t => t.row === row && t.lane === lane)!.exits).toBeUndefined();
+describe("connectByGeometry lines lanes up off the shape, not the placement order", () => {
+    it("leaves an ordinary straight on the default rule", () => {
+        const straight = loose([
+            tile("sf.1.0", 1, 0, 0), tile("sf.2.0", 2, 20, 0),
+            tile("sf.1.1", 1, 0, 20), tile("sf.2.1", 2, 20, 20),
+            tile("sf.1.2", 1, 0, 40), tile("sf.2.2", 2, 20, 40),
+        ], 2);
+        const connected = connectByGeometry(straight);
+        for (const id of ["sf.1.0", "sf.2.0", "sf.1.1", "sf.2.1"]) {
+            expect(connected.find(candidate => candidate.id === id)!.exits).toBeUndefined();
         }
     });
 
     it("keeps a hand-drawn override untouched", () => {
         const state = tinyState();
-        state.tiles[0] = { row: 0, lane: 1, x: 0, y: 0, exits: [{ row: 1, lane: 2 }] };
-        const connected = connectByGeometry(state.tiles);
-        expect(connected[0].exits).toEqual([{ row: 1, lane: 2 }]);
-    });
-
-    it("connects to the tile that is physically ahead when a lane skips a row", () => {
-        // A sharp inside line: lane 1 has no tile on row 1, so the tile that is
-        // actually in front of 0:1 is 2:1 — which the row+1 rule can't reach but
-        // geometry can. 0:1 is resolved first (row order), so this also guards
-        // the "no reversal" rule below: 2:1's own default forward step happens
-        // to point straight back at 0:1 on this 3-row wrap, but since 2:1 has
-        // not been resolved yet when 0:1 searches, it is not excluded — a
-        // candidate only ever blocks a reversal once this run has actually
-        // resolved it, not merely because it exists.
-        const corner = emptyState({
-            tiles: [
-                { row: 0, lane: 1, x: 0, y: 0 },
-                { row: 0, lane: 2, x: 30, y: 0 },
-                { row: 1, lane: 2, x: 30, y: 20 },
-                { row: 2, lane: 1, x: 0, y: 40 },
-                { row: 2, lane: 2, x: 30, y: 40 },
-            ],
-        });
-        const connected = connectByGeometry(corner.tiles);
-        const inside = connected.find(t => t.row === 0 && t.lane === 1)!;
-        expect(inside.exits).toBeDefined();
-        expect(inside.exits!.some(e => e.row === 2 && e.lane === 1)).toBe(true);
+        state.tiles[0] = { ...state.tiles[0], exits: ["bend.2.0"] };
+        const connected = connectByGeometry(state);
+        expect(connected[0].exits).toEqual(["bend.2.0"]);
+        expect(connected[0].autoExits).toBeUndefined();
     });
 
     it("never connects across more than one lane, even when that tile is the closest", () => {
-        // Lane 3 sits physically nearest 0:1 on the next row — a three-lane road
-        // pinched into a sharp bend — but a car may only ever step into this lane
-        // or the one next to it (§5.1), so geometry must not offer lane 3 however
-        // close it is.
-        const pinched = emptyState({
-            tiles: [
-                { row: 0, lane: 1, x: 0, y: 0 },
-                { row: 0, lane: 2, x: 20, y: 0 },
-                { row: 0, lane: 3, x: 40, y: 0 },
-                { row: 1, lane: 3, x: 2, y: 20 },
-                { row: 1, lane: 2, x: 20, y: 20 },
-                { row: 1, lane: 1, x: 40, y: 20 },
-            ],
-        });
-        const connected = connectByGeometry(pinched.tiles);
-        const fromLane1 = connected.find(t => t.row === 0 && t.lane === 1)!;
-        expect((fromLane1.exits ?? []).every(e => Math.abs(e.lane - 1) <= 1)).toBe(true);
+        // Lane 3 sits physically nearest lane 1 on the next row — a three-lane
+        // road pinched into a sharp bend — but a car may only ever step into
+        // this lane or the one next to it (§5.1).
+        const pinched = loose([
+            tile("sf.1.0", 1, 0, 0), tile("sf.2.0", 2, 20, 0), tile("sf.3.0", 3, 40, 0),
+            tile("sf.3.1", 3, 2, 20), tile("sf.2.1", 2, 20, 20), tile("sf.1.1", 1, 40, 20),
+        ]);
+        const connected = connectByGeometry(pinched);
+        const state = loose(connected);
+        const exits = effectiveExits(state, connected.find(candidate => candidate.id === "sf.1.0")!);
+        const lanes = exits.map(exit => connected.find(candidate => candidate.id === exit)!.lane);
+        expect(lanes.every(lane => Math.abs(lane - 1) <= 1)).toBe(true);
     });
 
-    it("marks what it writes as auto so a later pass may redraw it", () => {
-        const corner = emptyState({
-            tiles: [
-                { row: 0, lane: 1, x: 0, y: 0 },
-                { row: 0, lane: 2, x: 30, y: 0 },
-                { row: 1, lane: 2, x: 30, y: 20 },
-                { row: 2, lane: 1, x: 0, y: 40 },
-                { row: 2, lane: 2, x: 30, y: 40 },
-            ],
-        });
-        const connected = connectByGeometry(corner.tiles);
-        const inside = connected.find(t => t.row === 0 && t.lane === 1)!;
-        expect(inside.autoExits).toBe(true);
+    it("connects a lane change the default rule cannot reach, and marks it auto", () => {
+        // Lane 2 has run out of tiles at this point in the section, so "the
+        // next tile along in the lane beside me" finds nothing — but a tile is
+        // plainly there on the art, farther off than staying in lane the way a
+        // wide road's lane change always is.
+        const wide = loose([
+            tile("sf.3.0", 3, 390, 180),
+            tile("sf.3.1", 3, 270, 180),
+            tile("sf.2.0", 2, 210, 100),
+        ]);
+        const connected = connectByGeometry(wide);
+        const from = connected.find(candidate => candidate.id === "sf.3.0")!;
+        expect(from.autoExits).toBe(true);
+        expect(from.exits).toContain("sf.3.1");
+        expect(from.exits).toContain("sf.2.0");
     });
 
     it("redraws its own auto exits on a second pass instead of freezing them", () => {
-        // First pass draws 0:1 -> 2:1 off the gap on row 1 (no lane-1 tile
-        // there yet). Add a real 1:1 to close that gap — a second pass must
-        // follow the tiles rather than keep repeating what it wrote before,
-        // and since row+1 now lines up on its own the stale override is
-        // dropped entirely rather than left pointing at the old target.
-        let tiles: EditorTile[] = [
-            { row: 0, lane: 1, x: 0, y: 0 },
-            { row: 0, lane: 2, x: 30, y: 0 },
-            { row: 1, lane: 2, x: 30, y: 20 },
-            { row: 2, lane: 1, x: 0, y: 40 },
-            { row: 2, lane: 2, x: 30, y: 40 },
-        ];
-        tiles = connectByGeometry(tiles);
-        const firstPass = tiles.find(t => t.row === 0 && t.lane === 1)!;
-        expect(firstPass.autoExits).toBe(true);
-        expect(firstPass.exits!.some(e => e.row === 2 && e.lane === 1)).toBe(true);
+        let state = loose([
+            tile("sf.3.0", 3, 390, 180),
+            tile("sf.3.1", 3, 270, 180),
+            tile("sf.2.0", 2, 210, 100),
+        ]);
+        state = loose(connectByGeometry(state));
+        expect(state.tiles.find(candidate => candidate.id === "sf.3.0")!.autoExits).toBe(true);
 
-        tiles = [...tiles, { row: 1, lane: 1, x: 0, y: 20 }];
-        tiles = connectByGeometry(tiles);
-        const redrawn = tiles.find(t => t.row === 0 && t.lane === 1)!;
+        // Give lane 2 a tile the default rule can reach, and the override it
+        // wrote is dropped rather than left pointing at the old target.
+        state = loose([...state.tiles, tile("sf.2.1", 2, 270, 100)]);
+        state = loose(connectByGeometry(state));
+        const redrawn = state.tiles.find(candidate => candidate.id === "sf.3.0")!;
         expect(redrawn.exits).toBeUndefined();
         expect(redrawn.autoExits).toBeUndefined();
     });
 
     it("ignores a stale auto exit from a previous run when aiming the search", () => {
-        // A's exits claim (wrongly, as if left over from an earlier, buggy
-        // run) that it only reaches the far tile C. If that stale exit fed
-        // this run's heading, the search would aim toward C alone and miss
-        // B — the close, straight-ahead, same-lane tile — entirely. A fresh
-        // run must derive A's heading from where the tiles actually sit and
-        // find both.
-        const a: EditorTile = { row: 0, lane: 1, x: 0, y: 0, exits: [{ row: 1, lane: 2 }], autoExits: true };
-        const b: EditorTile = { row: 1, lane: 1, x: 0, y: 10 };
-        const c: EditorTile = { row: 1, lane: 2, x: 50, y: 10 };
-        const connected = connectByGeometry([a, b, c]);
-        const fromA = connected.find(t => t.row === 0 && t.lane === 1)!;
-        const exits = effectiveExits(connected, fromA);
-        expect(exits.some(e => e.row === 1 && e.lane === 1)).toBe(true);
-        expect(exits.some(e => e.row === 1 && e.lane === 2)).toBe(true);
+        // A's exits claim (wrongly, as if left over from an earlier, buggy run)
+        // that it only reaches the far tile C. If that stale exit fed this run's
+        // heading, the search would aim toward C alone and miss B — the close,
+        // straight-ahead, same-lane tile — entirely.
+        const state = loose([
+            tile("sf.1.0", 1, 0, 0, { exits: ["sf.2.0"], autoExits: true }),
+            tile("sf.1.1", 1, 0, 10),
+            tile("sf.2.0", 2, 20, 10),
+        ]);
+        const connected = connectByGeometry(state);
+        const exits = effectiveExits(loose(connected), connected.find(candidate => candidate.id === "sf.1.0")!);
+        expect(exits).toContain("sf.1.1");
+        expect(exits).toContain("sf.2.0");
     });
 
     it("is stable across repeated runs — a second pass matches the first when nothing moved", () => {
-        // Same fixture as "connects to the tile that is physically ahead...":
-        // running it again must not drift to a different guess just because
-        // it is now reasoning about its own prior output rather than a blank
-        // tile — the whole point of never trusting a tile's own last exits.
-        const corner = emptyState({
-            tiles: [
-                { row: 0, lane: 1, x: 0, y: 0 },
-                { row: 0, lane: 2, x: 30, y: 0 },
-                { row: 1, lane: 2, x: 30, y: 20 },
-                { row: 2, lane: 1, x: 0, y: 40 },
-                { row: 2, lane: 2, x: 30, y: 40 },
-            ],
-        });
-        const once = connectByGeometry(corner.tiles);
-        const twice = connectByGeometry(once);
+        const state = loose([
+            tile("sf.3.0", 3, 390, 180),
+            tile("sf.3.1", 3, 270, 180),
+            tile("sf.2.0", 2, 210, 100),
+        ]);
+        const once = connectByGeometry(state);
+        const twice = connectByGeometry(loose(once));
         expect(twice).toEqual(once);
-    });
-
-    it("connects a wide road's lane change even when it sits farther off than staying in lane", () => {
-        // The lane-2 tile ahead of 7:3 sits noticeably farther away than the
-        // lane-3 tile ahead of it does — the lane offset a wide road draws —
-        // at close to the ~1.64x ratio that used to fall just outside a single
-        // "close enough to the nearest tile overall" cutoff shared across
-        // lanes, and so dropped the lane change entirely: exactly the bug
-        // report, a three-lane row that only ever connected straight ahead,
-        // never to the lane beside it. 7:2 sits on 7:3's own row and must
-        // never be offered — same row is never a valid step (a car changes
-        // lane while moving, never on the spot).
-        const wide = emptyState({
-            tiles: [
-                { row: 7, lane: 3, x: 390, y: 180 },
-                { row: 8, lane: 3, x: 270, y: 180 },
-                { row: 8, lane: 2, x: 210, y: 100 },
-                { row: 7, lane: 2, x: 320, y: 100 },
-            ],
-        });
-        const connected = connectByGeometry(wide.tiles);
-        const from = connected.find(t => t.row === 7 && t.lane === 3)!;
-        const exits = effectiveExits(connected, from);
-        expect(exits.some(e => e.row === 8 && e.lane === 3)).toBe(true);
-        expect(exits.some(e => e.row === 8 && e.lane === 2)).toBe(true);
-        expect(exits.every(e => e.row !== 7)).toBe(true);
     });
 
     it("never reverses an existing exit, picking the next-nearest tile in that lane instead", () => {
         // X already steps to Y (hand-drawn). Y's own forward search is aimed
         // (via an explicit heading, to make the test deterministic) straight
-        // back at X — the nearest candidate in lane 1 — with W a little
-        // farther beyond it in the same direction. Y must not retrace X's
-        // line backwards; it should fall through to W instead.
-        const x: EditorTile = { row: 5, lane: 1, x: 0, y: 0, exits: [{ row: 6, lane: 1 }] };
-        const y: EditorTile = { row: 6, lane: 1, x: 0, y: 10, heading: -90 };
-        const w: EditorTile = { row: 4, lane: 1, x: 0, y: -20 };
-        const connected = connectByGeometry([x, y, w]);
-        const fromY = connected.find(t => t.row === 6 && t.lane === 1)!;
-        expect(fromY.exits).toEqual([{ row: 4, lane: 1 }]);
-        expect(fromY.exits!.some(e => e.row === 5 && e.lane === 1)).toBe(false);
+        // back at X — the nearest candidate in lane 1 — with W a little farther
+        // beyond it in the same direction. Y must not retrace X's line
+        // backwards; it should fall through to W instead.
+        const state = loose([
+            // W first, so the default rule has nothing to say about Y and the
+            // geometry is what answers.
+            tile("w", 1, 0, -20),
+            tile("x", 1, 0, 0, { exits: ["y"] }),
+            tile("y", 1, 0, 10, { heading: -90 }),
+        ]);
+        const connected = connectByGeometry(state);
+        const exits = effectiveExits(loose(connected), connected.find(candidate => candidate.id === "y")!);
+        expect(exits).toEqual(["w"]);
+        expect(exits).not.toContain("x");
     });
 
     it("drops the lane rather than reversing an exit when nothing else is ahead", () => {
-        // Same as above but without W to fall back on: Y must end up with no
-        // step in lane 1 at all, not a reversal of X's line.
-        const x: EditorTile = { row: 5, lane: 1, x: 0, y: 0, exits: [{ row: 6, lane: 1 }] };
-        const y: EditorTile = { row: 6, lane: 1, x: 0, y: 10, heading: -90 };
-        const connected = connectByGeometry([x, y]);
-        const fromY = connected.find(t => t.row === 6 && t.lane === 1)!;
-        expect(fromY.exits).toBeUndefined();
-    });
-
-    it("never touches a hand-drawn exit, even one that could be redrawn", () => {
-        const state = tinyState();
-        state.tiles[0] = { row: 0, lane: 1, x: 0, y: 0, exits: [{ row: 1, lane: 2 }] };
-        const connected = connectByGeometry(state.tiles);
-        const tile = connected.find(t => t.row === 0 && t.lane === 1)!;
-        expect(tile.exits).toEqual([{ row: 1, lane: 2 }]);
-        expect(tile.autoExits).toBeUndefined();
+        const state = loose([
+            tile("x", 1, 0, 0, { exits: ["y"] }),
+            tile("y", 1, 0, 10, { heading: -90 }),
+        ]);
+        // Nothing is written: the geometry finds no candidate in lane 1 that it
+        // is allowed to point at. (On this one-section fixture the default rule
+        // still wraps Y round to X, which a real lap's next section would be.)
+        const connected = connectByGeometry(state);
+        expect(connected.find(candidate => candidate.id === "y")!.exits).toBeUndefined();
+        expect(connected.find(candidate => candidate.id === "y")!.autoExits).toBeUndefined();
     });
 });

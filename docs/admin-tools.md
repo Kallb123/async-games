@@ -135,21 +135,52 @@ client-only `isAdmin` dead end the rest of `/admin` uses.
 
 ### Why it exists
 
-A Race Cars circuit is a graph of spaces (see
+A Race Cars circuit is a graph of tiles (see
 [`race-cars.md`](./games/race-cars.md) §5.1): every tile carries its own
 `exits` — the spaces a car may drive to next — and its own `geometry` (the
-centre point and heading it is drawn at). Two things about a real circuit can't
-be typed by hand:
+centre point and heading it is drawn at). Three things about a real circuit
+can't be typed by hand:
 
 - **214 hand-placed coordinates** (§23.6). The centre point of every tile has
   to sit on the road in the art, and eyeballing pixel pairs into a source file
   is not a job.
 - **The corner merges that break §5.1's step rule.** The default rule — the
-  next row, this lane or either lane beside it — is written for you. But a
-  painted corner that only feeds particular tiles ahead, and an inside line
+  next tile along, this lane or either lane beside it — is written for you. But
+  a painted corner that only feeds particular tiles ahead, and an inside line
   that takes fewer tiles round a corner than the outside, both need their
   `exits` naming by hand. That is a graph edge, and drawing edges is what the
   editor is for.
+- **Row numbers.** Nobody types these any more, here or in a track file. They
+  are derived from the steps you draw (see below), which is the whole reason
+  the editor grew sections.
+
+### Sections and sync lines
+
+The lap is cut into **sections**: a straight, an esse, a corner. Each boundary
+between two of them is a **sync line** — a line across the road where every
+lane is genuinely level with every other. A **corner is a section** with a stop
+count (§10); there is no separate painting of corner bands.
+
+Rows are then derived inside each section from the steps you drew, and they are
+the thing sections exist for. A row number counted along a lane drifts the
+moment a corner's inside line takes fewer tiles than its outside, and by the
+second corner two tiles drawn side by side on the art carry row numbers a lap
+apart — which is a step across the road that doesn't move the car forward, and
+a corner a car can drive the stop count of for free. Derived, a row is a rank
+in the step graph: every step advances at least one row by construction, a lane
+taking the short way round simply skips the rows it saved, and both lanes are
+level again at the next sync line.
+
+Two consequences worth keeping in mind while drawing:
+
+- **Put a boundary where the road is square**, a tile or two clear of a corner
+  whose ends are skewed — not at the corner's own painted edge.
+- **Place each lane's tiles in the order the road runs.** A lane's run through
+  a section is its order of placement; the derivation and the default step rule
+  both read it.
+- **A lap needs at least two sections.** The wrap back to the start line has to
+  cross a sync line; held inside one section it is a loop in the very graph the
+  rows are ranked from.
 
 ### What you do with it
 
@@ -157,60 +188,62 @@ be typed by hand:
    *Upload backdrop* an image to trace against (the upload is held in this
    browser only, never written into the printed track). Set the viewBox size —
    an upload fills it in from the image.
-2. **Place tiles.** In *Place* mode, click the art to drop the next tile; its
-   row/lane auto-advance (lane 1 → 2 → 3 → next row). Drag a tile to nudge its
-   centre; click one to select it and edit its row, lane, heading or corner in
-   the *Tile* panel. Heading is computed from where a tile's exits point unless
-   you set it by hand.
-3. **Draw movement restriction.** Select a tile, switch to *Draw exits*, and
+2. **Cut the lap into sections.** In *Sections*, name each stretch in the order
+   it is driven, starting at the start/finish line: how many lanes wide it is,
+   and whether it is a straight or a corner owing one or two stops. *Earlier* /
+   *Later* reorder them; *Draw into this* picks the one new tiles land in.
+3. **Place tiles.** In *Place* mode, click the art to drop the next tile into
+   the active section; the lane cycles 1 → 2 → 3 and can be set by hand. Drag a
+   tile to nudge its centre; click one to select it and edit its section, lane
+   or heading in the *Tile* panel — which also shows the row it derived to.
+   Heading is computed from where a tile's exits point unless you set it.
+4. **Draw movement restriction.** Select a tile, switch to *Draw exits*, and
    click the tiles it may step to — each click adds or removes a step. Faint
    dashed edges are §5.1's default; solid edges are your overrides. An edit that
    lands back on the default drops the override, so ordinary straights stay
    plain. **Auto-connect exits from geometry** rebuilds every non-overridden
-   tile's steps from where the tiles actually sit rather than from row+1 — the
-   fix for a corner sharp enough that the lanes come out of it out of step (see
-   below). It leaves your hand-drawn exits alone.
-4. **Paint the corners.** In *Corners*, add a corner (id, name, stop count),
-   then switch to *Paint corners* and drag over exactly the tiles that belong
-   to it. Membership is **per tile** (§10, §5.1): a corner covers all its lanes
-   but not every lane on every row — the inside line is the short way round, so
-   it is in the corner for fewer rows than the outside. The corner's row band
-   (`from`/`to`, what §10 charges overshoot against) is derived from the rows
-   its tiles span. Set the brush to *Erase* to clear tiles.
-5. **Save/resume.** The draft autosaves to this browser's `localStorage`;
+   tile's steps from where the tiles actually sit rather than from the placement
+   order — the fix for a section whose lanes hold different numbers of tiles
+   (see below). It leaves your hand-drawn exits alone.
+5. **Move tiles between sections.** *Paint into section* drags the brush over
+   tiles to move them into the active section — how a corner gets its tiles, and
+   how a sync line is nudged a tile either way once the art shows it is in the
+   wrong place.
+6. **Save/resume.** The draft autosaves to this browser's `localStorage`;
    *Save draft to file* / *Open draft file* move it to a `.json` you can keep or
    carry to another machine. That draft is the working copy — separate from the
    deployable track file the export panel prints.
-6. **Validate & export.** The panel runs the tiles through the game's own
-   `assembleSpaces`, so "driveable in the editor" and "loads in the game" are
-   the same check. Copy the printed file, save it as
+7. **Validate & export.** The panel runs the drawing through the game's own
+   `deriveTrack`, so "driveable in the editor" and "loads in the game" are the
+   same check. Copy the printed file, save it as
    `src/games/RaceCars/tracks/<id>.ts`, and add it to `TRACK_LIST` in
-   `board.ts`.
+   `board.ts`. No row number is printed anywhere: the file carries sections,
+   tiles and steps, and derives its rows at module load exactly as the editor
+   did.
 
 Load a shipped track (Ashcombe, Anglet) to refine its placeholder geometry
-against the real art rather than placing every tile from nothing. The whole
-screen stretches to a desktop's width — the canvas stays put on the left while
-the panels scroll on the right — and folds to a single column on a phone.
+against the real art rather than placing every tile from nothing — its corners
+come back as sections with the straights between them, ready to be split
+further. The whole screen stretches to a desktop's width — the canvas stays put
+on the left while the panels scroll on the right — and folds to a single column
+on a phone.
 
-### Re-aligning lanes after a corner
+### A corner whose lanes run out of step
 
-The inside of a corner covers the same rows in fewer tiles than the outside, so
-the lanes come out of a corner out of step, and past it they have to line up
-again. There is **no separate re-alignment step, and none is needed** — the
-merge *is* an exit. Draw the inside line's last tile straight onto the row it
-should rejoin, and the graph carries the re-alignment; `assembleSpaces` then
-checks that every such exit lands on a real space and moves the car forward.
+The inside of a corner covers the same stretch in fewer tiles than the outside.
+Say so by drawing it: place the inside line's tiles where they sit on the art,
+and draw the steps out of each one, including the last one's merge back onto
+the straight. **The re-alignment *is* an exit** — there is no separate step for
+it, and the derivation spreads the shorter lane evenly across the rows its
+section spans so the two lines stay comparable.
 
-The catch is the auto-generator: §5.1's default step rule (this lane or either
-beside it, in the *next row*) can't see that the inside line took fewer tiles,
-so past a sharp corner "the next row in this lane" is no longer the tile in
-front. *Auto-connect exits from geometry* solves it by connecting each tile to
-the tiles physically ahead of it — off the shape you drew, not off row+1 — so a
-tile whose true next space carries a lower row number than its neighbour (the
-inside line having spent fewer rows) still connects forward. If an exit ends up
-running more than half a lap "forward", the export panel warns: that is almost
-always a row-numbering slip, where the rows past the corner stopped counting up
-in step with the road.
+A band like that has to name every one of its steps, and the export panel says
+so if it doesn't: "the next tile along in the lane beside me" is a statement
+about lanes that run *in step*, and over one that doesn't it is a guess — the
+guess that used to put two tiles drawn side by side a row apart. *Auto-connect
+exits from geometry* is the tool for it: it connects each tile to the tiles
+physically ahead of it in this lane and the one either side, working the
+direction of travel out from the next tile along the tile's own lane.
 
 ### No "What's new" entry
 

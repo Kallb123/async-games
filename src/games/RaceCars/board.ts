@@ -21,44 +21,51 @@ export interface RaceCarsSpace {
  * One space of a circuit, carrying the single fact about it no rule can work
  * out from where it sits: the spaces a car standing here may drive to next.
  *
- * §5.1's own rule — the next row, this lane or either lane beside it — is what
- * `deriveTrack` writes for an ordinary stretch of road, and it is written out
- * per space rather than recomputed on demand because a real circuit does not
- * obey it everywhere. Two things break it, and both live on the same corner:
+ * §5.1's own rule — the next tile along, this lane or either lane beside it —
+ * is what `deriveTrack` writes for an ordinary stretch of road, and it is
+ * written out per space rather than recomputed on demand because a real circuit
+ * does not obey it everywhere. Two things break it, and both live on a corner:
  *
  * - **A tile that names the tiles it lets you cross to.** Painted corners are
  *   not free to change lane across; the board says which space ahead each one
  *   feeds, and often that is only the one in front.
  * - **Lanes that do not run in step.** The inside of a corner is the short way
- *   round, so it takes fewer spaces to cover the same rows than the outside
- *   does — four against eight — and "the same lane in the next row" is then not
- *   a space that exists at all. Past the corner the lanes are level again but
- *   the count of spaces behind them is not, which is why nothing downstream
- *   measures progress in steps.
+ *   round, so it takes fewer spaces to cover the same stretch than the outside
+ *   does — four against eight — and "the same lane, one tile along" is then not
+ *   a step across the road at all. Both lanes are level again at the sync line
+ *   past the corner, and the rows they were given say so (`tracks/sections.ts`)
+ *   even though the count of spaces behind them differs.
  *
  * Read the list, never write to it: it belongs to the track, and every car on
  * the circuit is handed the same array.
  */
 export interface RaceCarsTrackSpace extends RaceCarsSpace {
-    /** Every space one step from here, in row then lane order. Never empty. */
+    /**
+     * Every space one step from here, in the order the road declares them —
+     * an order nothing reads anything into, since a walk keys its frontier by
+     * space. Never empty.
+     */
     exits: readonly RaceCarsSpace[];
     /**
-     * The corner this space belongs to, if any (§10) — membership is per space,
-     * not per row. A corner covers all of its lanes, but not every lane on every
-     * one of its rows: the inside line is the short way round and takes fewer
-     * tiles through the corner than the outside does (§5.1), so it is in the
-     * corner for fewer rows. A straight's spaces carry no id.
+     * The corner this space belongs to, if any (§10): the id of the section it
+     * was drawn into. A corner is a stretch of road between two sync lines, so
+     * both of its lines are in it for the same stretch even where the inside
+     * covers that stretch in half the tiles (§5.1) — and what §10 charges is
+     * the spaces past the corner rather than the rows. A straight's spaces
+     * carry no id.
      */
     cornerId?: string;
 }
 
 /**
- * A corner is a band of rows with a stop count, not a turn of the wheel (§5.1).
- * `from`/`to` are the inclusive row band its spaces span — the outside line's
- * extent, since the inside line covers it in fewer rows — and §10 charges
- * overshoot in rows past `to`. Which spaces are actually in it is carried on the
- * spaces themselves (`cornerId`), because within that band different rows hold
- * different lanes of it.
+ * A corner is a **section of road** with a stop count, not a turn of the wheel
+ * (§5.1): the tiles an author drew into it, which is what `cornerId` carries on
+ * each space and what §10 reads to decide when a car has left one.
+ *
+ * `from`/`to` are the inclusive row band those spaces span — a label for the
+ * screen and the place a spun car is put back, never the measure of an
+ * overshoot. §10 charges the **spaces** a move ends up past the corner
+ * (`cornerExits`), because a row is a rank rather than a distance (§5.1).
  */
 export interface RaceCarsCorner {
     id: string;
@@ -87,15 +94,15 @@ export interface RaceCarsTrack {
     id: string;
     name: string;
     /**
-     * Positions round one lap. Row numbers wrap: the row after `rows - 1` is
-     * row 0, and crossing that boundary completes a lap.
+     * Ranks round one lap. Row numbers wrap: the row after `rows - 1` is row 0,
+     * and crossing that boundary completes a lap.
      *
-     * A row is a **place on the road, not a step along it**. Everything that
-     * compares two cars, or a car against the circuit, is measured in rows —
-     * turn order, the gap to the leader, a corner's band, the finish line —
-     * precisely because a lane may have no space on a given row (§5.1), so one
-     * step can carry a car more than one row and two cars level with each other
-     * can be a different number of steps from the same corner.
+     * A row is a **place on the road, not a step along it, and not a distance**.
+     * It says how far round the lap a space is and nothing else, which is what
+     * orders the field and places the finish line. Rows are derived from the
+     * step graph itself (`tracks/sections.ts`), so a lane taking the short way
+     * round a corner skips the rows it saved rather than falling out of step
+     * with the lane beside it — and nothing a rule charges is counted in them.
      */
     rows: number;
     /** Every space on the circuit, and the steps out of each (§5.1). */
@@ -335,14 +342,16 @@ export const BRAKE_SLICK_THRESHOLD = 3;
 /** Entering a slick's space rolls a d6; a 1 loses control (§14). */
 export const OIL_DIE_SIDES = 6;
 export const OIL_SPIN_FACE = 1;
-/**
- * A tow is a second move of exactly three steps (§12) — three rows of road on a
- * circuit whose lanes run in step, and the inside line's three spaces where
- * they do not (§5.1).
- */
+/** A tow is a second move of exactly three steps (§12). */
 export const SLIPSTREAM_STEPS = 3;
-/** A tow is offered to a car this many rows behind another, in any lane (§12). */
-export const SLIPSTREAM_GAP_ROWS = [1, 2];
+/**
+ * A tow is offered to a car this many **steps** behind another, in any lane
+ * (§12) — steps along the road the car is actually on, not a difference of row
+ * numbers: a row is a rank rather than a distance (§5.1), so two cars a row
+ * apart on a staggered stretch are beside each other rather than in each
+ * other's wake.
+ */
+export const SLIPSTREAM_GAP_STEPS = [1, 2];
 /** Brakes shorten a roll down to this and no further — a car always moves (§11). */
 export const MIN_MOVE_STEPS = 1;
 
@@ -354,7 +363,7 @@ export function spaceKey(row: number, lane: number): string {
 }
 
 /**
- * The spaces of a circuit, indexed the two ways every rule asks for them.
+ * The spaces of a circuit, indexed the three ways every rule asks for them.
  *
  * A track is a graph rather than an arithmetic rule (§5.1), so "what is on this
  * space" would otherwise be a `.find()` over a couple of hundred entries — per
@@ -366,6 +375,7 @@ export function spaceKey(row: number, lane: number): string {
 interface TrackIndex {
     byKey: Map<string, RaceCarsTrackSpace>;
     byRow: Map<number, RaceCarsTrackSpace[]>;
+    byCorner: Map<string, RaceCarsTrackSpace[]>;
 }
 
 const TRACK_INDEX = new WeakMap<RaceCarsTrack, TrackIndex>();
@@ -376,15 +386,24 @@ function indexOf(track: RaceCarsTrack): TrackIndex {
 
     const byKey = new Map<string, RaceCarsTrackSpace>();
     const byRow = new Map<number, RaceCarsTrackSpace[]>();
+    const byCorner = new Map<string, RaceCarsTrackSpace[]>();
     for (const space of track.spaces) {
         byKey.set(spaceKey(space.row, space.lane), space);
         const row = byRow.get(space.row);
         if (row) row.push(space);
         else byRow.set(space.row, [space]);
+        if (space.cornerId) {
+            const corner = byCorner.get(space.cornerId);
+            if (corner) corner.push(space);
+            else byCorner.set(space.cornerId, [space]);
+        }
     }
     for (const row of byRow.values()) row.sort((a, b) => a.lane - b.lane);
+    // Last row first, then lane order: the order §13 searches a corner for a
+    // free space to put a spun car back on.
+    for (const corner of byCorner.values()) corner.sort((a, b) => b.row - a.row || a.lane - b.lane);
 
-    const built: TrackIndex = { byKey, byRow };
+    const built: TrackIndex = { byKey, byRow, byCorner };
     TRACK_INDEX.set(track, built);
     return built;
 }
@@ -395,11 +414,16 @@ export function spaceAt(track: RaceCarsTrack, row: number, lane: number): RaceCa
 }
 
 /**
- * Every space on a row, in lane order — two or three of them on an ordinary
- * row, and fewer than the road is wide where a lane skips it (§5.1).
+ * Every space on a row, in lane order — the width of the road on an ordinary
+ * one, and fewer where a lane skips it (§5.1).
  */
 export function spacesInRow(track: RaceCarsTrack, row: number): RaceCarsTrackSpace[] {
     return indexOf(track).byRow.get(row) ?? [];
+}
+
+/** Every space of one corner, its last row first — the order §13 searches. */
+export function spacesInCorner(track: RaceCarsTrack, cornerId: string): RaceCarsTrackSpace[] {
+    return indexOf(track).byCorner.get(cornerId) ?? [];
 }
 
 /** Spaces in one lap. */
@@ -407,28 +431,15 @@ export function spaceCount(track: RaceCarsTrack): number {
     return track.spaces.length;
 }
 
-/** Rows travelled going forward from `from` to `to`, the way a car drives. */
+/**
+ * Rows travelled going forward from `from` to `to`, the way a car drives.
+ *
+ * An **ordering** measure and never a charge: rows rank the field, band the
+ * corners and place the finish line, while everything a rule costs — an
+ * overshoot, a tow, a roll — is counted in spaces (§5.1, §10).
+ */
 export function rowsBetween(track: RaceCarsTrack, from: number, to: number): number {
     return ((to - from) % track.rows + track.rows) % track.rows;
-}
-
-/**
- * §5.1's step rule, and the only movement primitive in the game: the spaces a
- * car standing here may drive to, as the track itself declares them.
- *
- * A rule rather than a lookup until the circuits grew corners whose lanes run
- * out of step: "the next row, this lane or either beside it" is what
- * `deriveTrack` writes onto an ordinary stretch of road, and the track is free
- * to say something narrower anywhere it needs to.
- *
- * The list is the track's own — read it, never sort or push to it. It is never
- * empty for a space that exists, which is what lets §9 treat an empty *walk*
- * as "boxed in by traffic" rather than "off the end of the map"; a space that
- * is not on the circuit at all answers with an empty list rather than throwing,
- * because the one caller that can reach for one is a forged move being refused.
- */
-export function stepsFrom(track: RaceCarsTrack, row: number, lane: number): readonly RaceCarsSpace[] {
-    return spaceAt(track, row, lane)?.exits ?? [];
 }
 
 /**
@@ -446,70 +457,23 @@ export function driveableSteps(track: RaceCarsTrack, steps: number): number {
     return Math.min(Math.floor(steps), track.rows);
 }
 
-/** Rows covered by the end of each step of a path; index 0 is none of it yet. */
-function rowsByStep(track: RaceCarsTrack, path: RaceCarsSpace[]): number[] {
-    const covered = [0];
-    for (let step = 1; step < path.length; step++) {
-        covered.push(covered[step - 1] + rowsBetween(track, path[step - 1].row, path[step].row));
-    }
-    return covered;
-}
-
-/** Rows covered by a path, which is what §10 charges in — never its step count. */
-export function rowsAlong(track: RaceCarsTrack, path: RaceCarsSpace[]): number {
-    const covered = rowsByStep(track, path);
-    return covered[covered.length - 1];
-}
-
 /**
- * Rows a move of exactly `steps` steps from this space can cover, at its
- * shortest and its longest, ignoring traffic. (Not `RaceCarsModels`'
- * `rowsCovered`, which is the whole race's worth on the result page.)
+ * §5.1's step rule, and the only movement primitive in the game: the spaces a
+ * car standing here may drive to, as the track itself declares them.
  *
- * The two are the same number on a circuit whose lanes all run in step, and
- * that is the only reason the rest of the game could ever say "a roll of 8" and
- * "eight rows" in the same breath. Where a corner's inside line covers two rows
- * a step and its outside covers one, a gear's band is a range of rows rather
- * than a number of them — so the reach band quotes it as one (§23.5), and the
- * conservative line plans against the far end of it (§23.7 PR 6).
+ * A rule rather than a lookup until the circuits grew corners whose lanes run
+ * out of step: "the next tile along, this lane or either beside it" is what the
+ * section table writes onto an ordinary stretch of road, and a band traced off
+ * real art says exactly where each of its tiles leads instead.
+ *
+ * The list is the track's own — read it, never sort or push to it. It is never
+ * empty for a space that exists, which is what lets §9 treat an empty *walk*
+ * as "boxed in by traffic" rather than "off the end of the map"; a space that
+ * is not on the circuit at all answers with an empty list rather than throwing,
+ * because the one caller that can reach for one is a forged move being refused.
  */
-export function rowSpan(
-    track: RaceCarsTrack,
-    from: RaceCarsSpace,
-    steps: number,
-): { min: number; max: number } {
-    interface Reach { space: RaceCarsSpace; min: number; max: number }
-    let frontier = new Map<string, Reach>([
-        [spaceKey(from.row, from.lane), { space: from, min: 0, max: 0 }],
-    ]);
-
-    const walked = driveableSteps(track, steps);
-    for (let step = 1; step <= walked; step++) {
-        const next = new Map<string, Reach>();
-        for (const node of frontier.values()) {
-            for (const to of stepsFrom(track, node.space.row, node.space.lane)) {
-                const advance = rowsBetween(track, node.space.row, to.row);
-                const seen = next.get(spaceKey(to.row, to.lane));
-                if (!seen) next.set(spaceKey(to.row, to.lane), { space: to, min: node.min + advance, max: node.max + advance });
-                else {
-                    seen.min = Math.min(seen.min, node.min + advance);
-                    seen.max = Math.max(seen.max, node.max + advance);
-                }
-            }
-        }
-        // Only reachable off the circuit's edge, which no track has; leaving the
-        // frontier where it is quotes the rows reached so far rather than none.
-        if (next.size === 0) break;
-        frontier = next;
-    }
-
-    let min = Infinity;
-    let max = 0;
-    for (const node of frontier.values()) {
-        min = Math.min(min, node.min);
-        max = Math.max(max, node.max);
-    }
-    return { min: Number.isFinite(min) ? min : 0, max };
+export function stepsFrom(track: RaceCarsTrack, row: number, lane: number): readonly RaceCarsSpace[] {
+    return spaceAt(track, row, lane)?.exits ?? [];
 }
 
 /**
@@ -518,7 +482,9 @@ export function rowSpan(
  *
  * Not `toRow === 0`: a lane with no space on row 0 steps straight over the line
  * from row 77 to row 1, and a lap that only counts when a car lands exactly on
- * it is a lap that circuit can never complete.
+ * it is a lap that circuit can never complete. The start line is a section
+ * boundary — a sync line, where every lane is level (`tracks/sections.ts`) — so
+ * a step either crosses it or does not, whichever lane takes it.
  */
 export function crossesStartLine(track: RaceCarsTrack, fromRow: number, toRow: number): boolean {
     // A car standing on row 0 is on the line, not behind it, and one step can
@@ -528,10 +494,12 @@ export function crossesStartLine(track: RaceCarsTrack, fromRow: number, toRow: n
 }
 
 /**
- * The corner this space is in, or null on a straight — read off the space's own
- * `cornerId`, so it is per space, not per row (§10): the inside line of a corner
- * is in it for fewer rows than the outside, and two cars level on the same row
- * can be one in the corner and one already out of it.
+ * The corner this space is in, or null on a straight.
+ *
+ * Read off the space's own `cornerId` — the section it was drawn in (§10) — so
+ * it is per space rather than per row: the inside line of a corner is the short
+ * way round, and two cars level on the same row can be one in the corner and
+ * one already out of it.
  */
 export function cornerAt(track: RaceCarsTrack, row: number, lane: number): RaceCarsCorner | null {
     const cornerId = spaceAt(track, row, lane)?.cornerId;
@@ -545,10 +513,10 @@ export function cornerAt(track: RaceCarsTrack, row: number, lane: number): RaceC
  * the corner as slowly as the road allows. The road decides this and never the
  * gear, so a car that arrived at speed is charged in the ordinary way.
  *
- * Read off whether each exit is still in the same corner, not off the row band:
- * an inside line whose last corner space feeds only spaces outside the corner
- * has nowhere to go but out, and is owed the waiver even though the outside line
- * carries the band on for several more rows.
+ * Read off whether each exit is still in the same corner: an inside line whose
+ * last corner space feeds only spaces outside the corner has nowhere to go but
+ * out, and is owed the waiver even though the outside line carries the corner
+ * on for several more tiles.
  */
 export function waivedCornerIdAt(track: RaceCarsTrack, row: number, lane: number): string | null {
     const corner = cornerAt(track, row, lane);
@@ -560,59 +528,133 @@ export function waivedCornerIdAt(track: RaceCarsTrack, row: number, lane: number
 }
 
 /** One corner a move leaves behind, and what §10 charges for leaving it. */
-export interface RaceCarsCornerPass {
+export interface RaceCarsCornerExit {
     corner: RaceCarsCorner;
-    /** Rows travelled past the corner's last row by the end of the move. */
-    rowsPast: number;
+    /** The step that left it — the first space of the path past the corner. */
+    step: number;
+    /** Spaces the move ends up past the corner, which is what §10 charges. */
+    spacesPast: number;
 }
 
 /**
- * Every corner a move from `fromRow` covering `rows` rows leaves behind, in the
- * order it leaves them, with the rows it ends up past each.
+ * Every corner a path leaves behind, in the order it leaves them.
  *
- * Counted forward along the road rather than by subtracting row numbers, which
- * is what keeps a move that wraps the finish line honest (§10) — a car on row
- * 60 that covers 20 rows ends on row 2 of the next lap having crossed The Kink,
- * and `2 − 65` is not the answer. A corner already behind the car sits almost a
- * whole lap ahead by that measure, so it is not crossed twice.
- */
-export function cornersPassed(
-    track: RaceCarsTrack,
-    fromRow: number,
-    rows: number,
-): RaceCarsCornerPass[] {
-    return track.corners
-        // Where the corner's last row sits ahead of the car: 0 for one standing
-        // on it, and the corner is behind once the move covers more than that.
-        .map(corner => ({ corner, at: rowsBetween(track, fromRow, corner.to) }))
-        .filter(ahead => ahead.at < rows)
-        .sort((a, b) => a.at - b.at)
-        .map(ahead => ({ corner: ahead.corner, rowsPast: rows - ahead.at }));
-}
-
-/**
- * The same corners, placed on a path: which step of it each one fell behind at.
+ * Read off the spaces themselves — the step where the car was in the corner and
+ * the next where it is not — rather than off row numbers. A corner is the tiles
+ * an author drew into it (§10), so the inside line leaves at its own last tile
+ * while the outside carries on, and neither one has to be worked out from a
+ * band. A move that wraps the finish line needs no special case either, because
+ * nothing here subtracts one row number from another.
  *
- * §10 settles an overshoot at exactly that step rather than at the end of the
- * move, because a move that spins the car at the first corner "stops there and
- * never reaches the second" — so the second corner is never reached, and
- * neither are the oil checks past it, which is what keeps the recorded roll log
- * the same length on replay.
+ * §10 settles an overshoot at exactly the step it happens rather than at the end
+ * of the move, because a move that spins the car at the first corner "stops
+ * there and never reaches the second" — so the second corner is never reached,
+ * and neither are the oil checks past it, which is what keeps the recorded roll
+ * log the same length on replay.
  */
-export function cornerCrossings(
-    track: RaceCarsTrack,
-    path: RaceCarsSpace[],
-): (RaceCarsCornerPass & { step: number })[] {
+export function cornerExits(track: RaceCarsTrack, path: RaceCarsSpace[]): RaceCarsCornerExit[] {
     if (path.length < 2) return [];
+    const distance = path.length - 1;
+    const exits: RaceCarsCornerExit[] = [];
 
-    // A step is not a row once a lane can skip one (§5.1), so where a corner
-    // falls along the path has to be measured rather than counted off.
-    const covered = rowsByStep(track, path);
-    const rows = covered[covered.length - 1];
+    let from = cornerAt(track, path[0].row, path[0].lane);
+    for (let step = 1; step <= distance; step++) {
+        const to = cornerAt(track, path[step].row, path[step].lane);
+        if (from && from.id !== to?.id) {
+            exits.push({ corner: from, step, spacesPast: distance - step + 1 });
+        }
+        from = to;
+    }
+    return exits;
+}
 
-    return cornersPassed(track, path[0].row, rows).map(pass => ({
-        ...pass,
-        // The first step to carry the car past the corner's own last row.
-        step: covered.findIndex(rowsByStep => rowsByStep > rows - pass.rowsPast),
-    }));
+/** How a corner sits relative to a car, measured in the spaces of §9's walk. */
+export interface RaceCarsCornerReach {
+    corner: RaceCarsCorner;
+    /** Fewest steps that put the car on one of its spaces; 0 standing in it. */
+    enter: number;
+    /** Most steps, within the limit asked for, that still leave it on one. */
+    last: number;
+}
+
+/**
+ * Every space within `limit` steps of one, and how many steps away each is —
+ * the plain breadth-first walk of the road with no traffic on it, which is what
+ * both a reach band and §12's "in the wake of" are asked in terms of.
+ *
+ * First sighting wins, so a space's step is the fewest that reach it, and the
+ * map is in step order. The car's own space is in it at nought.
+ */
+export function stepsWithin(
+    track: RaceCarsTrack,
+    from: RaceCarsSpace,
+    limit: number,
+): Map<string, { space: RaceCarsSpace; step: number }> {
+    const seen = new Map<string, { space: RaceCarsSpace; step: number }>([
+        [spaceKey(from.row, from.lane), { space: from, step: 0 }],
+    ]);
+
+    let frontier: RaceCarsSpace[] = [from];
+    const walked = driveableSteps(track, limit);
+    for (let step = 1; step <= walked; step++) {
+        const next = new Map<string, RaceCarsSpace>();
+        for (const space of frontier) {
+            for (const to of stepsFrom(track, space.row, space.lane)) next.set(spaceKey(to.row, to.lane), to);
+        }
+        // Only reachable off the circuit's edge, which no track has.
+        if (next.size === 0) break;
+        frontier = [...next.values()];
+        for (const [key, space] of next) if (!seen.has(key)) seen.set(key, { space, step });
+    }
+    return seen;
+}
+
+/**
+ * Where each corner within `limit` steps sits, in steps — the reading the reach
+ * band quotes and the tow is priced against (§23.5).
+ *
+ * Steps rather than rows, because a roll is spent in steps and a corner is a
+ * set of tiles: "the corner is six out and you are still inside it at nine" is
+ * a sentence about the same currency the driver is about to spend. Traffic is
+ * ignored, exactly as the reach band ignores it — it can only make a move
+ * shorter, so a roll this says can stop in a corner can always stop in it.
+ *
+ * One breadth-first walk for every corner rather than one apiece, because the
+ * board screen asks this on every render.
+ */
+export function cornerReaches(
+    track: RaceCarsTrack,
+    from: RaceCarsSpace,
+    limit: number,
+): Map<string, RaceCarsCornerReach> {
+    const reaches = new Map<string, RaceCarsCornerReach>();
+    // In step order, which is what the contiguity below reads.
+    for (const { space, step } of stepsWithin(track, from, limit).values()) {
+        const corner = cornerAt(track, space.row, space.lane);
+        if (!corner) continue;
+        const seen = reaches.get(corner.id);
+        // First sighting is the fewest steps to it.
+        if (!seen) {
+            reaches.set(corner.id, { corner, enter: step, last: step });
+            continue;
+        }
+        // Extended only while the walk is *still* inside it. A corner's spaces
+        // are reachable on a run of consecutive steps and then not again until
+        // the next lap round, and a walk long enough to come back to one would
+        // otherwise report a car as able to stay in the corner it is standing
+        // in for another seventy-eight spaces.
+        if (step === seen.last + 1) seen.last = step;
+    }
+    return reaches;
+}
+
+/**
+ * The nearest corner ahead of a car — the one the reach band is measured
+ * against. A fold over a walk already taken rather than a walk of its own, so
+ * the screen reads one walk per render however many gears it prints.
+ */
+export function nextCornerReach(reaches: Map<string, RaceCarsCornerReach>): RaceCarsCornerReach | null {
+    return [...reaches.values()]
+        .filter(reach => reach.enter > 0)
+        .sort((a, b) => a.enter - b.enter)[0] ?? null;
 }

@@ -15,7 +15,7 @@ import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic"
 import type { IRaceCarsSpecificGameStateResponse } from "./apiModels";
 import type { IRaceCarsArrivalOutcome } from "./RaceCarsLogic";
 import type { RaceCarsArrivalEvent } from "./rules";
-import { arrivalLine, RaceCarsArrivalSummary } from "./narration";
+import { arrivalLine, cornerName, RaceCarsArrivalSummary } from "./narration";
 import { cornerAt, RaceCarsTrack, spaceKey, trackById } from "./board";
 import { positionOf, rowsBehindLeader, standings } from "./ui";
 import { pluralize } from "@/utils/ui/text";
@@ -62,8 +62,15 @@ function arrivalRow(
             return { type: event.type === 'cornerStop' ? RC_CORNERSTOP : RC_OVERSHOOT, glyph: line.glyph, title: `${name} ${line.text}` };
         }
         case 'spin': {
-            const causeText = event.cause === 'oil' ? 'hit a slick and spun' : 'spun';
-            return { type: RC_SPIN, glyph: '💥', title: `${name} ${causeText} back to row ${arrival.row} and misses their next turn` };
+            // Where the car is put, not the row it is put on: a row is a rank
+            // round the lap rather than somewhere a driver can point at (§5.1),
+            // and the live log says the same thing (`arrivalLine`). The cause
+            // is spelled out here rather than borrowed, because the recap does
+            // distinguish an unpayable overshoot from a slick and the log does
+            // not (see the note above).
+            const cause = event.cause === 'oil' ? 'hit a slick and spun' : 'spun';
+            const where = event.cornerId ? ` back into ${cornerName(track, event.cornerId)}` : '';
+            return { type: RC_SPIN, glyph: '💥', title: `${name} ${cause}${where} and misses their next turn` };
         }
         case 'lap':
             return { type: RC_LAP, glyph: '🔁', title: `${name} completed ${pluralize(event.lapsCompleted, 'lap')}` };

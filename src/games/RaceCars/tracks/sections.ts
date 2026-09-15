@@ -1,25 +1,31 @@
-// The one table every track's circuit is derived from — row-by-row lane
-// widths and the corner bands are two readings of the same fact, and writing
-// them out separately (as ashcombe.ts once did, before anglet.ts needed the
-// same derivation) is how a corner comes to sit half on a three-lane row: a
-// discrepancy no rule would report, because every rule reads only one of the
-// two.
+// The form a circuit is authored in, and the one place a row number comes from.
 //
-// A section is the shorthand, not the model. What a track actually carries is
-// a graph — every space, and the spaces each one may be driven to (§5.1) — and
-// the shorthand is what writes §5.1's own step rule onto an ordinary stretch of
-// road so a straight is one line rather than thirty-two. A band that isn't
-// ordinary names its own `tiles`, which is where the two things a real circuit
-// does that the rule cannot say live: a tile that only feeds particular tiles
-// ahead of it, and an inside line that takes fewer spaces round a corner than
-// the outside does.
-import type { RaceCarsCorner, RaceCarsSpace, RaceCarsTrackSpace } from "../board";
+// A track is a **graph of tiles** — every space, and the spaces each one may be
+// driven to (§5.1). What an author writes is that graph cut into **sections**:
+// a straight, a corner, an esse, each one a stretch of road whose ends are
+// **sync lines** — a line across the road where every lane is level with every
+// other. Rows are then *derived*, section by section, and never typed.
+//
+// That derivation is the whole point of this file. Numbering tiles by counting
+// them along a lane is what broke the old model: a corner whose inside line
+// takes four tiles where the outside takes eight leaves the two lanes one,
+// four, nine tiles out of step, for the rest of the lap — so two tiles drawn
+// side by side carried different row numbers, and a step across the road came
+// out as a step that does not move the car forward. Rows here are a **rank in
+// the step graph**, worked out from the steps themselves: every step advances
+// at least one row by construction, tiles that are level land on the same row,
+// and a lane that takes the short way round simply skips the rows it saved.
+//
+// Nothing is measured in rows. Overshoot, the tow and the reach band are all
+// counted in spaces along the road (§10, §12); rows order the field, band the
+// corners and place the finish line, and that is all they are for.
+import type { RaceCarsCorner, RaceCarsGeometry, RaceCarsSpace, RaceCarsTrackSpace } from "../board";
 
 /**
  * Six staggered spaces on rows 0-2, lanes 1 and 3, so no car starts directly
- * behind another (§5.2) — every track's grid so far starts on a three-lane
- * straight the same width as this one, so there has been nothing yet for a
- * second circuit to say differently. P1 first.
+ * behind another (§5.2) — every track's grid so far starts on a plain
+ * three-lane straight the same width as this one, whose first section derives
+ * rows 0, 1, 2 in order. P1 first.
  */
 export const STAGGERED_SIX_GRID: RaceCarsSpace[] = [
     { row: 2, lane: 1 },
@@ -31,125 +37,380 @@ export const STAGGERED_SIX_GRID: RaceCarsSpace[] = [
 ];
 
 /**
- * One space of a section, written out because the section's own shape doesn't
- * say it.
+ * One tile as an author writes it: which lane of its section it is in, where it
+ * sits on the art, and — where the road does not simply run on — the tiles it
+ * may be driven to.
  *
- * Two reasons to write one, and a band that has either needs every one of its
- * spaces listed rather than just the odd ones out — a `tiles` list *is* the
- * band's spaces:
+ * `id` is the tile's name for the whole circuit's life, and the only way one
+ * tile names another. It deliberately is not a coordinate: rows are derived
+ * from these steps, so a step written as a row number would be a step written
+ * in terms of the answer.
  *
- * - **The lane doesn't run in step with the others.** The inside of a corner
- *   covers the same rows in fewer spaces than the outside, so it simply has no
- *   space on some of the band's rows, and listing the ones it does have is how
- *   that is said.
- * - **The space only feeds particular spaces ahead.** `exits` replaces §5.1's
- *   rule for this space outright: a painted corner that lets a car continue in
- *   its own lane and nowhere else lists exactly that one space.
- *
- * A space with no `exits` of its own still gets §5.1's rule — the next row,
- * this lane or either lane beside it, whichever of those the road actually has
- * — which is what lets a band be sparse without also hand-writing the steps
- * through it.
+ * `exits` may name a tile in any section, which is what a corner's re-alignment
+ * onto the straight past it is. Left out, the tile takes the default of a road
+ * whose lanes run in step (see `defaultExitIds`).
  */
-export interface SectionTile extends RaceCarsSpace {
-    exits?: RaceCarsSpace[];
-    /**
-     * The corner this space is in, overriding the section's own `corner` for
-     * this space alone. A section corner tags all its spaces; a space that is
-     * physically outside the painted corner even though it sits in the band —
-     * the inside line past its own apex — carries `cornerId: undefined` to opt
-     * out (§10, per-space membership).
-     */
-    cornerId?: string;
+export interface SourceTile {
+    id: string;
+    lane: number;
+    exits?: string[];
+    /** Where the tile centre sits on the art, for a traced circuit. */
+    x?: number;
+    y?: number;
+    /** Which way a car on it faces; derived from its exits when left out. */
+    heading?: number;
 }
 
+/**
+ * A stretch of road between two sync lines: a straight, an esse, or a corner
+ * with a stop count (§10).
+ *
+ * A section is a **corner's identity** as well as its extent — a corner is a
+ * section with `corner` set, and every tile in that section is in it. Which is
+ * also why a section boundary has to be a place where the lanes really are
+ * level: a corner's entry and exit are where the rules and the road have to
+ * agree, and rows restart their alignment at every one of them.
+ *
+ * Write `length` for an ordinary band — so many tiles in every lane, all of
+ * them in step, §5.1's own step rule between them — and `tiles` for one traced
+ * off real art, where the lanes may hold different numbers of tiles and each
+ * one names where it leads.
+ */
 export interface TrackSection {
+    id: string;
     name: string;
-    /** Inclusive row band. */
-    from: number;
-    to: number;
     /** How wide the road is here, in lanes — 2 or 3. */
     lanes: 2 | 3;
-    /**
-     * Every space this band has, for a band that is not simply `lanes` of them
-     * on each of its rows. Lanes may run out of step with each other and a
-     * space may name its own exits; `lanes` still says how wide the road is,
-     * because that is what the art draws and what a lane number is measured
-     * against.
-     */
-    tiles?: SectionTile[];
-    /** Corner id and stop count, or null for a straight. */
-    corner: { id: string; stops: 1 | 2 } | null;
+    /** Corner stop count, or null for a straight. The section's id names it. */
+    corner: { stops: 1 | 2 } | null;
+    /** A plain band: this many tiles in every lane, lanes in step. */
+    length?: number;
+    /** A traced band: every tile it holds, each lane's run in road order. */
+    tiles?: SourceTile[];
 }
 
-/** Every space of a section: its own `tiles`, or `lanes` of them on every row. */
-function tilesOf(section: TrackSection): SectionTile[] {
+/** A point on the art — what a bearing is taken between. */
+export interface Point {
+    x: number;
+    y: number;
+}
+
+/** A tile once the derivation has placed it. */
+export interface PlacedTile {
+    id: string;
+    lane: number;
+    x?: number;
+    y?: number;
+    heading?: number;
+    /** Index of its section in the lap. */
+    section: number;
+    /** Where it sits in its lane's run through that section; 0 is first. */
+    index: number;
+    /** Resolved steps out, as tile ids — its own, or the default rule's. */
+    exits: string[];
+    /** The derived row (see the file comment). */
+    row: number;
+}
+
+export interface DerivedTrack {
+    rows: number;
+    spaces: RaceCarsTrackSpace[];
+    corners: RaceCarsCorner[];
+    /** Every tile, placed — what a geometry pass and the editor read. */
+    tiles: PlacedTile[];
+    /** Where each tile landed, by id — what a grid slot is written in terms of. */
+    spaceOf: Map<string, RaceCarsSpace>;
+}
+
+/** The id `length` bands give their tiles: section, lane and place in the run. */
+export function plainTileId(sectionId: string, lane: number, index: number): string {
+    return `${sectionId}.${lane}.${index}`;
+}
+
+/** Every tile of a section: its own, or `lanes` runs of `length` plain ones. */
+function sectionTiles(section: TrackSection): SourceTile[] {
+    if (section.tiles && section.length !== undefined) {
+        throw new Error(`Race Cars: section "${section.name}" has both a length and its own tiles`);
+    }
     if (section.tiles) return section.tiles;
-    const tiles: SectionTile[] = [];
-    for (let row = section.from; row <= section.to; row++) {
-        for (let lane = 1; lane <= section.lanes; lane++) tiles.push({ row, lane });
+    if (!section.length || section.length < 1) {
+        throw new Error(`Race Cars: section "${section.name}" has no tiles and no length`);
+    }
+    const tiles: SourceTile[] = [];
+    for (let lane = 1; lane <= section.lanes; lane++) {
+        for (let index = 0; index < section.length; index++) {
+            tiles.push({ id: plainTileId(section.id, lane, index), lane });
+        }
     }
     return tiles;
 }
 
-/**
- * §5.1's own step rule, written onto a space that didn't name its exits: the
- * next row, this lane or either lane beside it, keeping only the ones the road
- * actually has a space on.
- *
- * Narrowing handles itself, which is the reason this reads the next row's
- * spaces rather than a lane width. Coming out of a three-lane straight into a
- * two-lane corner, lane 3 has only lane 2 to merge into — and because every row
- * has a space on it, the result is never empty, which is what lets §9 treat an
- * empty step list as "boxed in by traffic" rather than "off the end of the map".
- *
- * Exported because the track editor (docs/admin-tools.md) draws these faint,
- * behind the exits an author has overridden, so a corner's real merge reads
- * against §5.1's default rather than replacing it invisibly.
- */
-export function defaultExits(rows: number, spacesByRow: Map<number, number[]>, tile: SectionTile): RaceCarsSpace[] {
-    const to = (tile.row + 1) % rows;
-    return (spacesByRow.get(to) ?? [])
-        .filter(lane => Math.abs(lane - tile.lane) <= 1)
-        .map(lane => ({ row: to, lane }));
+/** Each lane's run through a section, in the order the tiles were written. */
+function laneRuns(tiles: readonly SourceTile[]): Map<number, SourceTile[]> {
+    const runs = new Map<number, SourceTile[]>();
+    for (const tile of tiles) {
+        const run = runs.get(tile.lane);
+        if (run) run.push(tile);
+        else runs.set(tile.lane, [tile]);
+    }
+    return runs;
+}
+
+/** A lane and the two either side of it — everywhere §5.1's rule is applied. */
+export function neighbouringLanes(lane: number): number[] {
+    return [lane - 1, lane, lane + 1];
+}
+
+/** A section with its lanes' runs — the shape the default step rule reads. */
+export interface SectionRuns {
+    section: TrackSection;
+    runs: Map<number, SourceTile[]>;
+}
+
+/** Every section's lane runs, once, for a caller asking about more than one tile. */
+export function lapRuns(sections: TrackSection[]): SectionRuns[] {
+    return sections.map(section => ({ section, runs: laneRuns(sectionTiles(section)) }));
 }
 
 /**
- * A circuit's `spaces` — every tile with the steps out of it, §5.1's default
- * rule written onto any that didn't name their own — validated as a graph a
- * race can actually be driven round.
+ * §5.1's own step rule written in the authoring model: the next tile along, in
+ * this lane or either lane beside it, and the first tiles of the next section
+ * for a tile at the end of its own run.
  *
- * The half of `deriveTrack` that is about tiles rather than sections, split out
- * so the track editor can assemble the same graph from tiles it has no section
- * table for and refuse the same undriveable circuits (docs/admin-tools.md).
- * `rows` is the lap length: `deriveTrack` reads it off the last section, the
- * editor off the highest row it has a tile on. Throws — the errors are the ones
- * `board.test.ts` pins — on each hole a race would otherwise fall into
- * silently: two spaces on one square, a row the road skips, a space nothing can
- * step off, a step onto a space that isn't there, or a step that changes lane
- * without moving the car forward.
+ * Narrowing handles itself, because this reads the lanes the next section
+ * actually has rather than a width: coming out of a three-lane straight into a
+ * two-lane corner, lane 3 has only lane 2 to merge into.
+ *
+ * It is only a rule for a band whose lanes run **in step**. Where they do not —
+ * a corner traced off real art, where the inside takes four tiles to the
+ * outside's eight — "the next tile along in the lane beside me" is not a
+ * statement about the road at all, so `deriveTrack` refuses such a section
+ * unless every one of its tiles names its own steps.
  */
-export function assembleSpaces(tiles: SectionTile[], rows: number): RaceCarsTrackSpace[] {
+export function defaultExitIds(lap: SectionRuns[], sectionIndex: number, tile: SourceTile): string[] {
+    const here = lap[sectionIndex];
+    const run = here.runs.get(tile.lane) ?? [];
+    const index = run.findIndex(other => other.id === tile.id);
+    const next = lap[(sectionIndex + 1) % lap.length];
+
+    // Whether the road carries on inside this section is a question about the
+    // tile's **own** lane, asked once. Asking it per candidate lane is how a
+    // two-lane esse came to step straight into the lane 3 of the corner past
+    // it, from every tile in the run rather than only its last: the esse has no
+    // lane 3 to carry on in, so every tile looked one section ahead for one.
+    const last = index === run.length - 1;
+
+    return neighbouringLanes(tile.lane).flatMap(lane => {
+        const onward = last ? next.runs.get(lane)?.[0] : here.runs.get(lane)?.[index + 1];
+        return onward ? [onward.id] : [];
+    });
+}
+
+/**
+ * The longest path to each tile over one section's own steps, as a depth in
+ * steps: 0 for a tile nothing inside the section leads to.
+ *
+ * Read forwards it says how far past the section's entry sync line a tile can
+ * be; read backwards (`adjacency` reversed) how far short of its exit. Between
+ * them they give the band each tile may sit in, which is what `deriveTrack`
+ * centres it in.
+ */
+function longestDepths(ids: string[], adjacency: Map<string, string[]>, sectionName: string): Map<string, number> {
+    const depth = new Map<string, number>();
+    const open = new Set<string>();
+
+    const visit = (id: string): number => {
+        const settled = depth.get(id);
+        if (settled !== undefined) return settled;
+        if (open.has(id)) {
+            throw new Error(`Race Cars: the steps inside "${sectionName}" loop back on themselves at ${id}`);
+        }
+        open.add(id);
+        let best = 0;
+        for (const from of adjacency.get(id) ?? []) best = Math.max(best, visit(from) + 1);
+        open.delete(id);
+        depth.set(id, best);
+        return best;
+    };
+
+    for (const id of ids) visit(id);
+    return depth;
+}
+
+function addEdge(adjacency: Map<string, string[]>, from: string, to: string): void {
+    const edges = adjacency.get(from);
+    if (edges) edges.push(to);
+    else adjacency.set(from, [to]);
+}
+
+/**
+ * A circuit's rows, spaces and corners, all derived from one `SECTIONS` table.
+ *
+ * Throws on a circuit that cannot be driven rather than shipping one. A track
+ * is static data read at module load and asserted by `board.test.ts`, and the
+ * track editor runs the same function over the tiles an author has drawn, so
+ * "it validates in the editor" and "it loads in the game" are one statement.
+ */
+export function deriveTrack(sections: TrackSection[]): DerivedTrack {
+    // Two, not one: the lap's wrap back to the start line has to cross a sync
+    // line. A single section would hold that wrap inside itself, where it is a
+    // loop in the very graph the rows are ranked from — and a lap whose last
+    // tile ranks before its first is not a lap.
+    if (sections.length < 2) {
+        throw new Error("Race Cars: a circuit needs at least two sections, so the lap's wrap back to the start line crosses a sync line");
+    }
+
+    const lap = lapRuns(sections);
+
+    // ── Every tile, placed in its section and its lane's run ────────────────
+    const placed: PlacedTile[] = [];
+    const byId = new Map<string, PlacedTile>();
+    lap.forEach(({ section, runs }, sectionIndex) => {
+        if (runs.size === 0) throw new Error(`Race Cars: section "${section.name}" has no tiles`);
+        for (const [lane, run] of runs) {
+            if (lane < 1 || lane > section.lanes) {
+                throw new Error(`Race Cars: section "${section.name}" has a tile in lane ${lane} on a ${section.lanes}-lane road`);
+            }
+            run.forEach((tile, index) => {
+                if (byId.has(tile.id)) throw new Error(`Race Cars: two tiles share the id ${tile.id}`);
+                const entry: PlacedTile = {
+                    id: tile.id,
+                    lane: tile.lane,
+                    x: tile.x,
+                    y: tile.y,
+                    heading: tile.heading,
+                    section: sectionIndex,
+                    index,
+                    exits: [],
+                    row: 0,
+                };
+                placed.push(entry);
+                byId.set(tile.id, entry);
+            });
+        }
+    });
+
+    // ── The steps out of each one ───────────────────────────────────────────
+    //
+    // A band whose lanes hold different numbers of tiles has no "the tile
+    // beside me, one along" to fall back on, so it has to say where its tiles
+    // lead. This is the check that turns a silently wrong corner into a
+    // refusal an author can read.
+    lap.forEach(({ section, runs }, sectionIndex) => {
+        const lengths = [...runs.values()].map(run => run.length);
+        const inStep = lengths.every(length => length === lengths[0]);
+        for (const run of runs.values()) {
+            for (const tile of run) {
+                const entry = byId.get(tile.id)!;
+                if (tile.exits) {
+                    for (const exit of tile.exits) {
+                        if (!byId.has(exit)) {
+                            throw new Error(`Race Cars: ${tile.id} steps to ${exit}, which is not a tile`);
+                        }
+                    }
+                    entry.exits = [...tile.exits];
+                    continue;
+                }
+                if (!inStep) {
+                    throw new Error(`Race Cars: section "${section.name}" runs its lanes out of step, so ${tile.id} has to name its own steps`);
+                }
+                entry.exits = defaultExitIds(lap, sectionIndex, tile);
+            }
+        }
+    });
+
+    // ── The rows those steps imply ──────────────────────────────────────────
+    let start = 0;
+    lap.forEach(({ section }, sectionIndex) => {
+        const tiles = placed.filter(tile => tile.section === sectionIndex);
+        const ids = tiles.map(tile => tile.id);
+
+        const predecessors = new Map<string, string[]>();
+        const successors = new Map<string, string[]>();
+        for (const tile of tiles) {
+            for (const exit of tile.exits) {
+                if (byId.get(exit)!.section !== sectionIndex) continue;
+                addEdge(successors, tile.id, exit);
+                addEdge(predecessors, exit, tile.id);
+            }
+        }
+
+        const fromEntry = longestDepths(ids, predecessors, section.name);
+        const toExit = longestDepths(ids, successors, section.name);
+        // The section is as many rows deep as its longest line through it.
+        const length = Math.max(...ids.map(id => fromEntry.get(id)! + toExit.get(id)!)) + 1;
+
+        for (const tile of tiles) {
+            const earliest = fromEntry.get(tile.id)!;
+            const latest = length - 1 - toExit.get(tile.id)!;
+            // Centred between the two sync lines, so a lane taking the short
+            // way round is spread evenly across the rows it saved rather than
+            // bunched against one end of them. Every step still advances at
+            // least one row: an exit's earliest is at least one past this
+            // tile's, and its latest at least one past this tile's too, so the
+            // midpoints cannot meet.
+            tile.row = start + Math.round((earliest + latest) / 2);
+        }
+
+        start += length;
+    });
+
+    const rows = start;
+    const spaceOf = new Map<string, RaceCarsSpace>(
+        placed.map(tile => [tile.id, { row: tile.row, lane: tile.lane }]),
+    );
+
+    const spaces = assembleSpaces(placed.map(tile => ({
+        row: tile.row,
+        lane: tile.lane,
+        exits: tile.exits.map(exit => spaceOf.get(exit)!),
+        cornerId: sections[tile.section].corner ? sections[tile.section].id : undefined,
+    })), rows);
+
+    const corners: RaceCarsCorner[] = sections
+        .map((section, sectionIndex) => ({ section, sectionIndex }))
+        .filter(({ section }) => section.corner !== null)
+        .map(({ section, sectionIndex }) => {
+            const band = placed.filter(tile => tile.section === sectionIndex).map(tile => tile.row);
+            return {
+                id: section.id,
+                name: section.name,
+                from: Math.min(...band),
+                to: Math.max(...band),
+                stops: section.corner!.stops,
+            };
+        });
+
+    return { rows, spaces, corners, tiles: placed, spaceOf };
+}
+
+/**
+ * The spaces of a circuit, checked as a graph a race can actually be driven
+ * round — the half of the derivation that is about spaces rather than sections.
+ * Split out so `board.test.ts` can drive these checks against a hand-built
+ * spaces list: the derivation above makes most of them unreachable (it cannot
+ * emit a sideways step or skip a row), and they are the guard under a track
+ * file that ever stops coming through it.
+ *
+ * Throws on each hole a race would otherwise fall into silently: two spaces on
+ * one square, a row the road skips, a space nothing can step off, a step onto a
+ * space that isn't there, or a step that changes lane without moving the car
+ * forward.
+ */
+export function assembleSpaces(spaces: RaceCarsTrackSpace[], rows: number): RaceCarsTrackSpace[] {
     const spacesByRow = new Map<number, number[]>();
-    for (const tile of tiles) {
-        const lanes = spacesByRow.get(tile.row);
-        if (lanes?.includes(tile.lane)) throw new Error(`Race Cars: two spaces at ${tile.row}:${tile.lane}`);
-        if (lanes) lanes.push(tile.lane);
-        else spacesByRow.set(tile.row, [tile.lane]);
+    for (const space of spaces) {
+        const lanes = spacesByRow.get(space.row);
+        if (lanes?.includes(space.lane)) throw new Error(`Race Cars: two spaces at ${space.row}:${space.lane}`);
+        if (lanes) lanes.push(space.lane);
+        else spacesByRow.set(space.row, [space.lane]);
     }
     for (const lanes of spacesByRow.values()) lanes.sort((a, b) => a - b);
     for (let row = 0; row < rows; row++) {
-        // A row the road skips is a gap `defaultExits` steps straight over,
-        // which is a lap distance no rule would agree on.
+        // A row the road skips is a row nothing can be level with, which is a
+        // lap distance no two lanes would agree on.
         if (!spacesByRow.has(row)) throw new Error(`Race Cars: row ${row} has no spaces on it`);
     }
-
-    const spaces: RaceCarsTrackSpace[] = tiles.map(tile => ({
-        row: tile.row,
-        lane: tile.lane,
-        exits: tile.exits ?? defaultExits(rows, spacesByRow, tile),
-        cornerId: tile.cornerId,
-    }));
 
     for (const space of spaces) {
         if (space.exits.length === 0) throw new Error(`Race Cars: nothing to step to from ${space.row}:${space.lane}`);
@@ -167,57 +428,47 @@ export function assembleSpaces(tiles: SectionTile[], rows: number): RaceCarsTrac
 }
 
 /**
- * A track's `rows`, `spaces` and `corners`, all read off one `SECTIONS` table.
+ * The bearing from one point towards the mean of some others, in the
+ * degrees-clockwise-from-increasing-rows `RaceCarsGeometry.heading` is measured
+ * in: which way a car standing here faces, given where the road leads.
  *
- * Throws on a circuit that cannot be driven rather than shipping one. A track
- * is static data read at module load and asserted by `board.test.ts`, so the
- * only way to reach one of these is to be writing a circuit — and every one of
- * them is a hole a race would fall into silently: a space nothing can step off,
- * a step onto a space that isn't there, a row the road skips entirely, or a
- * step that doesn't move the car forward, which is a car that can drive a
- * corner's stop count for free.
+ * Over plain points rather than tiles, because the editor asks the same
+ * question of its own tile type — and two copies of an `atan2` are two things
+ * to keep in step for no reason.
  */
-export function deriveTrack(sections: TrackSection[]): {
-    rows: number;
-    spaces: RaceCarsTrackSpace[];
-    corners: RaceCarsCorner[];
-} {
-    const rows = sections[sections.length - 1].to + 1;
+export function bearingTo(from: Point, targets: readonly Point[]): number {
+    if (targets.length === 0) return 0;
+    const meanX = targets.reduce((sum, target) => sum + target.x, 0) / targets.length;
+    const meanY = targets.reduce((sum, target) => sum + target.y, 0) / targets.length;
+    return Math.round((Math.atan2(meanY - from.y, meanX - from.x) * 180) / Math.PI);
+}
 
-    let expected = 0;
-    for (const section of sections) {
-        if (section.from !== expected || section.to < section.from) {
-            throw new Error(`Race Cars: section "${section.name}" covers rows ${section.from}-${section.to}, expected to start at ${expected}`);
-        }
-        expected = section.to + 1;
-    }
+/** Where a tile leads, as points — the tiles it steps to that have been placed on art. */
+function exitPoints(tile: PlacedTile, byId: Map<string, PlacedTile>): Point[] {
+    return tile.exits
+        .map(exit => byId.get(exit))
+        .filter((exit): exit is PlacedTile => exit?.x !== undefined && exit?.y !== undefined)
+        .map(exit => ({ x: exit.x!, y: exit.y! }));
+}
 
-    const tiles = sections.flatMap(section => tilesOf(section).map(tile => {
-        if (tile.row < section.from || tile.row > section.to) {
-            throw new Error(`Race Cars: section "${section.name}" has a space on row ${tile.row}, outside its band`);
-        }
-        if (tile.lane < 1 || tile.lane > section.lanes) {
-            throw new Error(`Race Cars: section "${section.name}" has a space in lane ${tile.lane} on a ${section.lanes}-lane road`);
-        }
-        // A section corner tags every space in the band; a space that names its
-        // own cornerId keeps it — including an explicit `cornerId: undefined`,
-        // which drops the inside line out of the corner past its apex (§10,
-        // per-space membership). "Key present" is what distinguishes that opt-out
-        // from a space that simply didn't mention a corner.
-        return { ...tile, cornerId: 'cornerId' in tile ? tile.cornerId : section.corner?.id };
+/**
+ * A traced circuit's `geometry`, read straight off the tiles it was drawn from
+ * — so a board traced on real art carries its own positions rather than having
+ * them generated from a loop, and a tile that named no heading is pointed down
+ * its own exits.
+ *
+ * The circuits that ship with generated geometry (`loopGeometry.ts`) do not
+ * call this: they have no drawn positions to read.
+ */
+export function tileGeometry(derived: DerivedTrack): RaceCarsGeometry[] {
+    const byId = new Map(derived.tiles.map(tile => [tile.id, tile]));
+    return derived.tiles.map(tile => ({
+        row: tile.row,
+        lane: tile.lane,
+        x: Math.round(tile.x ?? 0),
+        y: Math.round(tile.y ?? 0),
+        heading: tile.heading ?? (tile.x === undefined || tile.y === undefined
+            ? 0
+            : bearingTo({ x: tile.x, y: tile.y }, exitPoints(tile, byId))),
     }));
-
-    const spaces = assembleSpaces(tiles, rows);
-
-    const corners: RaceCarsCorner[] = sections
-        .filter(section => section.corner !== null)
-        .map(section => ({
-            id: section.corner!.id,
-            name: section.name,
-            from: section.from,
-            to: section.to,
-            stops: section.corner!.stops,
-        }));
-
-    return { rows, spaces, corners };
 }

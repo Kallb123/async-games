@@ -6,13 +6,13 @@ import { roundedRectGeometry } from "./loopGeometry";
 import { deriveTrack, STAGGERED_SIX_GRID, type TrackSection } from "./sections";
 
 const SECTIONS: TrackSection[] = [
-    { name: 'Start / Finish Straight', from: 0, to: 9, lanes: 3, corner: null },
-    { name: 'Ashcombe Hairpin', from: 10, to: 14, lanes: 2, corner: { id: 'hairpin', stops: 2 } },
-    { name: 'The Mile', from: 15, to: 46, lanes: 3, corner: null },
-    { name: 'Gravel Bend', from: 47, to: 51, lanes: 2, corner: { id: 'gravel', stops: 1 } },
-    { name: 'Woodland Esses', from: 52, to: 61, lanes: 2, corner: null },
-    { name: 'The Kink', from: 62, to: 65, lanes: 3, corner: { id: 'kink', stops: 1 } },
-    { name: 'Run to the Line', from: 66, to: 77, lanes: 3, corner: null },
+    { id: 'start', name: 'Start / Finish Straight', length: 10, lanes: 3, corner: null },
+    { id: 'hairpin', name: 'Ashcombe Hairpin', length: 5, lanes: 2, corner: { stops: 2 } },
+    { id: 'mile', name: 'The Mile', length: 32, lanes: 3, corner: null },
+    { id: 'gravel', name: 'Gravel Bend', length: 5, lanes: 2, corner: { stops: 1 } },
+    { id: 'esses', name: 'Woodland Esses', length: 10, lanes: 2, corner: null },
+    { id: 'kink', name: 'The Kink', length: 4, lanes: 3, corner: { stops: 1 } },
+    { id: 'run', name: 'Run to the Line', length: 12, lanes: 3, corner: null },
 ];
 
 const { rows: ROWS, spaces: SPACES, corners: CORNERS } = deriveTrack(SECTIONS);

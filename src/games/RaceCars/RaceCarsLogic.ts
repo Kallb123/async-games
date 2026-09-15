@@ -5,11 +5,12 @@ import { serializable } from "@/utils/apiModels/Serialisable";
 import { v4 as uuidv4, NIL as NIL_UUID } from 'uuid';
 import type { IRaceCarsGameData } from "@/games/RaceCars/RaceCarsModels";
 import {
+    cornerAt,
     gearName,
+    RaceCarsTrack,
     MIN_MOVE_STEPS,
     RaceCarsGear,
     RaceCarsSpace,
-    rowsAlong,
     SLIPSTREAM_STEPS,
     trackById,
     BRAKE_SLICK_THRESHOLD,
@@ -133,6 +134,20 @@ function takeTheFlag(data: IRaceCarsGameData, winnerId: string): void {
             text: `Classified: ${order.map((userId, index) => `P${index + 1} ${userToken(userId)}`).join(', ')}`,
         });
     }
+}
+
+/**
+ * Where a move ended, for the history log: the corner it finished inside, or
+ * nothing at all on open road.
+ *
+ * A row number used to stand here ("drove 8 rows to row 42"), and it cannot any
+ * more: a row is a rank round the lap rather than a place a driver could point
+ * at (§5.1), so the corner is the landmark and the space count is the distance.
+ */
+function landing(track: RaceCarsTrack, path: RaceCarsSpace[]): string {
+    const end = path[path.length - 1];
+    const corner = cornerAt(track, end.row, end.lane);
+    return corner ? ` into ${corner.name}` : '';
 }
 
 /**
@@ -482,16 +497,16 @@ export class RaceCarsMove implements IGameCommand {
         ps.brakeSpent = this.brake;
 
         const track = trackById(gs.trackId);
-        // Rows covered, not steps taken: the two are the same number until a
-        // corner's lanes run out of step (§5.1), and the driver is reading the
-        // road rather than counting spaces.
-        const rows = rowsAlong(track, path);
+        // Spaces, not rows: a roll is spent in spaces and a row is a rank round
+        // the lap rather than a distance (§5.1), so "eight spaces" is the one
+        // number the driver and the log can both read off the board.
+        const spaces = path.length - 1;
         const braked = this.brake > 0 ? ` after braking ${pluralize(this.brake, 'space')} off the roll` : '';
         // Read before the arrival is applied: a spin drops the gear to neutral.
         const roll = { gear: ps.gear, value: ps.roll };
         const settled = settle(data, ps, this.senderId, path, {
             blockedShort: options.blockedShort,
-            lead: rows > 0 ? `drove ${pluralize(rows, 'row')} to row ${path[path.length - 1].row}${braked}` : '',
+            lead: spaces > 0 ? `drove ${pluralize(spaces, 'space')}${landing(track, path)}${braked}` : '',
         });
 
         // Store the oil rolls back into the command for replay (§23.4).
@@ -577,7 +592,7 @@ export class RaceCarsSlipstream implements IGameCommand {
         const path = derivePath(gs, this.senderId, options.distance, { row: tow.row, lane: tow.lane });
         if (path.length === 0) return INVALID;
 
-        const rows = rowsAlong(trackById(gs.trackId), path);
+        const track = trackById(gs.trackId);
         const settled = settle(data, ps, this.senderId, path, {
             blockedShort: options.blockedShort,
             // §12: a tow can push a car out of a corner it still owes stops to,
@@ -585,7 +600,7 @@ export class RaceCarsSlipstream implements IGameCommand {
             // corner the driver "could not have avoided leaving"; declining
             // this costs nothing, so that reasoning does not reach the tow.
             waiveUnavoidableCorner: false,
-            lead: `took the tow ${pluralize(rows, 'row')} to row ${path[path.length - 1].row}`,
+            lead: `took the tow ${pluralize(path.length - 1, 'space')}${landing(track, path)}`,
         });
 
         // Store the oil rolls back into the command for replay (§23.4).

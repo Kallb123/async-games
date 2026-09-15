@@ -197,7 +197,7 @@ describe("RaceCarsMove (§7 step 2, §9-§11)", () => {
         expect(outcome.turnOver).toBe(true);
         expect(seat(game, 'a').row).toBe(27);
         expect(seat(game, 'a').lane).toBe(1);
-        expect(log(game)).toContain('drove 7 rows to row 27');
+        expect(log(game)).toContain('drove 7 spaces');
         expectConserved(game);
     });
 
@@ -319,7 +319,7 @@ describe("RaceCarsMove (§7 step 2, §9-§11)", () => {
         expect(seat(flat, 'a').row).toBe(55);
         expect(seat(flat, 'a').tyres).toBe(1);
         expect(seat(flat, 'a').cornerStops).toBe(0);
-        expect(log(flat)).toContain('overshot Gravel Bend by 4 rows');
+        expect(log(flat)).toContain('overshot Gravel Bend by 4 spaces');
         expect(log(flat)).toContain('4 tyres');
         expectConserved(flat);
     });
@@ -344,7 +344,7 @@ describe("RaceCarsMove (§7 step 2, §9-§11)", () => {
         expect(seat(game, 'a').row).toBe(51);
         expect(seat(game, 'a').gear).toBe(0);
         expect(seat(game, 'a').skipNextTurn).toBe(true);
-        expect(log(game)).toContain('spun back to row 51 and misses their next turn');
+        expect(log(game)).toContain('spun back into Gravel Bend and misses their next turn');
         // Nothing was spent, so the line must not claim a tyre for it.
         expect(log(game)).not.toContain('tyre');
         expectConserved(game);
@@ -732,7 +732,7 @@ describe("RaceCarsSlipstream (§7 step 3, §12)", () => {
         expect(outcome.turnOver).toBe(true);
         expect(seat(game, 'a').row).toBe(23);
         expect(seat(game, 'a').lane).toBe(2);
-        expect(log(game)).toContain('took the tow 3 rows to row 23');
+        expect(log(game)).toContain('took the tow 3 spaces');
         expect(game.currentTurn).toBe('b');
         expectConserved(game);
     });
@@ -781,7 +781,7 @@ describe("RaceCarsSlipstream (§7 step 3, §12)", () => {
         expect(outcome.validMove).toBe(true);
         expect(seat(game, 'a').row).toBe(17);
         expect(seat(game, 'a').tyres).toBe(2);
-        expect(log(game)).toContain('overshot Ashcombe Hairpin by 3 rows');
+        expect(log(game)).toContain('overshot Ashcombe Hairpin by 3 spaces');
     });
 
     it("spins the car when the tow's overshoot cannot be paid (§13)", async () => {

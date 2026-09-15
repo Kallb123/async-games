@@ -32,7 +32,8 @@ export interface RaceCarsArrivalSummary {
     finished: boolean;
 }
 
-function cornerName(track: RaceCarsTrack, cornerId: string): string {
+/** A corner by name, for any line that has an id and wants words. */
+export function cornerName(track: RaceCarsTrack, cornerId: string): string {
     return track.corners.find(corner => corner.id === cornerId)?.name ?? 'the corner';
 }
 
@@ -61,13 +62,21 @@ export function arrivalLine(
         case 'overshoot':
             return event.waived
                 ? { glyph: '🐢', text: `left ${cornerName(track, event.cornerId)} as slowly as the road allows` }
-                : { glyph: '🛞', text: `overshot ${cornerName(track, event.cornerId)} by ${pluralize(event.rows, 'row')}` };
+                : { glyph: '🛞', text: `overshot ${cornerName(track, event.cornerId)} by ${pluralize(event.spaces, 'space')}` };
         case 'lap':
             return { glyph: '🔁', text: `completed ${pluralize(event.lapsCompleted, 'lap')}` };
         case 'finish':
             return { glyph: '🏁', text: 'crossed the line' };
         case 'spin':
-            return { glyph: '💥', text: `spun back to row ${arrival.row} and misses their next turn` };
+            // Named by where the car is put rather than by a row number: a row
+            // is a rank round the lap, not somewhere a driver can point at
+            // (§5.1), and a spin always ends inside a corner or on the slick.
+            return {
+                glyph: '💥',
+                text: event.cornerId
+                    ? `spun back into ${cornerName(track, event.cornerId)} and misses their next turn`
+                    : 'spun on the oil and misses their next turn',
+            };
         case 'oilCheck':
             return null;
     }
@@ -94,13 +103,13 @@ export function arrivalHeadline(arrival: RaceCarsArrivalSummary): { headline: st
         return { headline: '🏁 Chequered flag!', subline: 'You crossed the line and took the race.' };
     }
     if (arrival.spun) {
-        return { headline: '💥 Spin!', subline: `Back to row ${arrival.row} in neutral, and you miss your next turn.` };
+        return { headline: '💥 Spin!', subline: 'The car is put back in neutral, and you miss your next turn.' };
     }
     const overshot = arrival.events.find(event => event.type === 'overshoot' && !event.waived);
     if (overshot?.type === 'overshoot') {
         return {
             headline: '🛞 Overshot',
-            subline: `${pluralize(overshot.rows, 'row')} past the corner, and the tyres paid for it.`,
+            subline: `${pluralize(overshot.spaces, 'space')} past the corner, and the tyres paid for it.`,
         };
     }
     const banked = arrival.events.find(event => event.type === 'cornerStop');
@@ -118,5 +127,5 @@ export function arrivalHeadline(arrival: RaceCarsArrivalSummary): { headline: st
     if (arrival.events.some(event => event.type === 'blocked')) {
         return { headline: '🚧 Traffic', subline: 'The road ran out early — a lifted throttle and a scuffed tyre.' };
     }
-    return { headline: `Row ${arrival.row}`, subline: 'A clean run down the road.' };
+    return { headline: '🏎️ Clean run', subline: 'Nothing to pay, and the road ahead is clear.' };
 }

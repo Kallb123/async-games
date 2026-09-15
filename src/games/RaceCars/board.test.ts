@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
     cornerAt,
-    cornerCrossings,
-    cornersPassed,
+    cornerExits,
+    cornerReaches,
     crossesStartLine,
     DEFAULT_DISTANCE,
     DEFAULT_SPEC,
@@ -12,15 +12,16 @@ import {
     MAX_PLAYERS,
     MIN_PLAYERS,
     RACE_DISTANCES,
+    RaceCarsSpace,
     RaceCarsTrack,
-    rowsAlong,
     rowsBetween,
-    rowSpan,
     shiftDownCost,
     SHIFT_DOWN_GEARBOX_COST,
     SLICK_CAP,
     spaceAt,
     spaceCount,
+    spaceKey,
+    spacesInCorner,
     spacesInRow,
     SPECS,
     specDef,
@@ -31,8 +32,8 @@ import {
     WEAR_TOKENS_PER_CAR,
 } from "./board";
 import { ASHCOMBE } from "./tracks/ashcombe";
-import { assembleSpaces, type SectionTile, type TrackSection } from "./tracks/sections";
-import { KETTLE_CORNER, testTrack } from "./testFixtures";
+import { assembleSpaces, type TrackSection } from "./tracks/sections";
+import { kettleCorner, testTrack } from "./testFixtures";
 
 const TRACK_LIST: RaceCarsTrack[] = Object.values(TRACKS);
 
@@ -305,70 +306,39 @@ describe("corner geometry (§10)", () => {
         expect(cornerAt(ASHCOMBE, 52, 1)).toBeNull();
     });
 
-    it("membership is per space — one lane can be in a corner while another on the same row is not", () => {
-        // The inside line is in the corner for fewer rows than the outside
-        // (§5.1): here row 1 lane 2 has left the corner while lane 1 is still in.
-        const tiles: SectionTile[] = [
-            { row: 0, lane: 1 }, { row: 0, lane: 2 },
-            { row: 1, lane: 1, cornerId: 'bend' }, { row: 1, lane: 2 },
-            { row: 2, lane: 1, cornerId: 'bend' }, { row: 2, lane: 2, cornerId: 'bend' },
-        ];
-        const track: RaceCarsTrack = {
-            id: 'pt', name: 'Per-tile', rows: 3,
-            spaces: assembleSpaces(tiles, 3),
-            corners: [{ id: 'bend', name: 'Bend', from: 1, to: 2, stops: 1 }],
-            grid: [], maxGear: 5, art: { href: '', viewBox: { width: 0, height: 0 } }, geometry: [],
-        };
-        expect(cornerAt(track, 1, 1)?.id).toBe('bend');
-        expect(cornerAt(track, 1, 2)).toBeNull();
-        expect(cornerAt(track, 2, 2)?.id).toBe('bend');
+    it("puts every tile of a corner section in the corner, both lines of it", () => {
+        // A corner is a **section** now (§10): the stretch of road between two
+        // sync lines, inside for as long as the road is. The inside line takes
+        // fewer tiles round it than the outside and is in it for the same
+        // stretch — which is what makes "spaces past the corner" the only
+        // honest way to charge an overshoot on either line (§5.1).
+        expect(spacesInCorner(KETTLE, 'kettle')).toHaveLength(12);
+        expect(cornerAt(KETTLE, 8, 1)?.id).toBe('kettle');
+        expect(cornerAt(KETTLE, 8, 2)?.id).toBe('kettle');
+        expect(cornerAt(KETTLE, 14, 1)).toBeNull();
     });
 
-    it("lets a space in a section corner opt out with an explicit cornerId: undefined", () => {
-        // The inside line rejoining the road one row before the outside: it drops
-        // out of the section's corner past its apex, while omitting the key still
-        // inherits the section corner.
-        const track = testTrack([
-            { name: 'S/F', from: 0, to: 2, lanes: 3, corner: null },
-            { name: 'Bend', from: 3, to: 4, lanes: 2, corner: { id: 'bend', stops: 1 }, tiles: [
-                { row: 3, lane: 1 }, { row: 3, lane: 2 },
-                { row: 4, lane: 1, cornerId: undefined }, { row: 4, lane: 2 },
-            ] },
-        ]);
-        expect(cornerAt(track, 3, 1)?.id).toBe('bend');
-        expect(cornerAt(track, 4, 1)).toBeNull();
-        expect(cornerAt(track, 4, 2)?.id).toBe('bend');
-    });
-
-    it("reports each corner left behind, in path order, with the rows past it", () => {
-        // Row 46 to row 66 crosses Gravel Bend and then The Kink.
-        expect(cornersPassed(ASHCOMBE, 46, 20).map(pass => [pass.corner.id, pass.rowsPast])).toEqual([
-            ['gravel', 15],
-            ['kink', 1],
+    it("reports each corner a path leaves behind, in path order, with the spaces past it", () => {
+        // Twenty spaces from row 46 down Ashcombe's lane 1, whose lanes run in
+        // step: out of Gravel Bend at the sixth and past The Kink at the last.
+        const path = Array.from({ length: 21 }, (_unused, step) => ({ row: (46 + step) % ASHCOMBE.rows, lane: 1 }));
+        expect(cornerExits(ASHCOMBE, path).map(exit => [exit.corner.id, exit.step, exit.spacesPast])).toEqual([
+            ['gravel', 6, 15],
+            ['kink', 20, 1],
         ]);
     });
 
-    it("counts a crossing that wraps the finish line along the road, not by subtraction", () => {
-        // §10: a car on row 60 that moves 20 ends on row 2 of the next lap
-        // having crossed The Kink, and `2 − 65` is not the answer.
-        expect(cornersPassed(ASHCOMBE, 60, 20).map(pass => pass.corner.id)).toEqual(['kink']);
-        expect(rowsBetween(ASHCOMBE, 60, 2)).toBe(20);
+    it("reads a crossing off the spaces, so a move that wraps the line needs no special case", () => {
+        // §10: a car on row 60 that drives 20 spaces ends on row 2 of the next
+        // lap having crossed The Kink, and `2 − 65` is not the answer — nothing
+        // here subtracts one row number from another.
+        const path = Array.from({ length: 21 }, (_unused, step) => ({ row: (60 + step) % ASHCOMBE.rows, lane: 1 }));
+        expect(cornerExits(ASHCOMBE, path).map(exit => exit.corner.id)).toEqual(['kink']);
     });
 
     it("reports nothing for a move that stays inside a corner", () => {
-        expect(cornersPassed(ASHCOMBE, 10, 3)).toEqual([]);
-    });
-
-    it("places each corner on the step of the path that left it behind", () => {
-        // The same two corners, walked as an actual path: Ashcombe's lanes run
-        // in step, so a step is a row and the crossings land where §10's own
-        // worked example puts them.
-        const path = Array.from({ length: 21 }, (_unused, step) => ({ row: (46 + step) % ASHCOMBE.rows, lane: 1 }));
-        expect(cornerCrossings(ASHCOMBE, path).map(crossing => [crossing.corner.id, crossing.step])).toEqual([
-            ['gravel', 6],
-            ['kink', 20],
-        ]);
-        expect(rowsAlong(ASHCOMBE, path)).toBe(20);
+        const path = [10, 11, 12, 13].map(row => ({ row, lane: 1 }));
+        expect(cornerExits(ASHCOMBE, path)).toEqual([]);
     });
 
     it("completes a lap on crossing the line, not on landing on row 0", () => {
@@ -379,124 +349,270 @@ describe("corner geometry (§10)", () => {
         expect(crossesStartLine(ASHCOMBE, 0, 1)).toBe(false);
     });
 
-    it("quotes a gear's band in rows, which is its step count while the lanes run in step", () => {
-        expect(rowSpan(ASHCOMBE, { row: 20, lane: 2 }, 8)).toEqual({ min: 8, max: 8 });
-        expect(rowSpan(ASHCOMBE, { row: 20, lane: 2 }, 0)).toEqual({ min: 0, max: 0 });
+    it("says how many spaces out each corner is, and how long a move can stay in it", () => {
+        // What the reach band quotes (§23.5): the currency the die is thrown in.
+        const reaches = cornerReaches(ASHCOMBE, { row: 44, lane: 2 }, 20);
+        expect(reaches.get('gravel')).toMatchObject({ enter: 3, last: 7 });
+        // The Kink is still ahead at the end of the walk, so "last" is as far
+        // as it was asked to look rather than the corner's own last space.
+        expect(reaches.get('kink')).toMatchObject({ enter: 18, last: 20 });
+        // A car standing in a corner is nought spaces into it, and can stay in
+        // it for as long as the corner runs — not until it comes back round to
+        // it a lap later, which a walk of a whole lap does reach.
+        expect(cornerReaches(ASHCOMBE, { row: 48, lane: 1 }, 6).get('gravel')).toMatchObject({ enter: 0, last: 3 });
+        expect(cornerReaches(ASHCOMBE, { row: 48, lane: 1 }, ASHCOMBE.rows).get('gravel'))
+            .toMatchObject({ enter: 0, last: 3 });
     });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 
 // The Kettle (testFixtures.ts) with a straight either side of it: a corner
-// whose outside is painted and whose inside takes four spaces to the outside's
+// whose outside is painted and whose inside takes four tiles to the outside's
 // eight, which is both of the things §5.1's own step rule cannot say.
+//
+// Its rows are derived, not typed (`tracks/sections.ts`): the straight takes
+// rows 0-5, the corner 6-13 — its longest line through — and the run-out 14-19.
+// The inside line's four tiles are spread evenly across the corner's own eight
+// rows rather than bunched at one end of them, which is what keeps the two
+// lines comparable while one of them covers the road in half the tiles.
 const KETTLE = testTrack([
-    { name: 'Straight', from: 0, to: 5, lanes: 3, corner: null },
-    KETTLE_CORNER,
-    { name: 'Run to the Line', from: 14, to: 19, lanes: 3, corner: null },
+    { id: 'straight', name: 'Straight', length: 6, lanes: 3, corner: null },
+    kettleCorner('run'),
+    { id: 'run', name: 'Run to the Line', length: 6, lanes: 3, corner: null },
 ]);
 
+/** Every route of exactly `steps` steps off a space, traffic ignored — a test's
+ *  brute force, where the game itself walks breadth-first and keeps one. */
+function everyPath(track: RaceCarsTrack, from: RaceCarsSpace, steps: number): RaceCarsSpace[][] {
+    if (steps === 0) return [[from]];
+    return stepsFrom(track, from.row, from.lane)
+        .flatMap(next => everyPath(track, next, steps - 1).map(rest => [from, ...rest]));
+}
+
 describe("a corner whose lanes do not run in step (§5.1)", () => {
-    it("steps where the space says it may, and nowhere else", () => {
-        // Painted: the outside of the corner feeds the space in front of it.
+    it("derives rows the lanes agree on rather than letting them drift apart", () => {
+        // The outside's eight tiles take a row each; the inside's four are
+        // spread across the same eight rows, two rows to a tile.
+        expect(KETTLE.rows).toBe(20);
+        expect(KETTLE.corners).toEqual([{ id: 'kettle', name: 'The Kettle', from: 6, to: 13, stops: 1 }]);
+        const inside = KETTLE.spaces.filter(space => space.lane === 1 && space.cornerId === 'kettle');
+        expect(inside.map(space => space.row)).toEqual([8, 9, 10, 11]);
+        const outside = KETTLE.spaces.filter(space => space.lane === 2 && space.cornerId === 'kettle');
+        expect(outside.map(space => space.row)).toEqual([6, 7, 8, 9, 10, 11, 12, 13]);
+    });
+
+    it("steps where the tile says it may, and nowhere else", () => {
+        // Painted: the outside of the corner feeds the tile in front of it.
         expect(stepsFrom(KETTLE, 6, 2)).toEqual([{ row: 7, lane: 2 }]);
-        // The inside skips the rows it has no space on.
-        expect(stepsFrom(KETTLE, 6, 1)).toEqual([{ row: 8, lane: 1 }]);
+        // The inside skips the rows it has no tile on.
+        expect(stepsFrom(KETTLE, 11, 1)).toEqual([{ row: 14, lane: 1 }, { row: 14, lane: 2 }]);
         expect(spaceAt(KETTLE, 7, 1)).toBeNull();
         // Everything around it still gets §5.1's own rule, narrowing included.
         expect(stepsFrom(KETTLE, 5, 3)).toEqual([{ row: 6, lane: 2 }]);
-        expect(stepsFrom(KETTLE, 5, 2)).toEqual([{ row: 6, lane: 1 }, { row: 6, lane: 2 }]);
+        expect(stepsFrom(KETTLE, 5, 2)).toEqual([{ row: 8, lane: 1 }, { row: 6, lane: 2 }]);
     });
 
-    it("covers the corner in four spaces on the inside and eight on the outside", () => {
-        expect(rowSpan(KETTLE, { row: 6, lane: 1 }, 4)).toEqual({ min: 8, max: 8 });
-        expect(rowSpan(KETTLE, { row: 6, lane: 2 }, 4)).toEqual({ min: 4, max: 4 });
+    it("never lets a step fail to move the car forward, whichever line it takes", () => {
+        // The invariant the derivation exists to hold: every step of the graph
+        // advances at least one row, so no lane can drift level with another.
+        for (const space of KETTLE.spaces) {
+            for (const exit of space.exits) {
+                expect(rowsBetween(KETTLE, space.row, exit.row)).toBeGreaterThan(0);
+            }
+        }
     });
 
-    it("makes a gear's band a range of rows rather than a number of them", () => {
-        // From the straight, where the line into the corner is still a choice:
-        // five spaces are five rows round the outside and nine down the inside.
-        expect(rowSpan(KETTLE, { row: 5, lane: 2 }, 5)).toEqual({ min: 5, max: 9 });
-    });
-
-    it("charges an overshoot in rows of road, not in spaces driven", () => {
-        // Five spaces down the inside land on row 15, two rows past the
-        // corner's last row — the same five round the outside are still in it.
+    it("charges an overshoot in spaces driven, which both lines can be read in", () => {
+        // Five spaces down the inside are out of the corner and one space past
+        // it; the same five round the outside are still in it.
         const inside = [
-            { row: 6, lane: 1 }, { row: 8, lane: 1 }, { row: 10, lane: 1 },
-            { row: 12, lane: 1 }, { row: 14, lane: 1 }, { row: 15, lane: 1 },
+            { row: 5, lane: 1 }, { row: 8, lane: 1 }, { row: 9, lane: 1 },
+            { row: 10, lane: 1 }, { row: 11, lane: 1 }, { row: 14, lane: 1 },
         ];
-        expect(rowsAlong(KETTLE, inside)).toBe(9);
-        expect(cornerCrossings(KETTLE, inside)).toEqual([
-            { corner: KETTLE.corners[0], step: 4, rowsPast: 2 },
+        expect(cornerExits(KETTLE, inside).map(exit => [exit.corner.id, exit.spacesPast])).toEqual([
+            ['kettle', 1],
         ]);
 
-        const outside = [6, 7, 8, 9, 10, 11].map(row => ({ row, lane: 2 }));
-        expect(cornerCrossings(KETTLE, outside)).toEqual([]);
+        const outside = [5, 6, 7, 8, 9, 10].map(row => ({ row, lane: row === 5 ? 2 : 2 }));
+        expect(cornerExits(KETTLE, outside)).toEqual([]);
+    });
+
+    it("charges every route to one destination the same, which is what §9 sells", () => {
+        // §9 lets a driver tap a **destination** rather than draw a path, and
+        // that is only honest if two routes of the same length to the same
+        // space are charged the same — which, now that an overshoot is read off
+        // the corner each step is in, is a statement about the board rather
+        // than about arithmetic. Every route of every length, enumerated.
+        const starts = [
+            { track: KETTLE, from: { row: 5, lane: 1 }, steps: 8 },
+            { track: KETTLE, from: { row: 5, lane: 2 }, steps: 8 },
+            { track: KETTLE, from: { row: 8, lane: 1 }, steps: 8 },
+            // A three-lane road through a real corner: every route of eight
+            // spaces from the end of The Mile, over Gravel Bend and out.
+            { track: ASHCOMBE, from: { row: 46, lane: 2 }, steps: 8 },
+        ];
+        for (const start of starts) {
+            for (let steps = 1; steps <= start.steps; steps++) {
+                const charged = new Map<string, string>();
+                for (const path of everyPath(start.track, start.from, steps)) {
+                    const end = spaceKey(path[steps].row, path[steps].lane);
+                    const bill = cornerExits(start.track, path)
+                        .map(exit => `${exit.corner.id}:${exit.spacesPast}`).join(',');
+                    const seen = charged.get(end);
+                    if (seen === undefined) charged.set(end, bill);
+                    else expect([end, bill]).toEqual([end, seen]);
+                }
+            }
+        }
     });
 
     it("waives the corner for an inside line that has nowhere left inside it (§10)", () => {
-        // Not "standing on the corner's last row": the inside line's last space
+        // Not "standing on the corner's last row": the inside line's last tile
         // is two rows short of it and still has nowhere to go but out.
-        expect(waivedCornerIdAt(KETTLE, 12, 1)).toBe('kettle');
-        expect(waivedCornerIdAt(KETTLE, 12, 2)).toBeNull();
+        expect(waivedCornerIdAt(KETTLE, 11, 1)).toBe('kettle');
+        expect(waivedCornerIdAt(KETTLE, 11, 2)).toBeNull();
         expect(waivedCornerIdAt(KETTLE, 13, 2)).toBe('kettle');
         expect(waivedCornerIdAt(KETTLE, 5, 2)).toBeNull();
     });
 });
 
-describe("deriveTrack refuses a circuit that cannot be driven", () => {
-    const straight = (from: number, to: number, lanes: 2 | 3 = 3): TrackSection =>
-        ({ name: `Rows ${from}-${to}`, from, to, lanes, corner: null });
+// A **staggered** straight: the lanes are drawn half a tile apart, so a lane
+// change is a step diagonally forward rather than straight across — which is
+// how a real board draws a road you can change lane on without losing ground.
+//
+// This is the shape that broke the old model. Counting rows along each lane put
+// the two lanes' tiles on the same row numbers, so the diagonal step a car
+// actually drives came out as a step that changes lane without moving forward —
+// refused by the rules, and the corner behind it out of step for the rest of
+// the lap. Derived, the two lanes interleave: each tile gets its own rank, and
+// every step advances.
+const STAGGERED = testTrack([
+    {
+        id: 'straight', name: 'Staggered Straight', lanes: 2, corner: null,
+        tiles: [
+            ...Array.from({ length: 3 }, (_unused, index) => ({
+                id: `straight.1.${index}`,
+                lane: 1,
+                // On along this lane, or across to the tile half a tile ahead.
+                exits: index < 2
+                    ? [`straight.1.${index + 1}`, `straight.2.${index}`]
+                    : [`straight.2.${index}`],
+            })),
+            ...Array.from({ length: 3 }, (_unused, index) => ({
+                id: `straight.2.${index}`,
+                lane: 2,
+                exits: index < 2
+                    ? [`straight.2.${index + 1}`, `straight.1.${index + 1}`]
+                    : ['run.1.0', 'run.2.0'],
+            })),
+        ],
+    },
+    { id: 'run', name: 'Run to the Line', length: 2, lanes: 2, corner: null },
+]);
 
-    it("refuses a step onto a space that is not there", () => {
-        expect(() => testTrack([
-            straight(0, 2),
-            { name: 'Bend', from: 3, to: 4, lanes: 2, corner: null, tiles: [
-                { row: 3, lane: 1, exits: [{ row: 4, lane: 3 }] },
-                { row: 3, lane: 2 }, { row: 4, lane: 1 }, { row: 4, lane: 2 },
-            ] },
-        ])).toThrow(/not a space/);
+describe("a staggered straight, drawn half a tile out of step (§5.1)", () => {
+    it("gives each lane its own ranks rather than putting both on the same rows", () => {
+        // Six rows of staggered road, then a plain two-row run to the line.
+        expect(STAGGERED.rows).toBe(8);
+        const staggered = STAGGERED.spaces.filter(space => space.row < 6);
+        expect(staggered.filter(space => space.lane === 1).map(space => space.row)).toEqual([0, 2, 4]);
+        expect(staggered.filter(space => space.lane === 2).map(space => space.row)).toEqual([1, 3, 5]);
     });
 
-    it("refuses a space nothing can be driven off", () => {
+    it("makes the lane change a step that moves the car forward", () => {
+        // The bug in one line: this step used to come out as 7:3 → 7:2.
+        expect(stepsFrom(STAGGERED, 0, 1)).toEqual([{ row: 2, lane: 1 }, { row: 1, lane: 2 }]);
+        for (const space of STAGGERED.spaces) {
+            for (const exit of space.exits) {
+                expect(rowsBetween(STAGGERED, space.row, exit.row)).toBeGreaterThan(0);
+            }
+        }
+    });
+});
+
+describe("deriveTrack refuses a circuit that cannot be driven", () => {
+    const straight = (id: string, length: number, lanes: 2 | 3 = 3): TrackSection =>
+        ({ id, name: id, length, lanes, corner: null });
+
+    it("refuses a step onto a tile that is not there", () => {
         expect(() => testTrack([
-            straight(0, 2),
-            { name: 'Bend', from: 3, to: 4, lanes: 2, corner: null, tiles: [
-                { row: 3, lane: 1, exits: [] },
-                { row: 3, lane: 2 }, { row: 4, lane: 1 }, { row: 4, lane: 2 },
+            straight('s', 3),
+            { id: 'bend', name: 'Bend', lanes: 2, corner: null, tiles: [
+                { id: 'b.1.0', lane: 1, exits: ['b.9.9'] },
+                { id: 'b.2.0', lane: 2, exits: ['s.1.0'] },
+            ] },
+        ])).toThrow(/not a tile/);
+    });
+
+    it("refuses a tile nothing can be driven off", () => {
+        expect(() => testTrack([
+            straight('s', 3),
+            { id: 'bend', name: 'Bend', lanes: 2, corner: null, tiles: [
+                { id: 'b.1.0', lane: 1, exits: [] },
+                { id: 'b.2.0', lane: 2, exits: ['s.1.0'] },
             ] },
         ])).toThrow(/nothing to step to/);
     });
 
-    it("refuses a sideways step — a car changes lane while moving (§5.1)", () => {
+    it("refuses a band whose lanes run out of step and name no steps of their own", () => {
+        // The default rule is a statement about a road whose lanes run in step;
+        // over one that doesn't it is a guess, and a guess is what used to put
+        // two tiles drawn side by side a row apart.
         expect(() => testTrack([
-            straight(0, 2),
-            { name: 'Bend', from: 3, to: 4, lanes: 2, corner: null, tiles: [
-                { row: 3, lane: 1, exits: [{ row: 3, lane: 2 }] },
-                { row: 3, lane: 2 }, { row: 4, lane: 1 }, { row: 4, lane: 2 },
+            straight('s', 3),
+            { id: 'bend', name: 'Bend', lanes: 2, corner: null, tiles: [
+                { id: 'b.1.0', lane: 1 },
+                { id: 'b.2.0', lane: 2 },
+                { id: 'b.2.1', lane: 2 },
             ] },
-        ])).toThrow(/sideways/);
+        ])).toThrow(/out of step/);
     });
 
-    it("refuses a row the road skips entirely", () => {
+    it("refuses steps that loop back on themselves inside a section", () => {
         expect(() => testTrack([
-            straight(0, 2),
-            { name: 'Bend', from: 3, to: 4, lanes: 2, corner: null, tiles: [
-                { row: 3, lane: 1, exits: [{ row: 0, lane: 1 }] },
-                { row: 3, lane: 2, exits: [{ row: 0, lane: 2 }] },
+            straight('s', 3),
+            { id: 'bend', name: 'Bend', lanes: 2, corner: null, tiles: [
+                { id: 'b.1.0', lane: 1, exits: ['b.2.0'] },
+                { id: 'b.2.0', lane: 2, exits: ['b.1.0'] },
             ] },
-        ])).toThrow(/row 4 has no spaces/);
+        ])).toThrow(/loop back/);
     });
 
-    it("refuses a lane the road is not wide enough for, and a gap between sections", () => {
+    it("refuses two tiles sharing an id, an empty section, and a lane the road is not wide enough for", () => {
         expect(() => testTrack([
-            straight(0, 2),
-            { name: 'Bend', from: 3, to: 3, lanes: 2, corner: null, tiles: [
-                { row: 3, lane: 1 }, { row: 3, lane: 3 },
+            straight('s', 3),
+            { id: 'bend', name: 'Bend', lanes: 2, corner: null, tiles: [
+                { id: 'b.1.0', lane: 1, exits: ['s.1.0'] },
+                { id: 'b.1.0', lane: 2, exits: ['s.2.0'] },
+            ] },
+        ])).toThrow(/share the id/);
+
+        expect(() => testTrack([straight('s', 3), { id: 'empty', name: 'Empty', lanes: 2, corner: null, tiles: [] }]))
+            .toThrow(/has no tiles/);
+
+        expect(() => testTrack([
+            straight('s', 3),
+            { id: 'bend', name: 'Bend', lanes: 2, corner: null, tiles: [
+                { id: 'b.1.0', lane: 1, exits: ['s.1.0'] },
+                { id: 'b.3.0', lane: 3, exits: ['s.3.0'] },
             ] },
         ])).toThrow(/2-lane road/);
-        expect(() => testTrack([straight(0, 2), straight(4, 6)])).toThrow(/expected to start at 3/);
+    });
+
+    it("still refuses a hand-built spaces list that breaks the graph", () => {
+        // `assembleSpaces` is the guard under the derivation, and the one the
+        // editor runs a drawing through: a track file that ever stops coming
+        // through `deriveTrack` is checked here instead.
+        expect(() => assembleSpaces([
+            { row: 0, lane: 1, exits: [{ row: 0, lane: 2 }] },
+            { row: 0, lane: 2, exits: [{ row: 1, lane: 2 }] },
+            { row: 1, lane: 2, exits: [{ row: 0, lane: 1 }] },
+        ], 2)).toThrow(/sideways/);
+        expect(() => assembleSpaces([
+            { row: 0, lane: 1, exits: [{ row: 2, lane: 1 }] },
+            { row: 2, lane: 1, exits: [{ row: 0, lane: 1 }] },
+        ], 3)).toThrow(/row 1 has no spaces/);
     });
 });
 

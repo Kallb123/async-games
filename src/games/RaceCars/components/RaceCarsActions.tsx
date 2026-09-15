@@ -11,15 +11,16 @@ import { RaceCarsShift, RaceCarsSlipstream } from '@/utils/apiModels/GameLogic';
 import type { IRaceCarsSpecificGameStateResponse } from '@/games/RaceCars/apiModels';
 import {
     cornerAt,
+    cornerReaches,
     gearDef,
     gearName,
     MIN_MOVE_STEPS,
-    rowsBetween,
-    rowSpan,
+    nextCornerReach,
     SLIPSTREAM_STEPS,
     trackById,
+    type RaceCarsCorner,
+    type RaceCarsCornerReach,
     type RaceCarsGear,
-    type RaceCarsTrack,
 } from '@/games/RaceCars/board';
 import { legalGears, type IRaceCarsPlayerState, type RaceCarsMoveOptions } from '@/games/RaceCars/rules';
 import { rulesState } from '@/games/RaceCars/ui';
@@ -30,49 +31,59 @@ import { rulesState } from '@/games/RaceCars/ui';
  * A planner would resolve one hypothetical roll and show a driver a concrete
  * board they will not get, answering "where do I end up" when the decision this
  * game asks for is "which band do I bet on". So each gear names the span it can
- * reach, where that span lands relative to the next corner, and what an
+ * roll, where that span lands relative to the next corner, and what an
  * overshoot from it would cost — one `reachableSpaces`-shaped reading of the
  * pure rules, client-side, and true about a range rather than persuasive about
  * a number.
+ *
+ * Everything here counts in **spaces**, which is the one currency the driver is
+ * spending: the die is thrown in spaces, §10 charges an overshoot in spaces,
+ * and a row is a rank round the lap rather than a distance (§5.1). `reaches`
+ * says how many spaces out each corner is, walked once per render rather than
+ * once per gear.
  */
-function reachBand(track: RaceCarsTrack, ps: IRaceCarsPlayerState, gear: RaceCarsGear): string {
+function reachBand(
+    ps: IRaceCarsPlayerState,
+    reaches: Map<string, RaceCarsCornerReach>,
+    here: RaceCarsCorner | null,
+    gear: RaceCarsGear,
+): string {
     const { min, max } = gearDef(gear);
-    // The die is thrown in spaces and §10 is charged in rows, and the two are
-    // only the same number while a circuit's lanes run in step (§5.1) — so the
-    // band is converted to road here, once, and everything below it reads rows.
-    const rows = { min: rowSpan(track, ps, min).min, max: rowSpan(track, ps, max).max };
-    const span = `rolls ${min}–${max} → rows ${(ps.row + rows.min) % track.rows}–${(ps.row + rows.max) % track.rows}`;
-    return `${span} · ${cornerVerdict(track, ps, rows.min, rows.max)}`;
+    return `rolls ${min}–${max} · ${cornerVerdict(ps, reaches, here, min, max)}`;
 }
 
-/** `min`/`max` are rows of road the gear's band covers, never its dice faces. */
-function cornerVerdict(track: RaceCarsTrack, ps: IRaceCarsPlayerState, min: number, max: number): string {
-    const here = cornerAt(track, ps.row, ps.lane);
+/** `min`/`max` are the spaces the gear's band rolls — its dice faces, in full. */
+function cornerVerdict(
+    ps: IRaceCarsPlayerState,
+    reaches: Map<string, RaceCarsCornerReach>,
+    here: RaceCarsCorner | null,
+    min: number,
+    max: number,
+): string {
     const owed = here ? here.stops - ps.cornerStops : 0;
 
     // The corner under the car still owes a stop, so the band is measured
     // against getting out of it rather than into the next one.
     if (here && owed > 0) {
-        const toEnd = rowsBetween(track, ps.row, here.to);
-        // §10's waiver: a car on a corner's last row has taken it as slowly as
-        // the road allows, so what it still owes is written off as it leaves.
-        if (toEnd === 0) return `leaves ${here.name} — the last row waives the stop it owes`;
-        if (min > toEnd) return `overshoots ${here.name} by ${min - toEnd}–${max - toEnd} rows${tyreCost(ps, max - toEnd)}`;
-        return max > toEnd
-            ? `can bank a stop in ${here.name} — over ${toEnd} and it overshoots${tyreCost(ps, max - toEnd)}`
+        // The longest a move can stay inside this corner, in spaces — the
+        // outside line, where the corner has one.
+        const last = reaches.get(here.id)?.last ?? 0;
+        // §10's waiver: a car with nowhere left inside the corner has taken it
+        // as slowly as the road allows, so what it still owes is written off.
+        if (last === 0) return `leaves ${here.name} — the road out waives the stop it owes`;
+        if (min > last) return `overshoots ${here.name} by ${min - last}–${max - last} spaces${tyreCost(ps, max - last)}`;
+        return max > last
+            ? `can bank a stop in ${here.name} — over ${last} and it overshoots${tyreCost(ps, max - last)}`
             : `stays in ${here.name} and banks a stop`;
     }
 
-    const next = track.corners
-        .map(corner => ({ corner, start: rowsBetween(track, ps.row, corner.from), end: rowsBetween(track, ps.row, corner.to) }))
-        .filter(ahead => ahead.start > 0)
-        .sort((a, b) => a.start - b.start)[0];
+    const next = nextCornerReach(reaches);
     if (!next) return 'clear road';
 
-    if (max < next.start) return `clear road — ${next.corner.name} is ${next.start} rows out`;
-    if (min > next.end) return `overshoots ${next.corner.name} by ${min - next.end}–${max - next.end} rows${tyreCost(ps, max - next.end)}`;
-    return max > next.end
-        ? `can stop in ${next.corner.name} — over ${next.end} and it overshoots${tyreCost(ps, max - next.end)}`
+    if (max < next.enter) return `clear road — ${next.corner.name} is ${next.enter} spaces out`;
+    if (min > next.last) return `overshoots ${next.corner.name} by ${min - next.last}–${max - next.last} spaces${tyreCost(ps, max - next.last)}`;
+    return max > next.last
+        ? `can stop in ${next.corner.name} — over ${next.last} and it overshoots${tyreCost(ps, max - next.last)}`
         : `can stop in ${next.corner.name}`;
 }
 
@@ -80,36 +91,40 @@ function cornerVerdict(track: RaceCarsTrack, ps: IRaceCarsPlayerState, min: numb
  * What an overshoot costs, in the currency §10 charges it in.
  *
  * `qualifier` is what separates the two readers: the reach band is quoting the
- * worst of a range, §12's tow is quoting an exact number of rows.
+ * worst of a range, §12's tow is quoting an exact number of spaces.
  */
-function tyreCost(ps: IRaceCarsPlayerState, rows: number, qualifier = 'up to '): string {
-    if (rows <= 0) return '';
-    return rows > ps.tyres
+function tyreCost(ps: IRaceCarsPlayerState, spaces: number, qualifier = 'up to '): string {
+    if (spaces <= 0) return '';
+    return spaces > ps.tyres
         ? ` — more tyres than you have left: a spin`
-        : ` — ${qualifier}${pluralize(rows, 'tyre')}`;
+        : ` — ${qualifier}${pluralize(spaces, 'tyre')}`;
 }
 
 /**
- * §12's offer, priced. Three spaces are free on an open road and are three rows
- * of overshoot in a braking zone, which is the whole decision — so the prompt
- * names the corner and what leaving it would cost rather than saying "free".
+ * §12's offer, priced. Three spaces are free on an open road and are three
+ * spaces of overshoot in a braking zone, which is the whole decision — so the
+ * prompt names the corner and what leaving it would cost rather than saying
+ * "free".
  */
-function towPrompt(track: RaceCarsTrack, ps: IRaceCarsPlayerState, options: RaceCarsMoveOptions): string {
+function towPrompt(
+    ps: IRaceCarsPlayerState,
+    reaches: Map<string, RaceCarsCornerReach>,
+    here: RaceCarsCorner | null,
+    options: RaceCarsMoveOptions,
+): string {
     if (options.blockedShort) {
         return `Traffic — the tow only runs ${pluralize(options.distance, 'space')}. Tap a highlighted space to take what there is and scuff a tyre.`;
     }
-    const here = cornerAt(track, ps.row, ps.lane);
     // The worst the tow can do, which is what a warning should quote: three
-    // steps are three rows of road until a corner's lanes run out of step, and
-    // then they are as many rows as the longest line through it covers (§5.1).
+    // steps against the longest the corner can still hold the car.
     const past = here && here.stops > ps.cornerStops
-        ? rowSpan(track, ps, SLIPSTREAM_STEPS).max - rowsBetween(track, ps.row, here.to)
+        ? Math.max(0, SLIPSTREAM_STEPS - (reaches.get(here.id)?.last ?? 0))
         : 0;
     if (past > 0) {
         // §12: a tow out of a corner is charged in full — §10's waiver forgives
         // a corner you could not avoid leaving, and declining this costs
         // nothing.
-        return `Three spaces — but they push you out of ${here!.name} by ${pluralize(past, 'row')}, charged in full${tyreCost(ps, past, '')}.`;
+        return `Three spaces — but they push you out of ${here!.name} by ${pluralize(past, 'space')}, charged in full${tyreCost(ps, past, '')}.`;
     }
     return `Three free spaces. Tap a highlighted space to take the tow.`;
 }
@@ -162,6 +177,10 @@ export default function RaceCarsActions({ gs, myUserId, brake, setBrake, options
     if (!ps) return null;
 
     const track = trackById(gs.trackId);
+    // Where every corner sits from where this car stands, in spaces — one walk
+    // of the road per render, read by every gear's band and by the tow prompt.
+    const reaches = cornerReaches(track, { row: ps.row, lane: ps.lane }, track.rows);
+    const here = cornerAt(track, ps.row, ps.lane);
 
     // Off-turn the gear ladder is the one thing worth reading, and a turn that
     // has already been driven still holds its own spent `roll` (§23.4 keeps
@@ -180,7 +199,7 @@ export default function RaceCarsActions({ gs, myUserId, brake, setBrake, options
     if (!readOnly && ps.phase === 'slipstream' && options !== null) {
         return (
             <div className="ag-actionsheet">
-                <div className="ag-callout">{towPrompt(track, ps, options)}</div>
+                <div className="ag-callout">{towPrompt(ps, reaches, here, options)}</div>
                 <div className="ag-build-list">
                     <BuildRow
                         icon={<span className="ag-rc-gearmark">🌀</span>}
@@ -212,7 +231,7 @@ export default function RaceCarsActions({ gs, myUserId, brake, setBrake, options
                                 key={gear}
                                 icon={<span className="ag-rc-gearmark">{gear}</span>}
                                 name={`${gearName(gear)} · d${gearDef(gear).faces.length}`}
-                                cost={`${reachBand(track, ps, gear)}${gearboxCost > 0 ? ` · ⚙️${gearboxCost}` : ''}`}
+                                cost={`${reachBand(ps, reaches, here, gear)}${gearboxCost > 0 ? ` · ⚙️${gearboxCost}` : ''}`}
                                 tag={pendingTarget === `shift:${gear}` ? <PendingTag label="Shifting…" /> : 'Shift'}
                                 pending={pendingTarget === `shift:${gear}`}
                                 onClick={() => {
