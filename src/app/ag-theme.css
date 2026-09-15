@@ -1518,6 +1518,13 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-score-pill--warn { --ag-score-warn-ring: inset 0 0 0 1.5px var(--ag-danger); }
 .ag-score-pill--tappable { cursor: pointer; }
 .ag-score-pill--tappable:active { filter: brightness(0.96); }
+/* A pill whose content swaps has to keep its width across the swap. Sized by
+   its own text — `flex-basis: auto` — each one jumped wider or narrower the
+   moment the summary became the breakdown, and the strip jogged sideways under
+   the tap. The basis is instead the width of the longest line either state
+   holds, so the swap changes height alone; they still grow from there to share
+   out a strip with room to spare. */
+.ag-scorestrip--expandable .ag-score-pill { flex-basis: 148px; }
 /* Selected pill — pulses in sync with the board city it rings, matching the
    tapped-card highlight (.ag-hand-card--highlighted). */
 .ag-score-pill--highlighted {
