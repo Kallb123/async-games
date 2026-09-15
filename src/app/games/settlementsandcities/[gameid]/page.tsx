@@ -262,22 +262,25 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
             if (!ps) return [];
             const isMe = userId === myUserId;
             const isActive = userId === displayedCurrentTurn && !complete;
-            const totalCards = ps.resourceCount;
-            let sub: React.ReactNode;
-            if (gs.longestRoadOwner === userId) sub = '🛣️ LR';
-            else if (gs.largestArmyOwner === userId) sub = '⚔️ LA';
-            else sub = `${totalCards} cards`;
+            const totalCards = ps.resourceCount + ps.devCardCount;
             const isLongestRoad = gs.longestRoadOwner === userId;
             const isLargestArmy = gs.largestArmyOwner === userId;
             const roadLength = calculateLongestRoad(userId, gs.vertices, gs.edges);
-            // The pill's `sub` line already shows either the LR/LA tag or the
-            // card count when collapsed; `GameScoreboard` swaps it out for
-            // this once expanded, so all three figures still belong here.
+            // Collapsed: total card count plus whichever bonus tags this
+            // player holds, each carrying its own emoji. `GameScoreboard`
+            // swaps this out for `detail` once expanded, so all four figures
+            // below still belong here too.
+            const sub = [
+                `${totalCards} card${totalCards === 1 ? '' : 's'}`,
+                isLongestRoad ? '🛣️ LR' : null,
+                isLargestArmy ? '⚔️ LA' : null,
+            ].filter(Boolean).join(' - ');
             const detail = (
                 <>
-                    <div>{totalCards} card{totalCards === 1 ? '' : 's'}</div>
-                    <div>⚔️ {ps.knightsPlayed} knight{ps.knightsPlayed === 1 ? '' : 's'}{isLargestArmy && ' · Largest Army'}</div>
-                    <div>🛣️ {roadLength} segment{roadLength === 1 ? '' : 's'}{isLongestRoad && ' · Longest Road'}</div>
+                    <div>{ps.resourceCount} Res Card{ps.resourceCount === 1 ? '' : 's'}</div>
+                    <div>{ps.devCardCount} Dev Card{ps.devCardCount === 1 ? '' : 's'}</div>
+                    <div>{ps.knightsPlayed} Knight{ps.knightsPlayed === 1 ? '' : 's'}{isLargestArmy ? ' - ⚔️ LA' : ''}</div>
+                    <div>{roadLength} Segment{roadLength === 1 ? '' : 's'}{isLongestRoad ? ' - 🛣️ LR' : ''}</div>
                 </>
             );
             return [{
