@@ -306,18 +306,19 @@ export function connectByGeometry(tiles: EditorTile[]): EditorTile[] {
     const byKey = new Map(tiles.map(tile => [spaceKey(tile.row, tile.lane), tile]));
 
     // What this run has resolved so far — a hand-drawn override from the
-    // start, an auto tile's the moment this loop below (re)computes it.
-    // Never a tile's own previous `exits` when those were auto-written: that
-    // is exactly the stale guess this function stops trusting.
-    const resolved = new Map<string, RaceCarsSpace[]>();
+    // start, an auto tile's the moment the loop below (re)computes it. Never
+    // a tile's own previous `exits` when those were auto-written: that is
+    // exactly the stale guess this function stops trusting.
+    const results = new Map<string, EditorTile>();
     for (const tile of tiles) {
-        if (tile.exits && !tile.autoExits) resolved.set(spaceKey(tile.row, tile.lane), tile.exits);
+        if (tile.exits && !tile.autoExits) results.set(spaceKey(tile.row, tile.lane), tile);
     }
 
-    const results = new Map<string, EditorTile>();
-    for (const tile of [...tiles].sort((a, b) => a.row - b.row || a.lane - b.lane)) {
+    // Row order is the direction of travel, now that every sharp lane change
+    // is hand-drawn rather than something this function has to infer.
+    for (const tile of [...tiles].sort((a, b) => a.row - b.row)) {
         const tileKey = spaceKey(tile.row, tile.lane);
-        if (tile.exits && !tile.autoExits) { results.set(tileKey, tile); continue; }
+        if (results.has(tileKey)) continue; // hand-drawn, seeded above
 
         const fallback = defaultExits(rows, byRow, tile);
         const heading = tile.heading ?? headingTowards(tile, fallback, byKey);
@@ -330,10 +331,14 @@ export function connectByGeometry(tiles: EditorTile[]): EditorTile[] {
             let nearest: { other: EditorTile; dist: number } | null = null;
             for (const other of tiles) {
                 if (other === tile || other.row === tile.row || other.lane !== lane) continue;
-                // A candidate this run has already pointed back into this
-                // tile is never offered — that line has a direction.
-                const already = resolved.get(spaceKey(other.row, other.lane));
-                if (already?.some(exit => exit.row === tile.row && exit.lane === tile.lane)) continue;
+                // A candidate this run has already resolved with an exit
+                // back into this tile is never offered — that line has a
+                // direction, and retracing it would connect the two both
+                // ways. Not yet resolved (still ahead in row order) means
+                // not yet a reason to exclude it.
+                const otherResult = results.get(spaceKey(other.row, other.lane));
+                const alreadyExits = otherResult && (otherResult.exits ?? defaultExits(rows, byRow, otherResult));
+                if (alreadyExits?.some(exit => exit.row === tile.row && exit.lane === tile.lane)) continue;
                 const dx = other.x - tile.x;
                 const dy = other.y - tile.y;
                 const dist = Math.hypot(dx, dy);
@@ -347,7 +352,6 @@ export function connectByGeometry(tiles: EditorTile[]): EditorTile[] {
             ? { ...tile, exits, autoExits: true }
             : (tile.exits ? { ...tile, ...NO_EXITS } : tile);
 
-        resolved.set(tileKey, result.exits ?? fallback);
         results.set(tileKey, result);
     }
 
