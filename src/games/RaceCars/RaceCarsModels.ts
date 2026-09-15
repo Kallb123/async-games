@@ -403,7 +403,18 @@ export var RaceCarsGameDataModel =
 export interface IRaceCarsGameResultStats {
     /** §4.2's classification — written once, for the whole field, by the ending. */
     finishingPosition: Map<string, number>;
-    /** Laps × the track's row count, plus the final row — net progress, the same reading `rowsPerTurn` takes each round. */
+    /**
+     * Laps × the track's row count, plus the final row — net progress, the same
+     * reading `rowsPerTurn` takes each round.
+     *
+     * **Rows on purpose**, and the one family of numbers still quoted in them
+     * (with `rowsPerTurn` and `rowsBehindLeader`). Everything a rule *charges*
+     * moved to spaces, because a space is a space on either line through a
+     * corner (§10) — but a rank round the lap is exactly what these three are
+     * asking for: how far round two cars are, against each other, on one
+     * circuit. Spaces driven would flatter whichever of them took the longer
+     * way round.
+     */
     rowsCovered: Map<string, number>;
     topGear: Map<string, number>;
     tyresSpent: Map<string, number>;

@@ -1,26 +1,52 @@
 // The pure half of the Race Cars track editor (docs/admin-tools.md): the model
-// an admin builds by clicking tiles onto a circuit image, and the two things it
-// does with that model — validate it as a circuit a race can be driven round,
-// and print it as a `tracks/` file ready to paste beside anglet.ts.
+// an admin builds by clicking tiles onto a circuit image, and the three things
+// it does with that model — derive the circuit it describes, say what is wrong
+// with it, and print it as a `tracks/` file ready to paste beside anglet.ts.
 //
 // No React and no DOM: the editor component owns the pointer handling and this
 // owns the geometry, the graph and the serialisation, so both can be reasoned
-// about (and tested) on their own. It reuses the game's own step rule —
-// `defaultExits` and `assembleSpaces` — rather than restating §5.1, so a track
-// drawn here obeys exactly the rules the track files that ship already do.
-import type {
-    RaceCarsCorner,
-    RaceCarsGear,
-    RaceCarsSpace,
-    RaceCarsTrack,
-} from "../board";
+// about (and tested) on their own. It reuses the game's own derivation —
+// `deriveTrack`, and `defaultExitIds` for §5.1's step rule — rather than
+// restating any of it, so a track drawn here obeys exactly the rules the track
+// files that ship already do, rows included.
+//
+// **Rows are never authored here.** An author draws sections, tiles and the
+// steps between them; `deriveTrack` works out which row each tile lands on
+// (`sections.ts`). The editor shows those rows back so a skewed corner is
+// visible, and that is the only place a row number enters this file.
+import type { RaceCarsGear, RaceCarsTrack } from "../board";
 import { spaceKey } from "../board";
-import { assembleSpaces, defaultExits, type SectionTile } from "./sections";
+import {
+    bearingTo,
+    defaultExitIds,
+    deriveTrack,
+    lapRuns,
+    neighbouringLanes,
+    plainTileId,
+    tileGeometry,
+    type DerivedTrack,
+    type SectionRuns,
+    type SourceTile,
+    type TrackSection,
+} from "./sections";
 
 /**
- * One tile as the editor holds it: a (row, lane) on the circuit, the point on
- * the art the author dropped it at, and — where they differ from §5.1's default
- * — the steps out of it and the corner it belongs to.
+ * One stretch of road between two sync lines, as the editor holds it: the same
+ * thing `TrackSection` is, with the stop count flattened so a straight and a
+ * corner are one control rather than two shapes (§10).
+ */
+export interface EditorSection {
+    id: string;
+    name: string;
+    lanes: 2 | 3;
+    /** 0 for a straight; a corner's stop count otherwise. */
+    stops: 0 | 1 | 2;
+}
+
+/**
+ * One tile as the editor holds it: its id, the section and lane it belongs to,
+ * the point on the art the author dropped it at, and — where they differ from
+ * §5.1's default — the steps out of it.
  *
  * `exits` is left undefined for an ordinary tile that takes the default rule,
  * so the printed track carries an override only where a real corner needs one,
@@ -28,12 +54,14 @@ import { assembleSpaces, defaultExits, type SectionTile } from "./sections";
  * omitted, it is computed from where the tile's exits point.
  */
 export interface EditorTile {
-    row: number;
+    id: string;
+    /** The `EditorSection.id` this tile is drawn in. */
+    section: string;
     lane: number;
     x: number;
     y: number;
     heading?: number;
-    exits?: RaceCarsSpace[];
+    exits?: string[];
     /**
      * Set alongside `exits` when `connectByGeometry` wrote them, not an author's
      * hand — so a later pass may redraw them (a moved tile, a redrawn corner) the
@@ -41,13 +69,6 @@ export interface EditorTile {
      * author drew themselves, which stays untouched forever.
      */
     autoExits?: boolean;
-    cornerId?: string;
-}
-
-/** A corner's name and stop count; its row band is read off the tiles in it. */
-export interface EditorCornerMeta {
-    name: string;
-    stops: 1 | 2;
 }
 
 /** Everything the editor holds for one circuit — its own save format. */
@@ -57,10 +78,18 @@ export interface EditorState {
     artHref: string;
     viewBox: { width: number; height: number };
     maxGear: Exclude<RaceCarsGear, 0>;
+    /** In the order they are driven, starting at the start/finish line. */
+    sections: EditorSection[];
     tiles: EditorTile[];
-    /** Keyed by corner id; the band comes from the tiles that carry that id. */
-    corners: Record<string, EditorCornerMeta>;
 }
+
+/** The section every blank circuit opens with, so there is somewhere to draw. */
+const FIRST_SECTION: EditorSection = {
+    id: "start",
+    name: "Start / Finish Straight",
+    lanes: 3,
+    stops: 0,
+};
 
 /** A blank circuit to start drawing on, sized to the art behind it. */
 export function emptyState(overrides: Partial<EditorState> = {}): EditorState {
@@ -70,8 +99,8 @@ export function emptyState(overrides: Partial<EditorState> = {}): EditorState {
         artHref: "",
         viewBox: { width: 828, height: 538 },
         maxGear: 5,
+        sections: [{ ...FIRST_SECTION }],
         tiles: [],
-        corners: {},
         ...overrides,
     };
 }
@@ -80,23 +109,29 @@ function isNumber(value: unknown): value is number {
     return typeof value === "number" && Number.isFinite(value);
 }
 
-/** A space literal `{ row, lane }`, kept only if both are numbers. */
-function cleanSpace(value: unknown): RaceCarsSpace | null {
+/** One section of an imported draft, or null if its shape can't be trusted. */
+function cleanSection(value: unknown): EditorSection | null {
     if (!value || typeof value !== "object") return null;
-    const space = value as Record<string, unknown>;
-    return isNumber(space.row) && isNumber(space.lane) ? { row: space.row, lane: space.lane } : null;
+    const section = value as Record<string, unknown>;
+    if (typeof section.id !== "string" || !section.id) return null;
+    return {
+        id: section.id,
+        name: typeof section.name === "string" ? section.name : section.id,
+        lanes: section.lanes === 2 ? 2 : 3,
+        stops: section.stops === 1 ? 1 : section.stops === 2 ? 2 : 0,
+    };
 }
 
 /** One tile of an imported draft, or null if its shape can't be trusted. */
 function cleanTile(value: unknown): EditorTile | null {
     if (!value || typeof value !== "object") return null;
     const tile = value as Record<string, unknown>;
-    if (!isNumber(tile.row) || !isNumber(tile.lane) || !isNumber(tile.x) || !isNumber(tile.y)) return null;
-    const cleaned: EditorTile = { row: tile.row, lane: tile.lane, x: tile.x, y: tile.y };
+    if (typeof tile.id !== "string" || !tile.id) return null;
+    if (typeof tile.section !== "string" || !isNumber(tile.lane) || !isNumber(tile.x) || !isNumber(tile.y)) return null;
+    const cleaned: EditorTile = { id: tile.id, section: tile.section, lane: tile.lane, x: tile.x, y: tile.y };
     if (isNumber(tile.heading)) cleaned.heading = tile.heading;
-    if (typeof tile.cornerId === "string") cleaned.cornerId = tile.cornerId;
     if (Array.isArray(tile.exits)) {
-        const exits = tile.exits.map(cleanSpace).filter((exit): exit is RaceCarsSpace => exit !== null);
+        const exits = tile.exits.filter((exit): exit is string => typeof exit === "string");
         if (exits.length > 0) {
             cleaned.exits = exits;
             if (tile.autoExits === true) cleaned.autoExits = true;
@@ -110,10 +145,10 @@ function cleanTile(value: unknown): EditorTile | null {
  * localStorage autosave and its "open a draft file" both come through here, and
  * the file is arbitrary local content: a wrong file, a stale copy, a hand-edit
  * with one bad find/replace. Every entry is shape-checked, not just the top
- * level: a tiles array carrying a `null`, or a corner whose value isn't an
- * object, would otherwise crash the first render that reads `tile.row` or
- * `corner.name`. Bad entries are dropped rather than trusted, and anything that
- * isn't an object at all falls back to a blank track.
+ * level: a tiles array carrying a `null`, or a section whose value isn't an
+ * object, would otherwise crash the first render that reads `tile.lane` or
+ * `section.name`. Bad entries are dropped rather than trusted, and anything
+ * that isn't an object at all falls back to a blank track.
  */
 export function parseDraft(raw: string | null): EditorState {
     if (!raw) return emptyState();
@@ -123,21 +158,12 @@ export function parseDraft(raw: string | null): EditorState {
         const source = parsed as Record<string, unknown>;
         const base = emptyState();
 
+        const sections = Array.isArray(source.sections)
+            ? source.sections.map(cleanSection).filter((section): section is EditorSection => section !== null)
+            : [];
         const tiles = Array.isArray(source.tiles)
             ? source.tiles.map(cleanTile).filter((tile): tile is EditorTile => tile !== null)
             : [];
-
-        const corners: EditorState["corners"] = {};
-        if (source.corners && typeof source.corners === "object") {
-            for (const [id, value] of Object.entries(source.corners as Record<string, unknown>)) {
-                if (!value || typeof value !== "object") continue;
-                const meta = value as Record<string, unknown>;
-                corners[id] = {
-                    name: typeof meta.name === "string" ? meta.name : id,
-                    stops: meta.stops === 2 ? 2 : 1,
-                };
-            }
-        }
 
         const viewBox = source.viewBox && typeof source.viewBox === "object" ? source.viewBox as Record<string, unknown> : {};
         const gear = source.maxGear;
@@ -151,95 +177,143 @@ export function parseDraft(raw: string | null): EditorState {
                 height: isNumber(viewBox.height) ? viewBox.height : base.viewBox.height,
             },
             maxGear: (gear === 1 || gear === 2 || gear === 3 || gear === 4 || gear === 5 || gear === 6) ? gear : base.maxGear,
+            // A draft with no readable sections still has to be drawable on.
+            sections: sections.length > 0 ? sections : base.sections,
             tiles,
-            corners,
         };
     } catch {
         return emptyState();
     }
 }
 
-/** Lap length: one past the highest row any tile sits on, or 0 for a blank track. */
-export function rowCount(tiles: EditorTile[]): number {
-    return tiles.reduce((max, tile) => Math.max(max, tile.row + 1), 0);
+// ─── The circuit the drawing describes ───────────────────────────────────────
+
+/** What to call a section on screen and in the printed file. */
+export function sectionLabel(section: EditorSection): string {
+    return section.name || section.id;
 }
 
-/** The lanes present on each row, sorted — what §5.1's default step rule reads. */
-export function spacesByRow(tiles: EditorTile[]): Map<number, number[]> {
-    const byRow = new Map<number, number[]>();
-    for (const tile of tiles) {
-        const lanes = byRow.get(tile.row);
-        if (lanes) lanes.push(tile.lane);
-        else byRow.set(tile.row, [tile.lane]);
+/** The tiles drawn in one section, in the order they were placed. */
+export function tilesIn(state: EditorState, sectionId: string): EditorTile[] {
+    return state.tiles.filter(tile => tile.section === sectionId);
+}
+
+/**
+ * The editor's model as the `SECTIONS` table a track file is written in — the
+ * one conversion everything else here goes through, so the circuit the editor
+ * validates, previews and prints is one reading of the drawing rather than
+ * three that could drift.
+ */
+export function toSections(state: EditorState): TrackSection[] {
+    const bySection = new Map(state.sections.map(section => [section.id, [] as SourceTile[]]));
+    for (const tile of state.tiles) {
+        bySection.get(tile.section)?.push({
+            id: tile.id,
+            lane: tile.lane,
+            exits: tile.exits,
+            x: tile.x,
+            y: tile.y,
+            heading: tile.heading,
+        });
     }
-    for (const lanes of byRow.values()) lanes.sort((a, b) => a - b);
-    return byRow;
+    return state.sections.map(section => ({
+        id: section.id,
+        name: sectionLabel(section),
+        lanes: section.lanes,
+        corner: section.stops > 0 ? { stops: section.stops as 1 | 2 } : null,
+        tiles: bySection.get(section.id) ?? [],
+    }));
 }
 
 /**
- * The steps §5.1 gives this tile when it names none of its own — the next row,
- * this lane or either lane beside it — so the editor can draw them faint behind
- * the exits an author has overridden, and tell the two apart when it prints.
+ * The row each tile lands on, by tile id — what the canvas prints on the tiles
+ * so a skewed section is something an author can see rather than something the
+ * game finds out about later. Empty while the drawing is not a circuit yet.
  */
-export function tileDefaultExits(tiles: EditorTile[], tile: EditorTile): RaceCarsSpace[] {
-    return defaultExits(rowCount(tiles), spacesByRow(tiles), tile);
+export function derivedRows(derived: DerivedTrack | null): Map<string, number> {
+    return new Map((derived?.tiles ?? []).map(tile => [tile.id, tile.row]));
 }
 
-/** Whether two step lists name the same spaces, order aside. */
-export function sameExits(a: readonly RaceCarsSpace[], b: readonly RaceCarsSpace[]): boolean {
+// ─── Steps ───────────────────────────────────────────────────────────────────
+
+/** The next free id for a tile in this section and lane — `section.lane.n`. */
+export function nextTileId(state: EditorState, sectionId: string, lane: number): string {
+    const taken = new Set(state.tiles.map(tile => tile.id));
+    let index = 0;
+    while (taken.has(plainTileId(sectionId, lane, index))) index++;
+    return plainTileId(sectionId, lane, index);
+}
+
+/**
+ * §5.1's own step rule for one tile — the next tile along, this lane or either
+ * lane beside it — so the editor can draw it faint behind the steps an author
+ * has overridden, and tell the two apart when it prints.
+ *
+ * `lap` is passed in rather than rebuilt, because the canvas asks this of every
+ * tile on every render and rebuilding the lap per tile is the O(n²) the tile
+ * lookup already avoids.
+ */
+export function tileDefaultExits(lap: SectionRuns[], state: EditorState, tile: EditorTile): string[] {
+    const sectionIndex = state.sections.findIndex(section => section.id === tile.section);
+    if (sectionIndex < 0) return [];
+    return defaultExitIds(lap, sectionIndex, { id: tile.id, lane: tile.lane });
+}
+
+/**
+ * The tile the road carries straight on to in this tile's **own** lane — the
+ * direction of travel, for a search that has to tell "ahead" from "beside".
+ *
+ * Rows used to answer that: a candidate on the same row was level, whatever the
+ * art did, and never a step. With rows derived rather than typed there is
+ * nothing to compare but the road itself, and the author has already said which
+ * way it runs by placing each lane's tiles in order — so the next tile along
+ * this lane is the heading, rather than the mean of the default steps, which
+ * points diagonally across the road and lets the tile *beside* this one pass
+ * for one ahead of it.
+ */
+function laneAhead(lap: SectionRuns[], state: EditorState, tile: EditorTile): string[] {
+    return tileDefaultExits(lap, state, tile).filter(exit => {
+        const other = state.tiles.find(candidate => candidate.id === exit);
+        return other?.lane === tile.lane;
+    });
+}
+
+/** Whether two step lists name the same tiles, order aside. */
+export function sameExits(a: readonly string[], b: readonly string[]): boolean {
     if (a.length !== b.length) return false;
-    const bKeys = new Set(b.map(space => spaceKey(space.row, space.lane)));
-    return a.every(space => bKeys.has(spaceKey(space.row, space.lane)));
+    const other = new Set(b);
+    return a.every(exit => other.has(exit));
 }
 
-/** A tile's steps: its own where it has overridden them, else §5.1's default. */
-export function effectiveExits(tiles: EditorTile[], tile: EditorTile): RaceCarsSpace[] {
-    return tile.exits ?? tileDefaultExits(tiles, tile);
-}
-
-/**
- * Every tile's effective steps at once, keyed by `spaceKey`. The canvas draws
- * an edge per exit on every render — and during a drag, every frame — so it
- * reads them from one O(n) pass here rather than recomputing §5.1's default per
- * tile (§23.4's objection to a `.find` per space per render, in the editor).
- */
-export function allEffectiveExits(tiles: EditorTile[]): Map<string, RaceCarsSpace[]> {
-    const rows = rowCount(tiles);
-    const byRow = spacesByRow(tiles);
-    return new Map(tiles.map(tile => [
-        spaceKey(tile.row, tile.lane),
-        tile.exits ?? defaultExits(rows, byRow, tile),
+/** Every tile's effective steps at once, by tile id — one pass for the canvas. */
+export function allEffectiveExits(state: EditorState): Map<string, string[]> {
+    const lap = lapRuns(toSections(state));
+    return new Map(state.tiles.map(tile => [
+        tile.id,
+        tile.exits ?? tileDefaultExits(lap, state, tile),
     ]));
 }
 
-/**
- * The screen bearing toward the mean of a set of exit tiles — the direction of
- * travel, in the degrees-clockwise-from-increasing-rows that
- * `RaceCarsGeometry.heading` is measured in and `loopGeometry` writes. Split
- * from `tileHeading` so a caller placing every tile (`toTrack`) can pass the
- * lookup and the exits it already has in hand rather than rebuild them per tile
- * — the O(n²) trap the canvas edges already avoid (§23.4).
- */
-function headingTowards(tile: EditorTile, exits: readonly RaceCarsSpace[], byKey: Map<string, EditorTile>): number {
-    const targets = exits
-        .map(exit => byKey.get(spaceKey(exit.row, exit.lane)))
-        .filter((exit): exit is EditorTile => exit !== undefined);
-    if (targets.length === 0) return 0;
-    const meanX = targets.reduce((sum, exit) => sum + exit.x, 0) / targets.length;
-    const meanY = targets.reduce((sum, exit) => sum + exit.y, 0) / targets.length;
-    return Math.round((Math.atan2(meanY - tile.y, meanX - tile.x) * 180) / Math.PI);
+/** One tile's steps: its own where it has overridden them, else §5.1's default. */
+export function effectiveExits(state: EditorState, tile: EditorTile): string[] {
+    return tile.exits ?? tileDefaultExits(lapRuns(toSections(state)), state, tile);
 }
 
 /**
  * The heading a car on this tile faces: its own where the author set one, else
  * pointed down the road toward its exits, so a fresh track's cars aim the right
- * way without a heading typed per tile. Rebuilds the tile lookup itself — for
- * the once-per-selection panel, not the per-tile loop (see `headingTowards`).
+ * way without a heading typed per tile.
  */
-export function tileHeading(tiles: EditorTile[], tile: EditorTile): number {
+export function tileHeading(state: EditorState, tile: EditorTile): number {
     if (tile.heading !== undefined) return tile.heading;
-    const byKey = new Map(tiles.map(other => [spaceKey(other.row, other.lane), other]));
-    return headingTowards(tile, effectiveExits(tiles, tile), byKey);
+    const byId = new Map(state.tiles.map(other => [other.id, other]));
+    return headingTowards(tile, effectiveExits(state, tile), byId);
+}
+
+function headingTowards(tile: EditorTile, exits: readonly string[], byId: Map<string, EditorTile>): number {
+    return bearingTo(tile, exits
+        .map(exit => byId.get(exit))
+        .filter((exit): exit is EditorTile => exit !== undefined));
 }
 
 /**
@@ -256,268 +330,267 @@ export const NO_EXITS: Pick<EditorTile, "exits" | "autoExits"> = { exits: undefi
 const CONNECT_CONE = 0.3;
 
 /**
- * Exits redrawn from where the tiles actually sit rather than assumed from
- * their row numbers — the plain remaining job here once every corner sharp
- * enough to need a real lane realignment is drawn by hand instead (its
- * `exits` a genuine override, never `autoExits`): the tiles this function
- * still touches are an ordinary straight or gentle bend, where row+1 already
- * names the right row and the only question worth asking geometrically is
- * *which* tile on it — the nearest one ahead, not necessarily the one at the
- * same x the road happened to wander to.
+ * Exits redrawn from where the tiles actually sit rather than assumed from the
+ * order they were placed in — the plain remaining job here once every corner
+ * sharp enough to need a real lane realignment is drawn by hand instead (its
+ * `exits` a genuine override, never `autoExits`): the tiles this function still
+ * touches are an ordinary straight or gentle bend, where the only question
+ * worth asking geometrically is *which* tile ahead, not necessarily the one the
+ * road happened to wander towards.
  *
- * The nearest tile is picked once per lane — this lane and the one either
- * side, exactly what §5.1's own rule allows (`defaultExits`) — rather than
- * once across every candidate pooled together with a distance cutoff. A lane
- * change can sit much farther away than staying in lane (the lane offset on a
- * wide or staggered road), so a single "close enough to the closest" cutoff
- * across lanes was dropping a real, and often the only, tile ahead in the
- * next lane over just because the same-lane tile happened to be nearer — a
- * wide road never got its 1↔2 or 2↔3 merge drawn. Per lane, one candidate
- * either exists ahead or it doesn't; there is nothing to rank it against.
+ * The nearest tile is picked once per lane — this lane and the one either side,
+ * exactly what §5.1's own rule allows — rather than once across every candidate
+ * pooled together with a distance cutoff. A lane change can sit much farther
+ * away than staying in lane (the lane offset on a wide or staggered road), so a
+ * single "close enough to the closest" cutoff across lanes was dropping a real,
+ * and often the only, tile ahead in the next lane over just because the
+ * same-lane tile happened to be nearer — a wide road never got its 1↔2 or 2↔3
+ * merge drawn. Per lane, one candidate either exists ahead or it doesn't.
  * Limiting candidates to this lane or the one either side of it also keeps
  * geometry from ever connecting lane 1 straight to lane 3, a step no car may
- * take, however close that tile happens to sit. A same-row (sideways)
- * candidate is never connected either — a car changes lane while moving,
- * never on the spot.
+ * take, however close that tile happens to sit.
  *
  * A tile that already carries a hand-drawn override keeps it untouched. One
  * this function wrote itself on an earlier run (`autoExits`) is *always*
- * redrawn from scratch rather than trusted as a starting point: reasoning
- * from last run's guess — its heading, or which tiles it already reached —
- * is exactly what let a second run drift to a different, sometimes wrong,
- * target instead of settling on the one the tiles actually call for. Both
- * the heading used to aim the search and the record of what is "already
- * connected" (below) come only from this run's own tile positions and
- * hand-drawn exits, never from a tile's own previous auto-connect result.
+ * redrawn from scratch rather than trusted as a starting point: reasoning from
+ * last run's guess — its heading, or which tiles it already reached — is
+ * exactly what let a second run drift to a different, sometimes wrong, target
+ * instead of settling on the one the tiles actually call for.
  *
- * Tiles are worked in row order — the direction of travel, now that every
- * sharp lane change is hand-drawn rather than something this function has to
- * infer — so that a candidate behind a tile has already been resolved by the
- * time that tile searches, and a candidate this very run has already pointed
- * the other way is never offered back: that line has a direction, and
+ * Tiles are worked in road order — section by section, and in placement order
+ * inside each — so that a candidate behind a tile has already been resolved by
+ * the time that tile searches, and a candidate this very run has already
+ * pointed the other way is never offered back: that line has a direction, and
  * retracing it would connect two tiles both ways however well the nearer one
- * otherwise fits the heading. The next-nearest tile in that lane is offered
- * instead, the same as when the nearest candidate fails the heading cone —
- * or no exit at all for that lane, if nothing else is ahead.
+ * otherwise fits the heading. Two tiles pointing at each other is the one
+ * mistake the derivation cannot place a row against at all, and it says so.
  */
-export function connectByGeometry(tiles: EditorTile[]): EditorTile[] {
-    const rows = rowCount(tiles);
-    const byRow = spacesByRow(tiles);
-    const byKey = new Map(tiles.map(tile => [spaceKey(tile.row, tile.lane), tile]));
+export function connectByGeometry(state: EditorState): EditorTile[] {
+    const lap = lapRuns(toSections(state));
+    const byId = new Map(state.tiles.map(tile => [tile.id, tile]));
+    const order = new Map(state.sections.map((section, index) => [section.id, index]));
 
-    // What this run has resolved so far — a hand-drawn override from the
-    // start, an auto tile's the moment the loop below (re)computes it. Never
-    // a tile's own previous `exits` when those were auto-written: that is
-    // exactly the stale guess this function stops trusting.
+    // What this run has resolved so far — a hand-drawn override from the start,
+    // an auto tile's the moment the loop below (re)computes it. Never a tile's
+    // own previous `exits` when those were auto-written: that is exactly the
+    // stale guess this function stops trusting.
     const results = new Map<string, EditorTile>();
-    for (const tile of tiles) {
-        if (tile.exits && !tile.autoExits) results.set(spaceKey(tile.row, tile.lane), tile);
+    for (const tile of state.tiles) {
+        if (tile.exits && !tile.autoExits) results.set(tile.id, tile);
     }
 
-    // Row order is the direction of travel, now that every sharp lane change
-    // is hand-drawn rather than something this function has to infer.
-    for (const tile of [...tiles].sort((a, b) => a.row - b.row)) {
-        const tileKey = spaceKey(tile.row, tile.lane);
-        if (results.has(tileKey)) continue; // hand-drawn, seeded above
+    const roadOrder = [...state.tiles].sort((a, b) =>
+        (order.get(a.section) ?? 0) - (order.get(b.section) ?? 0));
 
-        const fallback = defaultExits(rows, byRow, tile);
-        const heading = tile.heading ?? headingTowards(tile, fallback, byKey);
+    for (const tile of roadOrder) {
+        if (results.has(tile.id)) continue; // hand-drawn, seeded above
+
+        const fallback = tileDefaultExits(lap, state, tile);
+        const ahead = laneAhead(lap, state, tile);
+        const heading = tile.heading ?? headingTowards(tile, ahead.length > 0 ? ahead : fallback, byId);
         const radians = (heading * Math.PI) / 180;
         const forwardX = Math.cos(radians);
         const forwardY = Math.sin(radians);
 
-        const exits: RaceCarsSpace[] = [];
-        for (const lane of [tile.lane - 1, tile.lane, tile.lane + 1]) {
+        const exits: string[] = [];
+        for (const lane of neighbouringLanes(tile.lane)) {
             let nearest: { other: EditorTile; dist: number } | null = null;
-            for (const other of tiles) {
-                if (other === tile || other.row === tile.row || other.lane !== lane) continue;
-                // A candidate this run has already resolved with an exit
-                // back into this tile is never offered — that line has a
-                // direction, and retracing it would connect the two both
-                // ways. Not yet resolved (still ahead in row order) means
-                // not yet a reason to exclude it.
-                const otherResult = results.get(spaceKey(other.row, other.lane));
-                const alreadyExits = otherResult && (otherResult.exits ?? defaultExits(rows, byRow, otherResult));
-                if (alreadyExits?.some(exit => exit.row === tile.row && exit.lane === tile.lane)) continue;
+            for (const other of state.tiles) {
+                if (other.id === tile.id || other.lane !== lane) continue;
+                // A candidate this run has already resolved with an exit back
+                // into this tile is never offered — that line has a direction.
+                const resolved = results.get(other.id);
+                const alreadyExits = resolved && (resolved.exits ?? tileDefaultExits(lap, state, resolved));
+                if (alreadyExits?.includes(tile.id)) continue;
                 const dx = other.x - tile.x;
                 const dy = other.y - tile.y;
                 const dist = Math.hypot(dx, dy);
                 if (dist <= 0 || dx * forwardX + dy * forwardY < dist * CONNECT_CONE) continue;
                 if (!nearest || dist < nearest.dist) nearest = { other, dist };
             }
-            if (nearest) exits.push({ row: nearest.other.row, lane: nearest.other.lane });
+            if (nearest) exits.push(nearest.other.id);
         }
 
         const result = exits.length > 0 && !sameExits(exits, fallback)
             ? { ...tile, exits, autoExits: true }
             : (tile.exits ? { ...tile, ...NO_EXITS } : tile);
 
-        results.set(tileKey, result);
+        results.set(tile.id, result);
     }
 
-    return tiles.map(tile => results.get(spaceKey(tile.row, tile.lane))!);
+    return state.tiles.map(tile => results.get(tile.id)!);
 }
 
-/**
- * Each corner as the rules want it — id, name, stop count, and the inclusive
- * row band read off the tiles that carry its id. A corner with no tiles is
- * dropped rather than printed as an empty band nothing sits in.
- */
-export function buildCorners(state: EditorState): RaceCarsCorner[] {
-    return Object.entries(state.corners)
-        .map(([id, meta]) => {
-            const rows = state.tiles.filter(tile => tile.cornerId === id).map(tile => tile.row);
-            return { id, meta, rows };
-        })
-        .filter(corner => corner.rows.length > 0)
-        .map(corner => ({
-            id: corner.id,
-            name: corner.meta.name,
-            from: Math.min(...corner.rows),
-            to: Math.max(...corner.rows),
-            stops: corner.meta.stops,
-        }))
-        .sort((a, b) => a.from - b.from);
-}
+// ─── Validation ──────────────────────────────────────────────────────────────
 
 export interface EditorValidation {
     /** Reasons the track cannot be driven — it must not be shipped with any. */
     errors: string[];
     /** Things worth an author's eye that do not stop the track working. */
     warnings: string[];
+    /**
+     * The circuit the drawing derived to, or null if it does not derive to one.
+     * Handed back rather than thrown away so the screen can print the rows it
+     * worked out without deriving the same drawing a second time — this runs on
+     * every keystroke and every frame of a drag.
+     */
+    derived: DerivedTrack | null;
 }
 
 /**
  * What is wrong with the drawn circuit, split into what stops it being a track
- * at all and what merely wants a second look. The errors half runs the tiles
- * through `assembleSpaces` — the very check the track files pass at module load
- * — so "it validates in the editor" and "it loads in the game" are the same
- * statement.
+ * at all and what merely wants a second look. The errors half runs the drawing
+ * through `deriveTrack` — the very derivation the track files pass at module
+ * load — so "it validates in the editor" and "it loads in the game" are the
+ * same statement.
  */
 export function validateTrack(state: EditorState): EditorValidation {
     const errors: string[] = [];
     const warnings: string[] = [];
 
     if (state.tiles.length === 0) {
-        return { errors: ["Nothing drawn yet — click the art to place tiles."], warnings };
+        return { errors: ["Nothing drawn yet — click the art to place tiles."], warnings, derived: null };
     }
     if (!state.id.trim()) warnings.push("No track id set.");
     if (!state.name.trim()) warnings.push("No track name set.");
     if (!state.artHref.trim()) warnings.push("No art path set — the board will draw the space layer alone.");
 
-    const rows = rowCount(state.tiles);
-    const tiles: SectionTile[] = state.tiles.map(tile => ({
-        row: tile.row,
-        lane: tile.lane,
-        exits: tile.exits,
-    }));
+    let derived: DerivedTrack | null = null;
     try {
-        assembleSpaces(tiles, rows);
+        derived = deriveTrack(toSections(state));
     } catch (error) {
         errors.push(error instanceof Error ? error.message.replace(/^Race Cars: /, "") : String(error));
     }
 
-    // An exit that runs more than half a lap "forward" is almost always a
-    // backward step from a row-numbering slip — the trap a sharp corner sets,
-    // where the inside line took fewer tiles round and the rows past it no
-    // longer count up in step. A car crossing the start line steps forward a
-    // row or two, never half the lap, so the wrap itself never trips this.
-    if (rows > 0) {
-        let backwards = 0;
-        for (const [fromKey, exits] of allEffectiveExits(state.tiles)) {
-            const from = state.tiles.find(tile => spaceKey(tile.row, tile.lane) === fromKey);
-            if (!from) continue;
-            for (const exit of exits) {
-                const advance = ((exit.row - from.row) % rows + rows) % rows;
-                if (advance > rows / 2) backwards++;
+    // A tile drawn into a section that has since been deleted is a tile the
+    // derivation never sees — it would quietly vanish from the printed track
+    // rather than break it, which is the worse of the two.
+    const sectionIds = new Set(state.sections.map(section => section.id));
+    const orphans = state.tiles.filter(tile => !sectionIds.has(tile.section)).length;
+    if (orphans > 0) {
+        warnings.push(`${orphans} tile${orphans === 1 ? " belongs" : "s belong"} to a section that no longer exists — they will not be printed.`);
+    }
+
+    for (const section of state.sections) {
+        const tiles = tilesIn(state, section.id);
+        if (tiles.length === 0) {
+            warnings.push(`Section "${sectionLabel(section)}" has no tiles on it yet.`);
+            continue;
+        }
+        const lanes = new Set(tiles.map(tile => tile.lane));
+        if (lanes.size < section.lanes) {
+            warnings.push(`Section "${sectionLabel(section)}" is ${section.lanes} lanes wide but only has tiles in ${lanes.size} of them.`);
+        }
+    }
+
+    // The thing rows are *for*: a corner whose inside line is drawn shorter than
+    // its outside gets more rows than it has tiles in a lane, which is correct
+    // and worth seeing. A section far longer in rows than any of its lanes is
+    // long in tiles, though, is usually a zig-zag of steps that should have
+    // been two sections with a sync line between them.
+    if (derived) {
+        for (const [index, section] of state.sections.entries()) {
+            const tiles = derived.tiles.filter(tile => tile.section === index);
+            if (tiles.length === 0) continue;
+            const rows = new Set(tiles.map(tile => tile.row)).size;
+            const longestLane = Math.max(...[...new Set(tiles.map(tile => tile.lane))]
+                .map(lane => tiles.filter(tile => tile.lane === lane).length));
+            if (rows > longestLane * 2) {
+                warnings.push(`Section "${sectionLabel(section)}" spans ${rows} rows for a longest lane of ${longestLane} tiles — check its steps run across the road rather than zig-zagging along it.`);
             }
         }
-        if (backwards > 0) {
-            warnings.push(`${backwards} exit${backwards === 1 ? '' : 's'} run more than half a lap forward — usually a row-numbering slip after a corner. Check the rows count up the way the road runs.`);
-        }
     }
 
-    // A tile painted with a corner that no longer exists — a corner removed, or
-    // a stale id in an imported draft. `cornerAt` reads it as no corner at all,
-    // so §10's stops go silently unenforced on that tile; surface it rather than
-    // print a track whose spaces name a corner missing from its own list.
-    const cornerIds = new Set(Object.keys(state.corners));
-    if (state.tiles.some(tile => tile.cornerId !== undefined && !cornerIds.has(tile.cornerId))) {
-        warnings.push("Some tiles are painted with a corner that no longer exists — clear them, or add the corner back.");
-    }
-
-    return { errors, warnings };
+    return { errors, warnings, derived };
 }
 
 /**
- * The editor's model as one `RaceCarsTrack` — the single conversion `printTrackFile`
- * reads its geometry off, so the printed `spaces`, `corners` and `geometry` are
- * all one function's view of the drawn circuit rather than three that could
- * drift. Throws through `assembleSpaces` on an undriveable track, so a caller
- * runs `validateTrack` first (the export panel does, and only prints when it is
- * clean).
- *
- * The lookup and the per-tile exits are built once and threaded into every
- * heading, rather than rebuilt per tile: this runs on every keystroke and drag
- * frame while a track is valid, so the O(n²) it would otherwise be is the same
- * trap §23.4 fixed for the canvas edges.
+ * The editor's model as one `RaceCarsTrack` — what the preview board draws and
+ * what `printTrackFile` reads its geometry off. Throws through `deriveTrack` on
+ * a circuit that cannot be driven, so a caller runs `validateTrack` first (the
+ * export panel does, and only prints when it is clean).
  */
 export function toTrack(state: EditorState): RaceCarsTrack {
-    const rows = rowCount(state.tiles);
-    const tiles: SectionTile[] = state.tiles.map(tile => ({ row: tile.row, lane: tile.lane, exits: tile.exits, cornerId: tile.cornerId }));
-    const byKey = new Map(state.tiles.map(tile => [spaceKey(tile.row, tile.lane), tile]));
-    const exitsByKey = allEffectiveExits(state.tiles);
+    const derived = deriveTrack(toSections(state));
     return {
         id: state.id || "draft",
         name: state.name || "Draft circuit",
-        rows,
-        spaces: assembleSpaces(tiles, rows),
-        corners: buildCorners(state),
+        rows: derived.rows,
+        spaces: derived.spaces,
+        corners: derived.corners,
         grid: [],
         maxGear: state.maxGear,
         art: { href: state.artHref, viewBox: state.viewBox },
-        geometry: state.tiles.map(tile => ({
-            row: tile.row,
-            lane: tile.lane,
-            x: Math.round(tile.x),
-            y: Math.round(tile.y),
-            heading: tile.heading ?? headingTowards(tile, exitsByKey.get(spaceKey(tile.row, tile.lane)) ?? [], byKey),
-        })),
+        geometry: tileGeometry(derived),
     };
 }
 
 /**
  * Load an existing `RaceCarsTrack` into the editor, so a placeholder circuit
  * (Ashcombe's loop, Anglet's traced polyline) can be dragged onto its real art
- * rather than re-placed from nothing. An exit list that matches §5.1's default
- * is dropped back to undefined, so refining geometry doesn't turn every ordinary
- * straight into a hand-written override.
+ * rather than re-placed from nothing.
+ *
+ * A finished track carries no sections — they are the authoring model, and what
+ * survives derivation is rows and corner ids — so they are read back the one
+ * way they can be: every corner is its own section, and the road between two of
+ * them is a straight. An author who wants a sync line inside one of those
+ * straights (an esse, a chicane approach) splits it in the editor, which is the
+ * same decision they would have made drawing it from scratch.
  */
 export function fromTrack(track: RaceCarsTrack): EditorState {
-    const geometryByKey = new Map(track.geometry.map(g => [spaceKey(g.row, g.lane), g]));
-    const byRow = new Map<number, number[]>();
-    for (const space of track.spaces) {
-        const lanes = byRow.get(space.row);
-        if (lanes) lanes.push(space.lane);
-        else byRow.set(space.row, [space.lane]);
-    }
-    for (const lanes of byRow.values()) lanes.sort((a, b) => a - b);
+    const geometryByKey = new Map(track.geometry.map(at => [spaceKey(at.row, at.lane), at]));
 
-    const cornerById = new Map(track.corners.map(corner => [corner.id, corner]));
-    const tiles: EditorTile[] = track.spaces.map(space => {
-        const geometry = geometryByKey.get(spaceKey(space.row, space.lane));
-        const fallback = defaultExits(track.rows, byRow, { row: space.row, lane: space.lane });
+    // The corner bands, in road order, with the straights between them.
+    const corners = [...track.corners].sort((a, b) => a.from - b.from);
+    const sections: EditorSection[] = [];
+    const bandOf = new Map<number, string>();
+    let row = 0;
+    let straights = 0;
+    const claim = (id: string, from: number, to: number) => {
+        for (let at = from; at <= to; at++) bandOf.set(at, id);
+    };
+    const addStraight = (from: number, to: number) => {
+        straights++;
+        const id = `straight${straights}`;
+        sections.push({
+            id,
+            name: straights === 1 ? "Start / Finish Straight" : `Straight ${straights}`,
+            lanes: 3,
+            stops: 0,
+        });
+        claim(id, from, to);
+    };
+
+    for (const corner of corners) {
+        if (corner.from > row) addStraight(row, corner.from - 1);
+        sections.push({ id: corner.id, name: corner.name, lanes: 2, stops: corner.stops });
+        claim(corner.id, corner.from, corner.to);
+        row = corner.to + 1;
+    }
+    if (row < track.rows || sections.length === 0) addStraight(row, track.rows - 1);
+    // A section is as wide as the widest row drawn in it.
+    for (const section of sections) {
+        const widest = Math.max(1, ...track.spaces.filter(space => bandOf.get(space.row) === section.id).map(space => space.lane));
+        section.lanes = widest >= 3 ? 3 : 2;
+    }
+
+    // Tile ids are the (row, lane) they were loaded from, so the exits below can
+    // name them before the editor has ever re-derived a row.
+    const idOf = (r: number, lane: number) => `t${r}_${lane}`;
+    const ordered = [...track.spaces].sort((a, b) => a.row - b.row || a.lane - b.lane);
+    const tiles: EditorTile[] = ordered.map(space => {
+        const at = geometryByKey.get(spaceKey(space.row, space.lane));
         return {
-            row: space.row,
+            id: idOf(space.row, space.lane),
+            section: bandOf.get(space.row) ?? sections[0].id,
             lane: space.lane,
-            x: geometry?.x ?? 0,
-            y: geometry?.y ?? 0,
-            heading: geometry?.heading,
-            exits: sameExits(space.exits, fallback) ? undefined : space.exits.map(e => ({ row: e.row, lane: e.lane })),
-            // Per space, read straight off the space — not derived from the row
-            // band, which would pull the inside line back into the corner it
-            // already left (§10).
-            cornerId: space.cornerId,
+            x: at?.x ?? 0,
+            y: at?.y ?? 0,
+            heading: at?.heading,
+            // Every step is kept as an override: what the default rule would
+            // have written depends on rows that have not been derived yet, and
+            // a wrong guess here is a silently different circuit.
+            exits: space.exits.map(exit => idOf(exit.row, exit.lane)),
         };
     });
 
@@ -527,77 +600,88 @@ export function fromTrack(track: RaceCarsTrack): EditorState {
         artHref: track.art.href,
         viewBox: { ...track.art.viewBox },
         maxGear: track.maxGear,
+        sections,
         tiles,
-        corners: Object.fromEntries(
-            [...cornerById.values()].map(corner => [corner.id, { name: corner.name, stops: corner.stops }]),
-        ),
     };
 }
 
 // ─── Printing the track file ─────────────────────────────────────────────────
 
-function spaceLiteral(space: RaceCarsSpace): string {
-    return `{ row: ${space.row}, lane: ${space.lane} }`;
-}
-
-function tileLiteral(tile: EditorTile): string {
-    const parts = [`row: ${tile.row}`, `lane: ${tile.lane}`];
-    if (tile.exits) parts.push(`exits: [${tile.exits.map(spaceLiteral).join(", ")}]`);
-    if (tile.cornerId) parts.push(`cornerId: ${JSON.stringify(tile.cornerId)}`);
+function tileLiteral(tile: EditorTile, exits: string[], heading: number): string {
+    const parts = [
+        `id: ${JSON.stringify(tile.id)}`,
+        `lane: ${tile.lane}`,
+        `x: ${Math.round(tile.x)}`,
+        `y: ${Math.round(tile.y)}`,
+        `heading: ${heading}`,
+    ];
+    if (tile.exits) parts.push(`exits: [${exits.map(exit => JSON.stringify(exit)).join(", ")}]`);
     return `{ ${parts.join(", ")} },`;
 }
 
 /**
  * The circuit as a `tracks/` TypeScript file, ready to save beside the others
  * and add to `TRACK_LIST` — the editor's whole point, since 214 hand-placed
- * coordinates and their exits are not a thing to type by hand (§23.6).
+ * coordinates and their steps are not a thing to type by hand (§23.6).
  *
- * It prints explicit tiles and geometry rather than the section shorthand the
- * shipped tracks derive from: the editor's reason to exist is the geometry and
- * the per-tile exits, neither of which a section table carries, so re-deriving
- * them from sections would throw the authored positions away. `assembleSpaces`
- * still runs on the tiles at module load, so the printed track refuses the same
- * undriveable circuits `deriveTrack` does.
+ * It prints the same `SECTIONS` table the hand-written circuits are authored in,
+ * with every tile written out: a traced board's tiles carry positions and steps
+ * a `length` shorthand cannot say, and its rows are derived at module load from
+ * the printed steps exactly as they were in the editor. No row number is
+ * printed anywhere — printing one would be printing the answer to a question
+ * `deriveTrack` is the only thing allowed to answer.
+ *
+ * Throws rather than printing a circuit that cannot be driven; a caller runs
+ * `validateTrack` first.
  */
 export function printTrackFile(state: EditorState): string {
-    const corners = buildCorners(state);
     const constName = (state.id || "track").toUpperCase().replace(/[^A-Z0-9]/g, "_");
+    const exitsById = allEffectiveExits(state);
+    // The guard, and the only derivation this needs: a file that cannot be
+    // derived is a file that would not load, so it is never printed. Callers
+    // run `validateTrack` first and so never see this throw (the export panel
+    // only prints a clean drawing) — it is here so that a caller that forgets
+    // gets an error rather than a broken module.
+    deriveTrack(toSections(state));
 
-    const tileLines = state.tiles.map(tile => `    ${tileLiteral(tile)}`).join("\n");
-    const cornerLines = corners
-        .map(c => `    { id: ${JSON.stringify(c.id)}, name: ${JSON.stringify(c.name)}, from: ${c.from}, to: ${c.to}, stops: ${c.stops} },`)
-        .join("\n");
-    const geometryLines = toTrack(state).geometry
-        .map(g => `    { row: ${g.row}, lane: ${g.lane}, x: ${g.x}, y: ${g.y}, heading: ${g.heading} },`)
-        .join("\n");
+    const sectionLines = state.sections.map(section => {
+        const tiles = tilesIn(state, section.id)
+            // Lane by lane, each run in road order: the shape `sections.ts`
+            // reads, and the shape a human reads a corner in.
+            .sort((a, b) => a.lane - b.lane)
+            .map(tile => `            ${tileLiteral(tile, exitsById.get(tile.id) ?? [], tileHeading(state, tile))}`)
+            .join("\n");
+        const corner = section.stops > 0 ? `{ stops: ${section.stops} }` : "null";
+        return `    {
+        id: ${JSON.stringify(section.id)},
+        name: ${JSON.stringify(sectionLabel(section))},
+        lanes: ${section.lanes},
+        corner: ${corner},
+        tiles: [
+${tiles}
+        ],
+    },`;
+    }).join("\n");
 
     return `// ${state.name || "A circuit"} — authored in the track editor (docs/admin-tools.md).
-// Every tile's centre point, the corner merges that break §5.1's step rule and
-// the corner bands were placed by hand on the art; \`assembleSpaces\` re-checks
-// the graph at module load, exactly as the section-derived tracks are checked.
-import type { RaceCarsCorner, RaceCarsGeometry, RaceCarsTrack } from "../board";
-import { assembleSpaces, STAGGERED_SIX_GRID, type SectionTile } from "./sections";
+// Every tile's centre point and the steps out of it were placed by hand on the
+// art; the rows are derived from those steps at module load (\`sections.ts\`),
+// exactly as they are for the circuits written as plain section lengths.
+import type { RaceCarsTrack } from "../board";
+import { deriveTrack, STAGGERED_SIX_GRID, tileGeometry, type TrackSection } from "./sections";
 
-const TILES: SectionTile[] = [
-${tileLines}
+const SECTIONS: TrackSection[] = [
+${sectionLines}
 ];
 
-const ROWS = ${rowCount(state.tiles)};
-
-const CORNERS: RaceCarsCorner[] = [
-${cornerLines}
-];
-
-const GEOMETRY: RaceCarsGeometry[] = [
-${geometryLines}
-];
+const DERIVED = deriveTrack(SECTIONS);
 
 export const ${constName}: RaceCarsTrack = {
     id: ${JSON.stringify(state.id || "draft")},
     name: ${JSON.stringify(state.name || "Draft circuit")},
-    rows: ROWS,
-    spaces: assembleSpaces(TILES, ROWS),
-    corners: CORNERS,
+    rows: DERIVED.rows,
+    spaces: DERIVED.spaces,
+    corners: DERIVED.corners,
     // Every track so far shares the staggered six-slot grid; give this one its
     // own array here if its start line sits somewhere else.
     grid: STAGGERED_SIX_GRID,
@@ -606,7 +690,7 @@ export const ${constName}: RaceCarsTrack = {
         href: ${JSON.stringify(state.artHref)},
         viewBox: { width: ${state.viewBox.width}, height: ${state.viewBox.height} },
     },
-    geometry: GEOMETRY,
+    geometry: tileGeometry(DERIVED),
 };
 `;
 }

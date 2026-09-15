@@ -17,27 +17,28 @@ import { deriveTrack, STAGGERED_SIX_GRID, type TrackSection } from "./sections";
 // right next to the start/finish line, same as it draws Chambre d'Amour at
 // the opposite end.
 //
-// Row bands are centred on each corner's fraction of the way round that same
-// path (§10 only reads bands, never x/y, so a placeholder here changes no
-// rule): Digue ~7%, Port ~32%, Chambre ~38%, Sables ~51%, VVF ~63%,
+// Section lengths are chosen so each corner falls at its own fraction of the
+// way round that same path (nothing reads x/y as a rule, so a placeholder here
+// changes none): Digue ~7%, Port ~32%, Chambre ~38%, Sables ~51%, VVF ~63%,
 // La Barre ~75%, Villa ~87% of 98 rows — read off `WAYPOINTS` below, not
-// guessed, so a corner's row band and its place on the drawn road agree.
+// guessed, so where a corner sits in the lap and where it is drawn agree. The
+// rows themselves are derived from the sections (`sections.ts`), never typed.
 const SECTIONS: TrackSection[] = [
-    { name: 'Start / Finish Straight', from: 0, to: 5, lanes: 3, corner: null },
-    { name: 'La Digue Kink', from: 6, to: 9, lanes: 2, corner: { id: 'digue', stops: 1 } },
-    { name: 'Front de Mer', from: 10, to: 29, lanes: 3, corner: null },
-    { name: 'Port Sweep', from: 30, to: 33, lanes: 2, corner: { id: 'port', stops: 1 } },
-    { name: 'Jetée Esses', from: 34, to: 35, lanes: 2, corner: null },
-    { name: "Chambre d'Amour Hairpin", from: 36, to: 40, lanes: 2, corner: { id: 'chambre', stops: 1 } },
-    { name: "Sables d'Or Straight", from: 41, to: 47, lanes: 3, corner: null },
-    { name: "Sables d'Or Bend", from: 48, to: 51, lanes: 2, corner: { id: 'sables', stops: 1 } },
-    { name: 'VVF Esses', from: 52, to: 58, lanes: 2, corner: null },
-    { name: 'VVF Chicane', from: 59, to: 63, lanes: 2, corner: { id: 'vvf', stops: 2 } },
-    { name: 'Barre Esses', from: 64, to: 70, lanes: 2, corner: null },
-    { name: 'La Barre Chicane', from: 71, to: 75, lanes: 2, corner: { id: 'barre', stops: 2 } },
-    { name: 'Villa Approach', from: 76, to: 82, lanes: 3, corner: null },
-    { name: 'Villa Hairpin', from: 83, to: 86, lanes: 2, corner: { id: 'villa', stops: 1 } },
-    { name: 'Run to the Line', from: 87, to: 97, lanes: 3, corner: null },
+    { id: 'start', name: 'Start / Finish Straight', length: 6, lanes: 3, corner: null },
+    { id: 'digue', name: 'La Digue Kink', length: 4, lanes: 2, corner: { stops: 1 } },
+    { id: 'front', name: 'Front de Mer', length: 20, lanes: 3, corner: null },
+    { id: 'port', name: 'Port Sweep', length: 4, lanes: 2, corner: { stops: 1 } },
+    { id: 'jetee', name: 'Jetée Esses', length: 2, lanes: 2, corner: null },
+    { id: 'chambre', name: "Chambre d'Amour Hairpin", length: 5, lanes: 2, corner: { stops: 1 } },
+    { id: 'sablesStraight', name: "Sables d'Or Straight", length: 7, lanes: 3, corner: null },
+    { id: 'sables', name: "Sables d'Or Bend", length: 4, lanes: 2, corner: { stops: 1 } },
+    { id: 'vvfEsses', name: 'VVF Esses', length: 7, lanes: 2, corner: null },
+    { id: 'vvf', name: 'VVF Chicane', length: 5, lanes: 2, corner: { stops: 2 } },
+    { id: 'barreEsses', name: 'Barre Esses', length: 7, lanes: 2, corner: null },
+    { id: 'barre', name: 'La Barre Chicane', length: 5, lanes: 2, corner: { stops: 2 } },
+    { id: 'villaApproach', name: 'Villa Approach', length: 7, lanes: 3, corner: null },
+    { id: 'villa', name: 'Villa Hairpin', length: 4, lanes: 2, corner: { stops: 1 } },
+    { id: 'run', name: 'Run to the Line', length: 11, lanes: 3, corner: null },
 ];
 
 const { rows: ROWS, spaces: SPACES, corners: CORNERS } = deriveTrack(SECTIONS);

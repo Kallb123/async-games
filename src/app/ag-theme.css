@@ -1859,7 +1859,7 @@ a.ag-list-row, a.ag-list-row-main {
     color: var(--ag-ink);
 }
 .ag-build-row--active,
-.ag-rcedit-corner--active { border-color: var(--ag-terracotta); box-shadow: 0 0 0 1px var(--ag-terracotta); }
+.ag-rcedit-section--active { border-color: var(--ag-terracotta); box-shadow: 0 0 0 1px var(--ag-terracotta); }
 .ag-build-row--disabled { background: var(--ag-surface-2); opacity: 0.6; cursor: not-allowed; }
 .ag-build-main { flex: 1; min-width: 0; }
 .ag-build-name { display: block; font: 800 14px var(--ag-font); }
@@ -4562,7 +4562,7 @@ button.ag-tt-ticket { cursor: pointer; }
     gap: 10px;
 }
 .ag-rcedit-field { display: flex; flex-direction: column; gap: 4px; }
-.ag-rcedit-corner {
+.ag-rcedit-section {
     border: 1px solid var(--ag-line);
     border-radius: 12px;
     padding: 10px;
@@ -4572,8 +4572,6 @@ button.ag-tt-ticket { cursor: pointer; }
    pushed to the end. */
 .ag-rcedit-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .ag-rcedit-toolbar-zoom { display: flex; gap: 6px; align-items: center; margin-left: auto; }
-/* The two row-band inputs on a corner, narrower than a full field. */
-.ag-rcedit-rownum { max-width: 110px; }
 /* The printed track file — a read-only code block, monospace and pre-wrapped. */
 .ag-rcedit-code { font-family: monospace; font-size: 12px; white-space: pre; }
 .ag-rcedit-issues { margin: 0; padding-left: 18px; }

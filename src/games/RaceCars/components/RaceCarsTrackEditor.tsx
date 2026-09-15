@@ -2,33 +2,47 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Section from '@/components/ui/Section';
-import { spaceKey, TRACK_LIST, type RaceCarsGear, type RaceCarsSpace } from '@/games/RaceCars/board';
+import { TRACK_LIST, type RaceCarsGear } from '@/games/RaceCars/board';
 import {
     allEffectiveExits,
     connectByGeometry,
+    derivedRows,
     effectiveExits,
     emptyState,
     fromTrack,
+    nextTileId,
     NO_EXITS,
     parseDraft,
     printTrackFile,
     sameExits,
+    sectionLabel,
     tileDefaultExits,
     tileHeading,
+    tilesIn,
+    toSections,
     validateTrack,
+    type EditorSection,
     type EditorState,
     type EditorTile,
 } from '@/games/RaceCars/tracks/editorModel';
+import { lapRuns } from '@/games/RaceCars/tracks/sections';
 import { readStoredValue, writeStoredValue } from '@/utils/hooks/useStoredValue';
 
 /**
- * The Race Cars track editor (docs/admin-tools.md): drop each tile onto a
- * circuit image to fix its centre point, draw the corner merges that break
- * §5.1's step rule, paint the corners, and print a `tracks/` file. It is the
- * interactive answer to §23.6's "214 hand-placed coordinates is not a thing to
- * type" — and to the same problem the new spaces-graph gave the corners: an
- * inside line that takes fewer tiles round a corner than the outside has to
- * name where it merges back, and that merge is exactly an exit drawn here.
+ * The Race Cars track editor (docs/admin-tools.md): cut the lap into sections,
+ * drop each tile onto a circuit image to fix its centre point, draw the steps
+ * that break §5.1's own rule, and print a `tracks/` file. It is the interactive
+ * answer to §23.6's "214 hand-placed coordinates is not a thing to type".
+ *
+ * **Nothing here numbers a row.** An author draws sections and the steps
+ * between tiles; `deriveTrack` works the rows out from those steps and the
+ * canvas prints them back onto the tiles (`tracks/sections.ts`). That is the
+ * whole reason the editor grew sections: a row typed by hand drifts one tile at
+ * a time through every corner whose inside line is shorter than its outside,
+ * and by the second corner two tiles drawn side by side carry numbers a lap
+ * apart. A section boundary is a **sync line** — draw one wherever the lanes
+ * are genuinely level across the road, a tile or two clear of a corner, and the
+ * rows inside each section are worked out from there.
  *
  * All the geometry, graph and printing live in `editorModel.ts` as pure
  * functions; this component owns only the pointer handling and the panels. The
@@ -46,9 +60,10 @@ const STORAGE_KEY = 'ag-racecars-track-editor';
  * mid-track can tell which of them are live without digging through commits —
  * shown as a small footer, its tooltip naming what changed.
  */
-const TOOL_VERSION = 5;
+const TOOL_VERSION = 6;
 const TOOL_CHANGES = [
-    'v5 — auto-connect never reasons from its own previous run: heading and "already connected" are worked out fresh from where the tiles sit and in row order each time, so a second run settles rather than drifting to a different tile.',
+    'v6 — sections and sync lines: the lap is cut into stretches of road whose ends are level across every lane, corners are sections rather than a paint colour, and rows are derived from the steps rather than typed (so they cannot drift after a corner).',
+    'v5 — auto-connect never reasons from its own previous run: heading and "already connected" are worked out fresh from where the tiles sit and in road order each time, so a second run settles rather than drifting to a different tile.',
     'v4 — auto-connect never reverses an existing exit (generated or hand-drawn); it falls through to the next-nearest tile in that lane instead of connecting two tiles both ways.',
     'v3 — auto-connect picks the nearest tile per lane rather than one distance cutoff shared across lanes, so a wide road\'s lane change is no longer dropped for sitting farther off than staying in lane.',
     'v2 — auto-connect never skips a lane (no lane 1 straight to lane 3), and tags what it writes so a later pass can redraw it instead of freezing on the first run.',
@@ -71,7 +86,7 @@ type Mode = 'place' | 'exits' | 'paint';
 interface PointerState {
     /** 'tile'/'background' are the place & exits gestures; 'paint' drags the brush. */
     kind: 'tile' | 'background' | 'paint';
-    key?: string;
+    id?: string;
     startX: number;
     startY: number;
     moved: boolean;
@@ -90,15 +105,33 @@ function artPoint(svg: SVGSVGElement, event: React.PointerEvent): { x: number; y
     return { x: mapped.x, y: mapped.y };
 }
 
-/** The next lane to place after this one: 1 → 2 → 3 → wrap to the next row. */
-function advance(row: number, lane: number): { row: number; lane: number } {
-    return lane >= 3 ? { row: row + 1, lane: 1 } : { row, lane: lane + 1 };
-}
-
 /** The pointer state a paint drag starts in — shared by the tile and background
  *  press so a fourth field wouldn't need adding in two places. */
 function paintPointer(event: React.PointerEvent): PointerState {
     return { kind: 'paint', startX: event.clientX, startY: event.clientY, moved: false };
+}
+
+/** The sections a tile can be drawn into, for the two pickers that offer them. */
+function SectionOptions({ sections }: { sections: EditorSection[] }) {
+    return sections.map(section => (
+        <option key={section.id} value={section.id}>
+            {sectionLabel(section)}{section.stops > 0 ? ` — corner, ${section.stops} stop${section.stops === 1 ? '' : 's'}` : ''}
+        </option>
+    ));
+}
+
+/** The lanes a road this wide has, for the two pickers that offer them. */
+function LaneOptions({ lanes }: { lanes: number }) {
+    return Array.from({ length: lanes }, (_unused, index) => index + 1)
+        .map(lane => <option key={lane} value={lane}>{lane}</option>);
+}
+
+/** A section id nothing else is using, for the "add section" button. */
+function freeSectionId(sections: EditorSection[]): string {
+    const taken = new Set(sections.map(section => section.id));
+    let index = sections.length + 1;
+    while (taken.has(`section${index}`)) index++;
+    return `section${index}`;
 }
 
 export default function RaceCarsTrackEditor() {
@@ -120,9 +153,8 @@ export default function RaceCarsTrackEditor() {
     const [backdrop, setBackdrop] = useState<string | null>(null);
 
     const [mode, setMode] = useState<Mode>('place');
-    const [activeCorner, setActiveCorner] = useState<string>('');
-    const [selectedKey, setSelectedKey] = useState<string | null>(null);
-    const [nextRow, setNextRow] = useState(0);
+    const [activeSectionId, setActiveSectionId] = useState<string>('');
+    const [selectedId, setSelectedId] = useState<string | null>(null);
     const [nextLane, setNextLane] = useState(1);
     const [zoom, setZoom] = useState(1);
     const [fileError, setFileError] = useState<string | null>(null);
@@ -130,86 +162,94 @@ export default function RaceCarsTrackEditor() {
     const svgRef = useRef<SVGSVGElement>(null);
     const pointerRef = useRef<PointerState | null>(null);
 
-    const tilesByKey = useMemo(
-        () => new Map(state.tiles.map(tile => [spaceKey(tile.row, tile.lane), tile])),
-        [state.tiles],
-    );
-    const selected = selectedKey ? tilesByKey.get(selectedKey) ?? null : null;
+    const tilesById = useMemo(() => new Map(state.tiles.map(tile => [tile.id, tile])), [state.tiles]);
+    const selected = selectedId ? tilesById.get(selectedId) ?? null : null;
+
+    // The section tiles are drawn into, and the brush's target. Resolved rather
+    // than stored, so deleting the active section can't leave the canvas
+    // dropping tiles into one that no longer exists.
+    const activeSection = state.sections.find(section => section.id === activeSectionId) ?? state.sections[0];
 
     const validation = useMemo(() => validateTrack(state), [state]);
+    // Rows as the derivation sees them, printed on the tiles: the one reading
+    // that tells an author their sync lines are where they think they are.
+    const rows = useMemo(() => derivedRows(validation.derived), [validation]);
 
-    const patchTile = useCallback((key: string, patch: Partial<EditorTile>) => {
+    const patchTile = useCallback((id: string, patch: Partial<EditorTile>) => {
         setState(prev => ({
             ...prev,
-            tiles: prev.tiles.map(tile => (spaceKey(tile.row, tile.lane) === key ? { ...tile, ...patch } : tile)),
+            tiles: prev.tiles.map(tile => (tile.id === id ? { ...tile, ...patch } : tile)),
         }));
     }, []);
 
     const placeTile = useCallback((at: { x: number; y: number }) => {
+        if (!activeSection) return;
+        const lanes = activeSection.lanes;
+        const lane = Math.min(nextLane, lanes);
+        let placedId = '';
         setState(prev => {
-            const key = spaceKey(nextRow, nextLane);
-            if (prev.tiles.some(tile => spaceKey(tile.row, tile.lane) === key)) return prev;
-            return { ...prev, tiles: [...prev.tiles, { row: nextRow, lane: nextLane, x: at.x, y: at.y }] };
-        });
-        setSelectedKey(spaceKey(nextRow, nextLane));
-        const { row, lane } = advance(nextRow, nextLane);
-        setNextRow(row);
-        setNextLane(lane);
-    }, [nextRow, nextLane]);
-
-    // Paint one tile into the active corner (or erase it, when the brush is set
-    // to "none"). Membership is per tile: a corner covers all its lanes but not
-    // every lane on every one of its rows — the inside line is in it for fewer
-    // rows than the outside (§10, §5.1). A no-op when the tile already carries
-    // that corner, so dragging the brush back over painted ground doesn't
-    // stringify the whole draft to localStorage on every frame (§23.4).
-    const paint = useCallback((key: string) => {
-        const target = activeCorner || undefined;
-        setState(prev => {
-            const tile = prev.tiles.find(t => spaceKey(t.row, t.lane) === key);
-            if (!tile || tile.cornerId === target) return prev;
+            placedId = nextTileId(prev, activeSection.id, lane);
             return {
                 ...prev,
-                tiles: prev.tiles.map(t => (spaceKey(t.row, t.lane) === key ? { ...t, cornerId: target } : t)),
+                tiles: [...prev.tiles, { id: placedId, section: activeSection.id, lane, x: at.x, y: at.y }],
             };
         });
-    }, [activeCorner]);
+        setSelectedId(placedId);
+        setNextLane(lane >= lanes ? 1 : lane + 1);
+    }, [activeSection, nextLane]);
 
-    const tileKeyAt = useCallback((at: { x: number; y: number }): string | null => {
+    // Paint one tile into the active section — which is also how a corner is
+    // drawn, since a corner *is* a section (§10). A no-op when the tile is
+    // already in it, so dragging the brush back over painted ground doesn't
+    // stringify the whole draft to localStorage on every frame (§23.4).
+    const paint = useCallback((id: string) => {
+        if (!activeSection) return;
+        setState(prev => {
+            const tile = prev.tiles.find(candidate => candidate.id === id);
+            if (!tile || tile.section === activeSection.id) return prev;
+            return {
+                ...prev,
+                tiles: prev.tiles.map(candidate => (candidate.id === id
+                    ? { ...candidate, section: activeSection.id }
+                    : candidate)),
+            };
+        });
+    }, [activeSection]);
+
+    const tileIdAt = useCallback((at: { x: number; y: number }): string | null => {
         for (const tile of state.tiles) {
-            if (Math.hypot(tile.x - at.x, tile.y - at.y) <= PAINT_HIT) return spaceKey(tile.row, tile.lane);
+            if (Math.hypot(tile.x - at.x, tile.y - at.y) <= PAINT_HIT) return tile.id;
         }
         return null;
     }, [state.tiles]);
 
-    const toggleExit = useCallback((fromKey: string, target: RaceCarsSpace) => {
+    const toggleExit = useCallback((fromId: string, targetId: string) => {
         setState(prev => {
-            const tile = prev.tiles.find(t => spaceKey(t.row, t.lane) === fromKey);
+            const tile = prev.tiles.find(candidate => candidate.id === fromId);
             if (!tile) return prev;
-            const current = tile.exits ?? tileDefaultExits(prev.tiles, tile);
-            const targetKey = spaceKey(target.row, target.lane);
-            const has = current.some(exit => spaceKey(exit.row, exit.lane) === targetKey);
-            const nextExits = has
-                ? current.filter(exit => spaceKey(exit.row, exit.lane) !== targetKey)
-                : [...current, { row: target.row, lane: target.lane }];
+            const fallback = tileDefaultExits(lapRuns(toSections(prev)), prev, tile);
+            const current = tile.exits ?? fallback;
+            const nextExits = current.includes(targetId)
+                ? current.filter(exit => exit !== targetId)
+                : [...current, targetId];
             // If the edit lands back on §5.1's default, drop the override so the
             // printed track stays a plain straight rather than a hand-written one.
-            const asDefault = sameExits(nextExits, tileDefaultExits(prev.tiles, tile));
+            const asDefault = sameExits(nextExits, fallback);
             return {
                 ...prev,
                 // A hand edit is authored, even one starting from an auto-connect
                 // — so it clears autoExits and, from here on, auto-connect leaves
                 // it alone like any other hand-drawn override.
-                tiles: prev.tiles.map(t => (spaceKey(t.row, t.lane) === fromKey
-                    ? { ...t, exits: asDefault ? undefined : nextExits, autoExits: undefined }
-                    : t)),
+                tiles: prev.tiles.map(candidate => (candidate.id === fromId
+                    ? { ...candidate, exits: asDefault ? undefined : nextExits, autoExits: undefined }
+                    : candidate)),
             };
         });
     }, []);
 
-    const deleteTile = useCallback((key: string) => {
+    const deleteTile = useCallback((id: string) => {
         setState(prev => {
-            const survivors = prev.tiles.filter(t => spaceKey(t.row, t.lane) !== key);
+            const survivors = prev.tiles.filter(tile => tile.id !== id);
             // Scrub any hand-drawn exit that pointed at the deleted tile, so its
             // removal can't leave a dangling reference — the very graph error
             // that would otherwise throw out of the export printer. An override
@@ -218,26 +258,24 @@ export default function RaceCarsTrackEditor() {
                 ...prev,
                 tiles: survivors.map(tile => {
                     if (!tile.exits) return tile;
-                    const kept = tile.exits.filter(exit => spaceKey(exit.row, exit.lane) !== key);
+                    const kept = tile.exits.filter(exit => exit !== id);
                     if (kept.length === tile.exits.length) return tile;
-                    return kept.length > 0
-                        ? { ...tile, exits: kept }
-                        : { ...tile, ...NO_EXITS };
+                    return kept.length > 0 ? { ...tile, exits: kept } : { ...tile, ...NO_EXITS };
                 }),
             };
         });
-        setSelectedKey(null);
+        setSelectedId(null);
     }, []);
 
-    const onTilePointerDown = useCallback((event: React.PointerEvent, key: string) => {
+    const onTilePointerDown = useCallback((event: React.PointerEvent, id: string) => {
         event.stopPropagation();
         svgRef.current?.setPointerCapture(event.pointerId);
         if (mode === 'paint') {
-            paint(key);
+            paint(id);
             pointerRef.current = paintPointer(event);
             return;
         }
-        pointerRef.current = { kind: 'tile', key, startX: event.clientX, startY: event.clientY, moved: false };
+        pointerRef.current = { kind: 'tile', id, startX: event.clientX, startY: event.clientY, moved: false };
     }, [mode, paint]);
 
     const onBackgroundPointerDown = useCallback((event: React.PointerEvent) => {
@@ -269,8 +307,8 @@ export default function RaceCarsTrackEditor() {
             // toolbar that says it isn't.
             if (mode !== 'paint') return;
             const at = artPoint(svg, event);
-            const key = at && tileKeyAt(at);
-            if (key) paint(key);
+            const id = at && tileIdAt(at);
+            if (id) paint(id);
             return;
         }
         if (!pointer.moved) {
@@ -280,39 +318,39 @@ export default function RaceCarsTrackEditor() {
         }
         // A moved press on a tile drags its centre; on the background it does
         // nothing (the container scrolls to pan).
-        if (pointer.kind === 'tile' && pointer.key && mode === 'place') {
+        if (pointer.kind === 'tile' && pointer.id && mode === 'place') {
             const at = artPoint(svg, event);
-            if (at) patchTile(pointer.key, { x: Math.round(at.x), y: Math.round(at.y) });
+            if (at) patchTile(pointer.id, { x: Math.round(at.x), y: Math.round(at.y) });
         }
-    }, [mode, paint, tileKeyAt, patchTile]);
+    }, [mode, paint, tileIdAt, patchTile]);
 
     const onPointerUp = useCallback(() => {
         const pointer = pointerRef.current;
         pointerRef.current = null;
         if (!pointer || pointer.kind === 'paint' || pointer.moved) return;
         // A press that didn't travel is a click.
-        if (pointer.kind === 'tile' && pointer.key) {
-            if (mode === 'exits' && selectedKey && pointer.key !== selectedKey) {
-                const target = tilesByKey.get(pointer.key);
-                if (target) toggleExit(selectedKey, { row: target.row, lane: target.lane });
+        if (pointer.kind === 'tile' && pointer.id) {
+            if (mode === 'exits' && selectedId && pointer.id !== selectedId) {
+                toggleExit(selectedId, pointer.id);
             } else {
-                setSelectedKey(pointer.key);
+                setSelectedId(pointer.id);
             }
         } else if (pointer.kind === 'background' && mode === 'place' && pointer.at) {
             placeTile(pointer.at);
         }
-    }, [mode, selectedKey, tilesByKey, toggleExit, placeTile]);
+    }, [mode, selectedId, toggleExit, placeTile]);
 
     const autoConnect = useCallback(() => {
-        setState(prev => ({ ...prev, tiles: connectByGeometry(prev.tiles) }));
+        setState(prev => ({ ...prev, tiles: connectByGeometry(prev) }));
     }, []);
 
     const loadTrack = useCallback((trackId: string) => {
-        const track = TRACK_LIST.find(t => t.id === trackId);
+        const track = TRACK_LIST.find(candidate => candidate.id === trackId);
         if (!track) return;
         setState(fromTrack(track));
         setBackdrop(null);
-        setSelectedKey(null);
+        setSelectedId(null);
+        setActiveSectionId('');
         setMode('place');
     }, []);
 
@@ -320,8 +358,8 @@ export default function RaceCarsTrackEditor() {
         if (!window.confirm('Clear the whole editor and start a blank track?')) return;
         setState(emptyState());
         setBackdrop(null);
-        setSelectedKey(null);
-        setNextRow(0);
+        setSelectedId(null);
+        setActiveSectionId('');
         setNextLane(1);
     }, []);
 
@@ -344,7 +382,8 @@ export default function RaceCarsTrackEditor() {
         reader.onload = () => {
             setState(parseDraft(typeof reader.result === 'string' ? reader.result : null));
             setBackdrop(null);
-            setSelectedKey(null);
+            setSelectedId(null);
+            setActiveSectionId('');
             setMode('place');
         };
         reader.onerror = () => setFileError("Couldn't read that draft file.");
@@ -375,6 +414,8 @@ export default function RaceCarsTrackEditor() {
         event.target.value = '';
     }, []);
 
+    const sectionName = activeSection ? sectionLabel(activeSection) : 'no section';
+
     return (
         <div className="ag-rcedit-page">
             <div className="ag-rcedit-canvas-col">
@@ -383,7 +424,7 @@ export default function RaceCarsTrackEditor() {
                         <div className="ag-rcedit-toolbar">
                             <button type="button" className={`ag-btn ${mode === 'place' ? 'ag-btn--dark' : 'ag-btn--light'}`} onClick={() => setMode('place')}>Place</button>
                             <button type="button" className={`ag-btn ${mode === 'exits' ? 'ag-btn--dark' : 'ag-btn--light'}`} onClick={() => setMode('exits')} disabled={!selected}>Draw exits</button>
-                            <button type="button" className={`ag-btn ${mode === 'paint' ? 'ag-btn--dark' : 'ag-btn--light'}`} onClick={() => setMode('paint')}>Paint corners</button>
+                            <button type="button" className={`ag-btn ${mode === 'paint' ? 'ag-btn--dark' : 'ag-btn--light'}`} onClick={() => setMode('paint')}>Paint into section</button>
                             <div className="ag-rcedit-toolbar-zoom">
                                 <button type="button" className="ag-btn ag-btn--light" onClick={() => setZoom(z => Math.max(0.25, z - 0.25))}>−</button>
                                 <span className="ag-hint">{Math.round(zoom * 100)}%</span>
@@ -391,36 +432,36 @@ export default function RaceCarsTrackEditor() {
                             </div>
                         </div>
 
-                        {mode === 'paint' && (
-                            <div className="ag-rcedit-toolbar">
-                                <label className="ag-field-label" htmlFor="rcedit-brush">Painting</label>
-                                <select id="rcedit-brush" className="ag-select" value={activeCorner} onChange={e => setActiveCorner(e.target.value)}>
-                                    <option value="">Erase (no corner)</option>
-                                    {Object.keys(state.corners).map(id => <option key={id} value={id}>{state.corners[id].name || id}</option>)}
-                                </select>
-                            </div>
-                        )}
+                        <div className="ag-rcedit-toolbar">
+                            <label className="ag-field-label" htmlFor="rcedit-section">Drawing into</label>
+                            <select id="rcedit-section" className="ag-select" value={activeSection?.id ?? ''} onChange={e => setActiveSectionId(e.target.value)}>
+                                <SectionOptions sections={state.sections} />
+                            </select>
+                            <label className="ag-field-label" htmlFor="rcedit-lane">Lane</label>
+                            <select id="rcedit-lane" className="ag-select" value={nextLane} onChange={e => setNextLane(Number(e.target.value))}>
+                                <LaneOptions lanes={activeSection?.lanes ?? 3} />
+                            </select>
+                        </div>
 
                         <p className="ag-hint">
                             {mode === 'place'
-                                ? `Click the art to drop the next tile (row ${nextRow}, lane ${nextLane}). Drag a tile to nudge its centre; click one to select it.`
+                                ? `Click the art to drop the next tile into "${sectionName}", lane ${Math.min(nextLane, activeSection?.lanes ?? 3)} — place each lane's tiles in the order the road runs. Drag a tile to nudge its centre; click one to select it.`
                                 : mode === 'exits'
                                     ? (selected
-                                        ? `Click a tile to add or remove a step from ${selected.row}:${selected.lane}. Faint lines are §5.1's default; solid lines are overrides.`
+                                        ? `Click a tile to add or remove a step from ${selected.id}. Faint lines are §5.1's default; solid lines are overrides.`
                                         : 'Select a tile first.')
-                                    : activeCorner
-                                        ? `Click or drag over the tiles in "${state.corners[activeCorner]?.name || activeCorner}" — paint exactly the corner tiles; the inside line is in it for fewer rows than the outside.`
-                                        : 'Click or drag over tiles to clear their corner. Pick a corner above to paint one on.'}
+                                    : `Click or drag over tiles to move them into "${sectionName}". A corner is a section, so this is how one is drawn.`}
                         </p>
 
                         <EditorCanvas
                             svgRef={svgRef}
                             state={state}
+                            rows={rows}
                             backdropHref={backdrop ?? state.artHref}
                             zoom={zoom}
                             mode={mode}
-                            activeCorner={activeCorner}
-                            selectedKey={selectedKey}
+                            activeSectionId={activeSection?.id ?? ''}
+                            selectedId={selectedId}
                             onTilePointerDown={onTilePointerDown}
                             onBackgroundPointerDown={onBackgroundPointerDown}
                             onPointerMove={onPointerMove}
@@ -432,12 +473,12 @@ export default function RaceCarsTrackEditor() {
                         </div>
                         <p className="ag-hint">
                             Auto-connect is for straights and gentle bends: it finds the closest tile physically ahead in
-                            each of this lane and the two either side of it, rather than assuming row+1 is the right tile —
-                            so a wide road&apos;s lane change still gets drawn even when it sits much farther off than
-                            staying in lane — and never skips a lane. Draw a sharp corner&apos;s lane realignment by hand
-                            instead; auto-connect leaves any hand-drawn exit alone. It never trusts what it drew on an
-                            earlier run either — every run reasons only from where the tiles sit now, so moving tiles and
-                            running it again redraws cleanly rather than drifting from a stale guess.
+                            each of this lane and the two either side of it — so a wide road&apos;s lane change still gets
+                            drawn even when it sits much farther off than staying in lane — and never skips a lane. Draw a
+                            sharp corner&apos;s lane realignment by hand instead; auto-connect leaves any hand-drawn exit
+                            alone. It never trusts what it drew on an earlier run either — every run reasons only from where
+                            the tiles sit now, so moving tiles and running it again redraws cleanly rather than drifting
+                            from a stale guess.
                         </p>
                     </div>
                 </Section>
@@ -459,32 +500,19 @@ export default function RaceCarsTrackEditor() {
                     <SelectedTilePanel
                         state={state}
                         tile={selected}
-                        onPatch={patch => patchTile(spaceKey(selected.row, selected.lane), patch)}
-                        onResetExits={() => patchTile(spaceKey(selected.row, selected.lane), NO_EXITS)}
-                        onDelete={() => deleteTile(spaceKey(selected.row, selected.lane))}
+                        row={rows.get(selected.id)}
+                        onPatch={patch => patchTile(selected.id, patch)}
+                        onResetExits={() => patchTile(selected.id, NO_EXITS)}
+                        onDelete={() => deleteTile(selected.id)}
                     />
                 )}
 
-                <CornersPanel
+                <SectionsPanel
                     state={state}
-                    activeCorner={activeCorner}
-                    onSetActiveCorner={setActiveCorner}
-                    onSetCorners={corners => setState(prev => ({ ...prev, corners }))}
-                    onRemoveCorner={id => {
-                        // Drop the corner and scrub it off every tile that carried
-                        // it, so no tile is left painted with a corner that no
-                        // longer exists (cornerAt would read it as no corner).
-                        setState(prev => {
-                            const corners = { ...prev.corners };
-                            delete corners[id];
-                            return {
-                                ...prev,
-                                corners,
-                                tiles: prev.tiles.map(tile => (tile.cornerId === id ? { ...tile, cornerId: undefined } : tile)),
-                            };
-                        });
-                        if (activeCorner === id) setActiveCorner('');
-                    }}
+                    rows={rows}
+                    activeSectionId={activeSection?.id ?? ''}
+                    onSetActiveSection={setActiveSectionId}
+                    onSetSections={sections => setState(prev => ({ ...prev, sections }))}
                 />
 
                 <ExportPanel state={state} validation={validation} />
@@ -500,13 +528,15 @@ export default function RaceCarsTrackEditor() {
 interface CanvasProps {
     svgRef: React.RefObject<SVGSVGElement | null>;
     state: EditorState;
+    /** The derived row per tile id — empty while the drawing isn't a circuit. */
+    rows: Map<string, number>;
     /** The image drawn under the tiles — the traced backdrop, else the art path. */
     backdropHref: string;
     zoom: number;
     mode: Mode;
-    activeCorner: string;
-    selectedKey: string | null;
-    onTilePointerDown: (event: React.PointerEvent, key: string) => void;
+    activeSectionId: string;
+    selectedId: string | null;
+    onTilePointerDown: (event: React.PointerEvent, id: string) => void;
     onBackgroundPointerDown: (event: React.PointerEvent) => void;
     onPointerMove: (event: React.PointerEvent) => void;
     onPointerUp: (event: React.PointerEvent) => void;
@@ -516,14 +546,18 @@ interface CanvasProps {
 // between two zoom states on click, which would fight click-to-place. Here zoom
 // is a continuous control and the container just scrolls to pan.
 function EditorCanvas(props: CanvasProps) {
-    const { svgRef, state, backdropHref, zoom, mode, activeCorner, selectedKey, onTilePointerDown, onBackgroundPointerDown, onPointerMove, onPointerUp } = props;
+    const { svgRef, state, rows, backdropHref, zoom, mode, activeSectionId, selectedId, onTilePointerDown, onBackgroundPointerDown, onPointerMove, onPointerUp } = props;
     const { width, height } = state.viewBox;
 
     // Both lookups built once per render rather than a `.find` per exit: at 214
     // tiles the edges alone are hundreds of lookups, and a drag re-renders them
     // every frame (§23.4).
-    const byKey = useMemo(() => new Map(state.tiles.map(tile => [spaceKey(tile.row, tile.lane), tile])), [state.tiles]);
-    const exitsByKey = useMemo(() => allEffectiveExits(state.tiles), [state.tiles]);
+    const byId = useMemo(() => new Map(state.tiles.map(tile => [tile.id, tile])), [state.tiles]);
+    const exitsById = useMemo(() => allEffectiveExits(state), [state]);
+    const corners = useMemo(
+        () => new Set(state.sections.filter(section => section.stops > 0).map(section => section.id)),
+        [state.sections],
+    );
 
     return (
         <div className="ag-rcedit-canvas">
@@ -546,13 +580,12 @@ function EditorCanvas(props: CanvasProps) {
                     reads at a glance. */}
                 {state.tiles.map(tile => {
                     const isOverride = tile.exits !== undefined;
-                    const fromKey = spaceKey(tile.row, tile.lane);
-                    return (exitsByKey.get(fromKey) ?? []).map(exit => {
-                        const target = byKey.get(spaceKey(exit.row, exit.lane));
+                    return (exitsById.get(tile.id) ?? []).map(exit => {
+                        const target = byId.get(exit);
                         if (!target) return null;
                         return (
                             <line
-                                key={`${fromKey}->${spaceKey(exit.row, exit.lane)}`}
+                                key={`${tile.id}->${exit}`}
                                 className={`ag-rcedit-edge${isOverride ? ' ag-rcedit-edge--override' : ''}`}
                                 x1={tile.x} y1={tile.y} x2={target.x} y2={target.y}
                             />
@@ -561,14 +594,10 @@ function EditorCanvas(props: CanvasProps) {
                 })}
 
                 {state.tiles.map(tile => {
-                    const key = spaceKey(tile.row, tile.lane);
-                    const isSelected = key === selectedKey;
-                    // Corner membership is per tile (§10): a corner covers all
-                    // its lanes but not every lane on every row, so the inside
-                    // line lights up for fewer rows than the outside.
-                    const inCorner = tile.cornerId !== undefined;
-                    const isBrush = mode === 'paint' && activeCorner !== '' && tile.cornerId === activeCorner;
-                    const isTarget = mode === 'exits' && selectedKey !== null && !isSelected;
+                    const isSelected = tile.id === selectedId;
+                    const inCorner = corners.has(tile.section);
+                    const isBrush = mode === 'paint' && tile.section === activeSectionId;
+                    const isTarget = mode === 'exits' && selectedId !== null && !isSelected;
                     const className = [
                         'ag-rcedit-tile',
                         inCorner ? 'ag-rcedit-tile--corner' : '',
@@ -576,11 +605,14 @@ function EditorCanvas(props: CanvasProps) {
                         isSelected ? 'ag-rcedit-tile--selected' : '',
                         isTarget ? 'ag-rcedit-tile--target' : '',
                     ].filter(Boolean).join(' ');
+                    const row = rows.get(tile.id);
                     return (
-                        <g key={key} onPointerDown={event => onTilePointerDown(event, key)}>
+                        <g key={tile.id} onPointerDown={event => onTilePointerDown(event, tile.id)}>
                             <circle className={className} cx={tile.x} cy={tile.y} r={TILE_RADIUS} />
+                            {/* The derived row, not an authored one — this is
+                                where a skewed sync line shows itself. */}
                             <text className="ag-rcedit-tile-label" x={tile.x} y={tile.y - TILE_RADIUS - 2} textAnchor="middle">
-                                {tile.row}:{tile.lane}
+                                {row === undefined ? `·:${tile.lane}` : `${row}:${tile.lane}`}
                             </text>
                         </g>
                     );
@@ -673,24 +705,32 @@ function TrackPanel({ state, fileError, onPatch, onLoadTrack, onUploadArt, onImp
     );
 }
 
-function SelectedTilePanel({ state, tile, onPatch, onResetExits, onDelete }: {
+function SelectedTilePanel({ state, tile, row, onPatch, onResetExits, onDelete }: {
     state: EditorState;
     tile: EditorTile;
+    row: number | undefined;
     onPatch: (patch: Partial<EditorTile>) => void;
     onResetExits: () => void;
     onDelete: () => void;
 }) {
-    const cornerIds = Object.keys(state.corners);
-    const autoHeading = tileHeading(state.tiles, { ...tile, heading: undefined });
+    const autoHeading = tileHeading(state, { ...tile, heading: undefined });
+    const section = state.sections.find(candidate => candidate.id === tile.section);
     return (
-        <Section label={`Tile ${tile.row}:${tile.lane}`}>
+        <Section label={`Tile ${tile.id}`}>
             <div className="ag-stack">
                 <div className="ag-rcedit-grid">
-                    <Field label="Row">
-                        <input className="ag-input" type="number" value={tile.row} onChange={e => onPatch({ row: Number(e.target.value) || 0 })} />
+                    <Field label="Section">
+                        <select className="ag-select" value={tile.section} onChange={e => onPatch({ section: e.target.value })}>
+                            <SectionOptions sections={state.sections} />
+                        </select>
                     </Field>
                     <Field label="Lane">
-                        <input className="ag-input" type="number" value={tile.lane} onChange={e => onPatch({ lane: Number(e.target.value) || 0 })} />
+                        <select className="ag-select" value={tile.lane} onChange={e => onPatch({ lane: Number(e.target.value) })}>
+                            <LaneOptions lanes={section?.lanes ?? 3} />
+                        </select>
+                    </Field>
+                    <Field label="Derived row">
+                        <input className="ag-input" value={row === undefined ? '—' : row} disabled />
                     </Field>
                     <Field label={`Heading (auto ${autoHeading}°)`}>
                         <input
@@ -701,16 +741,10 @@ function SelectedTilePanel({ state, tile, onPatch, onResetExits, onDelete }: {
                             onChange={e => onPatch({ heading: e.target.value === '' ? undefined : Number(e.target.value) })}
                         />
                     </Field>
-                    <Field label="Part of corner">
-                        <select className="ag-select" value={tile.cornerId ?? ''} onChange={e => onPatch({ cornerId: e.target.value || undefined })}>
-                            <option value="">— none —</option>
-                            {cornerIds.map(id => <option key={id} value={id}>{state.corners[id].name || id}</option>)}
-                        </select>
-                    </Field>
                 </div>
 
                 <p className="ag-hint">
-                    Steps out: {effectiveExits(state.tiles, tile).map(e => `${e.row}:${e.lane}`).join(', ') || 'none'}
+                    Steps out: {effectiveExits(state, tile).join(', ') || 'none'}
                     {tile.exits ? (tile.autoExits ? ' (auto-connected — a re-run may redraw this)' : ' (hand-drawn override)') : ' (default §5.1 rule)'}.
                 </p>
 
@@ -723,60 +757,91 @@ function SelectedTilePanel({ state, tile, onPatch, onResetExits, onDelete }: {
     );
 }
 
-function CornersPanel({ state, activeCorner, onSetActiveCorner, onSetCorners, onRemoveCorner }: {
+function SectionsPanel({ state, rows, activeSectionId, onSetActiveSection, onSetSections }: {
     state: EditorState;
-    activeCorner: string;
-    onSetActiveCorner: (id: string) => void;
-    onSetCorners: (corners: EditorState['corners']) => void;
-    onRemoveCorner: (id: string) => void;
+    rows: Map<string, number>;
+    activeSectionId: string;
+    onSetActiveSection: (id: string) => void;
+    onSetSections: (sections: EditorSection[]) => void;
 }) {
-    const [newId, setNewId] = useState('');
-    const ids = Object.keys(state.corners);
-
-    const addCorner = () => {
-        const id = newId.trim();
-        if (!id || state.corners[id]) return;
-        onSetCorners({ ...state.corners, [id]: { name: id, stops: 1 } });
-        onSetActiveCorner(id);
-        setNewId('');
+    const patch = (id: string, change: Partial<EditorSection>) => {
+        onSetSections(state.sections.map(section => (section.id === id ? { ...section, ...change } : section)));
     };
-    const patchCorner = (id: string, patch: Partial<EditorState['corners'][string]>) => {
-        onSetCorners({ ...state.corners, [id]: { ...state.corners[id], ...patch } });
+    const move = (index: number, by: number) => {
+        const to = index + by;
+        if (to < 0 || to >= state.sections.length) return;
+        const sections = [...state.sections];
+        const [moved] = sections.splice(index, 1);
+        sections.splice(to, 0, moved);
+        onSetSections(sections);
+    };
+    const add = () => {
+        const id = freeSectionId(state.sections);
+        onSetSections([...state.sections, { id, name: '', lanes: 3, stops: 0 }]);
+        onSetActiveSection(id);
+    };
+    const remove = (id: string) => {
+        if (state.sections.length <= 1) return;
+        onSetSections(state.sections.filter(section => section.id !== id));
+        if (activeSectionId === id) onSetActiveSection('');
+    };
+
+    /** The rows a section's tiles landed on, for the author to read its extent off. */
+    const band = (id: string): string => {
+        const placed = tilesIn(state, id).map(tile => rows.get(tile.id)).filter((row): row is number => row !== undefined);
+        if (placed.length === 0) return 'no rows yet';
+        const from = Math.min(...placed);
+        const to = Math.max(...placed);
+        return from === to ? `row ${from}` : `rows ${from}–${to}`;
     };
 
     return (
-        <Section label="Corners" count={ids.length}>
+        <Section label="Sections" count={state.sections.length}>
             <div className="ag-stack">
                 <p className="ag-hint">
-                    A corner is a stop-count over a band of rows (§10). It covers <strong>all its lanes</strong>, but not
-                    every lane on every row — the inside line is the short way round, so it is in the corner for fewer rows
-                    than the outside. Add one, then switch to <strong>Paint corners</strong> and drag over exactly its tiles.
-                    Lane re-alignment after the corner needs no separate step: draw the inside line&apos;s last tile straight
-                    onto the row it should merge back into, and the exit is the re-alignment.
+                    The lap in the order it is driven, starting at the start/finish line. Each boundary between two sections
+                    is a <strong>sync line</strong>: put one wherever the road is genuinely square across every lane, a tile
+                    or two clear of a corner where the ends are skewed. Rows are derived inside each section from the steps
+                    you draw, so an inside line that takes fewer tiles round a corner simply skips the rows it saved instead
+                    of throwing every lane after it out of step. A <strong>corner is a section</strong> with a stop count
+                    (§10) — no separate painting of bands.
                 </p>
 
-                {ids.map(id => (
-                    <div key={id} className={`ag-rcedit-corner ag-stack${activeCorner === id ? ' ag-rcedit-corner--active' : ''}`}>
+                {state.sections.map((section, index) => (
+                    <div key={section.id} className={`ag-rcedit-section ag-stack${activeSectionId === section.id ? ' ag-rcedit-section--active' : ''}`}>
                         <div className="ag-rcedit-grid">
-                            <Field label="Id"><input className="ag-input" value={id} disabled /></Field>
-                            <Field label="Name"><input className="ag-input" value={state.corners[id].name} onChange={e => patchCorner(id, { name: e.target.value })} /></Field>
-                            <Field label="Stops">
-                                <select className="ag-select" value={state.corners[id].stops} onChange={e => patchCorner(id, { stops: Number(e.target.value) as 1 | 2 })}>
-                                    <option value={1}>1</option>
+                            <Field label="Id"><input className="ag-input" value={section.id} disabled /></Field>
+                            <Field label="Name">
+                                <input className="ag-input" value={section.name} placeholder={section.id} onChange={e => patch(section.id, { name: e.target.value })} />
+                            </Field>
+                            <Field label="Lanes">
+                                <select className="ag-select" value={section.lanes} onChange={e => patch(section.id, { lanes: Number(e.target.value) === 2 ? 2 : 3 })}>
                                     <option value={2}>2</option>
+                                    <option value={3}>3</option>
+                                </select>
+                            </Field>
+                            <Field label="Corner stops">
+                                <select className="ag-select" value={section.stops} onChange={e => patch(section.id, { stops: Number(e.target.value) as 0 | 1 | 2 })}>
+                                    <option value={0}>straight</option>
+                                    <option value={1}>1 stop</option>
+                                    <option value={2}>2 stops</option>
                                 </select>
                             </Field>
                         </div>
+                        <p className="ag-hint">{tilesIn(state, section.id).length} tiles · {band(section.id)}</p>
                         <div className="ag-btn-row ag-btn-row--wrap">
-                            <button type="button" className="ag-btn ag-btn--light" onClick={() => onSetActiveCorner(id)}>{activeCorner === id ? 'Painting this' : 'Paint this'}</button>
-                            <button type="button" className="ag-btn ag-btn--light" onClick={() => onRemoveCorner(id)}>Remove corner</button>
+                            <button type="button" className="ag-btn ag-btn--light" onClick={() => onSetActiveSection(section.id)}>
+                                {activeSectionId === section.id ? 'Drawing into this' : 'Draw into this'}
+                            </button>
+                            <button type="button" className="ag-btn ag-btn--light" onClick={() => move(index, -1)} disabled={index === 0}>Earlier</button>
+                            <button type="button" className="ag-btn ag-btn--light" onClick={() => move(index, 1)} disabled={index === state.sections.length - 1}>Later</button>
+                            <button type="button" className="ag-btn ag-btn--light" onClick={() => remove(section.id)} disabled={state.sections.length <= 1}>Remove</button>
                         </div>
                     </div>
                 ))}
 
                 <div className="ag-btn-row ag-btn-row--wrap">
-                    <input className="ag-input" value={newId} onChange={e => setNewId(e.target.value)} placeholder="new corner id, e.g. hairpin" autoComplete="off" />
-                    <button type="button" className="ag-btn ag-btn--dark" onClick={addCorner}>Add corner</button>
+                    <button type="button" className="ag-btn ag-btn--dark" onClick={add}>Add section</button>
                 </div>
             </div>
         </Section>
@@ -786,9 +851,9 @@ function CornersPanel({ state, activeCorner, onSetActiveCorner, onSetCorners, on
 function ExportPanel({ state, validation }: { state: EditorState; validation: ReturnType<typeof validateTrack> }) {
     const [copied, setCopied] = useState(false);
     const clean = validation.errors.length === 0 && state.tiles.length > 0;
-    // Only print a driveable track: `printTrackFile` runs the tiles through
-    // `assembleSpaces`, which throws on the very graph errors the banner above
-    // is already reporting — so printing an unclean track would crash the panel.
+    // Only print a driveable track: `printTrackFile` runs the drawing through
+    // `deriveTrack`, which throws on the very graph errors the banner above is
+    // already reporting — so printing an unclean track would crash the panel.
     const source = useMemo(() => (clean ? printTrackFile(state) : ''), [clean, state]);
 
     const copy = async () => {

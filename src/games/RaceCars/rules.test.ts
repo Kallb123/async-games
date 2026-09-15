@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { MAX_PLAYERS, RaceCarsSpace, RaceCarsTrack, rowsAlong, TRACKS } from "./board";
+import { MAX_PLAYERS, RaceCarsSpace, RaceCarsTrack, TRACKS } from "./board";
 import {
     classification,
     conservativeTurn,
@@ -15,7 +15,7 @@ import {
     slipstreamOffered,
     trackProgress,
 } from "./rules";
-import { car, KETTLE_CORNER, race, testTrack } from "./testFixtures";
+import { car, kettleCorner, race, testTrack } from "./testFixtures";
 
 // Ashcombe (§5.2), for reading the fixtures below against:
 //   0-9 straight (3) · 10-14 Hairpin (2, two stops) · 15-46 The Mile (3)
@@ -29,11 +29,11 @@ import { car, KETTLE_CORNER, race, testTrack } from "./testFixtures";
 // reached. Two corners six rows apart make both charges payable and visible —
 // and it doubles as proof the rules read the track data rather than Ashcombe.
 const TWO_CORNERS: RaceCarsTrack = testTrack([
-    { name: 'Straight', from: 0, to: 7, lanes: 3, corner: null },
-    { name: 'First', from: 8, to: 10, lanes: 2, corner: { id: 'first', stops: 1 } },
-    { name: 'Between', from: 11, to: 13, lanes: 3, corner: null },
-    { name: 'Second', from: 14, to: 16, lanes: 2, corner: { id: 'second', stops: 1 } },
-    { name: 'Run to the Line', from: 17, to: 29, lanes: 3, corner: null },
+    { id: 'straight', name: 'Straight', length: 8, lanes: 3, corner: null },
+    { id: 'first', name: 'First', length: 3, lanes: 2, corner: { stops: 1 } },
+    { id: 'between', name: 'Between', length: 3, lanes: 3, corner: null },
+    { id: 'second', name: 'Second', length: 3, lanes: 2, corner: { stops: 1 } },
+    { id: 'run', name: 'Run to the Line', length: 13, lanes: 3, corner: null },
 ], {
     id: 'twocorners',
     name: 'Two Corners',
@@ -58,23 +58,26 @@ afterAll(() => { delete TRACKS[TWO_CORNERS.id]; });
 // exists to prove the rules read the track data, and §23.7's follow-up is where
 // a real circuit grows corners shaped like this.
 const UNEVEN: RaceCarsTrack = testTrack([
+    { id: 'sf', name: 'Start / Finish Straight', length: 6, lanes: 3, corner: null },
+    kettleCorner('run'),
     {
-        name: 'Start / Finish Straight', from: 0, to: 5, lanes: 3, corner: null,
+        id: 'run', name: 'Run to the Line', lanes: 3, corner: null,
         tiles: [
-            // Lane 1 has no space on the line itself.
-            { row: 0, lane: 2 }, { row: 0, lane: 3 },
-            ...[1, 2, 3, 4, 5].flatMap(row => [1, 2, 3].map(lane => ({ row, lane }))),
-        ],
-    },
-    KETTLE_CORNER,
-    {
-        name: 'Run to the Line', from: 14, to: 23, lanes: 3, corner: null,
-        tiles: [
-            ...[14, 15, 16, 17, 18, 19, 20, 21, 22].flatMap(row => [1, 2, 3].map(lane => ({ row, lane }))),
-            // The inside line cuts across the start/finish line, where the road
-            // has no space in lane 1 at all.
-            { row: 23, lane: 1, exits: [{ row: 1, lane: 1 }] },
-            { row: 23, lane: 2 }, { row: 23, lane: 3 },
+            // Lanes 2 and 3 run the length of it; lane 1 takes three tiles to
+            // their six, so its last one steps clean over the start line into
+            // row 1 rather than landing on row 0 at all.
+            ...[2, 3].flatMap(lane => Array.from({ length: 6 }, (_unused, index) => ({
+                id: `run.${lane}.${index}`,
+                lane,
+                exits: index < 5
+                    ? [`run.${lane}.${index + 1}`]
+                    : [2, 3].filter(to => Math.abs(to - lane) <= 1).map(to => `sf.${to}.0`),
+            }))),
+            ...Array.from({ length: 3 }, (_unused, index) => ({
+                id: `run.1.${index}`,
+                lane: 1,
+                exits: index < 2 ? [`run.1.${index + 1}`] : ['sf.1.1'],
+            })),
         ],
     },
 ], {
@@ -270,7 +273,7 @@ describe("corner stops (§10)", () => {
         const banked = race({ a: { row: 12, lane: 1, cornerStops: 1 } });
         const charged = drive(banked, 'a', 5);
         expect(charged.tyres).toBe(2);            // 5 tyres, three rows past row 14
-        expect(charged.events).toContainEqual({ type: 'overshoot', cornerId: 'hairpin', rows: 3, waived: false });
+        expect(charged.events).toContainEqual({ type: 'overshoot', cornerId: 'hairpin', spaces: 3, waived: false });
 
         // Two stops banked, and the same move is free.
         const paid = race({ a: { row: 14, lane: 1, cornerStops: 2 } });
@@ -291,7 +294,7 @@ describe("corner stops (§10)", () => {
         const arrival = drive(race({ a: { row: 9, lane: 1 } }), 'a', 8);
         expect(arrival.row).toBe(17);
         expect(arrival.cornerStops).toBe(0);
-        expect(arrival.events).toContainEqual({ type: 'overshoot', cornerId: 'hairpin', rows: 3, waived: false });
+        expect(arrival.events).toContainEqual({ type: 'overshoot', cornerId: 'hairpin', spaces: 3, waived: false });
     });
 
     it("resets banked stops the moment the corner is legally left", () => {
@@ -311,7 +314,7 @@ describe("overshoot (§10)", () => {
         const arrival = drive(race({ a: { row: 45, lane: 1 } }), 'a', distance);
         expect(arrival.row).toBe(row);
         expect(arrival.tyres).toBe(5 - cost);
-        expect(arrival.events).toContainEqual({ type: 'overshoot', cornerId: 'gravel', rows: cost, waived: false });
+        expect(arrival.events).toContainEqual({ type: 'overshoot', cornerId: 'gravel', spaces: cost, waived: false });
     });
 
     it("counts rows along the path when the move wraps the finish line", () => {
@@ -321,13 +324,13 @@ describe("overshoot (§10)", () => {
         const state = race({ a: { row: 60, lane: 1, tyres: 20 } }, { laps: 2 });
         const arrival = drive(state, 'a', 20);
         expect(arrival).toMatchObject({ row: 2, lapsCompleted: 1, tyres: 5 });
-        expect(arrival.events).toContainEqual({ type: 'overshoot', cornerId: 'kink', rows: 15, waived: false });
+        expect(arrival.events).toContainEqual({ type: 'overshoot', cornerId: 'kink', spaces: 15, waived: false });
     });
 
     it("is free for a car that began its turn on the corner's last row (§18)", () => {
         const arrival = drive(race({ a: { row: 51, lane: 1, cornerStops: 0 } }), 'a', 4);
         expect(arrival).toMatchObject({ row: 55, tyres: 5, spun: false, cornerStops: 0 });
-        expect(arrival.events).toContainEqual({ type: 'overshoot', cornerId: 'gravel', rows: 4, waived: true });
+        expect(arrival.events).toContainEqual({ type: 'overshoot', cornerId: 'gravel', spaces: 4, waived: true });
     });
 
     it("is charged in full to a tow off that same last row (§12)", () => {
@@ -336,7 +339,7 @@ describe("overshoot (§10)", () => {
         // it — and RaceCarsSlipstream is the one caller that turns this off.
         const arrival = drive(race({ a: { row: 51, lane: 1, cornerStops: 0 } }), 'a', 3, { waiveUnavoidableCorner: false });
         expect(arrival).toMatchObject({ row: 54, tyres: 2 });
-        expect(arrival.events).toContainEqual({ type: 'overshoot', cornerId: 'gravel', rows: 3, waived: false });
+        expect(arrival.events).toContainEqual({ type: 'overshoot', cornerId: 'gravel', spaces: 3, waived: false });
     });
 
     it("is charged in full one row earlier, where the road still offered a stop", () => {
@@ -354,8 +357,8 @@ describe("overshoot (§10)", () => {
         const arrival = drive(state, 'a', 8);
         expect(arrival.row).toBe(17);
         expect(arrival.events.filter(event => event.type === 'overshoot')).toEqual([
-            { type: 'overshoot', cornerId: 'first', rows: 7, waived: false },
-            { type: 'overshoot', cornerId: 'second', rows: 1, waived: false },
+            { type: 'overshoot', cornerId: 'first', spaces: 7, waived: false },
+            { type: 'overshoot', cornerId: 'second', spaces: 1, waived: false },
         ]);
         expect(arrival.tyres).toBe(2);
     });
@@ -543,12 +546,18 @@ describe("the dice (§8.1)", () => {
 });
 
 describe("slipstream (§12)", () => {
-    it("is offered one or two rows behind another car, in any lane", () => {
-        expect(slipstreamOffered(race({ a: { row: 20, lane: 1 }, b: { row: 21, lane: 3 } }), 'a')).toBe(true);
+    it("is offered one or two spaces behind another car, in any lane it could tuck into", () => {
+        // Steps of the road rather than a difference of row numbers (§5.1): a
+        // row is a rank, so "in the wake of" is a question about the road
+        // between the two cars, which is what a walk of the step graph answers.
+        expect(slipstreamOffered(race({ a: { row: 20, lane: 1 }, b: { row: 21, lane: 2 } }), 'a')).toBe(true);
         expect(slipstreamOffered(race({ a: { row: 20, lane: 1 }, b: { row: 22, lane: 3 } }), 'a')).toBe(true);
+        // One row up and two lanes over is alongside, not in front: no line
+        // through the road puts this car behind that one.
+        expect(slipstreamOffered(race({ a: { row: 20, lane: 1 }, b: { row: 21, lane: 3 } }), 'a')).toBe(false);
     });
 
-    it("is not offered three rows behind, or in front", () => {
+    it("is not offered three spaces behind, or in front", () => {
         expect(slipstreamOffered(race({ a: { row: 20, lane: 1 }, b: { row: 23, lane: 1 } }), 'a')).toBe(false);
         expect(slipstreamOffered(race({ a: { row: 20, lane: 1 }, b: { row: 19, lane: 1 } }), 'a')).toBe(false);
     });
@@ -697,33 +706,36 @@ describe("the conservative line (§23.7)", () => {
 });
 
 describe("a corner whose lanes run out of step (§5.1, §10)", () => {
+    // The Kettle between two straights (testFixtures.ts): rows 0-5 are the
+    // start/finish straight, 6-13 the corner — its outside line a tile a row,
+    // its inside four tiles spread across the same eight — and 14-19 the run
+    // back to the line, where lane 1 takes three tiles to the other lanes' six.
     const kettle = (cars: Parameters<typeof race>[0]) => race(cars, { trackId: 'uneven' });
 
     it("offers only the spaces a painted corner feeds", () => {
         expect(reachableSpaces(kettle({ a: { row: 6, lane: 2 } }), 'a', 2).map(key)).toEqual(['8:2']);
-        expect(reachableSpaces(kettle({ a: { row: 6, lane: 1 } }), 'a', 2).map(key)).toEqual(['10:1']);
+        expect(reachableSpaces(kettle({ a: { row: 8, lane: 1 } }), 'a', 2).map(key)).toEqual(['10:1']);
     });
 
-    it("covers twice the road down the inside for the same roll", () => {
-        const inside = kettle({ a: { row: 6, lane: 1 } });
-        const insidePath = derivePath(inside, 'a', 5, reachableSpaces(inside, 'a', 5)[0]);
-        expect(rowsAlong(UNEVEN, insidePath)).toBe(9);
-
-        const outside = kettle({ a: { row: 6, lane: 2 } });
-        const outsidePath = derivePath(outside, 'a', 5, reachableSpaces(outside, 'a', 5)[0]);
-        expect(rowsAlong(UNEVEN, outsidePath)).toBe(5);
+    it("makes the line through a corner a real choice: the same roll, a different place", () => {
+        // Five spaces from the same tile on the straight: down the inside they
+        // are out of the corner and onto the run-out, round the outside they
+        // are still inside it. Two destinations the same number of spaces away
+        // and a different distance round the lap, which is §9's whole point.
+        const state = kettle({ a: { row: 5, lane: 1 } });
+        expect(reachableSpaces(state, 'a', 5).map(key)).toEqual(['10:2', '14:2', '16:1']);
     });
 
-    it("charges the overshoot in rows of road, and only to the line that left the corner", () => {
-        // Five spaces down the inside land two rows past the corner's last row.
-        const inside = drive(kettle({ a: { row: 6, lane: 1 } }), 'a', 5);
-        expect(inside.row).toBe(15);
-        expect(inside.events).toContainEqual({ type: 'overshoot', cornerId: 'kettle', rows: 2, waived: false });
-        expect(inside.tyres).toBe(3);
+    it("charges the overshoot in spaces driven, and only to the line that left the corner", () => {
+        // The inside line is one space past the corner when the roll runs out.
+        const inside = drive(kettle({ a: { row: 5, lane: 1 } }), 'a', 5, { lane: 1 });
+        expect(inside.row).toBe(16);
+        expect(inside.events).toContainEqual({ type: 'overshoot', cornerId: 'kettle', spaces: 1, waived: false });
+        expect(inside.tyres).toBe(4);
 
         // The same five round the outside are still inside it, and bank a stop.
-        const outside = drive(kettle({ a: { row: 6, lane: 2 } }), 'a', 5);
-        expect(outside.row).toBe(11);
+        const outside = drive(kettle({ a: { row: 5, lane: 1 } }), 'a', 5, { lane: 2 });
+        expect(outside.row).toBe(10);
         expect(outside.tyres).toBe(5);
         expect(outside.events).toContainEqual({ type: 'cornerStop', cornerId: 'kettle', banked: 1, owed: 1 });
     });
@@ -732,16 +744,17 @@ describe("a corner whose lanes run out of step (§5.1, §10)", () => {
         // Two rows short of the corner's last row, and every step out of it
         // leaves the corner — which is the waiver's own reasoning, not the row
         // number it happens to read on a circuit whose lanes run in step.
-        const arrival = drive(kettle({ a: { row: 12, lane: 1, cornerStops: 0 } }), 'a', 3);
-        expect(arrival.events).toContainEqual({ type: 'overshoot', cornerId: 'kettle', rows: 3, waived: true });
+        const arrival = drive(kettle({ a: { row: 11, lane: 1, cornerStops: 0 } }), 'a', 3);
+        expect(arrival.events).toContainEqual({ type: 'overshoot', cornerId: 'kettle', spaces: 3, waived: true });
         expect(arrival.tyres).toBe(5);
     });
 
     it("completes the lap on a step that jumps the start line (§15)", () => {
-        // Lane 1 has no space on row 0, so the inside line steps from row 23
-        // straight to row 1 — a lap that only counted on landing on row 0 is a
-        // lap this circuit could never complete.
-        const arrival = drive(kettle({ a: { row: 23, lane: 1 } }), 'a', 1);
+        // Lane 1 of the run-out takes three tiles to the other lanes' six, so
+        // its last one steps from row 18 straight to row 1 — a lap that only
+        // counted on landing on row 0 is a lap this circuit could never
+        // complete.
+        const arrival = drive(kettle({ a: { row: 18, lane: 1 } }), 'a', 1, { lane: 1 });
         expect(arrival.row).toBe(1);
         expect(arrival.lapsCompleted).toBe(1);
         expect(arrival.finished).toBe(true);

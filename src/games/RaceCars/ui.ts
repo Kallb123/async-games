@@ -49,6 +49,11 @@ export function positionOf(order: string[], userId: string): number {
  * Measured across laps as well as rows, so a leader a lap up reads as the whole
  * lap they are up rather than as a negative row number — and it is only ever
  * subtraction because `standings` has already established who is in front.
+ *
+ * Rows rather than spaces, deliberately, and one of the few numbers still quoted
+ * in them: a gap is a question about rank round the lap, which is the one thing
+ * a row is for (§5.1). Spaces would answer a different question — how many
+ * moves it takes to close — which depends on the line each car takes.
  */
 export function rowsBehindLeader(gs: IRaceCarsSpecificGameStateResponse, userId: string): number {
     const order = standings(gs);
