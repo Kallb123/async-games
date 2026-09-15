@@ -456,9 +456,12 @@ export function gameStateToResponse(
     // usual clear) so the player it happened to still sees what they rolled. That
     // held-over roll is theirs alone: a turn that ended because its player could
     // afford nothing says what they hold, so everyone else is handed exactly what
-    // a tapped "End turn" leaves — no dice, no payout, no flag. `lastRollAutoEndedBy`
-    // is the server's own bookkeeping and never goes out at all.
-    const hideAutoEndedRoll = gs.lastRollAutoEnded && gs.lastRollAutoEndedBy !== viewerId;
+    // a tapped "End turn" leaves — no dice, no payout, no flag. A viewerless
+    // response (buildAllEvents) is nobody, not the owner, so it is kept out too
+    // rather than matching a `lastRollAutoEndedBy` that has yet to be written.
+    // `lastRollAutoEndedBy` is the server's own bookkeeping and never goes out.
+    const hideAutoEndedRoll = gs.lastRollAutoEnded
+        && (viewerId === null || gs.lastRollAutoEndedBy !== viewerId);
 
     const longestRoadOwner = gs.longestRoadOwner ?? null;
     const largestArmyOwner = gs.largestArmyOwner ?? null;

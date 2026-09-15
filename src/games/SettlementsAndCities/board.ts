@@ -135,14 +135,18 @@ export interface ISACSpecificGameState {
     // with `?? []` and simply show no payout, rather than claiming a roll paid
     // nobody.
     lastRollChanges?: ISACRollChange[];
-    // Set once `sacFinishTurn` has ended the turn on its own — nothing left to
-    // build, buy or trade — rather than the player tapping "End turn", naming the
-    // player it happened to. The dice and payout above are left in place rather
-    // than cleared so the roll that caused it isn't hidden the instant it
-    // happens, and the UI reads the flag to add the "no actions were possible"
-    // note. Both reset as soon as the next roll lands (`SACRollDice`), so
-    // neither outlives the roll it explains. Only the named player is sent any
-    // of it — see `hideAutoEndedRoll` in gameStateToResponse.
+    // Set by `SACEndTurn` when the main turn it ends had nothing left to build,
+    // buy or trade, naming the player it happened to. The dice and payout above
+    // are then left in place rather than cleared, so the roll isn't hidden in the
+    // same instant the turn goes, and the UI reads the flag to add the "no
+    // actions were possible" note. Both reset as soon as the next roll lands
+    // (`SACRollDice`), so neither outlives the roll it explains.
+    //
+    // Deliberately derived from the hand the turn ended on rather than from what
+    // ended it: a turn `sacFinishTurn` ended for its player and one they tapped
+    // "End turn" on leave identical state, so there is no "that was automatic"
+    // bit to find. Only the named player is sent any of it either way — see
+    // `hideAutoEndedRoll` in gameStateToResponse.
     lastRollAutoEnded: boolean;
     lastRollAutoEndedBy: string | null;
     pendingRobber: boolean;

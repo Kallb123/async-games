@@ -120,7 +120,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "A Settlements & Cities turn that ends itself gives nothing away",
-                detail: "When your turn ended on its own because there was nothing left to build, buy or trade, the match log told everyone exactly that — so the table could work out you couldn't afford a road and were short of every resource. An automatic ending now reads as \"ended their turn\", the same as tapping the button, in the log and in the notification others get. You still see your own roll held on screen with the note explaining it.",
+                detail: "When your turn ended on its own because there was nothing left to build, buy or trade, the match log told everyone exactly that — so the table could work out you couldn't afford a road and were short of every resource. An automatic ending now reads as \"ended their turn\", the same as tapping the button — in the log, in the notification others get, and in the match review. You still see your own roll held on screen with the note explaining it.",
                 game: "settlementsandcities",
             },
             {

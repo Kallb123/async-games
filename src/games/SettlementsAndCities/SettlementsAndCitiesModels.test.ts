@@ -146,6 +146,16 @@ describe("Settlements & Cities' auto-ended turn on the wire", () => {
             expect(wire.lastRollAutoEnded).toBe(false);
         },
     );
+
+    it("keeps it from a viewerless response even when nobody is named as the owner", () => {
+        // buildAllEvents replays with viewerId null. "Nobody" must read as
+        // "not the owner" — matching a null owner against a null viewer would
+        // hand the roll to a reaction feed every player can read.
+        const state = autoEndedState();
+        state.lastRollAutoEndedBy = null;
+
+        expect(gameStateToResponse(state, NAMES, null).lastRoll).toBeNull();
+    });
 });
 
 // A roll's total (2-12) is tallied straight off SACRollDice's own recorded

@@ -1,7 +1,7 @@
 import { IGameData, IGameDataDocument } from "../mongodb/GameData";
 import { deserializeJSON } from "../apiModels/Serialisable";
 import { IGameCommand, IGameType } from "../apiModels/gameCommand";
-import { runCommand } from "./commandPipeline";
+import { runCommandChain } from "./commandPipeline";
 import { createAdapterRegistry } from "./adapterRegistry";
 import { OutbreakAction, OutbreakDiscard, OutbreakEndTurn, OutbreakPlayEvent } from "@/games/Outbreak/OutbreakLogic";
 import { IOutbreakGameData } from "@/games/Outbreak/OutbreakModels";
@@ -321,7 +321,7 @@ export async function resolveStalledTurn(
         command.senderId = userId;
         command.senderUsername = senderUsername;
 
-        const { outcome, gameOver } = await runCommand(gameData, gameType, command);
+        const { outcome, gameOver } = await runCommandChain(gameData, gameType, command);
         // A refused command is recorded nowhere (commandPipeline), so nothing
         // it may have touched on the way to refusing is accounted for either.
         // With nothing accepted before it that is still 'declined': the only

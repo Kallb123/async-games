@@ -24,7 +24,23 @@ export interface ICommandOutcome {
      * Deliberately not "any accepted command": in a crew game that would let
      * one player hold the table indefinitely by nudging one action a period.
      */
-    timerRestarts?: boolean
+    timerRestarts?: boolean,
+    /**
+     * A command the game wants run straight after this one, exactly as if the
+     * player had sent it themselves — `runCommandChain` executes it through the
+     * same pipeline, and it is *not* recorded on `commandHistory`.
+     *
+     * That last part is the point. It exists so a game can end a turn on the
+     * player's behalf without the ending being a distinguishable event:
+     * Settlements & Cities passes back an ordinary `SACEndTurn` when a roll or
+     * trade leaves its player unable to afford anything, so the log line, the
+     * push notification and the match-review timeline all read exactly as they
+     * do when that player taps "End turn". A follow-up must therefore be a
+     * *deterministic* function of the state the triggering command left behind:
+     * replaying the trigger regenerates it, which is why there is nothing to
+     * record — and why a recorded one would replay twice.
+     */
+    followUpCommand?: IGameCommand
 }
 
 export interface IGameCommand {
