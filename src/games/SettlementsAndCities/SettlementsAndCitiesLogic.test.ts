@@ -295,8 +295,8 @@ describe("Settlements & Cities — a roll that auto-ends the turn stays on scree
         expect(gs.lastRollDie1).toBe(5);
         expect(gs.lastRollDie2).toBe(3);
         expect(gs.lastRollChanges).toHaveLength(1);
-        expect(gs.lastRollHeldOver).toBe(true);
-        expect(gs.lastRollHeldOverFor).toBe("u1");
+        expect(gs.lastRollAutoEnded).toBe(true);
+        expect(gs.lastRollAutoEndedBy).toBe("u1");
     });
 
     it("clears the note, the dice and its owner as soon as the next roll lands", async () => {
@@ -310,8 +310,8 @@ describe("Settlements & Cities — a roll that auto-ends the turn stays on scree
         firstRoll.recordedRoll1 = 5;
         firstRoll.recordedRoll2 = 3;
         await run(game, firstRoll);
-        expect(gs.lastRollHeldOver).toBe(true);
-        expect(gs.lastRollHeldOverFor).toBe("u1");
+        expect(gs.lastRollAutoEnded).toBe(true);
+        expect(gs.lastRollAutoEndedBy).toBe("u1");
 
         // u2 rolls a 3 — the board's only hex needs an 8 to pay out, so this
         // roll pays no one, but u2 still has ore to trade with, so their turn
@@ -321,8 +321,8 @@ describe("Settlements & Cities — a roll that auto-ends the turn stays on scree
         secondRoll.recordedRoll2 = 2;
         const { outcome: secondOutcome } = await run(game, secondRoll);
         expect(secondOutcome.turnOver).toBe(false);
-        expect(gs.lastRollHeldOver).toBe(false);
-        expect(gs.lastRollHeldOverFor).toBeNull();
+        expect(gs.lastRollAutoEnded).toBe(false);
+        expect(gs.lastRollAutoEndedBy).toBeNull();
         expect(gs.lastRoll).toBe(3);
     });
 });

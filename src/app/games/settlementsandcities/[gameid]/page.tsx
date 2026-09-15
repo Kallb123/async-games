@@ -317,7 +317,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
         // True of a turn the game ended and one its player tapped End turn on —
         // the roll is held over for the same reason either way, and saying
         // "ended automatically" would be wrong for half of them.
-        gs?.lastRollHeldOver ? 'there was nothing left to build, buy or trade' : null,
+        gs?.lastRollAutoEnded ? 'there was nothing left to build, buy or trade' : null,
     ].filter(Boolean).join(' · ');
 
     // ── Your hand ────────────────────────────────────────────────────────────

@@ -129,7 +129,7 @@ export interface ISACSpecificGameState {
     lastRollDie2: number | null;
     // What that roll moved, per player, in turn order — only the players it
     // touched. Cleared with the rest of the last-roll fields when the turn
-    // passes — unless `lastRollHeldOver` says the turn passed on its own, in
+    // passes — unless `lastRollAutoEnded` says the turn passed on its own, in
     // which case they ride into the next turn so the roll stays visible.
     // Absent on a game whose last roll predates the field; readers answer that
     // with `?? []` and simply show no payout, rather than claiming a roll paid
@@ -140,9 +140,17 @@ export interface ISACSpecificGameState {
     // then left in place rather than cleared, so the roll isn't hidden in the
     // same instant the turn goes. Both reset as soon as the next roll lands
     // (`SACRollDice`), so neither outlives the roll it belongs to, and only the
-    // named player is sent either — see `hideHeldOverRoll` in gameStateToResponse.
-    lastRollHeldOver: boolean;
-    lastRollHeldOverFor: string | null;
+    // named player is sent either — see `hideAutoEndedRoll` in gameStateToResponse.
+    //
+    // Read it as "the roll is held over", not "the game ended this turn": it is
+    // derived from the hand the turn ended on, so a player who taps "End turn"
+    // with nothing affordable sets it too. That is deliberate — it is what leaves
+    // no "this one was automatic" bit in the state for an opponent to find. (The
+    // names are the ones already in the database; renaming a persisted field
+    // would make every game mid-hand-off at deploy read it as false and hand the
+    // held-over roll to the table, which is the leak this all exists to close.)
+    lastRollAutoEnded: boolean;
+    lastRollAutoEndedBy: string | null;
     pendingRobber: boolean;
     longestRoadOwner: string | null;
     largestArmyOwner: string | null;

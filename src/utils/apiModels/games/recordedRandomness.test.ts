@@ -101,6 +101,20 @@ describe("the command route", () => {
         expect(strip!.index).toBeLessThan(run!.index);
     });
 
+    // `timestamp` is a field initialiser on every command, so one built in a
+    // browser arrives carrying that device's clock — and that value is what
+    // stamps the player's own history lines. A command the game generates for
+    // itself (ICommandOutcome.followUpCommand) is necessarily stamped on the
+    // server, so leaving the hand-played ones alone would make "which clock
+    // stamped this" a way of telling a turn a game ended from one a player did.
+    it("stamps the command with the server's clock before running it", () => {
+        const stamp = /^[ \t]*commandRequest\.timestamp = new Date\(\)\.toISOString\(\);/m.exec(routeSource);
+        const run = /^[ \t]*(?:const .*= )?await runCommand\(/m.exec(routeSource);
+
+        expect(stamp).not.toBeNull();
+        expect(stamp!.index).toBeLessThan(run!.index);
+    });
+
     // Execute is not the first thing to read the command: the route logs
     // `myString()`, and a summary reads the recorded fields to name the roll and
     // the payout it dealt (SAC's rollChanges, Dice Cities' moneyChanges, both

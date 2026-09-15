@@ -65,3 +65,25 @@ describe("playerHistory", () => {
             .toEqual({ text: "{{user_a}} rolled a 6", actorId: "user_a" });
     });
 });
+
+describe("a history line's timestamp on the way out", () => {
+    it("is truncated to the minute it fell in", () => {
+        // Every reader renders these through formatRelativeTime ("just now",
+        // "5m ago"), so the seconds show nowhere — and sending them lets an
+        // opponent measure the gap between two lines. A command a game generated
+        // in answer to another lands milliseconds later; one a player tapped
+        // lands however long they took. That gap says which just happened.
+        const resolved = resolveHistory(
+            [{ text: "{{u1}} ended their turn", createdAt: "2026-09-15T10:00:37.412Z" }],
+            { u1: "Alice" },
+        );
+
+        expect(resolved[0].createdAt).toBe("2026-09-15T10:00:00.000Z");
+    });
+
+    it("leaves a stamp it can't read alone rather than dropping it", () => {
+        const resolved = resolveHistory([{ text: "x", createdAt: "not a date" }], {});
+
+        expect(resolved[0].createdAt).toBe("not a date");
+    });
+});

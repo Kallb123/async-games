@@ -82,9 +82,9 @@ export interface ISACSpecificGameStateResponse {
     // True when the roll above is being held past the end of its turn, because
     // its player had nothing left to build, buy or trade — the board notes as
     // much beside the dice. Only ever true for that one player; everyone else
-    // gets `false` and no roll at all (see `hideHeldOverRoll` in
+    // gets `false` and no roll at all (see `hideAutoEndedRoll` in
     // gameStateToResponse), and the state's record of who it was stays server-side.
-    lastRollHeldOver: boolean;
+    lastRollAutoEnded: boolean;
     pendingRobber: boolean;
     // Bonus holders, as stable Clerk userIds (resolve a name via playerStates).
     longestRoadOwner: string | null;

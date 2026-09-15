@@ -125,8 +125,8 @@ export function cloneSACState(
         lastRollDie1: gs.lastRollDie1,
         lastRollDie2: gs.lastRollDie2,
         lastRollChanges: cloneRollChanges(gs.lastRollChanges),
-        lastRollHeldOver: gs.lastRollHeldOver ?? false,
-        lastRollHeldOverFor: gs.lastRollHeldOverFor ?? null,
+        lastRollAutoEnded: gs.lastRollAutoEnded ?? false,
+        lastRollAutoEndedBy: gs.lastRollAutoEndedBy ?? null,
         pendingRobber: gs.pendingRobber,
         longestRoadOwner: gs.longestRoadOwner,
         largestArmyOwner: gs.largestArmyOwner,
@@ -238,8 +238,8 @@ SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
         lastRollDie1: null,
         lastRollDie2: null,
         lastRollChanges: [],
-        lastRollHeldOver: false,
-        lastRollHeldOverFor: null,
+        lastRollAutoEnded: false,
+        lastRollAutoEndedBy: null,
         pendingRobber: false,
         longestRoadOwner: null,
         largestArmyOwner: null,
@@ -357,8 +357,8 @@ function makeSACStateSchemaDef() {
             type: [{ userId: String, gained: resourcesSubSchema, discarded: Number }],
             default: undefined,
         },
-        lastRollHeldOver: Boolean,
-        lastRollHeldOverFor: { type: String, default: null },
+        lastRollAutoEnded: Boolean,
+        lastRollAutoEndedBy: { type: String, default: null },
         pendingRobber: Boolean,
         longestRoadOwner: { type: String, default: null },
         largestArmyOwner: { type: String, default: null },
@@ -457,9 +457,9 @@ export function gameStateToResponse(
     // so putting it in front of the table says so. Everyone else gets what an
     // ordinary hand-off leaves — no dice, no payout, no flag — and a viewerless
     // response (buildAllEvents) counts as everyone else rather than matching a
-    // `lastRollHeldOverFor` that has yet to be written.
-    const hideHeldOverRoll = gs.lastRollHeldOver
-        && (viewerId === null || gs.lastRollHeldOverFor !== viewerId);
+    // `lastRollAutoEndedBy` that has yet to be written.
+    const hideAutoEndedRoll = gs.lastRollAutoEnded
+        && (viewerId === null || gs.lastRollAutoEndedBy !== viewerId);
 
     const longestRoadOwner = gs.longestRoadOwner ?? null;
     const largestArmyOwner = gs.largestArmyOwner ?? null;
@@ -481,14 +481,14 @@ export function gameStateToResponse(
         pendingRoadSetup: gs.pendingRoadSetup,
         lastSetupSettlementVertex: gs.lastSetupSettlementVertex,
         hasRolled: gs.hasRolled,
-        lastRoll: hideHeldOverRoll ? null : gs.lastRoll,
-        lastRollDie1: hideHeldOverRoll ? null : gs.lastRollDie1,
-        lastRollDie2: hideHeldOverRoll ? null : gs.lastRollDie2,
+        lastRoll: hideAutoEndedRoll ? null : gs.lastRoll,
+        lastRollDie1: hideAutoEndedRoll ? null : gs.lastRollDie1,
+        lastRollDie2: hideAutoEndedRoll ? null : gs.lastRollDie2,
         // Field by field rather than by reference: these come off a live Mongoose
         // document, and sending the subdocuments as they are would ship their
         // internals (and an `_id` per row) along with them.
-        lastRollChanges: hideHeldOverRoll ? [] : cloneRollChanges(gs.lastRollChanges),
-        lastRollHeldOver: !hideHeldOverRoll && (gs.lastRollHeldOver ?? false),
+        lastRollChanges: hideAutoEndedRoll ? [] : cloneRollChanges(gs.lastRollChanges),
+        lastRollAutoEnded: !hideAutoEndedRoll && (gs.lastRollAutoEnded ?? false),
         pendingRobber: gs.pendingRobber,
         longestRoadOwner,
         largestArmyOwner,

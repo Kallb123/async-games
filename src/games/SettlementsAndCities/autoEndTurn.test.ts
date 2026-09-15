@@ -128,7 +128,7 @@ describe("Settlements & Cities — a turn the game ends for you", () => {
         const final = automatic[automatic.length - 1].specificGameState as ISACSpecificGameStateResponse;
 
         expect(final.lastRoll).toBe(8);
-        expect(final.lastRollHeldOver).toBe(true);
+        expect(final.lastRollAutoEnded).toBe(true);
     });
 
     it("holds it for a player who taps End turn with nothing left to do, too", async () => {
@@ -139,7 +139,7 @@ describe("Settlements & Cities — a turn the game ends for you", () => {
         const final = chosen[chosen.length - 1].specificGameState as ISACSpecificGameStateResponse;
 
         expect(final.lastRoll).toBe(8);
-        expect(final.lastRollHeldOver).toBe(true);
+        expect(final.lastRollAutoEnded).toBe(true);
     });
 });
 
@@ -171,7 +171,7 @@ function comparable(snapshots: ITurnSnapshot[]) {
                 lastRollDie1: state.lastRollDie1,
                 lastRollDie2: state.lastRollDie2,
                 lastRollChanges: state.lastRollChanges,
-                lastRollHeldOver: state.lastRollHeldOver,
+                lastRollAutoEnded: state.lastRollAutoEnded,
             },
         };
     });

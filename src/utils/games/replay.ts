@@ -1,10 +1,10 @@
 import { IGameData } from "../mongodb/GameData";
 import { UNKNOWN_PLAYER_NAME } from "../ui/players";
-import { IHistoryEntry, resolveHistory, resolveTokens } from "./history";
+import { IHistoryEntry, resolveHistory, resolveTokens, toTheMinute } from "./history";
 import { IGameCommand, IGameType, ICommandOutcome } from "../apiModels/GameLogic";
 import type { GameResultEvent } from "../apiModels/GameDataApi";
 import { deserializeJSON } from "../apiModels/Serialisable";
-import { runCommand } from "./commandPipeline";
+import { isRecordedFollowUpOf, runCommand } from "./commandPipeline";
 import { createAdapterRegistry } from "./adapterRegistry";
 import { buildInitialSnakesAndLaddersState, gameStateToModel as snakesAndLaddersStateToModel, ISnakesAndLaddersGameData } from "@/games/SnakesAndLadders/SnakesAndLaddersModels";
 import { buildInitialDiceCitiesState, gameStateToModel as diceCitiesStateToModel, IDiceCitiesGameData } from "@/games/DiceCities/DiceCitiesModels";
@@ -350,7 +350,7 @@ export async function buildTimeline(
                 ? {
                       senderId: command.senderId,
                       senderUsername: command.senderUsername,
-                      timestamp: command.timestamp,
+                      timestamp: toTheMinute(command.timestamp),
                       summary: resolveTokens(command.myString(), historyNames),
                   }
                 : null,
@@ -360,16 +360,6 @@ export async function buildTimeline(
 
     // Initial state.
     snapshot(null, false);
-
-    // Whether `raw` — the next entry in the list being replayed — is the recorded
-    // copy of `generated`. Compared on what a stored command reliably carries and
-    // a regenerated one reproduces: its class and who sent it. Its id and
-    // timestamp deliberately differ, which is the whole reason to prefer the
-    // recorded one.
-    const isRecordedAt = (raw: unknown, generated: IGameCommand): boolean => {
-        const next = raw as { className?: string, senderId?: string } | undefined;
-        return next?.className === generated.className && next?.senderId === generated.senderId;
-    };
 
     // Applies an ordered list of raw commands, snapshotting after each. Returns
     // true if the game ended part-way through.
@@ -396,6 +386,9 @@ export async function buildTimeline(
             // see ICommandOutcome.followUpCommand.
             const { outcome, gameOver } = await runCommand(state, gameType, command, {
                 onStep: (applied, appliedOutcome) => {
+                    // Every command actually applied, the follow-ups among them:
+                    // this is the plan handed back to the client to resend.
+                    resolvedOut?.push(applied);
                     snapshot(applied, planned);
                     onStep?.({
                         prev: snapshots[snapshots.length - 2],
@@ -405,23 +398,22 @@ export async function buildTimeline(
                         planned,
                     });
                 },
-                // A follow-up was recorded when it ran, so it is already the next
-                // entry in this very list and the loop will apply it in a moment —
-                // with the id and timestamp its history line was stamped with.
-                // Running the regenerated one as well would apply it twice, which
-                // (in a game whose Special Build phase leaves a second end turn
-                // legal) quietly ends somebody else's turn too.
+                // A follow-up was recorded when it ran, marked with the id of the
+                // command it answered, so it is already the next entry in this very
+                // list and the loop will apply it in a moment — with the id and
+                // timestamp its history line was stamped with. Running the
+                // regenerated one as well would apply it twice, which (in a game
+                // whose Special Build phase leaves a second end turn legal) quietly
+                // ends somebody else's turn too.
                 //
-                // A turn played before its game recorded follow-ups has none in
-                // the list, so there the regenerated one is what keeps the replay
+                // A turn played before its game recorded follow-ups carries no such
+                // entry, so there the regenerated one is what keeps the replay
                 // faithful to the turn as it happened.
-                resolveFollowUp: generated => (isRecordedAt(rawCommands[index + 1], generated) ? null : generated),
+                resolveFollowUp: (generated, trigger) =>
+                    (isRecordedFollowUpOf(rawCommands[index + 1], trigger.id) ? null : generated),
             });
             if (!outcome.validMove) {
                 continue;
-            }
-            if (resolvedOut) {
-                resolvedOut.push(command);
             }
             if (gameOver) {
                 return true;

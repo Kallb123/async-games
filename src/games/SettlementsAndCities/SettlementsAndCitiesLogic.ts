@@ -238,13 +238,13 @@ function sacFinishTurn(sacData: ISettlementsAndCitiesGameData, userId: string, t
 
 // Ends a regular main turn: reset per-turn flags, promote freshly-bought dev
 // cards to playable, and pass the dice to the next seat in turn order. When
-// `lastRollHeldOver` is set the turn ended on its own rather than a player
+// `lastRollAutoEnded` is set the turn ended on its own rather than a player
 // tapping "End turn", so the roll that caused it is left in place — cleared,
 // like the flag itself, only once the next roll lands and overwrites both.
 function sacAdvanceMainTurn(sacData: ISettlementsAndCitiesGameData): void {
     const gs = sacData.specificGameState;
     gs.hasRolled = false;
-    if (!gs.lastRollHeldOver) {
+    if (!gs.lastRollAutoEnded) {
         gs.lastRoll = null;
         gs.lastRollDie1 = null;
         gs.lastRollDie2 = null;
@@ -568,8 +568,8 @@ export class SACRollDice implements IGameCommand {
         gs.lastRollDie2 = die2;
         // This roll's own outcome decides whether the note belongs — never the
         // stale flag (or stale owner) from whatever ended the previous turn.
-        gs.lastRollHeldOver = false;
-        gs.lastRollHeldOverFor = null;
+        gs.lastRollAutoEnded = false;
+        gs.lastRollAutoEndedBy = null;
 
         // What this roll moved, per player, built up as it resolves and then
         // parked on the state: the board screen, the turn recap and the history
@@ -1121,8 +1121,8 @@ export class SACEndTurn implements IGameCommand {
         // byte-identical state — there is no "this one was automatic" to leak.
         const ps = gs.playerStates.get(this.senderId);
         if (!gs.specialBuildActive && ps && !sacHasAnyAction(gs, this.senderId, ps)) {
-            gs.lastRollHeldOver = true;
-            gs.lastRollHeldOverFor = this.senderId;
+            gs.lastRollAutoEnded = true;
+            gs.lastRollAutoEndedBy = this.senderId;
         }
         sacData.gameState.history.unshift(playerHistory(
             this.senderId,
