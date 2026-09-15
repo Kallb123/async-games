@@ -190,9 +190,11 @@ does two things that rule cannot say, and both of them live on a corner:
   the outside of a corner is not somewhere a car crosses freely: those spaces
   feed the space in front of them, and that is all.
 - **Lanes need not run in step.** The inside of a corner is the short way round,
-  so it covers the same rows in fewer spaces than the outside — four against
-  eight is an ordinary hairpin. Past the corner the two lanes are level with
-  each other again, but the number of spaces behind them is not.
+  so it covers the same stretch in fewer spaces than the outside — four against
+  eight is an ordinary hairpin, and a tight right-hander drawn with a **single**
+  tile on the inside against five on the outside is the extreme the boards
+  actually use. Past the corner the two lanes are level with each other again,
+  but the number of spaces behind them is not.
 
 ```
 lane 2, the outside:  ■ ■ ■ ■ ■ ■ ■ ■     rows 6 7 8 9 10 11 12 13

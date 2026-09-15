@@ -451,6 +451,9 @@ describe("a corner whose lanes do not run in step (§5.1)", () => {
             // A three-lane road through a real corner: every route of eight
             // spaces from the end of The Mile, over Gravel Bend and out.
             { track: ASHCOMBE, from: { row: 46, lane: 2 }, steps: 8 },
+            // And the one-inside, five-outside right-hander below, where the
+            // lines through the corner differ most.
+            { track: RIGHT_HANDER, from: { row: 2, lane: 2 }, steps: 8 },
         ];
         for (const start of starts) {
             for (let steps = 1; steps <= start.steps; steps++) {
@@ -528,6 +531,67 @@ describe("a staggered straight, drawn half a tile out of step (§5.1)", () => {
                 expect(rowsBetween(STAGGERED, space.row, exit.row)).toBeGreaterThan(0);
             }
         }
+    });
+});
+
+// The corner the board art actually draws at a 90° right-hander: the inside
+// lane is **one** tile, the middle three, the outside five. The most extreme
+// version of "lanes need not run in step" a real circuit asks for, and the one
+// the old row-counting model could not hold at all — the lanes came out of it
+// four apart.
+const RIGHT_HANDER = testTrack([
+    { id: 'approach', name: 'Approach', length: 3, lanes: 3, corner: null },
+    {
+        id: 'bend', name: 'The Bend', lanes: 3, corner: { stops: 1 },
+        tiles: [
+            // The inside: one tile, and the only way off it is out of the corner.
+            { id: 'bend.1.0', lane: 1, exits: ['run.1.0', 'run.2.0'] },
+            ...[0, 1, 2].map(index => ({
+                id: `bend.2.${index}`,
+                lane: 2,
+                exits: index < 2 ? [`bend.2.${index + 1}`] : ['run.1.0', 'run.2.0', 'run.3.0'],
+            })),
+            ...[0, 1, 2, 3, 4].map(index => ({
+                id: `bend.3.${index}`,
+                lane: 3,
+                exits: index < 4 ? [`bend.3.${index + 1}`] : ['run.2.0', 'run.3.0'],
+            })),
+        ],
+    },
+    { id: 'run', name: 'Run to the Line', length: 3, lanes: 3, corner: null },
+]);
+
+describe("a corner of one tile inside and five outside (§5.1)", () => {
+    it("ranks all three lanes against the outside line's extent", () => {
+        expect(RIGHT_HANDER.rows).toBe(11);
+        expect(RIGHT_HANDER.corners).toEqual([{ id: 'bend', name: 'The Bend', from: 3, to: 7, stops: 1 }]);
+        const rowsIn = (lane: number) => RIGHT_HANDER.spaces
+            .filter(space => space.cornerId === 'bend' && space.lane === lane)
+            .map(space => space.row);
+        // Five rows of corner: the outside takes one a tile, the middle three
+        // of them, and the inside's single tile ranks in the middle of the lot.
+        expect(rowsIn(3)).toEqual([3, 4, 5, 6, 7]);
+        expect(rowsIn(2)).toEqual([4, 5, 6]);
+        expect(rowsIn(1)).toEqual([5]);
+    });
+
+    it("takes the whole corner in one step down the inside, and five round the outside", () => {
+        // Entering it is a single step covering three rows of road.
+        expect(stepsFrom(RIGHT_HANDER, 2, 1)).toContainEqual({ row: 5, lane: 1 });
+        // And there is nowhere to go from there but out, which is §10's waiver.
+        expect(waivedCornerIdAt(RIGHT_HANDER, 5, 1)).toBe('bend');
+        expect(waivedCornerIdAt(RIGHT_HANDER, 5, 3)).toBeNull();
+    });
+
+    it("charges the inside line for the spaces it is past, not the rows", () => {
+        // Two spaces down the inside are out of the corner and one space past
+        // it; two round the outside are three tiles from leaving.
+        const inside = [{ row: 2, lane: 1 }, { row: 5, lane: 1 }, { row: 8, lane: 1 }];
+        expect(cornerExits(RIGHT_HANDER, inside).map(exit => [exit.corner.id, exit.spacesPast])).toEqual([
+            ['bend', 1],
+        ]);
+        const outside = [{ row: 2, lane: 3 }, { row: 3, lane: 3 }, { row: 4, lane: 3 }];
+        expect(cornerExits(RIGHT_HANDER, outside)).toEqual([]);
     });
 });
 
