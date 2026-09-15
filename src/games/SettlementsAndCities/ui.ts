@@ -1,6 +1,9 @@
 import type { ISACRollChange, SAC_DevCard, SAC_Resource } from './board';
 import { SAC_RESOURCES } from './board';
 
+/** Rematch-link key for the random-tiles option (see utils/ui/rematch.ts). */
+export const SAC_RANDOM_TILES_PARAM = "randomtiles";
+
 // ─── Development-card presentation metadata ────────────────────────────────────
 // Shared between the in-game hand (board page) and the actions sheet so the icon,
 // name and one-line blurb for each dev card are defined in exactly one place.

@@ -12,7 +12,7 @@ import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import usePlayerList from "@/utils/hooks/usePlayerList";
 import { useCreateLobbyOrInvite } from "@/utils/hooks/useCreateLobbyOrInvite";
 import { GAME_META } from "@/utils/ui/games";
-import { readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
+import { readRematchFlag, readRematchPlayers, readRematchTurnTimer } from "@/utils/ui/rematch";
 import { SettlementsAndCitiesInvitationRequest } from "@/games/SettlementsAndCities/SettlementsAndCitiesModels";
 import {
   SACExpansionId,
@@ -22,6 +22,7 @@ import {
   normaliseExpansions,
   validateExpansions,
 } from "@/games/SettlementsAndCities/expansions";
+import { SAC_RANDOM_TILES_PARAM } from "@/games/SettlementsAndCities/ui";
 import { useToast } from "@/components/ToastContext";
 
 // A rematch link carries enabled expansion ids as a comma-separated list
@@ -73,6 +74,7 @@ function NewGameSettlementsAndCitiesForm() {
   const { userList, setItem, players } = usePlayerList(readRematchPlayers(searchParams));
   const [turnTimer, setTurnTimer] = useState(() => readRematchTurnTimer(searchParams, "1d"));
   const [expansions, setExpansions] = useState(() => expansionsFromParam(searchParams.get('expansions')));
+  const [randomTiles, setRandomTiles] = useState(() => readRematchFlag(searchParams, SAC_RANDOM_TILES_PARAM));
   const { showToast } = useToast();
   const gameMeta = GAME_META.settlementsandcities;
   const { seatCount, setSeatCount, maxSeats, partySize, canSubmit, actionLabel, footnote, submit } = useCreateLobbyOrInvite({
@@ -102,6 +104,7 @@ function NewGameSettlementsAndCitiesForm() {
       userList: players,
       turnTimer,
       expansions,
+      randomTiles,
     };
     await submit(data);
   };
@@ -117,6 +120,22 @@ function NewGameSettlementsAndCitiesForm() {
       <UserInviteList userList={userList} setItem={setItem} />
       <SeatCountSelect value={seatCount} onChange={setSeatCount} max={maxSeats} />
       <TurnTimerSelect value={turnTimer} onChange={setTurnTimer} />
+
+      <OptionSection
+        label="Board setup"
+        footer={<p className="ag-hint">
+          Boards are balanced by default: the red numbers — the 6s and 8s, the likeliest
+          rolls on the board — never end up on hexes that touch. The terrain is shuffled
+          either way, so the island is different every game.
+        </p>}
+      >
+        <OptionToggleRow
+          title="Totally random tiles"
+          description="Deal the numbers with no constraint, so the 6s and 8s may touch — one corner of the map can end up worth far more than the rest."
+          on={randomTiles}
+          onToggle={() => setRandomTiles(v => !v)}
+        />
+      </OptionSection>
 
       <OptionSection
         label="Expansions"

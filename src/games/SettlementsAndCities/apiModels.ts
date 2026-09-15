@@ -115,6 +115,10 @@ export interface ISACSpecificGameStateResponse {
     specialBuildActive: boolean;
     specialBuildQueue: string[];
     specialBuildMainPlayer: string | null;
+    // Whether the numbers were dealt with no constraint rather than the
+    // balanced layout a game gets by default. Public, like the board it
+    // describes, and true for every game dealt before the option existed.
+    randomTiles: boolean;
     // Active expansions and the VP target they imply (design doc §8).
     expansions: SACExpansions;
     victoryTarget: number;

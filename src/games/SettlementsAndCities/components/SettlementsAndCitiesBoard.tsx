@@ -1,7 +1,7 @@
 'use client'
 import React from 'react';
 import BoardZoom from '@/components/ui/BoardZoom';
-import { BOARD_TOPOLOGY, SAC_RESOURCES } from '@/games/SettlementsAndCities/board';
+import { BOARD_TOPOLOGY, SAC_RESOURCES, isRedNumber } from '@/games/SettlementsAndCities/board';
 import type { ISACHexResponse, ISACVertexResponse, ISACEdgeResponse, ISACHarborResponse } from '@/games/SettlementsAndCities/apiModels';
 import { SAC_RESOURCE_EMOJI, type SACSpotKind } from '@/games/SettlementsAndCities/ui';
 
@@ -126,7 +126,7 @@ export default function SettlementsAndCitiesBoard({
                                     cx={cx}
                                     cy={cy}
                                     r={14}
-                                    fill={hex.numberToken === 6 || hex.numberToken === 8 ? '#ffd5d5' : '#fffde7'}
+                                    fill={isRedNumber(hex.numberToken) ? '#ffd5d5' : '#fffde7'}
                                     stroke="#ccc"
                                     strokeWidth={1}
                                     style={{ pointerEvents: 'none' }}
@@ -137,7 +137,7 @@ export default function SettlementsAndCitiesBoard({
                                     textAnchor="middle"
                                     fontSize={13}
                                     fontWeight="bold"
-                                    fill={hex.numberToken === 6 || hex.numberToken === 8 ? '#c0392b' : '#333'}
+                                    fill={isRedNumber(hex.numberToken) ? '#c0392b' : '#333'}
                                     style={{ pointerEvents: 'none' }}
                                 >
                                     {hex.numberToken}

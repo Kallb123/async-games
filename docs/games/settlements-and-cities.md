@@ -35,6 +35,17 @@ The modular nature of the board ensures no two games are exactly alike.
 
 1. **The Island:** Shuffle and randomly place the 19 terrain hexes within the sea frame.
 2. **Number Tokens:** Place tokens on each resource hex (alphabetically spiraling inward, then flipped face-up). The Desert receives no token.
+   * **Balanced by default:** the numbers are dealt so that no two *red* tokens
+     — the 6s and the 8s, the likeliest rolls once the 7 is set aside — sit on
+     hexes that share a side. That is the one constraint Catan's own setup
+     places on a variable layout, and it is the board every game gets unless
+     its host says otherwise. Only the numbers are constrained: the terrain is
+     shuffled either way, so a balanced island is still a different island
+     every game.
+   * **Totally random tiles (opt-out, on the setup screen):** drops that
+     constraint and deals the numbers raw, red tokens allowed to touch — which
+     can leave one corner of the map worth far more than the rest. Recorded in
+     the game's history, since it is the deviation rather than the default.
 3. **The Robber:** Placed on the Desert hex.
 4. **Initial Placement:** Players roll to determine turn order. In a "snake draft" format (1-2-3-4-4-3-2-1), each player places one Settlement at a hex intersection and one connected Road. Players receive one starting resource for each hex adjacent to their *second* placed settlement.
 

@@ -67,6 +67,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Settlements & Cities boards are balanced now",
+                detail: "The numbers are dealt the way Catan's own rules ask: no two red tokens — the 6s and 8s, the likeliest rolls on the board — on hexes that touch, so nobody's first settlement lands on a corner that runs away with the game. The terrain is still shuffled, so the island is different every time. Want the old free-for-all? Switch Totally random tiles on when you set up a game and the numbers are dealt with no rules at all, unbalanced map and all.",
+                game: "settlementsandcities",
+            },
+            {
                 title: "Add or change your password from Settings",
                 detail: "Signed in with Google or Microsoft? You can now add a password too, so you're never locked out if that account changes. Already have one? Change it from the same place — under Settings › Password.",
             },
@@ -106,10 +111,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Send a meme in a game's chat",
                 detail: "There's now an IMG button beside the GIF one: tap it to search KLIPY's meme collection and send a result the same way — tap to send, with whatever you've typed going underneath as a caption.",
-            },
-            {
-                title: "Send a GIF in a game's chat",
-                detail: "There's a GIF button beside the message box now: tap it, search for what you're after, and tap a result to send it. Type a line first and it goes underneath as a caption. GIFs play in the thread, or sit still with a play button if you've asked your phone for less motion, and if they can't be reached you can still send a message as normal.",
             },
         ],
     },

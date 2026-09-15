@@ -38,10 +38,14 @@ import {
 
 export interface SettlementsAndCitiesInvitationRequest extends IInvitationRequest {
     expansions: SACExpansions;
+    /** Deal the numbers with no constraint at all, rather than the balanced
+     *  layout (no two red 6/8 hexes touching) a game gets by default. */
+    randomTiles: boolean;
 }
 
 export interface ISettlementsAndCitiesInvitationData extends IInvitationData {
     expansions: SACExpansions;
+    randomTiles: boolean;
 }
 
 export interface ISettlementsAndCitiesInvitationDataDocument
@@ -132,6 +136,7 @@ export function cloneSACState(
         specialBuildActive: gs.specialBuildActive ?? false,
         specialBuildQueue: [...(gs.specialBuildQueue ?? [])],
         specialBuildMainPlayer: gs.specialBuildMainPlayer ?? null,
+        randomTiles: gs.randomTiles ?? true,
         expansions: normaliseExpansions(gs.expansions),
         victoryTarget: gs.victoryTarget ?? 10,
     };
@@ -162,6 +167,7 @@ const expansionsSubSchema = {
 var SettlementsAndCitiesInvitationSchema = new Schema<ISettlementsAndCitiesInvitationDataDocument>(
     {
         expansions: expansionsSubSchema,
+        randomTiles: Boolean,
     },
     { discriminatorKey: 'kind' },
 );
@@ -175,6 +181,10 @@ SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
 
     const expansions = normaliseExpansions(this.expansions);
     const victoryTarget = computeVictoryTarget(expansions);
+    // Balanced unless the host asked for the raw deal — so an invite sent
+    // before the option existed (no field at all) gets today's default board
+    // rather than being held to the old behaviour.
+    const randomTiles = this.randomTiles === true;
 
     const { turnOrder, history } = rollOffTurnOrder(userIdList);
 
@@ -183,8 +193,13 @@ SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
         history.push({ text: `Setup: expansions enabled — ${enabledNames.join(', ')}` });
     }
     history.push({ text: `Setup: first to ${victoryTarget} victory points wins` });
+    // Only the deviation is worth a line: the balanced board is the house
+    // default, and a log that announced it every game would say nothing.
+    if (randomTiles) {
+        history.push({ text: 'Setup: totally random tiles — red numbers (6 and 8) may touch' });
+    }
 
-    const { hexes, harbors, desertHexIndex } = generateBoard();
+    const { hexes, harbors, desertHexIndex } = generateBoard(randomTiles);
 
     const playerStates = new Map<string, ISACPlayerState>();
     for (const userId of userIdList) {
@@ -234,6 +249,7 @@ SettlementsAndCitiesInvitationSchema.methods.CreateGame = async function(
         specialBuildActive: false,
         specialBuildQueue: [],
         specialBuildMainPlayer: null,
+        randomTiles,
         expansions,
         victoryTarget,
     };
@@ -352,6 +368,7 @@ function makeSACStateSchemaDef() {
         specialBuildActive: Boolean,
         specialBuildQueue: [String],
         specialBuildMainPlayer: { type: String, default: null },
+        randomTiles: Boolean,
         expansions: expansionsSubSchema,
         victoryTarget: Number,
     };
@@ -475,6 +492,7 @@ export function gameStateToResponse(
         specialBuildActive: gs.specialBuildActive ?? false,
         specialBuildQueue,
         specialBuildMainPlayer,
+        randomTiles: gs.randomTiles ?? true,
         expansions: normaliseExpansions(gs.expansions),
         victoryTarget: gs.victoryTarget ?? 10,
     };

@@ -7,7 +7,7 @@ import { uuidString } from "@/utils/apiModels/GameDataApi";
 import type { ISACGameDataResponse, ISACSpecificGameStateResponse } from "@/games/SettlementsAndCities/apiModels";
 import { BOARD_TOPOLOGY, NO_RESOURCES, SAC_RESOURCES, calculateLongestRoad, isValidSettlementVertex, isValidRoadEdge, isValidSetupRoadEdge } from "@/games/SettlementsAndCities/board";
 import { SAC_EXPANSION_IDS, enabledExpansionNames, normaliseExpansions } from "@/games/SettlementsAndCities/expansions";
-import { SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER, SAC_RESOURCE_EMOJI, sacRollChangeParts, type SACSpotKind } from "@/games/SettlementsAndCities/ui";
+import { SAC_RANDOM_TILES_PARAM, SAC_DEV_CARD_META, SAC_DEV_CARD_ORDER, SAC_RESOURCE_EMOJI, sacRollChangeParts, type SACSpotKind } from "@/games/SettlementsAndCities/ui";
 import SettlementsAndCitiesBoard from "@/games/SettlementsAndCities/components/SettlementsAndCitiesBoard";
 import SettlementsAndCitiesActions, { SACBoardMode } from "@/games/SettlementsAndCities/components/SettlementsAndCitiesActions";
 import GameShell from "@/components/ui/GameShell";
@@ -30,6 +30,7 @@ import { useHistoryReactions } from "@/utils/hooks/useHistoryReactions";
 import { useSubmitCommand, type SubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { playerColourForId } from "@/utils/ui/playerColours";
 import { abandonedGameStatus, isPlayersTurn, nameForUserId, scoreboardSeatOrder } from "@/utils/ui/players";
+import { rematchFlag } from "@/utils/ui/rematch";
 import {
     SACPlaceSettlementSetup,
     SACPlaceRoadSetup,
@@ -385,7 +386,10 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
                     userIdList={userIdList}
                     myUserId={myUserId}
                     turnTimer={gameData?.turnTimer}
-                    extraParams={{ expansions: enabledExpansionIds.join(',') }}
+                    extraParams={{
+                        expansions: enabledExpansionIds.join(','),
+                        ...rematchFlag(SAC_RANDOM_TILES_PARAM, gs?.randomTiles === true),
+                    }}
                 />
             )}
 
