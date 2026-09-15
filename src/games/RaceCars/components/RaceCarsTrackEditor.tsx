@@ -182,8 +182,11 @@ export default function RaceCarsTrackEditor() {
             const asDefault = sameExits(nextExits, tileDefaultExits(prev.tiles, tile));
             return {
                 ...prev,
+                // A hand edit is authored, even one starting from an auto-connect
+                // — so it clears autoExits and, from here on, auto-connect leaves
+                // it alone like any other hand-drawn override.
                 tiles: prev.tiles.map(t => (spaceKey(t.row, t.lane) === fromKey
-                    ? { ...t, exits: asDefault ? undefined : nextExits }
+                    ? { ...t, exits: asDefault ? undefined : nextExits, autoExits: undefined }
                     : t)),
             };
         });
@@ -202,7 +205,9 @@ export default function RaceCarsTrackEditor() {
                     if (!tile.exits) return tile;
                     const kept = tile.exits.filter(exit => spaceKey(exit.row, exit.lane) !== key);
                     if (kept.length === tile.exits.length) return tile;
-                    return { ...tile, exits: kept.length > 0 ? kept : undefined };
+                    return kept.length > 0
+                        ? { ...tile, exits: kept }
+                        : { ...tile, exits: undefined, autoExits: undefined };
                 }),
             };
         });
@@ -412,7 +417,9 @@ export default function RaceCarsTrackEditor() {
                         </div>
                         <p className="ag-hint">
                             Auto-connect rebuilds each tile&apos;s steps from where the tiles sit, not from row+1 — the way a
-                            sharp corner&apos;s lanes fall back into step. It leaves your hand-drawn exits alone.
+                            sharp corner&apos;s lanes fall back into step. It only connects to the closest tile in the same
+                            lane or one lane over, never skipping a lane, and leaves your hand-drawn exits alone — run it
+                            again after moving tiles and it will redraw only what it drew itself last time.
                         </p>
                     </div>
                 </Section>
@@ -435,7 +442,7 @@ export default function RaceCarsTrackEditor() {
                         state={state}
                         tile={selected}
                         onPatch={patch => patchTile(spaceKey(selected.row, selected.lane), patch)}
-                        onResetExits={() => patchTile(spaceKey(selected.row, selected.lane), { exits: undefined })}
+                        onResetExits={() => patchTile(spaceKey(selected.row, selected.lane), { exits: undefined, autoExits: undefined })}
                         onDelete={() => deleteTile(spaceKey(selected.row, selected.lane))}
                     />
                 )}
@@ -684,7 +691,7 @@ function SelectedTilePanel({ state, tile, onPatch, onResetExits, onDelete }: {
 
                 <p className="ag-hint">
                     Steps out: {effectiveExits(state.tiles, tile).map(e => `${e.row}:${e.lane}`).join(', ') || 'none'}
-                    {tile.exits ? ' (overridden)' : ' (default §5.1 rule)'}.
+                    {tile.exits ? (tile.autoExits ? ' (auto-connected — a re-run may redraw this)' : ' (hand-drawn override)') : ' (default §5.1 rule)'}.
                 </p>
 
                 <div className="ag-btn-row ag-btn-row--wrap">
