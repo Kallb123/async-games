@@ -60,6 +60,7 @@ export function makeState(overrides: Partial<ISACSpecificGameState> = {}): ISACS
         specialBuildActive: false,
         specialBuildQueue: [],
         specialBuildMainPlayer: null,
+        balancedSetup: false,
         expansions: {
             seasAndSailors: false,
             knightsAndCommerce: false,
