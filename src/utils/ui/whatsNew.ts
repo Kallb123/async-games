@@ -67,6 +67,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Every game shows when it's waiting",
+                detail: "The \"Sending\" badge in a game's top bar is now a pulsing bar along the bottom edge of it — and it lights up for everything the game is waiting on, not just the move you have made: your move going out, an opponent's move coming back, and the match review being built. It sits inside the bar, so nothing on screen shifts when it comes and goes.",
+            },
+            {
                 title: "Settlements & Cities boards are balanced now",
                 detail: "The numbers are dealt the way Catan's own rules ask: no two red tokens — the 6s and 8s, the likeliest rolls on the board — on hexes that touch, so nobody's first settlement lands on a corner that runs away with the game. The terrain is still shuffled, so the island is different every time. Want the old free-for-all? Switch Totally random tiles on when you set up a game and the numbers are dealt with no rules at all, unbalanced map and all.",
                 game: "settlementsandcities",
@@ -107,10 +111,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Open chat and turn history from the bottom of the page too",
                 detail: "Both panels used to only open from the 💬 and 📜 buttons up in the top bar — on a tall board that meant scrolling all the way back up just to open or close one. Their titles at the bottom of the page are now buttons of their own: tap either to open it, and tap it again to close, right where you already are.",
-            },
-            {
-                title: "Send a meme in a game's chat",
-                detail: "There's now an IMG button beside the GIF one: tap it to search KLIPY's meme collection and send a result the same way — tap to send, with whatever you've typed going underneath as a caption.",
             },
         ],
     },

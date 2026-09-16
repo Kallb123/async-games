@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { IGameCommand } from "@/utils/apiModels/GameLogic";
 import { IHistoryEntryResponse } from "@/utils/apiModels/GameDataApi";
+import { REQUEST_TIMEOUT_MS } from "./fetchWithSessionRetry";
 
 // One reconstructed point on the game timeline (mirrors the server ITurnSnapshot).
 export interface ITurnSnapshot<TState = unknown> {
@@ -60,6 +61,13 @@ export function useTurnNavigation<TState>(gameId: string, live: LiveGameView<TSt
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ plannedCommands: planned }),
+                    // Without a deadline a stalled connection never settles, so
+                    // the `finally` below never runs and `loading` stays true —
+                    // which now means the shell's loading bar pulses for the
+                    // rest of the session. `useSubmitCommand` guards its own
+                    // POST the same way. The `catch` below turns the abort into
+                    // the ordinary error path.
+                    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
                 });
                 if (!res.ok) {
                     throw new Error("Unable to load timeline");

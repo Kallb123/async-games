@@ -60,7 +60,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     const { gameid } = use(params);
     const gameId = gameid;
 
-    const { gameData, setGameData, getGameData } = useGameData<ISACGameDataResponse>(gameId);
+    const { gameData, setGameData, getGameData, loading: loadingGame } = useGameData<ISACGameDataResponse>(gameId);
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
 
     const { submitCommand: sendCommand, submitting, pendingTarget } = useSubmitCommand<ISACGameDataResponse>(gameId, user, setGameData, getGameData);
@@ -368,7 +368,7 @@ export default function GameSettlementsAndCities({ params }: { params: Promise<{
     }
 
     return (
-        <GameShell title="Settlements & Cities" subtitle={subtitle} options={gs ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }}>
+        <GameShell title="Settlements & Cities" subtitle={subtitle} options={gs ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }}>
             <FcmTokenComp />
 
             {gameGuide.open && <GameGuideModal guide={settlementsAndCitiesGuide} onClose={gameGuide.closeGuide} />}

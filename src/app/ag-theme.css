@@ -184,7 +184,7 @@ button {
 }
 
 /* Same badge, recoloured for the dark bar it sits on — the same white scrim
-   `.ag-sync-pill` already uses there, rather than a third opacity. */
+   the top bar's loading track already uses there, rather than a third opacity. */
 [data-env="dev"] .ag-game-topbar:not(:has(.ag-dev-badge))::after,
 .ag-dev-badge {
     background: rgba(255, 255, 255, 0.12);
@@ -3909,9 +3909,10 @@ button.ag-tt-ticket { cursor: pointer; }
         verb at 120 ms (a swap any sooner reads as a flicker on a fast reply);
      2. the object the command acts on wears a marching-ant pending skin, so a
         board tap is acknowledged where it landed, not only on a button;
-     3. one sync pill in the top bar owns "is anything in flight?" for the
-        whole screen.
-   Everything here is driven by the in-flight command from useSubmitCommand.
+     3. one loading bar, inset along the bottom of the top bar, owns "is
+        anything in flight?" for the whole screen.
+   Layers 1 and 2 are driven by the in-flight command from useSubmitCommand.
+   Layer 3 is wider than that on purpose — see its own note below.
    ========================================================================== */
 
 @keyframes ag-spin { to { transform: rotate(360deg); } }
@@ -3943,7 +3944,30 @@ button.ag-tt-ticket { cursor: pointer; }
 }
 .ag-spinner--sm { width: 10px; height: 10px; border-width: 2px; }
 .ag-spinner--accent { color: var(--ag-terracotta); }
-.ag-spinner--gold { border-top-color: var(--ag-gold); }
+
+/* ---- Shared sweeping bar ----
+   The 3px indeterminate bar, pinned along the bottom edge of whatever it is
+   dropped into (a positioned parent — the pending button, the game top bar).
+   Indeterminate on purpose, like the keyframe it rides: we can't honestly
+   predict how long the table takes. One class, so the height, the stub width
+   and the rhythm can't drift between the two things that wear it. */
+.ag-pending-bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3px;
+    overflow: hidden;
+    background: color-mix(in oklch, currentColor 16%, transparent);
+}
+.ag-pending-bar::after {
+    content: '';
+    display: block;
+    width: 34%;
+    height: 100%;
+    background: currentColor;
+    animation: ag-pending-sweep 1.15s ease-in-out infinite;
+}
 
 /* ---- Layer 1: the pressed control (ActionButton) ---- */
 .ag-btn--pending {
@@ -3966,23 +3990,6 @@ button.ag-tt-ticket { cursor: pointer; }
     padding: 0 10px;
     white-space: nowrap;
     animation: ag-pending-reveal 130ms ease-out 120ms both;
-}
-.ag-btn-pending-bar {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 3px;
-    overflow: hidden;
-    background: color-mix(in oklch, currentColor 16%, transparent);
-}
-.ag-btn-pending-bar::after {
-    content: '';
-    display: block;
-    width: 34%;
-    height: 100%;
-    background: currentColor;
-    animation: ag-pending-sweep 1.15s ease-in-out infinite;
 }
 
 /* ---- Layer 2: the object the command acts on ---- */
@@ -4047,33 +4054,43 @@ button.ag-tt-ticket { cursor: pointer; }
 }
 .ag-svg-ghost { opacity: 0.55; }
 
-/* ---- Layer 3: the top-bar sync pill ---- */
-.ag-sync-pill {
-    flex: none;
-    display: flex;
-    align-items: center;
-    gap: 6px;
+/* ---- Layer 3: the top bar's loading bar ----
+   The shared bar above, dressed for the dark chrome and widened in meaning:
+   not just commands, but the whole screen's "we are waiting on the table",
+   raised by the game-state fetch and the timeline rebuild too (`busy` on
+   GameShell).
+
+   Inset along the bottom edge of the bar rather than placed inside it — the top
+   bar is `position: sticky`, which is a containing block, so this hangs off it
+   without joining the flex row. Nothing in the bar moves and the bar's height
+   never changes, whether it is showing or not. */
+.ag-pending-bar--topbar {
+    pointer-events: none;
+    /* The same white scrim the dev badge wears on this bar, not a third opacity. */
     background: rgba(255, 255, 255, 0.12);
-    border-radius: 99px;
-    padding: 5px 10px 5px 7px;
-    font: 800 9.5px var(--ag-font);
-    letter-spacing: 0.05em;
-    color: var(--ag-on-dark);
     animation: ag-pending-reveal 140ms ease-out both;
 }
-.ag-sync-pill .ag-spinner { width: 13px; height: 13px; border-width: 2px; }
+/* Gold, and fading out at both ends: on a bar this wide a hard-edged stub reads
+   as a progress bar that has stalled a third of the way along. */
+.ag-pending-bar--topbar::after {
+    background: linear-gradient(90deg, transparent, var(--ag-gold), transparent);
+}
 
 @media (prefers-reduced-motion: reduce) {
     .ag-spinner,
     .ag-pending-skin::after,
     .ag-pending-tag,
     .ag-svg-ants,
-    .ag-sync-pill,
-    .ag-btn-pending-bar::after,
+    .ag-pending-bar,
+    .ag-pending-bar::after,
     .ag-btn-pending-verb,
     .ag-btn--pending > .ag-btn-body {
         animation: none;
     }
+    /* Without the sweep, a 34% stub parked at the left reads as a bar that has
+       stalled — so either bar becomes a steady lit line instead. */
+    .ag-pending-bar::after { width: 100%; opacity: 0.55; }
+    .ag-pending-bar--topbar::after { background: var(--ag-gold); }
     /* Without the reveal animation the verb needs the label hidden outright. */
     .ag-btn--pending > .ag-btn-body { visibility: hidden; }
     .ag-spinner { border-top-color: currentColor; opacity: 0.6; }

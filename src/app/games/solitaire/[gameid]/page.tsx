@@ -28,7 +28,7 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
     const { gameid } = use(params);
     const gameId = gameid;
 
-    const { gameData, setGameData, getGameData } = useGameData<ISolitaireGameDataResponse>(gameId);
+    const { gameData, setGameData, getGameData, loading: loadingGame } = useGameData<ISolitaireGameDataResponse>(gameId);
 
     const { endGame } = useEndGame(gameId);
 
@@ -87,7 +87,7 @@ export default function GameSolitaire({ params }: { params: Promise<{ gameid: uu
     ];
 
     return (
-        <GameShell title="Solitaire" subtitle={subtitle} options={state ? menuOptions : undefined} syncing={submitting} log={{ entries: gameData?.gameState?.history ?? [] }}>
+        <GameShell title="Solitaire" subtitle={subtitle} options={state ? menuOptions : undefined} busy={submitting || loadingGame} log={{ entries: gameData?.gameState?.history ?? [] }}>
             <FcmTokenComp />
 
             {state && (

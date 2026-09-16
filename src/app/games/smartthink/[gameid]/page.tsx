@@ -34,7 +34,7 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
     const { gameid } = use(params);
     const gameId = gameid;
 
-    const { gameData, setGameData, getGameData } = useGameData<ISmartthinkGameDataResponse>(gameId);
+    const { gameData, setGameData, getGameData, loading: loadingGame } = useGameData<ISmartthinkGameDataResponse>(gameId);
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
 
     const { submitCommand, submitting } = useSubmitCommand<ISmartthinkGameDataResponse>(gameId, user, setGameData, getGameData);
@@ -126,7 +126,7 @@ export default function GameSmartthink({ params }: { params: Promise<{ gameid: u
     ];
 
     return (
-        <GameShell title="Smartthink" subtitle={subtitle} options={displayed ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }}>
+        <GameShell title="Smartthink" subtitle={subtitle} options={displayed ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, oldestFirst: true, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }}>
             <FcmTokenComp />
 
             {scoreEntries.length > 0 && <GameScoreboard entries={scoreEntries} />}

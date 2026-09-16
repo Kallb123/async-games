@@ -77,7 +77,7 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
     const { gameid } = use(params);
     const gameId = gameid;
 
-    const { gameData, setGameData, getGameData } = useGameData<IBannedIsletGameDataResponse>(gameId);
+    const { gameData, setGameData, getGameData, loading: loadingGame } = useGameData<IBannedIsletGameDataResponse>(gameId);
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
     const { submitCommand: rawSubmitCommand, submitting, pendingTarget } = useSubmitCommand<IBannedIsletGameDataResponse>(gameId, user, setGameData, getGameData);
     const { endGame } = useEndGame(gameId);
@@ -348,7 +348,7 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
             title="Banned Islet"
             subtitle={subtitle}
             options={gs ? menuOptions : undefined}
-            syncing={submitting}
+            busy={submitting || loadingGame || nav.loading}
             log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }}
             chat={{ gameId, userIdList, usernameList }}
             className="ag-game--bannedislet"
