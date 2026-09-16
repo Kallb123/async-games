@@ -20,7 +20,6 @@ import {
     gridSlots,
     marksOn,
     withExitToggled,
-    withMarkPainted,
     withMarkToggled,
     withSectionStepsNamed,
     withTileUnmarked,
@@ -56,6 +55,21 @@ function tinyState(): EditorState {
         grid: ["sf.1.0", "sf.2.0", "bend.1.0", "bend.2.0", "bend.1.1", "bend.2.1"],
     });
 }
+
+/**
+ * The same circuit with the corner's inside line one tile short, so its lanes
+ * run out of step — and with that tile's marks scrubbed, exactly as deleting
+ * one in the editor does, so the only thing left to report about it is that
+ * five tiles cannot seat six cars.
+ */
+function skewedState(): EditorState {
+    const skewed = tinyState();
+    skewed.tiles = skewed.tiles.filter(candidate => candidate.id !== "bend.1.1");
+    return { ...skewed, ...withTileUnmarked(skewed, "bend.1.1") };
+}
+
+/** What every five-tile fixture reports, and the only thing it should. */
+const SHORT_GRID = [expect.stringMatching(/starting grid has 5 of 6/)];
 
 /** One tile, for the geometry fixtures below — all in one unnamed section. */
 function tile(id: string, lane: number, x: number, y: number, extra: Partial<EditorTile> = {}): EditorTile {
@@ -94,14 +108,11 @@ describe("editor validation", () => {
     it("clears the out-of-step refusal once the section's steps are written down", () => {
         // The author's way out: the geometry's own answer, confirmed rather
         // than left to a rule `deriveTrack` refuses for the section.
-        const skewed = tinyState();
-        skewed.tiles = skewed.tiles.filter(candidate => candidate.id !== "bend.1.1");
+        const skewed = skewedState();
         expect(validateTrack(skewed).errors[0]).toMatch(/out of step/);
 
         const named = { ...skewed, tiles: withSectionStepsNamed(skewed, "bend") };
-        // Five tiles cannot seat a full grid, so this asks about the refusal
-        // under test rather than about an empty list.
-        expect(validateTrack(named).errors.join(" ")).not.toMatch(/out of step/);
+        expect(validateTrack(named).errors).toEqual(SHORT_GRID);
         // ...and the printed file carries them, so it loads for the same reason.
         expect(printTrackFile(named)).toMatch(/exits: \[/);
     });
@@ -121,12 +132,6 @@ describe("editor validation", () => {
 
 describe("naming a tile's steps rather than leaning on §5.1's rule", () => {
     /** The tiny circuit with its corner's inside line one tile short. */
-    function skewedState(): EditorState {
-        const skewed = tinyState();
-        skewed.tiles = skewed.tiles.filter(candidate => candidate.id !== "bend.1.1");
-        return skewed;
-    }
-
     it("knows which sections the default rule is refused for", () => {
         const skewed = skewedState();
         expect(sectionOutOfStep(skewed, "bend")).toBe(true);
@@ -176,7 +181,7 @@ describe("naming a tile's steps rather than leaning on §5.1's rule", () => {
         const backOn = withExitToggled(off, tile.id, step);
         const settled = backOn.find(candidate => candidate.id === tile.id)!;
         expect(settled.exits).toEqual(tile.exits);
-        expect(validateTrack({ ...skewed, tiles: backOn }).errors.join(" ")).not.toMatch(/out of step/);
+        expect(validateTrack({ ...skewed, tiles: backOn }).errors).toEqual(SHORT_GRID);
     });
 
     it("still drops an override that lands on the default where it is allowed", () => {
@@ -365,14 +370,6 @@ describe("marks: the grid, the finish line and the oil", () => {
         // A second click takes the slot back out; the cars behind move up.
         const fewer = { ...three, grid: withMarkToggled(three, "grid", "bend.2.1") };
         expect([...gridSlots(fewer)]).toEqual([["sf.1.0", 1], ["sf.2.0", 2]]);
-    });
-
-    it("paints add-only, handing back the very same list when nothing changed", () => {
-        // What keeps a brush dragged back over painted ground from stringifying
-        // the whole draft into localStorage on every frame.
-        const state = { ...tinyState(), oil: ["sf.1.0"] };
-        expect(withMarkPainted(state, "oil", "sf.1.0")).toBe(state.oil);
-        expect(withMarkPainted(state, "oil", "sf.2.0")).toEqual(["sf.1.0", "sf.2.0"]);
     });
 
     it("takes a deleted tile out of every mark it was in", () => {

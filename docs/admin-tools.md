@@ -281,10 +281,12 @@ Load a shipped track (Ashcombe, Anglet) to refine its placeholder geometry
 against the real art rather than placing every tile from nothing — its corners
 come back as sections with the straights between them, ready to be split
 further, and its marks come back on the tiles they sit on. A slot naming a
-space that circuit hasn't got is dropped on the way in, so a grid reading fewer
-than six is the editor telling you which cars had nowhere to stand. The whole screen stretches to a desktop's width — the canvas stays put
-on the left while the panels scroll on the right — and folds to a single column
-on a phone.
+space that circuit hasn't got is dropped on the way in, so a grid reading
+fewer than six is the editor telling you which cars had nowhere to stand.
+
+The whole screen stretches to a desktop's width — the canvas stays put on the
+left while the panels scroll on the right — and folds to a single column on a
+phone.
 
 ### A corner whose lanes run out of step
 

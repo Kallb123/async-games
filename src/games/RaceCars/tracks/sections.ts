@@ -22,21 +22,6 @@
 import type { RaceCarsCorner, RaceCarsGeometry, RaceCarsSpace, RaceCarsTrackSpace } from "../board";
 
 /**
- * Six staggered spaces on rows 0-2, lanes 1 and 3, so no car starts directly
- * behind another (§5.2) — every track's grid so far starts on a plain
- * three-lane straight the same width as this one, whose first section derives
- * rows 0, 1, 2 in order. P1 first.
- */
-export const STAGGERED_SIX_GRID: RaceCarsSpace[] = [
-    { row: 2, lane: 1 },
-    { row: 2, lane: 3 },
-    { row: 1, lane: 1 },
-    { row: 1, lane: 3 },
-    { row: 0, lane: 1 },
-    { row: 0, lane: 3 },
-];
-
-/**
  * One tile as an author writes it: which lane of its section it is in, where it
  * sits on the art, and — where the road does not simply run on — the tiles it
  * may be driven to.

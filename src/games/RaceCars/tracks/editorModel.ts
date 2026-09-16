@@ -85,16 +85,27 @@ export interface EditorTile {
 export const MARK_KINDS = ["grid", "finish", "oil"] as const;
 export type MarkKind = (typeof MARK_KINDS)[number];
 
-/** What each mark is called on screen, and the badge the canvas draws for it. */
-export const MARK_LABELS: Record<MarkKind, string> = {
-    grid: "Starting grid",
-    finish: "Finish line",
-    oil: "Oil",
-};
-export const MARK_GLYPHS: Record<MarkKind, string> = {
-    grid: "🏎",
-    finish: "🏁",
-    oil: "🛢",
+/**
+ * What each mark is called, the glyph it wears on the canvas and in the picker,
+ * and the line the panel explains it with — one table rather than one per thing
+ * a mark has to say about itself, for the same reason the lists are `state[kind]`.
+ */
+export const MARKS: Record<MarkKind, { label: string; glyph: string; note: string }> = {
+    grid: {
+        label: "Starting grid",
+        glyph: "🏎",
+        note: "Every car is dealt onto the tile marked for its slot (§5.2), so a track cannot ship until a full field is seated.",
+    },
+    finish: {
+        label: "Finish line",
+        glyph: "🏁",
+        note: "The tiles the line is painted across, which need not be one row: a lane taking the short way round carries it on its own.",
+    },
+    oil: {
+        label: "Oil",
+        glyph: "🛢",
+        note: "Optional, and most circuits have none.",
+    },
 };
 
 /** Everything the editor holds for one circuit — its own save format. */
@@ -601,19 +612,6 @@ export function withMarkToggled(state: EditorState, kind: MarkKind, id: string):
 }
 
 /**
- * The same mark, added only — the brush dragged across a run of tiles, which is
- * how a finish line gets painted across the road in one stroke.
- *
- * Returns the list it was given when the tile is already marked, so dragging
- * back over painted ground doesn't restringify the whole draft into
- * localStorage on every frame (the same reason `paint` is a no-op in place).
- */
-export function withMarkPainted(state: EditorState, kind: MarkKind, id: string): string[] {
-    const marked = state[kind];
-    return marked.includes(id) ? marked : [...marked, id];
-}
-
-/**
  * Every mark list with one tile taken out of all three — what deleting a tile
  * has to leave behind, exactly as deleting one scrubs the steps that pointed at
  * it. A mark naming a tile that is not on the drawing is the dangling reference
@@ -667,7 +665,7 @@ function validateMarks(state: EditorState, errors: string[], warnings: string[])
     for (const kind of MARK_KINDS) {
         const missing = state[kind].filter(id => !known.has(id));
         if (missing.length > 0) {
-            errors.push(`${MARK_LABELS[kind]} names ${missing.join(", ")}, which is not a tile on this drawing.`);
+            errors.push(`${MARKS[kind].label} names ${missing.join(", ")}, which is not a tile on this drawing.`);
         }
     }
 
@@ -696,9 +694,11 @@ function validateMarks(state: EditorState, errors: string[], warnings: string[])
     // A line has to cross the whole road: a lane with no tile on it is a lane a
     // car laps down without ever passing the flag.
     if (state.finish.length > 0) {
-        const lanes = new Set(state.tiles.filter(tile => state.finish.includes(tile.id)).map(tile => tile.lane));
+        const line = new Set(state.finish);
+        const painted = state.tiles.filter(tile => line.has(tile.id));
+        const lanes = new Set(painted.map(tile => tile.lane));
         const widest = Math.max(0, ...state.sections
-            .filter(section => state.finish.some(id => sectionOf.get(id) === section.id))
+            .filter(section => painted.some(tile => tile.section === section.id))
             .map(section => section.lanes));
         const missing = Array.from({ length: widest }, (_unused, index) => index + 1).filter(lane => !lanes.has(lane));
         if (missing.length > 0) {
@@ -780,18 +780,16 @@ export function validateTrack(state: EditorState): EditorValidation {
 
 /**
  * A mark list as spaces on the derived circuit, quietly dropping any tile that
- * is not on the drawing.
+ * is not on the drawing — `spacesOf`, which throws on one, with the lenience in
+ * front of it rather than a second walk of the same map.
  *
- * Deliberately not `spacesOf`, which throws: that is the guard a **printed**
- * track file wants at module load, while this is a preview redrawn on every
- * keystroke — and a mark left dangling for the keystroke between deleting a
- * tile and the state settling must not take the whole screen down. The dangling
- * mark is reported by `validateTrack` instead.
+ * The lenience is the preview's, not the printer's: this is redrawn on every
+ * keystroke, and a mark left dangling for the keystroke between deleting a tile
+ * and the state settling must not take the whole screen down. A printed track
+ * file keeps the throw, and `validateTrack` reports the dangling mark.
  */
 function markSpaces(derived: DerivedTrack, ids: readonly string[]): RaceCarsSpace[] {
-    return ids
-        .map(id => derived.spaceOf.get(id))
-        .filter((space): space is RaceCarsSpace => space !== undefined);
+    return spacesOf(derived, ids.filter(id => derived.spaceOf.has(id)));
 }
 
 /**

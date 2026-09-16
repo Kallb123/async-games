@@ -3,7 +3,7 @@
 // very long straight.
 import type { RaceCarsTrack } from "../board";
 import { roundedRectGeometry } from "./loopGeometry";
-import { deriveTrack, STAGGERED_SIX_GRID, type TrackSection } from "./sections";
+import { deriveTrack, plainTileId, spacesOf, type TrackSection } from "./sections";
 
 const SECTIONS: TrackSection[] = [
     { id: 'start', name: 'Start / Finish Straight', length: 10, lanes: 3, corner: null },
@@ -15,7 +15,21 @@ const SECTIONS: TrackSection[] = [
     { id: 'run', name: 'Run to the Line', length: 12, lanes: 3, corner: null },
 ];
 
-const { rows: ROWS, spaces: SPACES, corners: CORNERS } = deriveTrack(SECTIONS);
+const DERIVED = deriveTrack(SECTIONS);
+const { rows: ROWS, spaces: SPACES, corners: CORNERS } = DERIVED;
+
+/**
+ * Six staggered slots on the first three rows of the grid straight, lanes 1 and
+ * 3, so no car starts directly behind another (§5.2). P1 first.
+ *
+ * Named as tiles and resolved through the derivation, like every other
+ * circuit's: a slot written as a row and a lane is a guess at what the rows will
+ * come out as, and Anglet is what a wrong guess costs (`anglet.ts`).
+ */
+const GRID = spacesOf(DERIVED, [2, 1, 0].flatMap(index => [
+    plainTileId("start", 1, index),
+    plainTileId("start", 3, index),
+]));
 
 // Placeholder geometry (§23.7 PR 1): the circuit drawn as a plain
 // rounded-rectangle loop (`loopGeometry.ts`), the 78 rows spaced evenly round
@@ -52,7 +66,7 @@ export const ASHCOMBE: RaceCarsTrack = {
     rows: ROWS,
     spaces: SPACES,
     corners: CORNERS,
-    grid: STAGGERED_SIX_GRID,
+    grid: GRID,
     // Five, not six, and deliberately (§8.3): sixth needs roughly seventy
     // unbroken rows to climb to, which is most of a lap of Ashcombe. The gear
     // itself is specified and tested; the permission lives here.

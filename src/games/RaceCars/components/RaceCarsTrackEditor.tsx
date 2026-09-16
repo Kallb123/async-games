@@ -12,9 +12,8 @@ import {
     emptyState,
     fromTrack,
     gridSlots,
-    MARK_GLYPHS,
     MARK_KINDS,
-    MARK_LABELS,
+    MARKS,
     marksOn,
     nextTileId,
     NO_EXITS,
@@ -27,7 +26,6 @@ import {
     tilesIn,
     validateTrack,
     withExitToggled,
-    withMarkPainted,
     withMarkToggled,
     withSectionStepsNamed,
     withTileUnmarked,
@@ -100,6 +98,20 @@ const MAX_DRAFT_BYTES = 8 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 
 type Mode = 'place' | 'exits' | 'paint' | 'mark';
+
+/**
+ * The four things the canvas can be doing, each with the key that picks it and
+ * the button's label — one list, because a mode was three hand-kept copies:
+ * a toolbar button, a `case` in the hot-key handler, and a line of the "Keys:"
+ * hint. `needsTile` is the one fact that differs between them, written once so
+ * the disabled button and the ignored key cannot drift apart.
+ */
+const MODES: { mode: Mode; key: string; label: string; needsTile?: boolean }[] = [
+    { mode: 'place', key: 'q', label: 'Place' },
+    { mode: 'exits', key: 'w', label: 'Draw exits', needsTile: true },
+    { mode: 'paint', key: 'e', label: 'Paint into section' },
+    { mode: 'mark', key: 'r', label: 'Mark' },
+];
 
 interface PointerState {
     /** 'tile'/'background' are the place & exits gestures; 'paint' drags the
@@ -221,12 +233,17 @@ export default function RaceCarsTrackEditor() {
                 if (next) setActiveSectionId(next.id);
             };
 
-            switch (event.key.toLowerCase()) {
-                case 'q': setMode('place'); break;
+            const key = event.key.toLowerCase();
+            const picked = MODES.find(candidate => candidate.key === key);
+            if (picked) {
                 // Mirrors the toolbar, which can't draw exits from no tile.
-                case 'w': if (!selected) return; setMode('exits'); break;
-                case 'e': setMode('paint'); break;
-                case 'r': setMode('mark'); break;
+                if (picked.needsTile && !selected) return;
+                setMode(picked.mode);
+                event.preventDefault();
+                return;
+            }
+
+            switch (key) {
                 // The marker keys only move the picker, exactly as 1-3 only move
                 // the lane one — a key never does what its own control wouldn't.
                 case 'g': setMarker('grid'); break;
@@ -305,10 +322,13 @@ export default function RaceCarsTrackEditor() {
     }, [marker]);
 
     const paintMark = useCallback((id: string) => {
-        setState(prev => {
-            const marks = withMarkPainted(prev, marker, id);
-            return marks === prev[marker] ? prev : { ...prev, [marker]: marks };
-        });
+        // Add-only, and the state itself unchanged for a tile already marked:
+        // a stroke back over painted ground must not stringify the whole draft
+        // into localStorage per frame (the same reason `paint` is a no-op in
+        // place).
+        setState(prev => (prev[marker].includes(id)
+            ? prev
+            : { ...prev, [marker]: withMarkToggled(prev, marker, id) }));
     }, [marker]);
 
     const clearMark = useCallback((kind: MarkKind) => {
@@ -543,16 +563,40 @@ export default function RaceCarsTrackEditor() {
 
     const sectionName = activeSection ? sectionLabel(activeSection) : 'no section';
 
+    /** What this mode's click does, in words — one arm each rather than a
+     *  four-deep ternary in the markup. */
+    const modeHint = (): string => {
+        switch (mode) {
+            case 'place':
+                return `Click the art to drop the next tile into "${sectionName}", lane ${Math.min(nextLane, activeLanes)} — place each lane's tiles in the order the road runs. Drag a tile to nudge its centre; click one to select it.`;
+            case 'exits':
+                return selected
+                    ? `Click a tile to add or remove a step from ${selected.id}; click ${selected.id} itself to make its steps its own, so they are written down rather than left to §5.1's rule.`
+                    : 'Select a tile first.';
+            case 'paint':
+                return `Click or drag over tiles to move them into "${sectionName}". A corner is a section, so this is how one is drawn.`;
+            case 'mark':
+                return `Click a tile to mark it as ${MARKS[marker].label.toLowerCase()}, or drag to paint a run of them — a line across the road is one stroke. Click a marked tile again to take it off.${marker === 'grid' ? ` The grid is ordered: the first tile marked is P1, and a race seats ${MAX_PLAYERS}.` : ''}`;
+        }
+    };
+
     return (
         <div className="ag-rcedit-page">
             <div className="ag-rcedit-canvas-col">
                 <Section label="Canvas" count={state.tiles.length}>
                     <div className="ag-stack">
                         <div className="ag-rcedit-toolbar">
-                            <button type="button" className={`ag-btn ${mode === 'place' ? 'ag-btn--dark' : 'ag-btn--light'}`} onClick={() => setMode('place')}>Place</button>
-                            <button type="button" className={`ag-btn ${mode === 'exits' ? 'ag-btn--dark' : 'ag-btn--light'}`} onClick={() => setMode('exits')} disabled={!selected}>Draw exits</button>
-                            <button type="button" className={`ag-btn ${mode === 'paint' ? 'ag-btn--dark' : 'ag-btn--light'}`} onClick={() => setMode('paint')}>Paint into section</button>
-                            <button type="button" className={`ag-btn ${mode === 'mark' ? 'ag-btn--dark' : 'ag-btn--light'}`} onClick={() => setMode('mark')}>Mark</button>
+                            {MODES.map(({ mode: candidate, label, needsTile }) => (
+                                <button
+                                    key={candidate}
+                                    type="button"
+                                    className={`ag-btn ${mode === candidate ? 'ag-btn--dark' : 'ag-btn--light'}`}
+                                    onClick={() => setMode(candidate)}
+                                    disabled={needsTile && !selected}
+                                >
+                                    {label}
+                                </button>
+                            ))}
                             <div className="ag-rcedit-toolbar-zoom">
                                 <button type="button" className="ag-btn ag-btn--light" onClick={() => setZoom(z => Math.max(0.25, z - 0.25))}>−</button>
                                 <span className="ag-hint">{Math.round(zoom * 100)}%</span>
@@ -572,7 +616,7 @@ export default function RaceCarsTrackEditor() {
                             <label className="ag-field-label" htmlFor="rcedit-mark">Marking</label>
                             <select id="rcedit-mark" className="ag-select" value={marker} onChange={e => setMarker(e.target.value as MarkKind)}>
                                 {MARK_KINDS.map(kind => (
-                                    <option key={kind} value={kind}>{MARK_GLYPHS[kind]} {MARK_LABELS[kind]}</option>
+                                    <option key={kind} value={kind}>{MARKS[kind].glyph} {MARKS[kind].label}</option>
                                 ))}
                             </select>
                         </div>
@@ -580,23 +624,16 @@ export default function RaceCarsTrackEditor() {
                         {/* The one place the hot keys are named, rather than a
                             `title` on each control that only a hover finds. */}
                         <p className="ag-hint">
-                            Keys: <strong>Q</strong> place, <strong>W</strong> draw exits, <strong>E</strong> paint,{' '}
-                            <strong>R</strong> mark — <strong>1</strong>/<strong>2</strong>/<strong>3</strong> pick the
-                            lane, <strong>G</strong>/<strong>F</strong>/<strong>O</strong> pick the mark (grid, finish,
-                            oil), and <strong>A</strong>/<strong>S</strong> step back and on through the sections.
+                            Keys: {MODES.map(({ key, label }, index) => (
+                                <React.Fragment key={key}>
+                                    {index > 0 ? ', ' : ''}<strong>{key.toUpperCase()}</strong> {label.toLowerCase()}
+                                </React.Fragment>
+                            ))} — <strong>1</strong>/<strong>2</strong>/<strong>3</strong> pick the lane,{' '}
+                            <strong>G</strong>/<strong>F</strong>/<strong>O</strong> pick the mark (grid, finish, oil),
+                            and <strong>A</strong>/<strong>S</strong> step back and on through the sections.
                         </p>
 
-                        <p className="ag-hint">
-                            {mode === 'place'
-                                ? `Click the art to drop the next tile into "${sectionName}", lane ${Math.min(nextLane, activeLanes)} — place each lane's tiles in the order the road runs. Drag a tile to nudge its centre; click one to select it.`
-                                : mode === 'exits'
-                                    ? (selected
-                                        ? `Click a tile to add or remove a step from ${selected.id}; click ${selected.id} itself to make its steps its own, so they are written down rather than left to §5.1's rule.`
-                                        : 'Select a tile first.')
-                                    : mode === 'paint'
-                                        ? `Click or drag over tiles to move them into "${sectionName}". A corner is a section, so this is how one is drawn.`
-                                        : `Click a tile to mark it as ${MARK_LABELS[marker].toLowerCase()}, or drag to paint a run of them — a line across the road is one stroke. Click a marked tile again to take it off.${marker === 'grid' ? ` The grid is ordered: the first tile marked is P1, and a race seats ${MAX_PLAYERS}.` : ''}`}
-                        </p>
+                        <p className="ag-hint">{modeHint()}</p>
 
                         <EditorCanvas
                             svgRef={svgRef}
@@ -796,7 +833,7 @@ function EditorCanvas(props: CanvasProps) {
                     // slot or the mark's glyph.
                     const marks = marksOn(state, tile.id);
                     const badge = marks
-                        .map(kind => (kind === 'grid' ? `P${slots.get(tile.id)}` : MARK_GLYPHS[kind]))
+                        .map(kind => (kind === 'grid' ? `P${slots.get(tile.id)}` : MARKS[kind].glyph))
                         .join(' ');
                     return (
                         <g key={tile.id} onPointerDown={event => onTilePointerDown(event, tile.id)}>
@@ -977,6 +1014,11 @@ function MarksPanel({ state, rows, marker, onSetMarker, onClearMark, onSetGridBe
     onClearMark: (kind: MarkKind) => void;
     onSetGridBehindFinishLine: (on: boolean) => void;
 }) {
+    /** How many are marked — and, for the grid alone, how many it still wants. */
+    const counted = (kind: MarkKind): string => (kind === 'grid'
+        ? `${state.grid.length} of ${MAX_PLAYERS}, P1 first`
+        : `${state[kind].length} marked`);
+
     /** A mark's tiles as an author reads them back: the tile, and the row it derived to. */
     const listed = (kind: MarkKind): string => state[kind]
         .map((id, index) => {
@@ -998,10 +1040,8 @@ function MarksPanel({ state, rows, marker, onSetMarker, onClearMark, onSetGridBe
                 {MARK_KINDS.map(kind => (
                     <div key={kind} className={`ag-rcedit-section ag-stack${marker === kind ? ' ag-rcedit-section--active' : ''}`}>
                         <p className="ag-hint">
-                            <strong>{MARK_GLYPHS[kind]} {MARK_LABELS[kind]}</strong>
-                            {kind === 'grid' && ` — ${state.grid.length} of ${MAX_PLAYERS}, P1 first. Every car is dealt onto the tile marked for its slot (§5.2), so a track cannot ship until all ${MAX_PLAYERS} are marked.`}
-                            {kind === 'finish' && ' — the tiles the line is painted across, which need not be one row: a lane taking the short way round carries it on its own.'}
-                            {kind === 'oil' && ' — optional, and most circuits have none.'}
+                            <strong>{MARKS[kind].glyph} {MARKS[kind].label}</strong>
+                            {' — '}{counted(kind)}. {MARKS[kind].note}
                         </p>
                         <p className="ag-hint">{listed(kind) || 'Nothing marked yet.'}</p>
                         <div className="ag-btn-row ag-btn-row--wrap">

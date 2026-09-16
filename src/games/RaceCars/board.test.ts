@@ -70,11 +70,15 @@ describe("Ashcombe Park", () => {
     });
 
     it("puts six staggered cars on the grid, all on real spaces (§5.2)", () => {
-        expect(ASHCOMBE.grid).toHaveLength(MAX_PLAYERS);
-        const keys = new Set(ASHCOMBE.grid.map(slot => `${slot.row}:${slot.lane}`));
-        expect(keys.size).toBe(MAX_PLAYERS);
+        // The table §5.2 prints, written out rather than referred back to: the
+        // slots are named as tiles in `ashcombe.ts` and resolved through the
+        // derivation, so this is what says the derivation still puts them here.
+        expect(ASHCOMBE.grid).toEqual([
+            { row: 2, lane: 1 }, { row: 2, lane: 3 },
+            { row: 1, lane: 1 }, { row: 1, lane: 3 },
+            { row: 0, lane: 1 }, { row: 0, lane: 3 },
+        ]);
         for (const slot of ASHCOMBE.grid) {
-            expect(slot.lane).toBeGreaterThanOrEqual(1);
             expect(spaceAt(ASHCOMBE, slot.row, slot.lane)).not.toBeNull();
         }
     });

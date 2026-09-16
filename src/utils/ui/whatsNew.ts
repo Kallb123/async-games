@@ -121,7 +121,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "Race Cars: cars no longer start the Anglet track boxed in",
-                detail: "Four of the six cars on Anglet Chambre D'Amour were parked on a piece of road the track doesn't actually have, so those drivers were told \"boxed in — nothing is reachable\" on the first turn and every turn after it, whatever gear they picked. The grid now sits on the six spaces the art paints a car on, and the track editor won't let a circuit ship without saying where its cars start.",
+                detail: "Four of the six cars on Anglet Chambre D'Amour were parked on a piece of road the track doesn't actually have, so those drivers were told \"boxed in — nothing is reachable\" on the first turn and every turn after it, whatever gear they picked. The grid now sits on the six spaces the art paints a car on.",
                 game: "racecars",
             },
             {
