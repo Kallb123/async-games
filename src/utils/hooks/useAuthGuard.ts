@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useAuth, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
+import { withTimeout } from "@/utils/withTimeout";
 
 /**
  * Whether the viewer is signed in *and* unlocked — the "safe to fetch" signal,
@@ -28,7 +29,8 @@ export function useIsAuthorised() {
  * would otherwise hang the whole ladder — the `await` never settles, the fetch
  * hook's `finally` never runs, and the screen waits for ever on a repair that
  * is never coming. Every `fetch` in `fetchWithSessionRetry` is bounded for that
- * exact reason; so is this.
+ * exact reason; `withTimeout` is how everything that isn't a `fetch` gets the
+ * same treatment.
  */
 const SESSION_REFRESH_TIMEOUT_MS = 5000;
 
@@ -58,25 +60,16 @@ export function useSessionRefresh(): () => Promise<void> {
         getTokenRef.current = getToken;
     });
 
+    // Clerk unreachable, a session it won't renew, a call that never answers:
+    // `withTimeout` turns all three into "no new token", and the caller retries
+    // regardless — this is the part of the attempt that can be skipped.
     return useCallback(async () => {
-        // Clerk unreachable, or a session it won't renew. The caller retries
-        // regardless — this is the part of the attempt that can be skipped.
-        const giveUp = (error: unknown) => console.error('Could not renew the session token', error);
-        let expiry: ReturnType<typeof setTimeout> | undefined;
-        try {
-            // Caught on the promise rather than on the `await`: a renewal that
-            // loses the race below and fails afterwards would otherwise surface
-            // as an unhandled rejection and nothing else.
-            const renewal = getTokenRef.current({ skipCache: true }).catch(giveUp);
-            await Promise.race([
-                renewal,
-                new Promise<void>((resolve) => { expiry = setTimeout(resolve, SESSION_REFRESH_TIMEOUT_MS); }),
-            ]);
-        } catch (error) {
-            giveUp(error);
-        } finally {
-            clearTimeout(expiry);
-        }
+        await withTimeout(
+            () => getTokenRef.current({ skipCache: true }),
+            SESSION_REFRESH_TIMEOUT_MS,
+            null,
+            'Renewing the session token',
+        );
     }, []);
 }
 

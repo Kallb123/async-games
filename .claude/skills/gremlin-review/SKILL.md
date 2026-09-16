@@ -125,9 +125,20 @@ inside `after`, → **GREMLIN BREAKS IT**.
   connection leaves a promise that never settles, so a caller holding a guard
   flag never clears it and the board stays locked until reload. Go through
   `fetchWithSessionRetry` (`src/utils/hooks/fetchWithSessionRetry.ts`, 20s +
-  one retry on a transient 401 after a backgrounded tab) or pass
+  one retry on a transient 401 after a backgrounded tab — which renews the
+  session token first, and, for a board that never loaded, ends in
+  `reloadForStaleSession`'s one-shot page reload) or pass
   `AbortSignal.timeout(...)` explicitly, as `useSubmitCommand` does at 30s for
   a write.
+- **An `await` that isn't a `fetch` still needs a deadline** — a Mongo lookup
+  behind a 30s server selection, an SDK call that accepts and never answers.
+  `withTimeout` (`src/utils/withTimeout.ts`) is the one way that is done:
+  fallback on failure *or* deadline, the rejection caught on the work so a late
+  one isn't unhandled, and the timer always cleared.
+- **A recovery that reloads or retries has a bound** — and the guard has to
+  survive what it guards. `reloadForStaleSession` writes its marker before the
+  reload and holds its answer afterwards, because `location.reload()` does not
+  stop the page it replaces.
 - **`res.json()` is guarded** — an HTML error page from a proxy is not JSON.
   Check `res.ok` and catch the parse.
 - **State is never seeded with `{} as T`.** That lies to every consumer

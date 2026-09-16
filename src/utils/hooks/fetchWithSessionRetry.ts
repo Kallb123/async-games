@@ -73,11 +73,6 @@ export async function fetchWithSessionRetry(
  */
 const RELOAD_MARKER_KEY = 'ag-session-reload';
 
-// Whether the marker might be in storage, so the common case — every successful
-// fetch, for the life of the tab — costs a boolean rather than a storage call.
-// Starts true because a reload is precisely how this page may have been loaded.
-let markerMayExist = true;
-
 // Whether this document has already fired its reload. `location.reload()` does
 // not stop the page it is replacing: in-flight fetches land and pending retry
 // timers fire while the new document is still being fetched, and one of them
@@ -124,7 +119,6 @@ export function reloadForStaleSession(): boolean {
     } catch {
         return false;
     }
-    markerMayExist = true;
     reloadFired = true;
     console.warn('Session looks stale with nothing loaded — reloading once to renew it');
     window.location.reload();
@@ -137,12 +131,11 @@ export function reloadForStaleSession(): boolean {
  * a token really does expire the recovery above is available again.
  */
 export function clearStaleSessionReload(): void {
-    // `reloadFired` first: a fetch that succeeds while the reload this document
-    // asked for is still being fetched must not give that reload back.
-    if (reloadFired || !markerMayExist) {
+    // A fetch that succeeds while the reload this document asked for is still
+    // being fetched must not give that reload back.
+    if (reloadFired) {
         return;
     }
-    markerMayExist = false;
     try {
         window.sessionStorage.removeItem(RELOAD_MARKER_KEY);
     } catch {
