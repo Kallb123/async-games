@@ -10,6 +10,7 @@ import { randomGuestName } from "@/utils/games/guestName";
 import { invitedYouTo, seatsCta } from "@/utils/games/lobby";
 import { LobbyPreview, allowLobbyPreview, findLobbyPreview } from "@/utils/games/lobbyPreview";
 import { clientIp } from "@/utils/rateLimit";
+import { withTimeout } from "@/utils/withTimeout";
 
 // What a join link looks like when it lands in a chat rather than a browser.
 //
@@ -48,26 +49,16 @@ const GENERIC: Metadata = {
 const PREVIEW_BUDGET_MS = 2500;
 
 async function previewFor(joinCode: string): Promise<LobbyPreview | null> {
-    // Failures are logged and turned into "no preview" on the lookup itself,
-    // so a race the timeout wins can't swallow one — or leave the rejection
-    // of the promise it abandoned unhandled.
-    const lookup = (async () => {
+    // A lookup that fails, or that takes longer than the budget, is "no
+    // preview" — never a thrown page. `withTimeout` owns the rest of that
+    // bargain: the failure is caught on the lookup itself, so a race the
+    // deadline wins can't leave the rejection of the answer it abandoned
+    // unhandled, and the timer is cleared however the race ends rather than
+    // left behind on every request this page serves.
+    return withTimeout(async () => {
         if (!(await allowLobbyPreview('lobby-unfurl', clientIp(await headers())))) return null;
         return await findLobbyPreview(joinCode);
-    })().catch((error: unknown) => {
-        console.error(error);
-        return null;
-    });
-
-    // Cleared however the race ends, so a lookup that answers straight away
-    // doesn't leave a timer behind on every request this page serves.
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    const expired = new Promise<null>(resolve => { timeout = setTimeout(() => resolve(null), PREVIEW_BUDGET_MS); });
-    try {
-        return await Promise.race([lookup, expired]);
-    } finally {
-        clearTimeout(timeout);
-    }
+    }, PREVIEW_BUDGET_MS, null, `Previewing lobby ${joinCode}`);
 }
 
 interface JoinPageProps {

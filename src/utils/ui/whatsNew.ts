@@ -119,6 +119,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "A connection blip no longer throws you out of your game",
+                detail: "If the app lost the network for a moment while you had a board open — a phone changing between wifi and cell, or a tab left sitting long enough that your sign-in needed renewing — you were dumped back on your home screen, which then came up empty and needed a reload of its own. A game now waits out a blip and quietly asks again, keeping the board in front of you while it does; a sign-in that has gone stale is renewed behind the scenes; and every list on the home screen waits it out the same way rather than showing you nothing. A move you have just made can no longer be undone on screen either, by a background refresh that was already on its way when you tapped.",
+            },
+            {
                 title: "A lobby that closed stops saying a game is starting",
                 detail: "If the host cancelled your lobby while you were sitting on it, or it ran out of time, you were told \"Game is starting! Look for it on your home screen.\" — and then found nothing there, because nothing had started. It now says the lobby isn't open any more. Opening an old lobby link after the game has already begun takes you to the board instead of turning you away.",
             },
@@ -160,11 +164,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "Match review controls stay on screen while you rewind",
                 detail: "Stepping back through a match, the transport buttons sat at the very bottom of the page — so on a tall board the part of the game you were rewinding was off the top of the screen, and you couldn't see anything change as you moved. The scrubber is now pinned to the bottom of the screen while you review, with the board scrolling clear above it.",
-            },
-            {
-                title: "Dice Cities' match review speaks plain English",
-                detail: "Stepping back through a Dice Cities game's actions used to show raw internal labels like \"CardPurchase! Card? <id>\" instead of what actually happened. Every action in the rewind scrubber now reads the way the turn history does — \"rolled a 7 (3 and 4)\", \"bought a Wheat Field\", \"used the TV Station on Priya\" — and a roll names who it paid, same as the recap: \"rolled a 4 — Bob +1🪙, Alice -1🪙\".",
-                game: "dicecities",
             },
         ],
     },

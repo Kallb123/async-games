@@ -942,6 +942,45 @@ description or theme colour is exactly what those two files exist to prevent.
     `mapLabels.ts` (the two bits of board geometry the map kit above draws).
   - `src/utils/hooks/` — shared stateful logic (`usePlayerList`, the invite
     picker; `useTurnNavigation`; `useNow`/`useNowToTheMinute`, the shared clock).
+- **Fetching and keeping it fresh.** One hook does this for the whole app:
+  `useRefreshableData` (`src/utils/hooks/useRefreshableData.ts`) fetches a JSON
+  endpoint once the viewer is authorised, re-fetches on the push events it is
+  given, on a foreground return and (where asked) on a poll, drops overlapping
+  refreshes, and hands back `isLoading`/`isRefreshing` so a refresh shimmers
+  instead of swapping live content for skeletons. `useGameData` is that hook
+  pointed at `/api/game/[gameid]`, `useDashboard` at `/api/dashboard`,
+  `useGameChat` at a game's thread. **A failed fetch is not a verdict:** the
+  last good body stays on screen and the hook retries on a short backoff
+  (`retryDelayMs` — a network error, a 5xx, a 401 mid-session-refresh and
+  408/429 are worth another go; the rest of the 4xx range is an answer). No
+  screen should send a player somewhere else over one failed request — a board
+  moves a viewer only on a 404 (to that game's result page), a 403, or a board
+  that never loaded at all once the retries are spent (home, with a toast), and
+  never one they were playing. A local write
+  (`setData`, used for the game state a command's own response carries)
+  supersedes any fetch already in flight, so the two are not last-write-wins.
+- **An expired session is a ladder, not a failure.** A tab that has been idle
+  comes back with a session token that expired while nothing was running to
+  renew it, and every request 401s until something asks Clerk for another.
+  `fetchWithSessionRetry` (`src/utils/hooks/fetchWithSessionRetry.ts`) climbs
+  three rungs: it renews the token (`useSessionRefresh`'s
+  `getToken({ skipCache: true })`) and asks again after a short wait; failing
+  that, `useRefreshableData`'s backoff repeats that whole dance three more
+  times; and if a *board* is still empty at the end of it,
+  `reloadForStaleSession` reloads the page **once**. That last rung is the only
+  thing that fixes a cookie Clerk can't renew in place, because only a document
+  request passes through `clerkMiddleware` and gets its handshake — an in-app
+  navigation is an RSC request and cannot, which is why sending the player to
+  another screen has never helped. It is one shot per tab, guarded twice: the
+  marker lives in `sessionStorage`, is written before the reload and is given
+  back only by a fetch that then succeeds, and a document that has fired its
+  reload keeps that answer while it is being replaced — the old page goes on
+  running, and a poll landing in that window must not hand the reload back. A
+  genuinely dead session therefore reloads once and then falls through to the
+  ordinary failure handling (and, once Clerk itself notices, `useAuthGuard`'s
+  trip to `/login`). The renewal above it is bounded too
+  (`SESSION_REFRESH_TIMEOUT_MS`): an `await` with no deadline in front of the
+  retry ladder would hang the screen on a repair that never arrives.
 - **Reading the clock.** Components never call `Date.now()` while rendering — not
   even inside a helper, where `react-hooks/purity` can't see it. `useNow`
   (`src/utils/hooks/useNow.ts`) reads the wall clock as the external source it is
