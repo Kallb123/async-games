@@ -1078,7 +1078,10 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-accent-purple { background: var(--ag-purple); }
 
 /* Stat tiles */
-.ag-stat-row { display: flex; gap: 10px; }
+/* 6px, matching `.ag-scorestrip` — a stat row almost always sits directly
+   under the seats, and the two rows divide the same width, so a different gap
+   put every boundary a couple of pixels off the one above it. */
+.ag-stat-row { display: flex; gap: 6px; }
 .ag-stat {
     flex: 1;
     background: var(--ag-surface);
@@ -1494,8 +1497,20 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-scorestrip--expandable { cursor: pointer; }
 .ag-scorestrip--expandable:active { filter: brightness(0.96); }
 .ag-score-pill {
-    flex: 1 0 auto;
-    min-width: 84px;
+    /* Basis 0, not `auto`: on `auto` each pill started at the width of its own
+       name and role, so two seats split the strip by how long their usernames
+       happened to be rather than in half — and the stat tiles below, which do
+       divide evenly, visibly didn't line up with them. Grow and shrink are
+       unchanged, so a strip too narrow for its seats still scrolls at their
+       natural width rather than squashing them (see the --expandable basis
+       below, which relies on that). The floor is `max-content` rather than a
+       fixed 84px, which is what keeps the even split from costing anything:
+       seats divide the strip evenly while there is room for all of them at
+       their natural width, and the moment there isn't, each falls back to
+       exactly that width and the strip scrolls as before — no squashed name,
+       no ellipsis that wasn't there. */
+    flex: 1 0 0;
+    min-width: max-content;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -1528,7 +1543,11 @@ a.ag-list-row, a.ag-list-row-main {
    the tap. The basis is instead the width of the longest line either state
    holds, so the swap changes height alone; they still grow from there to share
    out a strip with room to spare. */
-.ag-scorestrip--expandable .ag-score-pill { flex-basis: 148px; }
+/* And this is the one strip that must NOT take the `max-content` floor above:
+   the detail it swaps in is several lines, so a floor that tracked the content
+   would resize the pill on the swap — the exact jog the fixed basis is here to
+   prevent. It keeps the plain floor and lets the basis do the work. */
+.ag-scorestrip--expandable .ag-score-pill { flex-basis: 148px; min-width: 84px; }
 /* Selected pill — pulses in sync with the board city it rings, matching the
    tapped-card highlight (.ag-hand-card--highlighted). */
 .ag-score-pill--highlighted {
