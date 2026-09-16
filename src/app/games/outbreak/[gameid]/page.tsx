@@ -355,7 +355,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
                                     {DISEASE_COLORS.map(color => (
                                         <span
                                             key={color}
-                                            className="ag-ob-cubetally-n"
+                                            className="ag-stat-tally-n ag-ob-cubetally-n"
                                             style={{ color: DISEASE_COLOR_DEFS[color].inkHex }}
                                             aria-label={`${DISEASE_COLOR_DEFS[color].name}: ${gs.cubesLeft[color]}`}
                                         >

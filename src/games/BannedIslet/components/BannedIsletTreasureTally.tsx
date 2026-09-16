@@ -33,7 +33,9 @@ export default function BannedIsletTreasureTally({ positions, treasures }: Banne
             {TREASURES.map(treasure => {
                 const captured = treasures[treasure.id];
                 const left = treasureTilesLeft(positions, treasure.id);
-                const state = captured ? 'aboard' : left <= 1 ? 'danger' : 'safe';
+                // Safe is the absence of a modifier — only the two states
+                // worth recolouring carry one.
+                const state = captured ? 'aboard' : left <= 1 ? 'danger' : null;
                 const reading = captured
                     ? 'captured'
                     : `${left} of ${treasure.tiles.length} tiles left`;
@@ -41,12 +43,12 @@ export default function BannedIsletTreasureTally({ positions, treasures }: Banne
                 return (
                     <span
                         key={treasure.id}
-                        className={`ag-bi-tally-item ag-bi-tally-item--${state}`}
+                        className={`ag-bi-tally-item${state ? ` ag-bi-tally-item--${state}` : ''}`}
                         title={`${treasureName(treasure.id)} — ${reading}`}
                         aria-label={`${treasureName(treasure.id)}: ${reading}`}
                     >
                         <span className="ag-bi-tally-figure" aria-hidden="true">{treasureGlyph(treasure.id)}</span>
-                        <span className="ag-bi-tally-n" aria-hidden="true">
+                        <span className="ag-stat-tally-n ag-bi-tally-n" aria-hidden="true">
                             {captured ? '✓' : `${left}/${treasure.tiles.length}`}
                         </span>
                     </span>

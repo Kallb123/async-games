@@ -1089,6 +1089,10 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-stat--button { font: inherit; text-align: left; cursor: pointer; }
 .ag-stat-num { font: 800 22px var(--ag-font); color: var(--ag-ink); }
 .ag-stat-label { font: 600 11px var(--ag-font); color: var(--ag-ink-softer); margin-top: 2px; }
+/* One reading inside a stat tile that carries several rather than one number —
+   Outbreak's per-colour cube supply, Banned Islet's treasure quadrant. Tabular
+   figures so the readings sit in a column that doesn't jitter as they change. */
+.ag-stat-tally-n { font: 800 14px var(--ag-font); font-variant-numeric: tabular-nums; color: var(--ag-ink); }
 
 /* Recent-match form guide (compact row of W/L/D dots) — row uses .ag-chips */
 .ag-result-chip {
@@ -4129,7 +4133,7 @@ button.ag-tt-ticket { cursor: pointer; }
    board is what names the colours. The numbers use each colour's `inkHex`
    (board.ts), not the cube `hex`, or blue and yellow would be unreadable here. */
 .ag-ob-cubetally { display: flex; gap: 6px; }
-.ag-ob-cubetally-n { font: 800 16px var(--ag-font); font-variant-numeric: tabular-nums; }
+.ag-ob-cubetally-n { font-size: 16px; }
 
 /* ---- Escalation drawer: the scale behind an escalating stat ---- */
 /* Sits under the stat row on the same panel, so tapping the stat reads as
@@ -4392,18 +4396,8 @@ button.ag-tt-ticket { cursor: pointer; }
     justify-content: space-between;
     gap: 2px 10px;
 }
-.ag-bi-tally-item {
-    display: flex;
-    align-items: center;
-    gap: 3px;
-    min-width: 0;
-}
+.ag-bi-tally-item { display: flex; align-items: center; gap: 3px; }
 .ag-bi-tally-figure { font-size: 13px; line-height: 1; }
-.ag-bi-tally-n {
-    font: 800 14px var(--ag-font);
-    font-variant-numeric: tabular-nums;
-    color: var(--ag-ink);
-}
 .ag-bi-tally-item--danger .ag-bi-tally-n { color: var(--ag-danger); }
 .ag-bi-tally-item--aboard { opacity: 0.55; }
 .ag-bi-tally-item--aboard .ag-bi-tally-n { color: var(--bi-teal-deep); }
