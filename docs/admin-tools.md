@@ -266,10 +266,19 @@ section spans so the two lines stay comparable.
 A band like that has to name every one of its steps, and the export panel says
 so if it doesn't: "the next tile along in the lane beside me" is a statement
 about lanes that run *in step*, and over one that doesn't it is a guess — the
-guess that used to put two tiles drawn side by side a row apart. *Auto-connect
-exits from geometry* is the tool for it: it connects each tile to the tiles
-physically ahead of it in this lane and the one either side, working the
-direction of travel out from the next tile along the tile's own lane.
+guess that used to put two tiles drawn side by side a row apart.
+
+*Auto-connect exits from geometry* does most of the work: it connects each tile
+to the tiles physically ahead of it in this lane and the one either side,
+working the direction of travel out from the next tile along the tile's own
+lane. It cannot finish the job on its own, though, and this is the one place
+that matters: where the geometry's answer happens to *match* §5.1's default,
+auto-connect leaves the tile on the rule rather than writing the set down — so
+the section stays refused however many times you run it. Those are the tiles
+step 5 is for. Finish with **Name this section's steps** in the *Sections*
+panel, which writes down every tile still leaning on the rule in one go and
+leaves the ones auto-connect drew alone; the panel counts them for you, so a
+section reading zero is one that will load.
 
 ### No "What's new" entry
 

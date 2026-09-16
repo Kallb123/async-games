@@ -14,21 +14,18 @@ import {
     NO_EXITS,
     parseDraft,
     pinnedExits,
-    sectionOutOfStep,
     printTrackFile,
-    sameExits,
     sectionLabel,
-    tileDefaultExits,
+    sectionOutOfStep,
     tileHeading,
     tilesIn,
-    toSections,
     validateTrack,
+    withExitToggled,
     withSectionStepsNamed,
     type EditorSection,
     type EditorState,
     type EditorTile,
 } from '@/games/RaceCars/tracks/editorModel';
-import { lapRuns } from '@/games/RaceCars/tracks/sections';
 import { readStoredValue, writeStoredValue } from '@/utils/hooks/useStoredValue';
 
 /**
@@ -286,30 +283,7 @@ export default function RaceCarsTrackEditor() {
     }, [state.tiles]);
 
     const toggleExit = useCallback((fromId: string, targetId: string) => {
-        setState(prev => {
-            const tile = prev.tiles.find(candidate => candidate.id === fromId);
-            if (!tile) return prev;
-            const fallback = tileDefaultExits(lapRuns(toSections(prev)), prev, tile);
-            const current = tile.exits ?? fallback;
-            const nextExits = current.includes(targetId)
-                ? current.filter(exit => exit !== targetId)
-                : [...current, targetId];
-            // If the edit lands back on §5.1's default, drop the override so the
-            // printed track stays a plain straight rather than a hand-written one
-            // — but never where that rule is one `deriveTrack` refuses, or an
-            // author editing a tile in an out-of-step section would silently
-            // undo the very thing making its section driveable.
-            const asDefault = sameExits(nextExits, fallback) && !sectionOutOfStep(prev, tile.section);
-            return {
-                ...prev,
-                // A hand edit is authored, even one starting from an auto-connect
-                // — so it clears autoExits and, from here on, auto-connect leaves
-                // it alone like any other hand-drawn override.
-                tiles: prev.tiles.map(candidate => (candidate.id === fromId
-                    ? { ...candidate, exits: asDefault ? undefined : nextExits, autoExits: undefined }
-                    : candidate)),
-            };
-        });
+        setState(prev => ({ ...prev, tiles: withExitToggled(prev, fromId, targetId) }));
     }, []);
 
     /**

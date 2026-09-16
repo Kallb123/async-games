@@ -363,6 +363,36 @@ export function withSectionStepsNamed(state: EditorState, sectionId: string): Ed
 }
 
 /**
+ * One tile's steps with `targetId` added or taken away — a click on the canvas
+ * while drawing exits, as a change to the tiles.
+ *
+ * An edit that lands back on §5.1's default normally **drops** the override, so
+ * an ordinary straight prints plain rather than hand-written. Not in a section
+ * whose lanes run out of step: there the rule it would fall back to is one
+ * `deriveTrack` refuses, so dropping the override would silently undo the thing
+ * making the section driveable — an author toggling a step off and on again
+ * would put the refusal back without touching anything else.
+ */
+export function withExitToggled(state: EditorState, fromId: string, targetId: string): EditorTile[] {
+    const tile = state.tiles.find(candidate => candidate.id === fromId);
+    if (!tile) return state.tiles;
+
+    const fallback = tileDefaultExits(lapRuns(toSections(state)), state, tile);
+    const current = tile.exits ?? fallback;
+    const exits = current.includes(targetId)
+        ? current.filter(exit => exit !== targetId)
+        : [...current, targetId];
+    const asDefault = sameExits(exits, fallback) && !sectionOutOfStep(state, tile.section);
+
+    return state.tiles.map(candidate => (candidate.id === fromId
+        // A hand edit is authored, even one starting from an auto-connect — so
+        // it clears `autoExits` and, from here on, auto-connect leaves it alone
+        // like any other hand-drawn override.
+        ? { ...candidate, exits: asDefault ? undefined : exits, autoExits: undefined }
+        : candidate));
+}
+
+/**
  * The heading a car on this tile faces: its own where the author set one, else
  * pointed down the road toward its exits, so a fresh track's cars aim the right
  * way without a heading typed per tile.

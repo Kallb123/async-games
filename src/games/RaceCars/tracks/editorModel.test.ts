@@ -15,6 +15,7 @@ import {
     tileHeading,
     toTrack,
     validateTrack,
+    withExitToggled,
     withSectionStepsNamed,
     type EditorState,
     type EditorTile,
@@ -43,65 +44,6 @@ function tinyState(): EditorState {
         ],
     });
 }
-
-describe("naming a tile's steps rather than leaning on §5.1's rule", () => {
-    /** The tiny circuit with its corner's inside line one tile short. */
-    function skewedState(): EditorState {
-        const skewed = tinyState();
-        skewed.tiles = skewed.tiles.filter(candidate => candidate.id !== "bend.1.1");
-        return skewed;
-    }
-
-    it("knows which sections the default rule is refused for", () => {
-        const skewed = skewedState();
-        expect(sectionOutOfStep(skewed, "bend")).toBe(true);
-        // The start/finish line's own lanes still run in step.
-        expect(sectionOutOfStep(skewed, "sf")).toBe(false);
-        // ...as do the corner's, once the missing tile is back.
-        expect(sectionOutOfStep(tinyState(), "bend")).toBe(false);
-    });
-
-    it("freezes the steps a tile is already taking, without changing them", () => {
-        // The bug this exists for: a tile whose default steps are already the
-        // right ones had no way to say so, because every toggle that lands on
-        // the default drops the override again.
-        const skewed = skewedState();
-        const tile = skewed.tiles.find(candidate => candidate.id === "bend.2.0")!;
-        const before = effectiveExits(skewed, tile);
-        expect(tile.exits).toBeUndefined();
-
-        const pinned = { ...tile, ...pinnedExits(skewed, tile) };
-        expect(pinned.exits).toEqual(before);
-        expect(effectiveExits({ ...skewed, tiles: [pinned] }, pinned)).toEqual(before);
-    });
-
-    it("leaves steps a tile already named alone when naming a section's", () => {
-        const skewed = skewedState();
-        skewed.tiles = skewed.tiles.map(candidate => (candidate.id === "bend.1.0"
-            ? { ...candidate, exits: ["bend.2.1"] }
-            : candidate));
-
-        const named = withSectionStepsNamed(skewed, "bend");
-        expect(named.find(candidate => candidate.id === "bend.1.0")!.exits).toEqual(["bend.2.1"]);
-        // ...and every other tile in the section now carries its own.
-        expect(named.filter(candidate => candidate.section === "bend").every(candidate => candidate.exits)).toBe(true);
-        // A tile outside the section is untouched.
-        expect(named.find(candidate => candidate.id === "sf.1.0")!.exits).toBeUndefined();
-    });
-
-    it("hands an auto-connected set over as the tile's own", () => {
-        const skewed = skewedState();
-        skewed.tiles = skewed.tiles.map(candidate => (candidate.id === "bend.2.0"
-            ? { ...candidate, exits: ["bend.2.1"], autoExits: true }
-            : candidate));
-        const tile = skewed.tiles.find(candidate => candidate.id === "bend.2.0")!;
-
-        const pinned = pinnedExits(skewed, tile);
-        expect(pinned.exits).toEqual(["bend.2.1"]);
-        // No longer auto-connect's to redraw — an author has confirmed it.
-        expect(pinned.autoExits).toBeUndefined();
-    });
-});
 
 /** One tile, for the geometry fixtures below — all in one unnamed section. */
 function tile(id: string, lane: number, x: number, y: number, extra: Partial<EditorTile> = {}): EditorTile {
@@ -160,6 +102,93 @@ describe("editor validation", () => {
         const orphan = tinyState();
         orphan.sections = orphan.sections.filter(section => section.id !== "bend");
         expect(validateTrack(orphan).warnings.some(warning => /no longer exists/.test(warning))).toBe(true);
+    });
+});
+
+describe("naming a tile's steps rather than leaning on §5.1's rule", () => {
+    /** The tiny circuit with its corner's inside line one tile short. */
+    function skewedState(): EditorState {
+        const skewed = tinyState();
+        skewed.tiles = skewed.tiles.filter(candidate => candidate.id !== "bend.1.1");
+        return skewed;
+    }
+
+    it("knows which sections the default rule is refused for", () => {
+        const skewed = skewedState();
+        expect(sectionOutOfStep(skewed, "bend")).toBe(true);
+        // The start/finish line's own lanes still run in step.
+        expect(sectionOutOfStep(skewed, "sf")).toBe(false);
+        // ...as do the corner's, once the missing tile is back.
+        expect(sectionOutOfStep(tinyState(), "bend")).toBe(false);
+    });
+
+    it("freezes the steps a tile is already taking, without changing them", () => {
+        // The bug this exists for: a tile whose default steps are already the
+        // right ones had no way to say so, because every toggle that lands on
+        // the default drops the override again.
+        const skewed = skewedState();
+        const tile = skewed.tiles.find(candidate => candidate.id === "bend.2.0")!;
+        const before = effectiveExits(skewed, tile);
+        expect(tile.exits).toBeUndefined();
+
+        const pinned = { ...tile, ...pinnedExits(skewed, tile) };
+        expect(pinned.exits).toEqual(before);
+        expect(effectiveExits({ ...skewed, tiles: [pinned] }, pinned)).toEqual(before);
+    });
+
+    it("leaves steps a tile already named alone when naming a section's", () => {
+        const skewed = skewedState();
+        skewed.tiles = skewed.tiles.map(candidate => (candidate.id === "bend.1.0"
+            ? { ...candidate, exits: ["bend.2.1"] }
+            : candidate));
+
+        const named = withSectionStepsNamed(skewed, "bend");
+        expect(named.find(candidate => candidate.id === "bend.1.0")!.exits).toEqual(["bend.2.1"]);
+        // ...and every other tile in the section now carries its own.
+        expect(named.filter(candidate => candidate.section === "bend").every(candidate => candidate.exits)).toBe(true);
+        // A tile outside the section is untouched.
+        expect(named.find(candidate => candidate.id === "sf.1.0")!.exits).toBeUndefined();
+    });
+
+    it("keeps an edit that lands on the default where the rule is refused", () => {
+        // The promise `docs/admin-tools.md` makes: toggling a step off and on
+        // again cannot un-name a tile's steps in an out-of-step section, or an
+        // author would put the refusal back without meaning to.
+        const skewed = { ...skewedState(), tiles: withSectionStepsNamed(skewedState(), "bend") };
+        const tile = skewed.tiles.find(candidate => candidate.id === "bend.2.0")!;
+        const step = tile.exits![0];
+
+        const off = { ...skewed, tiles: withExitToggled(skewed, tile.id, step) };
+        const backOn = withExitToggled(off, tile.id, step);
+        const settled = backOn.find(candidate => candidate.id === tile.id)!;
+        expect(settled.exits).toEqual(tile.exits);
+        expect(validateTrack({ ...skewed, tiles: backOn }).errors).toEqual([]);
+    });
+
+    it("still drops an override that lands on the default where it is allowed", () => {
+        // The ordinary case, unchanged: a straight prints plain rather than
+        // hand-written, so the two rules don't collapse into one.
+        const tiny = tinyState();
+        const tile = tiny.tiles.find(candidate => candidate.id === "bend.2.0")!;
+        const step = effectiveExits(tiny, tile)[0];
+
+        const off = { ...tiny, tiles: withExitToggled(tiny, tile.id, step) };
+        expect(off.tiles.find(candidate => candidate.id === tile.id)!.exits).toBeDefined();
+        const backOn = withExitToggled(off, tile.id, step);
+        expect(backOn.find(candidate => candidate.id === tile.id)!.exits).toBeUndefined();
+    });
+
+    it("hands an auto-connected set over as the tile's own", () => {
+        const skewed = skewedState();
+        skewed.tiles = skewed.tiles.map(candidate => (candidate.id === "bend.2.0"
+            ? { ...candidate, exits: ["bend.2.1"], autoExits: true }
+            : candidate));
+        const tile = skewed.tiles.find(candidate => candidate.id === "bend.2.0")!;
+
+        const pinned = pinnedExits(skewed, tile);
+        expect(pinned.exits).toEqual(["bend.2.1"]);
+        // No longer auto-connect's to redraw — an author has confirmed it.
+        expect(pinned.autoExits).toBeUndefined();
     });
 });
 
