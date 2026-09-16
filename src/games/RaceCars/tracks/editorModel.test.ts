@@ -9,9 +9,9 @@ import {
     nextTileId,
     parseDraft,
     printTrackFile,
-    mustNameSteps,
     pinnedExits,
     sameExits,
+    sectionOutOfStep,
     tileHeading,
     toTrack,
     validateTrack,
@@ -52,13 +52,13 @@ describe("naming a tile's steps rather than leaning on §5.1's rule", () => {
         return skewed;
     }
 
-    it("knows which tiles the default rule is refused for", () => {
+    it("knows which sections the default rule is refused for", () => {
         const skewed = skewedState();
-        const inCorner = skewed.tiles.find(candidate => candidate.id === "bend.2.0")!;
-        const onTheStraight = skewed.tiles.find(candidate => candidate.id === "sf.1.0")!;
-        expect(mustNameSteps(skewed, inCorner)).toBe(true);
+        expect(sectionOutOfStep(skewed, "bend")).toBe(true);
         // The start/finish line's own lanes still run in step.
-        expect(mustNameSteps(skewed, onTheStraight)).toBe(false);
+        expect(sectionOutOfStep(skewed, "sf")).toBe(false);
+        // ...as do the corner's, once the missing tile is back.
+        expect(sectionOutOfStep(tinyState(), "bend")).toBe(false);
     });
 
     it("freezes the steps a tile is already taking, without changing them", () => {

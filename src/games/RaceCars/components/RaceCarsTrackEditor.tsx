@@ -10,11 +10,11 @@ import {
     effectiveExits,
     emptyState,
     fromTrack,
-    mustNameSteps,
     nextTileId,
     NO_EXITS,
     parseDraft,
     pinnedExits,
+    sectionOutOfStep,
     printTrackFile,
     sameExits,
     sectionLabel,
@@ -75,6 +75,10 @@ const TOOL_CHANGES = [
     'v2 — auto-connect never skips a lane (no lane 1 straight to lane 3), and tags what it writes so a later pass can redraw it instead of freezing on the first run.',
     'v1 — corner painting, save/resume to a file, and connecting exits from the drawn geometry.',
 ].join('\n');
+
+/** The opener both panels use to explain the refusal, so rewording it moves
+ *  one string rather than two that drift. Each site appends its own tail. */
+const OUT_OF_STEP = "This section's lanes run out of step, so §5.1's rule is refused here";
 
 const TILE_RADIUS = 7;
 /** How far a pointer may travel before a click counts as a drag, in screen px. */
@@ -295,7 +299,7 @@ export default function RaceCarsTrackEditor() {
             // — but never where that rule is one `deriveTrack` refuses, or an
             // author editing a tile in an out-of-step section would silently
             // undo the very thing making its section driveable.
-            const asDefault = sameExits(nextExits, fallback) && !mustNameSteps(prev, tile);
+            const asDefault = sameExits(nextExits, fallback) && !sectionOutOfStep(prev, tile.section);
             return {
                 ...prev,
                 // A hand edit is authored, even one starting from an auto-connect
@@ -834,7 +838,7 @@ function SelectedTilePanel({ state, tile, row, onPatch, onTogglePinned, onDelete
 }) {
     const autoHeading = tileHeading(state, { ...tile, heading: undefined });
     const section = state.sections.find(candidate => candidate.id === tile.section);
-    const needsOwnSteps = mustNameSteps(state, tile);
+    const outOfStep = sectionOutOfStep(state, tile.section);
     return (
         <Section label={`Tile ${tile.id}`}>
             <div className="ag-stack">
@@ -866,10 +870,9 @@ function SelectedTilePanel({ state, tile, row, onPatch, onTogglePinned, onDelete
                 <p className="ag-hint">
                     Steps out: {effectiveExits(state, tile).join(', ') || 'none'}
                     {tile.exits ? (tile.autoExits ? ' (auto-connected — a re-run may redraw this)' : ' (hand-drawn override)') : ' (default §5.1 rule)'}.
-                    {needsOwnSteps && !tile.exits && (
-                        <> This section&apos;s lanes run out of step, so §5.1&apos;s rule is refused here and this tile
-                        has to name its own steps — even these ones. Make them its own to say so.</>
-                    )}
+                    {outOfStep && (tile.exits
+                        ? <> {OUT_OF_STEP} — handing these back would refuse the section again.</>
+                        : <> {OUT_OF_STEP} and this tile has to name its own steps, even these ones. Make them its own to say so.</>)}
                 </p>
 
                 <div className="ag-btn-row ag-btn-row--wrap">
@@ -913,14 +916,6 @@ function SectionsPanel({ state, rows, activeSectionId, onSetActiveSection, onSet
         if (activeSectionId === id) onSetActiveSection('');
     };
 
-    /**
-     * How many of a section's tiles still fall back to §5.1's rule where that
-     * rule is refused — the ones `deriveTrack` would throw on, one at a time.
-     * Zero for a section whose lanes run in step, which is nearly all of them.
-     */
-    const unnamed = (id: string): number =>
-        tilesIn(state, id).filter(tile => !tile.exits && mustNameSteps(state, tile)).length;
-
     /** The rows a section's tiles landed on, for the author to read its extent off. */
     const band = (id: string): string => {
         const placed = tilesIn(state, id).map(tile => rows.get(tile.id)).filter((row): row is number => row !== undefined);
@@ -942,7 +937,15 @@ function SectionsPanel({ state, rows, activeSectionId, onSetActiveSection, onSet
                     (§10) — no separate painting of bands.
                 </p>
 
-                {state.sections.map((section, index) => (
+                {state.sections.map((section, index) => {
+                    // The tiles `deriveTrack` would throw on, one at a time:
+                    // zero for a section whose lanes run in step, which is
+                    // nearly all of them. Counted once per row rather than per
+                    // use — each ask walks the tiles and rebuilds the lap.
+                    const outstanding = sectionOutOfStep(state, section.id)
+                        ? tilesIn(state, section.id).filter(tile => !tile.exits).length
+                        : 0;
+                    return (
                     <div key={section.id} className={`ag-rcedit-section ag-stack${activeSectionId === section.id ? ' ag-rcedit-section--active' : ''}`}>
                         <div className="ag-rcedit-grid">
                             <Field label="Id"><input className="ag-input" value={section.id} disabled /></Field>
@@ -965,16 +968,16 @@ function SectionsPanel({ state, rows, activeSectionId, onSetActiveSection, onSet
                         </div>
                         <p className="ag-hint">
                             {tilesIn(state, section.id).length} tiles · {band(section.id)}
-                            {unnamed(section.id) > 0 && (
-                                <> · lanes out of step, so §5.1&apos;s rule is refused here and {unnamed(section.id)} tile
-                                {unnamed(section.id) === 1 ? '' : 's'} still leaning on it must name their own steps.</>
+                            {outstanding > 0 && (
+                                <> · {OUT_OF_STEP} and {outstanding} tile{outstanding === 1 ? '' : 's'} still
+                                leaning on it must name their own steps.</>
                             )}
                         </p>
                         <div className="ag-btn-row ag-btn-row--wrap">
                             <button type="button" className="ag-btn ag-btn--light" onClick={() => onSetActiveSection(section.id)}>
                                 {activeSectionId === section.id ? 'Drawing into this' : 'Draw into this'}
                             </button>
-                            {unnamed(section.id) > 0 && (
+                            {outstanding > 0 && (
                                 <button type="button" className="ag-btn ag-btn--dark" onClick={() => onSetTiles(withSectionStepsNamed(state, section.id))}>
                                     Name this section&apos;s steps
                                 </button>
@@ -984,7 +987,8 @@ function SectionsPanel({ state, rows, activeSectionId, onSetActiveSection, onSet
                             <button type="button" className="ag-btn ag-btn--light" onClick={() => remove(section.id)} disabled={state.sections.length <= 1}>Remove</button>
                         </div>
                     </div>
-                ))}
+                    );
+                })}
 
                 <div className="ag-btn-row ag-btn-row--wrap">
                     <button type="button" className="ag-btn ag-btn--dark" onClick={add}>Add section</button>

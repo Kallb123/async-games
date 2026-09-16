@@ -23,6 +23,7 @@ import {
     lapRuns,
     neighbouringLanes,
     plainTileId,
+    runsInStep,
     tileGeometry,
     type DerivedTrack,
     type SectionRuns,
@@ -300,32 +301,21 @@ export function effectiveExits(state: EditorState, tile: EditorTile): string[] {
 }
 
 /**
- * Whether §5.1's default step rule is refused for this tile — that is, whether
- * its section's lanes hold different numbers of tiles.
+ * Whether §5.1's default step rule is refused for a section — that is, whether
+ * its lanes hold different numbers of tiles.
  *
- * `defaultExitIds` answers "the next tile along, this lane or either beside it"
- * by **index** within each lane's run. Where the runs are different lengths
- * that index is not a statement about the road, so `deriveTrack` refuses the
- * section unless every tile in it names its own steps (`sections.ts`). The
- * editor still draws the computed default there, because it is usually the
- * right answer near the section's entry and a useful thing to start from — but
- * an author has to confirm it, which is what `pinnedExits` is for.
+ * The test itself is `runsInStep` in `sections.ts`, asked of the same lane runs
+ * `deriveTrack` refuses the section from, so the editor's count, its button and
+ * the error message an author reads can never disagree about which tiles are
+ * the problem.
+ *
+ * The editor still draws the computed default in such a section, because it is
+ * usually the right answer near the section's entry and a useful thing to start
+ * from — but an author has to confirm it, which is what `pinnedExits` is for.
  */
-export function mustNameSteps(state: EditorState, tile: EditorTile): boolean {
-    const section = state.sections.find(candidate => candidate.id === tile.section);
-    if (!section) return false;
-    const lengths = [...laneRunLengths(state, section.id)];
-    return lengths.length > 1 && lengths.some(length => length !== lengths[0]);
-}
-
-/** How many tiles each lane of a section holds, in no particular order. */
-function laneRunLengths(state: EditorState, sectionId: string): number[] {
-    const perLane = new Map<number, number>();
-    for (const tile of state.tiles) {
-        if (tile.section !== sectionId) continue;
-        perLane.set(tile.lane, (perLane.get(tile.lane) ?? 0) + 1);
-    }
-    return [...perLane.values()];
+export function sectionOutOfStep(state: EditorState, sectionId: string): boolean {
+    const here = lapRuns(toSections(state)).find(({ section }) => section.id === sectionId);
+    return here ? !runsInStep(here.runs) : false;
 }
 
 /**
@@ -337,11 +327,18 @@ function laneRunLengths(state: EditorState, sectionId: string): number[] {
  * because an edit that lands on the default drops the override again. A tile in
  * a section whose lanes run out of step needs exactly that, since the rule its
  * steps would otherwise fall back to is one `deriveTrack` refuses.
+ *
+ * `lap` is optional for the same reason `tileDefaultExits` takes one: a caller
+ * naming a whole section's steps would otherwise rebuild it per tile.
  */
-export function pinnedExits(state: EditorState, tile: EditorTile): Pick<EditorTile, "exits" | "autoExits"> {
+export function pinnedExits(
+    state: EditorState,
+    tile: EditorTile,
+    lap: SectionRuns[] = lapRuns(toSections(state)),
+): Pick<EditorTile, "exits" | "autoExits"> {
     // `autoExits` cleared with it: a set an author has confirmed is theirs, so
     // auto-connect leaves it alone like any other hand-drawn override.
-    return { exits: effectiveExits(state, tile), autoExits: undefined };
+    return { exits: tile.exits ?? tileDefaultExits(lap, state, tile), autoExits: undefined };
 }
 
 /**
@@ -361,7 +358,7 @@ export function pinnedExits(state: EditorState, tile: EditorTile): Pick<EditorTi
 export function withSectionStepsNamed(state: EditorState, sectionId: string): EditorTile[] {
     const lap = lapRuns(toSections(state));
     return state.tiles.map(tile => (tile.section === sectionId && !tile.exits
-        ? { ...tile, exits: tileDefaultExits(lap, state, tile), autoExits: undefined }
+        ? { ...tile, ...pinnedExits(state, tile, lap) }
         : tile));
 }
 

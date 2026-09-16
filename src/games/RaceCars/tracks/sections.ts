@@ -156,6 +156,21 @@ function laneRuns(tiles: readonly SourceTile[]): Map<number, SourceTile[]> {
     return runs;
 }
 
+/**
+ * Whether a section's lanes hold the same number of tiles.
+ *
+ * §5.1's default step rule is only a statement about the road where they do:
+ * it answers "the next tile along, this lane or either beside it" by index into
+ * each lane's run, and where the runs are different lengths that index is not
+ * beside anything. `deriveTrack` refuses such a section unless every tile names
+ * its own steps, and the editor asks the same question to say which tiles those
+ * are — so the test lives here, once, rather than in both.
+ */
+export function runsInStep(runs: Map<number, SourceTile[]>): boolean {
+    const lengths = [...runs.values()].map(run => run.length);
+    return lengths.every(length => length === lengths[0]);
+}
+
 /** A lane and the two either side of it — everywhere §5.1's rule is applied. */
 export function neighbouringLanes(lane: number): number[] {
     return [lane - 1, lane, lane + 1];
@@ -297,8 +312,7 @@ export function deriveTrack(sections: TrackSection[]): DerivedTrack {
     // lead. This is the check that turns a silently wrong corner into a
     // refusal an author can read.
     lap.forEach(({ section, runs }, sectionIndex) => {
-        const lengths = [...runs.values()].map(run => run.length);
-        const inStep = lengths.every(length => length === lengths[0]);
+        const inStep = runsInStep(runs);
         for (const run of runs.values()) {
             for (const tile of run) {
                 const entry = byId.get(tile.id)!;
