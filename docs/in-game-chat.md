@@ -308,7 +308,9 @@ export function useGameChat(gameId: string, open: boolean) {
 ```
 
 `send(text)` POSTs and then `await refresh()`. **No optimistic append:**
-`useRefreshableData` owns `data` and exposes no setter, so an optimistic list
+`useRefreshableData` owns `data`, and the `setData` it exposes is for a caller
+the server has already answered with the new state (a game command's own
+response) — not for a guess at one. An optimistic list here
 means a second copy of the messages inside this hook, merged with the hook's own
 and rendering the sent line twice until the refetch reconciles it. A refetch
 after a POST the player just waited on is imperceptible and has one source of
@@ -1049,7 +1051,8 @@ games).*
 `GameChat`.
 
 One thing to get right, and it is the reason this is not a two-line change:
-`useRefreshableData` owns `data` and hands out no setter, which is exactly why
+`useRefreshableData` owns `data`, and its setter is for state the server has
+already answered with, not for a guess — which is exactly why
 phase 1 refused an optimistic append (§6). Older pages need state of their own
 in `useGameChat`, prepended to the live window. That is safe where the
 optimistic append was not, and the difference is worth stating in the code:

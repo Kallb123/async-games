@@ -49,9 +49,11 @@ export interface GameChat {
  * for, and every tick is a request per watching player. `enabled` is false for a
  * single-seat game, whose shell mounts this hook but has no thread to read.
  *
- * There is no optimistic append. `useRefreshableData` owns `data` and hands out
- * no setter, so an optimistic list would be a second copy of the messages
- * rendering each sent line twice until the refetch reconciled it; a refetch
+ * There is no optimistic append. `useRefreshableData` owns `data`, and the
+ * `setData` it hands out is for a caller the server has already answered with
+ * the new state (a game command's own response) — never for a guess at one. An
+ * optimistic list here would be a second copy of the messages, rendering each
+ * sent line twice until the refetch reconciled it; a refetch
  * after a POST the player just waited on is imperceptible and has one source of
  * truth. See docs/in-game-chat.md §6.
  *
@@ -61,8 +63,8 @@ export interface GameChat {
  *
  * Older pages (`loadEarlier`) are the one piece of state this hook owns for
  * itself rather than taking from `useRefreshableData` — deliberately, and only
- * here. `useRefreshableData` owns `data` and hands out no setter, which is
- * exactly why there is no optimistic append above: a second copy of the *live*
+ * here. `useRefreshableData` owns `data`, and its setter is not for guesses,
+ * which is exactly why there is no optimistic append above: a second copy of the *live*
  * window would drift from the poll's own copy the moment the two disagreed.
  * An older page cannot drift, because it never changes once fetched — nothing
  * edits or deletes a chat message, so a page of history fetched with `before`
@@ -196,9 +198,9 @@ export function useGameChat(gameId: string, open: boolean, enabled: boolean): Ga
             setUnreadCutoffId(undefined);
         }
     }
-    // Gated on `data !== null`, not just `!isLoading`: a failed fetch also
-    // leaves `isLoading` false (useRefreshableData flips it in its `finally`
-    // whether or not the request succeeded) but `data` stays null, and `readAt`
+    // Gated on `data !== null`, not just `!isLoading`: a fetch that failed for
+    // good (useRefreshableData clears `isLoading` once it has stopped retrying,
+    // whether or not it ever succeeded) leaves `data` null, and `readAt`
     // would read as `null` — indistinguishable from "never opened this thread".
     // Capturing that as the cutoff would mark the whole history unread for
     // this viewing; waiting for real data means a retry or the next poll

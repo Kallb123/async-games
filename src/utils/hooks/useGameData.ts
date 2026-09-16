@@ -1,35 +1,73 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+'use client'
+import { useCallback, useEffect, type Dispatch, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
-import { fetchWithSessionRetry } from "./fetchWithSessionRetry";
 import { useIsAuthorised } from "./useAuthGuard";
-import { usePushEvents, TURN_ADVANCED_EVENTS } from "./usePushEvents";
+import { TURN_ADVANCED_EVENTS } from "./usePushEvents";
+import { useRefreshableData } from "./useRefreshableData";
 import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
+
+/** What `/api/game/[gameid]` answers with. Nothing reads its `success` flag. */
+interface IGameDataBody<T> {
+    gameData: T;
+}
 
 /**
  * Fetches a game's current state from `/api/game/[gameid]`, shared by every
- * game screen. Loads once the viewer is signed in and unlocked (the screen
- * itself owns the redirect via `useAuthGuard`) and re-fetches whenever the
- * turn advances or the tab returns to the foreground — the game-screen twin
- * of `useRefreshableData`, which does the same for the dashboard lists.
- *
- * While an opponent could be moving, it also polls (see `pollWhileWatching`):
- * a player watching the board is the one case no push covers, since the tab
- * never goes away to come back.
+ * game screen. It is `useRefreshableData` pointed at one game: the loading
+ * flags, the drop-overlapping-fetches bookkeeping, the keep-the-last-good-body
+ * failure handling and the backoff retries are all that hook's, and what is
+ * left here is the three things that are actually about a game — which body
+ * field the board wants, when an opponent could be moving, and where a viewer
+ * goes when the game isn't theirs to look at.
  *
  * `loading` is true whenever a fetch is in flight — the first one and every
  * later refresh — which is what the shell's top-bar loading bar renders from.
- * It is deliberately not the `isLoading`/`isRefreshing` pair `useRefreshableData`
- * draws for the dashboard: a board never swaps itself out for a skeleton, so
- * the only thing either flag would drive here is that one bar.
+ * It is the `isLoading`/`isRefreshing` pair collapsed back into one flag: a
+ * board never swaps itself out for a skeleton, so the only thing either would
+ * drive here is that one bar.
  *
- * Retries once on a 401 (transient session-cookie refresh race, see
- * fetchWithSessionRetry) before bailing on genuine failures: a 404 (no
- * such live game — it may still have a finished GameResult) sends the user
- * to that game's result page instead, which enforces its own view
- * permission; any other failure (a 401 that persists after the retry, or a
- * network error) redirects home.
+ * **A failed fetch never moves the player.** It used to: any failure that
+ * wasn't a 404 pushed them home, so a single background poll losing its
+ * connection — a phone changing network, a session cookie mid-refresh — ejected
+ * somebody from a board they were in the middle of, onto a dashboard whose own
+ * fetch was failing for exactly the same reason and so came up empty. Now a
+ * failure keeps the board it has, and the retries underneath bring it back.
+ * Only two answers move anybody, and both are the server saying this is not
+ * their game to be looking at:
+ *
+ * - **404** — no such live game. It may still have a finished `GameResult`, so
+ *   the viewer goes to that game's result page, which enforces its own view
+ *   permission.
+ * - **403** — a real game they aren't a player in. Home.
  */
 export function useGameData<T extends IGameDataResponse>(gameId: string) {
+    const { isAuthorised, user } = useIsAuthorised();
+    const router = useRouter();
+
+    // Poll only while there is something that could change under us. On the
+    // viewer's own turn nothing can move until they act, so polling then would
+    // be pure noise — and `YourTurn` already pushes the moment the turn comes
+    // back to them. `currentTurn` is empty until the first fetch lands, and on a
+    // finished game.
+    //
+    // A board with nothing on it at all is the exception: that is the screen
+    // that most needs to recover on its own, so it keeps asking until it has
+    // something to show (and stops, like every poll, as soon as the viewer
+    // stops watching — see `usePushEvents`).
+    const waitingOnOpponent = (body: IGameDataBody<T> | null) => {
+        const game = body?.gameData;
+        if (!game) {
+            return true;
+        }
+        return !!game.currentTurn && !game.complete && game.currentTurn !== user?.id;
+    };
+
+    const { data, setData, isLoading, isRefreshing, status, refresh } = useRefreshableData<IGameDataBody<T>>(
+        `/api/game/${gameId}`,
+        TURN_ADVANCED_EVENTS,
+        { pollWhileWatching: waitingOnOpponent },
+    );
+
     // Null until the first response lands, rather than `{} as T`. The cast was
     // a lie the compiler then enforced everywhere downstream: every screen
     // reads `gameData.specificGameState.…` on its very first render, when the
@@ -37,96 +75,47 @@ export function useGameData<T extends IGameDataResponse>(gameId: string) {
     // optional-chains its way around it — this makes the type agree with the
     // code, so a new screen that forgets is a compile error rather than a
     // blank board and a thrown render.
-    const [gameData, setGameData] = useState<T | null>(null);
-    // True from mount rather than from the dispatch of the first fetch, so the
-    // gap between the viewer being authorised and the effect below firing isn't
-    // a blink of "idle" in the middle of the first load. It is only ever cleared
-    // in `getGameData`'s `finally`, which is why what the hook *returns* is
-    // gated on `isAuthorised` below.
-    const [loading, setLoading] = useState(true);
-    const { isAuthorised, user } = useIsAuthorised();
-    const router = useRouter();
-    const mountedRef = useRef(true);
-    // A count, not a flag: a push-driven refresh and the ten-second poll can
-    // overlap, and the first to finish must not clear the bar while the second
-    // is still out.
-    const inFlightRef = useRef(0);
-    // Whether a fetch has ever finished. `loading` already starts true, so the
-    // very first fetch has nothing to raise — and raising it from the effect
-    // that kicks that fetch off is the cascading render
-    // `react-hooks/set-state-in-effect` exists to stop. `useRefreshableData`
-    // gates its own `setIsRefreshing` on the same ref for the same reason.
-    const loadedRef = useRef(false);
-    useEffect(() => {
-        mountedRef.current = true;
-        return () => { mountedRef.current = false; };
-    }, []);
+    const gameData = data?.gameData ?? null;
 
-    const getGameData = useCallback(async (): Promise<void> => {
-        inFlightRef.current += 1;
-        if (loadedRef.current) setLoading(true);
-        try {
-            const res = await fetchWithSessionRetry(`/api/game/${gameId}`, () => !mountedRef.current);
-            if (!mountedRef.current) return;
-
-            if (!res || !res.ok) {
-                console.error(`Failed to load game ${gameId}: ${res?.status ?? "network error"}`);
-                router.push(res?.status === 404 ? `/games/result/${gameId}` : '/');
-                return;
+    // The same `Dispatch` the screens have always been handed — the updater
+    // form included, which is how a reaction gets patched into the history in
+    // place — mapped onto the one field of the body it lives in.
+    const setGameData = useCallback<Dispatch<SetStateAction<T | null>>>((update) => {
+        setData((previous) => {
+            const current = previous?.gameData ?? null;
+            const next = typeof update === 'function'
+                ? (update as (previous: T | null) => T | null)(current)
+                : update;
+            // An updater that had nothing to patch hands back exactly what it
+            // was given; keeping the same body object then keeps the render it
+            // would otherwise cost.
+            if (next === current) {
+                return previous;
             }
-
-            // Guarded for the same reason useRefreshableData guards its own parse:
-            // a 200 that isn't JSON (a proxy's error page, a truncated body) throws
-            // here, and this runs inside an effect with nothing to catch it.
-            // Keeping the last good state beats blanking the board.
-            let data: { gameData?: T } | null = null;
-            try {
-                data = await res.json();
-            } catch (error) {
-                console.error(`Failed to parse game ${gameId}`, error);
-                return;
-            }
-            if (data?.gameData && mountedRef.current) setGameData(data.gameData);
-        } finally {
-            // In a `finally` so a thrown fetch (an unreachable network) clears
-            // the bar too, rather than leaving it pulsing for the rest of the
-            // session.
-            inFlightRef.current -= 1;
-            loadedRef.current = true;
-            if (inFlightRef.current === 0 && mountedRef.current) setLoading(false);
-        }
-    }, [gameId, router]);
+            return next === null ? null : { gameData: next };
+        });
+    }, [setData]);
 
     useEffect(() => {
-        if (isAuthorised) {
-            getGameData();
+        if (status === 404) {
+            // `replace`, not `push`: Back from the result page should go
+            // wherever they came from, not to the board that just sent them
+            // here and would only send them straight back.
+            router.replace(`/games/result/${gameId}`);
+        } else if (status === 403) {
+            router.replace('/');
         }
-    }, [isAuthorised, getGameData]);
-
-    // Poll only while there is something that could change under us: the game
-    // is live and the turn belongs to somebody else. On the viewer's own turn
-    // nothing can move until they act, so polling then would be pure noise —
-    // and `YourTurn` already pushes the moment the turn comes back to them.
-    // `currentTurn` is empty until the first fetch lands, and on a finished
-    // game.
-    const waitingOnOpponent = !!gameData?.currentTurn
-        && !gameData.complete
-        && gameData.currentTurn !== user?.id;
-
-    usePushEvents(TURN_ADVANCED_EVENTS, getGameData, {
-        refreshOnVisible: true,
-        pollWhileWatching: waitingOnOpponent,
-    });
+    }, [status, gameId, router]);
 
     return {
         gameData,
         setGameData,
-        getGameData,
+        getGameData: refresh,
         // Gated on `isAuthorised` — the condition on the only thing that ever
         // clears the flag. Clerk's script not loading at all (a blocker, an
         // outage, an offline first paint) leaves `isAuthorised` false forever,
         // and `useAuthGuard` deliberately doesn't redirect for it; without this
         // the bar would pulse for the life of the tab with nothing in flight.
-        loading: loading && isAuthorised,
+        loading: (isLoading || isRefreshing) && isAuthorised,
     };
 }
