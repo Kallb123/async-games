@@ -60,8 +60,9 @@ const STORAGE_KEY = 'ag-racecars-track-editor';
  * mid-track can tell which of them are live without digging through commits —
  * shown as a small footer, its tooltip naming what changed.
  */
-const TOOL_VERSION = 6;
+const TOOL_VERSION = 7;
 const TOOL_CHANGES = [
+    'v7 — a step auto-connect drew from the geometry is purple on the canvas, telling it apart from both §5.1\'s faint grey default and a terracotta hand-drawn override — so what a re-run will redraw reads at a glance.',
     'v6 — sections and sync lines: the lap is cut into stretches of road whose ends are level across every lane, corners are sections rather than a paint colour, and rows are derived from the steps rather than typed (so they cannot drift after a corner).',
     'v5 — auto-connect never reasons from its own previous run: heading and "already connected" are worked out fresh from where the tiles sit and in road order each time, so a second run settles rather than drifting to a different tile.',
     'v4 — auto-connect never reverses an existing exit (generated or hand-drawn); it falls through to the next-nearest tile in that lane instead of connecting two tiles both ways.',
@@ -448,7 +449,7 @@ export default function RaceCarsTrackEditor() {
                                 ? `Click the art to drop the next tile into "${sectionName}", lane ${Math.min(nextLane, activeSection?.lanes ?? 3)} — place each lane's tiles in the order the road runs. Drag a tile to nudge its centre; click one to select it.`
                                 : mode === 'exits'
                                     ? (selected
-                                        ? `Click a tile to add or remove a step from ${selected.id}. Faint lines are §5.1's default; solid lines are overrides.`
+                                        ? `Click a tile to add or remove a step from ${selected.id}.`
                                         : 'Select a tile first.')
                                     : `Click or drag over tiles to move them into "${sectionName}". A corner is a section, so this is how one is drawn.`}
                         </p>
@@ -467,6 +468,17 @@ export default function RaceCarsTrackEditor() {
                             onPointerMove={onPointerMove}
                             onPointerUp={onPointerUp}
                         />
+
+                        {/* The one place the edge colours are named. It sits
+                            under the canvas rather than inside a mode's hint so
+                            it reads while placing and painting too, and so a
+                            fourth colour has a single line to change. */}
+                        <p className="ag-hint">
+                            A step&apos;s edge is coloured by where it came from: <strong>grey</strong> is §5.1&apos;s
+                            default, <strong>purple</strong> was auto-connected from the geometry, and{' '}
+                            <strong>terracotta</strong> is a hand-drawn override. A re-run of auto-connect redraws the
+                            purple ones and leaves the terracotta ones alone.
+                        </p>
 
                         <div className="ag-btn-row ag-btn-row--wrap">
                             <button type="button" className="ag-btn ag-btn--light" onClick={autoConnect}>Auto-connect exits from geometry</button>
@@ -542,6 +554,18 @@ interface CanvasProps {
     onPointerUp: (event: React.PointerEvent) => void;
 }
 
+/**
+ * The modifier naming where a tile's steps came from, so the canvas can colour
+ * the three apart: nothing for §5.1's default, `--auto` for a set
+ * auto-connect wrote from the geometry, `--override` for one an author drew.
+ * The two kinds of drawn exit have to read differently because only the
+ * generated ones are disposable — a re-run redraws them.
+ */
+function edgeOriginClass(tile: EditorTile): string {
+    if (!tile.exits) return '';
+    return tile.autoExits ? ' ag-rcedit-edge--auto' : ' ag-rcedit-edge--override';
+}
+
 // A plain scroll-and-zoom frame, deliberately not `BoardZoom`: that toggles
 // between two zoom states on click, which would fight click-to-place. Here zoom
 // is a continuous control and the container just scrolls to pan.
@@ -575,23 +599,23 @@ function EditorCanvas(props: CanvasProps) {
                     <image href={backdropHref} x={0} y={0} width={width} height={height} preserveAspectRatio="xMidYMid slice" />
                 )}
 
-                {/* Exit edges under the tiles: faint dashed for §5.1's default,
-                    solid for a hand-drawn override, so a corner's real merge
-                    reads at a glance. */}
-                {state.tiles.map(tile => {
-                    const isOverride = tile.exits !== undefined;
-                    return (exitsById.get(tile.id) ?? []).map(exit => {
-                        const target = byId.get(exit);
-                        if (!target) return null;
-                        return (
-                            <line
-                                key={`${tile.id}->${exit}`}
-                                className={`ag-rcedit-edge${isOverride ? ' ag-rcedit-edge--override' : ''}`}
-                                x1={tile.x} y1={tile.y} x2={target.x} y2={target.y}
-                            />
-                        );
-                    });
-                })}
+                {/* Exit edges under the tiles, one colour per where the step
+                    came from: faint grey dashed for §5.1's default, purple for
+                    one auto-connect drew from the geometry, terracotta for a
+                    hand-drawn override. An author needs to tell the last two
+                    apart at a glance — a re-run redraws the purple ones and
+                    leaves the terracotta ones alone. */}
+                {state.tiles.map(tile => (exitsById.get(tile.id) ?? []).map(exit => {
+                    const target = byId.get(exit);
+                    if (!target) return null;
+                    return (
+                        <line
+                            key={`${tile.id}->${exit}`}
+                            className={`ag-rcedit-edge${edgeOriginClass(tile)}`}
+                            x1={tile.x} y1={tile.y} x2={target.x} y2={target.y}
+                        />
+                    );
+                }))}
 
                 {state.tiles.map(tile => {
                     const isSelected = tile.id === selectedId;

@@ -198,13 +198,16 @@ Two consequences worth keeping in mind while drawing:
    or heading in the *Tile* panel — which also shows the row it derived to.
    Heading is computed from where a tile's exits point unless you set it.
 4. **Draw movement restriction.** Select a tile, switch to *Draw exits*, and
-   click the tiles it may step to — each click adds or removes a step. Faint
-   dashed edges are §5.1's default; solid edges are your overrides. An edit that
-   lands back on the default drops the override, so ordinary straights stay
-   plain. **Auto-connect exits from geometry** rebuilds every non-overridden
-   tile's steps from where the tiles actually sit rather than from the placement
-   order — the fix for a section whose lanes hold different numbers of tiles
-   (see below). It leaves your hand-drawn exits alone.
+   click the tiles it may step to — each click adds or removes a step. An edge is
+   coloured by where its step came from: faint grey dashed is §5.1's default,
+   purple is a step auto-connect drew from the geometry, and terracotta is your
+   own hand-drawn override. An edit that lands back on the default drops the
+   override, so ordinary straights stay plain. **Auto-connect exits from
+   geometry** rebuilds every non-overridden tile's steps from where the tiles
+   actually sit rather than from the placement order — the fix for a section
+   whose lanes hold different numbers of tiles (see below). It leaves your
+   hand-drawn exits alone, and only the purple edges are its to redraw, so the
+   colours tell you what a second run will touch.
 5. **Move tiles between sections.** *Paint into section* drags the brush over
    tiles to move them into the active section — how a corner gets its tiles, and
    how a sync line is nudged a tile either way once the art shows it is in the

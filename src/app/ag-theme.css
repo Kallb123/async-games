@@ -4698,6 +4698,16 @@ button.ag-tt-ticket { cursor: pointer; }
     opacity: 0.5;
     pointer-events: none;
 }
+/* A step auto-connect worked out from the geometry: drawn, so heavier than the
+   default, but its own colour rather than the override's, because a re-run
+   redraws these and leaves the hand-drawn ones alone — an author has to see
+   which is which before pressing the button again. */
+.ag-rcedit-edge--auto {
+    stroke: var(--ag-purple);
+    stroke-width: 1.4;
+    stroke-dasharray: 5 2;
+    opacity: 0.85;
+}
 .ag-rcedit-edge--override {
     stroke: var(--ag-terracotta-deep);
     stroke-width: 1.6;
