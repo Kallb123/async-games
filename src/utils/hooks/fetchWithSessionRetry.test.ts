@@ -63,16 +63,35 @@ describe("reloadForStaleSession", () => {
         expect(browser.reload).toHaveBeenCalledTimes(1);
     });
 
-    it("gets its reload back once something loads", async () => {
+    it("gets its reload back on a later page, once something has loaded", async () => {
+        const browser = fakeWindow();
+        const first = await loadAgainst(browser);
+        expect(first.reloadForStaleSession()).toBe(true);
+
+        // The page that came back loaded something, so the marker goes — and a
+        // session that expires all over again later is a new problem with a
+        // shot of its own. (Never twice from one document: by the time one has
+        // fired, it is the page being replaced.)
+        const afterReload = await loadAgainst(browser);
+        afterReload.clearStaleSessionReload();
+        expect(afterReload.reloadForStaleSession()).toBe(true);
+        expect(browser.reload).toHaveBeenCalledTimes(2);
+    });
+
+    it("keeps its answer once the reload is fired, whatever lands in the meantime", async () => {
+        // The page keeps running while the new document is fetched: the chat
+        // poll on the same board can succeed in that window, and its success
+        // path clears the marker. That must not re-arm the reload the tab is
+        // already taking — nor let the page that comes back take another.
         const browser = fakeWindow();
         const { reloadForStaleSession, clearStaleSessionReload } = await loadAgainst(browser);
 
         expect(reloadForStaleSession()).toBe(true);
         clearStaleSessionReload();
-
-        // A later session expiry is a new problem and gets its own one shot.
-        expect(reloadForStaleSession()).toBe(true);
-        expect(browser.reload).toHaveBeenCalledTimes(2);
+        expect(reloadForStaleSession()).toBe(false);
+        expect(browser.reload).toHaveBeenCalledTimes(1);
+        // And the marker the reloaded page will read is still there.
+        expect(browser.stored.size).toBe(1);
     });
 
     it("does not reload at all when there is nowhere to remember it", async () => {

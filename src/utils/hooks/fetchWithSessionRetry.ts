@@ -78,6 +78,15 @@ const RELOAD_MARKER_KEY = 'ag-session-reload';
 // Starts true because a reload is precisely how this page may have been loaded.
 let markerMayExist = true;
 
+// Whether this document has already fired its reload. `location.reload()` does
+// not stop the page it is replacing: in-flight fetches land and pending retry
+// timers fire while the new document is still being fetched, and one of them
+// succeeding would otherwise hand back — via `clearStaleSessionReload` — the
+// very reload the tab is in the middle of taking. The page that came back would
+// then find no marker and be free to reload again. A document that has fired
+// its one reload is done deciding, whatever else lands in that window.
+let reloadFired = false;
+
 /**
  * Reloads the page, once, to renew a session cookie that nothing on the client
  * can fix — and reports whether it did.
@@ -88,15 +97,25 @@ let markerMayExist = true;
  * this state gets nowhere by being sent to another screen, which is why
  * "just refresh the page" is what has always fixed it by hand.
  *
- * Strictly once per tab per stale session. The marker is written *before* the
- * reload and cleared only by a fetch that then succeeds
- * (`clearStaleSessionReload`), so a session that is genuinely dead — signed out
- * elsewhere, revoked — reloads exactly one time and then answers false, leaving
- * the caller to handle the failure its own way. It also answers false when
- * there is no storage to remember the attempt with (private mode, blocked site
- * data): with no way to stop a second reload, don't take the first.
+ * Strictly once per tab per stale session, guarded twice over: a marker written
+ * *before* the reload, which survives it and is given back only by a fetch that
+ * then succeeds (`clearStaleSessionReload`), and `reloadFired`, which settles
+ * the outgoing document's answer for good so that nothing landing during the
+ * reload can reopen it. A session that is genuinely dead — signed out
+ * elsewhere, revoked — therefore reloads exactly one time and then answers
+ * false, leaving the caller to handle the failure its own way.
+ *
+ * It also answers false when there is no storage to remember the attempt with
+ * (private mode, blocked site data): with no way to stop a second reload, don't
+ * take the first. A duplicated tab inherits the marker with the rest of the
+ * source tab's `sessionStorage`, so it can inherit a spent one and skip
+ * straight to the caller's own handling — a repair not taken, which is the side
+ * to err on.
  */
 export function reloadForStaleSession(): boolean {
+    if (reloadFired) {
+        return false;
+    }
     try {
         if (window.sessionStorage.getItem(RELOAD_MARKER_KEY) !== null) {
             return false;
@@ -106,6 +125,7 @@ export function reloadForStaleSession(): boolean {
         return false;
     }
     markerMayExist = true;
+    reloadFired = true;
     console.warn('Session looks stale with nothing loaded — reloading once to renew it');
     window.location.reload();
     return true;
@@ -117,7 +137,9 @@ export function reloadForStaleSession(): boolean {
  * a token really does expire the recovery above is available again.
  */
 export function clearStaleSessionReload(): void {
-    if (!markerMayExist) {
+    // `reloadFired` first: a fetch that succeeds while the reload this document
+    // asked for is still being fetched must not give that reload back.
+    if (reloadFired || !markerMayExist) {
         return;
     }
     markerMayExist = false;

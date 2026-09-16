@@ -22,6 +22,17 @@ export function useIsAuthorised() {
 }
 
 /**
+ * How long the renewal gets before the retry goes ahead without it. Short,
+ * deliberately: this sits in front of a request that is itself being retried on
+ * a deadline, and a Clerk that accepts the connection and then never answers
+ * would otherwise hang the whole ladder — the `await` never settles, the fetch
+ * hook's `finally` never runs, and the screen waits for ever on a repair that
+ * is never coming. Every `fetch` in `fetchWithSessionRetry` is bounded for that
+ * exact reason; so is this.
+ */
+const SESSION_REFRESH_TIMEOUT_MS = 5000;
+
+/**
  * Asks Clerk for a fresh session token, so that the cookie the API reads is the
  * current one. Hand it to `fetchWithSessionRetry`, which calls it before
  * retrying a 401.
@@ -48,12 +59,23 @@ export function useSessionRefresh(): () => Promise<void> {
     });
 
     return useCallback(async () => {
+        // Clerk unreachable, or a session it won't renew. The caller retries
+        // regardless — this is the part of the attempt that can be skipped.
+        const giveUp = (error: unknown) => console.error('Could not renew the session token', error);
+        let expiry: ReturnType<typeof setTimeout> | undefined;
         try {
-            await getTokenRef.current({ skipCache: true });
+            // Caught on the promise rather than on the `await`: a renewal that
+            // loses the race below and fails afterwards would otherwise surface
+            // as an unhandled rejection and nothing else.
+            const renewal = getTokenRef.current({ skipCache: true }).catch(giveUp);
+            await Promise.race([
+                renewal,
+                new Promise<void>((resolve) => { expiry = setTimeout(resolve, SESSION_REFRESH_TIMEOUT_MS); }),
+            ]);
         } catch (error) {
-            // Clerk unreachable, or a session it won't renew. The caller retries
-            // regardless — this is the part that can be skipped.
-            console.error('Could not renew the session token', error);
+            giveUp(error);
+        } finally {
+            clearTimeout(expiry);
         }
     }, []);
 }

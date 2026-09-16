@@ -971,11 +971,16 @@ description or theme colour is exactly what those two files exist to prevent.
   thing that fixes a cookie Clerk can't renew in place, because only a document
   request passes through `clerkMiddleware` and gets its handshake — an in-app
   navigation is an RSC request and cannot, which is why sending the player to
-  another screen has never helped. It is one shot per tab: the marker lives in
-  `sessionStorage`, is written before the reload, and is given back only by a
-  fetch that then succeeds, so a genuinely dead session reloads once and then
-  falls through to the ordinary failure handling (and, once Clerk itself
-  notices, `useAuthGuard`'s trip to `/login`).
+  another screen has never helped. It is one shot per tab, guarded twice: the
+  marker lives in `sessionStorage`, is written before the reload and is given
+  back only by a fetch that then succeeds, and a document that has fired its
+  reload keeps that answer while it is being replaced — the old page goes on
+  running, and a poll landing in that window must not hand the reload back. A
+  genuinely dead session therefore reloads once and then falls through to the
+  ordinary failure handling (and, once Clerk itself notices, `useAuthGuard`'s
+  trip to `/login`). The renewal above it is bounded too
+  (`SESSION_REFRESH_TIMEOUT_MS`): an `await` with no deadline in front of the
+  retry ladder would hang the screen on a repair that never arrives.
 - **Reading the clock.** Components never call `Date.now()` while rendering — not
   even inside a helper, where `react-hooks/purity` can't see it. `useNow`
   (`src/utils/hooks/useNow.ts`) reads the wall clock as the external source it is
