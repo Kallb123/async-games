@@ -3,7 +3,7 @@
 // art; the rows are derived from those steps at module load (`sections.ts`),
 // exactly as they are for the circuits written as plain section lengths.
 import type { RaceCarsTrack } from "../board";
-import { deriveTrack, STAGGERED_SIX_GRID, tileGeometry, type TrackSection } from "./sections";
+import { deriveTrack, spacesOf, tileGeometry, type TrackSection } from "./sections";
 
 const SECTIONS: TrackSection[] = [
     {
@@ -436,9 +436,20 @@ export const ANGLET: RaceCarsTrack = {
     rows: DERIVED.rows,
     spaces: DERIVED.spaces,
     corners: DERIVED.corners,
-    // Every track so far shares the staggered six-slot grid; give this one its
-    // own array here if its start line sits somewhere else.
-    grid: STAGGERED_SIX_GRID,
+    // Not the staggered six-slot grid the plain circuits share: this straight's
+    // lanes never sit level, because a lane-2 tile steps across into the lane 1
+    // and lane 3 tiles beside it rather than the ones one further along, so the
+    // derivation ranks lane 2 a row ahead of them the whole way down the road.
+    // Rows 0 and 2 are therefore lane 2 alone, and `{ row: 2, lane: 1 }` is not
+    // a space this circuit has — four of the six cars were dealt onto
+    // coordinates with no road at them, where nothing was reachable and the
+    // board could only offer "boxed in" for the rest of the race. Named as
+    // tiles, the grid is the six the art actually has a car painted on.
+    grid: spacesOf(DERIVED, [
+        "start.1.2", "start.3.2",
+        "start.1.1", "start.3.1",
+        "start.1.0", "start.3.0",
+    ]),
     maxGear: 5,
     art: {
         href: "/art/racecars/anglet.png",

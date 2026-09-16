@@ -122,6 +122,27 @@ export interface DerivedTrack {
     spaceOf: Map<string, RaceCarsSpace>;
 }
 
+/**
+ * The spaces some named tiles landed on — how a circuit says *which tiles* its
+ * grid slots, its finish line and its oil patches sit on.
+ *
+ * A track file names them by tile id and resolves them here, for the same
+ * reason no row is ever typed: a row is derived from the steps (see the file
+ * comment), so a grid slot written as `{ row: 2, lane: 1 }` is a guess at the
+ * derivation's answer that goes quietly wrong the moment the drawing changes —
+ * which is how Anglet came to deal four of its six cars onto coordinates the
+ * circuit has no space at, where they could not move at all. A tile id cannot
+ * drift, and one that is not on the circuit throws at module load rather than
+ * at the start line.
+ */
+export function spacesOf(derived: DerivedTrack, ids: readonly string[]): RaceCarsSpace[] {
+    return ids.map(id => {
+        const space = derived.spaceOf.get(id);
+        if (!space) throw new Error(`Race Cars: ${id} is not a tile on this circuit`);
+        return space;
+    });
+}
+
 /** The id `length` bands give their tiles: section, lane and place in the run. */
 export function plainTileId(sectionId: string, lane: number, index: number): string {
     return `${sectionId}.${lane}.${index}`;

@@ -228,29 +228,61 @@ Two consequences worth keeping in mind while drawing:
    tiles to move them into the active section — how a corner gets its tiles, and
    how a sync line is nudged a tile either way once the art shows it is in the
    wrong place.
-7. **Hot keys.** The toolbar is driveable from the keyboard, which is worth
+7. **Mark the grid, the line and the oil.** In *Mark* mode, the *Marking*
+   picker says which of the three a click lays; a drag paints a run of them (a
+   line across the road is one stroke), and clicking a marked tile takes the
+   mark off again. Each one rings the tile on the canvas and badges it
+   underneath.
+   - **Starting grid** — the tile each car is dealt onto (§5.2), *in the order
+     you mark them*: first is P1. A track cannot be exported until all six are
+     marked, because this is the one mark a race reads, and a slot that is not a
+     space the circuit has is a car that cannot move at all. That is not
+     hypothetical: Anglet shipped taking the shared six-slot grid of rows 0–2,
+     lanes 1 and 3, on a circuit whose derived rows 0 and 2 are lane 2 alone —
+     four of its six drivers spent the race being told "boxed in".
+   - **Finish line** — the tiles the line is painted across. It need not be one
+     row: a lane taking the short way round a corner carries the line on its
+     own row, and a line drawn on the skew sits on several. The panel warns if a
+     lane has no tile on it, since a car down that lane would never cross it.
+   - **Oil** — optional, and most circuits have none.
+
+   The *Marks* panel also carries **the grid sits behind the finish line**, for
+   a circuit whose cars line up back down the straight from the line so that it
+   doubles as the start: the first crossing is then the start of lap 1 rather
+   than the end of it.
+
+   **Only the grid is read by a race today.** The finish line, the oil and that
+   setting are printed into the track file and nothing reads them yet — §15
+   still counts a lap at the derived row 0, and §14's slicks are still laid only
+   by spins and heavy braking.
+8. **Hot keys.** The toolbar is driveable from the keyboard, which is worth
    knowing before placing a few hundred tiles by hand: `Q` *Place*, `W` *Draw
-   exits*, `E` *Paint into section*, `1`/`2`/`3` for that lane, and `A`/`S` to
-   step back and on through the sections. Each key does exactly what its
-   control does and nothing the control wouldn't — so a key is ignored while a
-   button is disabled or a lane is one this section hasn't got, as is anything
-   typed into a field or held with Ctrl/Cmd/Alt.
-8. **Save/resume.** The draft autosaves to this browser's `localStorage`;
+   exits*, `E` *Paint into section*, `R` *Mark*, `1`/`2`/`3` for that lane,
+   `G`/`F`/`O` for the mark (grid, finish, oil), and `A`/`S` to step back and on
+   through the sections. Each key does exactly what its control does and nothing
+   the control wouldn't — so a key is ignored while a button is disabled or a
+   lane is one this section hasn't got, as is anything typed into a field or
+   held with Ctrl/Cmd/Alt.
+9. **Save/resume.** The draft autosaves to this browser's `localStorage`;
    *Save draft to file* / *Open draft file* move it to a `.json` you can keep or
    carry to another machine. That draft is the working copy — separate from the
    deployable track file the export panel prints.
-9. **Validate & export.** The panel runs the drawing through the game's own
-   `deriveTrack`, so "driveable in the editor" and "loads in the game" are the
-   same check. Copy the printed file, save it as
-   `src/games/RaceCars/tracks/<id>.ts`, and add it to `TRACK_LIST` in
-   `board.ts`. No row number is printed anywhere: the file carries sections,
-   tiles and steps, and derives its rows at module load exactly as the editor
-   did.
+10. **Validate & export.** The panel runs the drawing through the game's own
+    `deriveTrack`, so "driveable in the editor" and "loads in the game" are the
+    same check — and refuses a circuit that has not marked a full grid, which is
+    "seats a field" rather than "joins up". Copy the printed file, save it as
+    `src/games/RaceCars/tracks/<id>.ts`, and add it to `TRACK_LIST` in
+    `board.ts`. No row number is printed anywhere: the file carries sections,
+    tiles, steps and the tile ids its marks sit on, and derives its rows — and
+    resolves those marks through `spacesOf` — at module load exactly as the
+    editor did.
 
 Load a shipped track (Ashcombe, Anglet) to refine its placeholder geometry
 against the real art rather than placing every tile from nothing — its corners
 come back as sections with the straights between them, ready to be split
-further. The whole screen stretches to a desktop's width — the canvas stays put
+further, and its marks come back on the tiles they sit on. A slot naming a
+space that circuit hasn't got is dropped on the way in, so a grid reading fewer
+than six is the editor telling you which cars had nowhere to stand. The whole screen stretches to a desktop's width — the canvas stays put
 on the left while the panels scroll on the right — and folds to a single column
 on a phone.
 

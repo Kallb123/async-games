@@ -152,8 +152,34 @@ describe("every track", () => {
         }
     });
 
-    it.each(TRACK_LIST.map(track => [track.id, track] as const))("%s seats a full grid", (_id, track) => {
+    it.each(TRACK_LIST.map(track => [track.id, track] as const))("%s seats a full grid, every car on a space it has", (_id, track) => {
+        // The invariant Anglet shipped without. Its lanes never sit level, so
+        // rows 0 and 2 are lane 2 alone — and the shared six-slot grid dealt
+        // four of its six cars onto `{ row: 0 | 2, lane: 1 | 3 }`, coordinates
+        // with no road at them. `spaceAt` answered null, `stepsFrom` an empty
+        // list, and every turn those drivers took could only say "boxed in".
+        // A grid slot is now a tile id resolved through the derivation
+        // (`tracks/sections.ts`), which cannot name a space that is not there —
+        // this is the assertion under that, for a grid that ever stops coming
+        // through it.
         expect(track.grid.length).toBeGreaterThanOrEqual(MAX_PLAYERS);
+        const keys = new Set(track.grid.map(slot => spaceKey(slot.row, slot.lane)));
+        expect(keys.size).toBe(track.grid.length);
+        for (const slot of track.grid) {
+            expect(spaceAt(track, slot.row, slot.lane)).not.toBeNull();
+            // A space that exists is a space with somewhere to go (§5.1), so
+            // this holds for free — and says what the assertion above is for.
+            expect(stepsFrom(track, slot.row, slot.lane).length).toBeGreaterThan(0);
+        }
+    });
+
+    it.each(TRACK_LIST.map(track => [track.id, track] as const))("%s paints its finish line and its oil on spaces it has", (_id, track) => {
+        // Both are optional and neither is read by a race yet (`board.ts`), but
+        // a circuit that names one names it the same way the grid does, and a
+        // mark on a space the road hasn't got is the same mistake.
+        for (const space of [...(track.finish ?? []), ...(track.oil ?? [])]) {
+            expect(spaceAt(track, space.row, space.lane)).not.toBeNull();
+        }
     });
 });
 

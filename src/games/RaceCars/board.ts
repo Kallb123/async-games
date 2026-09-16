@@ -110,6 +110,36 @@ export interface RaceCarsTrack {
     corners: RaceCarsCorner[];
     /** The starting grid, P1 first (§5.2). Never shorter than MAX_PLAYERS. */
     grid: RaceCarsSpace[];
+    /**
+     * Where the finish line is painted across the road, if the circuit says.
+     *
+     * A line is a set of spaces rather than a row because a real one is painted
+     * wherever the art puts it: a lane that takes the short way round carries it
+     * on a different row from the lane beside it, and a line drawn on the skew
+     * sits on several. **Authoring data only for now** — §15 still counts a lap
+     * at row 0 (`crossesStartLine`), so this is what an author has drawn and not
+     * yet what a race reads.
+     */
+    finish?: RaceCarsSpace[];
+    /**
+     * Whether the grid sits **behind** the finish line, so the first crossing of
+     * it is the start of lap 1 rather than the end of it.
+     *
+     * A circuit whose grid is drawn back down the straight from the line — the
+     * line then doubling as the start — would otherwise credit every car a lap
+     * within a few rows of the flag dropping. **Authoring data only for now**,
+     * for the same reason as `finish`.
+     */
+    gridBehindFinishLine?: boolean;
+    /**
+     * Spaces the circuit paints oil on, if any.
+     *
+     * **Authoring data only for now**: §14's slicks are still laid by spins and
+     * heavy braking alone, and nothing in a race reads this list. It is here so
+     * that a circuit drawn with a permanently greasy patch can say so once, in
+     * the file it is drawn into, rather than that being redrawn later.
+     */
+    oil?: RaceCarsSpace[];
     /** The top gear this circuit's straights can reach (§8.3). */
     maxGear: Exclude<RaceCarsGear, 0>;
     art: { href: string; viewBox: { width: number; height: number } };

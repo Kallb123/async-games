@@ -4689,6 +4689,23 @@ button.ag-tt-ticket { cursor: pointer; }
     stroke-width: 2.4;
     pointer-events: none;
 }
+/* What a tile carries besides being road: a grid slot, the finish line, oil.
+   Drawn as rings outside the tile rather than as a fill, so a marked tile still
+   reads as the section and the state it is in — and so a tile that is two
+   things at once (a finish-line tile with oil on it) shows both, each ring one
+   step further out. The one the brush is currently laying is drawn solid. */
+.ag-rcedit-mark {
+    fill: none;
+    stroke-width: 1.6;
+    stroke-dasharray: 3 2;
+    opacity: 0.9;
+    pointer-events: none;
+}
+.ag-rcedit-mark--live { stroke-dasharray: none; stroke-width: 2.2; }
+.ag-rcedit-mark--grid { stroke: var(--ag-green); }
+.ag-rcedit-mark--finish { stroke: var(--ag-ink); }
+.ag-rcedit-mark--oil { stroke: var(--ag-purple); }
+
 /* §5.1's default steps, drawn faint behind the overrides so a corner's real
    merge stands out from the road's ordinary flow. */
 .ag-rcedit-edge {

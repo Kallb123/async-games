@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { MAX_PLAYERS } from "../board";
+import { ANGLET } from "./anglet";
 import { ASHCOMBE } from "./ashcombe";
 import {
     connectByGeometry,
@@ -15,8 +17,13 @@ import {
     tileHeading,
     toTrack,
     validateTrack,
+    gridSlots,
+    marksOn,
     withExitToggled,
+    withMarkPainted,
+    withMarkToggled,
     withSectionStepsNamed,
+    withTileUnmarked,
     type EditorState,
     type EditorTile,
 } from "./editorModel";
@@ -25,6 +32,10 @@ import {
  * A tiny driveable circuit: a one-tile start/finish line and a two-tile
  * one-stop corner, two lanes wide, wrapping back to the line. Rows are derived
  * — row 0 is the line, 1-2 the corner — and never written here.
+ *
+ * Its six tiles are also its six grid slots, which is the smallest thing that
+ * can seat a full field: a circuit that does not say which tiles its cars start
+ * on is one `validateTrack` refuses (§5.2), however well the road joins up.
  */
 function tinyState(): EditorState {
     return emptyState({
@@ -42,6 +53,7 @@ function tinyState(): EditorState {
             { id: "bend.1.1", section: "bend", lane: 1, x: 0, y: 40 },
             { id: "bend.2.1", section: "bend", lane: 2, x: 20, y: 40 },
         ],
+        grid: ["sf.1.0", "sf.2.0", "bend.1.0", "bend.2.0", "bend.1.1", "bend.2.1"],
     });
 }
 
@@ -87,7 +99,9 @@ describe("editor validation", () => {
         expect(validateTrack(skewed).errors[0]).toMatch(/out of step/);
 
         const named = { ...skewed, tiles: withSectionStepsNamed(skewed, "bend") };
-        expect(validateTrack(named).errors).toEqual([]);
+        // Five tiles cannot seat a full grid, so this asks about the refusal
+        // under test rather than about an empty list.
+        expect(validateTrack(named).errors.join(" ")).not.toMatch(/out of step/);
         // ...and the printed file carries them, so it loads for the same reason.
         expect(printTrackFile(named)).toMatch(/exits: \[/);
     });
@@ -162,7 +176,7 @@ describe("naming a tile's steps rather than leaning on §5.1's rule", () => {
         const backOn = withExitToggled(off, tile.id, step);
         const settled = backOn.find(candidate => candidate.id === tile.id)!;
         expect(settled.exits).toEqual(tile.exits);
-        expect(validateTrack({ ...skewed, tiles: backOn }).errors).toEqual([]);
+        expect(validateTrack({ ...skewed, tiles: backOn }).errors.join(" ")).not.toMatch(/out of step/);
     });
 
     it("still drops an override that lands on the default where it is allowed", () => {
@@ -230,6 +244,7 @@ describe("rows are derived from the steps, never typed", () => {
                 { id: "bend.1.0", section: "bend", lane: 1, x: 0, y: 15, exits: ["bend.1.1"] },
                 { id: "bend.1.1", section: "bend", lane: 1, x: 0, y: 35, exits: ["sf.1.0", "sf.2.0"] },
             ],
+            grid: ["sf.1.0", "sf.2.0", "bend.2.0", "bend.2.1", "bend.1.0", "bend.1.1"],
         });
         const rows = derivedRows(validateTrack(kettle).derived);
         expect(rows.get("bend.2.0")).toBe(1);
@@ -322,6 +337,110 @@ describe("the printed track file", () => {
         broken.tiles[0] = { ...broken.tiles[0], exits: ["nowhere"] };
         expect(validateTrack(broken).errors.length).toBeGreaterThan(0);
         expect(() => printTrackFile(broken)).toThrow(/not a tile/);
+    });
+});
+
+describe("marks: the grid, the finish line and the oil", () => {
+    it("refuses a circuit that has not said where its cars start", () => {
+        const ungridded: EditorState = { ...tinyState(), grid: [] };
+        expect(validateTrack(ungridded).errors.join(" ")).toMatch(/starting grid has 0 of 6/);
+        // ...and the printer refuses it too, for a caller that skipped the check.
+        expect(() => printTrackFile(ungridded)).toThrow(/no starting grid/);
+    });
+
+    it("refuses a mark on a tile that is not on the drawing", () => {
+        // The Anglet failure in the authoring model: a slot naming a space the
+        // circuit hasn't got, which a race turns into a car that cannot move.
+        const stray = { ...tinyState(), oil: ["nowhere"] };
+        expect(validateTrack(stray).errors.join(" ")).toMatch(/Oil names nowhere, which is not a tile/);
+    });
+
+    it("numbers the grid in the order the tiles were marked, and renumbers when one comes out", () => {
+        const empty = { ...tinyState(), grid: [] };
+        const one = { ...empty, grid: withMarkToggled(empty, "grid", "sf.1.0") };
+        const two = { ...one, grid: withMarkToggled(one, "grid", "bend.2.1") };
+        const three = { ...two, grid: withMarkToggled(two, "grid", "sf.2.0") };
+        expect([...gridSlots(three)]).toEqual([["sf.1.0", 1], ["bend.2.1", 2], ["sf.2.0", 3]]);
+
+        // A second click takes the slot back out; the cars behind move up.
+        const fewer = { ...three, grid: withMarkToggled(three, "grid", "bend.2.1") };
+        expect([...gridSlots(fewer)]).toEqual([["sf.1.0", 1], ["sf.2.0", 2]]);
+    });
+
+    it("paints add-only, handing back the very same list when nothing changed", () => {
+        // What keeps a brush dragged back over painted ground from stringifying
+        // the whole draft into localStorage on every frame.
+        const state = { ...tinyState(), oil: ["sf.1.0"] };
+        expect(withMarkPainted(state, "oil", "sf.1.0")).toBe(state.oil);
+        expect(withMarkPainted(state, "oil", "sf.2.0")).toEqual(["sf.1.0", "sf.2.0"]);
+    });
+
+    it("takes a deleted tile out of every mark it was in", () => {
+        const state = { ...tinyState(), finish: ["sf.1.0", "sf.2.0"], oil: ["sf.1.0"] };
+        expect(marksOn(state, "sf.1.0")).toEqual(["grid", "finish", "oil"]);
+        const scrubbed = withTileUnmarked(state, "sf.1.0");
+        expect(scrubbed.grid).not.toContain("sf.1.0");
+        expect(scrubbed.finish).toEqual(["sf.2.0"]);
+        expect(scrubbed.oil).toEqual([]);
+    });
+
+    it("drops a mark naming a tile a reloaded draft no longer has", () => {
+        const draft = JSON.stringify({
+            ...tinyState(),
+            grid: ["sf.1.0", "sf.1.0", "deleted", 7],
+            oil: "not a list",
+            gridBehindFinishLine: true,
+        });
+        const reloaded = parseDraft(draft);
+        // Each id once, only the ones really drawn, in the order they were marked.
+        expect(reloaded.grid).toEqual(["sf.1.0"]);
+        expect(reloaded.oil).toEqual([]);
+        expect(reloaded.gridBehindFinishLine).toBe(true);
+    });
+
+    it("warns about a finish line that leaves a lane open", () => {
+        const state = { ...tinyState(), finish: ["sf.1.0"] };
+        expect(validateTrack(state).warnings.join(" ")).toMatch(/no tile in lane 2/);
+        const across = { ...tinyState(), finish: ["sf.1.0", "sf.2.0"] };
+        expect(validateTrack(across).warnings.join(" ")).not.toMatch(/no tile in lane/);
+    });
+
+    it("warns when the grid is set behind a finish line nobody has painted", () => {
+        const state = { ...tinyState(), gridBehindFinishLine: true };
+        expect(validateTrack(state).warnings.join(" ")).toMatch(/no finish line is painted/);
+    });
+
+    it("loads a shipped track's grid back as the tiles it stands on", () => {
+        const ashcombe = fromTrack(ASHCOMBE);
+        expect(ashcombe.grid).toHaveLength(MAX_PLAYERS);
+        expect(validateTrack(ashcombe).errors).toEqual([]);
+        // P1 first, and on the space Ashcombe deals it to (§5.2).
+        expect(toTrack(ashcombe).grid).toEqual(ASHCOMBE.grid);
+        expect(toTrack(fromTrack(ANGLET)).grid).toEqual(ANGLET.grid);
+    });
+
+    it("prints the marks as tile ids resolved through the derivation", () => {
+        const source = printTrackFile({
+            ...tinyState(),
+            finish: ["sf.1.0", "sf.2.0"],
+            oil: ["bend.1.0"],
+            gridBehindFinishLine: true,
+        });
+        expect(source).toContain('grid: spacesOf(DERIVED, ["sf.1.0", "sf.2.0", "bend.1.0", "bend.2.0", "bend.1.1", "bend.2.1"])');
+        expect(source).toContain('finish: spacesOf(DERIVED, ["sf.1.0", "sf.2.0"])');
+        expect(source).toContain('oil: spacesOf(DERIVED, ["bend.1.0"])');
+        expect(source).toContain("gridBehindFinishLine: true");
+        // Still not one row number anywhere — a mark names a tile for exactly
+        // the reason a step does.
+        expect(source).not.toMatch(/\brow: \d/);
+    });
+
+    it("leaves out the lines a plain circuit has nothing to say with", () => {
+        const source = printTrackFile(tinyState());
+        expect(source).toContain("grid: spacesOf(DERIVED, [");
+        expect(source).not.toContain("finish:");
+        expect(source).not.toContain("oil:");
+        expect(source).not.toContain("gridBehindFinishLine");
     });
 });
 
