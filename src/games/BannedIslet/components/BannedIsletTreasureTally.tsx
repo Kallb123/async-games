@@ -44,6 +44,13 @@ export default function BannedIsletTreasureTally({ positions, treasures }: Banne
                     <span
                         key={treasure.id}
                         className={`ag-bi-tally-item${state ? ` ag-bi-tally-item--${state}` : ''}`}
+                        // One `img` to assistive tech, labelled with the same
+                        // thing in words — a bare span with both its children
+                        // hidden is not reliably given a name, and a figure
+                        // announcing as nothing is the failure §17 exists to
+                        // stop. DiceCitiesLandmarkTrack's pip row does it the
+                        // same way.
+                        role="img"
                         title={`${treasureName(treasure.id)} — ${reading}`}
                         aria-label={`${treasureName(treasure.id)}: ${reading}`}
                     >
