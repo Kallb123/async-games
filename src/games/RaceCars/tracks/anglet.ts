@@ -1,109 +1,448 @@
-// Anglet Chambre d'Amour — the second circuit (§20's first iteration hook): a
-// tighter, seven-corner street course transcribed off the board art at
-// art-masters/racecars/anglet.png, read start/finish and clockwise. Two of
-// its chicanes (VVF and La Barre) are marked on that art with a doubled
-// "STOP" pip rather than one, which is what `stops: 2` is for — Ashcombe's
-// own Hairpin already proved the field, this is the second track exercising
-// it rather than a new rule.
+// Anglet Chambre D'Amour — authored in the track editor (docs/admin-tools.md).
+// Every tile's centre point and the steps out of it were placed by hand on the
+// art; the rows are derived from those steps at module load (`sections.ts`),
+// exactly as they are for the circuits written as plain section lengths.
 import type { RaceCarsTrack } from "../board";
-import { polylineGeometry, type Waypoint } from "./loopGeometry";
-import { deriveTrack, STAGGERED_SIX_GRID, type TrackSection } from "./sections";
+import { deriveTrack, STAGGERED_SIX_GRID, tileGeometry, type TrackSection } from "./sections";
 
-// Read off the art in the direction its arrows run: out of the grid along the
-// seafront, round the harbour hook at the far end (Port Sweep into the tight
-// Chambre d'Amour hairpin the circuit is named for, out again through Sables
-// d'Or), back along the villas through the two doubled-stop chicanes, and
-// home through Villa Hairpin — the loop back beside the grid the art draws
-// right next to the start/finish line, same as it draws Chambre d'Amour at
-// the opposite end.
-//
-// Section lengths are chosen so each corner falls at its own fraction of the
-// way round that same path (nothing reads x/y as a rule, so a placeholder here
-// changes none): Digue ~7%, Port ~32%, Chambre ~38%, Sables ~51%, VVF ~63%,
-// La Barre ~75%, Villa ~87% of 98 rows — read off `WAYPOINTS` below, not
-// guessed, so where a corner sits in the lap and where it is drawn agree. The
-// rows themselves are derived from the sections (`sections.ts`), never typed.
 const SECTIONS: TrackSection[] = [
-    { id: 'start', name: 'Start / Finish Straight', length: 6, lanes: 3, corner: null },
-    { id: 'digue', name: 'La Digue Kink', length: 4, lanes: 2, corner: { stops: 1 } },
-    { id: 'front', name: 'Front de Mer', length: 20, lanes: 3, corner: null },
-    { id: 'port', name: 'Port Sweep', length: 4, lanes: 2, corner: { stops: 1 } },
-    { id: 'jetee', name: 'Jetée Esses', length: 2, lanes: 2, corner: null },
-    { id: 'chambre', name: "Chambre d'Amour Hairpin", length: 5, lanes: 2, corner: { stops: 1 } },
-    { id: 'sablesStraight', name: "Sables d'Or Straight", length: 7, lanes: 3, corner: null },
-    { id: 'sables', name: "Sables d'Or Bend", length: 4, lanes: 2, corner: { stops: 1 } },
-    { id: 'vvfEsses', name: 'VVF Esses', length: 7, lanes: 2, corner: null },
-    { id: 'vvf', name: 'VVF Chicane', length: 5, lanes: 2, corner: { stops: 2 } },
-    { id: 'barreEsses', name: 'Barre Esses', length: 7, lanes: 2, corner: null },
-    { id: 'barre', name: 'La Barre Chicane', length: 5, lanes: 2, corner: { stops: 2 } },
-    { id: 'villaApproach', name: 'Villa Approach', length: 7, lanes: 3, corner: null },
-    { id: 'villa', name: 'Villa Hairpin', length: 4, lanes: 2, corner: { stops: 1 } },
-    { id: 'run', name: 'Run to the Line', length: 11, lanes: 3, corner: null },
+    {
+        id: "start",
+        name: "Start Straight",
+        lanes: 3,
+        corner: null,
+        tiles: [
+            { id: "start.1.0", lane: 1, x: 1052, y: 861, heading: 44, exits: ["start.1.1", "start.2.1"] },
+            { id: "start.1.1", lane: 1, x: 1103, y: 884, heading: 37, exits: ["start.1.2", "start.2.2"] },
+            { id: "start.1.2", lane: 1, x: 1157, y: 898, heading: 26, exits: ["start.1.3", "start.2.3"] },
+            { id: "start.1.3", lane: 1, x: 1212, y: 901, heading: 23, exits: ["start.1.4", "start.2.4"] },
+            { id: "start.1.4", lane: 1, x: 1269, y: 905, heading: 22, exits: ["start.1.5", "start.2.5"] },
+            { id: "start.1.5", lane: 1, x: 1321, y: 905, heading: 1, exits: ["section2.1.0"] },
+            { id: "start.2.0", lane: 2, x: 1014, y: 881, heading: 20, exits: ["start.1.0", "start.2.1", "start.3.0"] },
+            { id: "start.2.1", lane: 2, x: 1066, y: 901, heading: 23, exits: ["start.1.1", "start.2.2", "start.3.1"] },
+            { id: "start.2.2", lane: 2, x: 1121, y: 925, heading: 8, exits: ["start.1.2", "start.2.3", "start.3.2"] },
+            { id: "start.2.3", lane: 2, x: 1181, y: 933, heading: -1, exits: ["start.1.3", "start.2.4", "start.3.3"] },
+            { id: "start.2.4", lane: 2, x: 1237, y: 933, heading: 2, exits: ["start.2.5", "start.1.4", "start.3.4"] },
+            { id: "start.2.5", lane: 2, x: 1291, y: 935, heading: 0, exits: ["section2.2.0"] },
+            { id: "start.3.0", lane: 3, x: 1029, y: 919, heading: 3, exits: ["start.2.1", "start.3.1"] },
+            { id: "start.3.1", lane: 3, x: 1081, y: 941, heading: 1, exits: ["start.2.2", "start.3.2"] },
+            { id: "start.3.2", lane: 3, x: 1146, y: 959, heading: -14, exits: ["start.2.3", "start.3.3"] },
+            { id: "start.3.3", lane: 3, x: 1208, y: 963, heading: -19, exits: ["start.2.4", "start.3.4"] },
+            { id: "start.3.4", lane: 3, x: 1265, y: 963, heading: -19, exits: ["start.2.5", "section2.3.0"] },
+        ],
+    },
+    {
+        id: "section2",
+        name: "Corner 1",
+        lanes: 3,
+        corner: { stops: 1 },
+        tiles: [
+            { id: "section2.1.0", lane: 1, x: 1384, y: 906, heading: -32, exits: ["section2.1.1"] },
+            { id: "section2.1.1", lane: 1, x: 1437, y: 873, heading: 0, exits: ["section2.1.2", "section2.2.2"] },
+            { id: "section2.1.2", lane: 1, x: 1495, y: 852, heading: 31, exits: ["section2.1.3", "section2.2.3"] },
+            { id: "section2.1.3", lane: 1, x: 1552, y: 869, heading: 46, exits: ["section2.1.4", "section2.2.4"] },
+            { id: "section2.1.4", lane: 1, x: 1603, y: 896, heading: 48, exits: ["section3.1.0", "section3.2.0"] },
+            { id: "section2.2.0", lane: 2, x: 1350, y: 935, heading: -21, exits: ["section2.2.1", "section2.1.0"] },
+            { id: "section2.2.1", lane: 2, x: 1411, y: 927, heading: -50, exits: ["section2.2.2", "section2.1.1"] },
+            { id: "section2.2.2", lane: 2, x: 1457, y: 895, heading: 7, exits: ["section2.2.3", "section2.3.3"] },
+            { id: "section2.2.3", lane: 2, x: 1515, y: 882, heading: 47, exits: ["section2.2.4", "section2.3.4"] },
+            { id: "section2.2.4", lane: 2, x: 1563, y: 905, heading: 49, exits: ["section3.2.0", "section3.3.0"] },
+            { id: "section2.3.0", lane: 3, x: 1319, y: 963, heading: -17, exits: ["section2.3.1", "section2.2.0"] },
+            { id: "section2.3.1", lane: 3, x: 1377, y: 964, heading: -28, exits: ["section2.3.2", "section2.2.1"] },
+            { id: "section2.3.2", lane: 3, x: 1430, y: 953, heading: -39, exits: ["section2.3.3"] },
+            { id: "section2.3.3", lane: 3, x: 1475, y: 917, heading: 4, exits: ["section2.3.4"] },
+            { id: "section2.3.4", lane: 3, x: 1525, y: 920, heading: 29, exits: ["section3.3.0"] },
+        ],
+    },
+    {
+        id: "section3",
+        name: "Beach Wind",
+        lanes: 3,
+        corner: null,
+        tiles: [
+            { id: "section3.1.0", lane: 1, x: 1652, y: 922, heading: 36, exits: ["section3.1.1", "section3.2.1"] },
+            { id: "section3.1.1", lane: 1, x: 1705, y: 934, heading: 16, exits: ["section3.1.2", "section3.2.2"] },
+            { id: "section3.1.2", lane: 1, x: 1762, y: 931, heading: 6, exits: ["section3.1.3", "section3.2.3"] },
+            { id: "section3.1.3", lane: 1, x: 1815, y: 916, heading: -2, exits: ["section3.1.4", "section3.2.4"] },
+            { id: "section3.1.4", lane: 1, x: 1871, y: 896, heading: 5, exits: ["section3.1.5", "section3.2.5"] },
+            { id: "section3.1.5", lane: 1, x: 1933, y: 881, heading: 17, exits: ["section3.1.6", "section3.2.6"] },
+            { id: "section3.1.6", lane: 1, x: 1994, y: 880, heading: 23, exits: ["section3.1.7", "section3.2.7"] },
+            { id: "section3.1.7", lane: 1, x: 2059, y: 887, heading: 32, exits: ["section3.1.8", "section3.2.8"] },
+            { id: "section3.1.8", lane: 1, x: 2118, y: 903, heading: 38, exits: ["section3.1.9", "section3.2.9"] },
+            { id: "section3.1.9", lane: 1, x: 2173, y: 923, heading: 44, exits: ["section3.1.10", "section3.2.10"] },
+            { id: "section3.1.10", lane: 1, x: 2229, y: 952, heading: 54, exits: ["section3.1.11", "section3.2.11"] },
+            { id: "section3.1.11", lane: 1, x: 2275, y: 987, heading: 51, exits: ["section3.1.12", "section3.2.12"] },
+            { id: "section3.1.12", lane: 1, x: 2324, y: 1015, heading: 29, exits: ["section3.1.13", "section3.2.13"] },
+            { id: "section3.1.13", lane: 1, x: 2379, y: 1024, heading: 16, exits: ["section4.1.0", "section3.2.14"] },
+            { id: "section3.2.0", lane: 2, x: 1615, y: 937, heading: 26, exits: ["section3.1.0", "section3.2.1", "section3.3.1"] },
+            { id: "section3.2.1", lane: 2, x: 1673, y: 963, heading: 1, exits: ["section3.1.1", "section3.2.2", "section3.3.2"] },
+            { id: "section3.2.2", lane: 2, x: 1738, y: 963, heading: -9, exits: ["section3.1.2", "section3.2.3", "section3.3.3"] },
+            { id: "section3.2.3", lane: 2, x: 1796, y: 954, heading: -21, exits: ["section3.1.3", "section3.2.4", "section3.3.4"] },
+            { id: "section3.2.4", lane: 2, x: 1848, y: 933, heading: -16, exits: ["section3.1.4", "section3.2.5", "section3.3.5"] },
+            { id: "section3.2.5", lane: 2, x: 1908, y: 919, heading: -11, exits: ["section3.1.5", "section3.2.6", "section3.3.6"] },
+            { id: "section3.2.6", lane: 2, x: 1965, y: 911, heading: 0, exits: ["section3.1.6", "section3.2.7", "section3.3.7"] },
+            { id: "section3.2.7", lane: 2, x: 2023, y: 913, heading: 8, exits: ["section3.1.7", "section3.2.8", "section3.3.8"] },
+            { id: "section3.2.8", lane: 2, x: 2081, y: 923, heading: 16, exits: ["section3.1.8", "section3.2.9", "section3.3.9"] },
+            { id: "section3.2.9", lane: 2, x: 2137, y: 940, heading: 23, exits: ["section3.1.9", "section3.2.10", "section3.3.10"] },
+            { id: "section3.2.10", lane: 2, x: 2187, y: 962, heading: 31, exits: ["section3.1.10", "section3.2.11", "section3.3.11"] },
+            { id: "section3.2.11", lane: 2, x: 2237, y: 994, heading: 39, exits: ["section3.1.11", "section3.2.12", "section3.3.12"] },
+            { id: "section3.2.12", lane: 2, x: 2285, y: 1031, heading: 20, exits: ["section3.1.12", "section3.2.13", "section3.3.13"] },
+            { id: "section3.2.13", lane: 2, x: 2349, y: 1051, heading: 2, exits: ["section3.2.14", "section3.3.14", "section3.1.13"] },
+            { id: "section3.2.14", lane: 2, x: 2406, y: 1051, heading: -3, exits: ["section4.2.0"] },
+            { id: "section3.3.0", lane: 3, x: 1575, y: 947, heading: 12, exits: ["section3.2.0", "section3.3.1"] },
+            { id: "section3.3.1", lane: 3, x: 1631, y: 978, heading: 1, exits: ["section3.2.1", "section3.3.2"] },
+            { id: "section3.3.2", lane: 3, x: 1703, y: 995, heading: -21, exits: ["section3.2.2", "section3.3.3"] },
+            { id: "section3.3.3", lane: 3, x: 1771, y: 987, heading: -30, exits: ["section3.2.3", "section3.3.4"] },
+            { id: "section3.3.4", lane: 3, x: 1831, y: 972, heading: -39, exits: ["section3.2.4", "section3.3.5"] },
+            { id: "section3.3.5", lane: 3, x: 1885, y: 951, heading: -29, exits: ["section3.2.5", "section3.3.6"] },
+            { id: "section3.3.6", lane: 3, x: 1939, y: 941, heading: -22, exits: ["section3.2.6", "section3.3.7"] },
+            { id: "section3.3.7", lane: 3, x: 1993, y: 940, heading: -15, exits: ["section3.2.7", "section3.3.8"] },
+            { id: "section3.3.8", lane: 3, x: 2049, y: 945, heading: -5, exits: ["section3.2.8", "section3.3.9"] },
+            { id: "section3.3.9", lane: 3, x: 2101, y: 959, heading: -1, exits: ["section3.2.9", "section3.3.10"] },
+            { id: "section3.3.10", lane: 3, x: 2151, y: 978, heading: 5, exits: ["section3.2.10", "section3.3.11"] },
+            { id: "section3.3.11", lane: 3, x: 2198, y: 1001, heading: 19, exits: ["section3.2.11", "section3.3.12"] },
+            { id: "section3.3.12", lane: 3, x: 2243, y: 1037, heading: 15, exits: ["section3.2.12", "section3.3.13"] },
+            { id: "section3.3.13", lane: 3, x: 2305, y: 1071, heading: -6, exits: ["section3.2.13", "section3.3.14"] },
+            { id: "section3.3.14", lane: 3, x: 2377, y: 1081, heading: -18, exits: ["section3.3.15", "section3.2.14"] },
+            { id: "section3.3.15", lane: 3, x: 2439, y: 1080, heading: -4, exits: ["section4.3.0"] },
+        ],
+    },
+    {
+        id: "section4",
+        name: "Corner 2",
+        lanes: 3,
+        corner: { stops: 1 },
+        tiles: [
+            { id: "section4.1.0", lane: 1, x: 2436, y: 1021, heading: 14, exits: ["section4.1.1", "section4.2.0"] },
+            { id: "section4.1.1", lane: 1, x: 2501, y: 1017, heading: 34, exits: ["section4.1.2", "section4.2.1"] },
+            { id: "section4.1.2", lane: 1, x: 2559, y: 1037, heading: 55, exits: ["section4.1.3", "section4.2.2"] },
+            { id: "section4.1.3", lane: 1, x: 2607, y: 1076, heading: 26, exits: ["section4.1.4"] },
+            { id: "section4.1.4", lane: 1, x: 2665, y: 1105, heading: 59, exits: ["section4.1.5", "section4.2.4"] },
+            { id: "section4.1.5", lane: 1, x: 2709, y: 1145, heading: 93, exits: ["section4.1.6", "section4.2.5"] },
+            { id: "section4.1.6", lane: 1, x: 2723, y: 1207, heading: 100, exits: ["section5.1.0", "section5.2.0"] },
+            { id: "section4.2.0", lane: 2, x: 2465, y: 1048, heading: 19, exits: ["section4.2.1", "section4.3.0"] },
+            { id: "section4.2.1", lane: 2, x: 2519, y: 1051, heading: 47, exits: ["section4.2.2", "section4.3.1"] },
+            { id: "section4.2.2", lane: 2, x: 2568, y: 1081, heading: 16, exits: ["section4.1.3", "section4.2.3"] },
+            { id: "section4.2.3", lane: 2, x: 2616, y: 1110, heading: 29, exits: ["section4.2.4"] },
+            { id: "section4.2.4", lane: 2, x: 2664, y: 1137, heading: 62, exits: ["section4.2.5"] },
+            { id: "section4.2.5", lane: 2, x: 2689, y: 1184, heading: 101, exits: ["section5.2.0", "section5.3.0"] },
+            { id: "section4.3.0", lane: 3, x: 2497, y: 1076, heading: 28, exits: ["section4.3.1"] },
+            { id: "section4.3.1", lane: 3, x: 2547, y: 1102, heading: 33, exits: ["section4.3.2"] },
+            { id: "section4.3.2", lane: 3, x: 2593, y: 1132, heading: 6, exits: ["section4.2.3", "section4.3.3"] },
+            { id: "section4.3.3", lane: 3, x: 2647, y: 1162, heading: 71, exits: ["section5.3.0"] },
+        ],
+    },
+    {
+        id: "section5",
+        name: "section5",
+        lanes: 3,
+        corner: null,
+        tiles: [
+            { id: "section5.1.0", lane: 1, x: 2733, y: 1265, heading: 105, exits: ["section6.1.0", "section5.2.1"] },
+            { id: "section5.2.0", lane: 2, x: 2698, y: 1241, heading: 82, exits: ["section5.2.1", "section5.3.1", "section5.1.0"] },
+            { id: "section5.2.1", lane: 2, x: 2705, y: 1295, heading: 84, exits: ["section6.2.0"] },
+            { id: "section5.3.0", lane: 3, x: 2665, y: 1213, heading: 65, exits: ["section5.3.1", "section5.2.0"] },
+            { id: "section5.3.1", lane: 3, x: 2672, y: 1275, heading: 62, exits: ["section5.3.2", "section5.2.1"] },
+            { id: "section5.3.2", lane: 3, x: 2677, y: 1324, heading: 100, exits: ["section6.3.0"] },
+        ],
+    },
+    {
+        id: "section6",
+        name: "Corner 3",
+        lanes: 3,
+        corner: { stops: 1 },
+        tiles: [
+            { id: "section6.1.0", lane: 1, x: 2738, y: 1324, heading: 106, exits: ["section6.1.1", "section6.2.0"] },
+            { id: "section6.1.1", lane: 1, x: 2740, y: 1379, heading: 141, exits: ["section6.2.1", "section6.1.2"] },
+            { id: "section6.1.2", lane: 1, x: 2708, y: 1424, heading: -177, exits: ["section6.1.3", "section6.2.1"] },
+            { id: "section6.1.3", lane: 1, x: 2649, y: 1439, heading: -155, exits: ["section6.1.4", "section6.2.2"] },
+            { id: "section6.1.4", lane: 1, x: 2595, y: 1434, heading: -159, exits: ["section7.1.0", "section7.2.0"] },
+            { id: "section6.2.0", lane: 2, x: 2711, y: 1355, heading: 134, exits: ["section6.2.1", "section6.3.0"] },
+            { id: "section6.2.1", lane: 2, x: 2685, y: 1405, heading: 178, exits: ["section6.2.2"] },
+            { id: "section6.2.2", lane: 2, x: 2623, y: 1407, heading: -157, exits: ["section7.2.0", "section7.3.0"] },
+            { id: "section6.3.0", lane: 3, x: 2667, y: 1379, heading: -177, exits: ["section7.3.0"] },
+        ],
+    },
+    {
+        id: "section7",
+        name: "section7",
+        lanes: 3,
+        corner: null,
+        tiles: [
+            { id: "section7.1.0", lane: 1, x: 2540, y: 1432, heading: -154, exits: ["section7.1.1", "section7.2.1"] },
+            { id: "section7.1.1", lane: 1, x: 2485, y: 1427, heading: -155 },
+            { id: "section7.1.2", lane: 1, x: 2429, y: 1421, heading: -158 },
+            { id: "section7.1.3", lane: 1, x: 2373, y: 1418, heading: -162 },
+            { id: "section7.1.4", lane: 1, x: 2317, y: 1419, heading: -159 },
+            { id: "section7.1.5", lane: 1, x: 2261, y: 1419, heading: -159 },
+            { id: "section7.1.6", lane: 1, x: 2206, y: 1419, heading: -165 },
+            { id: "section7.1.7", lane: 1, x: 2149, y: 1422, heading: -164 },
+            { id: "section7.1.8", lane: 1, x: 2094, y: 1425, heading: -164 },
+            { id: "section7.2.0", lane: 2, x: 2571, y: 1405, heading: -174, exits: ["section7.2.1", "section7.3.1", "section7.1.0"] },
+            { id: "section7.2.1", lane: 2, x: 2515, y: 1399, heading: -176, exits: ["section7.1.1", "section7.2.2", "section7.3.2"] },
+            { id: "section7.2.2", lane: 2, x: 2459, y: 1394, heading: -175, exits: ["section7.1.2", "section7.2.3", "section7.3.3"] },
+            { id: "section7.2.3", lane: 2, x: 2403, y: 1391, heading: -176, exits: ["section7.1.3", "section7.2.4", "section7.3.4"] },
+            { id: "section7.2.4", lane: 2, x: 2345, y: 1389, heading: -177, exits: ["section7.1.4", "section7.2.5", "section7.3.5"] },
+            { id: "section7.2.5", lane: 2, x: 2289, y: 1387, heading: 178, exits: ["section7.1.5", "section7.2.6", "section7.3.6"] },
+            { id: "section7.2.6", lane: 2, x: 2233, y: 1387, heading: 175, exits: ["section7.1.6", "section7.2.7", "section7.3.7"] },
+            { id: "section7.2.7", lane: 2, x: 2176, y: 1392, heading: 178, exits: ["section7.1.7", "section7.2.8", "section7.3.8"] },
+            { id: "section7.2.8", lane: 2, x: 2121, y: 1395, heading: 178, exits: ["section7.1.8", "section8.2.0", "section8.3.0"] },
+            { id: "section7.3.0", lane: 3, x: 2599, y: 1375, heading: 164, exits: ["section7.3.1", "section7.2.0"] },
+            { id: "section7.3.1", lane: 3, x: 2544, y: 1371, heading: 164, exits: ["section7.2.1", "section7.3.2"] },
+            { id: "section7.3.2", lane: 3, x: 2487, y: 1367, heading: 166, exits: ["section7.2.2", "section7.3.3"] },
+            { id: "section7.3.3", lane: 3, x: 2430, y: 1360, heading: 161, exits: ["section7.2.3", "section7.3.4"] },
+            { id: "section7.3.4", lane: 3, x: 2374, y: 1357, heading: 162, exits: ["section7.2.4", "section7.3.5"] },
+            { id: "section7.3.5", lane: 3, x: 2317, y: 1355, heading: 157, exits: ["section7.2.5", "section7.3.6"] },
+            { id: "section7.3.6", lane: 3, x: 2260, y: 1358, heading: 159, exits: ["section7.2.6", "section7.3.7"] },
+            { id: "section7.3.7", lane: 3, x: 2203, y: 1361, heading: 158, exits: ["section7.2.7", "section7.3.8"] },
+            { id: "section7.3.8", lane: 3, x: 2146, y: 1364, heading: 157, exits: ["section7.2.8", "section8.3.0"] },
+        ],
+    },
+    {
+        id: "section8",
+        name: "Corner 4",
+        lanes: 3,
+        corner: { stops: 1 },
+        tiles: [
+            { id: "section8.1.0", lane: 1, x: 2039, y: 1431, heading: 161, exits: ["section8.1.1"] },
+            { id: "section8.1.1", lane: 1, x: 1985, y: 1449, heading: -158, exits: ["section8.1.2", "section8.2.2"] },
+            { id: "section8.1.2", lane: 1, x: 1928, y: 1443, heading: -137, exits: ["section8.1.3", "section8.2.3"] },
+            { id: "section8.1.3", lane: 1, x: 1878, y: 1417, heading: 177, exits: ["section9.1.0"] },
+            { id: "section8.2.0", lane: 2, x: 2064, y: 1395, heading: 148, exits: ["section8.1.0", "section8.2.1"] },
+            { id: "section8.2.1", lane: 2, x: 2009, y: 1409, heading: -175, exits: ["section8.2.2", "section8.3.2"] },
+            { id: "section8.2.2", lane: 2, x: 1952, y: 1419, heading: -155, exits: ["section8.1.2", "section8.3.3", "section8.2.3"] },
+            { id: "section8.2.3", lane: 2, x: 1899, y: 1395, heading: 169, exits: ["section8.1.3", "section8.2.4"] },
+            { id: "section8.2.4", lane: 2, x: 1844, y: 1388, heading: 155, exits: ["section9.1.0", "section9.2.0"] },
+            { id: "section8.3.0", lane: 3, x: 2091, y: 1367, heading: 160, exits: ["section8.2.0", "section8.3.1"] },
+            { id: "section8.3.1", lane: 3, x: 2035, y: 1371, heading: 144, exits: ["section8.2.1", "section8.3.2"] },
+            { id: "section8.3.2", lane: 3, x: 1977, y: 1392, heading: -160, exits: ["section8.3.3"] },
+            { id: "section8.3.3", lane: 3, x: 1923, y: 1372, heading: 172, exits: ["section8.3.4", "section8.2.3"] },
+            { id: "section8.3.4", lane: 3, x: 1868, y: 1361, heading: 161, exits: ["section8.2.4", "section8.3.5"] },
+            { id: "section8.3.5", lane: 3, x: 1811, y: 1361, heading: 154, exits: ["section9.2.0", "section9.3.0"] },
+        ],
+    },
+    {
+        id: "section9",
+        name: "section9",
+        lanes: 3,
+        corner: null,
+        tiles: [
+            { id: "section9.1.0", lane: 1, x: 1819, y: 1419, heading: -166, exits: ["section9.1.1", "section9.2.0"] },
+            { id: "section9.1.1", lane: 1, x: 1763, y: 1424, heading: -163, exits: ["section9.1.2", "section9.2.1"] },
+            { id: "section9.1.2", lane: 1, x: 1707, y: 1426, heading: -161, exits: ["section9.1.3", "section9.2.2"] },
+            { id: "section9.1.3", lane: 1, x: 1648, y: 1426, heading: -161, exits: ["section9.1.4", "section9.2.3"] },
+            { id: "section9.1.4", lane: 1, x: 1590, y: 1425, heading: -155, exits: ["section9.1.5", "section9.2.4"] },
+            { id: "section9.1.5", lane: 1, x: 1536, y: 1420, heading: -157, exits: ["section9.1.6", "section9.2.5"] },
+            { id: "section9.1.6", lane: 1, x: 1477, y: 1415, heading: -151, exits: ["section9.1.7", "section9.2.6"] },
+            { id: "section9.1.7", lane: 1, x: 1422, y: 1405, heading: -154, exits: ["section10.1.0", "section9.2.7"] },
+            { id: "section9.2.0", lane: 2, x: 1790, y: 1394, heading: 180, exits: ["section9.1.1", "section9.2.1", "section9.3.0"] },
+            { id: "section9.2.1", lane: 2, x: 1733, y: 1395, heading: 179, exits: ["section9.1.2", "section9.2.2", "section9.3.1"] },
+            { id: "section9.2.2", lane: 2, x: 1677, y: 1396, heading: 179, exits: ["section9.1.3", "section9.2.3", "section9.3.2"] },
+            { id: "section9.2.3", lane: 2, x: 1620, y: 1397, heading: -177, exits: ["section9.1.4", "section9.2.4", "section9.3.3"] },
+            { id: "section9.2.4", lane: 2, x: 1565, y: 1394, heading: -173, exits: ["section9.1.5", "section9.2.5", "section9.3.4"] },
+            { id: "section9.2.5", lane: 2, x: 1509, y: 1388, heading: -173, exits: ["section9.1.6", "section9.2.6", "section9.3.5"] },
+            { id: "section9.2.6", lane: 2, x: 1451, y: 1380, heading: -172, exits: ["section9.1.7", "section9.2.7", "section9.3.6"] },
+            { id: "section9.2.7", lane: 2, x: 1397, y: 1372, heading: -171, exits: ["section10.2.0"] },
+            { id: "section9.3.0", lane: 3, x: 1759, y: 1363, heading: 157 },
+            { id: "section9.3.1", lane: 3, x: 1704, y: 1366, heading: 159 },
+            { id: "section9.3.2", lane: 3, x: 1649, y: 1367, heading: 161 },
+            { id: "section9.3.3", lane: 3, x: 1593, y: 1365, heading: 164 },
+            { id: "section9.3.4", lane: 3, x: 1537, y: 1360, heading: 166 },
+            { id: "section9.3.5", lane: 3, x: 1482, y: 1353, heading: 167 },
+            { id: "section9.3.6", lane: 3, x: 1426, y: 1347, heading: 169 },
+            { id: "section9.3.7", lane: 3, x: 1372, y: 1339, heading: -171, exits: ["section10.3.0"] },
+        ],
+    },
+    {
+        id: "section10",
+        name: "Corner 5",
+        lanes: 3,
+        corner: { stops: 2 },
+        tiles: [
+            { id: "section10.1.0", lane: 1, x: 1363, y: 1397, heading: -151, exits: ["section10.1.1", "section10.2.0"] },
+            { id: "section10.1.1", lane: 1, x: 1308, y: 1386, heading: -145, exits: ["section10.1.2", "section10.2.1"] },
+            { id: "section10.1.2", lane: 1, x: 1258, y: 1370, heading: -119, exits: ["section10.1.3", "section10.2.2"] },
+            { id: "section10.1.3", lane: 1, x: 1217, y: 1326, heading: -165, exits: ["section10.1.4"] },
+            { id: "section10.1.4", lane: 1, x: 1164, y: 1312, heading: 176, exits: ["section10.1.5", "section10.2.4"] },
+            { id: "section10.1.5", lane: 1, x: 1108, y: 1336, heading: -161, exits: ["section10.1.6", "section10.2.5"] },
+            { id: "section10.1.6", lane: 1, x: 1047, y: 1331, heading: -147, exits: ["section10.1.7", "section10.2.6"] },
+            { id: "section10.1.7", lane: 1, x: 994, y: 1319, heading: -150, exits: ["section11.1.0", "section11.2.0"] },
+            { id: "section10.2.0", lane: 2, x: 1337, y: 1363, heading: -148, exits: ["section10.2.1", "section10.3.0"] },
+            { id: "section10.2.1", lane: 2, x: 1286, y: 1352, heading: -122, exits: ["section10.2.2", "section10.3.1"] },
+            { id: "section10.2.2", lane: 2, x: 1243, y: 1312, heading: -165, exits: ["section10.1.3", "section10.2.3"] },
+            { id: "section10.2.3", lane: 2, x: 1194, y: 1278, heading: 151, exits: ["section10.1.4", "section10.2.4"] },
+            { id: "section10.2.4", lane: 2, x: 1136, y: 1294, heading: -176, exits: ["section10.2.5", "section10.3.4"] },
+            { id: "section10.2.5", lane: 2, x: 1080, y: 1309, heading: -146, exits: ["section10.2.6", "section10.3.5"] },
+            { id: "section10.2.6", lane: 2, x: 1027, y: 1295, heading: -151, exits: ["section11.2.0", "section11.3.0"] },
+            { id: "section10.3.0", lane: 3, x: 1317, y: 1330, heading: -145, exits: ["section10.3.1"] },
+            { id: "section10.3.1", lane: 3, x: 1270, y: 1298, heading: -138, exits: ["section10.3.2"] },
+            { id: "section10.3.2", lane: 3, x: 1227, y: 1259, heading: 174, exits: ["section10.2.3", "section10.3.3"] },
+            { id: "section10.3.3", lane: 3, x: 1168, y: 1249, heading: 142, exits: ["section10.2.4", "section10.3.4"] },
+            { id: "section10.3.4", lane: 3, x: 1113, y: 1273, heading: -178, exits: ["section10.3.5"] },
+            { id: "section10.3.5", lane: 3, x: 1056, y: 1271, heading: -170, exits: ["section11.3.0"] },
+        ],
+    },
+    {
+        id: "section11",
+        name: "section11",
+        lanes: 3,
+        corner: null,
+        tiles: [
+            { id: "section11.1.0", lane: 1, x: 939, y: 1308, heading: -150 },
+            { id: "section11.1.1", lane: 1, x: 875, y: 1292, heading: -140 },
+            { id: "section11.1.2", lane: 1, x: 802, y: 1249, heading: -104 },
+            { id: "section11.1.3", lane: 1, x: 769, y: 1188, heading: -107 },
+            { id: "section11.1.4", lane: 1, x: 736, y: 1148, heading: -159, exits: ["section12.1.0"] },
+            { id: "section11.2.0", lane: 2, x: 972, y: 1285, heading: -168, exits: ["section11.1.0", "section11.2.1", "section11.3.1"] },
+            { id: "section11.2.1", lane: 2, x: 917, y: 1274, heading: -164, exits: ["section11.1.1", "section11.2.2", "section11.3.2"] },
+            { id: "section11.2.2", lane: 2, x: 855, y: 1256, heading: -134, exits: ["section11.1.2", "section11.2.3", "section11.3.3"] },
+            { id: "section11.2.3", lane: 2, x: 807, y: 1198, heading: -117, exits: ["section11.1.3", "section11.2.4", "section11.3.4"] },
+            { id: "section11.2.4", lane: 2, x: 776, y: 1145, heading: -143, exits: ["section12.2.0"] },
+            { id: "section11.3.0", lane: 3, x: 1004, y: 1262, heading: 172, exits: ["section11.2.0", "section11.3.1"] },
+            { id: "section11.3.1", lane: 3, x: 949, y: 1250, heading: 173, exits: ["section11.2.1", "section11.3.2"] },
+            { id: "section11.3.2", lane: 3, x: 894, y: 1237, heading: -173, exits: ["section11.2.2", "section11.3.3"] },
+            { id: "section11.3.3", lane: 3, x: 847, y: 1207, heading: -137, exits: ["section11.2.3", "section11.3.4"] },
+            { id: "section11.3.4", lane: 3, x: 821, y: 1155, heading: -146, exits: ["section11.2.4", "section12.3.0"] },
+        ],
+    },
+    {
+        id: "section12",
+        name: "Corner 6",
+        lanes: 3,
+        corner: { stops: 2 },
+        tiles: [
+            { id: "section12.1.0", lane: 1, x: 682, y: 1127, heading: 162, exits: ["section12.1.1"] },
+            { id: "section12.1.1", lane: 1, x: 625, y: 1145, heading: 178, exits: ["section12.1.2", "section12.2.3"] },
+            { id: "section12.1.2", lane: 1, x: 567, y: 1161, heading: -160, exits: ["section12.1.3"] },
+            { id: "section12.1.3", lane: 1, x: 515, y: 1142, heading: -105, exits: ["section12.1.4", "section12.2.4"] },
+            { id: "section12.1.4", lane: 1, x: 485, y: 1095, heading: -90, exits: ["section12.1.5", "section12.2.5"] },
+            { id: "section12.1.5", lane: 1, x: 467, y: 1043, heading: -141, exits: ["section13.1.0"] },
+            { id: "section12.2.0", lane: 2, x: 725, y: 1106, heading: 173, exits: ["section12.1.0", "section12.2.1"] },
+            { id: "section12.2.1", lane: 2, x: 674, y: 1097, heading: 161, exits: ["section12.2.2"] },
+            { id: "section12.2.2", lane: 2, x: 620, y: 1116, heading: -179, exits: ["section12.2.3", "section12.3.4"] },
+            { id: "section12.2.3", lane: 2, x: 564, y: 1132, heading: -142, exits: ["section12.2.4"] },
+            { id: "section12.2.4", lane: 2, x: 520, y: 1099, heading: -91, exits: ["section12.2.5", "section12.3.5"] },
+            { id: "section12.2.5", lane: 2, x: 502, y: 1041, heading: -152, exits: ["section12.1.5", "section12.2.6"] },
+            { id: "section12.2.6", lane: 2, x: 465, y: 1001, heading: -161, exits: ["section13.1.0", "section13.2.0"] },
+            { id: "section12.3.0", lane: 3, x: 775, y: 1102, heading: -166, exits: ["section12.2.0", "section12.3.1"] },
+            { id: "section12.3.1", lane: 3, x: 729, y: 1074, heading: 172, exits: ["section12.2.1", "section12.3.2"] },
+            { id: "section12.3.2", lane: 3, x: 668, y: 1068, heading: 164, exits: ["section12.3.3"] },
+            { id: "section12.3.3", lane: 3, x: 616, y: 1083, heading: 166, exits: ["section12.3.4"] },
+            { id: "section12.3.4", lane: 3, x: 557, y: 1097, heading: -111, exits: ["section12.3.5"] },
+            { id: "section12.3.5", lane: 3, x: 535, y: 1041, heading: -145, exits: ["section12.2.5", "section12.3.6"] },
+            { id: "section12.3.6", lane: 3, x: 504, y: 995, heading: -160, exits: ["section12.2.6", "section12.3.7"] },
+            { id: "section12.3.7", lane: 3, x: 461, y: 958, heading: -162, exits: ["section13.2.0", "section13.3.0"] },
+        ],
+    },
+    {
+        id: "section13",
+        name: "section13",
+        lanes: 3,
+        corner: null,
+        tiles: [
+            { id: "section13.1.0", lane: 1, x: 423, y: 1008, heading: -120, exits: ["section13.1.1", "section13.2.0"] },
+            { id: "section13.1.1", lane: 1, x: 380, y: 973, heading: -121, exits: ["section13.1.2", "section13.2.1"] },
+            { id: "section13.1.2", lane: 1, x: 335, y: 936, heading: -117, exits: ["section13.1.3", "section13.2.2"] },
+            { id: "section13.1.3", lane: 1, x: 296, y: 901, heading: -121, exits: ["section13.1.4", "section13.2.3"] },
+            { id: "section13.1.4", lane: 1, x: 251, y: 865, heading: -121, exits: ["section13.1.5", "section13.2.4"] },
+            { id: "section13.1.5", lane: 1, x: 207, y: 828, heading: -122, exits: ["section14.1.0", "section13.2.5"] },
+            { id: "section13.2.0", lane: 2, x: 421, y: 965, heading: -143, exits: ["section13.1.1", "section13.2.1", "section13.3.0"] },
+            { id: "section13.2.1", lane: 2, x: 379, y: 932, heading: -141, exits: ["section13.1.2", "section13.2.2", "section13.3.1"] },
+            { id: "section13.2.2", lane: 2, x: 336, y: 896, heading: -138, exits: ["section13.1.3", "section13.2.3", "section13.3.2"] },
+            { id: "section13.2.3", lane: 2, x: 295, y: 861, heading: -143, exits: ["section13.1.4", "section13.2.4", "section13.3.3"] },
+            { id: "section13.2.4", lane: 2, x: 247, y: 823, heading: -140, exits: ["section13.2.5"] },
+            { id: "section13.2.5", lane: 2, x: 200, y: 784, heading: -116, exits: ["section14.2.0", "section14.3.0"] },
+            { id: "section13.3.0", lane: 3, x: 416, y: 924, heading: -162, exits: ["section13.2.1", "section13.3.1"] },
+            { id: "section13.3.1", lane: 3, x: 376, y: 890, heading: -159, exits: ["section13.2.2", "section13.3.2"] },
+            { id: "section13.3.2", lane: 3, x: 330, y: 851, heading: -163, exits: ["section13.2.3", "section13.3.3"] },
+            { id: "section13.3.3", lane: 3, x: 287, y: 818, heading: -160, exits: ["section13.2.4", "section13.3.4"] },
+            { id: "section13.3.4", lane: 3, x: 243, y: 783, heading: -138, exits: ["section14.3.0"] },
+        ],
+    },
+    {
+        id: "section14",
+        name: "Corner 7",
+        lanes: 3,
+        corner: { stops: 1 },
+        tiles: [
+            { id: "section14.1.0", lane: 1, x: 163, y: 791, heading: -108, exits: ["section14.1.1", "section14.2.0"] },
+            { id: "section14.1.1", lane: 1, x: 132, y: 746, heading: -83, exits: ["section14.1.2"] },
+            { id: "section14.1.2", lane: 1, x: 139, y: 689, heading: -28, exits: ["section14.1.3", "section14.2.1"] },
+            { id: "section14.1.3", lane: 1, x: 183, y: 649, heading: -9, exits: ["section14.1.4"] },
+            { id: "section14.1.4", lane: 1, x: 233, y: 641, heading: 16, exits: ["section14.1.5", "section14.2.2"] },
+            { id: "section14.1.5", lane: 1, x: 292, y: 639, heading: 18, exits: ["section15.1.0", "section15.2.0"] },
+            { id: "section14.2.0", lane: 2, x: 160, y: 734, heading: -60, exits: ["section14.2.1"] },
+            { id: "section14.2.1", lane: 2, x: 192, y: 678, heading: 7, exits: ["section14.2.2", "section14.3.1"] },
+            { id: "section14.2.2", lane: 2, x: 263, y: 669, heading: 19, exits: ["section15.2.0", "section15.3.0"] },
+            { id: "section14.3.0", lane: 3, x: 194, y: 739, heading: -48, exits: ["section14.3.1"] },
+            { id: "section14.3.1", lane: 3, x: 229, y: 700, heading: -2, exits: ["section15.3.0"] },
+        ],
+    },
+    {
+        id: "section15",
+        name: "Finish Straight",
+        lanes: 3,
+        corner: null,
+        tiles: [
+            { id: "section15.1.0", lane: 1, x: 347, y: 637, heading: 16, exits: ["section15.1.1", "section15.2.1"] },
+            { id: "section15.1.1", lane: 1, x: 403, y: 633, heading: 20, exits: ["section15.1.2", "section15.2.2"] },
+            { id: "section15.1.2", lane: 1, x: 459, y: 633, heading: 17, exits: ["section15.1.3", "section15.2.3"] },
+            { id: "section15.1.3", lane: 1, x: 516, y: 631, heading: 15, exits: ["section15.1.4", "section15.2.4"] },
+            { id: "section15.1.4", lane: 1, x: 579, y: 628, heading: 28, exits: ["section15.1.5", "section15.2.5"] },
+            { id: "section15.1.5", lane: 1, x: 652, y: 647, heading: 46, exits: ["section15.1.6", "section15.2.6"] },
+            { id: "section15.1.6", lane: 1, x: 708, y: 680, heading: 55, exits: ["section15.1.7", "section15.2.7"] },
+            { id: "section15.1.7", lane: 1, x: 754, y: 712, heading: 54, exits: ["section15.1.8", "section15.2.8"] },
+            { id: "section15.1.8", lane: 1, x: 799, y: 744, heading: 50, exits: ["section15.1.9", "section15.2.9"] },
+            { id: "section15.1.9", lane: 1, x: 847, y: 772, heading: 47, exits: ["section15.1.10", "section15.2.10"] },
+            { id: "section15.1.10", lane: 1, x: 896, y: 797, heading: 44, exits: ["section15.1.11", "section15.2.11"] },
+            { id: "section15.1.11", lane: 1, x: 946, y: 820, heading: 39, exits: ["section15.1.12", "section15.2.12"] },
+            { id: "section15.1.12", lane: 1, x: 999, y: 841, heading: 42, exits: ["start.1.0", "start.2.0"] },
+            { id: "section15.2.0", lane: 2, x: 319, y: 668, heading: -3, exits: ["section15.1.0", "section15.2.1", "section15.3.1"] },
+            { id: "section15.2.1", lane: 2, x: 376, y: 665, heading: -3, exits: ["section15.1.1", "section15.2.2", "section15.3.2"] },
+            { id: "section15.2.2", lane: 2, x: 433, y: 664, heading: -3, exits: ["section15.1.2", "section15.2.3", "section15.3.3"] },
+            { id: "section15.2.3", lane: 2, x: 489, y: 661, heading: -2, exits: ["section15.1.3", "section15.2.4", "section15.3.4"] },
+            { id: "section15.2.4", lane: 2, x: 546, y: 659, heading: 2, exits: ["section15.1.4", "section15.2.5", "section15.3.5"] },
+            { id: "section15.2.5", lane: 2, x: 610, y: 664, heading: 21, exits: ["section15.1.5", "section15.2.6", "section15.3.6"] },
+            { id: "section15.2.6", lane: 2, x: 669, y: 691, heading: 34, exits: ["section15.1.6", "section15.2.7", "section15.3.7"] },
+            { id: "section15.2.7", lane: 2, x: 713, y: 721, heading: 31, exits: ["section15.1.7", "section15.2.8", "section15.3.8"] },
+            { id: "section15.2.8", lane: 2, x: 764, y: 753, heading: 37, exits: ["section15.1.8", "section15.2.9", "section15.3.9"] },
+            { id: "section15.2.9", lane: 2, x: 809, y: 785, heading: 28, exits: ["section15.1.9", "section15.2.10", "section15.3.10"] },
+            { id: "section15.2.10", lane: 2, x: 861, y: 813, heading: 25, exits: ["section15.1.10", "section15.2.11", "section15.3.11"] },
+            { id: "section15.2.11", lane: 2, x: 910, y: 837, heading: 20, exits: ["section15.1.11", "section15.2.12", "section15.3.12"] },
+            { id: "section15.2.12", lane: 2, x: 963, y: 857, heading: 25, exits: ["section15.1.12", "start.2.0", "section15.3.13"] },
+            { id: "section15.3.0", lane: 3, x: 290, y: 698, heading: -20, exits: ["section15.2.0", "section15.3.1"] },
+            { id: "section15.3.1", lane: 3, x: 349, y: 696, heading: -22, exits: ["section15.2.1", "section15.3.2"] },
+            { id: "section15.3.2", lane: 3, x: 406, y: 693, heading: -19, exits: ["section15.2.2", "section15.3.3"] },
+            { id: "section15.3.3", lane: 3, x: 463, y: 692, heading: -22, exits: ["section15.2.3", "section15.3.4"] },
+            { id: "section15.3.4", lane: 3, x: 520, y: 689, heading: -21, exits: ["section15.2.4", "section15.3.5"] },
+            { id: "section15.3.5", lane: 3, x: 575, y: 689, heading: -9, exits: ["section15.2.5", "section15.3.6"] },
+            { id: "section15.3.6", lane: 3, x: 626, y: 700, heading: 14, exits: ["section15.2.6", "section15.3.7"] },
+            { id: "section15.3.7", lane: 3, x: 678, y: 734, heading: 10, exits: ["section15.2.7", "section15.3.8"] },
+            { id: "section15.3.8", lane: 3, x: 724, y: 761, heading: 17, exits: ["section15.2.8", "section15.3.9"] },
+            { id: "section15.3.9", lane: 3, x: 767, y: 794, heading: 13, exits: ["section15.2.9", "section15.3.10"] },
+            { id: "section15.3.10", lane: 3, x: 819, y: 824, heading: 11, exits: ["section15.2.10", "section15.3.11"] },
+            { id: "section15.3.11", lane: 3, x: 874, y: 852, heading: 3, exits: ["section15.2.11", "section15.3.12"] },
+            { id: "section15.3.12", lane: 3, x: 925, y: 872, heading: 5, exits: ["section15.2.12", "section15.3.13"] },
+            { id: "section15.3.13", lane: 3, x: 975, y: 895, heading: 7, exits: ["start.2.0", "start.3.0"] },
+        ],
+    },
 ];
 
-const { rows: ROWS, spaces: SPACES, corners: CORNERS } = deriveTrack(SECTIONS);
-
-// The art is a real 2835×1843 illustration (art-masters/racecars/anglet.png),
-// not a park drawn for this game, so there is a real centre line to read
-// waypoints off by eye — one per corner above, plus a few more where a
-// straight line between corners would cut across ground the road doesn't
-// cover (see the harbour hook below) — in art-pixel coordinates scaled down
-// by ~0.292 to sit at Ashcombe's own coordinate scale
-// (order of magnitude ~800×500), which is load-bearing: RaceCarsBoard.tsx's
-// SPACE_LENGTH/SPACE_WIDTH/CAR_LENGTH and the corner-pip sizing are constants
-// tuned to that scale and shared by every track, so a track drawn ten times
-// bigger would draw lozenges ten times too small for its own road.
-//
-// `polylineGeometry` walks these as straight edges rather than a curve, so a
-// corner's drawn heading changes sharply at its waypoint instead of easing
-// into it — coarser than the road it is standing in for, exactly as
-// Ashcombe's rounded rectangle stands in for corners it was never measured
-// against. §23.6's generator, sampling the real centre line as a proper path,
-// replaces this the same way it replaces Ashcombe's.
-// Port, the two unnamed points after it and Chambre d'Amour trace the
-// harbour hook's own outer edge — the loop the road actually runs — rather
-// than jumping straight from one corner marker to the next, which cuts
-// across the field the hook encloses instead of following the road round it.
-const WAYPOINTS: Waypoint[] = [
-    { x: 285, y: 248 },  // Start/finish, at the grid.
-    { x: 397, y: 244 },  // La Digue Kink.
-    { x: 745, y: 288 },  // Approaching Port Sweep.
-    { x: 789, y: 295 },  // Port Sweep, the harbour hook's near side.
-    { x: 805, y: 327 },
-    { x: 802, y: 365 },
-    { x: 783, y: 393 },  // Chambre d'Amour Hairpin, the harbour hook's tip.
-    { x: 716, y: 428 },  // Out of the hook, onto the straight back.
-    { x: 571, y: 404 },  // Sables d'Or Bend, the harbour hook's far side.
-    { x: 393, y: 370 },  // VVF Chicane.
-    { x: 204, y: 354 },  // La Barre Chicane.
-    { x: 85, y: 222 },   // Villa Hairpin, the loop back beside the grid.
-];
-
-/** Gap between neighbouring lanes, across the road — Ashcombe's own pitch. */
-const LANE_PITCH = 22;
-
-const GEOMETRY = polylineGeometry(ROWS, SPACES, WAYPOINTS, LANE_PITCH);
+const DERIVED = deriveTrack(SECTIONS);
 
 export const ANGLET: RaceCarsTrack = {
-    id: 'anglet',
-    name: "Anglet Chambre d'Amour",
-    rows: ROWS,
-    spaces: SPACES,
-    corners: CORNERS,
+    id: "anglet",
+    name: "Anglet Chambre D'Amour",
+    rows: DERIVED.rows,
+    spaces: DERIVED.spaces,
+    corners: DERIVED.corners,
+    // Every track so far shares the staggered six-slot grid; give this one its
+    // own array here if its start line sits somewhere else.
     grid: STAGGERED_SIX_GRID,
-    // Four, not five or six: the longest corner-free run (Front de Mer, 20
-    // rows) is shorter than Ashcombe's Mile, and this is a tighter, more
-    // technical circuit than a straight-line speed one — seven corners to
-    // Ashcombe's three, on twenty more rows.
-    maxGear: 4,
+    maxGear: 5,
     art: {
-        href: '/art/racecars/anglet.png',
-        // The art's own aspect ratio (2835×1843), scaled down to WAYPOINTS'
-        // coordinate space — not a value picked for the loop, but for the
-        // `<image>` under it: a viewBox any other shape crops or stretches
-        // the real picture against (§23.4's "art does not draw the spaces"
-        // cuts both ways — the spaces must not mis-draw the art either).
-        viewBox: { width: 828, height: 538 },
+        href: "/art/racecars/anglet.png",
+        viewBox: { width: 2835, height: 1843 },
     },
-    geometry: GEOMETRY,
+    geometry: tileGeometry(DERIVED),
 };

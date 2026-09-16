@@ -23,6 +23,7 @@ import {
     lapRuns,
     neighbouringLanes,
     plainTileId,
+    runsInStep,
     tileGeometry,
     type DerivedTrack,
     type SectionRuns,
@@ -297,6 +298,98 @@ export function allEffectiveExits(state: EditorState): Map<string, string[]> {
 /** One tile's steps: its own where it has overridden them, else §5.1's default. */
 export function effectiveExits(state: EditorState, tile: EditorTile): string[] {
     return tile.exits ?? tileDefaultExits(lapRuns(toSections(state)), state, tile);
+}
+
+/**
+ * Whether §5.1's default step rule is refused for a section — that is, whether
+ * its lanes hold different numbers of tiles.
+ *
+ * The test itself is `runsInStep` in `sections.ts`, asked of the same lane runs
+ * `deriveTrack` refuses the section from, so the editor's count, its button and
+ * the error message an author reads can never disagree about which tiles are
+ * the problem.
+ *
+ * The editor still draws the computed default in such a section, because it is
+ * usually the right answer near the section's entry and a useful thing to start
+ * from — but an author has to confirm it, which is what `pinnedExits` is for.
+ */
+export function sectionOutOfStep(state: EditorState, sectionId: string): boolean {
+    const here = lapRuns(toSections(state)).find(({ section }) => section.id === sectionId);
+    return here ? !runsInStep(here.runs) : false;
+}
+
+/**
+ * The patch that **freezes** a tile's steps as its own — the same set it is
+ * already taking, written down explicitly rather than left to §5.1's rule.
+ *
+ * This is the only way to say "yes, those exact steps" about a tile whose
+ * default is already correct: toggling a step off and back on can't do it,
+ * because an edit that lands on the default drops the override again. A tile in
+ * a section whose lanes run out of step needs exactly that, since the rule its
+ * steps would otherwise fall back to is one `deriveTrack` refuses.
+ *
+ * `lap` is optional for the same reason `tileDefaultExits` takes one: a caller
+ * naming a whole section's steps would otherwise rebuild it per tile.
+ */
+export function pinnedExits(
+    state: EditorState,
+    tile: EditorTile,
+    lap: SectionRuns[] = lapRuns(toSections(state)),
+): Pick<EditorTile, "exits" | "autoExits"> {
+    // `autoExits` cleared with it: a set an author has confirmed is theirs, so
+    // auto-connect leaves it alone like any other hand-drawn override.
+    return { exits: tile.exits ?? tileDefaultExits(lap, state, tile), autoExits: undefined };
+}
+
+/**
+ * The same, for every tile of one section at once.
+ *
+ * `deriveTrack` throws on the **first** tile it finds without steps of its own,
+ * so an out-of-step corner fixed a tile at a time is one error message per tile
+ * — a dozen rounds of read-click-read for one corner. The condition is a
+ * property of the section rather than the tile, so this is the shape the fix
+ * wants: confirm the section's steps once, then correct the few the geometry
+ * got wrong by hand.
+ *
+ * Tiles that already have their own steps keep them, hand-drawn and
+ * auto-connected alike — this only writes down the ones still falling back to
+ * §5.1's rule.
+ */
+export function withSectionStepsNamed(state: EditorState, sectionId: string): EditorTile[] {
+    const lap = lapRuns(toSections(state));
+    return state.tiles.map(tile => (tile.section === sectionId && !tile.exits
+        ? { ...tile, ...pinnedExits(state, tile, lap) }
+        : tile));
+}
+
+/**
+ * One tile's steps with `targetId` added or taken away — a click on the canvas
+ * while drawing exits, as a change to the tiles.
+ *
+ * An edit that lands back on §5.1's default normally **drops** the override, so
+ * an ordinary straight prints plain rather than hand-written. Not in a section
+ * whose lanes run out of step: there the rule it would fall back to is one
+ * `deriveTrack` refuses, so dropping the override would silently undo the thing
+ * making the section driveable — an author toggling a step off and on again
+ * would put the refusal back without touching anything else.
+ */
+export function withExitToggled(state: EditorState, fromId: string, targetId: string): EditorTile[] {
+    const tile = state.tiles.find(candidate => candidate.id === fromId);
+    if (!tile) return state.tiles;
+
+    const fallback = tileDefaultExits(lapRuns(toSections(state)), state, tile);
+    const current = tile.exits ?? fallback;
+    const exits = current.includes(targetId)
+        ? current.filter(exit => exit !== targetId)
+        : [...current, targetId];
+    const asDefault = sameExits(exits, fallback) && !sectionOutOfStep(state, tile.section);
+
+    return state.tiles.map(candidate => (candidate.id === fromId
+        // A hand edit is authored, even one starting from an auto-connect — so
+        // it clears `autoExits` and, from here on, auto-connect leaves it alone
+        // like any other hand-drawn override.
+        ? { ...candidate, exits: asDefault ? undefined : exits, autoExits: undefined }
+        : candidate));
 }
 
 /**

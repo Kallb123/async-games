@@ -13,19 +13,19 @@ import {
     nextTileId,
     NO_EXITS,
     parseDraft,
+    pinnedExits,
     printTrackFile,
-    sameExits,
     sectionLabel,
-    tileDefaultExits,
+    sectionOutOfStep,
     tileHeading,
     tilesIn,
-    toSections,
     validateTrack,
+    withExitToggled,
+    withSectionStepsNamed,
     type EditorSection,
     type EditorState,
     type EditorTile,
 } from '@/games/RaceCars/tracks/editorModel';
-import { lapRuns } from '@/games/RaceCars/tracks/sections';
 import { readStoredValue, writeStoredValue } from '@/utils/hooks/useStoredValue';
 
 /**
@@ -60,8 +60,11 @@ const STORAGE_KEY = 'ag-racecars-track-editor';
  * mid-track can tell which of them are live without digging through commits —
  * shown as a small footer, its tooltip naming what changed.
  */
-const TOOL_VERSION = 6;
+const TOOL_VERSION = 9;
 const TOOL_CHANGES = [
+    'v9 — a tile can be made to name its own steps even where they match §5.1\'s default: click the tile you are drawing from, or name a whole out-of-step section\'s at once from its row, which is what "runs its lanes out of step" was asking for and had no way to answer.',
+    'v8 — hot keys for the toolbar: Q/W/E pick the mode, 1–3 the lane, and A/S step back and on through the sections, so placing a lap no longer means a round trip to the buttons between tiles.',
+    'v7 — a step auto-connect drew from the geometry is purple on the canvas, telling it apart from both §5.1\'s faint grey default and a terracotta hand-drawn override — so what a re-run will redraw reads at a glance.',
     'v6 — sections and sync lines: the lap is cut into stretches of road whose ends are level across every lane, corners are sections rather than a paint colour, and rows are derived from the steps rather than typed (so they cannot drift after a corner).',
     'v5 — auto-connect never reasons from its own previous run: heading and "already connected" are worked out fresh from where the tiles sit and in road order each time, so a second run settles rather than drifting to a different tile.',
     'v4 — auto-connect never reverses an existing exit (generated or hand-drawn); it falls through to the next-nearest tile in that lane instead of connecting two tiles both ways.',
@@ -69,6 +72,10 @@ const TOOL_CHANGES = [
     'v2 — auto-connect never skips a lane (no lane 1 straight to lane 3), and tags what it writes so a later pass can redraw it instead of freezing on the first run.',
     'v1 — corner painting, save/resume to a file, and connecting exits from the drawn geometry.',
 ].join('\n');
+
+/** The opener both panels use to explain the refusal, so rewording it moves
+ *  one string rather than two that drift. Each site appends its own tail. */
+const OUT_OF_STEP = "This section's lanes run out of step, so §5.1's rule is refused here";
 
 const TILE_RADIUS = 7;
 /** How far a pointer may travel before a click counts as a drag, in screen px. */
@@ -169,11 +176,63 @@ export default function RaceCarsTrackEditor() {
     // than stored, so deleting the active section can't leave the canvas
     // dropping tiles into one that no longer exists.
     const activeSection = state.sections.find(section => section.id === activeSectionId) ?? state.sections[0];
+    // How wide the road is where tiles are landing — derived once, because the
+    // lane picker, the place hint and the lane hot keys must agree on it.
+    const activeLanes = activeSection?.lanes ?? 3;
 
     const validation = useMemo(() => validateTrack(state), [state]);
     // Rows as the derivation sees them, printed on the tiles: the one reading
     // that tells an author their sync lines are where they think they are.
     const rows = useMemo(() => derivedRows(validation.derived), [validation]);
+
+    // Hot keys for the toolbar: an author places a couple of hundred tiles a
+    // track, and the slow part is the round trip to the buttons between every
+    // one of them. Q/W/E sit under the hand that isn't on the mouse, 1–3 name
+    // the lane they pick, and A/S walk the lap the way it is driven.
+    useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            // Never take a key off a field — this screen is mostly text inputs —
+            // and leave anything chorded to the browser's own shortcuts.
+            if (event.ctrlKey || event.metaKey || event.altKey) return;
+            const target = event.target as HTMLElement | null;
+            if (target?.isContentEditable) return;
+            if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+
+            // Clamped rather than wrapped, like the picker's own arrow keys: the
+            // ends of the list should feel like ends while an author holds a key.
+            const stepSection = (by: number) => {
+                const index = state.sections.findIndex(section => section.id === activeSection?.id);
+                const next = state.sections[Math.min(Math.max(index + by, 0), state.sections.length - 1)];
+                if (next) setActiveSectionId(next.id);
+            };
+
+            switch (event.key.toLowerCase()) {
+                case 'q': setMode('place'); break;
+                // Mirrors the toolbar, which can't draw exits from no tile.
+                case 'w': if (!selected) return; setMode('exits'); break;
+                case 'e': setMode('paint'); break;
+                case 'a': stepSection(-1); break;
+                case 's': stepSection(1); break;
+                case '1':
+                case '2':
+                case '3': {
+                    // Only a lane this section actually has, so a key can never
+                    // set what the picker wouldn't have offered.
+                    const lane = Number(event.key);
+                    if (lane > activeLanes) return;
+                    setNextLane(lane);
+                    break;
+                }
+                default: return;
+            }
+            // Only once a key has actually done something — one this screen
+            // ignores stays the browser's (and the page's own scrolling).
+            event.preventDefault();
+        };
+
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [state.sections, activeSection, activeLanes, selected]);
 
     const patchTile = useCallback((id: string, patch: Partial<EditorTile>) => {
         setState(prev => ({
@@ -224,25 +283,27 @@ export default function RaceCarsTrackEditor() {
     }, [state.tiles]);
 
     const toggleExit = useCallback((fromId: string, targetId: string) => {
+        setState(prev => ({ ...prev, tiles: withExitToggled(prev, fromId, targetId) }));
+    }, []);
+
+    /**
+     * Freeze a tile's current steps as its own, or hand them back to §5.1's
+     * rule — the click on the tile itself while drawing its exits.
+     *
+     * A tile whose default steps are already the right ones has no other way to
+     * say so: every toggle that lands on the default drops the override again.
+     * That is the state a section running its lanes out of step needs, because
+     * the rule its tiles would otherwise fall back to is one `deriveTrack`
+     * refuses whether or not it happens to point the right way.
+     */
+    const togglePinnedExits = useCallback((id: string) => {
         setState(prev => {
-            const tile = prev.tiles.find(candidate => candidate.id === fromId);
+            const tile = prev.tiles.find(candidate => candidate.id === id);
             if (!tile) return prev;
-            const fallback = tileDefaultExits(lapRuns(toSections(prev)), prev, tile);
-            const current = tile.exits ?? fallback;
-            const nextExits = current.includes(targetId)
-                ? current.filter(exit => exit !== targetId)
-                : [...current, targetId];
-            // If the edit lands back on §5.1's default, drop the override so the
-            // printed track stays a plain straight rather than a hand-written one.
-            const asDefault = sameExits(nextExits, fallback);
+            const patch = tile.exits ? NO_EXITS : pinnedExits(prev, tile);
             return {
                 ...prev,
-                // A hand edit is authored, even one starting from an auto-connect
-                // — so it clears autoExits and, from here on, auto-connect leaves
-                // it alone like any other hand-drawn override.
-                tiles: prev.tiles.map(candidate => (candidate.id === fromId
-                    ? { ...candidate, exits: asDefault ? undefined : nextExits, autoExits: undefined }
-                    : candidate)),
+                tiles: prev.tiles.map(candidate => (candidate.id === id ? { ...candidate, ...patch } : candidate)),
             };
         });
     }, []);
@@ -332,13 +393,17 @@ export default function RaceCarsTrackEditor() {
         if (pointer.kind === 'tile' && pointer.id) {
             if (mode === 'exits' && selectedId && pointer.id !== selectedId) {
                 toggleExit(selectedId, pointer.id);
+            } else if (mode === 'exits' && pointer.id === selectedId) {
+                // Clicking the tile you are drawing from is the one gesture
+                // spare here, and it is the one that makes its steps its own.
+                togglePinnedExits(pointer.id);
             } else {
                 setSelectedId(pointer.id);
             }
         } else if (pointer.kind === 'background' && mode === 'place' && pointer.at) {
             placeTile(pointer.at);
         }
-    }, [mode, selectedId, toggleExit, placeTile]);
+    }, [mode, selectedId, toggleExit, togglePinnedExits, placeTile]);
 
     const autoConnect = useCallback(() => {
         setState(prev => ({ ...prev, tiles: connectByGeometry(prev) }));
@@ -439,16 +504,24 @@ export default function RaceCarsTrackEditor() {
                             </select>
                             <label className="ag-field-label" htmlFor="rcedit-lane">Lane</label>
                             <select id="rcedit-lane" className="ag-select" value={nextLane} onChange={e => setNextLane(Number(e.target.value))}>
-                                <LaneOptions lanes={activeSection?.lanes ?? 3} />
+                                <LaneOptions lanes={activeLanes} />
                             </select>
                         </div>
 
+                        {/* The one place the hot keys are named, rather than a
+                            `title` on each control that only a hover finds. */}
+                        <p className="ag-hint">
+                            Keys: <strong>Q</strong> place, <strong>W</strong> draw exits, <strong>E</strong> paint —{' '}
+                            <strong>1</strong>/<strong>2</strong>/<strong>3</strong> pick the lane, and{' '}
+                            <strong>A</strong>/<strong>S</strong> step back and on through the sections.
+                        </p>
+
                         <p className="ag-hint">
                             {mode === 'place'
-                                ? `Click the art to drop the next tile into "${sectionName}", lane ${Math.min(nextLane, activeSection?.lanes ?? 3)} — place each lane's tiles in the order the road runs. Drag a tile to nudge its centre; click one to select it.`
+                                ? `Click the art to drop the next tile into "${sectionName}", lane ${Math.min(nextLane, activeLanes)} — place each lane's tiles in the order the road runs. Drag a tile to nudge its centre; click one to select it.`
                                 : mode === 'exits'
                                     ? (selected
-                                        ? `Click a tile to add or remove a step from ${selected.id}. Faint lines are §5.1's default; solid lines are overrides.`
+                                        ? `Click a tile to add or remove a step from ${selected.id}; click ${selected.id} itself to make its steps its own, so they are written down rather than left to §5.1's rule.`
                                         : 'Select a tile first.')
                                     : `Click or drag over tiles to move them into "${sectionName}". A corner is a section, so this is how one is drawn.`}
                         </p>
@@ -467,6 +540,17 @@ export default function RaceCarsTrackEditor() {
                             onPointerMove={onPointerMove}
                             onPointerUp={onPointerUp}
                         />
+
+                        {/* The one place the edge colours are named. It sits
+                            under the canvas rather than inside a mode's hint so
+                            it reads while placing and painting too, and so a
+                            fourth colour has a single line to change. */}
+                        <p className="ag-hint">
+                            A step&apos;s edge is coloured by where it came from: <strong>grey</strong> is §5.1&apos;s
+                            default, <strong>purple</strong> was auto-connected from the geometry, and{' '}
+                            <strong>terracotta</strong> is a hand-drawn override. A re-run of auto-connect redraws the
+                            purple ones and leaves the terracotta ones alone.
+                        </p>
 
                         <div className="ag-btn-row ag-btn-row--wrap">
                             <button type="button" className="ag-btn ag-btn--light" onClick={autoConnect}>Auto-connect exits from geometry</button>
@@ -502,7 +586,7 @@ export default function RaceCarsTrackEditor() {
                         tile={selected}
                         row={rows.get(selected.id)}
                         onPatch={patch => patchTile(selected.id, patch)}
-                        onResetExits={() => patchTile(selected.id, NO_EXITS)}
+                        onTogglePinned={() => togglePinnedExits(selected.id)}
                         onDelete={() => deleteTile(selected.id)}
                     />
                 )}
@@ -513,6 +597,7 @@ export default function RaceCarsTrackEditor() {
                     activeSectionId={activeSection?.id ?? ''}
                     onSetActiveSection={setActiveSectionId}
                     onSetSections={sections => setState(prev => ({ ...prev, sections }))}
+                    onSetTiles={tiles => setState(prev => ({ ...prev, tiles }))}
                 />
 
                 <ExportPanel state={state} validation={validation} />
@@ -540,6 +625,18 @@ interface CanvasProps {
     onBackgroundPointerDown: (event: React.PointerEvent) => void;
     onPointerMove: (event: React.PointerEvent) => void;
     onPointerUp: (event: React.PointerEvent) => void;
+}
+
+/**
+ * The modifier naming where a tile's steps came from, so the canvas can colour
+ * the three apart: nothing for §5.1's default, `--auto` for a set
+ * auto-connect wrote from the geometry, `--override` for one an author drew.
+ * The two kinds of drawn exit have to read differently because only the
+ * generated ones are disposable — a re-run redraws them.
+ */
+function edgeOriginClass(tile: EditorTile): string {
+    if (!tile.exits) return '';
+    return tile.autoExits ? ' ag-rcedit-edge--auto' : ' ag-rcedit-edge--override';
 }
 
 // A plain scroll-and-zoom frame, deliberately not `BoardZoom`: that toggles
@@ -575,23 +672,23 @@ function EditorCanvas(props: CanvasProps) {
                     <image href={backdropHref} x={0} y={0} width={width} height={height} preserveAspectRatio="xMidYMid slice" />
                 )}
 
-                {/* Exit edges under the tiles: faint dashed for §5.1's default,
-                    solid for a hand-drawn override, so a corner's real merge
-                    reads at a glance. */}
-                {state.tiles.map(tile => {
-                    const isOverride = tile.exits !== undefined;
-                    return (exitsById.get(tile.id) ?? []).map(exit => {
-                        const target = byId.get(exit);
-                        if (!target) return null;
-                        return (
-                            <line
-                                key={`${tile.id}->${exit}`}
-                                className={`ag-rcedit-edge${isOverride ? ' ag-rcedit-edge--override' : ''}`}
-                                x1={tile.x} y1={tile.y} x2={target.x} y2={target.y}
-                            />
-                        );
-                    });
-                })}
+                {/* Exit edges under the tiles, one colour per where the step
+                    came from: faint grey dashed for §5.1's default, purple for
+                    one auto-connect drew from the geometry, terracotta for a
+                    hand-drawn override. An author needs to tell the last two
+                    apart at a glance — a re-run redraws the purple ones and
+                    leaves the terracotta ones alone. */}
+                {state.tiles.map(tile => (exitsById.get(tile.id) ?? []).map(exit => {
+                    const target = byId.get(exit);
+                    if (!target) return null;
+                    return (
+                        <line
+                            key={`${tile.id}->${exit}`}
+                            className={`ag-rcedit-edge${edgeOriginClass(tile)}`}
+                            x1={tile.x} y1={tile.y} x2={target.x} y2={target.y}
+                        />
+                    );
+                }))}
 
                 {state.tiles.map(tile => {
                     const isSelected = tile.id === selectedId;
@@ -705,16 +802,17 @@ function TrackPanel({ state, fileError, onPatch, onLoadTrack, onUploadArt, onImp
     );
 }
 
-function SelectedTilePanel({ state, tile, row, onPatch, onResetExits, onDelete }: {
+function SelectedTilePanel({ state, tile, row, onPatch, onTogglePinned, onDelete }: {
     state: EditorState;
     tile: EditorTile;
     row: number | undefined;
     onPatch: (patch: Partial<EditorTile>) => void;
-    onResetExits: () => void;
+    onTogglePinned: () => void;
     onDelete: () => void;
 }) {
     const autoHeading = tileHeading(state, { ...tile, heading: undefined });
     const section = state.sections.find(candidate => candidate.id === tile.section);
+    const outOfStep = sectionOutOfStep(state, tile.section);
     return (
         <Section label={`Tile ${tile.id}`}>
             <div className="ag-stack">
@@ -746,10 +844,15 @@ function SelectedTilePanel({ state, tile, row, onPatch, onResetExits, onDelete }
                 <p className="ag-hint">
                     Steps out: {effectiveExits(state, tile).join(', ') || 'none'}
                     {tile.exits ? (tile.autoExits ? ' (auto-connected — a re-run may redraw this)' : ' (hand-drawn override)') : ' (default §5.1 rule)'}.
+                    {outOfStep && (tile.exits
+                        ? <> {OUT_OF_STEP} — handing these back would refuse the section again.</>
+                        : <> {OUT_OF_STEP} and this tile has to name its own steps, even these ones. Make them its own to say so.</>)}
                 </p>
 
                 <div className="ag-btn-row ag-btn-row--wrap">
-                    {tile.exits && <button type="button" className="ag-btn ag-btn--light" onClick={onResetExits}>Reset exits to default</button>}
+                    <button type="button" className="ag-btn ag-btn--light" onClick={onTogglePinned}>
+                        {tile.exits ? 'Hand steps back to the default rule' : 'Make these steps its own'}
+                    </button>
                     <button type="button" className="ag-btn ag-btn--danger" onClick={onDelete}>Delete tile</button>
                 </div>
             </div>
@@ -757,12 +860,13 @@ function SelectedTilePanel({ state, tile, row, onPatch, onResetExits, onDelete }
     );
 }
 
-function SectionsPanel({ state, rows, activeSectionId, onSetActiveSection, onSetSections }: {
+function SectionsPanel({ state, rows, activeSectionId, onSetActiveSection, onSetSections, onSetTiles }: {
     state: EditorState;
     rows: Map<string, number>;
     activeSectionId: string;
     onSetActiveSection: (id: string) => void;
     onSetSections: (sections: EditorSection[]) => void;
+    onSetTiles: (tiles: EditorTile[]) => void;
 }) {
     const patch = (id: string, change: Partial<EditorSection>) => {
         onSetSections(state.sections.map(section => (section.id === id ? { ...section, ...change } : section)));
@@ -807,7 +911,15 @@ function SectionsPanel({ state, rows, activeSectionId, onSetActiveSection, onSet
                     (§10) — no separate painting of bands.
                 </p>
 
-                {state.sections.map((section, index) => (
+                {state.sections.map((section, index) => {
+                    // The tiles `deriveTrack` would throw on, one at a time:
+                    // zero for a section whose lanes run in step, which is
+                    // nearly all of them. Counted once per row rather than per
+                    // use — each ask walks the tiles and rebuilds the lap.
+                    const outstanding = sectionOutOfStep(state, section.id)
+                        ? tilesIn(state, section.id).filter(tile => !tile.exits).length
+                        : 0;
+                    return (
                     <div key={section.id} className={`ag-rcedit-section ag-stack${activeSectionId === section.id ? ' ag-rcedit-section--active' : ''}`}>
                         <div className="ag-rcedit-grid">
                             <Field label="Id"><input className="ag-input" value={section.id} disabled /></Field>
@@ -828,17 +940,29 @@ function SectionsPanel({ state, rows, activeSectionId, onSetActiveSection, onSet
                                 </select>
                             </Field>
                         </div>
-                        <p className="ag-hint">{tilesIn(state, section.id).length} tiles · {band(section.id)}</p>
+                        <p className="ag-hint">
+                            {tilesIn(state, section.id).length} tiles · {band(section.id)}
+                            {outstanding > 0 && (
+                                <> · {OUT_OF_STEP} and {outstanding} tile{outstanding === 1 ? '' : 's'} still
+                                leaning on it must name their own steps.</>
+                            )}
+                        </p>
                         <div className="ag-btn-row ag-btn-row--wrap">
                             <button type="button" className="ag-btn ag-btn--light" onClick={() => onSetActiveSection(section.id)}>
                                 {activeSectionId === section.id ? 'Drawing into this' : 'Draw into this'}
                             </button>
+                            {outstanding > 0 && (
+                                <button type="button" className="ag-btn ag-btn--dark" onClick={() => onSetTiles(withSectionStepsNamed(state, section.id))}>
+                                    Name this section&apos;s steps
+                                </button>
+                            )}
                             <button type="button" className="ag-btn ag-btn--light" onClick={() => move(index, -1)} disabled={index === 0}>Earlier</button>
                             <button type="button" className="ag-btn ag-btn--light" onClick={() => move(index, 1)} disabled={index === state.sections.length - 1}>Later</button>
                             <button type="button" className="ag-btn ag-btn--light" onClick={() => remove(section.id)} disabled={state.sections.length <= 1}>Remove</button>
                         </div>
                     </div>
-                ))}
+                    );
+                })}
 
                 <div className="ag-btn-row ag-btn-row--wrap">
                     <button type="button" className="ag-btn ag-btn--dark" onClick={add}>Add section</button>

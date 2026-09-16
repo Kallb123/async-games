@@ -198,22 +198,48 @@ Two consequences worth keeping in mind while drawing:
    or heading in the *Tile* panel — which also shows the row it derived to.
    Heading is computed from where a tile's exits point unless you set it.
 4. **Draw movement restriction.** Select a tile, switch to *Draw exits*, and
-   click the tiles it may step to — each click adds or removes a step. Faint
-   dashed edges are §5.1's default; solid edges are your overrides. An edit that
-   lands back on the default drops the override, so ordinary straights stay
-   plain. **Auto-connect exits from geometry** rebuilds every non-overridden
-   tile's steps from where the tiles actually sit rather than from the placement
-   order — the fix for a section whose lanes hold different numbers of tiles
-   (see below). It leaves your hand-drawn exits alone.
-5. **Move tiles between sections.** *Paint into section* drags the brush over
+   click the tiles it may step to — each click adds or removes a step. An edge is
+   coloured by where its step came from: faint grey dashed is §5.1's default,
+   purple is a step auto-connect drew from the geometry, and terracotta is your
+   own hand-drawn override. An edit that lands back on the default drops the
+   override, so ordinary straights stay plain. **Auto-connect exits from
+   geometry** rebuilds every non-overridden tile's steps from where the tiles
+   actually sit rather than from the placement order — the fix for a section
+   whose lanes hold different numbers of tiles (see below). It leaves your
+   hand-drawn exits alone, and only the purple edges are its to redraw, so the
+   colours tell you what a second run will touch.
+5. **Name a tile's own steps.** Most tiles take §5.1's default rule and print
+   nothing. A section whose lanes hold **different numbers of tiles** can't:
+   "the next tile along in the lane beside me" is an index, and where the runs
+   are different lengths that index is not a statement about the road, so
+   `deriveTrack` refuses the section unless every tile in it names its own
+   steps — *"section "X" runs its lanes out of step, so Y has to name its own
+   steps"*. The default drawn on the canvas is often still the right answer
+   near the section's entry, but it has to be **confirmed** rather than
+   assumed, which is the whole point of the rule. Click the tile you are
+   drawing from (or *Make these steps its own* in the *Tile* panel) to write
+   its current steps down as its own; the *Sections* panel counts the tiles
+   still leaning on the rule and names a whole section's in one go, which is
+   worth using because the error surfaces one tile at a time. Toggling a step
+   off and on again cannot do this: an edit that lands back on the default
+   drops the override — except in an out-of-step section, where it is kept for
+   exactly this reason.
+6. **Move tiles between sections.** *Paint into section* drags the brush over
    tiles to move them into the active section — how a corner gets its tiles, and
    how a sync line is nudged a tile either way once the art shows it is in the
    wrong place.
-6. **Save/resume.** The draft autosaves to this browser's `localStorage`;
+7. **Hot keys.** The toolbar is driveable from the keyboard, which is worth
+   knowing before placing a few hundred tiles by hand: `Q` *Place*, `W` *Draw
+   exits*, `E` *Paint into section*, `1`/`2`/`3` for that lane, and `A`/`S` to
+   step back and on through the sections. Each key does exactly what its
+   control does and nothing the control wouldn't — so a key is ignored while a
+   button is disabled or a lane is one this section hasn't got, as is anything
+   typed into a field or held with Ctrl/Cmd/Alt.
+8. **Save/resume.** The draft autosaves to this browser's `localStorage`;
    *Save draft to file* / *Open draft file* move it to a `.json` you can keep or
    carry to another machine. That draft is the working copy — separate from the
    deployable track file the export panel prints.
-7. **Validate & export.** The panel runs the drawing through the game's own
+9. **Validate & export.** The panel runs the drawing through the game's own
    `deriveTrack`, so "driveable in the editor" and "loads in the game" are the
    same check. Copy the printed file, save it as
    `src/games/RaceCars/tracks/<id>.ts`, and add it to `TRACK_LIST` in
@@ -240,10 +266,19 @@ section spans so the two lines stay comparable.
 A band like that has to name every one of its steps, and the export panel says
 so if it doesn't: "the next tile along in the lane beside me" is a statement
 about lanes that run *in step*, and over one that doesn't it is a guess — the
-guess that used to put two tiles drawn side by side a row apart. *Auto-connect
-exits from geometry* is the tool for it: it connects each tile to the tiles
-physically ahead of it in this lane and the one either side, working the
-direction of travel out from the next tile along the tile's own lane.
+guess that used to put two tiles drawn side by side a row apart.
+
+*Auto-connect exits from geometry* does most of the work: it connects each tile
+to the tiles physically ahead of it in this lane and the one either side,
+working the direction of travel out from the next tile along the tile's own
+lane. It cannot finish the job on its own, though, and this is the one place
+that matters: where the geometry's answer happens to *match* §5.1's default,
+auto-connect leaves the tile on the rule rather than writing the set down — so
+the section stays refused however many times you run it. Those are the tiles
+step 5 is for. Finish with **Name this section's steps** in the *Sections*
+panel, which writes down every tile still leaning on the rule in one go and
+leaves the ones auto-connect drew alone; the panel counts them for you, so a
+section reading zero is one that will load.
 
 ### No "What's new" entry
 
