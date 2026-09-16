@@ -119,6 +119,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "A lobby that closed stops saying a game is starting",
+                detail: "If the host cancelled your lobby while you were sitting on it, or it ran out of time, you were told \"Game is starting! Look for it on your home screen.\" — and then found nothing there, because nothing had started. It now says the lobby isn't open any more. Opening an old lobby link after the game has already begun takes you to the board instead of turning you away.",
+            },
+            {
                 title: "A Settlements & Cities turn that ends itself gives nothing away",
                 detail: "When your turn ended on its own because there was nothing left to build, buy or trade, the match log told everyone exactly that — so the table could work out you couldn't afford a road and were short of every resource. An automatic ending now reads as \"ended their turn\", the same as tapping the button — in the log, in the notification others get, and in the match review. You still see your own roll held on screen with the note explaining it.",
                 game: "settlementsandcities",
@@ -161,10 +165,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Dice Cities' match review speaks plain English",
                 detail: "Stepping back through a Dice Cities game's actions used to show raw internal labels like \"CardPurchase! Card? <id>\" instead of what actually happened. Every action in the rewind scrubber now reads the way the turn history does — \"rolled a 7 (3 and 4)\", \"bought a Wheat Field\", \"used the TV Station on Priya\" — and a roll names who it paid, same as the recap: \"rolled a 4 — Bob +1🪙, Alice -1🪙\".",
                 game: "dicecities",
-            },
-            {
-                title: "Result charts plot by round, and don't double-count doubles",
-                detail: "Dice Cities' Amusement Park lets you go again on doubles without your turn actually ending, but its result-page charts were plotting that bonus roll as an extra turn — running ahead of the \"N turns\" line on the same page. Every per-turn chart across every game now agrees with the turn count, and since a multiplayer chart was still one point per player per turn, it now groups by round instead: one point per lap of the table, so a game with several players reads at a glance.",
             },
         ],
     },

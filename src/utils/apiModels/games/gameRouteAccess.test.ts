@@ -21,7 +21,7 @@ import { API_ROOT, apiRoutesMatchingSource } from "@/utils/testing/apiRoutes";
 //  - a stronger gate on it being the caller's turn, which can only be true of
 //    a player (command and taketurn);
 //  - scoping the query itself to the caller's games, so a non-player's fetch
-//    comes back empty (the lobby's "what game did we become?" lookup);
+//    comes back empty (the lobby poll's "what game did we become?" lookup);
 //  - proving the caller is the scheduler rather than a player at all, which is
 //    the turn-timer cron: it acts on games nobody asked it about, on behalf of
 //    no user, and isAuthorisedCron is the only thing that may let it (see
