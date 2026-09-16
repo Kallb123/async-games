@@ -9,10 +9,13 @@ import {
     nextTileId,
     parseDraft,
     printTrackFile,
+    mustNameSteps,
+    pinnedExits,
     sameExits,
     tileHeading,
     toTrack,
     validateTrack,
+    withSectionStepsNamed,
     type EditorState,
     type EditorTile,
 } from "./editorModel";
@@ -40,6 +43,65 @@ function tinyState(): EditorState {
         ],
     });
 }
+
+describe("naming a tile's steps rather than leaning on §5.1's rule", () => {
+    /** The tiny circuit with its corner's inside line one tile short. */
+    function skewedState(): EditorState {
+        const skewed = tinyState();
+        skewed.tiles = skewed.tiles.filter(candidate => candidate.id !== "bend.1.1");
+        return skewed;
+    }
+
+    it("knows which tiles the default rule is refused for", () => {
+        const skewed = skewedState();
+        const inCorner = skewed.tiles.find(candidate => candidate.id === "bend.2.0")!;
+        const onTheStraight = skewed.tiles.find(candidate => candidate.id === "sf.1.0")!;
+        expect(mustNameSteps(skewed, inCorner)).toBe(true);
+        // The start/finish line's own lanes still run in step.
+        expect(mustNameSteps(skewed, onTheStraight)).toBe(false);
+    });
+
+    it("freezes the steps a tile is already taking, without changing them", () => {
+        // The bug this exists for: a tile whose default steps are already the
+        // right ones had no way to say so, because every toggle that lands on
+        // the default drops the override again.
+        const skewed = skewedState();
+        const tile = skewed.tiles.find(candidate => candidate.id === "bend.2.0")!;
+        const before = effectiveExits(skewed, tile);
+        expect(tile.exits).toBeUndefined();
+
+        const pinned = { ...tile, ...pinnedExits(skewed, tile) };
+        expect(pinned.exits).toEqual(before);
+        expect(effectiveExits({ ...skewed, tiles: [pinned] }, pinned)).toEqual(before);
+    });
+
+    it("leaves steps a tile already named alone when naming a section's", () => {
+        const skewed = skewedState();
+        skewed.tiles = skewed.tiles.map(candidate => (candidate.id === "bend.1.0"
+            ? { ...candidate, exits: ["bend.2.1"] }
+            : candidate));
+
+        const named = withSectionStepsNamed(skewed, "bend");
+        expect(named.find(candidate => candidate.id === "bend.1.0")!.exits).toEqual(["bend.2.1"]);
+        // ...and every other tile in the section now carries its own.
+        expect(named.filter(candidate => candidate.section === "bend").every(candidate => candidate.exits)).toBe(true);
+        // A tile outside the section is untouched.
+        expect(named.find(candidate => candidate.id === "sf.1.0")!.exits).toBeUndefined();
+    });
+
+    it("hands an auto-connected set over as the tile's own", () => {
+        const skewed = skewedState();
+        skewed.tiles = skewed.tiles.map(candidate => (candidate.id === "bend.2.0"
+            ? { ...candidate, exits: ["bend.2.1"], autoExits: true }
+            : candidate));
+        const tile = skewed.tiles.find(candidate => candidate.id === "bend.2.0")!;
+
+        const pinned = pinnedExits(skewed, tile);
+        expect(pinned.exits).toEqual(["bend.2.1"]);
+        // No longer auto-connect's to redraw — an author has confirmed it.
+        expect(pinned.autoExits).toBeUndefined();
+    });
+});
 
 /** One tile, for the geometry fixtures below — all in one unnamed section. */
 function tile(id: string, lane: number, x: number, y: number, extra: Partial<EditorTile> = {}): EditorTile {
@@ -73,6 +135,19 @@ describe("editor validation", () => {
         const skewed = tinyState();
         skewed.tiles = skewed.tiles.filter(candidate => candidate.id !== "bend.1.1");
         expect(validateTrack(skewed).errors[0]).toMatch(/out of step/);
+    });
+
+    it("clears the out-of-step refusal once the section's steps are written down", () => {
+        // The author's way out: the geometry's own answer, confirmed rather
+        // than left to a rule `deriveTrack` refuses for the section.
+        const skewed = tinyState();
+        skewed.tiles = skewed.tiles.filter(candidate => candidate.id !== "bend.1.1");
+        expect(validateTrack(skewed).errors[0]).toMatch(/out of step/);
+
+        const named = { ...skewed, tiles: withSectionStepsNamed(skewed, "bend") };
+        expect(validateTrack(named).errors).toEqual([]);
+        // ...and the printed file carries them, so it loads for the same reason.
+        expect(printTrackFile(named)).toMatch(/exits: \[/);
     });
 
     it("warns about a section with no tiles on it", () => {

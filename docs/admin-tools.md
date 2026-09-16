@@ -208,22 +208,38 @@ Two consequences worth keeping in mind while drawing:
    whose lanes hold different numbers of tiles (see below). It leaves your
    hand-drawn exits alone, and only the purple edges are its to redraw, so the
    colours tell you what a second run will touch.
-5. **Move tiles between sections.** *Paint into section* drags the brush over
+5. **Name a tile's own steps.** Most tiles take §5.1's default rule and print
+   nothing. A section whose lanes hold **different numbers of tiles** can't:
+   "the next tile along in the lane beside me" is an index, and where the runs
+   are different lengths that index is not a statement about the road, so
+   `deriveTrack` refuses the section unless every tile in it names its own
+   steps — *"section "X" runs its lanes out of step, so Y has to name its own
+   steps"*. The default drawn on the canvas is often still the right answer
+   near the section's entry, but it has to be **confirmed** rather than
+   assumed, which is the whole point of the rule. Click the tile you are
+   drawing from (or *Make these steps its own* in the *Tile* panel) to write
+   its current steps down as its own; the *Sections* panel counts the tiles
+   still leaning on the rule and names a whole section's in one go, which is
+   worth using because the error surfaces one tile at a time. Toggling a step
+   off and on again cannot do this: an edit that lands back on the default
+   drops the override — except in an out-of-step section, where it is kept for
+   exactly this reason.
+6. **Move tiles between sections.** *Paint into section* drags the brush over
    tiles to move them into the active section — how a corner gets its tiles, and
    how a sync line is nudged a tile either way once the art shows it is in the
    wrong place.
-6. **Hot keys.** The toolbar is driveable from the keyboard, which is worth
+7. **Hot keys.** The toolbar is driveable from the keyboard, which is worth
    knowing before placing a few hundred tiles by hand: `Q` *Place*, `W` *Draw
    exits*, `E` *Paint into section*, `1`/`2`/`3` for that lane, and `A`/`S` to
    step back and on through the sections. Each key does exactly what its
    control does and nothing the control wouldn't — so a key is ignored while a
    button is disabled or a lane is one this section hasn't got, as is anything
    typed into a field or held with Ctrl/Cmd/Alt.
-7. **Save/resume.** The draft autosaves to this browser's `localStorage`;
+8. **Save/resume.** The draft autosaves to this browser's `localStorage`;
    *Save draft to file* / *Open draft file* move it to a `.json` you can keep or
    carry to another machine. That draft is the working copy — separate from the
    deployable track file the export panel prints.
-8. **Validate & export.** The panel runs the drawing through the game's own
+9. **Validate & export.** The panel runs the drawing through the game's own
    `deriveTrack`, so "driveable in the editor" and "loads in the game" are the
    same check. Copy the printed file, save it as
    `src/games/RaceCars/tracks/<id>.ts`, and add it to `TRACK_LIST` in
