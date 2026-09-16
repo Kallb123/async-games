@@ -372,13 +372,30 @@ function hydrate(stored: StoredGame): IGameDataDocument {
 }
 
 function findOneFromStore(filter: Record<string, unknown>) {
-    const gameId = filter?.gameId;
-    if (typeof gameId !== 'string' || Object.keys(filter).length !== 1) {
-        throw new Error(`The test game store only looks games up by gameId, not ${JSON.stringify(filter)}`);
-    }
-    const stored = games.get(gameId);
+    const stored = storedMatching(filter);
     // Enough of a Query for the callers, which all end in .exec().
     return { exec: async () => (stored ? hydrate(stored) : null) };
+}
+
+/**
+ * The two ways a route asks for one game: by its id, and — for the lobby's
+ * "what game did we become?" once the invitation is gone (GET
+ * /api/lobby/[inviteId]) — by the invitation it was started from, scoped to a
+ * caller who is playing in it. Anything else throws rather than answering
+ * `undefined`, so a route that quietly stopped scoping its query fails here
+ * instead of passing on a lookup the store never really made.
+ */
+function storedMatching(filter: Record<string, unknown>): StoredGame | undefined {
+    const keys = Object.keys(filter ?? {});
+    if (typeof filter?.gameId === 'string' && keys.length === 1) {
+        return games.get(filter.gameId);
+    }
+    if (typeof filter?.inviteId === 'string' && typeof filter?.userIdList === 'string' && keys.length === 2) {
+        const { inviteId, userIdList } = filter;
+        return [...games.values()].find(game =>
+            game.inviteId === inviteId && (game.userIdList as string[] | undefined)?.includes(userIdList));
+    }
+    throw new Error(`The test game store looks games up by gameId, or by inviteId scoped to a player — not ${JSON.stringify(filter)}`);
 }
 
 /**

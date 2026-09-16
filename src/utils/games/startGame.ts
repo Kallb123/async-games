@@ -56,7 +56,8 @@ export async function startGameFromInvitation(
     //
     // gameData is built above and stamped with the invitation it came from, so
     // a host still sitting on their lobby screen when the last seat fills can
-    // find the game their lobby just became (GET /api/lobby/[inviteId]/game);
+    // find the game their lobby just became — that lookup is what the lobby's
+    // own poll answers with once the invitation is gone (GET /api/lobby/[inviteId]);
     // nothing else links the two once the invitation is gone. The document is
     // constructed inside the callback because withTransaction re-runs it on a
     // transient conflict, and a Mongoose document only saves as an insert once.
@@ -169,8 +170,8 @@ function startedResult(gameData: IGameData): AcceptSeatResult {
 // The game an invitation became, for a request that didn't get to start it
 // itself — another one did, in the window between this request reading the
 // invitation and acting on it. The invitation is gone by then, and `inviteId`
-// is the only link left to the game it became: the same one the lobby screen
-// polls on (GET /api/lobby/[inviteId]/game). Reporting the game the winning
+// is the only link left to the game it became: the same lookup the lobby
+// screen's own poll makes (GET /api/lobby/[inviteId]). Reporting the game the winning
 // request created beats reporting that nothing started, since something did.
 async function gameStartedFrom(inviteId: uuidString): Promise<AcceptSeatResult> {
     const gameData: IGameDataDocument | null = await GameDataModel.findOne({ inviteId }).exec();

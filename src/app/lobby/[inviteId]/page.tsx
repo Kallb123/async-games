@@ -5,14 +5,13 @@ import { FcmTokenComp } from "@/components/FirebaseForeground";
 import { useAuthGuard } from "@/utils/hooks/useAuthGuard";
 import { useToast } from "@/components/ToastContext";
 import { useRefreshableData } from "@/utils/hooks/useRefreshableData";
-import { IInvitationResponse } from "@/utils/mongodb/InvitationData";
+import type { ILobbyResponse } from "@/app/api/lobby/[inviteId]/route";
 import { OPEN_SEAT_LABEL } from "@/utils/games/lobby";
 import { buildJoinHref } from "@/utils/games/joinCode";
 import { formatRemainingUntil } from "@/utils/games/TurnTimer";
 import { useNowToTheMinute } from "@/utils/hooks/useNow";
 import { metaForGame, partySizeErrorMessage } from "@/utils/ui/games";
 import { shareOrCopyLink } from "@/utils/ui/share";
-import { fetchWithSessionRetry } from "@/utils/hooks/fetchWithSessionRetry";
 import { useEnterStartedGame } from "@/utils/hooks/useEnterStartedGame";
 import GameIdentityHeader from "@/components/ui/GameIdentityHeader";
 import ListSection from "@/components/ui/ListSection";
@@ -45,7 +44,7 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
   // starting — and none of those is worth a notification, so nothing pushes
   // about them (see usePushEvents). The one invite push left is a brand new
   // invite, which by definition is about some other lobby than this one.
-  const { data, isLoading, isRefreshing, status } = useRefreshableData<{ invite: IInvitationResponse, isHost: boolean }>(
+  const { data, isLoading, isRefreshing, status } = useRefreshableData<ILobbyResponse>(
     `/api/lobby/${inviteId}`,
     [],
     { pollWhileWatching: true },
@@ -53,57 +52,34 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
 
   const invite = data?.invite;
   const isHost = data?.isHost === true;
+  const startedGame = data?.startedGame;
 
-  // Once the lobby has been seen, a 404 means the last seat was just claimed
-  // and the game started (invitations are deleted on start — see
-  // startGameFromInvitation). Never having been seen at all means the code was
-  // wrong, or the lobby already expired.
-  const everSeenRef = useRef(false);
-  // Set the moment we start leaving, so a refresh landing while the lookup
-  // below is still in flight doesn't kick off a second one.
+  // Set the moment we start leaving, so the poll landing again on the way out
+  // doesn't send the player a second time.
   const leavingRef = useRef(false);
-  // Whether the screen is still here to be redirected. The lookup below can
-  // resolve after the player has gone (fetchWithSessionRetry waits out a
-  // transient 401 before retrying), and a toast and a push on an unmounted
-  // screen would land them somewhere they didn't ask to be.
-  const mountedRef = useRef(true);
   useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
-  useEffect(() => {
-    if (invite) {
-      everSeenRef.current = true;
-    }
-    // Only a 404 means the lobby is over: a network blip or a 500 leaves the
-    // player where they are. Read before `invite`, which deliberately holds
-    // the last good response (see useRefreshableData) and so survives it.
-    if (status !== 404 || leavingRef.current) return;
-    leavingRef.current = true;
-    if (!everSeenRef.current) {
-      showToast("That lobby isn't open any more.", 'danger');
-      router.push('/');
+    if (leavingRef.current) return;
+    // The lobby became a game — the same landing a joiner gets from
+    // /api/lobby/join, and the whole reason this screen polls.
+    if (startedGame) {
+      leavingRef.current = true;
+      enterStartedGame(startedGame.gameUrl, startedGame.gameId);
       return;
     }
-    // The game exists by the time the invitation is gone (it is saved first),
-    // so ask which game this lobby became and go straight to the board — the
-    // same landing a joiner gets from /api/lobby/join. A lobby that was
-    // cancelled or expired rather than started has no game: fall back home.
-    (async () => {
-      const response = await fetchWithSessionRetry(`/api/lobby/${inviteId}/game`, () => !mountedRef.current);
-      const started = response?.ok ? await response.json() : null;
-      if (!mountedRef.current) return;
-      if (started?.gameId) {
-        enterStartedGame(started.gameUrl, started.gameId);
-      } else {
-        showToast('Game is starting! Look for it on your home screen.', 'success', 'Game Started');
-        router.push('/');
-      }
-    })();
+    // Only a 404 means the lobby is over with no game to show for it: it
+    // expired, the host cancelled it, or the code was wrong in the first
+    // place. A network blip or a 500 leaves the player where they are.
+    if (status !== 404) return;
+    leavingRef.current = true;
+    showToast("That lobby isn't open any more.", 'danger');
+    router.push('/');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, invite]);
+  }, [status, startedGame]);
 
-  const meta = invite ? metaForGame({ friendlyName: invite.gameFriendlyName }) : undefined;
+  // From the started game once there is one: the invitation it was read from
+  // is gone by then, and the header keeping its thumb and its name is what
+  // stops the screen looking emptied out on the way to the board.
+  const meta = metaForGame({ url: startedGame?.gameUrl, friendlyName: invite?.gameFriendlyName });
   const seats = invite?.userList ?? [];
   const claimedSeats = seats.filter(seat => seat.name !== OPEN_SEAT_LABEL);
 
@@ -159,7 +135,7 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
       const { gameStarted, gameId, gameUrl } = await response.json();
       if (gameStarted) {
         // Claim the exit before the refresh loop sees the invitation vanish,
-        // so the 404 above doesn't send them a second time.
+        // so the effect above doesn't send them a second time.
         leavingRef.current = true;
         enterStartedGame(gameUrl, gameId);
       } else {
@@ -175,81 +151,93 @@ export default function Lobby({ params }: { params: Promise<{ inviteId: string }
 
   return (
     <main>
-      <GameIdentityHeader backHref="/" backLabel="Back home" meta={meta} title={isHost ? "Your lobby" : "The lobby"} subtitle={meta?.name} />
+      <GameIdentityHeader backHref="/" backLabel="Back home" meta={meta} title={startedGame ? "Your game" : isHost ? "Your lobby" : "The lobby"} subtitle={meta?.name} />
 
-      <div className="ag-section">
-        <button
-          type="button"
-          className="ag-card ag-joincode-card"
-          onClick={handleShare}
-          disabled={!invite?.joinCode}
-        >
-          <div className="ag-section-label">
-            Tap to share
-          </div>
-          <div className="ag-joincode" style={{ "--ag-joincode-size": "44px", marginTop: 4 } as React.CSSProperties}>
-            {invite?.joinCode ?? "····"}
-          </div>
-        </button>
-        <p className="ag-hint ag-hint--center">Sends a link that opens straight onto an open seat — or read the code out.</p>
-        {expiresIn && <p className="ag-hint ag-hint--center">Works for another {expiresIn}, then the lobby closes.</p>}
-      </div>
-
-      <ListSection
-        label="Seats"
-        showCount
-        isLoading={isLoading}
-        isRefreshing={isRefreshing}
-        empty={<div className="ag-empty">No one&apos;s joined yet — share your code above.</div>}
-      >
-        {!invite || claimedSeats.length === 0 ? [] : [
-          // The host holds no seat in the invitation (they're its sender), so
-          // they'd otherwise be missing from their own lobby — and from a
-          // seat-holder's view of it, where that reads as the host having left.
-          <ListRow
-            key="host"
-            icon={<Avatar name={invite.sender} imageUrl={invite.senderImageUrl} size={34} />}
-            title={invite.sender}
-            sub="Host"
-          />,
-          ...seats.map((seat, i) => (
-            seat.name === OPEN_SEAT_LABEL ? (
-              <ListRow
-                key={`seat-${i}`}
-                icon="🪑"
-                title={
-                  // .ag-dashed-add is styled as a button (cursor, hover) elsewhere;
-                  // this seat isn't clickable, so pointer-events:none keeps the
-                  // dashed-pill look without the borrowed interactivity cues.
-                  <span className="ag-dashed-add" style={{ cursor: "default", pointerEvents: "none" }}>Open seat</span>
-                }
-                sub="Waiting for a player"
-              />
-            ) : (
-              <ListRow
-                key={`seat-${i}`}
-                icon={<Avatar name={seat.name} size={34} />}
-                title={seat.name}
-              />
-            )
-          )),
-        ]}
-      </ListSection>
-
-      {isHost && invite && (
+      {startedGame ? (
+        // It is a game now, and the effect above is already on its way to the
+        // board. The lobby this screen draws itself from is gone, so drawing
+        // it anyway would show a code of dots over an empty room rather than
+        // the one that just filled.
         <div className="ag-section">
-          <button
-            type="button"
-            className="ag-btn ag-btn--primary ag-btn--block"
-            onClick={handleStart}
-            disabled={starting || !!startError}
-          >
-            {starting ? 'Starting…' : 'Start now'}
-          </button>
-          {startError && meta
-            ? <PartySizeHint meta={meta} total={partySize} />
-            : <p className="ag-hint ag-hint--center">Begins with everyone who&apos;s here — the empty seats are dropped.</p>}
+          <div className="ag-empty">Starting your game…</div>
         </div>
+      ) : (
+        <>
+          <div className="ag-section">
+            <button
+              type="button"
+              className="ag-card ag-joincode-card"
+              onClick={handleShare}
+              disabled={!invite?.joinCode}
+            >
+              <div className="ag-section-label">
+                Tap to share
+              </div>
+              <div className="ag-joincode" style={{ "--ag-joincode-size": "44px", marginTop: 4 } as React.CSSProperties}>
+                {invite?.joinCode ?? "····"}
+              </div>
+            </button>
+            <p className="ag-hint ag-hint--center">Sends a link that opens straight onto an open seat — or read the code out.</p>
+            {expiresIn && <p className="ag-hint ag-hint--center">Works for another {expiresIn}, then the lobby closes.</p>}
+          </div>
+
+          <ListSection
+            label="Seats"
+            showCount
+            isLoading={isLoading}
+            isRefreshing={isRefreshing}
+            empty={<div className="ag-empty">No one&apos;s joined yet — share your code above.</div>}
+          >
+            {!invite || claimedSeats.length === 0 ? [] : [
+              // The host holds no seat in the invitation (they're its sender), so
+              // they'd otherwise be missing from their own lobby — and from a
+              // seat-holder's view of it, where that reads as the host having left.
+              <ListRow
+                key="host"
+                icon={<Avatar name={invite.sender} imageUrl={invite.senderImageUrl} size={34} />}
+                title={invite.sender}
+                sub="Host"
+              />,
+              ...seats.map((seat, i) => (
+                seat.name === OPEN_SEAT_LABEL ? (
+                  <ListRow
+                    key={`seat-${i}`}
+                    icon="🪑"
+                    title={
+                      // .ag-dashed-add is styled as a button (cursor, hover) elsewhere;
+                      // this seat isn't clickable, so pointer-events:none keeps the
+                      // dashed-pill look without the borrowed interactivity cues.
+                      <span className="ag-dashed-add" style={{ cursor: "default", pointerEvents: "none" }}>Open seat</span>
+                    }
+                    sub="Waiting for a player"
+                  />
+                ) : (
+                  <ListRow
+                    key={`seat-${i}`}
+                    icon={<Avatar name={seat.name} size={34} />}
+                    title={seat.name}
+                  />
+                )
+              )),
+            ]}
+          </ListSection>
+
+          {isHost && invite && (
+            <div className="ag-section">
+              <button
+                type="button"
+                className="ag-btn ag-btn--primary ag-btn--block"
+                onClick={handleStart}
+                disabled={starting || !!startError}
+              >
+                {starting ? 'Starting…' : 'Start now'}
+              </button>
+              {startError && meta
+                ? <PartySizeHint meta={meta} total={partySize} />
+                : <p className="ag-hint ag-hint--center">Begins with everyone who&apos;s here — the empty seats are dropped.</p>}
+            </div>
+          )}
+        </>
       )}
 
       <FcmTokenComp />

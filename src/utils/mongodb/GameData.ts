@@ -53,7 +53,8 @@ export interface IGameData {
     // The invitation/lobby this game was started from, when it came from one.
     // The invitation is deleted the moment the game exists, so this is the
     // only link back to it — it lets a host still sitting on their lobby
-    // screen find the game their lobby became (see /api/lobby/[inviteId]/game).
+    // screen find the game their lobby became (see GET /api/lobby/[inviteId],
+    // which answers with it once the invitation is gone).
     inviteId?: uuidString,
     complete: boolean,
     winner: string,
@@ -231,8 +232,9 @@ GameDataSchema.index({ userIdList: 1, complete: 1 });
 // one index serves each of the filter's per-timer branches and the sort across
 // them together.
 GameDataSchema.index({ complete: 1, turnTimer: 1, lastTurnTimestamp: 1 });
-// The only link back from a game to the lobby it started from, polled by a
-// host still sitting on their lobby screen (GET /api/lobby/[inviteId]/game).
+// The only link back from a game to the lobby it started from, looked up on
+// every poll from a host still sitting on their lobby screen once the
+// invitation is gone (GET /api/lobby/[inviteId]).
 // Sparse: a game started from a direct invite has no inviteId.
 GameDataSchema.index({ inviteId: 1 }, { sparse: true });
 
