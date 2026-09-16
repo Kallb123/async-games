@@ -33,8 +33,10 @@ interface GameShellProps {
     /** A control for the top bar's right slot *instead of* the options menu
      *  (Train Time's ✕ while the claim sheet is open). */
     right?: React.ReactNode;
-    /** True while a command is in flight — shows the sync pill in the top bar. */
-    syncing?: boolean;
+    /** True while the screen is waiting on the network — a command going out, a
+     *  game-state fetch coming back, a timeline being rebuilt. Shows the loading
+     *  bar inset along the bottom of the top bar. */
+    busy?: boolean;
     /** The game's match-history log, behind the shell's own toggle. Omitted
      *  renders neither the toggle nor the panel. */
     log?: MatchHistoryProps;
@@ -53,9 +55,13 @@ interface GameShellProps {
  * title + status, options menu) wrapping a game's own board and actions.
  * Every game reuses this frame; only what goes inside is game-specific.
  *
- * The top bar also owns the one sync pill for the screen: whatever the player
- * tapped, there is exactly one place that says "your command is on its way",
- * so per-control feedback never has to stack up into competing spinners.
+ * The top bar also owns the one loading bar for the screen: whatever is in
+ * flight — the command the player just tapped, the fetch that brings an
+ * opponent's move back, the timeline behind Review actions — there is exactly
+ * one place that says "the app is talking to the table", so per-control
+ * feedback never has to stack up into competing spinners. It is inset along
+ * the bottom edge of the bar rather than sitting in it, so nothing in the bar
+ * moves when it comes and goes.
  *
  * It owns the turn-history log too: the toggle state, the menu row that flips
  * it and the panel itself all live here, so a game passes its lines in `log`
@@ -75,7 +81,7 @@ interface GameShellProps {
  * player scrolled past a tall board has a title to tap down there too, not
  * just a control back at the top they've already scrolled away from.
  */
-export default function GameShell({ title, subtitle, backHref = '/', options, right, syncing = false, log, chat, className = '', children }: GameShellProps) {
+export default function GameShell({ title, subtitle, backHref = '/', options, right, busy = false, log, chat, className = '', children }: GameShellProps) {
     const [showLog, setShowLog] = useState(false);
     const [showChat, setShowChat] = useState(false);
 
@@ -107,12 +113,6 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
                     <div className="ag-game-topbar-title">{title}</div>
                     {subtitle != null && <div className="ag-game-topbar-sub">{subtitle}</div>}
                 </div>
-                {syncing && (
-                    <span className="ag-sync-pill" role="status">
-                        <span className="ag-spinner ag-spinner--gold" />
-                        SENDING
-                    </span>
-                )}
                 {hasChat && (
                     <button
                         type="button"
@@ -131,6 +131,17 @@ export default function GameShell({ title, subtitle, backHref = '/', options, ri
                 {/* Last in the bar, where the CSS badge used to sit. Renders
                     nothing off a dev deployment. */}
                 <DevGameMenu />
+                {/* Absolutely positioned inside the bar, so it adds no height:
+                    the title and the buttons sit exactly where they do when
+                    nothing is loading.
+
+                    An indeterminate `progressbar` and not the `status` live
+                    region the pill it replaces used: this now rises on every
+                    background refresh too, and a live region would read one out
+                    every ten seconds while a player waits on an opponent. What
+                    a player *did* is still announced where they did it — the
+                    pressed button swaps to its pending verb (layer 1). */}
+                {busy && <span className="ag-pending-bar ag-pending-bar--topbar" role="progressbar" aria-label="Loading" />}
             </div>
             {children}
             {log && (showLog ? (

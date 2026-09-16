@@ -59,7 +59,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
     const { gameid } = use(params);
     const gameId = gameid;
 
-    const { gameData, setGameData, getGameData } = useGameData<ITrainTimeGameDataResponse>(gameId);
+    const { gameData, setGameData, getGameData, loading: loadingGame } = useGameData<ITrainTimeGameDataResponse>(gameId);
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
     const { submitCommand, submitting, pendingTarget } = useSubmitCommand<ITrainTimeGameDataResponse>(gameId, user, setGameData, getGameData);
     const { endGame } = useEndGame(gameId);
@@ -356,7 +356,7 @@ export default function GameTrainTime({ params }: { params: Promise<{ gameid: uu
                 ? <button type="button" className="ag-game-topbar-btn" aria-label="Close" onClick={() => setClaiming(false)}>✕</button>
                 : undefined}
             options={gs ? menuOptions : undefined}
-            syncing={submitting}
+            busy={submitting || loadingGame || nav.loading}
             log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }}
             chat={{ gameId, userIdList, usernameList }}
             className="ag-game--traintime"

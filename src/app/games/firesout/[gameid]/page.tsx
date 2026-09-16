@@ -59,7 +59,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
     const { gameid } = use(params);
     const gameId = gameid;
 
-    const { gameData, setGameData, getGameData } = useGameData<IFiresOutGameDataResponse>(gameId);
+    const { gameData, setGameData, getGameData, loading: loadingGame } = useGameData<IFiresOutGameDataResponse>(gameId);
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
     const { submitCommand, submitting, pendingTarget } = useSubmitCommand<IFiresOutGameDataResponse>(gameId, user, setGameData, getGameData);
     const { endGame } = useEndGame(gameId);
@@ -341,7 +341,7 @@ export default function GameFiresOut({ params }: { params: Promise<{ gameid: uui
             title="Fires Out!"
             subtitle={subtitle}
             options={gameData ? menuOptions : undefined}
-            syncing={submitting}
+            busy={submitting || loadingGame || nav.loading}
             log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }}
             chat={{ gameId, userIdList, usernameList }}
             className="ag-game--firesout"

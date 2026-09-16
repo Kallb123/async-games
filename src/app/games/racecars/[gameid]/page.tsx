@@ -43,7 +43,7 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
     const { gameid } = use(params);
     const gameId = gameid;
 
-    const { gameData, setGameData, getGameData } = useGameData<IRaceCarsGameDataResponse>(gameId);
+    const { gameData, setGameData, getGameData, loading: loadingGame } = useGameData<IRaceCarsGameDataResponse>(gameId);
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
     const { submitCommand: rawSubmitCommand, submitting, pendingTarget } = useSubmitCommand<IRaceCarsGameDataResponse>(gameId, user, setGameData, getGameData);
     const { endGame } = useEndGame(gameId);
@@ -253,7 +253,7 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
             title="Race Cars"
             subtitle={subtitle}
             options={gs ? menuOptions : undefined}
-            syncing={submitting}
+            busy={submitting || loadingGame || nav.loading}
             log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }}
             chat={{ gameId, userIdList, usernameList }}
             className="ag-game--racecars"

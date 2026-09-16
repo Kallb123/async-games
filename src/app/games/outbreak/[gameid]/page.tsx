@@ -61,7 +61,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     const { gameid } = use(params);
     const gameId = gameid;
 
-    const { gameData, setGameData, getGameData } = useGameData<IOutbreakGameDataResponse>(gameId);
+    const { gameData, setGameData, getGameData, loading: loadingGame } = useGameData<IOutbreakGameDataResponse>(gameId);
     const historyReact = useHistoryReactions(gameId, user?.id, setGameData, getGameData);
     const { submitCommand: rawSubmitCommand, submitting, pendingTarget } = useSubmitCommand<IOutbreakGameDataResponse>(gameId, user, setGameData, getGameData);
     const { endGame } = useEndGame(gameId);
@@ -322,7 +322,7 @@ export default function GameOutbreak({ params }: { params: Promise<{ gameid: uui
     }
 
     return (
-        <GameShell title="Outbreak" subtitle={subtitle} options={gs ? menuOptions : undefined} syncing={submitting} log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }} className="ag-game--outbreak">
+        <GameShell title="Outbreak" subtitle={subtitle} options={gs ? menuOptions : undefined} busy={submitting || loadingGame || nav.loading} log={{ entries: nav.displayedHistory, userIdList, viewerId: myUserId, onReact: nav.isLive ? historyReact : undefined }} chat={{ gameId, userIdList, usernameList }} className="ag-game--outbreak">
             <FcmTokenComp />
 
             {/* Game guide before role guide — a player needs to know the game

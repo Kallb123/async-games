@@ -16,6 +16,12 @@ import type { IGameDataResponse } from "@/utils/apiModels/GameDataApi";
  * a player watching the board is the one case no push covers, since the tab
  * never goes away to come back.
  *
+ * `loading` is true whenever a fetch is in flight — the first one and every
+ * later refresh — which is what the shell's top-bar loading bar renders from.
+ * It is deliberately not the `isLoading`/`isRefreshing` pair `useRefreshableData`
+ * draws for the dashboard: a board never swaps itself out for a skeleton, so
+ * the only thing either flag would drive here is that one bar.
+ *
  * Retries once on a 401 (transient session-cookie refresh race, see
  * fetchWithSessionRetry) before bailing on genuine failures: a 404 (no
  * such live game — it may still have a finished GameResult) sends the user
@@ -32,36 +38,63 @@ export function useGameData<T extends IGameDataResponse>(gameId: string) {
     // code, so a new screen that forgets is a compile error rather than a
     // blank board and a thrown render.
     const [gameData, setGameData] = useState<T | null>(null);
+    // True from mount rather than from the dispatch of the first fetch, so the
+    // gap between the viewer being authorised and the effect below firing isn't
+    // a blink of "idle" in the middle of the first load. It is only ever cleared
+    // in `getGameData`'s `finally`, which is why what the hook *returns* is
+    // gated on `isAuthorised` below.
+    const [loading, setLoading] = useState(true);
     const { isAuthorised, user } = useIsAuthorised();
     const router = useRouter();
     const mountedRef = useRef(true);
+    // A count, not a flag: a push-driven refresh and the ten-second poll can
+    // overlap, and the first to finish must not clear the bar while the second
+    // is still out.
+    const inFlightRef = useRef(0);
+    // Whether a fetch has ever finished. `loading` already starts true, so the
+    // very first fetch has nothing to raise — and raising it from the effect
+    // that kicks that fetch off is the cascading render
+    // `react-hooks/set-state-in-effect` exists to stop. `useRefreshableData`
+    // gates its own `setIsRefreshing` on the same ref for the same reason.
+    const loadedRef = useRef(false);
     useEffect(() => {
         mountedRef.current = true;
         return () => { mountedRef.current = false; };
     }, []);
 
     const getGameData = useCallback(async (): Promise<void> => {
-        const res = await fetchWithSessionRetry(`/api/game/${gameId}`, () => !mountedRef.current);
-        if (!mountedRef.current) return;
-
-        if (!res || !res.ok) {
-            console.error(`Failed to load game ${gameId}: ${res?.status ?? "network error"}`);
-            router.push(res?.status === 404 ? `/games/result/${gameId}` : '/');
-            return;
-        }
-
-        // Guarded for the same reason useRefreshableData guards its own parse:
-        // a 200 that isn't JSON (a proxy's error page, a truncated body) throws
-        // here, and this runs inside an effect with nothing to catch it.
-        // Keeping the last good state beats blanking the board.
-        let data: { gameData?: T } | null = null;
+        inFlightRef.current += 1;
+        if (loadedRef.current) setLoading(true);
         try {
-            data = await res.json();
-        } catch (error) {
-            console.error(`Failed to parse game ${gameId}`, error);
-            return;
+            const res = await fetchWithSessionRetry(`/api/game/${gameId}`, () => !mountedRef.current);
+            if (!mountedRef.current) return;
+
+            if (!res || !res.ok) {
+                console.error(`Failed to load game ${gameId}: ${res?.status ?? "network error"}`);
+                router.push(res?.status === 404 ? `/games/result/${gameId}` : '/');
+                return;
+            }
+
+            // Guarded for the same reason useRefreshableData guards its own parse:
+            // a 200 that isn't JSON (a proxy's error page, a truncated body) throws
+            // here, and this runs inside an effect with nothing to catch it.
+            // Keeping the last good state beats blanking the board.
+            let data: { gameData?: T } | null = null;
+            try {
+                data = await res.json();
+            } catch (error) {
+                console.error(`Failed to parse game ${gameId}`, error);
+                return;
+            }
+            if (data?.gameData && mountedRef.current) setGameData(data.gameData);
+        } finally {
+            // In a `finally` so a thrown fetch (an unreachable network) clears
+            // the bar too, rather than leaving it pulsing for the rest of the
+            // session.
+            inFlightRef.current -= 1;
+            loadedRef.current = true;
+            if (inFlightRef.current === 0 && mountedRef.current) setLoading(false);
         }
-        if (data?.gameData && mountedRef.current) setGameData(data.gameData);
     }, [gameId, router]);
 
     useEffect(() => {
@@ -85,5 +118,15 @@ export function useGameData<T extends IGameDataResponse>(gameId: string) {
         pollWhileWatching: waitingOnOpponent,
     });
 
-    return { gameData, setGameData, getGameData };
+    return {
+        gameData,
+        setGameData,
+        getGameData,
+        // Gated on `isAuthorised` — the condition on the only thing that ever
+        // clears the flag. Clerk's script not loading at all (a blocker, an
+        // outage, an offline first paint) leaves `isAuthorised` false forever,
+        // and `useAuthGuard` deliberately doesn't redirect for it; without this
+        // the bar would pulse for the life of the tab with nothing in flight.
+        loading: loading && isAuthorised,
+    };
 }

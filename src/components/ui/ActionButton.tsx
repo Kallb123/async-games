@@ -39,7 +39,7 @@ export default function ActionButton({
                         <span className="ag-spinner" />
                         {pendingLabel}
                     </span>
-                    <span className="ag-btn-pending-bar" />
+                    <span className="ag-pending-bar" />
                 </>
             )}
         </button>
