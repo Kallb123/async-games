@@ -60,8 +60,9 @@ const STORAGE_KEY = 'ag-racecars-track-editor';
  * mid-track can tell which of them are live without digging through commits —
  * shown as a small footer, its tooltip naming what changed.
  */
-const TOOL_VERSION = 7;
+const TOOL_VERSION = 8;
 const TOOL_CHANGES = [
+    'v8 — hot keys for the toolbar: Q/W/E pick the mode, 1–3 the lane, and A/S step back and on through the sections, so placing a lap no longer means a round trip to the buttons between tiles.',
     'v7 — a step auto-connect drew from the geometry is purple on the canvas, telling it apart from both §5.1\'s faint grey default and a terracotta hand-drawn override — so what a re-run will redraw reads at a glance.',
     'v6 — sections and sync lines: the lap is cut into stretches of road whose ends are level across every lane, corners are sections rather than a paint colour, and rows are derived from the steps rather than typed (so they cannot drift after a corner).',
     'v5 — auto-connect never reasons from its own previous run: heading and "already connected" are worked out fresh from where the tiles sit and in road order each time, so a second run settles rather than drifting to a different tile.',
@@ -170,11 +171,63 @@ export default function RaceCarsTrackEditor() {
     // than stored, so deleting the active section can't leave the canvas
     // dropping tiles into one that no longer exists.
     const activeSection = state.sections.find(section => section.id === activeSectionId) ?? state.sections[0];
+    // How wide the road is where tiles are landing — derived once, because the
+    // lane picker, the place hint and the lane hot keys must agree on it.
+    const activeLanes = activeSection?.lanes ?? 3;
 
     const validation = useMemo(() => validateTrack(state), [state]);
     // Rows as the derivation sees them, printed on the tiles: the one reading
     // that tells an author their sync lines are where they think they are.
     const rows = useMemo(() => derivedRows(validation.derived), [validation]);
+
+    // Hot keys for the toolbar: an author places a couple of hundred tiles a
+    // track, and the slow part is the round trip to the buttons between every
+    // one of them. Q/W/E sit under the hand that isn't on the mouse, 1–3 name
+    // the lane they pick, and A/S walk the lap the way it is driven.
+    useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            // Never take a key off a field — this screen is mostly text inputs —
+            // and leave anything chorded to the browser's own shortcuts.
+            if (event.ctrlKey || event.metaKey || event.altKey) return;
+            const target = event.target as HTMLElement | null;
+            if (target?.isContentEditable) return;
+            if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+
+            // Clamped rather than wrapped, like the picker's own arrow keys: the
+            // ends of the list should feel like ends while an author holds a key.
+            const stepSection = (by: number) => {
+                const index = state.sections.findIndex(section => section.id === activeSection?.id);
+                const next = state.sections[Math.min(Math.max(index + by, 0), state.sections.length - 1)];
+                if (next) setActiveSectionId(next.id);
+            };
+
+            switch (event.key.toLowerCase()) {
+                case 'q': setMode('place'); break;
+                // Mirrors the toolbar, which can't draw exits from no tile.
+                case 'w': if (!selected) return; setMode('exits'); break;
+                case 'e': setMode('paint'); break;
+                case 'a': stepSection(-1); break;
+                case 's': stepSection(1); break;
+                case '1':
+                case '2':
+                case '3': {
+                    // Only a lane this section actually has, so a key can never
+                    // set what the picker wouldn't have offered.
+                    const lane = Number(event.key);
+                    if (lane > activeLanes) return;
+                    setNextLane(lane);
+                    break;
+                }
+                default: return;
+            }
+            // Only once a key has actually done something — one this screen
+            // ignores stays the browser's (and the page's own scrolling).
+            event.preventDefault();
+        };
+
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [state.sections, activeSection, activeLanes, selected]);
 
     const patchTile = useCallback((id: string, patch: Partial<EditorTile>) => {
         setState(prev => ({
@@ -440,13 +493,21 @@ export default function RaceCarsTrackEditor() {
                             </select>
                             <label className="ag-field-label" htmlFor="rcedit-lane">Lane</label>
                             <select id="rcedit-lane" className="ag-select" value={nextLane} onChange={e => setNextLane(Number(e.target.value))}>
-                                <LaneOptions lanes={activeSection?.lanes ?? 3} />
+                                <LaneOptions lanes={activeLanes} />
                             </select>
                         </div>
 
+                        {/* The one place the hot keys are named, rather than a
+                            `title` on each control that only a hover finds. */}
+                        <p className="ag-hint">
+                            Keys: <strong>Q</strong> place, <strong>W</strong> draw exits, <strong>E</strong> paint —{' '}
+                            <strong>1</strong>/<strong>2</strong>/<strong>3</strong> pick the lane, and{' '}
+                            <strong>A</strong>/<strong>S</strong> step back and on through the sections.
+                        </p>
+
                         <p className="ag-hint">
                             {mode === 'place'
-                                ? `Click the art to drop the next tile into "${sectionName}", lane ${Math.min(nextLane, activeSection?.lanes ?? 3)} — place each lane's tiles in the order the road runs. Drag a tile to nudge its centre; click one to select it.`
+                                ? `Click the art to drop the next tile into "${sectionName}", lane ${Math.min(nextLane, activeLanes)} — place each lane's tiles in the order the road runs. Drag a tile to nudge its centre; click one to select it.`
                                 : mode === 'exits'
                                     ? (selected
                                         ? `Click a tile to add or remove a step from ${selected.id}.`

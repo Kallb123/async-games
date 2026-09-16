@@ -212,11 +212,18 @@ Two consequences worth keeping in mind while drawing:
    tiles to move them into the active section — how a corner gets its tiles, and
    how a sync line is nudged a tile either way once the art shows it is in the
    wrong place.
-6. **Save/resume.** The draft autosaves to this browser's `localStorage`;
+6. **Hot keys.** The toolbar is driveable from the keyboard, which is worth
+   knowing before placing a few hundred tiles by hand: `Q` *Place*, `W` *Draw
+   exits*, `E` *Paint into section*, `1`/`2`/`3` for that lane, and `A`/`S` to
+   step back and on through the sections. Each key does exactly what its
+   control does and nothing the control wouldn't — so a key is ignored while a
+   button is disabled or a lane is one this section hasn't got, as is anything
+   typed into a field or held with Ctrl/Cmd/Alt.
+7. **Save/resume.** The draft autosaves to this browser's `localStorage`;
    *Save draft to file* / *Open draft file* move it to a `.json` you can keep or
    carry to another machine. That draft is the working copy — separate from the
    deployable track file the export panel prints.
-7. **Validate & export.** The panel runs the drawing through the game's own
+8. **Validate & export.** The panel runs the drawing through the game's own
    `deriveTrack`, so "driveable in the editor" and "loads in the game" are the
    same check. Copy the printed file, save it as
    `src/games/RaceCars/tracks/<id>.ts`, and add it to `TRACK_LIST` in
