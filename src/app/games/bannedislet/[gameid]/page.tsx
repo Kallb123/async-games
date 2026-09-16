@@ -10,6 +10,7 @@ import BannedIsletActions, { BannedIsletPick } from "@/games/BannedIslet/compone
 import BannedIsletHands from "@/games/BannedIslet/components/BannedIsletHands";
 import BannedIsletFloodDiscard from "@/games/BannedIslet/components/BannedIsletFloodDiscard";
 import BannedIsletWaterLevelScale from "@/games/BannedIslet/components/BannedIsletWaterLevelScale";
+import BannedIsletTreasureTally from "@/games/BannedIslet/components/BannedIsletTreasureTally";
 import BannedIsletEndTurnScreen from "@/games/BannedIslet/components/BannedIsletEndTurnScreen";
 import { guide as bannedIsletGuide } from "@/games/BannedIslet/guide";
 import GameShell from "@/components/ui/GameShell";
@@ -31,7 +32,7 @@ import { useResettingState } from "@/utils/hooks/useResettingState";
 import { SubmitCommand, useSubmitCommand } from "@/utils/hooks/useSubmitCommand";
 import { useTurnNavigation } from "@/utils/hooks/useTurnNavigation";
 import { useTurnRecap } from "@/utils/hooks/useTurnRecap";
-import { ACTIONS_PER_TURN, HAND_LIMIT, LOSING_WATER_LEVEL, POSITION_COUNT, roleDef, tileName, BannedIsletTileId } from "@/games/BannedIslet/board";
+import { ACTIONS_PER_TURN, HAND_LIMIT, LOSING_WATER_LEVEL, roleDef, tileName, BannedIsletTileId } from "@/games/BannedIslet/board";
 import {
     IBannedIsletFloodLogEntry,
     giveCardTargets,
@@ -313,8 +314,6 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
         }] : []),
     ];
 
-    const tilesLeft = gs ? gs.positions.filter(p => p.state !== 'sunk').length : 0;
-
     // Recap intro: a standalone welcome-back screen shown before the board
     // when it's our turn and the island changed while we were away.
     if (recap.show) {
@@ -373,7 +372,15 @@ export default function GameBannedIslet({ params }: { params: Promise<{ gameid: 
                             onClick={() => setShowWaterScale(v => !v)}
                             pressed={showWaterScale}
                         />
-                        <Stat value={`${tilesLeft}/${POSITION_COUNT}`} label="Tiles left" />
+                        {/* Not "tiles left": the island shrinking is on the
+                            board already, and the count that actually ends the
+                            game is per treasure (§4.2 — one uncaptured
+                            treasure losing its second tile loses it, however
+                            much dry land is left over). */}
+                        <Stat
+                            value={<BannedIsletTreasureTally positions={gs.positions} treasures={gs.treasures} />}
+                            label="Treasure tiles"
+                        />
                     </div>
                     {showWaterScale && <BannedIsletWaterLevelScale waterLevel={gs.waterLevel} />}
 

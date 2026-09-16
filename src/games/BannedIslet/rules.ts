@@ -526,13 +526,26 @@ export function isPierLoss(island: BannedIsletIsland): boolean {
     return tileStateAt(island, pierPosition(island)) === 'sunk';
 }
 
+/**
+ * How many of a treasure's tiles are still above water — the forecast behind
+ * the loss below, rather than the report of it. Two is safe, one is a single
+ * flood card from ending the game, and nought *is* that ending (§4.2). The
+ * board screen reads it to show the team which relic is running out of island,
+ * which is why it counts survivors rather than answering yes or no.
+ */
+export function treasureTilesLeft(island: BannedIsletIsland, treasure: BannedIsletTreasureId): number {
+    const def = TREASURES.find(t => t.id === treasure);
+    if (!def) return 0;
+    return def.tiles.filter(tile => tileStateAt(island, positionOfTile(island, tile)) !== 'sunk').length;
+}
+
 /** Treasures whose tiles have both sunk while they were still out there — each one of them ends the game (§4.2). */
 export function lostTreasures(
     island: BannedIsletIsland,
     captured: Record<BannedIsletTreasureId, boolean>,
 ): BannedIsletTreasureId[] {
     return TREASURES
-        .filter(t => !captured[t.id] && t.tiles.every(tile => tileStateAt(island, positionOfTile(island, tile)) === 'sunk'))
+        .filter(t => !captured[t.id] && treasureTilesLeft(island, t.id) === 0)
         .map(t => t.id);
 }
 

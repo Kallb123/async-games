@@ -4377,6 +4377,36 @@ button.ag-tt-ticket { cursor: pointer; }
 }
 .ag-game--bannedislet .ag-stat-row { background: var(--bi-deep-2); padding: 0 12px 10px; }
 .ag-game--bannedislet .ag-stat { background: var(--ag-surface); border-radius: 9px; }
+/* The treasure tally is four readings rather than one number, so it takes the
+   wider share of the row — Train Time's stat row splits unevenly for the same
+   reason. */
+.ag-game--bannedislet .ag-stat-row > .ag-stat:last-child { flex: 1.45; }
+
+/* ---- The treasure quadrant (see BannedIsletTreasureTally.tsx): the four
+   figures two-by-two inside the stat tile, each with its own tiles-left
+   reading. Red is the third signal after the figure and the number, never the
+   only one (§17). ---- */
+.ag-bi-tally {
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+    justify-content: space-between;
+    gap: 2px 10px;
+}
+.ag-bi-tally-item {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    min-width: 0;
+}
+.ag-bi-tally-figure { font-size: 13px; line-height: 1; }
+.ag-bi-tally-n {
+    font: 800 14px var(--ag-font);
+    font-variant-numeric: tabular-nums;
+    color: var(--ag-ink);
+}
+.ag-bi-tally-item--danger .ag-bi-tally-n { color: var(--ag-danger); }
+.ag-bi-tally-item--aboard { opacity: 0.55; }
+.ag-bi-tally-item--aboard .ag-bi-tally-n { color: var(--bi-teal-deep); }
 .ag-game--bannedislet .ag-escalation-scale { background: var(--bi-deep-2); }
 .ag-game--bannedislet .ag-escalation-scale-space--current { background: var(--bi-teal); box-shadow: 0 0 0 2px var(--bi-teal-deep); }
 
