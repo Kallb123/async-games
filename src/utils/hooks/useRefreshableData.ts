@@ -1,8 +1,8 @@
 'use client'
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { fetchWithSessionRetry } from "./fetchWithSessionRetry";
+import { clearStaleSessionReload, fetchWithSessionRetry } from "./fetchWithSessionRetry";
 import { usePushEvents } from "./usePushEvents";
-import { useIsAuthorised } from "./useAuthGuard";
+import { useIsAuthorised, useSessionRefresh } from "./useAuthGuard";
 
 /**
  * A JSON endpoint the UI keeps in sync with push notifications.
@@ -132,6 +132,8 @@ export function useRefreshableData<T>(
 ): RefreshableData<T> {
     const { pollWhileWatching = false, enabled = true } = options;
     const { isAuthorised } = useIsAuthorised();
+    // Stable, so it can sit in `refresh`'s dependencies without rebuilding it.
+    const refreshSession = useSessionRefresh();
     const [data, setDataState] = useState<T | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -223,7 +225,7 @@ export function useRefreshableData<T>(
                 rerunRef.current = false;
                 // Read before the await, compared after it: see `generationRef`.
                 const generation = generationRef.current;
-                const response = await fetchWithSessionRetry(url, () => !mountedRef.current);
+                const response = await fetchWithSessionRetry(url, () => !mountedRef.current, refreshSession);
                 if (!mountedRef.current) {
                     return;
                 }
@@ -247,6 +249,9 @@ export function useRefreshableData<T>(
                 }
                 retryIn = null;
                 attemptsRef.current = 0;
+                // Something loaded, so whatever the session was, it works now:
+                // give the tab back its one stale-session reload for next time.
+                clearStaleSessionReload();
                 if (generationRef.current === generation) {
                     setDataState(body);
                 }
@@ -269,7 +274,7 @@ export function useRefreshableData<T>(
                 }
             }
         }
-    }, [url, isAuthorised, enabled, clearRetry]);
+    }, [url, isAuthorised, enabled, clearRetry, refreshSession]);
 
     useEffect(() => {
         refreshRef.current = refresh;

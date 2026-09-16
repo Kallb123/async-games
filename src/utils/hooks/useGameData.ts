@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ToastContext";
+import { reloadForStaleSession } from "./fetchWithSessionRetry";
 import { useIsAuthorised } from "./useAuthGuard";
 import { TURN_ADVANCED_EVENTS } from "./usePushEvents";
 import { useRefreshableData } from "./useRefreshableData";
@@ -45,7 +46,10 @@ interface IGameDataBody<T> {
  *   500s, a network that never came back. There is nothing to eject them
  *   *from* — the board has never had anything on it — and a shell reading
  *   "Loading…" for the rest of the afternoon, quietly asking again every ten
- *   seconds, tells them nothing. Home, with a toast that says why.
+ *   seconds, tells them nothing. Home, with a toast that says why — unless it
+ *   is a 401, which gets one reload first (see `reloadForStaleSession`):
+ *   renewing the session is the one repair that keeps the player in the game
+ *   they were opening, and home would only be a second screen that can't load.
  */
 export function useGameData<T extends IGameDataResponse>(gameId: string) {
     const { isAuthorised, user } = useIsAuthorised();
@@ -121,6 +125,15 @@ export function useGameData<T extends IGameDataResponse>(gameId: string) {
         // one's answer.
         if (gameData === null && !isLoading && status !== null && !strandedRef.current) {
             strandedRef.current = true;
+            // Still 401 after every retry renewed the token and asked again: the
+            // cookie needs the handshake only a document request gets. One
+            // reload, and the player lands back on the board they were opening
+            // rather than on a dashboard that is about to fail the same way.
+            // `false` means this tab has already spent its reload on this
+            // session, so it is really not coming back — fall through.
+            if (status === 401 && reloadForStaleSession()) {
+                return;
+            }
             showToast("Couldn't load that game. Check your connection and try again.", 'danger');
             router.replace('/');
         }

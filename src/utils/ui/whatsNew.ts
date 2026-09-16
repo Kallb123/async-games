@@ -120,7 +120,7 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         items: [
             {
                 title: "A connection blip no longer throws you out of your game",
-                detail: "If the app lost the network for a moment while you had a board open — a phone changing between wifi and cell, a sign-in being refreshed — you were dumped back on your home screen, which then came up empty and needed a reload of its own. A game now waits out a blip and quietly asks again, keeping the board in front of you while it does, and every list on the home screen does the same rather than showing you nothing. A move you have just made can no longer be undone on screen either, by a background refresh that was already on its way when you tapped.",
+                detail: "If the app lost the network for a moment while you had a board open — a phone changing between wifi and cell, or a tab left sitting long enough that your sign-in needed renewing — you were dumped back on your home screen, which then came up empty and needed a reload of its own. A game now waits out a blip and quietly asks again, keeping the board in front of you while it does; a sign-in that has gone stale is renewed behind the scenes; and every list on the home screen waits it out the same way rather than showing you nothing. A move you have just made can no longer be undone on screen either, by a background refresh that was already on its way when you tapped.",
             },
             {
                 title: "A lobby that closed stops saying a game is starting",

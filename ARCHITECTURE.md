@@ -959,6 +959,23 @@ description or theme colour is exactly what those two files exist to prevent.
   never one they were playing. A local write
   (`setData`, used for the game state a command's own response carries)
   supersedes any fetch already in flight, so the two are not last-write-wins.
+- **An expired session is a ladder, not a failure.** A tab that has been idle
+  comes back with a session token that expired while nothing was running to
+  renew it, and every request 401s until something asks Clerk for another.
+  `fetchWithSessionRetry` (`src/utils/hooks/fetchWithSessionRetry.ts`) climbs
+  three rungs: it renews the token (`useSessionRefresh`'s
+  `getToken({ skipCache: true })`) and asks again after a short wait; failing
+  that, `useRefreshableData`'s backoff repeats that whole dance three more
+  times; and if a *board* is still empty at the end of it,
+  `reloadForStaleSession` reloads the page **once**. That last rung is the only
+  thing that fixes a cookie Clerk can't renew in place, because only a document
+  request passes through `clerkMiddleware` and gets its handshake — an in-app
+  navigation is an RSC request and cannot, which is why sending the player to
+  another screen has never helped. It is one shot per tab: the marker lives in
+  `sessionStorage`, is written before the reload, and is given back only by a
+  fetch that then succeeds, so a genuinely dead session reloads once and then
+  falls through to the ordinary failure handling (and, once Clerk itself
+  notices, `useAuthGuard`'s trip to `/login`).
 - **Reading the clock.** Components never call `Date.now()` while rendering — not
   even inside a helper, where `react-hooks/purity` can't see it. `useNow`
   (`src/utils/hooks/useNow.ts`) reads the wall clock as the external source it is

@@ -1,6 +1,6 @@
 'use client'
-import { useEffect } from "react";
-import { useUser } from "@clerk/nextjs";
+import { useCallback, useEffect, useRef } from "react";
+import { useAuth, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 
 /**
@@ -19,6 +19,43 @@ export function useIsAuthorised() {
         isLoaded,
         isAuthorised: isLoaded && !!user && (user.publicMetadata.unlocked === true || user.publicMetadata.guest === true),
     };
+}
+
+/**
+ * Asks Clerk for a fresh session token, so that the cookie the API reads is the
+ * current one. Hand it to `fetchWithSessionRetry`, which calls it before
+ * retrying a 401.
+ *
+ * A tab that has been sitting idle — backgrounded on a phone, open behind
+ * something else all afternoon — comes back with a session token that expired
+ * while nothing was running to renew it, and every request 401s until something
+ * asks for a new one. `getToken({ skipCache: true })` is that ask; Clerk writes
+ * the renewed cookie itself.
+ *
+ * The returned function is stable for the life of the component, because Clerk
+ * rebuilds `getToken` as the session changes and `useRefreshableData` re-runs
+ * its fetch whenever the identity of what it fetches with changes — a fresh
+ * function per render there would be a fetch per render.
+ */
+export function useSessionRefresh(): () => Promise<void> {
+    const { getToken } = useAuth();
+    // Kept current after each render rather than during it: writing a ref while
+    // rendering is a side effect (react-hooks/refs), and this is only ever read
+    // from inside a request that is already in flight.
+    const getTokenRef = useRef(getToken);
+    useEffect(() => {
+        getTokenRef.current = getToken;
+    });
+
+    return useCallback(async () => {
+        try {
+            await getTokenRef.current({ skipCache: true });
+        } catch (error) {
+            // Clerk unreachable, or a session it won't renew. The caller retries
+            // regardless — this is the part that can be skipped.
+            console.error('Could not renew the session token', error);
+        }
+    }, []);
 }
 
 /**
