@@ -12,7 +12,7 @@ import {
     type BannedIsletTreasureId,
 } from "@/games/BannedIslet/board";
 import type { IBannedIsletFloodLogEntry } from "@/games/BannedIslet/rules";
-import { capturableTreasureAt, countCards, isEscapeReady, positionOfTile } from "@/games/BannedIslet/rules";
+import { capturableTreasureAt, countCards, isEscapeReady, standingTreasureTiles } from "@/games/BannedIslet/rules";
 import { swimLines, tileList, watersRiseLines } from "@/games/BannedIslet/narration";
 import { playerByUserId } from "@/utils/apiModels/GameDataApi";
 import { pluralize } from "@/utils/ui/text";
@@ -239,9 +239,7 @@ function tip(liveState: unknown, forUserId: string): IRecapTip | null {
     // it, and a shore-up still buys the team a turn.
     for (const def of TREASURES) {
         if (gs.treasures[def.id]) continue;
-        const standing = def.tiles
-            .map(tile => gs.positions[positionOfTile(gs.positions, tile)])
-            .filter(p => p.state !== 'sunk');
+        const standing = standingTreasureTiles(gs.positions, def.id);
         if (standing.length === 1 && standing[0].state === 'flooded') {
             return {
                 glyph: '🕳️',

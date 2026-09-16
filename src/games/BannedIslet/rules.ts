@@ -526,13 +526,36 @@ export function isPierLoss(island: BannedIsletIsland): boolean {
     return tileStateAt(island, pierPosition(island)) === 'sunk';
 }
 
+/**
+ * The tiles a treasure can still be captured on — its own, minus whatever has
+ * gone under for good. Flooded counts: a tile with one life left is a tile the
+ * team can still shore up and stand on (§9.1).
+ *
+ * The forecast behind the loss below, rather than the report of it, and the
+ * one walk three callers want: the loss asks whether the list is empty, the
+ * board screen counts it, and the recap's most-urgent tip asks whether the one
+ * tile left is already flooded.
+ */
+export function standingTreasureTiles(island: BannedIsletIsland, treasure: BannedIsletTreasureId): IBannedIsletPosition[] {
+    const def = TREASURES.find(t => t.id === treasure);
+    if (!def) return [];
+    return def.tiles
+        .map(tile => island[positionOfTile(island, tile)])
+        .filter((position): position is IBannedIsletPosition => !!position && position.state !== 'sunk');
+}
+
+/** How much island a treasure has left. Two is safe, one is a single flood card from ending the game, and nought *is* that ending (§4.2). */
+export function treasureTilesLeft(island: BannedIsletIsland, treasure: BannedIsletTreasureId): number {
+    return standingTreasureTiles(island, treasure).length;
+}
+
 /** Treasures whose tiles have both sunk while they were still out there — each one of them ends the game (§4.2). */
 export function lostTreasures(
     island: BannedIsletIsland,
     captured: Record<BannedIsletTreasureId, boolean>,
 ): BannedIsletTreasureId[] {
     return TREASURES
-        .filter(t => !captured[t.id] && t.tiles.every(tile => tileStateAt(island, positionOfTile(island, tile)) === 'sunk'))
+        .filter(t => !captured[t.id] && treasureTilesLeft(island, t.id) === 0)
         .map(t => t.id);
 }
 

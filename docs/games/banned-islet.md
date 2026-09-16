@@ -960,9 +960,20 @@ every PR after this one is playtestable as it lands.
 - The rest of the chrome is the shared kit re-tinted under a
   `.ag-game--bannedislet` scope and never rebuilt: `GameShell`,
   `GameScoreboard` (one row per player, `sub` carrying the role, `score` the
-  actions left), `Stat` for the water level and tiles remaining,
+  actions left), `Stat` for the water level and the treasure tiles,
   `GameOptionsMenu`, `GameFinishBanner`, `useGameData`, `useSubmitCommand`,
   `usePushEvents`, `useEndGame`.
+  - **Deviation, after PR 4:** the second `Stat` was built as this plan asks,
+    a count of the island's tiles remaining, and did not survive contact with
+    the game. The island shrinking is already the board, and a total of tiles
+    left is the one number on that screen nobody can lose by: §4.2 ends the
+    game when *one* uncaptured treasure's second tile goes under, with twenty
+    other tiles still dry. The tile is now a quadrant — the four treasure
+    figures, each reading how much of its own island is left, red on its last
+    tile and ✓ once it is aboard (`BannedIsletTreasureTally`, off
+    `treasureTilesLeft` in rules.ts). The island's total kept the place it was
+    always the right shape for: the match review still charts it turn by turn
+    (§14.2's shrinking-island line).
 - The board page itself, `src/app/games/bannedislet/[gameid]/page.tsx`, in the
   shape of Outbreak's — including `useGameGuide` + `GameGuideModal` (the guide
   lands in PR 10, the mount point is here) and `useTurnNavigation` +

@@ -1078,7 +1078,10 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-accent-purple { background: var(--ag-purple); }
 
 /* Stat tiles */
-.ag-stat-row { display: flex; gap: 10px; }
+/* 6px, matching `.ag-scorestrip` — a stat row almost always sits directly
+   under the seats, and the two rows divide the same width, so a different gap
+   put every boundary a couple of pixels off the one above it. */
+.ag-stat-row { display: flex; gap: 6px; }
 .ag-stat {
     flex: 1;
     background: var(--ag-surface);
@@ -1089,6 +1092,10 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-stat--button { font: inherit; text-align: left; cursor: pointer; }
 .ag-stat-num { font: 800 22px var(--ag-font); color: var(--ag-ink); }
 .ag-stat-label { font: 600 11px var(--ag-font); color: var(--ag-ink-softer); margin-top: 2px; }
+/* One reading inside a stat tile that carries several rather than one number —
+   Outbreak's per-colour cube supply, Banned Islet's treasure quadrant. Tabular
+   figures so the readings sit in a column that doesn't jitter as they change. */
+.ag-stat-tally-n { font: 800 14px var(--ag-font); font-variant-numeric: tabular-nums; color: var(--ag-ink); }
 
 /* Recent-match form guide (compact row of W/L/D dots) — row uses .ag-chips */
 .ag-result-chip {
@@ -1490,8 +1497,20 @@ a.ag-list-row, a.ag-list-row-main {
 .ag-scorestrip--expandable { cursor: pointer; }
 .ag-scorestrip--expandable:active { filter: brightness(0.96); }
 .ag-score-pill {
-    flex: 1 0 auto;
-    min-width: 84px;
+    /* Basis 0, not `auto`: on `auto` each pill started at the width of its own
+       name and role, so two seats split the strip by how long their usernames
+       happened to be rather than in half — and the stat tiles below, which do
+       divide evenly, visibly didn't line up with them. Grow and shrink are
+       unchanged, so a strip too narrow for its seats still scrolls at their
+       natural width rather than squashing them (see the --expandable basis
+       below, which relies on that). The floor is `max-content` rather than a
+       fixed 84px, which is what keeps the even split from costing anything:
+       seats divide the strip evenly while there is room for all of them at
+       their natural width, and the moment there isn't, each falls back to
+       exactly that width and the strip scrolls as before — no squashed name,
+       no ellipsis that wasn't there. */
+    flex: 1 0 0;
+    min-width: max-content;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -1524,7 +1543,11 @@ a.ag-list-row, a.ag-list-row-main {
    the tap. The basis is instead the width of the longest line either state
    holds, so the swap changes height alone; they still grow from there to share
    out a strip with room to spare. */
-.ag-scorestrip--expandable .ag-score-pill { flex-basis: 148px; }
+/* And this is the one strip that must NOT take the `max-content` floor above:
+   the detail it swaps in is several lines, so a floor that tracked the content
+   would resize the pill on the swap — the exact jog the fixed basis is here to
+   prevent. It keeps the plain floor and lets the basis do the work. */
+.ag-scorestrip--expandable .ag-score-pill { flex-basis: 148px; min-width: 84px; }
 /* Selected pill — pulses in sync with the board city it rings, matching the
    tapped-card highlight (.ag-hand-card--highlighted). */
 .ag-score-pill--highlighted {
@@ -4129,7 +4152,7 @@ button.ag-tt-ticket { cursor: pointer; }
    board is what names the colours. The numbers use each colour's `inkHex`
    (board.ts), not the cube `hex`, or blue and yellow would be unreadable here. */
 .ag-ob-cubetally { display: flex; gap: 6px; }
-.ag-ob-cubetally-n { font: 800 16px var(--ag-font); font-variant-numeric: tabular-nums; }
+.ag-ob-cubetally-n { font-size: 16px; }
 
 /* ---- Escalation drawer: the scale behind an escalating stat ---- */
 /* Sits under the stat row on the same panel, so tapping the stat reads as
@@ -4377,6 +4400,21 @@ button.ag-tt-ticket { cursor: pointer; }
 }
 .ag-game--bannedislet .ag-stat-row { background: var(--bi-deep-2); padding: 0 12px 10px; }
 .ag-game--bannedislet .ag-stat { background: var(--ag-surface); border-radius: 9px; }
+/* ---- The treasure quadrant (see BannedIsletTreasureTally.tsx): the four
+   figures two-by-two inside the stat tile, each with its own tiles-left
+   reading. Red is the third signal after the figure and the number, never the
+   only one (§17). ---- */
+.ag-bi-tally {
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+    justify-content: space-between;
+    gap: 2px 10px;
+}
+.ag-bi-tally-item { display: flex; align-items: center; gap: 3px; }
+.ag-bi-tally-figure { font-size: 13px; line-height: 1; }
+.ag-bi-tally-item--danger .ag-bi-tally-n { color: var(--ag-danger); }
+.ag-bi-tally-item--aboard { opacity: 0.55; }
+.ag-bi-tally-item--aboard .ag-bi-tally-n { color: var(--bi-teal-deep); }
 .ag-game--bannedislet .ag-escalation-scale { background: var(--bi-deep-2); }
 .ag-game--bannedislet .ag-escalation-scale-space--current { background: var(--bi-teal); box-shadow: 0 0 0 2px var(--bi-teal-deep); }
 

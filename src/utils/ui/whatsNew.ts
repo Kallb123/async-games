@@ -67,6 +67,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Banned Islet shows which treasure is running out of island",
+                detail: "The \"Tiles left\" box on the board is now the four treasures, two by two — each showing how many of its two tiles are still above water, and turning red the moment one is down to its last. That is the count that actually ends the game: let both tiles of a treasure you haven't captured go under and the team loses, however much dry land is left over. A treasure already aboard ticks off instead. Your match review still charts the island shrinking, tile by tile, turn by turn.",
+                game: "bannedislet",
+            },
+            {
                 title: "Every game shows when it's waiting",
                 detail: "The \"Sending\" badge in a game's top bar is now a pulsing bar along the bottom edge of it — and it lights up for everything the game is waiting on, not just the move you have made: your move going out, an opponent's move coming back, and the match review being built. It sits inside the bar, so nothing on screen shifts when it comes and goes.",
             },
@@ -107,10 +112,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "See what a Settlements & Cities roll paid out",
                 detail: "The dice that used to sit in the corner of the board are now a panel under it, and it says who collected what: \"Rolled 8 — You +2🪵 +1🌾, Bob +1⛏️\". A 7 names the cards it cost each player instead. The same breakdown is in the turn history and in the recap you get when it's your move again, so a roll you weren't there for still tells you who got rich.",
                 game: "settlementsandcities",
-            },
-            {
-                title: "Open chat and turn history from the bottom of the page too",
-                detail: "Both panels used to only open from the 💬 and 📜 buttons up in the top bar — on a tall board that meant scrolling all the way back up just to open or close one. Their titles at the bottom of the page are now buttons of their own: tap either to open it, and tap it again to close, right where you already are.",
             },
         ],
     },

@@ -26,6 +26,7 @@ import {
     sandbagsTargets,
     shoreUpTargets,
     treasureAt,
+    treasureTilesLeft,
 } from "./rules";
 import {
     EAST_OF_MIDDLE,
@@ -230,6 +231,17 @@ describe("the four losses (§4.2)", () => {
         expect(lostTreasures(bothGone, NOTHING_CAPTURED)).toEqual(['emberCrown']);
         expect(isTreasureLoss(bothGone, NOTHING_CAPTURED)).toBe(true);
         expect(isTreasureLoss(bothGone, { ...NOTHING_CAPTURED, emberCrown: true })).toBe(false);
+    });
+
+    it("counts down a treasure's remaining tiles, which is the warning the loss above is the end of", () => {
+        const tiles = { [MIDDLE]: 'cinderTemple' as BannedIsletTileId, [FAR_EAST]: 'ashfallHollow' as BannedIsletTileId };
+
+        // Flooded still counts: a tile with one life left is a tile the team
+        // can still shore up and capture on.
+        expect(treasureTilesLeft(island({ tiles }), 'emberCrown')).toBe(2);
+        expect(treasureTilesLeft(island({ tiles, flooded: [MIDDLE, FAR_EAST] }), 'emberCrown')).toBe(2);
+        expect(treasureTilesLeft(island({ tiles, sunk: [MIDDLE] }), 'emberCrown')).toBe(1);
+        expect(treasureTilesLeft(island({ tiles, sunk: [MIDDLE, FAR_EAST] }), 'emberCrown')).toBe(0);
     });
 
     it("loses when the meter reaches the skull, and not a level before it", () => {
