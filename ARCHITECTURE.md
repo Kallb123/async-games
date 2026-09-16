@@ -954,8 +954,9 @@ description or theme colour is exactly what those two files exist to prevent.
   (`retryDelayMs` — a network error, a 5xx, a 401 mid-session-refresh and
   408/429 are worth another go; the rest of the 4xx range is an answer). No
   screen should send a player somewhere else over one failed request — a board
-  moves a viewer only on a 404 (to that game's result page) or a 403, both of
-  them the server saying this game isn't theirs to look at. A local write
+  moves a viewer only on a 404 (to that game's result page), a 403, or a board
+  that never loaded at all once the retries are spent (home, with a toast), and
+  never one they were playing. A local write
   (`setData`, used for the game state a command's own response carries)
   supersedes any fetch already in flight, so the two are not last-write-wins.
 - **Reading the clock.** Components never call `Date.now()` while rendering — not

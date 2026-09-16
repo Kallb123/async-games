@@ -35,7 +35,10 @@ export interface RefreshableState {
 
 export interface RefreshableData<T> extends RefreshableState {
     data: T | null;
-    /** HTTP status of the last completed attempt (null before one finishes, or on a network error). */
+    /** HTTP status of the last completed attempt *for the current `url`* (null
+     *  before one finishes, on a network error, and again the moment the url
+     *  changes — a screen that acts on a status must not act on the last
+     *  screen's, see `useGameData`'s redirects). */
     status: number | null;
     refresh: () => Promise<void>;
     /**
@@ -133,6 +136,19 @@ export function useRefreshableData<T>(
     const [isLoading, setIsLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [status, setStatus] = useState<number | null>(null);
+    // Which url `status` is the answer for. A screen can swap one url for
+    // another without remounting — the rail's game switcher moving between two
+    // boards of the same game, a profile for another player — and until the new
+    // url's first attempt lands, `status` is the old one's. A caller that acts
+    // on a status (`useGameData` sends a 404 to the result page) would then act
+    // on it for the wrong thing. Compared during render rather than reset from
+    // an effect, which is the cascading render `react-hooks/set-state-in-effect`
+    // exists to stop — the same way `useGameChat` resets its older pages.
+    const [statusUrl, setStatusUrl] = useState(url);
+    if (url !== statusUrl) {
+        setStatusUrl(url);
+        setStatus(null);
+    }
 
     const mountedRef = useRef(true);
     const loadedRef = useRef(false);
@@ -150,6 +166,13 @@ export function useRefreshableData<T>(
     // on, so its body is dropped rather than overwriting the newer one. Without
     // this the two are simply last-write-wins, and a poll dispatched a moment
     // before a move lands after it and puts the board back as it was.
+    //
+    // It sequences this client's writes against the fetches this client
+    // dispatched, which is all it can do: a fetch *started* after a write can
+    // still bring back a body the server hadn't applied that write to yet (an
+    // optimistic patch whose own POST is still in flight). The caller's own
+    // re-fetch after that POST settles it, so the worst of that one is a
+    // flicker rather than a lost write.
     const generationRef = useRef(0);
     // The retry timer fires long after the render that scheduled it, by which
     // time `refresh` may have been rebuilt around a new url — so it calls the
