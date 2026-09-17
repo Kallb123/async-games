@@ -67,6 +67,11 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "✨",
         items: [
             {
+                title: "Race Cars now starts with a roll off the line",
+                detail: "Round one is the start, and it is one d20 a driver instead of a gear. Roll a 1 and the engine bogs down: no gear, no movement, and you are still in neutral when the race comes back round to you. Roll 2 to 16 and you get away cleanly in first, rolling its die for the move as usual. Roll 17 or more and it is a flying start — four spaces with no roll at all. Everybody who gets away is in first and can change gear from round two, and that is when normal racing begins. Out of neutral there is now one gear to take rather than two, so a car that bogged down — or spun — climbs the ladder from first like everybody else.",
+                game: "racecars",
+            },
+            {
                 title: "Race Cars: get right in on the track",
                 detail: "The circuit is a big board with small spaces, so the zoom pill has grown a second step — and you can now pinch to zoom anywhere in between. Both work on every board with a zoom pill, Outbreak and World Domination and the rest, and Race Cars goes deepest of the lot. Pan with a finger as usual; whatever you were looking at stays under your thumb rather than snapping back to the corner. The spaces themselves have gone see-through, so the painted track shows through the grid instead of hiding under it, and the ones you can actually move to sit inside a pulsing outline while you pick.",
                 game: "racecars",
@@ -108,10 +113,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
                 title: "Banned Islet's water level and hands get easier to read",
                 detail: "Tap the water level stat to see what each level means — the same trick Outbreak's infection rate uses — and check how many flood cards land at each one, right down to the skull. Every hand's cards now sit grouped by type instead of draw order, so it's easier to see what everyone's holding at a glance.",
                 game: "bannedislet",
-            },
-            {
-                title: "The home screen fills a big screen",
-                detail: "On a laptop or a desktop, the dashboard stops being a phone-width strip: a rail down the left puts every game you have on the go one click away wherever you have scrolled to, the games waiting on you sit side by side across the middle, and invites you have sent, finished games and the two big buttons move into a panel of their own on the right. On a phone it is exactly the screen it was.",
             },
         ],
     },

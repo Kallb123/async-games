@@ -22,6 +22,7 @@
   - [5.2 Ashcombe Park](#52-ashcombe-park)
   - [5.3 The cars](#53-the-cars)
 - [6. Setup Procedure](#6-setup-procedure)
+  - [6a. The startup round](#6a-the-startup-round)
 - [7. Core Gameplay Loop](#7-core-gameplay-loop)
 - [8. Gears and the Dice](#8-gears-and-the-dice)
   - [8.1 The gear table](#81-the-gear-table)
@@ -95,8 +96,9 @@ code — and pays for it in the response builder. Race Cars hides nothing, and
 
 ## 3. Player Experience Goals
 
-1. **The grid (turn 1): a standing start.** Six cars in three staggered rows,
-   everyone in gear 0, and the only decision is how hard to launch.
+1. **The grid (round 1): the lights go out.** Six cars in three staggered rows,
+   everyone in gear 0, and one d20 each decides who gets away and who is still
+   sitting there when the field leaves (§6a).
 2. **First corner: the bunching.** Ashcombe Hairpin owes two stops, so the
    field compresses into five rows of tarmac and the pole-sitter's advantage
    evaporates. This is the moment the game teaches that a lead is temporary.
@@ -302,10 +304,51 @@ a statement about the race rather than an advantage in it.
 
 ---
 
+### 6a. The startup round
+
+**Round one is the start, and nobody shifts in it.** Each driver, in grid
+order, throws **one d20**, and the face decides how their car gets away:
+
+| d20 | The getaway |
+|---|---|
+| **1** | **Bogged down.** No gear, no roll, no movement at all this round. The car is still in gear 0 when the race comes back round to it, so §8.2 gives it first and nothing else next round |
+| **2–16** | **Away cleanly.** The car takes **gear 1** and rolls gear 1's own die (1–2) for its move, which is then §7 step 2 as usual |
+| **17–20** | **Flying start.** The car takes **gear 1** and moves a fixed **four spaces** — no roll at all |
+
+Every car that gets away is in **gear 1**, and may change gear from round two
+like anybody else. From round two the game is §7's ordinary turn: up one gear or
+down as many as the gearbox pays for, roll, move, tow.
+
+The start is the one throw in this game that is **not** a bet. There is nothing
+to declare and nothing to decide, which is the point: §5.3 makes every car
+identical, so the grid is the only thing separating the field, and one open d20
+is what turns a row of identical cars into a race with something already
+happening in it by the time anyone picks a gear. A bogged-down start costs
+roughly a round and a half — the round it sat out, and the round it spends
+climbing out of neutral — which is the same order as §13's spin and is meant to
+be: it is bad luck you race out of, not a race you have lost.
+
+Everything else about the round is ordinary. Turn order is the grid order (§15),
+a move off the line resolves corners, blocking and oil like any other (§9-§14),
+and a car that ends its move one or two spaces behind another is owed §12's tow.
+
+**A race that was already running when this landed finishes under the rules it
+started under.** Every car carries the d20 it got away on, so a car in neutral
+carrying none is a race dealt before the startup round: it keeps handing its
+drivers a shift, and §8.2's old standing-start launch stays reachable for it
+alone. That is not politeness — a replay refuses a command it no longer
+considers legal and skips it in silence, so refusing those recorded launches
+would freeze a car on the grid for the whole of that match's review and flatten
+its line on a result chart computed once and stored.
+
+---
+
 ## 7. Core Gameplay Loop
 
 A round is one turn for each driver, in the order §15 fixes at the start of it.
-A turn is three steps, in this order, and the middle one is where the game is:
+A turn is three steps, in this order, and the middle one is where the game is —
+from **round two**, because round one is §6a's startup round and has a d20 where
+step 1 would be:
 
 **Step 1 — Shift.** Declare the gear you will drive this turn: at most one gear
 higher than your current gear, or any gear below it that you can pay the gearbox
@@ -352,9 +395,12 @@ bet faster than a player reading "11–20", and the shape of the bet is the game
 
 ### 8.2 Shifting
 
-**Up:** at most **one gear per turn**, free. From gear 0 (the grid, or a car
-that has spun) you may launch to gear 1 **or** gear 2 — a standing start is
-allowed one extra ratio, and it is the only exception.
+**Up:** at most **one gear per turn**, free, with no exception in any race dealt
+under §6a. From gear 0 —
+a car that bogged down at the start (§6a), or one that has spun (§13) — the only
+gear on offer is gear 1: you are not in first yet, so you cannot be in second
+next turn. Getting away well off the line is §6a's d20 rather than a free ratio,
+which is what that rule replaced.
 
 **Down:** one gear is free. More than one costs gearbox, steeply:
 
@@ -599,9 +645,10 @@ that can cost a day of wall-clock in a game where turns are a day apart. The
 driver finds out from their recap and from the log, which is where they would
 have found out anyway.
 
-A spun car rejoins from gear 0 on the turn after, which means the launch rule of
-§8.2 applies and it can be back in gear 2 immediately. The cost of a spin is
-therefore about **five rows of position and one whole turn**, not a wrecked car.
+A spun car rejoins from gear 0 on the turn after, and §8.2 gives a car in neutral
+first gear and nothing else — so it climbs the ladder from the bottom like a car
+that bogged down at the start (§6a). The cost of a spin is therefore about **five
+rows of position, one whole turn and a turn of climbing**, not a wrecked car.
 
 ---
 
@@ -742,7 +789,7 @@ like a cliff.
 | **The leader drives away** | Nothing slows a car that is alone | Corner stops bunch the field every lap regardless of gap; slipstream only tows the car behind; the leader commits first every round (§15) |
 | **The last round is decided before it is played** | Leader-first order + first-across-wins means a trailing car cannot win the final round | Accepted, and mitigated at the corner before it: The Kink owes a stop 12 rows from the line, so the lead has to be *taken* into the last corner rather than defended after it |
 | **The async race never finishes** | 12 turns × 6 drivers × a 1-day timer | Sprint is the default distance; the turn-timeout adapter (§23.2) drives a stalled car conservatively rather than banking a missed turn |
-| **A spin feels like elimination** | 5 rows lost and a turn missed, late in a race | No elimination at all (§4.3); a spun car relaunches straight into gear 2 |
+| **A spin feels like elimination** | 5 rows lost and a turn missed, late in a race | No elimination at all (§4.3); a spun car is back in first the turn after and climbing, the same recovery a car that bogged down off the line drives (§6a) |
 | **Analysis paralysis on the lane choice** | 214 spaces, three lanes, a 20-row move | Pick the destination, not the path (§9); the board highlights the legal set and nothing else is tappable |
 | **Oil turns the race into a lottery** | A 1-in-6 spin check per slick entered | 1-in-6 is per *entry*, the path derivation avoids slicks where it can (§14), slicks fade after one round, and the module is off by default |
 | **The wide board is unreadable on a phone** | A 78-row circuit at 400px | §19.2 — the map is context, the decision happens in a car-centred strip |
@@ -910,8 +957,8 @@ Ordered by what each one buys against what it costs.
 2. **Per-driver spec.** Let each driver split their own twelve tokens instead of
    racing the host's spec. The async cost is what kills it today: a setup phase
    is a whole extra round of turns before anything moves. It becomes free the
-   moment it is folded into the *first* turn's command — choose your spec and
-   your launch gear in one tap — which is where it should be built. **That
+   moment it is folded into the *first* turn's command — choose your spec as you
+   throw §6a's getaway, in one tap — which is where it should be built. **That
    shape is also what keeps §2's fourth pillar true.** A separate setup phase
    is a simultaneous commit — every driver picks before anyone moves — which is
    hidden state, sitting under a response builder that ignores its viewer.
@@ -951,7 +998,9 @@ Ordered by what each one buys against what it costs.
 
 ## 22. Quick Reference
 
-**Your turn**
+**Round one — the start** · one d20 · 1: bogged down, no gear and no move · 2–16: away in first, roll its die · 17–20: flying start, 4 spaces and no roll
+
+**Your turn** *(round two on)*
 
 1. **Shift** — up one, or down as many as the gearbox pays for. Roll the gear's die.
 2. **Brake** *(optional)* — 1 point = 1 space less, never below one space.
@@ -959,6 +1008,8 @@ Ordered by what each one buys against what it costs.
 4. **Tow** *(optional)* — 3 more spaces if you ended 1–2 spaces behind a car.
 
 **Gears** · 1: 1–2 · 2: 2–4 · 3: 4–8 · 4: 7–12 · 5: 11–20 · 6: 21–30
+
+**Shifting up** · one gear a turn · out of neutral, first only
 
 **Shifting down** · 2 gears = 1 gearbox · 3 = 3 · 4 = 6 · 5 = illegal
 
@@ -1135,7 +1186,7 @@ the code.
 * **The conservative line climbs the gear ladder**, where §23.7's PR 6 preference
   order says "hold the gear if its maximum cannot overshoot the next corner, else
   drop to the highest gear that cannot". Read literally that rule never goes up:
-  a timed-out driver launches to gear 2 and stays in it, and The Mile's 32 rows
+  a timed-out driver takes first off the line and stays in it, and The Mile's 32 rows
   alone take eleven turns at an average of three. `conservativeTurn` therefore
   takes **the highest legal gear that cannot overshoot**, which holds and drops
   exactly as described and also climbs on a clear straight. What it costs:
@@ -1276,9 +1327,10 @@ space that is not there.
       skipNextTurn: boolean,   // set by a spin (§13)
       finishedPosition: number | null,   // written once, for everyone, at the ending
       // The turn-in-progress, per player and never global (see below).
-      phase: 'shift' | 'move' | 'slipstream',
+      phase: 'start' | 'shift' | 'move' | 'slipstream',
       roll: number | null,     // this turn's rolled distance, once shifted
       brakeSpent: number,      // this turn, for §14's 3+ slick source
+      startRoll: number | null,  // §6a's d20, kept: a flying start's four spaces came off no gear's die
   }>,
 }
 ```
@@ -1334,8 +1386,11 @@ fields they are a security bug and a deadlock waiting together:
   this repo shipping the identical bug on Banned Islet's `actionsLeft`.
 
 Owned by the player, a stale roll is simply their own stale roll: it can never
-be spent by somebody else, and each driver's `phase` resets to `'shift'` when
-their own turn begins.
+be spent by somebody else, and each driver's `phase` resets when their own turn
+begins — to `'start'` while `round` is still 1 (§6a), and to `'shift'` after
+that. `CheckEndTurn` reads the round it has just advanced, so the first turn of
+round two opens on a gear even though the wrap and the hand-off happen in the
+same pass.
 
 **`round` / `roundOrder` / `roundIndex` are persisted rather than derived.**
 The order is a *fixed* fact about a round (§15), so deriving it from live
@@ -1349,13 +1404,23 @@ array being sorted, and an in-place `sort` whose comparator reads a half-permute
 array is an inconsistent comparator — which is reached at every corner, because
 bunching the field into equal rows is exactly what corners are for.
 
-Three command classes, not nine:
+Four command classes, not nine:
 
 | Command | Covers |
 |---|---|
+| `RaceCarsLaunch { recordedStartRoll?, recordedRoll? }` | §6a's getaway: throws the d20, and on anything but a 1 puts the car in gear 1 with a distance to spend. `turnOver: true` only on a stall, which moves nothing |
 | `RaceCarsShift { gear, recordedRoll? }` | Validates the shift against §8.2, pays gearbox, rolls the gear's die. `turnOver: false` |
 | `RaceCarsMove { row, lane, brake, recordedOilRolls? }` | Spends brakes, walks the derived path, resolves corners, overshoot, blocking, spins and oil. `turnOver: false` only if a tow is on offer |
 | `RaceCarsSlipstream { tow: { row, lane } \| null, recordedOilRolls? }` | Takes the tow, or declines it with `null`. Always ends the turn |
+
+**`RaceCarsLaunch` carries no fields of its own**, which is the point of it
+being a command rather than a flag on `RaceCarsShift`: §6a's throw declares
+nothing and decides nothing, so there is nothing about it a client could get
+right or wrong, and the two recorded dice are stripped off a live request like
+every other `recorded…` field. It shares `RaceCarsShift`'s guards exactly —
+`phase` is the authority and `roll` follows it — because it has the same hole:
+it returns `turnOver: false` on a clean getaway, so without `roll === null` a
+driver re-sends the same body until the d20 comes up 17.
 
 **`RaceCarsShift` is deliberately separate from `RaceCarsMove`.** They could be
 one command carrying both the gear and the destination — and they must not be,
@@ -1383,7 +1448,8 @@ The `tow: { row, lane } | null` shape is deliberate too: a `decline` flag beside
 command whose fields can be meaningless is a command whose validation has a case
 nobody writes.
 
-**What refuses a command.** Five of the six fields on the three commands are
+**What refuses a command.** Five of the six meaningful fields across these
+commands are
 attacker-supplied, and a plan that says what each command *does* without saying
 what makes it say *no* is a plan that ships the no's late. Every `Execute`
 opens with all of these:
@@ -1391,7 +1457,7 @@ opens with all of these:
 | Guard | Refuses |
 |---|---|
 | `userId === roundOrder[roundIndex]` | A driver acting out of race order — `currentTurn` alone is not proof, because `taketurn` and the cron's fallback both move it along `turnOrder` without touching `roundIndex` |
-| `ps.phase === 'shift' \| 'move' \| 'slipstream'` as the command requires, and `RaceCarsShift` additionally `ps.roll === null` | **Re-rolling the dice.** `RaceCarsShift` returns `turnOver: false`, so `currentTurn` never moves: without this guard a driver re-sends the same body until the d20 comes up 20, and every gate on the command route still passes |
+| `ps.phase === 'start' \| 'shift' \| 'move' \| 'slipstream'` as the command requires, and `RaceCarsLaunch`/`RaceCarsShift` additionally `ps.roll === null` | **Re-rolling the dice.** Both return `turnOver: false` on the getaway or shift they resolve, so `currentTurn` never moves: without this guard a driver re-sends the same body until the die comes up the number they wanted, and every gate on the command route still passes. It is also what refuses a launch outside the startup round and a shift inside it |
 | `Number.isInteger(brake) && brake >= 0 && brake <= ps.brakes && brake <= ps.roll - 1` | A negative brake (extra spaces *and* extra tokens), a brake larger than the pool, and a free slick laid by a driver with nothing to spend (§14) |
 | `reachableSpaces(...).some(s => s.row === row && s.lane === lane)` — a **membership test**, with the distance computed from the persisted `ps.roll` and the validated `brake`, never from the command | Teleporting. Deriving a path *to* a submitted destination rather than checking it is in the server's set accepts `{ row: 77, lane: 1 }` and wins the race from the grid. Lane 3 on a two-lane row, lane 0 and a fractional row die here too |
 | §9's blocked-short set as its **own** explicit set | A driver stopping wherever they like, which is §9's "you can never choose to stop" dressed as a block |
@@ -1461,11 +1527,13 @@ copy. The **party-size bound** is the route's own, and is not optional: the grid
 of §5.2 has six slots, so a seventh driver reads `grid[6] === undefined` and
 parks a car at an undefined row with a duplicate race number.
 
-**Recorded randomness.** Three sources, all named `recorded…` so
-`stripRecordedRandomness` deletes them off an incoming request:
+**Recorded randomness.** Five sources across four commands, all named
+`recorded…` so `stripRecordedRandomness` deletes them off an incoming request:
 
 | Field | On | Why |
 |---|---|---|
+| `recordedStartRoll` | `RaceCarsLaunch` | §6a's d20, which decides the getaway |
+| `recordedRoll` | `RaceCarsLaunch` | First gear's die, on the clean getaway that spends one — absent on a stall and on a flying start, which the d20 settles alone |
 | `recordedRoll` | `RaceCarsShift` | The gear's die |
 | `recordedOilRolls: number[]` | `RaceCarsMove` | One d6 per slick entered, in path order |
 | `recordedOilRolls: number[]` | `RaceCarsSlipstream` | The tow crosses spaces too (§12) |
@@ -1861,6 +1929,14 @@ the game becomes findable. Fixes to Race Cars before PR 9 are part of building
 it and get no line of their own — players never saw the broken version. AGENTS.md
 is explicit about this and the group only holds ten lines.
 
+**Amended once PR 4 landed.** `meta.available` went true there, so a race has
+been findable and startable for several releases without PR 9's *New games*
+line: the rule above now only governs that one entry, which PR 9 still owes.
+Anything a player of a live race would notice — a rule changing under them, the
+board getting easier to read — takes its own line in the group that fits it,
+in the branch that ships it, like any other live game. §6a's startup round is
+one of those.
+
 **Review passes.** By what each PR touches, rather than all five every time:
 
 | Agent | On |
@@ -1881,6 +1957,12 @@ Mongo and no Clerk.
   field, so a test sets the roll outright and asserts the exact resulting
   board: a 17 in fifth into Gravel Bend with four brakes (lands the corner), the
   same roll with none (four tyres or a spin), a 20 that crosses two corners.
+* **The startup round, at its three faces and the two that divide them.** A 1
+  moves nothing and leaves gear 0; a 2 and a 16 get away in first with a die to
+  spend; a 17 and a 20 buy four spaces and no die. Assert alongside them that
+  the launch is refused outside round one and the shift inside it, that a second
+  throw is refused once the first is spent, and that the round-one wrap hands
+  the field into `'shift'` with one gear on offer out of neutral (§6a, §8.2).
 * **The corner, exhaustively.** Enter, bank, leave, overshoot by one, overshoot
   by more than the tyres left, overshoot with exactly the tyres left, and get
   towed out of a corner that still owes a stop.

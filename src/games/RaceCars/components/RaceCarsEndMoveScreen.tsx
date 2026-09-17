@@ -10,9 +10,10 @@ interface RaceCarsEndMoveScreenProps {
     trackId: string;
     /**
      * The gear and number this leg was driven on, or null for §12's tow —
-     * which is a fixed three rows and no roll at all.
+     * which is a fixed three rows and no roll at all. A null `gear` is §6a's
+     * flying start: four spaces off no die, with the car in first.
      */
-    roll: { gear: RaceCarsGear; value: number } | null;
+    roll: { gear: RaceCarsGear | null; value: number } | null;
     arrival: IRaceCarsArrivalOutcome['arrival'];
     onDismiss: () => void;
 }
@@ -26,6 +27,13 @@ const DAMAGE_DOT = '#a8391f';
 /** Damage reads red; everything else is the road. */
 function dotFor(type: string): string {
     return type === 'spin' || type === 'overshoot' || type === 'blocked' ? DAMAGE_DOT : ROAD_DOT;
+}
+
+/** Where this leg's spaces came from: a gear's die, §6a's flying start, or §12's tow. */
+function legSummary(roll: { gear: RaceCarsGear | null; value: number } | null): string {
+    if (!roll) return 'Slipstream · three spaces';
+    if (roll.gear === null) return `Flying start · ${pluralize(roll.value, 'space')}`;
+    return `${gearName(roll.gear)} · d${gearDef(roll.gear).faces.length} · rolled ${roll.value}`;
 }
 
 /**
@@ -56,7 +64,7 @@ export default function RaceCarsEndMoveScreen({ trackId, roll, arrival, onDismis
     return (
         <TurnRecap
             header={{ name: meta.name, accent: meta.accent, glyph: meta.glyph }}
-            since={roll ? `${gearName(roll.gear)} · d${gearDef(roll.gear).faces.length} · rolled ${roll.value}` : 'Slipstream · three rows'}
+            since={legSummary(roll)}
             summary={{ headline: summary.headline, subline: `${spent}${summary.subline}` }}
             events={events}
             tip={arrival.towOffered ? {

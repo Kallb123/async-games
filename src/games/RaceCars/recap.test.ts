@@ -28,6 +28,7 @@ function player(
         phase: 'move',
         roll: null,
         brakeSpent: 0,
+        startRoll: null,
         ...overrides,
     };
 }
@@ -94,6 +95,29 @@ describe("Race Cars recap adapter", () => {
             { validMove: true, turnOver: false } as ICommandOutcome,
         );
         expect(events).toEqual([]);
+    });
+
+    it("reports a getaway only when it was not the ordinary one (§6a)", () => {
+        const launched = (start: { roll: number; outcome: string; spaces: number }) =>
+            raceCarsRecapAdapter.toEvents(
+                snap(state({ playerStates: { u1: alice() } })),
+                snap(state({ playerStates: { u1: alice() } })),
+                cmd({ className: "RaceCarsLaunch" }),
+                { validMove: true, turnOver: start.outcome === 'stalled', start } as unknown as ICommandOutcome,
+            );
+
+        const stalled = launched({ roll: 1, outcome: 'stalled', spaces: 0 });
+        expect(stalled).toHaveLength(1);
+        expect(stalled[0].type).toBe("rc_stall");
+        expect(stalled[0].title).toContain("Alice bogged down off the line");
+
+        const flying = launched({ roll: 18, outcome: 'flying', spaces: 4 });
+        expect(flying).toHaveLength(1);
+        expect(flying[0].type).toBe("rc_flier");
+        expect(flying[0].title).toContain("flying start");
+
+        // A clean getaway is the grid doing what the grid does.
+        expect(launched({ roll: 9, outcome: 'away', spaces: 2 })).toEqual([]);
     });
 
     it("banks a corner stop using narration's own wording", () => {

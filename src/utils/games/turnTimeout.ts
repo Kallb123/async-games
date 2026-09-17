@@ -12,7 +12,7 @@ import { BannedIsletAction, BannedIsletDiscard, BannedIsletEndTurn } from "@/gam
 import { IBannedIsletGameData } from "@/games/BannedIslet/BannedIsletModels";
 import { HAND_LIMIT as BANNED_ISLET_HAND_LIMIT } from "@/games/BannedIslet/board";
 import { forcedDiscard } from "@/games/BannedIslet/rules";
-import { RaceCarsMove, RaceCarsShift, RaceCarsSlipstream } from "@/games/RaceCars/RaceCarsLogic";
+import { RaceCarsLaunch, RaceCarsMove, RaceCarsShift, RaceCarsSlipstream } from "@/games/RaceCars/RaceCarsLogic";
 import { IRaceCarsGameData } from "@/games/RaceCars/RaceCarsModels";
 import { conservativeTurn } from "@/games/RaceCars/rules";
 import { mongoMap } from "./mongoMaps";
@@ -233,6 +233,10 @@ registerTurnTimeoutAdapter({
         if (!mongoMap(gs.players).has(userId)) return null;
 
         const plan = conservativeTurn(gs, userId);
+        // §6a: the startup round's d20 is the one command with nothing to
+        // decide, so a driver who lets it time out throws the same die every
+        // other driver throws — the race cannot begin until they have.
+        if (plan.phase === 'start') return new RaceCarsLaunch();
         if (plan.phase === 'shift') {
             const shift = new RaceCarsShift();
             shift.gear = plan.gear;

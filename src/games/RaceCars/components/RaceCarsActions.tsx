@@ -7,7 +7,7 @@ import RollReadout from '@/components/ui/RollReadout';
 import Stepper from '@/components/ui/Stepper';
 import { pluralize } from '@/utils/ui/text';
 import type { SubmitCommand } from '@/utils/hooks/useSubmitCommand';
-import { RaceCarsShift, RaceCarsSlipstream } from '@/utils/apiModels/GameLogic';
+import { RaceCarsLaunch, RaceCarsShift, RaceCarsSlipstream } from '@/utils/apiModels/GameLogic';
 import type { IRaceCarsSpecificGameStateResponse } from '@/games/RaceCars/apiModels';
 import {
     cornerAt,
@@ -17,12 +17,16 @@ import {
     MIN_MOVE_STEPS,
     nextCornerReach,
     SLIPSTREAM_STEPS,
+    START_DIE_SIDES,
+    START_FLYING_FROM,
+    START_FLYING_SPACES,
+    START_STALL_FACE,
     trackById,
     type RaceCarsCorner,
     type RaceCarsCornerReach,
     type RaceCarsGear,
 } from '@/games/RaceCars/board';
-import { legalGears, type IRaceCarsPlayerState, type RaceCarsMoveOptions } from '@/games/RaceCars/rules';
+import { flyingStartRoll, legalGears, type IRaceCarsPlayerState, type RaceCarsMoveOptions } from '@/games/RaceCars/rules';
 import { rulesState } from '@/games/RaceCars/ui';
 
 /**
@@ -129,6 +133,15 @@ function towPrompt(
     return `Three free spaces. Tap a highlighted space to take the tow.`;
 }
 
+/**
+ * §6a's startup round, priced the way every other prompt here is: what the die
+ * can do to you, in the currency the turn is spent in.
+ */
+const START_PROMPT = `Lights out. One d20 decides your getaway: a ${START_STALL_FACE} bogs the engine down `
+    + `and you do not move at all, ${START_STALL_FACE + 1}–${START_FLYING_FROM - 1} gets you away in first to roll its die, `
+    + `and ${START_FLYING_FROM} or more is a flying start — ${START_FLYING_SPACES} spaces with no roll at all. `
+    + `Either way you are in first, and may change gear from next round.`;
+
 /** What the move the driver is lining up will actually do, in their language. */
 function movePrompt(options: RaceCarsMoveOptions): string {
     if (options.boxedIn) return 'Boxed in — nothing is reachable, so tap your own space to stay put. No damage, and the gear drops to first.';
@@ -138,6 +151,9 @@ function movePrompt(options: RaceCarsMoveOptions): string {
 
 /** The `target` a declined tow wears while it is in flight — shared with the board page's own tow taps. */
 export const TOW_DECLINE = 'tow:decline';
+
+/** The `target` §6a's one-tap getaway wears while it is in flight. */
+const LAUNCH = 'launch';
 
 interface RaceCarsActionsProps {
     gs: IRaceCarsSpecificGameStateResponse;
@@ -192,6 +208,30 @@ export default function RaceCarsActions({ gs, myUserId, brake, setBrake, options
     // below answers it only on the driver's own turn, because a tow nobody can
     // take is not a control, and the ladder is what a waiting driver reads.
     const roll = ps.roll;
+
+    // §6a: the startup round, which is the one turn with nothing to decide — a
+    // d20 decides how the car gets away, and the gear ladder below is not a
+    // choice yet. Shown off-turn too, inert like every other waiting panel, so
+    // a driver reads what the die is about to do to them before it does it.
+    if (ps.phase === 'start') {
+        return (
+            <ReadOnlyPanel readOnly={readOnly}>
+                <div className="ag-actionsheet">
+                    <div className="ag-callout">{START_PROMPT}</div>
+                    <div className="ag-build-list">
+                        <BuildRow
+                            icon={<span className="ag-rc-gearmark">🚦</span>}
+                            name="Get away from the line"
+                            cost={`One d${START_DIE_SIDES}, and the only thing to do this round`}
+                            tag={pendingTarget === LAUNCH ? <PendingTag label="Away…" /> : 'Roll'}
+                            pending={pendingTarget === LAUNCH}
+                            onClick={() => submitCommand(new RaceCarsLaunch(), undefined, LAUNCH)}
+                        />
+                    </div>
+                </div>
+            </ReadOnlyPanel>
+        );
+    }
 
     // §12 step 3 of the turn: the move is driven and the one decision left is
     // the tow. Taking it is a tap on the circuit — the same board tap the move
@@ -255,15 +295,18 @@ export default function RaceCarsActions({ gs, myUserId, brake, setBrake, options
     // refuses anything outside them); this control just cannot offer them.
     const maxBrake = Math.min(ps.brakes, roll - MIN_MOVE_STEPS);
     const distance = roll - Math.min(brake, maxBrake);
-    const die = gearDef(ps.gear).faces.length;
+    // §6a's flying start came off the d20 rather than off first gear's d4, so
+    // the card draws the die that was actually thrown and names what it bought.
+    const flying = flyingStartRoll(rulesState(gs), ps);
+    const die = flying !== null ? START_DIE_SIDES : gearDef(ps.gear).faces.length;
 
     return (
         <ReadOnlyPanel readOnly={readOnly}>
             <div className="ag-actionsheet">
                 <RollReadout
-                    values={[roll]}
+                    values={[flying ?? roll]}
                     sides={[die]}
-                    headline={`${gearName(ps.gear)} · ${roll}`}
+                    headline={flying !== null ? `🚀 Flying start · ${pluralize(roll, 'space')}` : `${gearName(ps.gear)} · ${roll}`}
                     sub={brake > 0 ? `Braking ${pluralize(brake, 'space')} off — ${pluralize(distance, 'space')} to drive` : `${pluralize(distance, 'space')} to drive`}
                 />
 

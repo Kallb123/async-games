@@ -1,6 +1,7 @@
 // Turn recap for Race Cars — docs/games/race-cars.md §23.5 and §23.7 PR 8.
 //
-// The away-time story is the order changing, not a driver's own choices: a
+// The away-time story is the order changing, not a driver's own choices: §6a's
+// getaway is a row only when it was not the ordinary one, a
 // shift and its roll are read together off the move that follows them
 // (`RaceCarsShift` itself produces no row — §7's number is only interesting
 // once it has been spent), and every row below comes straight off the
@@ -13,9 +14,9 @@ import type { IRecapAdapter, IGameEvent, IRecapSummary, IRecapTip } from "@/util
 import type { ITurnSnapshot } from "@/utils/games/replay";
 import type { IGameCommand, ICommandOutcome } from "@/utils/apiModels/GameLogic";
 import type { IRaceCarsSpecificGameStateResponse } from "./apiModels";
-import type { IRaceCarsArrivalOutcome } from "./RaceCarsLogic";
+import type { IRaceCarsArrivalOutcome, IRaceCarsStartOutcome } from "./RaceCarsLogic";
 import type { RaceCarsArrivalEvent } from "./rules";
-import { arrivalLine, cornerName, RaceCarsArrivalSummary } from "./narration";
+import { arrivalLine, cornerName, RaceCarsArrivalSummary, startLine } from "./narration";
 import { cornerAt, RaceCarsTrack, spaceKey, trackById } from "./board";
 import { positionOf, rowsBehindLeader, standings } from "./ui";
 import { pluralize } from "@/utils/ui/text";
@@ -34,6 +35,8 @@ const RC_OILLAID = "rc_oillaid";
 const RC_LAP = "rc_lap";
 const RC_FINISH = "rc_finish";
 const RC_LEAD = "rc_lead";
+const RC_STALL = "rc_stall";
+const RC_FLIER = "rc_flier";
 
 /**
  * One arrival event as a recap row, or null for one that reads as "a plain
@@ -93,7 +96,9 @@ function toEvents(
     command: IGameCommand,
     outcome: ICommandOutcome,
 ): IGameEvent[] {
-    if (command.className !== "RaceCarsMove" && command.className !== "RaceCarsSlipstream") return [];
+    if (command.className !== "RaceCarsLaunch"
+        && command.className !== "RaceCarsMove"
+        && command.className !== "RaceCarsSlipstream") return [];
 
     const prevState = state(prev);
     const nextState = state(next);
@@ -105,6 +110,23 @@ function toEvents(
         actorId: command.senderId,
         actorUsername: name,
     };
+
+    // §6a: a getaway is a row only when it was not the ordinary one. A car that
+    // came away cleanly in first is the grid doing what the grid does — the
+    // same "plain move down a straight" this recap leaves out everywhere else —
+    // while bogging down and flying are the two a rival wants to have been told.
+    if (command.className === "RaceCarsLaunch") {
+        const start = (outcome as Partial<IRaceCarsStartOutcome>).start;
+        if (!start || start.outcome === 'away') return [];
+        const line = startLine(start);
+        return [{
+            ...base,
+            id: `${command.id}:start`,
+            type: start.outcome === 'stalled' ? RC_STALL : RC_FLIER,
+            glyph: line.glyph,
+            title: `${name} ${line.text}`,
+        }];
+    }
 
     const track = trackById(nextState.trackId);
     const events: IGameEvent[] = [];
@@ -160,6 +182,7 @@ function summarize(events: IGameEvent[], _forUserId: string): IRecapSummary {
     const overshoots = events.filter(event => event.type === RC_OVERSHOOT).length;
     const tows = events.some(event => event.type === RC_TOW);
     const cornerStops = events.some(event => event.type === RC_CORNERSTOP);
+    const stalls = events.some(event => event.type === RC_STALL);
 
     let tail = '.';
     if (finished) {
@@ -174,6 +197,8 @@ function summarize(events: IGameEvent[], _forUserId: string): IRecapSummary {
         tail = ' — someone picked up a tow.';
     } else if (cornerStops) {
         tail = ' — the field bunched at a corner.';
+    } else if (stalls) {
+        tail = ' — somebody bogged down on the grid.';
     }
 
     return {

@@ -55,7 +55,7 @@ describe("Race Cars turn timeout (§23.7 PR 6)", () => {
         const state = race({
             a: { row: 20, lane: 1, gear: 2, phase: 'shift' },
             b: { row: 60, lane: 1 },
-        });
+        }, { round: 2 });
         const game = makeGame(state);
 
         expect(await resolveStalledTurn(game, "a", "Alice")).toBe('advanced');
@@ -183,23 +183,53 @@ describe("Race Cars turn timeout (§23.7 PR 6)", () => {
         expect(game.currentTurn).toBe("b");
     });
 
-    it("launches a car that spun last round, rather than leaving it in neutral", async () => {
+    it("takes first again in a car that spun last round, rather than leaving it in neutral", async () => {
         // Gear 0 is where a spun car sits and never somewhere a driver may
-        // choose to go (§8.2), so the conservative line has to pick it up again.
+        // choose to go (§8.2), so the conservative line has to pick it up again
+        // — into first, because §6a replaced the standing start's extra ratio.
         const state = race({
-            a: { row: 5, lane: 1, gear: 0, phase: 'shift' },
-            b: { row: 40, lane: 1 },
-        });
+            a: { row: 5, lane: 1, gear: 0, phase: 'shift', startRoll: 12 },
+            b: { row: 40, lane: 1, startRoll: 8 },
+        }, { round: 2 });
         const game = makeGame(state);
 
         expect(await resolveStalledTurn(game, "a", "Alice")).toBe('advanced');
 
         expect(playedClassNames(game)).toEqual(['RaceCarsShift', 'RaceCarsMove']);
         const car = seat(state, "a");
-        expect(car.gear).toBe(2);                       // the standing start's extra ratio (§8.2)
+        expect(car.gear).toBe(1);                       // first, and first only, out of neutral (§6a, §8.2)
         expect(car.row).toBe(5 + car.roll!);
         expect(car.row).toBeLessThanOrEqual(9);         // and short of the Hairpin it cannot stop in
         expect(game.currentTurn).toBe("b");
+    });
+
+    it("throws §6a's d20 for a driver who lets the startup round time out", async () => {
+        // The startup round is the one turn with nothing to decide, so the cron
+        // sends the same command every driver sends — and a stall (a 1) ends the
+        // turn there, while anything else hands on to the move it rolled for.
+        const state = race({
+            a: { row: 2, lane: 1, gear: 0, phase: 'start' },
+            b: { row: 0, lane: 1, gear: 0, phase: 'start' },
+        });
+        const game = makeGame(state);
+
+        expect(await resolveStalledTurn(game, "a", "Alice")).toBe('advanced');
+
+        const car = seat(state, "a");
+        expect(playedClassNames(game)[0]).toBe('RaceCarsLaunch');
+        expect(car.startRoll).not.toBeNull();
+        // Either it bogged down and nothing else ran, or it got away and the
+        // conservative move spent the number it got away on.
+        if (car.startRoll === 1) {
+            expect(playedClassNames(game)).toEqual(['RaceCarsLaunch']);
+            expect(car.gear).toBe(0);
+            expect(car.row).toBe(2);
+        } else {
+            expect(car.gear).toBe(1);
+            expect(car.row).toBeGreaterThan(2);
+        }
+        expect(game.currentTurn).toBe("b");
+        expect(seat(state, "b").phase).toBe('start');
     });
 
     it("steers round a slick rather than driving over it (§14)", async () => {

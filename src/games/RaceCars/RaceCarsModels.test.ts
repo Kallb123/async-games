@@ -3,7 +3,9 @@ import {
     buildInitialRaceCarsState,
     cloneRaceCarsState,
     gameStateToModel,
+    RaceCarsInvitationModel,
 } from "./RaceCarsModels";
+import type { IRaceCarsGameData } from "./RaceCarsModels";
 import {
     DEFAULT_DISTANCE,
     DEFAULT_SPEC,
@@ -71,9 +73,12 @@ describe("buildInitialRaceCarsState — the grid (§6)", () => {
             expect(ps.skipNextTurn).toBe(false);
             expect(ps.finishedPosition).toBeNull();
             // The turn in progress, per player and never global (§23.4).
-            expect(ps.phase).toBe("shift");
+            // §6a: round one is the startup round, so the grid opens on the
+            // d20 rather than on a gear.
+            expect(ps.phase).toBe("start");
             expect(ps.roll).toBeNull();
             expect(ps.brakeSpent).toBe(0);
+            expect(ps.startRoll).toBeNull();
         }
     });
 
@@ -232,5 +237,42 @@ describe("gameStateToModel — what reaches the client (§23.4)", () => {
     it("falls back to the userId when a name is missing rather than sending nothing", () => {
         const state = buildInitialRaceCarsState(["u1", "u2"], SPRINT);
         expect(gameStateToModel(state, {}, "u1").playerStates.u1.username).toBe("u1");
+    });
+});
+
+describe("CreateGame — the setup block (§6, §6a)", () => {
+    /**
+     * `CreateGame` off the invitation schema, with no Mongo behind it: the
+     * method only reads `this`'s four settings and its turn timer, so a plain
+     * object stands in for the document.
+     */
+    async function createdHistory(userIds: string[]): Promise<string[]> {
+        const invite = { turnTimer: 0, ...SPRINT };
+        const createGame = RaceCarsInvitationModel.schema.methods.CreateGame as
+            (this: unknown, invite: unknown, userIdList: string[]) => Promise<IRaceCarsGameData>;
+        const gameData = await createGame.call(invite, invite, userIds);
+        return gameData.gameState.history.map(entry => entry.text);
+    }
+
+    it("writes it oldest line first, the way every other CreateGame does", async () => {
+        // The block is flipped once on its way into the document
+        // (`asStoredHistory`, utils/games/history.ts), so what is written here is
+        // what a player reads top to bottom. This game used to seed it the other
+        // way round, and the day that flip arrived its roll-off — the draw that
+        // decides the grid — dropped to the bottom of its own setup.
+        const texts = await createdHistory(["u1", "u2", "u3"]);
+
+        const firstSetting = texts.findIndex(text => text.includes('corners a lap'));
+        expect(firstSetting).toBeGreaterThan(0);
+        // Everything above the settings is the roll-off, and nothing below it is.
+        expect(texts.slice(0, firstSetting).every(text => /rolled a \d/.test(text))).toBe(true);
+        expect(texts.slice(firstSetting).some(text => /rolled a \d/.test(text))).toBe(false);
+    });
+
+    it("closes the block with §6a's startup round, under the roll-off rather than over it", async () => {
+        // Over those dice, "every driver throws a d20" reads as though the
+        // roll-off's own numbers were the getaways.
+        const texts = await createdHistory(["u1", "u2"]);
+        expect(texts[texts.length - 1]).toContain('round one is the start');
     });
 });

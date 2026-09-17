@@ -4,6 +4,7 @@ import {
     classification,
     conservativeTurn,
     derivePath,
+    flyingStartRoll,
     IRaceCarsPlayerState,
     IRaceCarsSpecificGameState,
     legalGears,
@@ -13,9 +14,11 @@ import {
     resolveArrival,
     rollFor,
     slipstreamOffered,
+    startOutcome,
     trackProgress,
 } from "./rules";
 import { behindLineTrack, car, kettleCorner, race, staggeredGrid, testTrack } from "./testFixtures";
+import { mongoMap } from "@/utils/games/mongoMaps";
 
 // Ashcombe (§5.2), for reading the fixtures below against:
 //   0-9 straight (3) · 10-14 Hairpin (2, two stops) · 15-46 The Mile (3)
@@ -656,7 +659,50 @@ describe("a grid drawn behind the finish line (§15)", () => {
 });
 
 describe("shifting (§8.2)", () => {
-    it("launches from a standing start into gear 1 or 2", () => {
+    it("reads §6a's three getaways off the d20, at the faces that divide them", () => {
+        expect(startOutcome(1)).toBe('stalled');
+        expect(startOutcome(2)).toBe('away');
+        expect(startOutcome(16)).toBe('away');
+        expect(startOutcome(17)).toBe('flying');
+        expect(startOutcome(20)).toBe('flying');
+    });
+
+    it("calls four spaces a flying start only in the round it was thrown in (§6a)", () => {
+        const flier = { a: { gear: 1 as const, roll: 4, startRoll: 18, phase: 'move' as const } };
+        const inRound = (round: number) => {
+            const state = race(flier, { round });
+            return flyingStartRoll(state, mongoMap(state.players).get('a')!);
+        };
+
+        // The face itself, so the card can draw the die that was thrown.
+        expect(inRound(1)).toBe(18);
+        // `startRoll` is kept for the whole race, so a 4 rolled in fourth gear
+        // on lap two must not be re-labelled by a 17 thrown on the grid.
+        expect(inRound(2)).toBeNull();
+        // And a clean getaway is a roll off first gear's die like any other.
+        const away = race({ a: { gear: 1 as const, roll: 2, startRoll: 9 } });
+        expect(flyingStartRoll(away, mongoMap(away.players).get('a')!)).toBeNull();
+        // A race already running when §6a shipped carries no d20 at all.
+        const legacy = race({ a: { gear: 1 as const, roll: 4 } });
+        expect(flyingStartRoll(legacy, mongoMap(legacy.players).get('a')!)).toBeNull();
+    });
+
+    it("takes first out of neutral and nothing else — there is no standing-start launch (§6a, §8.2)", () => {
+        // §6a's d20 is what decides how a car gets away now, so a car still in
+        // neutral (it bogged down off the line, or it spun) is not in first yet
+        // and cannot be in second next turn. `startRoll` is what says this car
+        // threw one: every car in a §6a race has by the time it can shift.
+        expect(legalGears(race({ a: { gear: 0, startRoll: 1 } }), 'a')).toEqual([
+            { gear: 1, gearboxCost: 0 },
+        ]);
+    });
+
+    it("leaves the old standing start reachable in a race dealt before §6a", () => {
+        // A car in neutral that never threw a d20 is a race from before the
+        // startup round, whose recorded log is full of gear-0-to-second shifts.
+        // Refusing them would not just change that race's rules mid-flight: a
+        // command replay refuses is skipped in silence, which freezes the car
+        // on the grid for the whole of that match's review.
         expect(legalGears(race({ a: { gear: 0 } }), 'a')).toEqual([
             { gear: 1, gearboxCost: 0 },
             { gear: 2, gearboxCost: 0 },

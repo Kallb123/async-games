@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { RaceCarsGameType, RaceCarsMove, RaceCarsShift, RaceCarsSlipstream } from "./RaceCarsLogic";
-import type { IRaceCarsArrivalOutcome } from "./RaceCarsLogic";
+import { RaceCarsGameType, RaceCarsLaunch, RaceCarsMove, RaceCarsShift, RaceCarsSlipstream } from "./RaceCarsLogic";
+import type { IRaceCarsArrivalOutcome, IRaceCarsStartOutcome } from "./RaceCarsLogic";
 import type { IRaceCarsGameData } from "./RaceCarsModels";
 import type { IRaceCarsPlayerState, IRaceCarsSpecificGameState } from "./rules";
 import { legalGears, moveOptions } from "./rules";
-import { GEARS, gearDef, RaceCarsGear, specDef, trackById } from "./board";
+import { GEARS, gearDef, RaceCarsGear, specDef, START_DIE_SIDES, START_FLYING_SPACES, trackById } from "./board";
 import { car, race } from "./testFixtures";
 import { runCommand } from "@/utils/games/commandPipeline";
 
@@ -38,6 +38,13 @@ function makeGame(
     } as unknown as IRaceCarsGameData;
 }
 
+function launch(fields: Partial<RaceCarsLaunch>, senderId = "a"): RaceCarsLaunch {
+    const command = new RaceCarsLaunch();
+    command.senderId = senderId;
+    command.senderUsername = senderId;
+    return Object.assign(command, fields);
+}
+
 function shift(fields: Partial<RaceCarsShift>, senderId = "a"): RaceCarsShift {
     const command = new RaceCarsShift();
     command.senderId = senderId;
@@ -60,7 +67,7 @@ function slipstream(fields: Partial<RaceCarsSlipstream>, senderId = "a"): RaceCa
 }
 
 /** One command through the pipeline the command route, replay and the cron all use. */
-function run(game: IRaceCarsGameData, command: RaceCarsShift | RaceCarsMove | RaceCarsSlipstream) {
+function run(game: IRaceCarsGameData, command: RaceCarsLaunch | RaceCarsShift | RaceCarsMove | RaceCarsSlipstream) {
     return runCommand(game, new RaceCarsGameType(), command);
 }
 
@@ -96,6 +103,137 @@ function expectConserved(game: IRaceCarsGameData) {
     }
 }
 
+describe("RaceCarsLaunch (§6a, the startup round)", () => {
+    /** The grid: both cars in neutral, both still to throw their d20. */
+    const grid = () => makeGame(race({
+        a: { row: 2, lane: 1, gear: 0, phase: 'start' },
+        b: { row: 2, lane: 3, gear: 0, phase: 'start' },
+    }));
+
+    it("bogs down on a 1: no gear, no roll, no movement, and the turn is over", async () => {
+        const game = grid();
+        const { outcome } = await run(game, launch({ recordedStartRoll: 1 }));
+
+        expect(outcome.validMove).toBe(true);
+        expect(outcome.turnOver).toBe(true);
+        const car = seat(game, 'a');
+        expect(car.gear).toBe(0);
+        expect(car.roll).toBeNull();
+        expect(car.row).toBe(2);
+        expect(car.startRoll).toBe(1);
+        expect(log(game)).toContain('bogged down off the line');
+        // The next driver still has their own getaway to throw — the startup
+        // round is a round like any other.
+        expect(game.currentTurn).toBe('b');
+        expect(seat(game, 'b').phase).toBe('start');
+    });
+
+    it("gets away in first on a 2, and rolls first gear's own die for the move", async () => {
+        const game = grid();
+        const { outcome } = await run(game, launch({ recordedStartRoll: 2 }));
+
+        expect(outcome).toMatchObject({ validMove: true, turnOver: false });
+        const car = seat(game, 'a');
+        expect(car.gear).toBe(1);
+        expect(car.phase).toBe('move');
+        expect(car.roll).toBeGreaterThanOrEqual(GEARS[1].min);
+        expect(car.roll).toBeLessThanOrEqual(GEARS[1].max);
+        // Not handed on: the number is thrown and spent inside the same turn.
+        expect(game.currentTurn).toBe('a');
+        expect(log(game)).toContain('got away in first');
+    });
+
+    it("takes a flying start on a 17: four spaces, no roll, and still in first", async () => {
+        const game = grid();
+        const { outcome } = await run(game, launch({ recordedStartRoll: 17 }));
+
+        const car = seat(game, 'a');
+        expect(car.gear).toBe(1);
+        expect(car.phase).toBe('move');
+        expect(car.roll).toBe(START_FLYING_SPACES);
+        expect(outcome.turnOver).toBe(false);
+        // The reveal reads this rather than the board (see RaceCarsStartScreen).
+        expect((outcome as IRaceCarsStartOutcome).start)
+            .toEqual({ roll: 17, outcome: 'flying', spaces: START_FLYING_SPACES });
+        expect(log(game)).toContain('flying start');
+        // And it is drivable: four spaces is a move like any other.
+        const reach = moveOptions(game.specificGameState, 'a', START_FLYING_SPACES);
+        expect((await run(game, move(reach.spaces[0]))).outcome.validMove).toBe(true);
+        expect(seat(game, 'a').row).toBe(6);
+    });
+
+    it("throws inside the d20's band when nothing is recorded, and records what it threw", async () => {
+        const game = grid();
+        const command = launch({});
+        await run(game, command);
+
+        const thrown = seat(game, 'a').startRoll!;
+        expect(thrown).toBeGreaterThanOrEqual(1);
+        expect(thrown).toBeLessThanOrEqual(START_DIE_SIDES);
+        // Written back onto the command before runCommand pushed it into
+        // commandHistory, or a replay throws a different die (§23.4).
+        expect(command.recordedStartRoll).toBe(thrown);
+        expect(game.gameState.commandHistory[0]).toBe(command);
+    });
+
+    it("refuses a second throw once the first has been spent", async () => {
+        // The command returns turnOver: false on a clean getaway, so currentTurn
+        // never moves — without the `roll === null` half of the guard a driver
+        // re-sends this body until the d20 comes up 17.
+        const game = grid();
+        await run(game, launch({ recordedStartRoll: 2 }));
+        const before = seat(game, 'a').roll;
+
+        expect((await run(game, launch({ recordedStartRoll: 20 }))).outcome.validMove).toBe(false);
+        expect(seat(game, 'a').roll).toBe(before);
+        expect(seat(game, 'a').startRoll).toBe(2);
+    });
+
+    it("refuses a getaway from a driver who is not on turn, and one after the startup round", async () => {
+        expect((await run(grid(), launch({ recordedStartRoll: 9 }, 'b'))).outcome.validMove).toBe(false);
+
+        const racing = makeGame(race({
+            a: { row: 20, gear: 3, phase: 'shift' },
+            b: {},
+        }, { round: 2 }));
+        expect((await run(racing, launch({ recordedStartRoll: 20 }))).outcome.validMove).toBe(false);
+    });
+
+    it("is the only way a startup-round turn can end, which is what keeps the old launch out of a new race", async () => {
+        // §6a's compatibility branch in `legalGears` hands gear 2 to a car in
+        // neutral that never threw a d20 — reachable only in a race dealt
+        // before the startup round, because every launch writes `startRoll`.
+        // That holds on this invariant and nothing else: if some later command
+        // could end a round-one turn without a launch, the driver it handed on
+        // to would open at gear 0 with no `startRoll` and be offered second off
+        // the line for free. So the three other commands are pinned as refused
+        // inside the startup round.
+        const game = grid();
+
+        expect((await run(game, shift({ gear: 2, recordedRoll: 3 }))).outcome.validMove).toBe(false);
+        expect((await run(game, move({ row: 4, lane: 1 }))).outcome.validMove).toBe(false);
+        expect((await run(game, slipstream({ tow: null }))).outcome.validMove).toBe(false);
+
+        // Nothing moved on, so the startup round still owns the turn.
+        expect(game.currentTurn).toBe('a');
+        expect(seat(game, 'a').phase).toBe('start');
+        expect(seat(game, 'a').startRoll).toBeNull();
+    });
+
+    it("hands the field into normal operation when the startup round wraps", async () => {
+        const game = grid();
+        await run(game, launch({ recordedStartRoll: 1 }));
+        await run(game, launch({ recordedStartRoll: 1 }, 'b'));
+
+        expect(game.specificGameState.round).toBe(2);
+        // §6a: the startup round is round one and nothing else, so the driver it
+        // wraps onto opens on a gear again.
+        expect(seat(game, game.currentTurn).phase).toBe('shift');
+        // And out of neutral there is one gear to take, not two (§8.2).
+        expect(legalGears(game.specificGameState, game.currentTurn)).toEqual([{ gear: 1, gearboxCost: 0 }]);
+    });
+});
+
 describe("RaceCarsShift (§7 step 1, §8)", () => {
     it("takes the gear, rolls its die and hands the driver into the move phase", async () => {
         const game = makeGame(race({ a: { row: 20, gear: 3, phase: 'shift' }, b: {} }));
@@ -123,12 +261,36 @@ describe("RaceCarsShift (§7 step 1, §8)", () => {
         expect(game.gameState.commandHistory[0]).toBe(command);
     });
 
-    it("launches from the grid to 1st or 2nd, and no further (§8.2)", async () => {
-        const standing = () => makeGame(race({ a: { row: 0, gear: 0, phase: 'shift' }, b: {} }));
+    it("takes first out of neutral and no further — §6a replaced the standing-start launch (§8.2)", async () => {
+        // `startRoll` is what says this car threw §6a's d20; a car in neutral
+        // without one is a race dealt before the startup round, covered below.
+        const standing = () => makeGame(race({
+            a: { row: 0, gear: 0, phase: 'shift', startRoll: 1 },
+            b: {},
+        }, { round: 2 }));
 
-        expect((await run(standing(), shift({ gear: 2, recordedRoll: 3 }))).outcome.validMove).toBe(true);
         expect((await run(standing(), shift({ gear: 1, recordedRoll: 2 }))).outcome.validMove).toBe(true);
+        expect((await run(standing(), shift({ gear: 2, recordedRoll: 3 }))).outcome.validMove).toBe(false);
         expect((await run(standing(), shift({ gear: 3, recordedRoll: 5 }))).outcome.validMove).toBe(false);
+    });
+
+    it("replays a race dealt before §6a on the rules it was driven under", async () => {
+        // A command replay refuses is skipped **in silence** (replay.ts), and a
+        // dropped shift takes the move that spent its roll with it — so a
+        // gear-0-to-second launch recorded before the startup round shipped has
+        // to still resolve, or that car freezes on the grid for the whole of
+        // its match review and flattens its line on the stored result chart.
+        const legacy = makeGame(race({
+            a: { row: 0, gear: 0, phase: 'shift' },
+            b: { row: 0, lane: 3 },
+        }));
+
+        expect((await run(legacy, shift({ gear: 2, recordedRoll: 4 }))).outcome.validMove).toBe(true);
+        expect(seat(legacy, 'a').gear).toBe(2);
+        // And the hand-off leaves that race on shifts rather than moving it
+        // onto a d20 nobody in it has thrown.
+        expect((await run(legacy, move({ row: 4, lane: 1 }))).outcome.validMove).toBe(true);
+        expect(seat(legacy, 'b').phase).toBe('shift');
     });
 
     it("refuses more than one gear up", async () => {
@@ -396,10 +558,12 @@ async function driveTurn(
 
 describe("CheckEndTurn (§15)", () => {
     it("hands the turn on and resets the incoming driver's phase, roll and brakes", async () => {
+        // Round two and after: §6a's startup round has its own hand-off, tested
+        // with the launch below.
         const game = makeGame(race({
             a: { row: 20, lane: 2, gear: 3, phase: 'shift' },
             b: { row: 10, lane: 1, gear: 3, phase: 'move', roll: 99, brakeSpent: 3 },
-        }));
+        }, { round: 2 }));
 
         await driveTurn(game, 'a', 4, 9, { row: 29, lane: 2 });
 
@@ -420,13 +584,13 @@ describe("CheckEndTurn (§15)", () => {
         const game = makeGame(race({
             a: { row: 20, lane: 2, gear: 3, phase: 'shift' },
             b: { row: 10, lane: 1, gear: 1, phase: 'shift' },
-            c: { row: 5, lane: 1, gear: 0, phase: 'shift' },
-        }));
+            c: { row: 5, lane: 1, gear: 1, phase: 'shift' },
+        }, { round: 2 }));
 
         await driveTurn(game, 'a', 4, 9, { row: 29, lane: 2 });
         expect((await driveTurn(game, 'b', 2, 3, { row: 13, lane: 1 })).outcome.validMove).toBe(true);
         expect((await driveTurn(game, 'c', 2, 2, { row: 7, lane: 1 })).outcome.validMove).toBe(true);
-        expect(game.specificGameState.round).toBe(2);
+        expect(game.specificGameState.round).toBe(3);
         expectConserved(game);
     });
 
@@ -434,16 +598,16 @@ describe("CheckEndTurn (§15)", () => {
         const game = makeGame(race({
             a: { row: 20, lane: 2, gear: 3, phase: 'shift' },
             b: { row: 40, lane: 2, gear: 3, phase: 'shift' },
-        }));
+        }, { round: 2 }));
 
         await driveTurn(game, 'a', 4, 9, { row: 29, lane: 2 });
         // Mid-round the order is a fixed fact, untouched by a's move — even
         // though b now leads on the road.
         expect(game.specificGameState.roundOrder).toEqual(['a', 'b']);
-        expect(game.specificGameState.round).toBe(1);
+        expect(game.specificGameState.round).toBe(2);
 
         await driveTurn(game, 'b', 4, 9, { row: 49, lane: 1 });
-        expect(game.specificGameState.round).toBe(2);
+        expect(game.specificGameState.round).toBe(3);
         expect(game.specificGameState.roundOrder).toEqual(['b', 'a']);
         expect(game.specificGameState.roundIndex).toBe(0);
         expect(game.currentTurn).toBe('b');
@@ -553,7 +717,7 @@ describe("CheckEndTurn (§15)", () => {
             a: { row: 20, lane: 2, gear: 3, phase: 'shift' },
             b: { row: 40, lane: 2, gear: 3, phase: 'shift' },
             c: { row: 60, lane: 1, gear: 3, phase: 'shift' },
-        }), ['a', 'b', 'c']);
+        }, { round: 2 }), ['a', 'b', 'c']);
 
         await driveTurn(game, 'a', 4, 9, { row: 29, lane: 2 });
         await driveTurn(game, 'b', 4, 8, { row: 48, lane: 1 });
@@ -600,8 +764,8 @@ describe("a race that keeps running", () => {
     it("drives two cars round Ashcombe to the flag without leaking a pool or sharing a space", async () => {
         const track = trackById('ashcombe');
         const game = makeGame(race({
-            a: { row: 2, lane: 1, gear: 0, phase: 'shift' },
-            b: { row: 2, lane: 3, gear: 0, phase: 'shift' },
+            a: { row: 2, lane: 1, gear: 0, phase: 'start' },
+            b: { row: 2, lane: 3, gear: 0, phase: 'start' },
         }));
 
         // Both drivers take the highest gear they are allowed and its lowest
@@ -626,10 +790,22 @@ describe("a race that keeps running", () => {
                 continue;
             }
 
-            const gears = legalGears(game.specificGameState, driver);
-            const gear = gears[gears.length - 1].gear;
-            const shifted = await run(game, shift({ gear, recordedRoll: gearDef(gear).min }, driver));
-            expect(shifted.outcome.validMove).toBe(true);
+            if (ps.phase === 'start') {
+                // §6a: round one is one d20 and no gear at all. Recorded so the
+                // race below is the same race every run — a clean getaway into
+                // first, with first gear's own die coming up a 2.
+                const away = await run(game, launch({ recordedStartRoll: 2, recordedRoll: 2 }, driver));
+                expect(away.outcome.validMove).toBe(true);
+                expectConserved(game);
+                continue;
+            }
+
+            if (ps.phase === 'shift') {
+                const gears = legalGears(game.specificGameState, driver);
+                const gear = gears[gears.length - 1].gear;
+                const shifted = await run(game, shift({ gear, recordedRoll: gearDef(gear).min }, driver));
+                expect(shifted.outcome.validMove).toBe(true);
+            }
 
             const reach = moveOptions(game.specificGameState, driver, seat(game, driver).roll!);
             const moved = await run(game, move(reach.spaces[0], driver));
