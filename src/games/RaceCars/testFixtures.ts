@@ -5,7 +5,7 @@
 //
 // Test-only. Nothing under src/app imports this.
 
-import type { RaceCarsTrack } from "./board";
+import { MAX_PLAYERS, type RaceCarsTrack } from "./board";
 import { deriveTrack, plainTileId, type TrackSection } from "./tracks/sections";
 import type { IRaceCarsPlayerState, IRaceCarsSpecificGameState } from "./rules";
 
@@ -118,4 +118,45 @@ export function kettleCorner(nextSectionId: string): TrackSection {
             })),
         ],
     };
+}
+
+/**
+ * §5.2's staggered six-slot grid on a circuit whose first rows are plain and
+ * level: rows 2, 1, 0 back from the line, two cars abreast in lanes 1 and 3.
+ *
+ * Written once because three fixtures wanted the same six coordinates, and the
+ * expression is fiddly enough that a fourth copy would be a typo waiting to
+ * happen rather than a fixture.
+ */
+export function staggeredGrid(rows = 2): RaceCarsTrack["grid"] {
+    return Array.from({ length: MAX_PLAYERS }, (_unused, slot) => ({
+        row: rows - Math.floor(slot / 2),
+        lane: slot % 2 === 0 ? 1 : 3,
+    }));
+}
+
+/** Fourteen rows of plain three-lane road: rows 0-3 the grid straight, 4-13 the lap. */
+export const LINE_SECTIONS: TrackSection[] = [
+    { id: 'gridstraight', name: 'Grid Straight', lanes: 3, corner: null, length: 4 },
+    { id: 'lap', name: 'Lap', lanes: 3, corner: null, length: 10 },
+];
+
+/**
+ * A circuit with its finish line painted across row 3 rather than row 0, and
+ * its grid on rows 0-2 — so the field starts **behind** the line and its first
+ * crossing begins lap 1 rather than ending it (§15).
+ *
+ * The one fixture that exercises both halves of the painted line at once, which
+ * is why it lives here: `rules.test.ts` drives races over it and
+ * `RaceCarsModels.test.ts` checks the grid it seats, and the two had a copy each.
+ */
+export function behindLineTrack(overrides: Partial<RaceCarsTrack> = {}): RaceCarsTrack {
+    return testTrack(LINE_SECTIONS, {
+        id: 'behindline',
+        name: 'Behind The Line',
+        grid: staggeredGrid(),
+        finish: [1, 2, 3].map(lane => ({ row: 3, lane })),
+        gridBehindFinishLine: true,
+        ...overrides,
+    });
 }

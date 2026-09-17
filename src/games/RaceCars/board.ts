@@ -407,8 +407,6 @@ interface TrackIndex {
     byKey: Map<string, RaceCarsTrackSpace>;
     byRow: Map<number, RaceCarsTrackSpace[]>;
     byCorner: Map<string, RaceCarsTrackSpace[]>;
-    /** The row §15 counts a lap at — see `lapBoundary`. */
-    lapBoundary: number;
 }
 
 const TRACK_INDEX = new WeakMap<RaceCarsTrack, TrackIndex>();
@@ -436,7 +434,7 @@ function indexOf(track: RaceCarsTrack): TrackIndex {
     // free space to put a spun car back on.
     for (const corner of byCorner.values()) corner.sort((a, b) => b.row - a.row || a.lane - b.lane);
 
-    const built: TrackIndex = { byKey, byRow, byCorner, lapBoundary: boundaryRow(track) };
+    const built: TrackIndex = { byKey, byRow, byCorner };
     TRACK_INDEX.set(track, built);
     return built;
 }
@@ -531,18 +529,13 @@ export function stepsFrom(track: RaceCarsTrack, row: number, lane: number): read
  * always been counted, and where a circuit that paints no line still has its
  * first section begin.
  */
-function boundaryRow(track: RaceCarsTrack): number {
+export function lapBoundary(track: RaceCarsTrack): number {
     if (!track.finish?.length) return 0;
     return Math.min(...track.finish.map(space => space.row));
 }
 
-/** The row this circuit counts a lap at (§15) — `boundaryRow`, memoised. */
-export function lapBoundary(track: RaceCarsTrack): number {
-    return indexOf(track).lapBoundary;
-}
-
 /**
- * Whether a step from `from` to `to` carries the car over the finish line,
+ * Whether a step from `fromRow` to `toRow` carries the car over the finish line,
  * completing a lap (§15).
  *
  * Not "lands on the boundary row": a lane with no space on that row steps
@@ -552,15 +545,15 @@ export function lapBoundary(track: RaceCarsTrack): number {
  * line at or before it reaches where it stopped".
  *
  * Whichever lane takes the step: the boundary is one row for the whole circuit
- * (`boundaryRow`), so two cars level across the road complete their laps on the
+ * (`lapBoundary`), so two cars level across the road complete their laps on the
  * same step rather than a lane at a time.
  */
-export function crossesFinishLine(track: RaceCarsTrack, from: RaceCarsSpace, to: RaceCarsSpace): boolean {
+export function crossesFinishLine(track: RaceCarsTrack, fromRow: number, toRow: number): boolean {
     const boundary = lapBoundary(track);
     // A car standing on the line is over it already, not behind it, and one
     // step can never carry it the whole lap round to it again.
-    if (from.row === boundary) return false;
-    return rowsBetween(track, from.row, boundary) <= rowsBetween(track, from.row, to.row);
+    if (fromRow === boundary) return false;
+    return rowsBetween(track, fromRow, boundary) <= rowsBetween(track, fromRow, toRow);
 }
 
 /**
@@ -577,6 +570,14 @@ export function crossesFinishLine(track: RaceCarsTrack, from: RaceCarsSpace, to:
  * is already this one: track order sorts on it, `rowsCovered` measures progress
  * with it, and a car yet to reach the line for the first time genuinely is a
  * lap's worth of progress behind one sitting on it.
+ *
+ * Two readers see the negative and are meant to. The result page's rows-covered
+ * chart (`GameResultData.ts`) opens below nought for such a race and climbs
+ * through it at the first crossing, which is the truth about where the field
+ * was; clamping it would flatten the opening turns of every driver's line
+ * equally and lose the slope that is the whole point of the chart. The board's
+ * lap readout clamps instead, because "lap 0 of 1" is not a thing a driver is
+ * ever on — the lap they are working on before the first crossing is the first.
  */
 export function startingLaps(track: RaceCarsTrack): number {
     return track.gridBehindFinishLine ? -1 : 0;

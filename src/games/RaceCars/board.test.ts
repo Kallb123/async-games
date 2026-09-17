@@ -4,6 +4,7 @@ import {
     cornerExits,
     cornerReaches,
     crossesFinishLine,
+    lapBoundary,
     DEFAULT_DISTANCE,
     DEFAULT_SPEC,
     distanceDef,
@@ -384,15 +385,13 @@ describe("corner geometry (§10)", () => {
     });
 
     it("completes a lap on crossing the line, not on landing on row 0", () => {
-        const at = (row: number, lane = 1) => ({ row, lane });
-        expect(crossesFinishLine(ASHCOMBE, at(77), at(0))).toBe(true);
-        expect(crossesFinishLine(ASHCOMBE, at(76), at(1))).toBe(true);
-        expect(crossesFinishLine(ASHCOMBE, at(70), at(75))).toBe(false);
+        expect(crossesFinishLine(ASHCOMBE, 77, 0)).toBe(true);
+        expect(crossesFinishLine(ASHCOMBE, 76, 1)).toBe(true);
+        expect(crossesFinishLine(ASHCOMBE, 70, 75)).toBe(false);
         // A car standing on the line is over it already.
-        expect(crossesFinishLine(ASHCOMBE, at(0), at(1))).toBe(false);
-        // Whichever lane takes the step: the boundary is the circuit's, not the
-        // lane's, so cars level across the road bank their laps together.
-        expect(crossesFinishLine(ASHCOMBE, at(77, 3), at(1, 1))).toBe(true);
+        expect(crossesFinishLine(ASHCOMBE, 0, 1)).toBe(false);
+        // Ashcombe paints no line, so its boundary is still row 0.
+        expect(lapBoundary(ASHCOMBE)).toBe(0);
     });
 
     it("says how many spaces out each corner is, and how long a move can stay in it", () => {

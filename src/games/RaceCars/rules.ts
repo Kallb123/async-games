@@ -588,7 +588,7 @@ export function resolveArrival(
         // circuit paints it (`lapBoundary`), and the race ends the instant a car
         // completes the distance — distance past the line is not measured, so
         // nothing further along the path is resolved or charged (§4.1, §18).
-        if (crossesFinishLine(track, path[step - 1], to)) {
+        if (crossesFinishLine(track, path[step - 1].row, to.row)) {
             lapsCompleted += 1;
             // On a circuit whose grid sits behind the line, the field starts a
             // lap short (`startingLaps`) and this first crossing only brings it

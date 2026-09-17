@@ -266,7 +266,11 @@ export default function GameRaceCars({ params }: { params: Promise<{ gameid: uui
 
             {gs && me && (
                 <div className="ag-stat-row">
-                    <Stat value={`${Math.min(me.lapsCompleted + 1, gs.laps)}/${gs.laps}`} label={gs.laps === 1 ? 'Lap' : 'Laps'} />
+                    {/* Clamped at both ends: a grid drawn behind the finish line
+                        seats the field a lap short (§15, `startingLaps`), so before
+                        its first crossing `lapsCompleted` is −1 and the lap a driver
+                        is working on is still the first one. */}
+                    <Stat value={`${Math.min(Math.max(me.lapsCompleted, 0) + 1, gs.laps)}/${gs.laps}`} label={gs.laps === 1 ? 'Lap' : 'Laps'} />
                     <Stat value={gap === 0 ? 'Leader' : `−${gap}`} label={gap === 0 ? 'Position' : 'Rows off the lead'} />
                 </div>
             )}

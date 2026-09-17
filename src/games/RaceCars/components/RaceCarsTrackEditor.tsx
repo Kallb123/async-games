@@ -1063,10 +1063,9 @@ function MarksPanel({ state, rows, marker, onSetMarker, onClearMark, onSetGridBe
                 />
 
                 <p className="ag-hint">
-                    The grid and the finish line are both read by a race: §15 counts the lap at the earliest row the line
-                    is painted on — one row for the whole circuit, so cars level across the road bank their laps together
-                    — or at the derived row 0 where no line is painted. Oil is still printed and unread; §14&apos;s slicks
-                    are laid only by spins and heavy braking.
+                    A circuit that paints no line has its lap counted at the derived row 0, as every circuit drawn before
+                    the line could be painted does. Oil is still printed and unread: §14&apos;s slicks are laid only by
+                    spins and heavy braking.
                 </p>
             </div>
         </Section>

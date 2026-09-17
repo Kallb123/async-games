@@ -167,8 +167,9 @@ than in an empty seat.
 
 A circuit is a **loop of rows**. Each row is 2 or 3 **lanes** wide, and a
 **space** is one (row, lane) pair. Rows are numbered from the start line and
-wrap: the row after the last row is row 0 again, and crossing that boundary
-completes a lap.
+wrap: the row after the last row is row 0 again. Crossing the circuit's **lap
+boundary** completes a lap — row 0 unless a finish line is painted somewhere
+else, see §15.
 
 Movement is always forward. On an ordinary stretch of road, from a space you can
 step to the same lane in the next row, or to either adjacent lane in the next
@@ -669,7 +670,12 @@ is the quiet counterweight to the rich-get-richer problem every racing game has,
 and it is why §17 does not need a catch-up mechanic beyond slipstream.
 
 **Race distance** is Sprint (1 lap, ~12 turns a driver) or Grand Prix (2 laps,
-~22). A lap is complete when a car crosses from the last row to row 0.
+~22). A lap is complete when a car crosses the **finish line** — the earliest row
+the circuit paints it on, or row 0 where it paints none (`lapBoundary`). One row
+for the whole circuit rather than one per lane, so two cars level across the road
+bank their laps on the same step. A circuit whose grid is drawn **behind** the
+line (`gridBehindFinishLine`) seats its field a lap short, so the first crossing
+starts lap 1 rather than ending it.
 
 ---
 

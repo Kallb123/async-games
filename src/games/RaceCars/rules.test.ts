@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { lapBoundary, MAX_PLAYERS, RaceCarsSpace, RaceCarsTrack, startingLaps, TRACKS } from "./board";
+import { lapBoundary, MAX_PLAYERS, RaceCarsSpace, RaceCarsTrack, rowsBetween, startingLaps, TRACKS } from "./board";
 import {
     classification,
     conservativeTurn,
@@ -15,7 +15,7 @@ import {
     slipstreamOffered,
     trackProgress,
 } from "./rules";
-import { car, kettleCorner, race, testTrack } from "./testFixtures";
+import { behindLineTrack, car, kettleCorner, LINE_SECTIONS, race, testTrack } from "./testFixtures";
 
 // Ashcombe (§5.2), for reading the fixtures below against:
 //   0-9 straight (3) · 10-14 Hairpin (2, two stops) · 15-46 The Mile (3)
@@ -113,8 +113,6 @@ function drive(
 }
 
 const key = (space: RaceCarsSpace) => `${space.row}:${space.lane}`;
-/** Steps between two rows of the 14-row fixture below, the way a car drives. */
-const rowsApart = (from: RaceCarsSpace, to: RaceCarsSpace) => ((to.row - from.row) % 14 + 14) % 14;
 
 describe("reach (§9)", () => {
     it("reaches exactly the spaces N steps away, and nothing else", () => {
@@ -482,35 +480,17 @@ describe("laps and the ending (§4.1, §15)", () => {
 
 // ─── A painted line, and a grid drawn behind it (§15) ────────────────────────
 //
-// Fourteen rows of plain three-lane road, cut so the line can be painted off
-// row 0: rows 0-3 are the grid straight, rows 4-13 the lap. The flag drops on
-// rows 0-2 and the line is painted across row 3, so every car starts **behind**
-// it — the case `gridBehindFinishLine` exists for, where counting the first
-// crossing would credit the whole field a lap three spaces into the race.
-const LINE_SECTIONS = [
-    { id: 'gridstraight', name: 'Grid Straight', length: 4, lanes: 3 as const, corner: null },
-    { id: 'lap', name: 'Lap', length: 10, lanes: 3 as const, corner: null },
-];
-const PAINTED_GRID = Array.from({ length: MAX_PLAYERS }, (_unused, slot) => ({
-    row: 2 - Math.floor(slot / 2),
-    lane: slot % 2 === 0 ? 1 : 3,
-}));
-const PAINTED_LINE = [1, 2, 3].map(lane => ({ row: 3, lane }));
-
-/** The circuit above, with the line painted and the grid declared behind it. */
-const BEHIND_LINE: RaceCarsTrack = testTrack(LINE_SECTIONS, {
-    id: 'behindline',
-    name: 'Behind The Line',
-    grid: PAINTED_GRID,
-    finish: PAINTED_LINE,
-    gridBehindFinishLine: true,
-});
+// `behindLineTrack` is the shared fixture (testFixtures.ts): fourteen rows of
+// plain three-lane road, the flag on rows 0-2 and the line painted across row 3,
+// so every car starts **behind** it — the case `gridBehindFinishLine` exists
+// for, where counting the first crossing would credit the whole field a lap
+// three spaces into the race.
+const BEHIND_LINE: RaceCarsTrack = behindLineTrack();
 /** The same circuit and the same painted line, with the grid in front of it. */
-const AHEAD_OF_LINE: RaceCarsTrack = testTrack(LINE_SECTIONS, {
+const AHEAD_OF_LINE: RaceCarsTrack = behindLineTrack({
     id: 'aheadofline',
     name: 'Ahead Of The Line',
-    grid: PAINTED_GRID,
-    finish: PAINTED_LINE,
+    gridBehindFinishLine: false,
 });
 TRACKS[BEHIND_LINE.id] = BEHIND_LINE;
 TRACKS[AHEAD_OF_LINE.id] = AHEAD_OF_LINE;
@@ -527,9 +507,10 @@ describe("the painted finish line (§15)", () => {
     });
 
     it("crosses at the painted row, whichever lane takes the step", () => {
-        const at = (row: number, lane: number) => ({ row, lane });
+        const at = (row: number, lane: number): RaceCarsSpace => ({ row, lane });
         const on = (from: RaceCarsSpace, to: RaceCarsSpace) =>
-            drive(race({ a: from }, { trackId: AHEAD_OF_LINE.id, laps: 9 }), 'a', rowsApart(from, to));
+            drive(race({ a: from }, { trackId: AHEAD_OF_LINE.id, laps: 9 }), 'a',
+                rowsBetween(AHEAD_OF_LINE, from.row, to.row));
         // Row 1 to row 4 passes row 3, which is the line.
         expect(on(at(1, 1), at(4, 1)).lapsCompleted).toBe(1);
         // Row 0 to row 2 stops short of it.
