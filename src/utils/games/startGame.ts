@@ -7,6 +7,7 @@ import { IInvitationDataDocument, InvitationModel } from '@/utils/mongodb/Invita
 import { GameDataModel, IGameData, IGameDataDocument } from '@/utils/mongodb/GameData';
 import { gameDataModelFor } from '@/utils/mongodb/mongodb';
 import { uuidString } from '@/utils/apiModels/GameDataApi';
+import { asStoredHistory } from '@/utils/games/history';
 
 /**
  * Turn an invitation into a live game: build the game document for the
@@ -32,6 +33,10 @@ export async function startGameFromInvitation(
 ): Promise<IGameData | null> {
     const userIdList = invite.userIdList.map(uid => uid.userId);
     const gameData = await invite.CreateGame(invite, userIdList.concat(invite.senderId));
+    // A game writes its setup block the way it reads, oldest line first; the
+    // log is stored newest-first. Flipping it here rather than in every
+    // CreateGame is what keeps the eleventh game from forgetting to.
+    gameData.gameState.history = asStoredHistory(gameData.gameState.history);
 
     // One lookup instead of a branch per game: the models come from the same
     // typed record Mongoose's discriminators are registered from, so a new game

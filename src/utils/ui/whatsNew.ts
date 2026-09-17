@@ -120,6 +120,10 @@ export const WHATS_NEW: WhatsNewGroup[] = [
         icon: "🔧",
         items: [
             {
+                title: "The match history tells the setup story the right way round",
+                detail: "The setup lines at the start of a game were logged in reverse, so the match history read them backwards. In a game whose opening roll-off had to break a tie, the two re-rolls showed up above the line announcing the tie — which read as the game making two players roll again over numbers that plainly didn't match. Setup now reads in the order it happened, from the roll-off down to the options the host turned on, and a throw made to break a tie says it was a re-roll. Games already under way keep the log they were started with.",
+            },
+            {
                 title: "Race Cars: cars no longer start the Anglet track boxed in",
                 detail: "Four of the six cars on Anglet Chambre D'Amour were parked on a piece of road the track doesn't actually have, so those drivers were told \"boxed in — nothing is reachable\" on the first turn and every turn after it, whatever gear they picked. The grid now sits on the six spaces the art paints a car on.",
                 game: "racecars",
@@ -160,11 +164,6 @@ export const WHATS_NEW: WhatsNewGroup[] = [
             {
                 title: "The panel you wait on stops looking tappable",
                 detail: "Settlements & Cities keeps its build list on screen while you wait for your turn, but the rows and the Trade with the bank button looked exactly like the live buttons under them — the same white cards, the same terracotta \"Build\" — so tapping one did nothing and never said why. Everything in a waiting panel now reads as off: flat, dashed and soft-greyed, with the costs still there to plan with. Every game's waiting panel got the same treatment.",
-                game: "settlementsandcities",
-            },
-            {
-                title: "Settlements & Cities shows what's happening on an opponent's turn",
-                detail: "The build/roll/trade panel used to disappear entirely while you waited for someone else's turn — including during setup, where it vanished right when you most wanted to see what was going on. It now stays on screen at all times, just greyed out and untappable until it's your move.",
                 game: "settlementsandcities",
             },
         ],

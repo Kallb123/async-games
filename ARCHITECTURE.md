@@ -221,6 +221,9 @@ interface IGameData {
     gameState: {
         turnOrder: string[];         // user IDs, decided at creation
         history: IHistoryEntry[];    // newest-first log; { text, actorId? }
+                                     // (a CreateGame setup block is written
+                                     //  oldest-first; startGameFromInvitation
+                                     //  flips it — asStoredHistory())
         commandHistory: IGameCommand[]; // every move, stored as Schema.Types.Mixed
     };
     complete: boolean;

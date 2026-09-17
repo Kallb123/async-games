@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { playerHistory, resolveHistory, userToken } from "./history";
+import { asStoredHistory, playerHistory, resolveHistory, userToken } from "./history";
 import { UNKNOWN_PLAYER_NAME } from "@/utils/ui/players";
 
 const NAMES = { user_a: "Alice", user_b: "Bob" };
@@ -85,5 +85,33 @@ describe("a history line's timestamp on the way out", () => {
         const resolved = resolveHistory([{ text: "x", createdAt: "not a date" }], {});
 
         expect(resolved[0].createdAt).toBe("not a date");
+    });
+});
+
+describe("asStoredHistory", () => {
+    it("flips a setup block into the order the log is stored in", () => {
+        // Written the way it reads: the roll-off, then what the host turned on.
+        const setup = [
+            { text: "Setup: {{user_a}} rolled a 6 and goes first" },
+            { text: "Setup: {{user_b}} rolled a 2" },
+            { text: "Setup: first to 10 victory points wins" },
+        ];
+
+        // Stored newest line first, like every unshift a command makes — so the
+        // log reads back in the order it was written once it is reversed for
+        // display, rather than the roll-off coming out backwards.
+        expect(asStoredHistory(setup).map(entry => entry.text)).toEqual([
+            "Setup: first to 10 victory points wins",
+            "Setup: {{user_b}} rolled a 2",
+            "Setup: {{user_a}} rolled a 6 and goes first",
+        ]);
+    });
+
+    it("leaves the block it was handed alone", () => {
+        const setup = [{ text: "one" }, { text: "two" }];
+
+        asStoredHistory(setup);
+
+        expect(setup.map(entry => entry.text)).toEqual(["one", "two"]);
     });
 });
