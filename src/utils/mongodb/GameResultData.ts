@@ -477,8 +477,11 @@ const GAME_RESULT_STATS: Record<string, {
                     // Net progress — laps completed times the lap, plus the
                     // row within it — the same reading the result stats take
                     // at game-end, so a driver's line on the chart ends where
-                    // their final "rows covered" number says it should.
-                    return ps ? ps.lapsCompleted * trackRows + ps.row : undefined;
+                    // their final "rows covered" number says it should. Clamped
+                    // at nought for the same reason it is there (§15's grid
+                    // behind the line seats a field at −1 laps, and this chart
+                    // floors its axis at nought).
+                    return ps ? Math.max(0, ps.lapsCompleted * trackRows + ps.row) : undefined;
                 },
             );
             const topGearPerTurn = await computePerTurnStat<IRaceCarsSpecificGameStateResponse>(

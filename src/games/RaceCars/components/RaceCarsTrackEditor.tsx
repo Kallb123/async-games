@@ -1063,9 +1063,9 @@ function MarksPanel({ state, rows, marker, onSetMarker, onClearMark, onSetGridBe
                 />
 
                 <p className="ag-hint">
-                    The starting grid is read by a race today. The finish line, the oil and the setting above are printed
-                    into the track file and nothing reads them yet — §15 still counts a lap at the derived row 0, and
-                    §14&apos;s slicks are still laid only by spins and heavy braking.
+                    A circuit that paints no line has its lap counted at the derived row 0, as every circuit drawn before
+                    the line could be painted does. Oil is still printed and unread: §14&apos;s slicks are laid only by
+                    spins and heavy braking.
                 </p>
             </div>
         </Section>

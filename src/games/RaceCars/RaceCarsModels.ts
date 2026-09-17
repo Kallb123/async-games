@@ -27,6 +27,7 @@ import {
     readRaceSettings,
     spaceKey,
     specDef,
+    startingLaps,
     trackById,
 } from "./board";
 import type { IRaceCarsPlayerState, IRaceCarsSpecificGameState } from "./rules";
@@ -209,7 +210,9 @@ export function buildInitialRaceCarsState(
             raceNumber: slot + 1,
             row: track.grid[slot].row,
             lane: track.grid[slot].lane,
-            lapsCompleted: 0,
+            // Nought, or a lap short on a circuit that lines its grid up behind
+            // the finish line, where the first crossing starts the race (§15).
+            lapsCompleted: startingLaps(track),
             gear: 0,
             tyres: spec.tyres,
             brakes: spec.brakes,
@@ -557,7 +560,15 @@ export async function computeRaceCarsResultStats(
     const gearboxSpent = new Map<string, number>();
     for (const [userId, ps] of mongoMap(gs.players)) {
         finishingPosition.set(userId, ps.finishedPosition ?? 0);
-        rowsCovered.set(userId, ps.lapsCompleted * track.rows + ps.row);
+        // Clamped at nought: a grid drawn behind the finish line seats the
+        // field a lap short (§15, `startingLaps`), so this reads negative until
+        // a driver's first crossing — and a result page that says "covered −75
+        // rows" is wrong in a way the number it is reporting is not. The chart
+        // this feeds floors its axis at nought too (`LineChart`), so a negative
+        // point is drawn off the bottom of the viewBox rather than below the
+        // line. Flat for those opening rounds, which is the honest shape of a
+        // field that has not started its first lap.
+        rowsCovered.set(userId, Math.max(0, ps.lapsCompleted * track.rows + ps.row));
         tyresSpent.set(userId, spec.tyres - ps.tyres);
         brakesSpent.set(userId, spec.brakes - ps.brakes);
         gearboxSpent.set(userId, spec.gearbox - ps.gearbox);

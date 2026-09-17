@@ -99,7 +99,7 @@ export const MARKS: Record<MarkKind, { label: string; glyph: string; note: strin
     finish: {
         label: "Finish line",
         glyph: "🏁",
-        note: "The tiles the line is painted across, which need not be one row: a lane taking the short way round carries it on its own.",
+        note: "The tiles the line is painted across, which need not be one row: a lane taking the short way round carries it on its own. §15 counts the lap at the earliest row of them, so every car crosses in the same place.",
     },
     oil: {
         label: "Oil",
@@ -772,6 +772,32 @@ export function validateTrack(state: EditorState): EditorValidation {
             if (rows > longestLane * 2) {
                 warnings.push(`Section "${sectionLabel(section)}" spans ${rows} rows for a longest lane of ${longestLane} tiles — check its steps run across the road rather than zig-zagging along it.`);
             }
+        }
+    }
+
+    // A grid behind a line that spans rows has to be behind the **earliest** of
+    // them, which is the row §15 counts the lap at (`lapBoundary`). A slot
+    // between the earliest and the latest painted row is behind the line in its
+    // own lane and past the boundary all the same — and seated a lap short, that
+    // car crosses nothing until it has driven the entire circuit, while the slot
+    // beside it reaches its first lap in a single step.
+    if (derived && state.gridBehindFinishLine && state.finish.length > 0) {
+        const boundary = Math.min(...markSpaces(derived, state.finish).map(space => space.row));
+        const rows = derivedRows(derived);
+        // Behind the boundary means the boundary is nearer **ahead** than behind,
+        // walking the way a car drives — which is the whole test, wrap included,
+        // and needs no guess at how many rows a grid is allowed to span. A slot
+        // on the boundary fails too: a car standing on the line is over it
+        // already, so it would never bank the crossing its lap short waits for.
+        const wrap = (from: number, to: number) => (to - from + derived.rows) % derived.rows;
+        const stray = [...gridSlots(state)]
+            .filter(([id]) => {
+                const row = rows.get(id);
+                return row !== undefined && wrap(row, boundary) >= wrap(boundary, row);
+            })
+            .map(([, slot]) => `P${slot}`);
+        if (stray.length > 0) {
+            errors.push(`${stray.join(", ")} ${stray.length === 1 ? "does not start" : "do not start"} behind the finish line, though the grid is set to. The lap is counted at the line's earliest row, so a car on or past that row is over the line already and would drive the whole circuit before its first crossing — which is what happens to a slot painted on a later row of a line that spans several. Move ${stray.length === 1 ? "it" : "them"} back behind the line's first row.`);
         }
     }
 

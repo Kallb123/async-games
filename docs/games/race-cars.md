@@ -160,10 +160,16 @@ than in an empty seat.
 
 ### 5.1 The circuit
 
+> For the track data itself — what a row, a space, a section and a sync line
+> each are, where a row number comes from, and what a circuit's shape does and
+> does not change about the race — see
+> [`race-cars-tracks.md`](./race-cars-tracks.md).
+
 A circuit is a **loop of rows**. Each row is 2 or 3 **lanes** wide, and a
 **space** is one (row, lane) pair. Rows are numbered from the start line and
-wrap: the row after the last row is row 0 again, and crossing that boundary
-completes a lap.
+wrap: the row after the last row is row 0 again. Crossing the circuit's **lap
+boundary** completes a lap — row 0 unless a finish line is painted somewhere
+else, see §15.
 
 Movement is always forward. On an ordinary stretch of road, from a space you can
 step to the same lane in the next row, or to either adjacent lane in the next
@@ -664,7 +670,12 @@ is the quiet counterweight to the rich-get-richer problem every racing game has,
 and it is why §17 does not need a catch-up mechanic beyond slipstream.
 
 **Race distance** is Sprint (1 lap, ~12 turns a driver) or Grand Prix (2 laps,
-~22). A lap is complete when a car crosses from the last row to row 0.
+~22). A lap is complete when a car crosses the **finish line** — the earliest row
+the circuit paints it on, or row 0 where it paints none (`lapBoundary`). One row
+for the whole circuit rather than one per lane, so two cars level across the road
+bank their laps on the same step. A circuit whose grid is drawn **behind** the
+line (`gridBehindFinishLine`) seats its field a lap short, so the first crossing
+starts lap 1 rather than ending it.
 
 ---
 
@@ -1159,8 +1170,9 @@ interface RaceCarsTrack {
   // same reason no row is typed: a slot written as a row and a lane is a guess
   // at what the derivation will make of the drawing (see the note below).
   grid: { row: number, lane: number }[],   // P1 first
-  // Painted by the track editor and printed here; authoring data only for now —
-  // §15 still counts a lap at row 0, and §14 still lays its own slicks.
+  // Painted by the track editor and printed here. §15 counts the lap at the
+  // earliest row of `finish` (`lapBoundary`), or at row 0 where none is painted;
+  // §14 still lays its own slicks, so `oil` is authoring data only.
   finish?: { row: number, lane: number }[],   // the line, which need not be one row
   gridBehindFinishLine?: boolean,             // first crossing starts lap 1, not ends it
   oil?: { row: number, lane: number }[],      // a circuit's own greasy patches

@@ -3,7 +3,8 @@ import {
     cornerAt,
     cornerExits,
     cornerReaches,
-    crossesStartLine,
+    crossesFinishLine,
+    lapBoundary,
     DEFAULT_DISTANCE,
     DEFAULT_SPEC,
     distanceDef,
@@ -178,11 +179,39 @@ describe("every track", () => {
     });
 
     it.each(TRACK_LIST.map(track => [track.id, track] as const))("%s paints its finish line and its oil on spaces it has", (_id, track) => {
-        // Both are optional and neither is read by a race yet (`board.ts`), but
-        // a circuit that names one names it the same way the grid does, and a
+        // The line is read by §15 (`lapBoundary`) and the oil by nothing yet,
+        // but a circuit that names either names it the way the grid does, and a
         // mark on a space the road hasn't got is the same mistake.
         for (const space of [...(track.finish ?? []), ...(track.oil ?? [])]) {
             expect(spaceAt(track, space.row, space.lane)).not.toBeNull();
+        }
+    });
+
+    it.each(TRACK_LIST.map(track => [track.id, track] as const))("%s seats its grid on the side of the line it says it does", (_id, track) => {
+        // `startingLaps` is one answer for the whole field, but "behind the
+        // line" is a fact about each slot — and `lapBoundary` is the *earliest*
+        // painted row, so a line spanning rows can leave a slot behind the line
+        // in its own lane yet already past the boundary. Seated a lap short, that
+        // driver crosses nothing until they have driven the entire circuit, while
+        // the slot beside them reaches nought in a single step: a lap down before
+        // anybody has taken a second turn. Cheap to assert, impossible to see.
+        const boundary = lapBoundary(track);
+        for (const slot of track.grid) {
+            // Which side of the line a slot is on, asked as "is the boundary
+            // nearer ahead of it than behind it" — the whole test, wrap included,
+            // and no guess at how many rows a grid may span.
+            const ahead = rowsBetween(track, slot.row, boundary);
+            const behind = rowsBetween(track, boundary, slot.row);
+            if (track.gridBehindFinishLine) {
+                // Behind the line, and never on it: a car standing on the line is
+                // over it already (`crossesFinishLine`), so it would never bank
+                // the crossing its lap short is waiting for.
+                expect(ahead).toBeLessThan(behind);
+            } else {
+                // At or past the line, so its first crossing is a lap it really
+                // drove — "at" because an ordinary grid sits on the flag itself.
+                expect(behind).toBeLessThanOrEqual(ahead);
+            }
         }
     });
 });
@@ -384,11 +413,13 @@ describe("corner geometry (§10)", () => {
     });
 
     it("completes a lap on crossing the line, not on landing on row 0", () => {
-        expect(crossesStartLine(ASHCOMBE, 77, 0)).toBe(true);
-        expect(crossesStartLine(ASHCOMBE, 76, 1)).toBe(true);
-        expect(crossesStartLine(ASHCOMBE, 70, 75)).toBe(false);
+        expect(crossesFinishLine(ASHCOMBE, 77, 0)).toBe(true);
+        expect(crossesFinishLine(ASHCOMBE, 76, 1)).toBe(true);
+        expect(crossesFinishLine(ASHCOMBE, 70, 75)).toBe(false);
         // A car standing on the line is over it already.
-        expect(crossesStartLine(ASHCOMBE, 0, 1)).toBe(false);
+        expect(crossesFinishLine(ASHCOMBE, 0, 1)).toBe(false);
+        // Ashcombe paints no line, so its boundary is still row 0.
+        expect(lapBoundary(ASHCOMBE)).toBe(0);
     });
 
     it("says how many spaces out each corner is, and how long a move can stay in it", () => {
